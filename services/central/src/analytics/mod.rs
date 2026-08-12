@@ -35,6 +35,10 @@ pub const QV_ECONOMIZER: &str = "economizer-diagnostics-v1";
 pub const QV_RCX_AHU: &str = "rcx-ahu-v1";
 pub const QV_RCX_VAV: &str = "rcx-vav-v1";
 pub const QV_METERING: &str = "metering-v1";
+pub const QV_SETPOINTS: &str = "setpoints-v1";
+pub const QV_DIURNAL: &str = "sensor-diurnal-v1";
+pub const QV_TOPOLOGY: &str = "topology-v1";
+pub const QV_SENSOR_STATS: &str = "sensor-stats-v1";
 
 /// Shared query fields for `/api/analytics/*` requests.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]

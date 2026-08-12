@@ -4,7 +4,19 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     cw_supply_t, web_wb_t,
-    CASE WHEN tower_fan_cmd IS NULL THEN NULL WHEN tower_fan_cmd > 1.0 THEN tower_fan_cmd / 100.0 ELSE tower_fan_cmd END AS fan
+    CASE WHEN tower_fan_cmd IS NULL THEN NULL WHEN tower_fan_cmd > 1.0 THEN tower_fan_cmd / 100.0 ELSE tower_fan_cmd END AS fan,
+    pump_status,
+    chiller_status,
+    chw_flow,
+    chw_pump_cmd,
+    CASE
+      WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
+      WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
+      WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 1.0 THEN 1 ELSE 0 END
+      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
+      ELSE 0
+    END AS proof_on
+
   FROM history
 ),
 base AS (
@@ -12,6 +24,7 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN COALESCE(proof_on, 0) = 0 THEN 0
       WHEN cw_supply_t IS NULL OR web_wb_t IS NULL OR fan IS NULL THEN 0
       WHEN fan >= {{TOWER_FAN_HI}}
        AND cw_supply_t > web_wb_t + {{CW_APPROACH}} + {{EXCESS_BEYOND_APPROACH_F}} THEN 1

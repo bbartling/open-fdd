@@ -1,15 +1,35 @@
 -- trim3_hwst.sql — HWST trim advisory
-WITH base AS (
+WITH h AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    hw_supply_t,
+    hw_reset_request_sum,
+    pump_status,
+    chiller_status,
+    chw_flow,
+    chw_pump_cmd,
+    CASE
+      WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
+      WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
+      WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 1.0 THEN 1 ELSE 0 END
+      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
+      ELSE 0
+    END AS proof_on
+  FROM history
+),
+base AS (
   SELECT
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN COALESCE(proof_on, 0) = 0 THEN 0
       WHEN hw_supply_t IS NULL THEN 0
       WHEN hw_supply_t > {{HWST_HI}}
        AND COALESCE(hw_reset_request_sum, 0) <= {{REQUEST_LO}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
-  FROM history
+  FROM h
 ),
 lagged AS (
   SELECT

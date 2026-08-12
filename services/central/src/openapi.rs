@@ -170,6 +170,34 @@ mod live_routes {
     pub fn analytics_metering() {}
 
     #[utoipa::path(
+        post, path = "/api/analytics/setpoints", tag = "analytics",
+        request_body = serde_json::Value,
+        responses((status = 200, description = "Occupied/unoccupied setpoint medians", body = serde_json::Value))
+    )]
+    pub fn analytics_setpoints() {}
+
+    #[utoipa::path(
+        post, path = "/api/analytics/diurnal", tag = "analytics",
+        request_body = serde_json::Value,
+        responses((status = 200, description = "24h sensor diurnal profiles", body = serde_json::Value))
+    )]
+    pub fn analytics_diurnal() {}
+
+    #[utoipa::path(
+        post, path = "/api/analytics/topology", tag = "analytics",
+        request_body = serde_json::Value,
+        responses((status = 200, description = "Equipment topology (feeds/fedBy)", body = serde_json::Value))
+    )]
+    pub fn analytics_topology() {}
+
+    #[utoipa::path(
+        post, path = "/api/analytics/sensor-stats", tag = "analytics",
+        request_body = serde_json::Value,
+        responses((status = 200, description = "Sensor stats all/fan-on/fan-off", body = serde_json::Value))
+    )]
+    pub fn analytics_sensor_stats() {}
+
+    #[utoipa::path(
         get, path = "/api/reports", tag = "reports",
         responses((status = 200, description = "List report artifacts / drafts", body = serde_json::Value))
     )]
@@ -241,6 +269,10 @@ mod live_routes {
         live_routes::analytics_sensor_health,
         live_routes::analytics_mechanical_cooling,
         live_routes::analytics_metering,
+        live_routes::analytics_setpoints,
+        live_routes::analytics_diurnal,
+        live_routes::analytics_topology,
+        live_routes::analytics_sensor_stats,
         live_routes::reports_list,
         live_routes::reports_engineering_findings,
         live_routes::reports_templates,

@@ -14,16 +14,17 @@ use arrow::record_batch::RecordBatch;
 use datafusion::parquet::arrow::ArrowWriter;
 use serde_json::{json, Value};
 
-/// Write `building={id}/equipment=AHU_1/part-0.parquet`. When `zone_t` is
+/// Write `building={id}/equipment=VAV_1/part-0.parquet`. When `zone_t` is
 /// `Some`, a constant zone temp makes VAV-1 comfort faults deterministic; when
 /// `None`, the `zone_t` role is absent so VAV-1 must SKIP (not fail).
+/// Equipment id is VAV_1 so `equipment_kinds: [vav, zone]` applies (AHU_1 is N/A).
 fn write_building(parquet_root: &Path, building_id: &str, zone_t: Option<f64>, rows: usize) {
     let dir = parquet_root
         .join(format!("building={building_id}"))
-        .join("equipment=AHU_1");
+        .join("equipment=VAV_1");
     std::fs::create_dir_all(&dir).unwrap();
 
-    let equipment: Vec<&str> = vec!["AHU_1"; rows];
+    let equipment: Vec<&str> = vec!["VAV_1"; rows];
     // Millisecond epoch @ 5-min cadence so window ORDER BY works on a real
     // timestamp column (string columns break DataFusion RANGE frames).
     let ts: Vec<i64> = (0..rows as i64)
@@ -141,7 +142,7 @@ fn building_id_scopes_results_and_faults() {
         .iter()
         .filter_map(|e| e["equipment_id"].as_str().map(str::to_string))
         .collect();
-    assert!(ids.contains(&"AHU_1".to_string()), "equipment: {eq}");
+    assert!(ids.contains(&"VAV_1".to_string()), "equipment: {eq}");
 
     // results_response reads each scoped dir independently.
     let r50 = open_fdd_edge_prototype::fdd::registry_api::results_response(Some("B50"));

@@ -203,6 +203,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route("/api/analytics/metering", post(analytics_metering))
         .route("/api/analytics/fuel", post(analytics_fuel))
+        .route("/api/analytics/setpoints", post(analytics_setpoints))
+        .route("/api/analytics/diurnal", post(analytics_diurnal))
+        .route("/api/analytics/topology", post(analytics_topology))
+        .route("/api/analytics/sensor-stats", post(analytics_sensor_stats))
         .route("/api/fuel/campus/import", post(fuel_campus_import))
         .route("/api/fuel/campus", get(fuel_campus_list))
         .route(
@@ -2048,6 +2052,100 @@ async fn analytics_metering(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
         "ok": true,
         "analytics": analytics::metering::handle_async(&req).await.to_json(),
     }))
+}
+
+async fn analytics_setpoints(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    let env = match analytics::historian::setpoints_from_history(
+        req.query.equipment_ids.as_deref(),
+        req.query.building_id.as_deref(),
+    )
+    .await
+    {
+        Ok(Some(env)) => analytics::finalize_historian(&req, env, analytics::QV_SETPOINTS),
+        Ok(None) => analytics::envelope_with_engine(
+            analytics::QV_SETPOINTS,
+            &req.query,
+            vec!["setpoints unavailable — no setpoint columns on historian".into()],
+            analytics::DF_ENGINE,
+        ),
+        Err(e) => analytics::envelope(
+            analytics::QV_SETPOINTS,
+            &req.query,
+            vec![format!("setpoints failed: {e}")],
+        ),
+    };
+    Json(json!({"ok": true, "analytics": env.to_json()}))
+}
+
+async fn analytics_diurnal(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    let env = match analytics::historian::diurnal_from_history(
+        req.query.equipment_ids.as_deref(),
+        req.query.building_id.as_deref(),
+    )
+    .await
+    {
+        Ok(Some(env)) => analytics::finalize_historian(&req, env, analytics::QV_DIURNAL),
+        Ok(None) => analytics::envelope_with_engine(
+            analytics::QV_DIURNAL,
+            &req.query,
+            vec!["diurnal unavailable — no historian timestamp/roles".into()],
+            analytics::DF_ENGINE,
+        ),
+        Err(e) => analytics::envelope(
+            analytics::QV_DIURNAL,
+            &req.query,
+            vec![format!("diurnal failed: {e}")],
+        ),
+    };
+    Json(json!({"ok": true, "analytics": env.to_json()}))
+}
+
+async fn analytics_topology(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    let env =
+        match analytics::historian::topology_from_history(req.query.building_id.as_deref()).await {
+            Ok(Some(env)) => analytics::finalize_historian(&req, env, analytics::QV_TOPOLOGY),
+            Ok(None) => analytics::envelope_with_engine(
+                analytics::QV_TOPOLOGY,
+                &req.query,
+                vec!["topology unavailable — no historian equipment".into()],
+                analytics::DF_ENGINE,
+            ),
+            Err(e) => analytics::envelope(
+                analytics::QV_TOPOLOGY,
+                &req.query,
+                vec![format!("topology failed: {e}")],
+            ),
+        };
+    Json(json!({"ok": true, "analytics": env.to_json()}))
+}
+
+async fn analytics_sensor_stats(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    let fan_state = req
+        .series
+        .as_ref()
+        .and_then(|s| s.get("fan_state"))
+        .and_then(|v| v.as_str());
+    let env = match analytics::historian::sensor_stats_from_history(
+        req.query.equipment_ids.as_deref(),
+        req.query.building_id.as_deref(),
+        fan_state,
+    )
+    .await
+    {
+        Ok(Some(env)) => analytics::finalize_historian(&req, env, analytics::QV_SENSOR_STATS),
+        Ok(None) => analytics::envelope_with_engine(
+            analytics::QV_SENSOR_STATS,
+            &req.query,
+            vec!["sensor-stats unavailable — no numeric roles".into()],
+            analytics::DF_ENGINE,
+        ),
+        Err(e) => analytics::envelope(
+            analytics::QV_SENSOR_STATS,
+            &req.query,
+            vec![format!("sensor-stats failed: {e}")],
+        ),
+    };
+    Json(json!({"ok": true, "analytics": env.to_json()}))
 }
 
 async fn analytics_fuel(Json(req): Json<FuelRequest>) -> Json<Value> {

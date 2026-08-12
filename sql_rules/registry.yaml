@@ -20,6 +20,7 @@ rules:
     pandas_function: vav1
     description: Zone comfort band violation hours with confirm window
     required_roles: [zone_t]
+    optional_roles: [occ_mode]
     output_columns: [equipment_id, fault_hours, fault_pct]
     priority: P0
     parity_status: sql_screening
@@ -530,6 +531,7 @@ rules:
     pandas_function: null
     description: Sensor out of hard range
     required_roles: [oa_t]
+    optional_roles: [fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -562,6 +564,7 @@ rules:
     pandas_function: null
     description: Sensor flatline (stuck)
     required_roles: [oa_t]
+    optional_roles: [fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -594,6 +597,7 @@ rules:
     pandas_function: null
     description: Sensor rate-of-change spike
     required_roles: [oa_t]
+    optional_roles: [fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -625,8 +629,8 @@ rules:
     sql_file: sv_stale.sql
     pandas_function: null
     description: Stale data (no fresh samples)
-    # OFDD-065: require a fan signal so age-vs-max does not inflate off-period / weather rows
-    required_roles: [fan_cmd]
+    # Pandas gate is `always` (sensor sweep); do not require fan_cmd.
+    required_roles: []
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -692,6 +696,7 @@ rules:
     pandas_function: null
     description: Suspected control-output hunting
     required_roles: [clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -733,6 +738,7 @@ rules:
     pandas_function: null
     description: PID hunting (operating-state oscillation)
     required_roles: [oa_damper_pct, clg_valve_pct, fan_cmd]
+    optional_roles: [fan_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1381,6 +1387,7 @@ rules:
     pandas_function: null
     description: Excessive reheat during warm weather
     required_roles: [oa_t, reheat_valve_pct, zone_flow]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1431,6 +1438,7 @@ rules:
     pandas_function: null
     description: Damper stuck at full open
     required_roles: [damper_pct, zone_flow]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1472,6 +1480,7 @@ rules:
     pandas_function: null
     description: Airflow sensor bias
     required_roles: [zone_flow, damper_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1495,6 +1504,7 @@ rules:
     pandas_function: null
     description: Reheat valve stuck / no temp rise
     required_roles: [reheat_valve_pct, vav_discharge_t, vav_inlet_t, zone_flow]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1545,6 +1555,7 @@ rules:
     pandas_function: null
     description: VAV leave vs parent AHU SAT (fedBy)
     required_roles: [vav_discharge_t, ahu_sat, zone_flow]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1586,6 +1597,7 @@ rules:
     pandas_function: null
     description: Min airflow / fixed high flow
     required_roles: [zone_flow, min_flow_sp]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1797,6 +1809,7 @@ rules:
     pandas_function: null
     description: Condenser water not optimized vs wet-bulb
     required_roles: [cw_supply_t, web_wb_t]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1838,6 +1851,7 @@ rules:
     pandas_function: null
     description: High CW approach at full tower fan
     required_roles: [cw_supply_t, web_wb_t, tower_fan_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1879,6 +1893,7 @@ rules:
     pandas_function: null
     description: Excess tower fan energy vs wet-bulb limit
     required_roles: [cw_supply_t, web_wb_t, tower_fan_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1929,6 +1944,7 @@ rules:
     pandas_function: null
     description: Discharge cold when heating
     required_roles: [sat, zone_t, fan_cmd]
+    optional_roles: [compressor_status, fan_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -2044,6 +2060,7 @@ rules:
     pandas_function: null
     description: HWST trim advisory
     required_roles: [hw_supply_t]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -2085,6 +2102,7 @@ rules:
     pandas_function: null
     description: CHW plant reset advisory
     required_roles: [chw_supply_t]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening

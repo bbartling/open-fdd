@@ -133,6 +133,11 @@ async fn inject_optional_fan_cols(
         "pump_status",
         "chiller_status",
         "chw_flow",
+        "chw_pump_cmd",
+        "compressor_status",
+        "occ_mode",
+        "hw_reset_request_sum",
+        "chw_reset_request_sum",
     ];
     let missing: Vec<&str> = needed.into_iter().filter(|c| !have.contains(*c)).collect();
     if missing.is_empty() {

@@ -4,7 +4,16 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     sat, zone_t,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan
+    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan,
+    compressor_status,
+    fan_status,
+    CASE
+      WHEN compressor_status IS NOT NULL THEN CASE WHEN compressor_status > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.05 THEN 1 ELSE 0 END
+      ELSE 1
+    END AS proof_on
+
   FROM history
 ),
 base AS (
@@ -12,6 +21,7 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN COALESCE(proof_on, 0) = 0 THEN 0
       WHEN sat IS NULL OR zone_t IS NULL OR fan IS NULL THEN 0
       WHEN fan >= 0.05 AND zone_t < {{ZONE_COLD}} AND sat < {{MIN_SAT}} THEN 1
       ELSE 0

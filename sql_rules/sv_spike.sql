@@ -5,7 +5,21 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     oa_t,
-    LAG(oa_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_oa_t
+    LAG(oa_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_oa_t,
+    fan_cmd,
+    fan_status,
+    pump_status,
+    chw_pump_cmd,
+    chiller_status,
+    CASE
+      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
+      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
+      WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
+      ELSE 1
+    END AS energized
+
   FROM history
 ),
 base AS (
@@ -13,6 +27,7 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN COALESCE(energized, 0) = 0 THEN 0
       WHEN oa_t IS NULL OR prev_oa_t IS NULL THEN 0
       WHEN ABS(oa_t - prev_oa_t) > 16.0 * {{SPIKE_SCALE}} THEN 1
       ELSE 0

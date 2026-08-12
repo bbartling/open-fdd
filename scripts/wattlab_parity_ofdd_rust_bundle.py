@@ -45,6 +45,10 @@ EXTRA_ANALYTICS = (
     ("rcx_chiller", "/api/analytics/rcx/chiller"),
     ("rcx_boiler", "/api/analytics/rcx/boiler"),
     ("rcx_preset", "/api/analytics/rcx/preset"),
+    ("setpoints", "/api/analytics/setpoints"),
+    ("diurnal", "/api/analytics/diurnal"),
+    ("topology", "/api/analytics/topology"),
+    ("sensor_stats_all", "/api/analytics/sensor-stats"),
 )
 
 
@@ -284,19 +288,46 @@ def assemble(capture_dir: Path, bundle_dir: Path) -> dict:
     _write_csv(bundle_dir / "rcx_preset_coverage.csv", rcx_preset)
     mark("rcx_preset_coverage.csv")
 
-    # Tables Rust cannot fill yet — empty with provenance flag, not dropped.
-    for empty_name in (
-        "setpoints.csv",
-        "sensor_stats_fan_on.csv",
-        "sensor_stats_fan_off.csv",
-        "sensor_diurnal_24h.csv",
-        "topology.csv",
-        "data_model.csv",
-    ):
-        if not (bundle_dir / empty_name).is_file():
-            (bundle_dir / empty_name).write_text("", encoding="utf-8")
-            mark(empty_name)
-            missing_apis.append(f"missing_api:{empty_name}")
+    setpoints = _extra_rows("setpoints")
+    _write_csv(bundle_dir / "setpoints.csv", setpoints)
+    mark("setpoints.csv")
+    if not setpoints:
+        missing_apis.append("missing_api:setpoints.csv")
+
+    diurnal = _extra_rows("diurnal")
+    _write_csv(bundle_dir / "sensor_diurnal_24h.csv", diurnal)
+    mark("sensor_diurnal_24h.csv")
+    if not diurnal:
+        missing_apis.append("missing_api:sensor_diurnal_24h.csv")
+
+    topo_wrap = extra.get("topology") or {}
+    _, topo_body = _unwrap(topo_wrap) if isinstance(topo_wrap, dict) else (None, topo_wrap)
+    topo_env = _analytics(topo_body) if isinstance(topo_body, dict) else {}
+    topo_rows = [r for r in (topo_env.get("rows") or []) if isinstance(r, dict)]
+    data_model_rows = [r for r in (topo_env.get("equipment") or []) if isinstance(r, dict)]
+    _write_csv(bundle_dir / "topology.csv", topo_rows)
+    mark("topology.csv")
+    _write_csv(bundle_dir / "data_model.csv", data_model_rows)
+    mark("data_model.csv")
+    if not topo_rows:
+        missing_apis.append("missing_api:topology.csv")
+
+    stats_all = _extra_rows("sensor_stats_all")
+    _write_csv(bundle_dir / "sensor_stats_all.csv", stats_all or health_rows)
+    mark("sensor_stats_all.csv")
+
+    # Fan-on / fan-off stats: same endpoint, series.fan_state captured separately
+    # when capture_extra posts with body variants (see capture_extra).
+    stats_on = _extra_rows("sensor_stats_fan_on")
+    _write_csv(bundle_dir / "sensor_stats_fan_on.csv", stats_on)
+    mark("sensor_stats_fan_on.csv")
+    if not stats_on:
+        missing_apis.append("missing_api:sensor_stats_fan_on.csv")
+    stats_off = _extra_rows("sensor_stats_fan_off")
+    _write_csv(bundle_dir / "sensor_stats_fan_off.csv", stats_off)
+    mark("sensor_stats_fan_off.csv")
+    if not stats_off:
+        missing_apis.append("missing_api:sensor_stats_fan_off.csv")
 
     _write_json(
         bundle_dir / "quality_flags.json",
@@ -344,6 +375,14 @@ def capture_extra(base: str, token: str | None, building_id: str, capture_dir: P
     for name, path in EXTRA_ANALYTICS:
         st, env = _req("POST", f"{base}{path}", token=token, body=body)
         extra[name] = {"status": st, "body": env}
+    for fan_state, key in (("on", "sensor_stats_fan_on"), ("off", "sensor_stats_fan_off")):
+        st, env = _req(
+            "POST",
+            f"{base}/api/analytics/sensor-stats",
+            token=token,
+            body={"building_id": building_id, "series": {"fan_state": fan_state}},
+        )
+        extra[key] = {"status": st, "body": env}
     _write_json(capture_dir / "extra_analytics.json", extra)
 
 
