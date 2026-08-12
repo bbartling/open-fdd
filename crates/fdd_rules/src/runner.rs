@@ -64,47 +64,53 @@ fn write_skip_marker(out_path: &Path, missing_roles: &[String], note: &str) -> s
     std::fs::write(out_path, serde_json::to_string_pretty(&body)?)
 }
 
-/// Inject NULL Float64 columns for optional roles missing from history, then
-/// rewrite SQL `FROM history` → `FROM history_opt_<rule>` so AHU-only buildings
-/// still run (pandas sched1: no zone → base mask only).
-async fn sql_with_optional_null_roles(
-    ctx: &SessionContext,
+/// Inject NULL columns for optional roles missing from history via a WITH CTE
+/// (TEMP VIEW is not available in all DataFusion builds used by tests).
+/// String roles such as `occ_mode` use VARCHAR; numeric proof roles use DOUBLE.
+fn sql_with_optional_null_roles(
     rule_id: &str,
     sql: &str,
     optional_roles: &[String],
     history_columns: &std::collections::HashSet<String>,
-) -> Result<String> {
+) -> String {
     let missing: Vec<String> = optional_roles
         .iter()
         .filter(|role| !history_columns.contains(&role.to_ascii_lowercase()))
         .cloned()
         .collect();
     if missing.is_empty() {
-        return Ok(sql.to_string());
+        return sql.to_string();
     }
-    let view_name = format!(
-        "history_opt_{}",
-        rule_id
-            .chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-            .collect::<String>()
-            .to_ascii_lowercase()
-    );
+    let _ = rule_id;
     let null_cols: String = missing
         .iter()
-        .map(|r| format!("CAST(NULL AS DOUBLE) AS \"{r}\""))
+        .map(|r| {
+            let ty = if r.eq_ignore_ascii_case("occ_mode") {
+                "VARCHAR"
+            } else {
+                "DOUBLE"
+            };
+            format!("CAST(NULL AS {ty}) AS \"{r}\"")
+        })
         .collect::<Vec<_>>()
         .join(", ");
-    let create_sql = format!(
-        "CREATE OR REPLACE TEMP VIEW {view_name} AS SELECT history.*, {null_cols} FROM history"
-    );
-    ctx.sql(&create_sql).await?.collect().await?;
+    let cte = format!("history_opt AS (SELECT history.*, {null_cols} FROM history)");
     let rewritten = sql
-        .replace(" FROM history", &format!(" FROM {view_name}"))
-        .replace(" from history", &format!(" from {view_name}"))
-        .replace("\nFROM history", &format!("\nFROM {view_name}"))
-        .replace("\nfrom history", &format!("\nfrom {view_name}"));
-    Ok(rewritten)
+        .replace(" FROM history", " FROM history_opt")
+        .replace(" from history", " from history_opt")
+        .replace("\nFROM history", "\nFROM history_opt")
+        .replace("\nfrom history", "\nfrom history_opt");
+    if let Some(idx) = rewritten.find("WITH ") {
+        let (pre, rest) = rewritten.split_at(idx);
+        let rest = rest.trim_start_matches("WITH ");
+        format!("{pre}WITH {cte}, {rest}")
+    } else if let Some(idx) = rewritten.find("with ") {
+        let (pre, rest) = rewritten.split_at(idx);
+        let rest = rest.trim_start_matches("with ");
+        format!("{pre}WITH {cte}, {rest}")
+    } else {
+        format!("WITH {cte} {rewritten}")
+    }
 }
 
 pub async fn run_all_rules(
@@ -241,28 +247,12 @@ pub async fn run_all_rules_with_overrides(
                 escaped
             );
         }
-        sql = match sql_with_optional_null_roles(
-            &ctx,
+        sql = sql_with_optional_null_roles(
             &rule.rule_id,
             &sql,
             &rule.optional_roles,
             &history_columns,
-        )
-        .await
-        {
-            Ok(s) => s,
-            Err(e) => {
-                timings.push(RuleTiming {
-                    rule_id: rule.rule_id.clone(),
-                    row_count: 0,
-                    elapsed_ms: t0.elapsed().as_millis(),
-                    output_path: out_path.display().to_string(),
-                    error: Some(format!("optional role inject: {e}")),
-                });
-                rules_failed += 1;
-                continue;
-            }
-        };
+        );
         match run_sql(&ctx, &sql).await {
             Ok(result) => {
                 std::fs::write(

@@ -145,7 +145,10 @@ async fn inject_optional_fan_cols(
     }
     let nulls = missing
         .iter()
-        .map(|c| format!("CAST(NULL AS DOUBLE) AS \"{c}\""))
+        .map(|c| {
+            let ty = if *c == "occ_mode" { "VARCHAR" } else { "DOUBLE" };
+            format!("CAST(NULL AS {ty}) AS \"{c}\"")
+        })
         .collect::<Vec<_>>()
         .join(", ");
     let cte = format!("history_opt AS (SELECT history.*, {nulls} FROM history)");
