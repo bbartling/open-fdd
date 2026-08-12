@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use fdd_rules::{
-    effective_param_strings, load_registry, load_tuning_profiles, read_poll_from_cache, rule_params,
-    run_all_rules_with_overrides, substitute_sql, RuleRegistry, RuleSpec,
+    effective_param_strings, load_registry, load_tuning_profiles, read_poll_from_cache,
+    rule_params, run_all_rules_with_overrides, substitute_sql, RuleRegistry, RuleSpec,
 };
 use fdd_sql::{register_parquet_tree, register_weather_if_present, run_sql};
 use serde_json::{json, Value};
@@ -1217,14 +1217,19 @@ mod tests {
         let lower = out.to_ascii_lowercase();
         assert!(lower.contains("confirmed as confirmed_fault"), "{out}");
         assert!(lower.contains("timestamp_utc"), "{out}");
-        assert!(lower.contains("where equipment_id = 'ahu_1'") || lower.contains("where equipment_id = 'AHU_1'"), "{out}");
+        assert!(
+            lower.contains("where equipment_id = 'ahu_1'")
+                || lower.contains("where equipment_id = 'AHU_1'"),
+            "{out}"
+        );
         assert!(!lower.contains("fault_hours"), "{out}");
         assert!(lower.contains("from final"), "{out}");
     }
 
     #[test]
     fn rewrite_skips_analytics_rollups() {
-        let raw = "SELECT equipment_id, AVG(zone_t) AS avg_zone_temp FROM history GROUP BY equipment_id";
+        let raw =
+            "SELECT equipment_id, AVG(zone_t) AS avg_zone_temp FROM history GROUP BY equipment_id";
         assert!(rewrite_rule_sql_to_fault_series(raw, "VAV_1").is_none());
     }
 
