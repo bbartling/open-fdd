@@ -292,13 +292,13 @@ def assemble(capture_dir: Path, bundle_dir: Path) -> dict:
     _write_csv(bundle_dir / "setpoints.csv", setpoints)
     mark("setpoints.csv")
     if not setpoints:
-        missing_apis.append("missing_api:setpoints.csv")
+        missing_apis.append("missing_table:setpoints.csv")
 
     diurnal = _extra_rows("diurnal")
     _write_csv(bundle_dir / "sensor_diurnal_24h.csv", diurnal)
     mark("sensor_diurnal_24h.csv")
     if not diurnal:
-        missing_apis.append("missing_api:sensor_diurnal_24h.csv")
+        missing_apis.append("missing_table:sensor_diurnal_24h.csv")
 
     topo_wrap = extra.get("topology") or {}
     _, topo_body = _unwrap(topo_wrap) if isinstance(topo_wrap, dict) else (None, topo_wrap)
@@ -310,7 +310,7 @@ def assemble(capture_dir: Path, bundle_dir: Path) -> dict:
     _write_csv(bundle_dir / "data_model.csv", data_model_rows)
     mark("data_model.csv")
     if not topo_rows:
-        missing_apis.append("missing_api:topology.csv")
+        missing_apis.append("missing_table:topology.csv")
 
     stats_all = _extra_rows("sensor_stats_all")
     _write_csv(bundle_dir / "sensor_stats_all.csv", stats_all or health_rows)
@@ -322,12 +322,12 @@ def assemble(capture_dir: Path, bundle_dir: Path) -> dict:
     _write_csv(bundle_dir / "sensor_stats_fan_on.csv", stats_on)
     mark("sensor_stats_fan_on.csv")
     if not stats_on:
-        missing_apis.append("missing_api:sensor_stats_fan_on.csv")
+        missing_apis.append("missing_table:sensor_stats_fan_on.csv")
     stats_off = _extra_rows("sensor_stats_fan_off")
     _write_csv(bundle_dir / "sensor_stats_fan_off.csv", stats_off)
     mark("sensor_stats_fan_off.csv")
     if not stats_off:
-        missing_apis.append("missing_api:sensor_stats_fan_off.csv")
+        missing_apis.append("missing_table:sensor_stats_fan_off.csv")
 
     _write_json(
         bundle_dir / "quality_flags.json",
