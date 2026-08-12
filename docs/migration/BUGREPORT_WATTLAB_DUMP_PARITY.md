@@ -26,7 +26,13 @@ Accepted only: CHW-1 skip/off, SCHED-247 pressure-not-fault, FC7 concept_only, r
 - Ranked `fan_status` > `fan_cmd` on AHU/ECON/FC/OA/DMP/VLV/TRIM-1 SQL
 - FC2 mix_tol no longer cancels (`mat+tol < min(rat,oat)-tol`)
 - CHW-2/3/4 hydronic proof CTE
-- SV-STALE no longer filters fan_cmd (pandas `always`)
+- SV-STALE no longer filters fan_cmd (pandas `always`); required_roles empty
+- SV-FLATLINE/RANGE/SPIKE `equipment_energized` (fan → pump → compressor)
+- VAV-1 occupied-only when `occ_mode` present (no fan_cmd required)
+- VAV-3/4/5/7/REHEAT/AHU-LEAVE fan_on + FLOW_ON_MIN
+- CW-OPT/APR/FAN + TRIM-3/4 hydronic proof (missing proof → 0 h)
+- HP-1 compressor/fan ranked proof; FC4/PID fan_status over cmd
+- New APIs: `/api/analytics/setpoints`, `/diurnal`, `/topology`, `/sensor-stats`
 - Vibe19 `topology.csv` now gets `vav_to_ahu` + `parent_ahu`
 
 ## After tip image
