@@ -6,7 +6,13 @@ WITH h AS (
     mat,
     oa_t,
     rat,
-    COALESCE(CASE WHEN fan_cmd IS NULL THEN 0.0 WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END, 0.0) AS fan
+    COALESCE(CASE WHEN fan_cmd IS NULL THEN 0.0 WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END, 0.0) AS fan,
+    CASE
+      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      ELSE 1
+    END AS fan_on
+
   FROM history
 ),
 base AS (
@@ -14,9 +20,9 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN fan > 0.01 AND mat IS NOT NULL AND oa_t IS NOT NULL AND rat IS NOT NULL
-       AND (mat - 1.15) < (rat - 1.15)
-       AND (mat - 1.15) < (oa_t - 1.15)
+      WHEN COALESCE(fan_on, 1) = 0 THEN 0
+      WHEN mat IS NOT NULL AND oa_t IS NOT NULL AND rat IS NOT NULL
+       AND (mat + 1.15) < (CASE WHEN rat < oa_t THEN rat ELSE oa_t END) - 1.15
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),

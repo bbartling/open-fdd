@@ -21,7 +21,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ORACLE = ROOT / "reports/wattlab-parity/artifacts/vibe19_oracle"
-DEFAULT_OFDD = ROOT / "reports/wattlab-parity/artifacts/ofdd_rust"
+DEFAULT_OFDD = ROOT / "reports/wattlab-parity/artifacts/ofdd_rust_bundle"
+DEFAULT_CAPTURE = ROOT / "reports/wattlab-parity/artifacts/ofdd_rust"
 DEFAULT_OUT = ROOT / "reports/wattlab-parity/artifacts/diff_summary.json"
 FIXTURE = ROOT / "reports/wattlab-parity/fixtures/schedule_b100_7to5.json"
 
@@ -232,6 +233,8 @@ def _intentional_43(
             return True, "4.3.0 SCHED-247 skip vs pass"
         if abs(oh - rh) > 0.05 and (ou in _PASS_STATUSES or ru == "FAULT"):
             return True, "4.3.0 SCHED-247 pressure-not-fault hours"
+    if rule_id == "FC7":
+        return True, "concept_only — SQL placeholder; htg_valve_pct missing"
     return False, ""
 
 
@@ -242,41 +245,43 @@ def _sql_screening_pair(
     o_hours: float | None,
     r_hours: float | None,
 ) -> tuple[bool, str]:
-    """Inventory ``sql_screening`` / 4.3.0 seams — not per-row blockers."""
+    """Only documented 4.3.0 / concept_only seams — FAULT∩FAULT hours are blockers."""
     ok, why = _intentional_43(rule_id, o_status, r_status, o_hours, r_hours)
     if ok:
         return True, why
-    ou, ru = o_status.upper(), r_status.upper()
-    rh = 0.0 if r_hours is None else r_hours
-    if ou == "NOT_APPLICABLE_EQUIPMENT_TYPE":
-        return True, "SQL screening runs all equipment types; pandas N/A"
-    if ou in _SKIP_STATUSES and ru in _PASS_STATUSES and rh == 0.0:
-        return True, "SQL PASS/0h where pandas skips"
-    if ou in _SKIP_STATUSES and ru == "FAULT":
-        return True, "SQL screening lacks operational skip/off gates"
-    if {ou, ru} <= {"FAULT", "PASS", "OK"}:
-        return True, "sql_screening status/hours (not mask_parity yet)"
     return False, ""
 
 
-def compare_manifest(oracle_dir: Path) -> list[dict]:
-    man = _load_json(oracle_dir / "MANIFEST.json") or {}
-    schema = str(man.get("schema_version") or "")
-    legacy = str(man.get("legacy_schema_version") or "")
-    ok = schema in _ACCEPTED_SCHEMAS or legacy in _ACCEPTED_SCHEMAS
-    return [
-        {
-            "artifact": "MANIFEST",
-            "key": "schema_version",
-            "vibe19": {"schema_version": schema, "legacy_schema_version": legacy},
-            "ofdd": "accept openfdd_engineering_bundle_v1 or wattlab_dump_v3",
-            "delta": None if ok else "unrecognized bundle schema",
-            "severity": "noise" if ok else "blocker",
-            "rationale": (
-                "React/Rust readers accept schema_version or legacy_schema_version."
-            ),
-        }
-    ]
+def _is_rust_extra_equip(equipment_id: str) -> bool:
+    u = equipment_id.lower()
+    return u in {"weather", "unknown"} or u.startswith("weather")
+
+
+def compare_manifest(oracle_dir: Path, ofdd_dir: Path | None = None) -> list[dict]:
+    rows = []
+    for side, d in (("vibe19", oracle_dir), ("ofdd", ofdd_dir or oracle_dir)):
+        man = _load_json(d / "MANIFEST.json") or {}
+        schema = str(man.get("schema_version") or "")
+        legacy = str(man.get("legacy_schema_version") or "")
+        ok = schema in _ACCEPTED_SCHEMAS or legacy in _ACCEPTED_SCHEMAS
+        rows.append(
+            {
+                "artifact": "MANIFEST",
+                "key": f"{side}.schema_version",
+                "vibe19": {"schema_version": schema, "legacy_schema_version": legacy}
+                if side == "vibe19"
+                else None,
+                "ofdd": {"schema_version": schema, "legacy_schema_version": legacy}
+                if side == "ofdd"
+                else None,
+                "delta": None if ok else "unrecognized bundle schema",
+                "severity": "noise" if ok else "blocker",
+                "rationale": (
+                    "React/Rust readers accept schema_version or legacy_schema_version."
+                ),
+            }
+        )
+    return rows
 
 
 def compare_package_health(oracle_dir: Path) -> list[dict]:
@@ -394,294 +399,302 @@ def compare_topology(oracle_dir: Path) -> list[dict]:
     ]
 
 
-def compare_analytics_tables(oracle_dir: Path, ofdd_dir: Path) -> list[dict]:
-    """Oracle analytics CSVs vs Rust /api/analytics/* — definition seams stay accepted."""
-    rows: list[dict] = []
-    runtime = _analytics_envelope(_load_json(ofdd_dir / "runtime.json") or {})
-    sensor = _analytics_envelope(_load_json(ofdd_dir / "sensor_health.json") or {})
-    motor = oracle_dir / "motor_hours.csv"
-    rows.append(
-        {
-            "artifact": "analytics",
-            "key": "runtime_vs_motor_hours",
-            "vibe19": "motor_hours.csv" if motor.is_file() else None,
-            "ofdd": {
-                "engine": runtime.get("engine"),
-                "row_count": len(runtime.get("rows") or [])
-                if isinstance(runtime.get("rows"), list)
-                else None,
-            },
-            "delta": "definition seam: pandas motor_hours vs DataFusion runtime",
-            "severity": "accepted",
-            "rationale": (
-                "Runtime analytics engines differ (pandas cookbook vs SQL). "
-                "Numeric equality is a follow-on; presence is required on both sides."
-            ),
-        }
-    )
-    rows.append(
-        {
-            "artifact": "analytics",
-            "key": "sensor_health",
-            "vibe19": (oracle_dir / "sensor_health_matrix.csv").is_file(),
-            "ofdd": {
-                "engine": sensor.get("engine"),
-                "row_count": len(sensor.get("rows") or [])
-                if isinstance(sensor.get("rows"), list)
-                else None,
-            },
-            "delta": None,
-            "severity": "accepted",
-            "rationale": "Sensor-health SQL vs pandas matrix — accepted until SQL patch cycle.",
-        }
-    )
-    return rows
+_ANALYTIC_FILES = (
+    "motor_hours.csv",
+    "motor_weekly.csv",
+    "sensor_health_matrix.csv",
+    "sensor_fault_summary.csv",
+    "sensor_stats_all.csv",
+    "sensor_stats_fan_on.csv",
+    "sensor_stats_fan_off.csv",
+    "sensor_diurnal_24h.csv",
+    "setpoints.csv",
+    "mech_cooling_oat_bins.csv",
+    "mech_cooling_coverage.csv",
+    "economizer_weather.csv",
+    "operating_signatures.csv",
+    "schedule_inference_table.csv",
+    "weather_observed.csv",
+    "meter_monthly_electric.csv",
+    "rcx_preset_coverage.csv",
+    "rcx_zone_comfort_ranking.csv",
+)
 
 
-def compare_fdd(oracle_dir: Path, ofdd_dir: Path) -> list[dict]:
-    """Compare vibe19 fdd_findings to Rust /api/fdd/results."""
+def _csv_index(path: Path, key_cols: tuple[str, ...]) -> dict[str, dict]:
     import csv
     import sys
 
     csv.field_size_limit(min(sys.maxsize, 32 * 1024 * 1024))
+    out: dict[str, dict] = {}
+    if not path.is_file() or path.stat().st_size == 0:
+        return out
+    with path.open(newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        if not reader.fieldnames:
+            return out
+        for row in reader:
+            parts = [str(row.get(c) or "") for c in key_cols if c in (reader.fieldnames or [])]
+            if not any(parts):
+                parts = [str(row.get(c) or "") for c in ("equipment_id", "week_label", "role", "sensor")]
+            key = "::".join(p for p in parts if p) or json.dumps(row, sort_keys=True)[:80]
+            out[key] = row
+    return out
+
+
+def compare_analytics_tables(oracle_dir: Path, ofdd_dir: Path) -> list[dict]:
+    """Numeric dump-vs-dump for every Engineering Bundle analytics CSV."""
+    import csv as _csv
 
     rows: list[dict] = []
-    findings_path = oracle_dir / "fdd_findings.csv"
-    summary_path = oracle_dir / "fdd_summary.csv"
-    rust = _unwrap_capture(_load_json(ofdd_dir / "fdd_results.json") or {})
-    rust_rows: list = []
-    if isinstance(rust, dict):
-        rust_rows = rust.get("results") or []
+    hour_cols = (
+        "run_hours",
+        "fault_hours",
+        "occupied_hours",
+        "unoccupied_hours",
+        "on_hours",
+        "pct_outside_comfort",
+        "mean",
+        "mean_zone_t",
+        "kwh",
+        "kWh",
+    )
+    for name in _ANALYTIC_FILES:
+        o_path = oracle_dir / name
+        r_path = ofdd_dir / name
+        o_ok = o_path.is_file() and o_path.stat().st_size > 0
+        r_ok = r_path.is_file() and r_path.stat().st_size > 0
+        if not o_ok and not r_ok:
+            rows.append(
+                {
+                    "artifact": name,
+                    "key": "presence",
+                    "vibe19": None,
+                    "ofdd": None,
+                    "delta": "missing_artifact both sides",
+                    "severity": "blocker",
+                }
+            )
+            continue
+        if o_ok and not r_ok:
+            rows.append(
+                {
+                    "artifact": name,
+                    "key": "presence",
+                    "vibe19": True,
+                    "ofdd": False,
+                    "delta": f"missing_api:{name}",
+                    "severity": "blocker",
+                    "rationale": "Do not drop Vibe19 files; add Rust API or assembler fill.",
+                }
+            )
+            continue
+        if r_ok and not o_ok:
+            rows.append(
+                {
+                    "artifact": name,
+                    "key": "presence",
+                    "vibe19": False,
+                    "ofdd": True,
+                    "delta": "oracle missing table",
+                    "severity": "blocker",
+                }
+            )
+            continue
+        o_idx = _csv_index(o_path, ("equipment_id", "signal", "week_label", "role"))
+        r_idx = _csv_index(r_path, ("equipment_id", "signal", "week_label", "role"))
+        keys = sorted(set(o_idx) | set(r_idx))
+        n_block = 0
+        n_ok = 0
+        for key in keys:
+            o = o_idx.get(key) or {}
+            r = r_idx.get(key) or {}
+            compared = False
+            ok = True
+            delta = None
+            for col in hour_cols:
+                if col not in o and col not in r:
+                    continue
+                compared = True
+                oa = _fnum(o, col)
+                rb = _fnum(r, col)
+                if oa is None and rb is None:
+                    continue
+                oa_v = 0.0 if oa is None else oa
+                rb_v = 0.0 if rb is None else rb
+                if _sev_num(oa_v, rb_v, abs_tol=0.05, rel_tol=0.001) == "blocker":
+                    ok = False
+                    delta = {col: rb_v - oa_v}
+                    break
+            if not compared:
+                n_ok += 1
+                continue
+            if ok:
+                n_ok += 1
+            else:
+                n_block += 1
+                rows.append(
+                    {
+                        "artifact": name,
+                        "key": key,
+                        "vibe19": {c: o.get(c) for c in hour_cols if c in o},
+                        "ofdd": {c: r.get(c) for c in hour_cols if c in r},
+                        "delta": delta,
+                        "severity": "blocker",
+                    }
+                )
+        rows.append(
+            {
+                "artifact": name,
+                "key": "table_summary",
+                "vibe19": len(o_idx),
+                "ofdd": len(r_idx),
+                "delta": {"numeric_ok": n_ok, "numeric_blockers": n_block},
+                "severity": "blocker" if n_block else "noise",
+            }
+        )
+    return rows
+
+
+def _load_findings(path: Path) -> dict[tuple[str, str], dict]:
+    import csv
+    import sys
+
+    csv.field_size_limit(min(sys.maxsize, 32 * 1024 * 1024))
+    out: dict[tuple[str, str], dict] = {}
+    if not path.is_file():
+        return out
+    with path.open(newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            rid = _RULE_ALIASES.get(str(row.get("rule_id") or ""), str(row.get("rule_id") or ""))
+            if rid in _RUST_ONLY_RULES and rid != "FC13-SAT-HIGH":
+                continue
+            key = (rid, str(row.get("equipment_id") or ""))
+            out[key] = row
+    return out
+
+
+def _load_rust_api_findings(capture_dir: Path) -> dict[tuple[str, str], dict]:
+    rust = _unwrap_capture(_load_json(capture_dir / "fdd_results.json") or {})
+    rust_rows = rust.get("results") if isinstance(rust, dict) else []
     if not isinstance(rust_rows, list):
         rust_rows = []
-
-    rust_by = {}
+    out = {}
     for r in rust_rows:
         if not isinstance(r, dict):
             continue
-        rid = str(r.get("rule_id", ""))
-        rid = _RULE_ALIASES.get(rid, rid)
-        key = (rid, str(r.get("equipment_id", "")))
-        rust_by[key] = r
+        rid = _RULE_ALIASES.get(str(r.get("rule_id") or ""), str(r.get("rule_id") or ""))
+        if rid in _RUST_ONLY_RULES and rid != "FC13":
+            continue
+        key = (rid, str(r.get("equipment_id") or ""))
+        out[key] = r
+    return out
 
-    oracle_by = {}
-    src = findings_path if findings_path.is_file() else summary_path
-    if src.is_file():
-        with src.open(newline="", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                key = (str(row.get("rule_id", "")), str(row.get("equipment_id", "")))
-                oracle_by[key] = row
 
-    if not oracle_by and rust_by:
-        rows.append(
-            {
-                "artifact": "fdd_findings",
-                "key": "engine_follow_on",
-                "vibe19": "oracle dump used --skip-rules (no findings CSV)",
-                "ofdd": f"{len(rust_by)} Rust DF results",
-                "delta": "Re-run oracle without --skip-rules",
-                "severity": "blocker",
-                "rationale": "Parity now requires cookbook rules on the playground oracle.",
-            }
-        )
-        return rows
+def compare_fdd(oracle_dir: Path, ofdd_dir: Path, capture_dir: Path | None = None) -> list[dict]:
+    """Per-(rule, equipment) dump-vs-dump matrix. FAULT∩FAULT hour gaps are blockers."""
+    rows: list[dict] = []
+    oracle_by = _load_findings(oracle_dir / "fdd_findings.csv")
+    if not oracle_by:
+        oracle_by = _load_findings(oracle_dir / "fdd_summary.csv")
+    rust_by = _load_findings(ofdd_dir / "fdd_findings.csv")
+    if not rust_by and capture_dir is not None:
+        rust_by = _load_rust_api_findings(capture_dir)
 
     if not oracle_by and not rust_by:
-        rows.append(
+        return [
             {
                 "artifact": "fdd_findings",
                 "key": "presence",
                 "vibe19": None,
                 "ofdd": None,
-                "delta": "both missing — run oracle with rules / OFDD FDD run",
+                "delta": "both missing",
                 "severity": "blocker",
             }
-        )
-        return rows
+        ]
 
-    rust_only = [k for k in rust_by if k not in oracle_by]
-    oracle_only = [k for k in oracle_by if k not in rust_by]
-    overlap = [k for k in oracle_by if k in rust_by]
-
-    rows.append(
-        {
-            "artifact": "fdd_findings",
-            "key": "row_count",
-            "vibe19": len(oracle_by),
-            "ofdd": len(rust_by),
-            "delta": {
-                "overlap": len(overlap),
-                "oracle_only": len(oracle_only),
-                "rust_only": len(rust_only),
-            },
-            "severity": "accepted" if len(oracle_by) != len(rust_by) else "noise",
-            "rationale": (
-                "Pandas emits the full catalog cartesian (48×59=2832 at 4.3.0). "
-                "Rust omits N/A and adds SQL-only analytics ids. Compare overlap."
-            ),
-        }
-    )
-
-    rust_only_analytics = [k for k in rust_only if k[0] in _RUST_ONLY_RULES]
-    rust_only_other = [k for k in rust_only if k[0] not in _RUST_ONLY_RULES]
-    if rust_only_analytics:
-        rows.append(
-            {
-                "artifact": "fdd_findings",
-                "key": "rust_only_sql_analytics",
-                "vibe19": 0,
-                "ofdd": len(rust_only_analytics),
-                "delta": sorted({k[0] for k in rust_only_analytics}),
-                "severity": "accepted",
-                "rationale": "SQL analytics ids are not in the pandas cookbook catalog.",
-            }
-        )
-    if rust_only_other:
-        sample = [f"{a}::{b}" for a, b in rust_only_other[:12]]
-        rows.append(
-            {
-                "artifact": "fdd_findings",
-                "key": "rust_only_cookbook",
-                "vibe19": None,
-                "ofdd": sample,
-                "delta": f"{len(rust_only_other)} rust-only cookbook rows",
-                "severity": "accepted",
-                "rationale": (
-                    "Rust may evaluate extra equipment ids (weather/unknown). "
-                    "Filed; not a silent status flip on shared keys."
-                ),
-            }
-        )
-
-    rust_rule_ids = {k[0] for k in rust_by}
-    oracle_only_applicable = 0
-    for key in sorted(oracle_only):
-        o = oracle_by[key]
-        o_status = str(o.get("status") or o.get("result_status") or "")
-        if o_status.upper() in _SKIP_STATUSES:
-            continue  # rust omits N/A / skipped — accepted, don't spam
-        if key[0] in rust_rule_ids or key[0] == "CHW-1":
-            oracle_only_applicable += 1
-            continue
-        rows.append(
-            {
-                "artifact": "fdd_findings",
-                "key": f"{key[0]}::{key[1]}",
-                "vibe19": o_status,
-                "ofdd": None,
-                "delta": "missing on OFDD",
-                "severity": "blocker",
-            }
-        )
-    if oracle_only_applicable:
-        rows.append(
-            {
-                "artifact": "fdd_findings",
-                "key": "oracle_applicable_omitted_by_sql",
-                "vibe19": oracle_only_applicable,
-                "ofdd": 0,
-                "delta": "SQL returned the rule on other equipment only (or CHW-1 skip)",
-                "severity": "accepted",
-                "rationale": (
-                    "DataFusion emits a row when the SQL query returns equipment. "
-                    "Missing AHU/VAV rows are sql_screening / optional-role skips, "
-                    "plus 4.3.0 CHW-1."
-                ),
-            }
-        )
-
-    skipped_omitted = sum(
-        1
-        for k in oracle_only
-        if str(oracle_by[k].get("status") or oracle_by[k].get("result_status") or "").upper()
-        in _SKIP_STATUSES
-    )
-    if skipped_omitted:
-        rows.append(
-            {
-                "artifact": "fdd_findings",
-                "key": "oracle_skipped_omitted_by_rust",
-                "vibe19": skipped_omitted,
-                "ofdd": 0,
-                "delta": "Rust does not emit N/A / skip rows",
-                "severity": "accepted",
-                "rationale": "Cartesian skip/N/A rows are pandas-only.",
-            }
-        )
-
-    screening_status: dict[str, int] = {}
-    screening_hours: dict[str, int] = {}
+    keys = sorted(set(oracle_by) | set(rust_by))
     match_status = 0
     match_hours = 0
-    for key in sorted(overlap):
-        o = oracle_by[key]
-        r = rust_by[key]
+    for rule_id, equip in keys:
+        if _is_rust_extra_equip(equip) and (rule_id, equip) not in oracle_by:
+            rows.append(
+                {
+                    "artifact": "fdd_findings",
+                    "key": f"{rule_id}::{equip}",
+                    "vibe19": None,
+                    "ofdd": rust_by.get((rule_id, equip), {}).get("status"),
+                    "delta": "rust extra equipment",
+                    "severity": "accepted",
+                    "rationale": "weather/unknown not in pandas 48-equip universe",
+                    "o_hours": None,
+                    "r_hours": _fnum(rust_by.get((rule_id, equip), {}), "fault_hours"),
+                }
+            )
+            continue
+        o = oracle_by.get((rule_id, equip)) or {}
+        r = rust_by.get((rule_id, equip)) or {}
         o_status = str(o.get("status") or o.get("result_status") or "")
         r_status = str(r.get("status") or "")
         oh = _fnum(o, "fault_hours", "confirmed_fault_hours")
         rh = _fnum(r, "fault_hours")
         o_h = 0.0 if oh is None else oh
         r_h = 0.0 if rh is None else rh
-        screen, why = _sql_screening_pair(key[0], o_status, r_status, oh, rh)
-        status_ok = _status_ok(o_status, r_status)
-        if status_ok:
-            match_status += 1
-        elif screen:
-            screening_status[key[0]] = screening_status.get(key[0], 0) + 1
-        else:
-            rows.append(
-                {
-                    "artifact": "fdd_findings",
-                    "key": f"{key[0]}::{key[1]}::status",
-                    "vibe19": o_status,
-                    "ofdd": r_status,
-                    "delta": "status mismatch",
-                    "severity": "blocker",
-                }
-            )
-        hours_sev = _sev_num(o_h, r_h, abs_tol=0.05, rel_tol=0.001)
-        if hours_sev == "blocker":
-            if screen or not status_ok:
-                screening_hours[key[0]] = screening_hours.get(key[0], 0) + 1
+        accepted, why = _sql_screening_pair(rule_id, o_status or "MISSING", r_status or "MISSING", oh, rh)
+        status_ok = bool(o_status) and bool(r_status) and _status_ok(o_status, r_status)
+        hours_ok = _sev_num(o_h, r_h, abs_tol=0.05, rel_tol=0.001) != "blocker"
+        if not o:
+            sev = "accepted" if accepted else "blocker"
+            delta = "missing on oracle"
+        elif not r:
+            if o_status.upper() in _SKIP_STATUSES and accepted:
+                sev = "accepted"
+                delta = why or "documented skip omit"
+            elif o_status.upper() in _SKIP_STATUSES:
+                sev = "blocker"
+                delta = "SQL omitted skip/N/A row (must emit N/A or omit both sides)"
             else:
-                rows.append(
-                    {
-                        "artifact": "fdd_findings",
-                        "key": f"{key[0]}::{key[1]}::fault_hours",
-                        "vibe19": o_h,
-                        "ofdd": r_h,
-                        "delta": r_h - o_h,
-                        "severity": "blocker",
-                    }
-                )
-        else:
+                sev = "accepted" if accepted else "blocker"
+                delta = why or "missing on OFDD"
+        elif accepted:
+            sev = "accepted"
+            delta = why
+        elif status_ok and hours_ok:
+            sev = "noise"
+            delta = None
+            match_status += 1
             match_hours += 1
-    if screening_status or screening_hours:
+        elif status_ok and not hours_ok:
+            sev = "blocker"
+            delta = r_h - o_h
+            match_status += 1
+        else:
+            sev = "blocker"
+            delta = "status mismatch" if not hours_ok else "status mismatch"
+        if status_ok:
+            if hours_ok:
+                match_hours += 0 if sev == "noise" else 0
         rows.append(
             {
                 "artifact": "fdd_findings",
-                "key": "sql_screening_rollup",
-                "vibe19": {"status_pairs": screening_status, "hour_pairs": screening_hours},
-                "ofdd": "parity_status=sql_screening in sql_rules/generated/parity_inventory.yaml",
-                "delta": (
-                    f"{sum(screening_status.values())} status + "
-                    f"{sum(screening_hours.values())} hour pairs"
-                ),
-                "severity": "accepted",
-                "rationale": (
-                    "Inventory marks cookbook twins sql_screening (not mask_parity). "
-                    "SQL evaluates all equipment types and lacks pandas skip/off gates. "
-                    "4.3.0 CHW-1 skip/off and SCHED-247 pressure-not-fault included. "
-                    "Numeric DataFusion parity is a follow-on SQL patch wave."
-                ),
+                "key": f"{rule_id}::{equip}",
+                "rule_id": rule_id,
+                "equipment_id": equip,
+                "vibe19": o_status or None,
+                "ofdd": r_status or None,
+                "o_hours": oh,
+                "r_hours": rh,
+                "delta": delta if delta is not None else (None if hours_ok else r_h - o_h),
+                "severity": sev,
+                "rationale": why if accepted else None,
             }
         )
     rows.append(
         {
             "artifact": "fdd_findings",
             "key": "overlap_matches",
-            "vibe19": {"status_ok": match_status, "hours_ok": match_hours},
-            "ofdd": len(overlap),
+            "vibe19": {"oracle_rows": len(oracle_by), "status_ok": match_status, "hours_ok": match_hours},
+            "ofdd": len(rust_by),
             "delta": None,
             "severity": "noise",
         }
@@ -816,21 +829,21 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--oracle", type=Path, default=DEFAULT_ORACLE)
     p.add_argument("--ofdd", type=Path, default=DEFAULT_OFDD)
+    p.add_argument("--capture", type=Path, default=DEFAULT_CAPTURE)
     p.add_argument("--fixture", type=Path, default=FIXTURE)
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
     args = p.parse_args()
 
     fixture = _load_json(args.fixture) or {}
     rows: list[dict] = []
-    rows.extend(gate0_schedule(args.oracle, args.ofdd, fixture))
-    rows.extend(compare_manifest(args.oracle))
+    ofdd_for_sched = args.ofdd if (args.ofdd / "parity_schedule.json").is_file() else args.capture
+    rows.extend(gate0_schedule(args.oracle, ofdd_for_sched, fixture))
+    rows.extend(compare_manifest(args.oracle, args.ofdd))
     rows.extend(compare_package_health(args.oracle))
     rows.extend(compare_quality(args.oracle))
     rows.extend(compare_topology(args.oracle))
-    rows.extend(compare_setpoints_gap(args.oracle, args.ofdd))
-    rows.extend(compare_schedule_analytics(args.ofdd))
     rows.extend(compare_analytics_tables(args.oracle, args.ofdd))
-    rows.extend(compare_fdd(args.oracle, args.ofdd))
+    rows.extend(compare_fdd(args.oracle, args.ofdd, args.capture))
 
     blockers = sum(1 for r in rows if r.get("severity") == "blocker")
     accepted = sum(1 for r in rows if r.get("severity") == "accepted")
@@ -847,7 +860,36 @@ def main() -> int:
     args.out.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     md_path = args.out.with_suffix(".md")
     md_path.write_text(to_markdown(rows), encoding="utf-8")
-    print(f"wrote {args.out} blockers={blockers} accepted={accepted} stop_rule_met={blockers == 0}")
+    matrix_path = args.out.parent / "diff_matrix.csv"
+    import csv as _csv
+
+    fields = [
+        "artifact",
+        "key",
+        "rule_id",
+        "equipment_id",
+        "vibe19",
+        "ofdd",
+        "o_hours",
+        "r_hours",
+        "delta",
+        "severity",
+        "rationale",
+    ]
+    with matrix_path.open("w", newline="", encoding="utf-8") as f:
+        w = _csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+        w.writeheader()
+        for r in rows:
+            flat = {k: r.get(k) for k in fields}
+            for k in ("vibe19", "ofdd", "delta"):
+                v = flat.get(k)
+                if isinstance(v, (dict, list)):
+                    flat[k] = json.dumps(v, ensure_ascii=False)[:500]
+            w.writerow(flat)
+    print(
+        f"wrote {args.out} matrix={matrix_path} blockers={blockers} "
+        f"accepted={accepted} stop_rule_met={blockers == 0}"
+    )
     return 0 if blockers == 0 else 1
 
 

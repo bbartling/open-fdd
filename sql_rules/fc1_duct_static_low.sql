@@ -5,7 +5,13 @@ WITH h AS (
     timestamp_utc,
     duct_static,
     duct_static_sp,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan_cmd
+    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan_cmd,
+    CASE
+      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      ELSE 1
+    END AS fan_on
+
   FROM history
 ),
 base AS (
@@ -13,6 +19,7 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN duct_static IS NOT NULL AND duct_static_sp IS NOT NULL
        AND duct_static < duct_static_sp - {{EPS_DSP}}
        AND fan_cmd >= 1.0 - {{EPS_VFD_SPD}}

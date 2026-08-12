@@ -1,6 +1,5 @@
 -- sv_stale.sql — Stale data (no fresh samples)
--- OFDD-065: gate on fan_cmd so off-period history does not inflate FAULT hours
--- (matches vibe19 applicability filter behavior on Liberty).
+-- Pandas gate is `always` — do not filter fan_cmd (off-period stale still counts).
 WITH mx AS (
   SELECT MAX(timestamp_utc) AS max_ts FROM history
 ),
@@ -15,7 +14,6 @@ base AS (
     END AS INT) AS raw_fault
   FROM history h
   CROSS JOIN mx
-  WHERE COALESCE(CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END, 0.0) > 0.05
 ),
 lagged AS (
   SELECT

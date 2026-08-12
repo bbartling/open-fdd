@@ -4,7 +4,15 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     web_oa_t,
-    CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END AS oa_d
+    CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END AS oa_d,
+    fan_cmd,
+    fan_status,
+    CASE
+      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      ELSE 1
+    END AS fan_on
+
   FROM history
 ),
 base AS (
@@ -12,6 +20,7 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN web_oa_t IS NULL OR oa_d IS NULL THEN 0
       WHEN web_oa_t < {{ECON6_OAT_MAX_F}} AND oa_d > {{ECON6_DAMPER_MAX}} THEN 1
       ELSE 0

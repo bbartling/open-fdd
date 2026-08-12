@@ -6,7 +6,15 @@ WITH h AS (
     sat,
     mat,
     COALESCE(CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END, 0.0) AS oa_damper_pct,
-    COALESCE(CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END, 0.0) AS clg_valve_pct
+    COALESCE(CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END, 0.0) AS clg_valve_pct,
+    fan_cmd,
+    fan_status,
+    CASE
+      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      ELSE 1
+    END AS fan_on
+
   FROM history
 ),
 base AS (
@@ -14,6 +22,7 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN sat IS NOT NULL AND mat IS NOT NULL AND clg_valve_pct > 0.01
        AND (sat - 1.15 - 0.55) > (mat + 1.15)
        AND (oa_damper_pct <= 0.05 OR oa_damper_pct > 0.9)

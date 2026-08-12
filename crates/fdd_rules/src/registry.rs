@@ -38,6 +38,10 @@ pub struct RuleSpec {
     /// (e.g. SCHED-1 zone comfort gate).
     #[serde(default)]
     pub optional_roles: Vec<String>,
+    /// Pandas cookbook equipment_kinds (ahu/vav/chiller/…). Empty = no type filter
+    /// (SQL-only analytics).
+    #[serde(default)]
+    pub equipment_kinds: Vec<String>,
     #[serde(default)]
     pub output_columns: Vec<String>,
     #[serde(default = "default_confirm")]

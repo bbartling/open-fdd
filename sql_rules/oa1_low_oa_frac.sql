@@ -4,7 +4,13 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     mat, rat, oa_t,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan
+    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan,
+    CASE
+      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      ELSE 1
+    END AS fan_on
+
   FROM history
 ),
 base AS (
@@ -12,6 +18,7 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN mat IS NULL OR rat IS NULL OR oa_t IS NULL THEN 0
       WHEN ABS(rat - oa_t) <= {{OAT_RAT_GUARD}} THEN 0
       WHEN (mat - rat) / NULLIF(oa_t - rat, 0) < {{MIN_OA_FRAC}}

@@ -161,6 +161,7 @@ mod tests {
             description: "test".into(),
             required_roles: vec![],
             optional_roles: vec![],
+            equipment_kinds: vec!["vav".into()],
             output_columns: vec![],
             confirm_seconds: 900,
             parity_status: String::new(),
