@@ -37,7 +37,14 @@ aliases_index:
 matrix:
 - rule_id: SV-RANGE
   title: Sensor out of hard range
-  equipment_types: &id001 []
+  equipment_types: &id001
+  - ahu
+  - vav
+  - chiller
+  - boiler
+  - weather
+  - zone
+  - heatpump
   required_roles: &id002 []
   optional_roles: &id003
   - oa_t
@@ -50,15 +57,21 @@ matrix:
   - pump_status
   - chw_pump_cmd
   - chiller_status
-  operational_proof_roles: &id004 []
+  operational_proof_roles: &id004
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
+  - pump-status
+  - chw-pump-status
+  - hw-pump-status
+  - pump-current
+  - chw-flow
+  - compressor-status
+  - equipment-enable
   default_thresholds: &id005
-    confirm_seconds:
-      default: 300.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     range_scale_temperature:
       default: 1.0
       unit: x
@@ -66,7 +79,31 @@ matrix:
       max: 2.0
       step: 0.1
       label: Temp range scale
-  pandas_implementation: sv_range
+    range_scale_humidity:
+      default: 1.0
+      unit: x
+      min: 0.5
+      max: 2.0
+      step: 0.1
+      label: Humidity range scale
+    range_scale_pressure:
+      default: 1.0
+      unit: x
+      min: 0.5
+      max: 2.0
+      step: 0.1
+      label: Pressure range scale
+    confirm_min:
+      default: 5.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 300.0
+      unit: sec
+  pandas_implementation: _sweep_range
   datafusion_sql_implementation: sv_range.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-range
   test_coverage: &id006
@@ -76,7 +113,14 @@ matrix:
   difference_class: none
 - rule_id: SV-FLATLINE
   title: Sensor flatline (stuck)
-  equipment_types: &id007 []
+  equipment_types: &id007
+  - ahu
+  - vav
+  - chiller
+  - boiler
+  - weather
+  - zone
+  - heatpump
   required_roles: &id008 []
   optional_roles: &id009
   - oa_t
@@ -91,16 +135,9 @@ matrix:
   - chiller_status
   operational_proof_roles: &id010 []
   default_thresholds: &id011
-    confirm_seconds:
-      default: 300.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     flatline_tol:
       default: 0.1
-      unit: degF
+      unit: °F
       min: 0.02
       max: 1.0
       step: 0.02
@@ -108,11 +145,21 @@ matrix:
     flatline_hours:
       default: 1.0
       unit: h
-      min: 0.25
-      max: 12.0
-      step: 0.25
+      min: 0.5
+      max: 8.0
+      step: 0.5
       label: Flatline window
-  pandas_implementation: sv_flatline
+    confirm_min:
+      default: 5.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 300.0
+      unit: sec
+  pandas_implementation: _sweep_flatline
   datafusion_sql_implementation: sv_flatline.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-flatline
   test_coverage: &id012 []
@@ -121,7 +168,14 @@ matrix:
   difference_class: none
 - rule_id: SV-SPIKE
   title: Sensor rate-of-change spike
-  equipment_types: &id013 []
+  equipment_types: &id013
+  - ahu
+  - vav
+  - chiller
+  - boiler
+  - weather
+  - zone
+  - heatpump
   required_roles: &id014 []
   optional_roles: &id015
   - oa_t
@@ -134,15 +188,21 @@ matrix:
   - pump_status
   - chw_pump_cmd
   - chiller_status
-  operational_proof_roles: &id016 []
+  operational_proof_roles: &id016
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
+  - pump-status
+  - chw-pump-status
+  - hw-pump-status
+  - pump-current
+  - chw-flow
+  - compressor-status
+  - equipment-enable
   default_thresholds: &id017
-    confirm_seconds:
-      default: 300.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     spike_scale:
       default: 1.0
       unit: x
@@ -150,7 +210,38 @@ matrix:
       max: 3.0
       step: 0.25
       label: Spike limit scale (global)
-  pandas_implementation: sv_spike
+    spike_scale_temperature:
+      default: 1.0
+      unit: x
+      min: 0.25
+      max: 3.0
+      step: 0.25
+      label: Temp spike scale
+    spike_scale_humidity:
+      default: 1.0
+      unit: x
+      min: 0.25
+      max: 3.0
+      step: 0.25
+      label: Humidity spike scale
+    spike_scale_pressure:
+      default: 1.0
+      unit: x
+      min: 0.25
+      max: 3.0
+      step: 0.25
+      label: Pressure spike scale
+    confirm_min:
+      default: 5.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 300.0
+      unit: sec
+  pandas_implementation: _sweep_spike
   datafusion_sql_implementation: sv_spike.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-spike
   test_coverage: &id018 []
@@ -159,7 +250,14 @@ matrix:
   difference_class: none
 - rule_id: SV-STALE
   title: Stale data (no fresh samples)
-  equipment_types: &id019 []
+  equipment_types: &id019
+  - ahu
+  - vav
+  - chiller
+  - boiler
+  - weather
+  - zone
+  - heatpump
   required_roles: &id020 []
   optional_roles: &id021
   - oa_t
@@ -169,13 +267,6 @@ matrix:
   - sat
   operational_proof_roles: &id022 []
   default_thresholds: &id023
-    confirm_seconds:
-      default: 300.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     stale_hours:
       default: 2.0
       unit: h
@@ -183,14 +274,17 @@ matrix:
       max: 12.0
       step: 0.5
       label: Stale window
-    stale_tol:
-      default: 0.05
-      unit: degF
+    confirm_min:
+      default: 5.0
+      unit: min
       min: 0.0
-      max: 1.0
-      step: 0.01
-      label: Stale tolerance
-  pandas_implementation: sv_stale
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 300.0
+      unit: sec
+  pandas_implementation: _sweep_stale
   datafusion_sql_implementation: sv_stale.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-stale
   test_coverage: &id024 []
@@ -199,7 +293,14 @@ matrix:
   difference_class: none
 - rule_id: SV-RATE
   title: Context-aware sensor rate of change
-  equipment_types: &id025 []
+  equipment_types: &id025
+  - ahu
+  - vav
+  - chiller
+  - boiler
+  - weather
+  - zone
+  - heatpump
   required_roles: &id026 []
   optional_roles: &id027
   - oa_t
@@ -209,13 +310,6 @@ matrix:
   - sat
   operational_proof_roles: &id028 []
   default_thresholds: &id029
-    confirm_seconds:
-      default: 600.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     persistence_min:
       default: 10.0
       unit: min
@@ -223,14 +317,45 @@ matrix:
       max: 60.0
       step: 1.0
       label: Fault persistence
-    steady_fault_per_hour:
-      default: 6.0
-      unit: degF_per_h
-      min: 1.0
+    transition_window_min:
+      default: 20.0
+      unit: min
+      min: 5.0
       max: 60.0
-      step: 0.5
-      label: Steady-state slew limit
-  pandas_implementation: sv_rate
+      step: 5.0
+      label: Transition window
+    max_gap_hours:
+      default: 2.0
+      unit: h
+      min: 0.25
+      max: 6.0
+      step: 0.25
+      label: Max sample gap
+    design_flow:
+      default: 0.0
+      unit: cfm
+      min: 0.0
+      max: 100000.0
+      step: 100.0
+      label: Design flow (flow profiles)
+    sensor_span:
+      default: 0.0
+      unit: eng
+      min: 0.0
+      max: 100000.0
+      step: 10.0
+      label: Sensor span (flow/pressure)
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
+  pandas_implementation: _sv_rate_compute
   datafusion_sql_implementation: sv_rate.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-rate
   test_coverage: &id030
@@ -241,75 +366,77 @@ matrix:
   difference_class: alias
 - rule_id: PID-HUNT-1
   title: Suspected control-output hunting
-  equipment_types: &id031 []
+  equipment_types: &id031
+  - ahu
+  - vav
+  - chiller
+  - boiler
+  - heatpump
   required_roles: &id032 []
   optional_roles: &id033
-  - oa_damper_pct
-  - clg_valve_pct
-  - htg_valve_pct
-  - damper_pct
-  - loop_enabled
-  - fan_status
-  - fan_cmd
-  operational_proof_roles: &id034 []
+  - loop-enabled
+  operational_proof_roles: &id034
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
+  - loop-enabled
   default_thresholds: &id035
-    confirm_seconds:
-      default: 0.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
-    window_hours:
-      default: 1.0
-      unit: h
-      min: 0.25
-      max: 4.0
-      step: 0.25
-      label: Hunting lookback window
     change_deadband_pct:
       default: 1.0
-      unit: pct
+      unit: '% out'
       min: 0.0
       max: 10.0
       step: 0.5
       label: Ignore changes below
     minimum_span_pct:
       default: 20.0
-      unit: pct
+      unit: '% out'
       min: 5.0
       max: 100.0
       step: 5.0
       label: Minimum observed span
     total_variation_fault_pct:
       default: 500.0
-      unit: pct
+      unit: '%/h'
       min: 50.0
       max: 2000.0
       step: 50.0
-      label: Total variation fault threshold
+      label: Total travel threshold
     minimum_equivalent_cycles:
       default: 2.5
-      unit: count
+      unit: cyc/h
       min: 0.5
-      max: 10.0
+      max: 20.0
       step: 0.5
       label: Min equivalent cycles
     minimum_reversals:
-      default: 4.0
+      default: 4
       unit: count
-      min: 1.0
-      max: 20.0
-      step: 1.0
+      min: 1
+      max: 40
+      step: 1
       label: Min direction reversals
     minimum_coverage_pct:
       default: 80.0
-      unit: pct
-      min: 50.0
+      unit: '%'
+      min: 25.0
       max: 100.0
       step: 5.0
-      label: Min window sample coverage
-  pandas_implementation: pid_hunt_1
+      label: Minimum data coverage
+    confirm_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 300.0
+      unit: sec
+  pandas_implementation: _pid_hunt_1
   datafusion_sql_implementation: pid_hunt_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#pid-hunt-1
   test_coverage: &id036 []
@@ -317,38 +444,69 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: FC1
-  title: Duct static below SP at full fan
-  equipment_types: &id037 []
+  title: Duct static below SP at full fan (GL36 A)
+  equipment_types: &id037
+  - ahu
   required_roles: &id038
-  - duct_static
-  - duct_static_sp
-  - fan_cmd
+  - duct-static-pressure
+  - duct-static-pressure-sp
+  - fan-cmd
   optional_roles: &id039
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id040 []
+  operational_proof_roles: &id040
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id041
     eps_dsp:
       default: 0.12
-      unit: inwc
+      unit: in. w.c.
       min: 0.0
       max: 0.5
       step: 0.01
-      label: Duct-static error epsDSP (GL36 default 0.1 in.w.c.)
+      label: Duct-static error εDSP (GL36 default 0.1 in.w.c.)
     eps_vfd_spd:
       default: 0.13
       unit: frac
       min: 0.0
       max: 0.5
       step: 0.01
-      label: VFD speed error epsVFDSPD (GL36 default 5%)
+      label: VFD speed error εVFDSPD (GL36 default 5%)
+    duct_static_err:
+      default: 0.12
+      unit: in. w.c.
+      min: 0.0
+      max: 0.5
+      step: 0.01
+      label: Legacy duct-static error (sets εDSP)
+    fan_hi:
+      default: 0.87
+      unit: frac
+      min: 0.5
+      max: 1.0
+      step: 0.01
+      label: Legacy fan-high threshold (sets εVFDSPD)
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 5.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
     confirm_seconds:
-      default: 300
+      default: 300.0
       unit: sec
-      min: 0
-      max: 3600
-      step: 300
-      label: Confirm time
   pandas_implementation: fc1
   datafusion_sql_implementation: fc1_duct_static_low.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc1
@@ -359,18 +517,77 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: FC2
-  title: Mixed air below envelope
-  equipment_types: &id043 []
+  title: MAT below OAT/RAT envelope (GL36 B)
+  equipment_types: &id043
+  - ahu
   required_roles: &id044
-  - mat
-  - oa_t
-  - rat
-  - fan_cmd
+  - mixed-air-temp
+  - outside-air-temp
+  - return-air-temp
+  - fan-cmd
   optional_roles: &id045
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id046 []
-  default_thresholds: &id047 {}
+  operational_proof_roles: &id046
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
+  default_thresholds: &id047
+    eps_mat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: MAT sensor error εMAT (GL36 default 5°F)
+    eps_rat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: RAT sensor error εRAT (GL36 default 2°F)
+    eps_oat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: OAT sensor error εOAT (GL36 default 2°F local / 5°F global)
+    mix_tol:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Legacy master sensor tolerance (sets all ε values)
+    fan_on_min:
+      default: 0.01
+      unit: frac
+      min: 0.0
+      max: 0.25
+      step: 0.01
+      label: Fan-on command threshold
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
   pandas_implementation: fc2
   datafusion_sql_implementation: fc2_mat_low.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc2
@@ -379,18 +596,77 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: FC3
-  title: Mixed air above envelope
-  equipment_types: &id049 []
+  title: MAT above OAT/RAT envelope (GL36 C)
+  equipment_types: &id049
+  - ahu
   required_roles: &id050
-  - mat
-  - oa_t
-  - rat
-  - fan_cmd
+  - mixed-air-temp
+  - outside-air-temp
+  - return-air-temp
+  - fan-cmd
   optional_roles: &id051
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id052 []
-  default_thresholds: &id053 {}
+  operational_proof_roles: &id052
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
+  default_thresholds: &id053
+    eps_mat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: MAT sensor error εMAT (GL36 default 5°F)
+    eps_rat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: RAT sensor error εRAT (GL36 default 2°F)
+    eps_oat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: OAT sensor error εOAT (GL36 default 2°F local / 5°F global)
+    mix_tol:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Legacy master sensor tolerance (sets all ε values)
+    fan_on_min:
+      default: 0.01
+      unit: frac
+      min: 0.0
+      max: 0.25
+      step: 0.01
+      label: Fan-on command threshold
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
   pandas_implementation: fc3
   datafusion_sql_implementation: fc3_mat_high.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc3
@@ -400,29 +676,47 @@ matrix:
   difference_class: none
 - rule_id: FC4
   title: PID hunting (operating-state oscillation)
-  equipment_types: &id055 []
+  equipment_types: &id055
+  - ahu
   required_roles: &id056
-  - oa_damper_pct
-  - clg_valve_pct
-  - fan_cmd
+  - outside-air-damper
+  - cooling-valve
+  - fan-cmd
   optional_roles: &id057
   - fan_status
-  operational_proof_roles: &id058 []
+  operational_proof_roles: &id058
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
+  - loop-enabled
   default_thresholds: &id059
+    delta_os_max:
+      default: 5
+      unit: count
+      min: 1
+      max: 30
+      step: 1
+      label: Max mode changes/hr ΔOSmax (GL36 default 7)
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 60.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
     confirm_seconds:
       default: 3600.0
       unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
-    delta_os_max:
-      default: 5.0
-      unit: count
-      min: 1.0
-      max: 30.0
-      step: 1.0
-      label: Max operating-state entries per hour
   pandas_implementation: fc4
   datafusion_sql_implementation: fc4_os_hunting.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc4
@@ -432,31 +726,45 @@ matrix:
   difference_class: none
 - rule_id: FC5
   title: SAT cold when heating commanded (GL36 D)
-  equipment_types: &id061 []
+  equipment_types: &id061
+  - ahu
   required_roles: &id062
-  - sat
-  - mat
-  - htg_valve_pct
-  - fan_cmd
+  - discharge-air-temp
+  - mixed-air-temp
+  - fan-cmd
+  - heating-valve
   optional_roles: &id063
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id064 []
+  operational_proof_roles: &id064
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id065
-    confirm_seconds:
-      default: 600.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
-    mix_tol:
+    eps_sat:
       default: 1.15
-      unit: degF
+      unit: °F
       min: 0.0
       max: 10.0
       step: 0.25
-      label: Legacy master sensor tolerance (sets all eps values)
+      label: SAT sensor error εSAT (GL36 default 2°F)
+    eps_mat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: MAT sensor error εMAT (GL36 default 5°F)
+    delta_supply_fan:
+      default: 0.55
+      unit: °F
+      min: 0.0
+      max: 5.0
+      step: 0.05
+      label: Supply-fan heat rise ΔTSF (GL36 default 2°F)
     htg_on_min:
       default: 0.01
       unit: frac
@@ -464,6 +772,37 @@ matrix:
       max: 0.25
       step: 0.01
       label: Heating-command ON threshold
+    mix_tol:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Legacy master sensor tolerance (sets all ε values)
+    fan_on_min:
+      default: 0.01
+      unit: frac
+      min: 0.0
+      max: 0.25
+      step: 0.01
+      label: Fan-on command threshold
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
   pandas_implementation: fc5
   datafusion_sql_implementation: fc5_sat_cold_heating.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc5
@@ -473,46 +812,83 @@ matrix:
   difference_class: none
 - rule_id: FC6
   title: Estimated OA fraction mismatch
-  equipment_types: &id067 []
+  equipment_types: &id067
+  - ahu
   required_roles: &id068
-  - mat
-  - rat
-  - oa_t
-  - fan_cmd
-  - vav_total_flow
+  - mixed-air-temp
+  - outside-air-temp
+  - return-air-temp
+  - vav-total-airflow
   optional_roles: &id069
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id070 []
+  operational_proof_roles: &id070
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id071
-    confirm_seconds:
-      default: 600.0
-      unit: sec
+    eps_airflow:
+      default: 0.15
+      unit: frac
+      min: 0.05
+      max: 1.0
+      step: 0.01
+      label: Airflow error εF (GL36 default 30%)
+    delta_t_min:
+      default: 5.0
+      unit: °F
       min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
+      max: 30.0
+      step: 0.5
+      label: Minimum |OAT−RAT| ΔTmin (GL36 default 10°F)
     airflow_err:
       default: 0.15
       unit: frac
       min: 0.05
       max: 1.0
       step: 0.01
-      label: Airflow error epsF (GL36 default 30%)
-    delta_t_min:
+      label: Legacy OA-fraction error (sets εF)
+    oat_rat_delta_min:
       default: 5.0
-      unit: degF
+      unit: °F
       min: 0.0
       max: 30.0
       step: 0.5
-      label: Minimum |OAT-RAT| deltaTmin (GL36 default 10degF)
+      label: Legacy OAT/RAT guard (sets ΔTmin)
     min_cfm_design:
-      default: 5000.0
+      default: 5000
       unit: cfm
+      min: 500
+      max: 20000
+      step: 500
+      label: Design min OA CFM
+    fan_on_min:
+      default: 0.01
+      unit: frac
       min: 0.0
-      max: 200000.0
-      step: 100.0
-      label: Design minimum outdoor airflow
+      max: 0.25
+      step: 0.01
+      label: Fan-on command threshold
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
   pandas_implementation: fc6
   datafusion_sql_implementation: fc6_oa_frac_mismatch.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc6
@@ -521,23 +897,37 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: FC7
-  title: SAT low while heating at full
-  equipment_types: &id073 []
+  title: SAT low with full heating (GL36 E)
+  equipment_types: &id073
+  - ahu
   required_roles: &id074
-  - sat
-  - sat_sp
-  - htg_valve_pct
-  - fan_cmd
+  - discharge-air-temp
+  - discharge-air-temp-sp
+  - fan-cmd
+  - heating-valve
   optional_roles: &id075 []
-  operational_proof_roles: &id076 []
+  operational_proof_roles: &id076
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id077
-    sat_err:
+    eps_sat:
       default: 1.0
-      unit: degF
+      unit: °F
       min: 0.0
       max: 10.0
       step: 0.25
-      label: Legacy SAT error (sets epsSAT)
+      label: SAT sensor error εSAT (GL36 default 2°F)
+    sat_err:
+      default: 1.0
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Legacy SAT error (sets εSAT)
     htg_full_min:
       default: 0.9
       unit: frac
@@ -545,13 +935,30 @@ matrix:
       max: 1.0
       step: 0.01
       label: Full-heating threshold (GL36 99%)
+    fan_on_min:
+      default: 0.01
+      unit: frac
+      min: 0.0
+      max: 0.25
+      step: 0.01
+      label: Fan-on command threshold
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
     confirm_seconds:
-      default: 600
+      default: 600.0
       unit: sec
-      min: 0
-      max: 3600
-      step: 300
-      label: Confirm time
   pandas_implementation: fc7
   datafusion_sql_implementation: fc7_sat_low_heating.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc7
@@ -564,18 +971,91 @@ matrix:
     twin parity
   difference_class: missing_implementation
 - rule_id: FC8
-  title: SAT vs MAT while economizing
-  equipment_types: &id079 []
+  title: SAT/MAT mismatch in economizer (GL36 F)
+  equipment_types: &id079
+  - ahu
   required_roles: &id080
-  - sat
-  - mat
-  - oa_damper_pct
-  - clg_valve_pct
+  - discharge-air-temp
+  - mixed-air-temp
+  - outside-air-damper
+  - cooling-valve
   optional_roles: &id081
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id082 []
-  default_thresholds: &id083 {}
+  operational_proof_roles: &id082
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
+  default_thresholds: &id083
+    eps_sat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: SAT sensor error εSAT (GL36 default 2°F)
+    eps_mat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: MAT sensor error εMAT (GL36 default 5°F)
+    delta_supply_fan:
+      default: 0.55
+      unit: °F
+      min: 0.0
+      max: 5.0
+      step: 0.05
+      label: Supply-fan heat rise ΔTSF (GL36 default 2°F)
+    econ_min_pos:
+      default: 0.05
+      unit: frac
+      min: 0.0
+      max: 0.5
+      step: 0.01
+      label: Economizer minimum-position threshold
+    clg_inactive_max:
+      default: 0.1
+      unit: frac
+      min: 0.0
+      max: 0.5
+      step: 0.01
+      label: Cooling-command inactive ceiling
+    mix_tol:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Legacy master sensor tolerance (sets all ε values)
+    supply_tol:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Legacy SAT tolerance master (sets εSAT)
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
   pandas_implementation: fc8
   datafusion_sql_implementation: fc8_sat_mat_econ.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc8
@@ -584,18 +1064,84 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: FC9
-  title: OAT high vs SAT SP while economizing
-  equipment_types: &id085 []
+  title: OAT too warm for free cooling (GL36 G)
+  equipment_types: &id085
+  - ahu
   required_roles: &id086
-  - oa_t
-  - sat_sp
-  - oa_damper_pct
-  - clg_valve_pct
+  - outside-air-temp
+  - discharge-air-temp-sp
+  - outside-air-damper
+  - cooling-valve
   optional_roles: &id087
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id088 []
-  default_thresholds: &id089 {}
+  operational_proof_roles: &id088
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
+  default_thresholds: &id089
+    eps_oat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: OAT sensor error εOAT (GL36 default 2°F local / 5°F global)
+    eps_sat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: SAT sensor error εSAT (GL36 default 2°F)
+    delta_supply_fan:
+      default: 0.55
+      unit: °F
+      min: 0.0
+      max: 5.0
+      step: 0.05
+      label: Supply-fan heat rise ΔTSF (GL36 default 2°F)
+    econ_min_pos:
+      default: 0.05
+      unit: frac
+      min: 0.0
+      max: 0.5
+      step: 0.01
+      label: Economizer minimum-position threshold
+    clg_inactive_max:
+      default: 0.1
+      unit: frac
+      min: 0.0
+      max: 0.5
+      step: 0.01
+      label: Cooling-command inactive ceiling
+    mix_tol:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Legacy master sensor tolerance (sets all ε values)
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
   pandas_implementation: fc9
   datafusion_sql_implementation: fc9_oa_sat_sp_econ.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc9
@@ -604,18 +1150,77 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: FC10
-  title: MAT-OAT delta while cooling and economizing
-  equipment_types: &id091 []
+  title: OAT/MAT mismatch + mech cooling (GL36 H)
+  equipment_types: &id091
+  - ahu
   required_roles: &id092
-  - mat
-  - oa_t
-  - oa_damper_pct
-  - clg_valve_pct
+  - mixed-air-temp
+  - outside-air-temp
+  - outside-air-damper
+  - cooling-valve
   optional_roles: &id093
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id094 []
-  default_thresholds: &id095 {}
+  operational_proof_roles: &id094
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
+  default_thresholds: &id095
+    eps_mat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: MAT sensor error εMAT (GL36 default 5°F)
+    eps_oat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: OAT sensor error εOAT (GL36 default 2°F local / 5°F global)
+    econ_full_open:
+      default: 0.9
+      unit: frac
+      min: 0.5
+      max: 1.0
+      step: 0.01
+      label: Economizer full-open threshold
+    clg_on_min:
+      default: 0.01
+      unit: frac
+      min: 0.0
+      max: 0.25
+      step: 0.01
+      label: Cooling-command ON threshold
+    mix_tol:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Legacy master sensor tolerance (sets all ε values)
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
   pandas_implementation: fc10
   datafusion_sql_implementation: fc10_mat_oa_clg.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc10
@@ -624,18 +1229,84 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: FC11
-  title: OAT low vs SAT SP while cooling and economizing
-  equipment_types: &id097 []
+  title: OAT/MAT mismatch economizer-only (GL36 I)
+  equipment_types: &id097
+  - ahu
   required_roles: &id098
-  - oa_t
-  - sat_sp
-  - oa_damper_pct
-  - clg_valve_pct
+  - outside-air-temp
+  - discharge-air-temp-sp
+  - outside-air-damper
+  - cooling-valve
   optional_roles: &id099
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id100 []
-  default_thresholds: &id101 {}
+  operational_proof_roles: &id100
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
+  default_thresholds: &id101
+    eps_oat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: OAT sensor error εOAT (GL36 default 2°F local / 5°F global)
+    eps_sat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: SAT sensor error εSAT (GL36 default 2°F)
+    delta_supply_fan:
+      default: 0.55
+      unit: °F
+      min: 0.0
+      max: 5.0
+      step: 0.05
+      label: Supply-fan heat rise ΔTSF (GL36 default 2°F)
+    econ_full_open:
+      default: 0.9
+      unit: frac
+      min: 0.5
+      max: 1.0
+      step: 0.01
+      label: Economizer full-open threshold
+    clg_on_min:
+      default: 0.01
+      unit: frac
+      min: 0.0
+      max: 0.25
+      step: 0.01
+      label: Cooling-command ON threshold
+    mix_tol:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Legacy master sensor tolerance (sets all ε values)
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
   pandas_implementation: fc11
   datafusion_sql_implementation: fc11_oa_sat_sp_clg.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc11
@@ -644,18 +1315,98 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: FC12
-  title: SAT above MAT while cooling
-  equipment_types: &id103 []
+  title: SAT above blend in cooling (GL36 J)
+  equipment_types: &id103
+  - ahu
   required_roles: &id104
-  - sat
-  - mat
-  - oa_damper_pct
-  - clg_valve_pct
+  - discharge-air-temp
+  - mixed-air-temp
+  - outside-air-damper
+  - cooling-valve
   optional_roles: &id105
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id106 []
-  default_thresholds: &id107 {}
+  operational_proof_roles: &id106
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
+  default_thresholds: &id107
+    eps_sat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: SAT sensor error εSAT (GL36 default 2°F)
+    eps_mat:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: MAT sensor error εMAT (GL36 default 5°F)
+    delta_supply_fan:
+      default: 0.55
+      unit: °F
+      min: 0.0
+      max: 5.0
+      step: 0.05
+      label: Supply-fan heat rise ΔTSF (GL36 default 2°F)
+    econ_min_pos:
+      default: 0.05
+      unit: frac
+      min: 0.0
+      max: 0.5
+      step: 0.01
+      label: Economizer minimum-position threshold
+    econ_full_open:
+      default: 0.9
+      unit: frac
+      min: 0.5
+      max: 1.0
+      step: 0.01
+      label: Economizer full-open threshold
+    clg_on_min:
+      default: 0.01
+      unit: frac
+      min: 0.0
+      max: 0.25
+      step: 0.01
+      label: Cooling-command ON threshold
+    mix_tol:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Legacy master sensor tolerance (sets all ε values)
+    supply_tol:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Legacy SAT tolerance master (sets εSAT)
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
   pandas_implementation: fc12
   datafusion_sql_implementation: fc12_sat_mat_clg.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc12
@@ -664,53 +1415,77 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: FC13
-  title: SAT above setpoint at full cooling
-  equipment_types: &id109 []
+  title: SAT above SP at full cooling (GL36 K)
+  equipment_types: &id109
+  - ahu
   required_roles: &id110
-  - sat
-  - sat_sp
-  - clg_valve_pct
-  - oa_damper_pct
+  - discharge-air-temp
+  - discharge-air-temp-sp
+  - outside-air-damper
+  - cooling-valve
   optional_roles: &id111
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id112 []
+  operational_proof_roles: &id112
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id113
-    sat_err:
+    eps_sat:
       default: 1.0
-      unit: degF
+      unit: °F
       min: 0.0
       max: 10.0
       step: 0.25
-      label: SAT high error band
-    clg_valve_min:
+      label: SAT sensor error εSAT (GL36 default 2°F)
+    sat_err:
+      default: 1.0
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Legacy SAT error (sets εSAT)
+    clg_full_min:
       default: 0.01
       unit: frac
-      min: 0.0
-      max: 0.5
+      min: 0.5
+      max: 1.0
       step: 0.01
-      label: Cooling valve open threshold
-    oa_damper_econ_low:
+      label: Full-cooling threshold (GL36 99%)
+    econ_min_pos:
       default: 0.05
       unit: frac
       min: 0.0
       max: 0.5
       step: 0.01
-      label: OA damper economizer low
-    oa_damper_econ_high:
+      label: Economizer minimum-position threshold
+    econ_full_open:
       default: 0.9
       unit: frac
       min: 0.5
       max: 1.0
       step: 0.01
-      label: OA damper economizer high
+      label: Economizer full-open threshold
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
     confirm_seconds:
-      default: 600
+      default: 600.0
       unit: sec
-      min: 0
-      max: 3600
-      step: 300
-      label: Confirm time
   pandas_implementation: fc13
   datafusion_sql_implementation: sat_high_fault.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc13
@@ -721,9 +1496,13 @@ matrix:
   difference_class: alias
 - rule_id: FC14
   title: CHW coil ΔT when inactive (GL36 L)
-  equipment_types: &id115 []
+  equipment_types: &id115
+  - ahu
   required_roles: &id116
-  - clg_valve_pct
+  - cooling-coil-entering-temp
+  - cooling-coil-leaving-temp
+  - outside-air-damper
+  - cooling-valve
   optional_roles: &id117
   - cooling_coil_entering_temp
   - cooling_coil_leaving_temp
@@ -732,22 +1511,80 @@ matrix:
   - oa_damper_pct
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id118 []
+  operational_proof_roles: &id118
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id119
-    confirm_seconds:
-      default: 600.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
-    mix_tol:
+    eps_ccet:
       default: 1.15
-      unit: degF
+      unit: °F
       min: 0.0
       max: 10.0
       step: 0.25
-      label: Legacy master sensor tolerance (sets all eps values)
+      label: Cooling-coil entering sensor error εCCET
+    eps_cclt:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Cooling-coil leaving sensor error εCCLT
+    delta_supply_fan:
+      default: 0.55
+      unit: °F
+      min: 0.0
+      max: 5.0
+      step: 0.05
+      label: Supply-fan heat rise ΔTSF (GL36 default 2°F)
+    econ_min_pos:
+      default: 0.05
+      unit: frac
+      min: 0.0
+      max: 0.5
+      step: 0.01
+      label: Economizer minimum-position threshold
+    clg_inactive_max:
+      default: 0.1
+      unit: frac
+      min: 0.0
+      max: 0.5
+      step: 0.01
+      label: Cooling-command inactive ceiling
+    htg_on_min:
+      default: 0.01
+      unit: frac
+      min: 0.0
+      max: 0.25
+      step: 0.01
+      label: Heating-command ON threshold
+    mix_tol:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Legacy master sensor tolerance (sets all ε values)
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
   pandas_implementation: fc14
   datafusion_sql_implementation: fc14_chw_coil_dt_inactive.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc14
@@ -757,8 +1594,13 @@ matrix:
   difference_class: none
 - rule_id: FC15
   title: HW coil ΔT when inactive (GL36 M)
-  equipment_types: &id121 []
-  required_roles: &id122 []
+  equipment_types: &id121
+  - ahu
+  required_roles: &id122
+  - heating-coil-entering-temp
+  - heating-coil-leaving-temp
+  - outside-air-damper
+  - cooling-valve
   optional_roles: &id123
   - heating_coil_entering_temp
   - heating_coil_leaving_temp
@@ -768,22 +1610,87 @@ matrix:
   - clg_valve_pct
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id124 []
+  operational_proof_roles: &id124
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id125
-    confirm_seconds:
-      default: 600.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
-    mix_tol:
+    eps_hcet:
       default: 1.15
-      unit: degF
+      unit: °F
       min: 0.0
       max: 10.0
       step: 0.25
-      label: Legacy master sensor tolerance (sets all eps values)
+      label: Heating-coil entering sensor error εHCET
+    eps_hclt:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Heating-coil leaving sensor error εHCLT
+    delta_supply_fan:
+      default: 0.55
+      unit: °F
+      min: 0.0
+      max: 5.0
+      step: 0.05
+      label: Supply-fan heat rise ΔTSF (GL36 default 2°F)
+    econ_min_pos:
+      default: 0.05
+      unit: frac
+      min: 0.0
+      max: 0.5
+      step: 0.01
+      label: Economizer minimum-position threshold
+    econ_full_open:
+      default: 0.9
+      unit: frac
+      min: 0.5
+      max: 1.0
+      step: 0.01
+      label: Economizer full-open threshold
+    clg_inactive_max:
+      default: 0.1
+      unit: frac
+      min: 0.0
+      max: 0.5
+      step: 0.01
+      label: Cooling-command inactive ceiling
+    clg_on_min:
+      default: 0.01
+      unit: frac
+      min: 0.0
+      max: 0.25
+      step: 0.01
+      label: Cooling-command ON threshold
+    mix_tol:
+      default: 1.15
+      unit: °F
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      label: Legacy master sensor tolerance (sets all ε values)
+    mode_delay_min:
+      default: 0.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Mode-change suspension (GL36 default 30)
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
   pandas_implementation: fc15
   datafusion_sql_implementation: fc15_hw_coil_dt_inactive.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc15
@@ -793,30 +1700,40 @@ matrix:
   difference_class: none
 - rule_id: AHU-SATDEV
   title: SAT deviation from setpoint
-  equipment_types: &id127 []
+  equipment_types: &id127
+  - ahu
   required_roles: &id128
-  - sat
-  - sat_sp
+  - discharge-air-temp
+  - discharge-air-temp-sp
   optional_roles: &id129
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id130 []
+  operational_proof_roles: &id130
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id131
-    confirm_seconds:
-      default: 600.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     sat_dev_err:
       default: 5.0
-      unit: degF
+      unit: °F
       min: 1.0
       max: 15.0
       step: 0.5
       label: SAT deviation
-  pandas_implementation: ahu_satdev
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
+  pandas_implementation: ahu_sat_dev
   datafusion_sql_implementation: ahu_satdev.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-satdev
   test_coverage: &id132
@@ -826,38 +1743,41 @@ matrix:
   difference_class: none
 - rule_id: AHU-DUCTHI
   title: Duct static pressure high
-  equipment_types: &id133 []
+  equipment_types: &id133
+  - ahu
   required_roles: &id134
-  - duct_static
-  - duct_static_sp
-  - fan_cmd
+  - duct-static-pressure
+  - duct-static-pressure-sp
   optional_roles: &id135
   - fan_status
   - fan_cmd
   operational_proof_roles: &id136 []
   default_thresholds: &id137
-    confirm_seconds:
-      default: 300.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     duct_high_margin:
       default: 0.25
-      unit: in_wc
+      unit: in. w.c.
       min: 0.05
       max: 1.0
       step: 0.05
       label: High margin
     pressure_on_min:
       default: 0.2
-      unit: in_wc
+      unit: in. w.c.
       min: 0.05
       max: 1.0
       step: 0.05
       label: Pressure-on evidence
-  pandas_implementation: ahu_ducthi
+    confirm_min:
+      default: 5.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 300.0
+      unit: sec
+  pandas_implementation: ahu_duct_high
   datafusion_sql_implementation: ahu_ducthi.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-ducthi
   test_coverage: &id138
@@ -867,22 +1787,22 @@ matrix:
   difference_class: none
 - rule_id: AHU-SIMUL
   title: Heating and cooling simultaneous
-  equipment_types: &id139 []
+  equipment_types: &id139
+  - ahu
   required_roles: &id140
-  - htg_valve_pct
-  - clg_valve_pct
+  - heating-valve
+  - cooling-valve
   optional_roles: &id141
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id142 []
+  operational_proof_roles: &id142
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id143
-    confirm_seconds:
-      default: 300.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     valve_open_pct:
       default: 0.1
       unit: frac
@@ -890,7 +1810,17 @@ matrix:
       max: 0.5
       step: 0.01
       label: Valve open threshold
-  pandas_implementation: ahu_simul
+    confirm_min:
+      default: 5.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 300.0
+      unit: sec
+  pandas_implementation: ahu_simul_heat_cool
   datafusion_sql_implementation: ahu_simul.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-simul
   test_coverage: &id144 []
@@ -898,28 +1828,33 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: OAT-METEO
-  title: Equipment OAT vs weather-staged wx OAT
-  equipment_types: &id145 []
+  title: BAS outdoor-air sensor vs Open-Meteo
+  equipment_types: &id145
+  - ahu
   required_roles: &id146
-  - oa_t
+  - outside-air-temp
+  - web-outside-air-temp
   optional_roles: &id147
   - web_oa_t
   operational_proof_roles: &id148 []
   default_thresholds: &id149
     oat_err:
       default: 5.0
-      unit: degF
+      unit: °F
       min: 2.0
       max: 20.0
       step: 0.5
-      label: OAT vs meteo tolerance
+      label: Max OAT disagreement
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
     confirm_seconds:
-      default: 900
+      default: 900.0
       unit: sec
-      min: 0
-      max: 3600
-      step: 300
-      label: Confirm time
   pandas_implementation: oat_vs_meteo
   datafusion_sql_implementation: oat_meteo_fault.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#oat-meteo
@@ -928,24 +1863,41 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: ECON-1
-  title: Economizer stuck closed when OAT favorable
-  equipment_types: &id151 []
+  title: Economizer stuck closed
+  equipment_types: &id151
+  - ahu
   required_roles: &id152
-  - fan_cmd
-  - oa_damper_pct
-  - oa_t
+  - fan-cmd
+  - outside-air-damper
+  - outside-air-temp
   optional_roles: &id153
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id154 []
+  operational_proof_roles: &id154
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id155
     econ1_oat_min:
       default: 55.0
-      unit: degF
+      unit: °F
       min: 45.0
       max: 70.0
       step: 1.0
       label: Favorable OAT
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
   pandas_implementation: econ1
   datafusion_sql_implementation: econ1_stuck_closed.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-1
@@ -954,19 +1906,26 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: ECON-2
-  title: Economizing when outdoor air unfavorable
-  equipment_types: &id157 []
+  title: Economizing when outdoor unfavorable
+  equipment_types: &id157
+  - ahu
   required_roles: &id158
-  - oa_t
-  - oa_damper_pct
+  - outside-air-temp
+  - outside-air-damper
   optional_roles: &id159
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id160 []
+  operational_proof_roles: &id160
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id161
     econ2_oat_hi:
       default: 63.0
-      unit: degF
+      unit: °F
       min: 55.0
       max: 80.0
       step: 1.0
@@ -978,13 +1937,16 @@ matrix:
       max: 0.9
       step: 0.02
       label: Damper open frac
+    confirm_min:
+      default: 5.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
     confirm_seconds:
-      default: 300
+      default: 300.0
       unit: sec
-      min: 0
-      max: 3600
-      step: 300
-      label: Confirm time
   pandas_implementation: econ2
   datafusion_sql_implementation: economizer_fault.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-2
@@ -994,41 +1956,40 @@ matrix:
   difference_class: none
 - rule_id: ECON-3
   title: Mech cooling without integrated economizer
-  equipment_types: &id163 []
+  equipment_types: &id163
+  - ahu
   required_roles: &id164
-  - web_oa_t
-  - web_oa_dp
-  - oa_damper_pct
-  - clg_valve_pct
+  - outside-air-damper
+  - cooling-valve
   optional_roles: &id165
-  - fan_status
-  - fan_cmd
-  operational_proof_roles: &id166 []
+  - web-outside-air-temp
+  - web-outside-air-dewpoint
+  - web-outside-air-humidity
+  operational_proof_roles: &id166
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id167
-    confirm_seconds:
-      default: 300.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     econ3_db_min:
       default: 60.0
-      unit: degF
+      unit: °F
       min: 50.0
       max: 68.0
       step: 1.0
       label: Free-cool OA dry-bulb min
     econ3_db_max:
       default: 72.0
-      unit: degF
+      unit: °F
       min: 65.0
       max: 80.0
       step: 1.0
       label: Free-cool OA dry-bulb max
     econ3_dp_max:
       default: 60.0
-      unit: degF
+      unit: °F
       min: 45.0
       max: 68.0
       step: 1.0
@@ -1040,7 +2001,17 @@ matrix:
       max: 1.0
       step: 0.02
       label: Integrated economizer damper
-  pandas_implementation: econ_3
+    confirm_min:
+      default: 5.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 300.0
+      unit: sec
+  pandas_implementation: econ2
   datafusion_sql_implementation: econ3_mech_without_econ.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-3
   test_coverage: &id168 []
@@ -1049,31 +2020,41 @@ matrix:
   difference_class: none
 - rule_id: ECON-4
   title: Low estimated OA fraction
-  equipment_types: &id169 []
+  equipment_types: &id169
+  - ahu
   required_roles: &id170
-  - mat
-  - rat
-  - oa_t
-  - fan_cmd
+  - mixed-air-temp
+  - return-air-temp
+  - outside-air-temp
+  - fan-cmd
   optional_roles: &id171
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id172 []
+  operational_proof_roles: &id172
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id173
     oa_min_pct:
       default: 21.0
-      unit: pct
+      unit: '%'
       min: 5.0
       max: 40.0
       step: 1.0
       label: Min OA fraction
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
     confirm_seconds:
-      default: 600
+      default: 600.0
       unit: sec
-      min: 0
-      max: 3600
-      step: 300
-      label: Confirm time
   pandas_implementation: econ4
   datafusion_sql_implementation: econ4_low_oa_frac.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-4
@@ -1083,32 +2064,42 @@ matrix:
   difference_class: none
 - rule_id: ECON-5
   title: Preheat over-conditioning
-  equipment_types: &id175 []
+  equipment_types: &id175
+  - ahu
   required_roles: &id176
-  - preheat_leave_t
-  - sat_sp
-  - oa_t
-  - htg_valve_pct
+  - preheat-leaving-temp
+  - discharge-air-temp-sp
+  - outside-air-temp
+  - heating-valve
   optional_roles: &id177
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id178 []
+  operational_proof_roles: &id178
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id179
-    confirm_seconds:
-      default: 600.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     preheat_over_f:
       default: 2.2
-      unit: degF
+      unit: °F
       min: 0.5
       max: 8.0
       step: 0.1
       label: Preheat over ΔT
-  pandas_implementation: econ_5
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
+  pandas_implementation: econ5
   datafusion_sql_implementation: econ5_preheat_over.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-5
   test_coverage: &id180 []
@@ -1117,25 +2108,23 @@ matrix:
   difference_class: none
 - rule_id: ECON-6
   title: Economizing in freezing weather
-  equipment_types: &id181 []
+  equipment_types: &id181
+  - ahu
   required_roles: &id182
-  - web_oa_t
-  - oa_damper_pct
+  - outside-air-damper
   optional_roles: &id183
-  - fan_status
-  - fan_cmd
-  operational_proof_roles: &id184 []
+  - web-outside-air-temp
+  operational_proof_roles: &id184
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id185
-    confirm_seconds:
-      default: 600.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     econ6_oat_max_f:
       default: 25.0
-      unit: degF
+      unit: °F
       min: 15.0
       max: 40.0
       step: 1.0
@@ -1147,7 +2136,17 @@ matrix:
       max: 0.5
       step: 0.01
       label: Winter min-OA damper
-  pandas_implementation: econ_6
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
+  pandas_implementation: econ6_compute
   datafusion_sql_implementation: econ6_econ_freezing.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-6
   test_coverage: &id186 []
@@ -1156,41 +2155,42 @@ matrix:
   difference_class: none
 - rule_id: ECON-7
   title: Economizer OK but not economizing
-  equipment_types: &id187 []
+  equipment_types: &id187
+  - ahu
   required_roles: &id188
-  - web_oa_t
-  - web_oa_dp
-  - oa_damper_pct
-  - clg_valve_pct
+  - outside-air-damper
   optional_roles: &id189
-  - fan_status
-  - fan_cmd
-  operational_proof_roles: &id190 []
+  - web-outside-air-temp
+  - web-outside-air-dewpoint
+  - web-outside-air-humidity
+  - cooling-valve
+  - compressor-status
+  - dx-cool-cmd
+  operational_proof_roles: &id190
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id191
-    confirm_seconds:
-      default: 600.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     econ7_db_min:
       default: 35.0
-      unit: degF
+      unit: °F
       min: 20.0
       max: 50.0
       step: 1.0
       label: Econ-OK dry-bulb floor (freeze guard)
     econ7_db_max:
       default: 72.0
-      unit: degF
+      unit: °F
       min: 65.0
       max: 80.0
       step: 1.0
       label: Econ-OK dry-bulb max
     econ7_dp_max:
       default: 60.0
-      unit: degF
+      unit: °F
       min: 45.0
       max: 68.0
       step: 1.0
@@ -1202,7 +2202,17 @@ matrix:
       max: 0.9
       step: 0.02
       label: Economizing damper threshold
-  pandas_implementation: econ_7
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
+  pandas_implementation: econ7_compute
   datafusion_sql_implementation: econ7_ok_not_economizing.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-7
   test_coverage: &id192 []
@@ -1211,29 +2221,38 @@ matrix:
   difference_class: none
 - rule_id: MECH-OAT-1
   title: Mechanical cooling below 60°F web OAT
-  equipment_types: &id193 []
+  equipment_types: &id193
+  - ahu
+  - chiller
+  - heatpump
   required_roles: &id194
   - web_oa_t
   optional_roles: &id195
-  - clg_valve_pct
-  - chiller_status
+  - web-outside-air-temp
+  - compressor-status
+  - chiller-status
+  - chw-pump-status
+  - dx-cool-cmd
   operational_proof_roles: &id196 []
   default_thresholds: &id197
-    confirm_seconds:
-      default: 600.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     mech_oat_max_f:
       default: 60.0
-      unit: degF
+      unit: °F
       min: 45.0
       max: 65.0
       step: 1.0
       label: Mech-cool OAT ceiling
-  pandas_implementation: mech_oat_1
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
+  pandas_implementation: mech_oat1_compute
   datafusion_sql_implementation: mech_oat_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#mech-oat-1
   test_coverage: &id198 []
@@ -1242,23 +2261,49 @@ matrix:
   difference_class: none
 - rule_id: CHW-NOLOAD-1
   title: Chiller running with no building load
-  equipment_types: &id199 []
+  equipment_types: &id199
+  - chiller
   required_roles: &id200 []
   optional_roles: &id201
-  - chiller_status
-  - chw_pump_status
-  - chw_pump_cmd
-  - building_zone_load_satisfied
+  - chiller-status
+  - chw-pump-status
+  - compressor-status
+  - building-zone-load-satisfied
+  - building-ahu-load-satisfied
   operational_proof_roles: &id202 []
   default_thresholds: &id203
+    comfort_low_f:
+      default: 70.0
+      unit: °F
+      min: 60.0
+      max: 78.0
+      step: 0.5
+      label: Comfort low
+    comfort_high_f:
+      default: 75.0
+      unit: °F
+      min: 68.0
+      max: 85.0
+      step: 0.5
+      label: Comfort high
+    sat_band_f:
+      default: 2.0
+      unit: °F
+      min: 0.5
+      max: 6.0
+      step: 0.5
+      label: AHU SAT≈SP band
+    confirm_min:
+      default: 30.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
     confirm_seconds:
       default: 1800.0
       unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
-  pandas_implementation: chw_noload_1
+  pandas_implementation: chw_noload1_compute
   datafusion_sql_implementation: chw_noload_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-noload-1
   test_coverage: &id204 []
@@ -1266,35 +2311,40 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: VAV-1
-  title: Zone comfort band violation hours with confirm window
-  equipment_types: &id205 []
+  title: Zone comfort band
+  equipment_types: &id205
+  - vav
+  - zone
   required_roles: &id206
-  - zone_t
+  - zone-air-temp
   optional_roles: &id207
   - occ_mode
   operational_proof_roles: &id208 []
   default_thresholds: &id209
-    zone_t_lo:
+    zone_lo:
       default: 70.0
-      unit: degF
+      unit: °F
       min: 55.0
       max: 72.0
       step: 0.5
       label: Zone low
-    zone_t_hi:
+    zone_hi:
       default: 75.0
-      unit: degF
+      unit: °F
       min: 72.0
       max: 85.0
       step: 0.5
       label: Zone high
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
     confirm_seconds:
-      default: 900
+      default: 900.0
       unit: sec
-      min: 0
-      max: 3600
-      step: 300
-      label: Confirm time
   pandas_implementation: vav1
   datafusion_sql_implementation: vav1_comfort_fault.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-1
@@ -1306,26 +2356,25 @@ matrix:
   difference_class: none
 - rule_id: VAV-3
   title: Excessive reheat during warm weather
-  equipment_types: &id211 []
+  equipment_types: &id211
+  - vav
   required_roles: &id212
-  - oa_t
-  - reheat_valve_pct
-  - zone_flow
+  - outside-air-temp
+  - reheat-valve
   optional_roles: &id213
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id214 []
+  operational_proof_roles: &id214
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id215
-    confirm_seconds:
-      default: 300.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     reheat_oat:
       default: 78.0
-      unit: degF
+      unit: °F
       min: 65.0
       max: 90.0
       step: 1.0
@@ -1344,7 +2393,17 @@ matrix:
       max: 200.0
       step: 5.0
       label: Airflow-on min
-  pandas_implementation: vav_3
+    confirm_min:
+      default: 5.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 300.0
+      unit: sec
+  pandas_implementation: vav3
   datafusion_sql_implementation: vav3_excessive_reheat.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-3
   test_coverage: &id216 []
@@ -1353,22 +2412,22 @@ matrix:
   difference_class: none
 - rule_id: VAV-4
   title: Damper stuck at full open
-  equipment_types: &id217 []
+  equipment_types: &id217
+  - vav
   required_roles: &id218
-  - damper_pct
-  - zone_flow
+  - damper
   optional_roles: &id219
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id220 []
+  operational_proof_roles: &id220
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
+  - loop-enabled
   default_thresholds: &id221
-    confirm_seconds:
-      default: 900.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     full_open_pct:
       default: 0.975
       unit: frac
@@ -1376,13 +2435,6 @@ matrix:
       max: 1.0
       step: 0.005
       label: Full open frac
-    flow_on_min:
-      default: 25.0
-      unit: cfm
-      min: 0.0
-      max: 200.0
-      step: 5.0
-      label: Airflow-on min
     sustain_hours:
       default: 1.5
       unit: h
@@ -1390,7 +2442,24 @@ matrix:
       max: 6.0
       step: 0.5
       label: Sustain window
-  pandas_implementation: vav_4
+    flow_on_min:
+      default: 25.0
+      unit: cfm
+      min: 0.0
+      max: 200.0
+      step: 5.0
+      label: Airflow-on min
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 900.0
+      unit: sec
+  pandas_implementation: vav4
   datafusion_sql_implementation: vav4_damper_full_open.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-4
   test_coverage: &id222 []
@@ -1399,23 +2468,33 @@ matrix:
   difference_class: none
 - rule_id: VAV-5
   title: Airflow sensor bias
-  equipment_types: &id223 []
+  equipment_types: &id223
+  - vav
   required_roles: &id224
-  - zone_flow
-  - damper_pct
+  - zone-airflow
+  - damper
   optional_roles: &id225
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id226 []
+  operational_proof_roles: &id226
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id227
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
     confirm_seconds:
       default: 900.0
       unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
-  pandas_implementation: vav_5
+  pandas_implementation: vav5
   datafusion_sql_implementation: vav5_airflow_bias.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-5
   test_coverage: &id228 []
@@ -1424,24 +2503,23 @@ matrix:
   difference_class: none
 - rule_id: VAV-REHEAT
   title: Reheat valve stuck / no temp rise
-  equipment_types: &id229 []
+  equipment_types: &id229
+  - vav
   required_roles: &id230
-  - reheat_valve_pct
-  - vav_discharge_t
-  - vav_inlet_t
-  - zone_flow
+  - reheat-valve
+  - vav-discharge-air-temp
+  - vav-inlet-air-temp
   optional_roles: &id231
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id232 []
+  operational_proof_roles: &id232
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id233
-    confirm_seconds:
-      default: 900.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     reheat_cmd:
       default: 0.3
       unit: frac
@@ -1451,7 +2529,7 @@ matrix:
       label: Reheat open frac
     min_rise:
       default: 3.0
-      unit: degF
+      unit: °F
       min: 0.5
       max: 15.0
       step: 0.5
@@ -1463,7 +2541,17 @@ matrix:
       max: 200.0
       step: 5.0
       label: Airflow-on min
-  pandas_implementation: vav_reheat
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 900.0
+      unit: sec
+  pandas_implementation: vav_reheat_stuck
   datafusion_sql_implementation: vav_reheat.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-reheat
   test_coverage: &id234 []
@@ -1472,26 +2560,25 @@ matrix:
   difference_class: none
 - rule_id: VAV-AHU-LEAVE
   title: VAV leave vs parent AHU SAT (fedBy)
-  equipment_types: &id235 []
+  equipment_types: &id235
+  - vav
   required_roles: &id236
-  - vav_discharge_t
-  - ahu_sat
-  - zone_flow
+  - vav-discharge-air-temp
+  - ahu-discharge-air-temp
   optional_roles: &id237
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id238 []
+  operational_proof_roles: &id238
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id239
-    confirm_seconds:
-      default: 900.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     delta_f:
       default: 8.0
-      unit: degF
+      unit: °F
       min: 2.0
       max: 25.0
       step: 0.5
@@ -1503,7 +2590,17 @@ matrix:
       max: 200.0
       step: 5.0
       label: Airflow-on min
-  pandas_implementation: vav_ahu_leave
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 900.0
+      unit: sec
+  pandas_implementation: vav_vs_ahu_leave
   datafusion_sql_implementation: vav_ahu_leave.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-ahu-leave
   test_coverage: &id240 []
@@ -1512,29 +2609,21 @@ matrix:
   difference_class: none
 - rule_id: VAV-7
   title: Min airflow / fixed high flow
-  equipment_types: &id241 []
+  equipment_types: &id241
+  - vav
   required_roles: &id242
-  - zone_flow
-  - min_flow_sp
+  - zone-airflow
   optional_roles: &id243
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id244 []
+  operational_proof_roles: &id244
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id245
-    confirm_seconds:
-      default: 900.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
-    high_min_flow_sp:
-      default: 250.0
-      unit: cfm
-      min: 50.0
-      max: 2000.0
-      step: 10.0
-      label: High min-flow SP
     flow_on_min:
       default: 25.0
       unit: cfm
@@ -1542,7 +2631,38 @@ matrix:
       max: 200.0
       step: 5.0
       label: Airflow-on min
-  pandas_implementation: vav_7
+    fixed_flow_max_std:
+      default: 15.0
+      unit: cfm
+      min: 1.0
+      max: 80.0
+      step: 1.0
+      label: Fixed-flow max std
+    fixed_flow_min_mean:
+      default: 200.0
+      unit: cfm
+      min: 50.0
+      max: 2000.0
+      step: 10.0
+      label: Fixed-flow min mean
+    high_min_flow_sp:
+      default: 250.0
+      unit: cfm
+      min: 50.0
+      max: 2000.0
+      step: 10.0
+      label: High min-flow SP
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 900.0
+      unit: sec
+  pandas_implementation: vav7
   datafusion_sql_implementation: vav7_min_airflow.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-7
   test_coverage: &id246 []
@@ -1551,10 +2671,11 @@ matrix:
   difference_class: none
 - rule_id: CHW-1
   title: Low chilled-water ΔT
-  equipment_types: &id247 []
+  equipment_types: &id247
+  - chiller
   required_roles: &id248
-  - chw_supply_t
-  - chw_return_t
+  - chilled-water-supply-temp
+  - chilled-water-return-temp
   optional_roles: &id249
   - chw_pump_cmd
   - pump_status
@@ -1563,22 +2684,38 @@ matrix:
   - chiller_amps
   - chiller_power
   - chw_flow
-  operational_proof_roles: &id250 []
+  operational_proof_roles: &id250
+  - pump-status
+  - chw-pump-status
+  - hw-pump-status
+  - pump-speed-feedback
+  - pump-current
+  - chw-flow
+  - water-flow
+  - chiller-status
+  - chiller-current
+  - chiller-power
+  - pump-cmd
+  - chw-pump-cmd
+  - hw-pump-cmd
   default_thresholds: &id251
-    confirm_seconds:
-      default: 900.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     min_dt:
       default: 4.0
-      unit: degF
+      unit: °F
       min: 1.0
       max: 12.0
       step: 0.5
-      label: Minimum delta-T
+      label: Min ΔT
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 900.0
+      unit: sec
   pandas_implementation: chw1
   datafusion_sql_implementation: chw1_low_dt.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-1
@@ -1593,21 +2730,28 @@ matrix:
   difference_class: none
 - rule_id: CHW-2
   title: DP below SP at max pump speed
-  equipment_types: &id253 []
+  equipment_types: &id253
+  - chiller
   required_roles: &id254
-  - chw_dp
-  - chw_dp_sp
-  - chw_pump_cmd
+  - chw-diff-pressure
+  - chw-diff-pressure-sp
+  - chw-pump-cmd
   optional_roles: &id255 []
-  operational_proof_roles: &id256 []
+  operational_proof_roles: &id256
+  - pump-status
+  - chw-pump-status
+  - hw-pump-status
+  - pump-speed-feedback
+  - pump-current
+  - chw-flow
+  - water-flow
+  - chiller-status
+  - chiller-current
+  - chiller-power
+  - pump-cmd
+  - chw-pump-cmd
+  - hw-pump-cmd
   default_thresholds: &id257
-    confirm_seconds:
-      default: 300.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     dp_margin:
       default: 2.2
       unit: psi
@@ -1622,7 +2766,17 @@ matrix:
       max: 1.0
       step: 0.01
       label: Pump high-speed threshold
-  pandas_implementation: chw_2
+    confirm_min:
+      default: 5.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 300.0
+      unit: sec
+  pandas_implementation: chw2
   datafusion_sql_implementation: chw2_dp_low.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-2
   test_coverage: &id258 []
@@ -1631,29 +2785,46 @@ matrix:
   difference_class: none
 - rule_id: CHW-3
   title: Plant supply temp outside deadband
-  equipment_types: &id259 []
+  equipment_types: &id259
+  - chiller
   required_roles: &id260
-  - chw_supply_t
-  - chw_supply_sp
-  - chw_pump_cmd
+  - chilled-water-supply-temp
+  - chilled-water-supply-temp-sp
+  - chw-pump-cmd
   optional_roles: &id261 []
-  operational_proof_roles: &id262 []
+  operational_proof_roles: &id262
+  - pump-status
+  - chw-pump-status
+  - hw-pump-status
+  - pump-speed-feedback
+  - pump-current
+  - chw-flow
+  - water-flow
+  - chiller-status
+  - chiller-current
+  - chiller-power
+  - pump-cmd
+  - chw-pump-cmd
+  - hw-pump-cmd
   default_thresholds: &id263
-    confirm_seconds:
-      default: 300.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     sp_band:
       default: 2.2
-      unit: degF
+      unit: °F
       min: 0.5
       max: 6.0
       step: 0.1
       label: SP band
-  pandas_implementation: chw_3
+    confirm_min:
+      default: 5.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 300.0
+      unit: sec
+  pandas_implementation: chw3
   datafusion_sql_implementation: chw3_supply_band.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-3
   test_coverage: &id264 []
@@ -1662,26 +2833,33 @@ matrix:
   difference_class: none
 - rule_id: CHW-4
   title: Flow high at max pump
-  equipment_types: &id265 []
+  equipment_types: &id265
+  - chiller
   required_roles: &id266
-  - chw_flow
-  - chw_pump_cmd
+  - chw-flow
+  - chw-pump-cmd
   optional_roles: &id267 []
-  operational_proof_roles: &id268 []
+  operational_proof_roles: &id268
+  - pump-status
+  - chw-pump-status
+  - hw-pump-status
+  - pump-speed-feedback
+  - pump-current
+  - chw-flow
+  - water-flow
+  - chiller-status
+  - chiller-current
+  - chiller-power
+  - pump-cmd
+  - chw-pump-cmd
+  - hw-pump-cmd
   default_thresholds: &id269
-    confirm_seconds:
-      default: 300.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     flow_hi:
-      default: 1100.0
+      default: 1100
       unit: gpm
-      min: 200.0
-      max: 3000.0
-      step: 50.0
+      min: 200
+      max: 3000
+      step: 50
       label: Flow high
     pump_hi:
       default: 0.87
@@ -1690,7 +2868,17 @@ matrix:
       max: 1.0
       step: 0.01
       label: Pump high-speed threshold
-  pandas_implementation: chw_4
+    confirm_min:
+      default: 5.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 300.0
+      unit: sec
+  pandas_implementation: chw4
   datafusion_sql_implementation: chw4_flow_high.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-4
   test_coverage: &id270 []
@@ -1699,38 +2887,46 @@ matrix:
   difference_class: none
 - rule_id: HP-1
   title: Discharge cold when heating
-  equipment_types: &id271 []
+  equipment_types: &id271
+  - heatpump
   required_roles: &id272
-  - sat
-  - zone_t
-  - fan_cmd
+  - discharge-air-temp
+  - zone-air-temp
+  - fan-cmd
   optional_roles: &id273
   - compressor_status
   - fan_status
-  operational_proof_roles: &id274 []
+  operational_proof_roles: &id274
+  - compressor-status
+  - equipment-enable
+  - fan-status
+  - fan-cmd
   default_thresholds: &id275
-    confirm_seconds:
-      default: 600.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     min_sat:
       default: 85.0
-      unit: degF
+      unit: °F
       min: 70.0
       max: 110.0
       step: 1.0
-      label: Min discharge SAT
+      label: Min heating SAT
     zone_cold:
       default: 69.0
-      unit: degF
+      unit: °F
       min: 60.0
       max: 72.0
       step: 0.5
-      label: Zone cold threshold
-  pandas_implementation: hp_1
+      label: Zone cold
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 600.0
+      unit: sec
+  pandas_implementation: hp1
   datafusion_sql_implementation: hp1_discharge_cold.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#hp-1
   test_coverage: &id276 []
@@ -1739,27 +2935,31 @@ matrix:
   difference_class: none
 - rule_id: WX-1
   title: OA temperature spike
-  equipment_types: &id277 []
+  equipment_types: &id277
+  - weather
   required_roles: &id278
-  - oa_t
+  - outside-air-temp
   optional_roles: &id279 []
   operational_proof_roles: &id280 []
   default_thresholds: &id281
-    confirm_seconds:
-      default: 300.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     spike_limit:
       default: 16.0
-      unit: degF
+      unit: °F
       min: 4.0
       max: 40.0
       step: 1.0
       label: Spike limit
-  pandas_implementation: wx_1
+    confirm_min:
+      default: 5.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 300.0
+      unit: sec
+  pandas_implementation: wx1
   datafusion_sql_implementation: wx1_oa_spike.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#wx-1
   test_coverage: &id282 []
@@ -1768,39 +2968,56 @@ matrix:
   difference_class: none
 - rule_id: CW-OPT-1
   title: Condenser water not optimized vs wet-bulb
-  equipment_types: &id283 []
+  equipment_types: &id283
+  - chiller
+  - cooling_tower
   required_roles: &id284
-  - cw_supply_t
-  - web_wb_t
+  - condenser-water-supply-temp
   optional_roles: &id285
   - pump_status
   - chiller_status
   - chw_flow
   - chw_pump_cmd
-  operational_proof_roles: &id286 []
+  operational_proof_roles: &id286
+  - pump-status
+  - chw-pump-status
+  - hw-pump-status
+  - pump-speed-feedback
+  - pump-current
+  - chw-flow
+  - water-flow
+  - chiller-status
+  - chiller-current
+  - chiller-power
+  - pump-cmd
+  - chw-pump-cmd
+  - hw-pump-cmd
   default_thresholds: &id287
-    confirm_seconds:
-      default: 900.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     cw_approach:
       default: 7.0
-      unit: degF
+      unit: °F
       min: 3.0
       max: 15.0
       step: 0.5
       label: Design approach
     cw_slack:
       default: 2.0
-      unit: degF
+      unit: °F
       min: 0.5
       max: 6.0
       step: 0.5
       label: Slack below target
-  pandas_implementation: cw_opt_1
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 900.0
+      unit: sec
+  pandas_implementation: cw_opt
   datafusion_sql_implementation: cw_opt_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-opt-1
   test_coverage: &id288 []
@@ -1809,28 +3026,34 @@ matrix:
   difference_class: none
 - rule_id: CW-APR-1
   title: High CW approach at full tower fan
-  equipment_types: &id289 []
+  equipment_types: &id289
+  - chiller
+  - cooling_tower
   required_roles: &id290
-  - cw_supply_t
-  - web_wb_t
-  - tower_fan_cmd
+  - condenser-water-supply-temp
   optional_roles: &id291
-  - pump_status
-  - chiller_status
-  - chw_flow
-  - chw_pump_cmd
-  operational_proof_roles: &id292 []
+  - tower-fan-cmd
+  - cw-fan-cmd
+  - fan-cmd
+  - web-outside-air-wetbulb
+  operational_proof_roles: &id292
+  - pump-status
+  - chw-pump-status
+  - hw-pump-status
+  - pump-speed-feedback
+  - pump-current
+  - chw-flow
+  - water-flow
+  - chiller-status
+  - chiller-current
+  - chiller-power
+  - pump-cmd
+  - chw-pump-cmd
+  - hw-pump-cmd
   default_thresholds: &id293
-    confirm_seconds:
-      default: 900.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     approach_max_f:
       default: 8.0
-      unit: degF
+      unit: °F
       min: 5.0
       max: 15.0
       step: 0.5
@@ -1842,7 +3065,17 @@ matrix:
       max: 1.0
       step: 0.01
       label: Tower fan full-speed threshold
-  pandas_implementation: cw_apr_1
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 900.0
+      unit: sec
+  pandas_implementation: cw_apr
   datafusion_sql_implementation: cw_apr_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-apr-1
   test_coverage: &id294 []
@@ -1851,35 +3084,41 @@ matrix:
   difference_class: none
 - rule_id: CW-FAN-1
   title: Excess tower fan energy vs wet-bulb limit
-  equipment_types: &id295 []
+  equipment_types: &id295
+  - chiller
+  - cooling_tower
   required_roles: &id296
-  - cw_supply_t
-  - web_wb_t
-  - tower_fan_cmd
+  - condenser-water-supply-temp
   optional_roles: &id297
-  - pump_status
-  - chiller_status
-  - chw_flow
-  - chw_pump_cmd
-  operational_proof_roles: &id298 []
+  - tower-fan-cmd
+  - cw-fan-cmd
+  - fan-cmd
+  - web-outside-air-wetbulb
+  operational_proof_roles: &id298
+  - pump-status
+  - chw-pump-status
+  - hw-pump-status
+  - pump-speed-feedback
+  - pump-current
+  - chw-flow
+  - water-flow
+  - chiller-status
+  - chiller-current
+  - chiller-power
+  - pump-cmd
+  - chw-pump-cmd
+  - hw-pump-cmd
   default_thresholds: &id299
-    confirm_seconds:
-      default: 900.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     cw_approach:
       default: 7.0
-      unit: degF
+      unit: °F
       min: 3.0
       max: 15.0
       step: 0.5
       label: Design approach
     excess_beyond_approach_f:
       default: 5.0
-      unit: degF
+      unit: °F
       min: 2.0
       max: 20.0
       step: 0.5
@@ -1891,7 +3130,17 @@ matrix:
       max: 1.0
       step: 0.01
       label: Tower fan full-speed threshold
-  pandas_implementation: cw_fan_1
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 900.0
+      unit: sec
+  pandas_implementation: cw_fan_excess
   datafusion_sql_implementation: cw_fan_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-fan-1
   test_coverage: &id300 []
@@ -1900,26 +3149,27 @@ matrix:
   difference_class: none
 - rule_id: TRIM-1
   title: Duct static trim advisory
-  equipment_types: &id301 []
+  equipment_types: &id301
+  - ahu
   required_roles: &id302
-  - duct_static
+  - duct-static-pressure
+  - vav-pressure-request-sum
   optional_roles: &id303
   - duct_static_sp
   - static_reset_request
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id304 []
+  operational_proof_roles: &id304
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id305
-    confirm_seconds:
-      default: 1800.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     duct_hi:
       default: 1.35
-      unit: in_wc
+      unit: in. w.c.
       min: 0.5
       max: 3.0
       step: 0.05
@@ -1931,7 +3181,17 @@ matrix:
       max: 10.0
       step: 0.5
       label: Request sum low
-  pandas_implementation: trim_1
+    confirm_min:
+      default: 30.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 1800.0
+      unit: sec
+  pandas_implementation: trim1
   datafusion_sql_implementation: trim1_duct_static.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-1
   test_coverage: &id306 []
@@ -1940,26 +3200,34 @@ matrix:
   difference_class: none
 - rule_id: TRIM-3
   title: HWST trim advisory
-  equipment_types: &id307 []
+  equipment_types: &id307
+  - boiler
   required_roles: &id308
-  - hw_supply_t
+  - hot-water-supply-temp
+  - hw-reset-request-sum
   optional_roles: &id309
   - pump_status
   - chiller_status
   - chw_flow
   - chw_pump_cmd
-  operational_proof_roles: &id310 []
+  operational_proof_roles: &id310
+  - pump-status
+  - chw-pump-status
+  - hw-pump-status
+  - pump-speed-feedback
+  - pump-current
+  - chw-flow
+  - water-flow
+  - chiller-status
+  - chiller-current
+  - chiller-power
+  - pump-cmd
+  - chw-pump-cmd
+  - hw-pump-cmd
   default_thresholds: &id311
-    confirm_seconds:
-      default: 1800.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     hwst_hi:
       default: 160.0
-      unit: degF
+      unit: °F
       min: 120.0
       max: 200.0
       step: 1.0
@@ -1971,7 +3239,17 @@ matrix:
       max: 10.0
       step: 0.5
       label: Request sum low
-  pandas_implementation: trim_3
+    confirm_min:
+      default: 30.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 1800.0
+      unit: sec
+  pandas_implementation: trim3
   datafusion_sql_implementation: trim3_hwst.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-3
   test_coverage: &id312 []
@@ -1980,26 +3258,34 @@ matrix:
   difference_class: none
 - rule_id: TRIM-4
   title: CHW plant reset advisory
-  equipment_types: &id313 []
+  equipment_types: &id313
+  - chiller
   required_roles: &id314
-  - chw_supply_t
+  - chilled-water-supply-temp
+  - chw-reset-request-sum
   optional_roles: &id315
   - pump_status
   - chiller_status
   - chw_flow
   - chw_pump_cmd
-  operational_proof_roles: &id316 []
+  operational_proof_roles: &id316
+  - pump-status
+  - chw-pump-status
+  - hw-pump-status
+  - pump-speed-feedback
+  - pump-current
+  - chw-flow
+  - water-flow
+  - chiller-status
+  - chiller-current
+  - chiller-power
+  - pump-cmd
+  - chw-pump-cmd
+  - hw-pump-cmd
   default_thresholds: &id317
-    confirm_seconds:
-      default: 1800.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     chw_lo:
       default: 45.0
-      unit: degF
+      unit: °F
       min: 35.0
       max: 55.0
       step: 0.5
@@ -2011,7 +3297,17 @@ matrix:
       max: 10.0
       step: 0.5
       label: Request sum low
-  pandas_implementation: trim_4
+    confirm_min:
+      default: 30.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 1800.0
+      unit: sec
+  pandas_implementation: trim4
   datafusion_sql_implementation: trim4_chw_reset.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-4
   test_coverage: &id318 []
@@ -2019,38 +3315,40 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: SCHED-1
-  title: Excess / wasted unoccupied fan runtime when the zone is already in the comfort
-    band (optimal-start / schedule misconfig signal). Without zone_t, falls back to
-    unoccupied + fan_on (pandas sched1 base).
-  equipment_types: &id319 []
+  title: Unoccupied runtime
+  equipment_types: &id319
+  - ahu
   required_roles: &id320
-  - occ_mode
-  - fan_status
+  - occupied
+  - fan-status
   optional_roles: &id321
-  - zone_t
+  - zone-air-temp
   operational_proof_roles: &id322 []
   default_thresholds: &id323
-    confirm_seconds:
-      default: 1800.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     comfort_low_f:
       default: 70.0
       unit: °F
-      min: 50.0
-      max: 80.0
+      min: 60.0
+      max: 78.0
       step: 0.5
-      label: Zone comfort low
+      label: Comfort low
     comfort_high_f:
       default: 75.0
       unit: °F
-      min: 55.0
-      max: 90.0
+      min: 68.0
+      max: 85.0
       step: 0.5
-      label: Zone comfort high
+      label: Comfort high
+    confirm_min:
+      default: 30.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 1800.0
+      unit: sec
   pandas_implementation: sched1
   datafusion_sql_implementation: sched1_unoccupied_runtime.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sched-1
@@ -2063,22 +3361,53 @@ matrix:
   difference_class: alias
 - rule_id: SCHED-247
   title: Always-on fan or pump runtime
-  equipment_types: &id325 []
+  equipment_types: &id325
+  - ahu
+  - vav
+  - chiller
+  - boiler
+  - heatpump
   required_roles: &id326 []
   optional_roles: &id327
-  - fan_status
-  - pump_status
-  - chiller_status
-  - fan_cmd
+  - fan-status
+  - pump-status
+  - chw-pump-status
+  - hw-pump-status
+  - chiller-status
+  - compressor-status
+  - tower-fan-cmd
+  - cw-fan-cmd
+  - fan-cmd
+  - chw-pump-cmd
+  - hw-pump-cmd
+  - duct-static-pressure
+  - chw-diff-pressure
   operational_proof_roles: &id328 []
   default_thresholds: &id329
+    always_on_pct:
+      default: 0.95
+      unit: frac
+      min: 0.8
+      max: 1.0
+      step: 0.01
+      label: Always-on fraction
+    pressure_on_min:
+      default: 0.2
+      unit: eng
+      min: 0.05
+      max: 2.0
+      step: 0.05
+      label: Pressure-on evidence
+    confirm_min:
+      default: 60.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
     confirm_seconds:
       default: 3600.0
       unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
   pandas_implementation: _sched247
   datafusion_sql_implementation: sched247_always_on.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sched-247
@@ -2093,21 +3422,25 @@ matrix:
   difference_class: none
 - rule_id: CMD-1
   title: Fan cmd/status mismatch
-  equipment_types: &id331 []
+  equipment_types: &id331
+  - ahu
   required_roles: &id332
-  - fan_cmd
-  - fan_status
+  - fan-cmd
+  - fan-status
   optional_roles: &id333 []
   operational_proof_roles: &id334 []
   default_thresholds: &id335
+    confirm_min:
+      default: 10.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
     confirm_seconds:
       default: 600.0
       unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
-  pandas_implementation: cmd_1
+  pandas_implementation: cmd1
   datafusion_sql_implementation: cmd1_fan_mismatch.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cmd-1
   test_coverage: &id336 []
@@ -2116,24 +3449,24 @@ matrix:
   difference_class: none
 - rule_id: OA-1
   title: Low OA fraction
-  equipment_types: &id337 []
+  equipment_types: &id337
+  - ahu
   required_roles: &id338
-  - mat
-  - rat
-  - oa_t
-  - fan_cmd
+  - mixed-air-temp
+  - return-air-temp
+  - outside-air-temp
+  - fan-status
   optional_roles: &id339
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id340 []
+  operational_proof_roles: &id340
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
   default_thresholds: &id341
-    confirm_seconds:
-      default: 900.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     min_oa_frac:
       default: 0.15
       unit: frac
@@ -2143,12 +3476,22 @@ matrix:
       label: Min OA fraction
     oat_rat_guard:
       default: 2.2
-      unit: degF
+      unit: °F
       min: 0.5
       max: 6.0
       step: 0.1
-      label: OAT/RAT guard
-  pandas_implementation: oa_1
+      label: Min |RAT−OAT| guard
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 900.0
+      unit: sec
+  pandas_implementation: oa1
   datafusion_sql_implementation: oa1_low_oa_frac.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#oa-1
   test_coverage: &id342 []
@@ -2157,31 +3500,35 @@ matrix:
   difference_class: none
 - rule_id: DMP-1
   title: OA damper leakage
-  equipment_types: &id343 []
+  equipment_types: &id343
+  - ahu
   required_roles: &id344
-  - oa_damper_pct
-  - oa_t
-  - mat
+  - outside-air-temp
+  - mixed-air-temp
+  - outside-air-damper
   optional_roles: &id345
   - fan_status
   - fan_cmd
   operational_proof_roles: &id346 []
   default_thresholds: &id347
-    confirm_seconds:
-      default: 900.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     leak_delta:
       default: 2.0
-      unit: degF
+      unit: °F
       min: 0.5
       max: 6.0
       step: 0.5
       label: Leak ΔT
-  pandas_implementation: dmp_1
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 900.0
+      unit: sec
+  pandas_implementation: dmp1
   datafusion_sql_implementation: dmp1_oa_damper_leak.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#dmp-1
   test_coverage: &id348 []
@@ -2190,39 +3537,43 @@ matrix:
   difference_class: none
 - rule_id: VLV-1
   title: Cooling valve leakage
-  equipment_types: &id349 []
+  equipment_types: &id349
+  - ahu
   required_roles: &id350
-  - clg_valve_pct
-  - sat
-  - sat_sp
-  - mat
+  - discharge-air-temp
+  - discharge-air-temp-sp
+  - cooling-valve
   optional_roles: &id351
-  - fan_status
-  - fan_cmd
+  - mixed-air-temp
+  - fan-status
+  - fan-cmd
   operational_proof_roles: &id352 []
   default_thresholds: &id353
-    confirm_seconds:
-      default: 900.0
-      unit: sec
-      min: 0.0
-      max: 3600.0
-      step: 300.0
-      label: Confirm time
     sat_err:
       default: 2.0
-      unit: degF
+      unit: °F
       min: 0.5
       max: 8.0
       step: 0.5
       label: SAT vs SP leak ΔT
     mat_leak_delta:
       default: 2.0
-      unit: degF
+      unit: °F
       min: 0.5
       max: 12.0
       step: 0.5
       label: SAT vs MAT leak ΔT
-  pandas_implementation: vlv_1
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 900.0
+      unit: sec
+  pandas_implementation: vlv1
   datafusion_sql_implementation: vlv1_clg_valve_leak.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vlv-1
   test_coverage: &id354 []
@@ -2340,12 +3691,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id001
-  equipment_kinds: null
+  equipment_kinds: *id001
   required_roles: *id002
   optional_roles: *id003
   operational_proof_roles: *id004
   default_thresholds: *id005
-  pandas_implementation: sv_range
+  pandas_implementation: _sweep_range
   datafusion_sql_implementation: sv_range.sql
   sql_file: sv_range.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-range
@@ -2355,8 +3706,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: equipment_energized
+  startup_delay_seconds: 0
   confirm_seconds: 300
   parameters:
     confirm_seconds:
@@ -2439,12 +3790,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id007
-  equipment_kinds: null
+  equipment_kinds: *id007
   required_roles: *id008
   optional_roles: *id009
   operational_proof_roles: *id010
   default_thresholds: *id011
-  pandas_implementation: sv_flatline
+  pandas_implementation: _sweep_flatline
   datafusion_sql_implementation: sv_flatline.sql
   sql_file: sv_flatline.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-flatline
@@ -2454,8 +3805,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: conditional
+  startup_delay_seconds: 0
   confirm_seconds: 300
   parameters:
     confirm_seconds:
@@ -2547,12 +3898,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id013
-  equipment_kinds: null
+  equipment_kinds: *id013
   required_roles: *id014
   optional_roles: *id015
   operational_proof_roles: *id016
   default_thresholds: *id017
-  pandas_implementation: sv_spike
+  pandas_implementation: _sweep_spike
   datafusion_sql_implementation: sv_spike.sql
   sql_file: sv_spike.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-spike
@@ -2562,8 +3913,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: equipment_energized
+  startup_delay_seconds: 0
   confirm_seconds: 300
   parameters:
     confirm_seconds:
@@ -2646,12 +3997,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id019
-  equipment_kinds: null
+  equipment_kinds: *id019
   required_roles: *id020
   optional_roles: *id021
   operational_proof_roles: *id022
   default_thresholds: *id023
-  pandas_implementation: sv_stale
+  pandas_implementation: _sweep_stale
   datafusion_sql_implementation: sv_stale.sql
   sql_file: sv_stale.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-stale
@@ -2661,8 +4012,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: always
+  startup_delay_seconds: 0.0
   confirm_seconds: 300
   parameters:
     confirm_seconds:
@@ -2755,12 +4106,12 @@ concepts:
   - SV-SLEW
   kind: diagnostic
   equipment_types: *id025
-  equipment_kinds: null
+  equipment_kinds: *id025
   required_roles: *id026
   optional_roles: *id027
   operational_proof_roles: *id028
   default_thresholds: *id029
-  pandas_implementation: sv_rate
+  pandas_implementation: _sv_rate_compute
   datafusion_sql_implementation: sv_rate.sql
   sql_file: sv_rate.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-rate
@@ -2770,8 +4121,8 @@ concepts:
   parity_level: sql_screening
   difference_class: alias
   known_semantic_differences: 'aliases: SV-SLEW (not independent rules)'
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: always
+  startup_delay_seconds: 0.0
   confirm_seconds: 600
   parameters:
     confirm_seconds:
@@ -2863,12 +4214,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id031
-  equipment_kinds: null
+  equipment_kinds: *id031
   required_roles: *id032
   optional_roles: *id033
   operational_proof_roles: *id034
   default_thresholds: *id035
-  pandas_implementation: pid_hunt_1
+  pandas_implementation: _pid_hunt_1
   datafusion_sql_implementation: pid_hunt_1.sql
   sql_file: pid_hunt_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#pid-hunt-1
@@ -2878,8 +4229,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: control_loop
+  startup_delay_seconds: 300
   confirm_seconds: 0
   parameters:
     confirm_seconds:
@@ -3012,11 +4363,11 @@ concepts:
 - canonical_id: FC1
   pandas_id: FC1
   rule_id: FC1
-  title: Duct static below SP at full fan
+  title: Duct static below SP at full fan (GL36 A)
   aliases: []
   kind: diagnostic
   equipment_types: *id037
-  equipment_kinds: null
+  equipment_kinds: *id037
   required_roles: *id038
   optional_roles: *id039
   operational_proof_roles: *id040
@@ -3031,8 +4382,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 300
   confirm_seconds: 300
   parameters:
     eps_dsp:
@@ -3120,11 +4471,11 @@ concepts:
 - canonical_id: FC2
   pandas_id: FC2
   rule_id: FC2
-  title: Mixed air below envelope
+  title: MAT below OAT/RAT envelope (GL36 B)
   aliases: []
   kind: diagnostic
   equipment_types: *id043
-  equipment_kinds: null
+  equipment_kinds: *id043
   required_roles: *id044
   optional_roles: *id045
   operational_proof_roles: *id046
@@ -3139,8 +4490,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters: {}
   time_semantics: row_or_interval_per_sql_file
@@ -3201,11 +4552,11 @@ concepts:
 - canonical_id: FC3
   pandas_id: FC3
   rule_id: FC3
-  title: Mixed air above envelope
+  title: MAT above OAT/RAT envelope (GL36 C)
   aliases: []
   kind: diagnostic
   equipment_types: *id049
-  equipment_kinds: null
+  equipment_kinds: *id049
   required_roles: *id050
   optional_roles: *id051
   operational_proof_roles: *id052
@@ -3220,8 +4571,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters: {}
   time_semantics: row_or_interval_per_sql_file
@@ -3286,7 +4637,7 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id055
-  equipment_kinds: null
+  equipment_kinds: *id055
   required_roles: *id056
   optional_roles: *id057
   operational_proof_roles: *id058
@@ -3301,8 +4652,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: control_loop
+  startup_delay_seconds: 300
   confirm_seconds: 3600
   parameters:
     confirm_seconds:
@@ -3385,7 +4736,7 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id061
-  equipment_kinds: null
+  equipment_kinds: *id061
   required_roles: *id062
   optional_roles: *id063
   operational_proof_roles: *id064
@@ -3400,8 +4751,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters:
     confirm_seconds:
@@ -3493,7 +4844,7 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id067
-  equipment_kinds: null
+  equipment_kinds: *id067
   required_roles: *id068
   optional_roles: *id069
   operational_proof_roles: *id070
@@ -3508,8 +4859,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters:
     confirm_seconds:
@@ -3606,11 +4957,11 @@ concepts:
 - canonical_id: FC7
   pandas_id: FC7
   rule_id: FC7
-  title: SAT low while heating at full
+  title: SAT low with full heating (GL36 E)
   aliases: []
   kind: diagnostic
   equipment_types: *id073
-  equipment_kinds: null
+  equipment_kinds: *id073
   required_roles: *id074
   optional_roles: *id075
   operational_proof_roles: *id076
@@ -3626,8 +4977,8 @@ concepts:
   difference_class: missing_implementation
   known_semantic_differences: concept_only — SQL file is a placeholder; do not claim
     twin parity
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters:
     sat_err:
@@ -3715,11 +5066,11 @@ concepts:
 - canonical_id: FC8
   pandas_id: FC8
   rule_id: FC8
-  title: SAT vs MAT while economizing
+  title: SAT/MAT mismatch in economizer (GL36 F)
   aliases: []
   kind: diagnostic
   equipment_types: *id079
-  equipment_kinds: null
+  equipment_kinds: *id079
   required_roles: *id080
   optional_roles: *id081
   operational_proof_roles: *id082
@@ -3734,8 +5085,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters: {}
   time_semantics: row_or_interval_per_sql_file
@@ -3796,11 +5147,11 @@ concepts:
 - canonical_id: FC9
   pandas_id: FC9
   rule_id: FC9
-  title: OAT high vs SAT SP while economizing
+  title: OAT too warm for free cooling (GL36 G)
   aliases: []
   kind: diagnostic
   equipment_types: *id085
-  equipment_kinds: null
+  equipment_kinds: *id085
   required_roles: *id086
   optional_roles: *id087
   operational_proof_roles: *id088
@@ -3815,8 +5166,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters: {}
   time_semantics: row_or_interval_per_sql_file
@@ -3877,11 +5228,11 @@ concepts:
 - canonical_id: FC10
   pandas_id: FC10
   rule_id: FC10
-  title: MAT-OAT delta while cooling and economizing
+  title: OAT/MAT mismatch + mech cooling (GL36 H)
   aliases: []
   kind: diagnostic
   equipment_types: *id091
-  equipment_kinds: null
+  equipment_kinds: *id091
   required_roles: *id092
   optional_roles: *id093
   operational_proof_roles: *id094
@@ -3896,8 +5247,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters: {}
   time_semantics: row_or_interval_per_sql_file
@@ -3958,11 +5309,11 @@ concepts:
 - canonical_id: FC11
   pandas_id: FC11
   rule_id: FC11
-  title: OAT low vs SAT SP while cooling and economizing
+  title: OAT/MAT mismatch economizer-only (GL36 I)
   aliases: []
   kind: diagnostic
   equipment_types: *id097
-  equipment_kinds: null
+  equipment_kinds: *id097
   required_roles: *id098
   optional_roles: *id099
   operational_proof_roles: *id100
@@ -3977,8 +5328,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters: {}
   time_semantics: row_or_interval_per_sql_file
@@ -4039,11 +5390,11 @@ concepts:
 - canonical_id: FC12
   pandas_id: FC12
   rule_id: FC12
-  title: SAT above MAT while cooling
+  title: SAT above blend in cooling (GL36 J)
   aliases: []
   kind: diagnostic
   equipment_types: *id103
-  equipment_kinds: null
+  equipment_kinds: *id103
   required_roles: *id104
   optional_roles: *id105
   operational_proof_roles: *id106
@@ -4058,8 +5409,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters: {}
   time_semantics: row_or_interval_per_sql_file
@@ -4120,12 +5471,12 @@ concepts:
 - canonical_id: FC13-SAT-HIGH
   pandas_id: FC13
   rule_id: FC13
-  title: SAT above setpoint at full cooling
+  title: SAT above SP at full cooling (GL36 K)
   aliases:
   - FC13
   kind: diagnostic
   equipment_types: *id109
-  equipment_kinds: null
+  equipment_kinds: *id109
   required_roles: *id110
   optional_roles: *id111
   operational_proof_roles: *id112
@@ -4140,8 +5491,8 @@ concepts:
   parity_level: sql_screening
   difference_class: alias
   known_semantic_differences: 'aliases: FC13 (not independent rules)'
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters:
     sat_err:
@@ -4251,7 +5602,7 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id115
-  equipment_kinds: null
+  equipment_kinds: *id115
   required_roles: *id116
   optional_roles: *id117
   operational_proof_roles: *id118
@@ -4266,8 +5617,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters:
     confirm_seconds:
@@ -4350,7 +5701,7 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id121
-  equipment_kinds: null
+  equipment_kinds: *id121
   required_roles: *id122
   optional_roles: *id123
   operational_proof_roles: *id124
@@ -4365,8 +5716,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters:
     confirm_seconds:
@@ -4449,12 +5800,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id127
-  equipment_kinds: null
+  equipment_kinds: *id127
   required_roles: *id128
   optional_roles: *id129
   operational_proof_roles: *id130
   default_thresholds: *id131
-  pandas_implementation: ahu_satdev
+  pandas_implementation: ahu_sat_dev
   datafusion_sql_implementation: ahu_satdev.sql
   sql_file: ahu_satdev.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-satdev
@@ -4464,8 +5815,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters:
     confirm_seconds:
@@ -4548,12 +5899,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id133
-  equipment_kinds: null
+  equipment_kinds: *id133
   required_roles: *id134
   optional_roles: *id135
   operational_proof_roles: *id136
   default_thresholds: *id137
-  pandas_implementation: ahu_ducthi
+  pandas_implementation: ahu_duct_high
   datafusion_sql_implementation: ahu_ducthi.sql
   sql_file: ahu_ducthi.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-ducthi
@@ -4563,8 +5914,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: conditional
+  startup_delay_seconds: 0
   confirm_seconds: 300
   parameters:
     confirm_seconds:
@@ -4656,12 +6007,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id139
-  equipment_kinds: null
+  equipment_kinds: *id139
   required_roles: *id140
   optional_roles: *id141
   operational_proof_roles: *id142
   default_thresholds: *id143
-  pandas_implementation: ahu_simul
+  pandas_implementation: ahu_simul_heat_cool
   datafusion_sql_implementation: ahu_simul.sql
   sql_file: ahu_simul.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-simul
@@ -4671,8 +6022,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 300
   confirm_seconds: 300
   parameters:
     confirm_seconds:
@@ -4751,11 +6102,11 @@ concepts:
 - canonical_id: OAT-METEO
   pandas_id: OAT-METEO
   rule_id: OAT-METEO
-  title: Equipment OAT vs weather-staged wx OAT
+  title: BAS outdoor-air sensor vs Open-Meteo
   aliases: []
   kind: diagnostic
   equipment_types: *id145
-  equipment_kinds: null
+  equipment_kinds: *id145
   required_roles: *id146
   optional_roles: *id147
   operational_proof_roles: *id148
@@ -4770,8 +6121,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: always
+  startup_delay_seconds: 0.0
   confirm_seconds: 900
   parameters:
     oat_err:
@@ -4851,11 +6202,11 @@ concepts:
 - canonical_id: ECON-1
   pandas_id: ECON-1
   rule_id: ECON-1
-  title: Economizer stuck closed when OAT favorable
+  title: Economizer stuck closed
   aliases: []
   kind: diagnostic
   equipment_types: *id151
-  equipment_kinds: null
+  equipment_kinds: *id151
   required_roles: *id152
   optional_roles: *id153
   operational_proof_roles: *id154
@@ -4870,8 +6221,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters:
     econ1_oat_min:
@@ -4941,11 +6292,11 @@ concepts:
 - canonical_id: ECON-2
   pandas_id: ECON-2
   rule_id: ECON-2
-  title: Economizing when outdoor air unfavorable
+  title: Economizing when outdoor unfavorable
   aliases: []
   kind: diagnostic
   equipment_types: *id157
-  equipment_kinds: null
+  equipment_kinds: *id157
   required_roles: *id158
   optional_roles: *id159
   operational_proof_roles: *id160
@@ -4960,8 +6311,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 300
   confirm_seconds: 300
   parameters:
     econ2_oat_hi:
@@ -5053,12 +6404,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id163
-  equipment_kinds: null
+  equipment_kinds: *id163
   required_roles: *id164
   optional_roles: *id165
   operational_proof_roles: *id166
   default_thresholds: *id167
-  pandas_implementation: econ_3
+  pandas_implementation: econ2
   datafusion_sql_implementation: econ3_mech_without_econ.sql
   sql_file: econ3_mech_without_econ.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-3
@@ -5068,8 +6419,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 300
   parameters:
     confirm_seconds:
@@ -5179,7 +6530,7 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id169
-  equipment_kinds: null
+  equipment_kinds: *id169
   required_roles: *id170
   optional_roles: *id171
   operational_proof_roles: *id172
@@ -5194,8 +6545,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters:
     oa_min_pct:
@@ -5278,12 +6629,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id175
-  equipment_kinds: null
+  equipment_kinds: *id175
   required_roles: *id176
   optional_roles: *id177
   operational_proof_roles: *id178
   default_thresholds: *id179
-  pandas_implementation: econ_5
+  pandas_implementation: econ5
   datafusion_sql_implementation: econ5_preheat_over.sql
   sql_file: econ5_preheat_over.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-5
@@ -5293,8 +6644,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters:
     confirm_seconds:
@@ -5377,12 +6728,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id181
-  equipment_kinds: null
+  equipment_kinds: *id181
   required_roles: *id182
   optional_roles: *id183
   operational_proof_roles: *id184
   default_thresholds: *id185
-  pandas_implementation: econ_6
+  pandas_implementation: econ6_compute
   datafusion_sql_implementation: econ6_econ_freezing.sql
   sql_file: econ6_econ_freezing.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-6
@@ -5392,8 +6743,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters:
     confirm_seconds:
@@ -5485,12 +6836,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id187
-  equipment_kinds: null
+  equipment_kinds: *id187
   required_roles: *id188
   optional_roles: *id189
   operational_proof_roles: *id190
   default_thresholds: *id191
-  pandas_implementation: econ_7
+  pandas_implementation: econ7_compute
   datafusion_sql_implementation: econ7_ok_not_economizing.sql
   sql_file: econ7_ok_not_economizing.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-7
@@ -5500,8 +6851,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters:
     confirm_seconds:
@@ -5611,12 +6962,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id193
-  equipment_kinds: null
+  equipment_kinds: *id193
   required_roles: *id194
   optional_roles: *id195
   operational_proof_roles: *id196
   default_thresholds: *id197
-  pandas_implementation: mech_oat_1
+  pandas_implementation: mech_oat1_compute
   datafusion_sql_implementation: mech_oat_1.sql
   sql_file: mech_oat_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#mech-oat-1
@@ -5626,8 +6977,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: always
+  startup_delay_seconds: 0.0
   confirm_seconds: 600
   parameters:
     confirm_seconds:
@@ -5710,12 +7061,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id199
-  equipment_kinds: null
+  equipment_kinds: *id199
   required_roles: *id200
   optional_roles: *id201
   operational_proof_roles: *id202
   default_thresholds: *id203
-  pandas_implementation: chw_noload_1
+  pandas_implementation: chw_noload1_compute
   datafusion_sql_implementation: chw_noload_1.sql
   sql_file: chw_noload_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-noload-1
@@ -5725,8 +7076,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: always
+  startup_delay_seconds: 0.0
   confirm_seconds: 1800
   parameters:
     confirm_seconds:
@@ -5796,11 +7147,11 @@ concepts:
 - canonical_id: VAV-1
   pandas_id: VAV-1
   rule_id: VAV-1
-  title: Zone comfort band violation hours with confirm window
+  title: Zone comfort band
   aliases: []
   kind: diagnostic
   equipment_types: *id205
-  equipment_kinds: null
+  equipment_kinds: *id205
   required_roles: *id206
   optional_roles: *id207
   operational_proof_roles: *id208
@@ -5815,8 +7166,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: conditional
+  startup_delay_seconds: 0.0
   confirm_seconds: 900
   parameters:
     zone_t_lo:
@@ -5909,12 +7260,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id211
-  equipment_kinds: null
+  equipment_kinds: *id211
   required_roles: *id212
   optional_roles: *id213
   operational_proof_roles: *id214
   default_thresholds: *id215
-  pandas_implementation: vav_3
+  pandas_implementation: vav3
   datafusion_sql_implementation: vav3_excessive_reheat.sql
   sql_file: vav3_excessive_reheat.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-3
@@ -5924,8 +7275,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 300
   confirm_seconds: 300
   parameters:
     confirm_seconds:
@@ -6026,12 +7377,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id217
-  equipment_kinds: null
+  equipment_kinds: *id217
   required_roles: *id218
   optional_roles: *id219
   operational_proof_roles: *id220
   default_thresholds: *id221
-  pandas_implementation: vav_4
+  pandas_implementation: vav4
   datafusion_sql_implementation: vav4_damper_full_open.sql
   sql_file: vav4_damper_full_open.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-4
@@ -6041,8 +7392,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: control_loop
+  startup_delay_seconds: 300
   confirm_seconds: 900
   parameters:
     confirm_seconds:
@@ -6143,12 +7494,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id223
-  equipment_kinds: null
+  equipment_kinds: *id223
   required_roles: *id224
   optional_roles: *id225
   operational_proof_roles: *id226
   default_thresholds: *id227
-  pandas_implementation: vav_5
+  pandas_implementation: vav5
   datafusion_sql_implementation: vav5_airflow_bias.sql
   sql_file: vav5_airflow_bias.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-5
@@ -6158,8 +7509,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 300
   confirm_seconds: 900
   parameters:
     confirm_seconds:
@@ -6233,12 +7584,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id229
-  equipment_kinds: null
+  equipment_kinds: *id229
   required_roles: *id230
   optional_roles: *id231
   operational_proof_roles: *id232
   default_thresholds: *id233
-  pandas_implementation: vav_reheat
+  pandas_implementation: vav_reheat_stuck
   datafusion_sql_implementation: vav_reheat.sql
   sql_file: vav_reheat.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-reheat
@@ -6248,8 +7599,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 900
   parameters:
     confirm_seconds:
@@ -6350,12 +7701,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id235
-  equipment_kinds: null
+  equipment_kinds: *id235
   required_roles: *id236
   optional_roles: *id237
   operational_proof_roles: *id238
   default_thresholds: *id239
-  pandas_implementation: vav_ahu_leave
+  pandas_implementation: vav_vs_ahu_leave
   datafusion_sql_implementation: vav_ahu_leave.sql
   sql_file: vav_ahu_leave.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-ahu-leave
@@ -6365,8 +7716,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 900
   parameters:
     confirm_seconds:
@@ -6458,12 +7809,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id241
-  equipment_kinds: null
+  equipment_kinds: *id241
   required_roles: *id242
   optional_roles: *id243
   operational_proof_roles: *id244
   default_thresholds: *id245
-  pandas_implementation: vav_7
+  pandas_implementation: vav7
   datafusion_sql_implementation: vav7_min_airflow.sql
   sql_file: vav7_min_airflow.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-7
@@ -6473,8 +7824,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 300
   confirm_seconds: 900
   parameters:
     confirm_seconds:
@@ -6566,7 +7917,7 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id247
-  equipment_kinds: null
+  equipment_kinds: *id247
   required_roles: *id248
   optional_roles: *id249
   operational_proof_roles: *id250
@@ -6582,8 +7933,8 @@ concepts:
   difference_class: none
   known_semantic_differences: Missing proof → pandas SKIPPED_MISSING_ROLES; SQL returns
     0 fault hours (optional proof roles). Proven-off zeros do not accumulate ΔT hours.
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: hydronic_flow
+  startup_delay_seconds: 900
   confirm_seconds: 900
   parameters:
     confirm_seconds:
@@ -6666,12 +8017,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id253
-  equipment_kinds: null
+  equipment_kinds: *id253
   required_roles: *id254
   optional_roles: *id255
   operational_proof_roles: *id256
   default_thresholds: *id257
-  pandas_implementation: chw_2
+  pandas_implementation: chw2
   datafusion_sql_implementation: chw2_dp_low.sql
   sql_file: chw2_dp_low.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-2
@@ -6681,8 +8032,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: hydronic_flow
+  startup_delay_seconds: 300
   confirm_seconds: 300
   parameters:
     confirm_seconds:
@@ -6774,12 +8125,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id259
-  equipment_kinds: null
+  equipment_kinds: *id259
   required_roles: *id260
   optional_roles: *id261
   operational_proof_roles: *id262
   default_thresholds: *id263
-  pandas_implementation: chw_3
+  pandas_implementation: chw3
   datafusion_sql_implementation: chw3_supply_band.sql
   sql_file: chw3_supply_band.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-3
@@ -6789,8 +8140,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: hydronic_flow
+  startup_delay_seconds: 600
   confirm_seconds: 300
   parameters:
     confirm_seconds:
@@ -6873,12 +8224,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id265
-  equipment_kinds: null
+  equipment_kinds: *id265
   required_roles: *id266
   optional_roles: *id267
   operational_proof_roles: *id268
   default_thresholds: *id269
-  pandas_implementation: chw_4
+  pandas_implementation: chw4
   datafusion_sql_implementation: chw4_flow_high.sql
   sql_file: chw4_flow_high.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-4
@@ -6888,8 +8239,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: hydronic_flow
+  startup_delay_seconds: 300
   confirm_seconds: 300
   parameters:
     confirm_seconds:
@@ -6981,12 +8332,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id271
-  equipment_kinds: null
+  equipment_kinds: *id271
   required_roles: *id272
   optional_roles: *id273
   operational_proof_roles: *id274
   default_thresholds: *id275
-  pandas_implementation: hp_1
+  pandas_implementation: hp1
   datafusion_sql_implementation: hp1_discharge_cold.sql
   sql_file: hp1_discharge_cold.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#hp-1
@@ -6996,8 +8347,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: compressor
+  startup_delay_seconds: 600
   confirm_seconds: 600
   parameters:
     confirm_seconds:
@@ -7089,12 +8440,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id277
-  equipment_kinds: null
+  equipment_kinds: *id277
   required_roles: *id278
   optional_roles: *id279
   operational_proof_roles: *id280
   default_thresholds: *id281
-  pandas_implementation: wx_1
+  pandas_implementation: wx1
   datafusion_sql_implementation: wx1_oa_spike.sql
   sql_file: wx1_oa_spike.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#wx-1
@@ -7104,8 +8455,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: always
+  startup_delay_seconds: 0.0
   confirm_seconds: 300
   parameters:
     confirm_seconds:
@@ -7188,12 +8539,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id283
-  equipment_kinds: null
+  equipment_kinds: *id283
   required_roles: *id284
   optional_roles: *id285
   operational_proof_roles: *id286
   default_thresholds: *id287
-  pandas_implementation: cw_opt_1
+  pandas_implementation: cw_opt
   datafusion_sql_implementation: cw_opt_1.sql
   sql_file: cw_opt_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-opt-1
@@ -7203,8 +8554,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: hydronic_flow
+  startup_delay_seconds: 600
   confirm_seconds: 900
   parameters:
     confirm_seconds:
@@ -7296,12 +8647,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id289
-  equipment_kinds: null
+  equipment_kinds: *id289
   required_roles: *id290
   optional_roles: *id291
   operational_proof_roles: *id292
   default_thresholds: *id293
-  pandas_implementation: cw_apr_1
+  pandas_implementation: cw_apr
   datafusion_sql_implementation: cw_apr_1.sql
   sql_file: cw_apr_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-apr-1
@@ -7311,8 +8662,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: hydronic_flow
+  startup_delay_seconds: 600
   confirm_seconds: 900
   parameters:
     confirm_seconds:
@@ -7404,12 +8755,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id295
-  equipment_kinds: null
+  equipment_kinds: *id295
   required_roles: *id296
   optional_roles: *id297
   operational_proof_roles: *id298
   default_thresholds: *id299
-  pandas_implementation: cw_fan_1
+  pandas_implementation: cw_fan_excess
   datafusion_sql_implementation: cw_fan_1.sql
   sql_file: cw_fan_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-fan-1
@@ -7419,8 +8770,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: hydronic_flow
+  startup_delay_seconds: 600
   confirm_seconds: 900
   parameters:
     confirm_seconds:
@@ -7521,12 +8872,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id301
-  equipment_kinds: null
+  equipment_kinds: *id301
   required_roles: *id302
   optional_roles: *id303
   operational_proof_roles: *id304
   default_thresholds: *id305
-  pandas_implementation: trim_1
+  pandas_implementation: trim1
   datafusion_sql_implementation: trim1_duct_static.sql
   sql_file: trim1_duct_static.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-1
@@ -7536,8 +8887,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 300
   confirm_seconds: 1800
   parameters:
     confirm_seconds:
@@ -7629,12 +8980,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id307
-  equipment_kinds: null
+  equipment_kinds: *id307
   required_roles: *id308
   optional_roles: *id309
   operational_proof_roles: *id310
   default_thresholds: *id311
-  pandas_implementation: trim_3
+  pandas_implementation: trim3
   datafusion_sql_implementation: trim3_hwst.sql
   sql_file: trim3_hwst.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-3
@@ -7644,8 +8995,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: hydronic_flow
+  startup_delay_seconds: 600
   confirm_seconds: 1800
   parameters:
     confirm_seconds:
@@ -7737,12 +9088,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id313
-  equipment_kinds: null
+  equipment_kinds: *id313
   required_roles: *id314
   optional_roles: *id315
   operational_proof_roles: *id316
   default_thresholds: *id317
-  pandas_implementation: trim_4
+  pandas_implementation: trim4
   datafusion_sql_implementation: trim4_chw_reset.sql
   sql_file: trim4_chw_reset.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-4
@@ -7752,8 +9103,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: hydronic_flow
+  startup_delay_seconds: 600
   confirm_seconds: 1800
   parameters:
     confirm_seconds:
@@ -7841,14 +9192,12 @@ concepts:
 - canonical_id: SCHED-1
   pandas_id: SCHED-1
   rule_id: SCHED-1
-  title: Excess / wasted unoccupied fan runtime when the zone is already in the comfort
-    band (optimal-start / schedule misconfig signal). Without zone_t, falls back to
-    unoccupied + fan_on (pandas sched1 base).
+  title: Unoccupied runtime
   aliases:
   - excess_runtime
   kind: diagnostic
   equipment_types: *id319
-  equipment_kinds: null
+  equipment_kinds: *id319
   required_roles: *id320
   optional_roles: *id321
   operational_proof_roles: *id322
@@ -7863,8 +9212,8 @@ concepts:
   parity_level: sql_screening
   difference_class: alias
   known_semantic_differences: 'aliases: excess_runtime (not independent rules)'
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: always
+  startup_delay_seconds: 0.0
   confirm_seconds: 1800
   parameters:
     confirm_seconds:
@@ -7956,7 +9305,7 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id325
-  equipment_kinds: null
+  equipment_kinds: *id325
   required_roles: *id326
   optional_roles: *id327
   operational_proof_roles: *id328
@@ -7973,8 +9322,8 @@ concepts:
   known_semantic_differences: '4.3: ranked proof status/current > command; pressure
     is inferred runtime only and does not OR into the FAULT mask. SQL uses the same
     rank.'
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: always
+  startup_delay_seconds: 0.0
   confirm_seconds: 3600
   parameters:
     confirm_seconds:
@@ -8048,12 +9397,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id331
-  equipment_kinds: null
+  equipment_kinds: *id331
   required_roles: *id332
   optional_roles: *id333
   operational_proof_roles: *id334
   default_thresholds: *id335
-  pandas_implementation: cmd_1
+  pandas_implementation: cmd1
   datafusion_sql_implementation: cmd1_fan_mismatch.sql
   sql_file: cmd1_fan_mismatch.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cmd-1
@@ -8063,8 +9412,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: always
+  startup_delay_seconds: 0.0
   confirm_seconds: 600
   parameters:
     confirm_seconds:
@@ -8138,12 +9487,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id337
-  equipment_kinds: null
+  equipment_kinds: *id337
   required_roles: *id338
   optional_roles: *id339
   operational_proof_roles: *id340
   default_thresholds: *id341
-  pandas_implementation: oa_1
+  pandas_implementation: oa1
   datafusion_sql_implementation: oa1_low_oa_frac.sql
   sql_file: oa1_low_oa_frac.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#oa-1
@@ -8153,8 +9502,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: fan_running
+  startup_delay_seconds: 600
   confirm_seconds: 900
   parameters:
     confirm_seconds:
@@ -8246,12 +9595,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id343
-  equipment_kinds: null
+  equipment_kinds: *id343
   required_roles: *id344
   optional_roles: *id345
   operational_proof_roles: *id346
   default_thresholds: *id347
-  pandas_implementation: dmp_1
+  pandas_implementation: dmp1
   datafusion_sql_implementation: dmp1_oa_damper_leak.sql
   sql_file: dmp1_oa_damper_leak.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#dmp-1
@@ -8261,8 +9610,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: conditional
+  startup_delay_seconds: 300
   confirm_seconds: 900
   parameters:
     confirm_seconds:
@@ -8345,12 +9694,12 @@ concepts:
   aliases: []
   kind: diagnostic
   equipment_types: *id349
-  equipment_kinds: null
+  equipment_kinds: *id349
   required_roles: *id350
   optional_roles: *id351
   operational_proof_roles: *id352
   default_thresholds: *id353
-  pandas_implementation: vlv_1
+  pandas_implementation: vlv1
   datafusion_sql_implementation: vlv1_clg_valve_leak.sql
   sql_file: vlv1_clg_valve_leak.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vlv-1
@@ -8360,8 +9709,8 @@ concepts:
   parity_level: sql_screening
   difference_class: none
   known_semantic_differences: ''
-  operational_gate: fan_or_occupied_when_declared
-  startup_delay_seconds: null
+  operational_gate: conditional
+  startup_delay_seconds: 300
   confirm_seconds: 900
   parameters:
     confirm_seconds:

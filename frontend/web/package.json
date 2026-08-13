@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "node scripts/assert_full_width.mjs && vitest run",
+    "test": "node ../../scripts/assert_frontend_full_width.mjs && vitest run",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
     "test:e2e": "playwright test",

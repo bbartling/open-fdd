@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "../src/styles");
+const root = join(dirname(fileURLToPath(import.meta.url)), "../frontend/web/src/styles");
 const tokens = readFileSync(join(root, "tokens.css"), "utf8");
 const css = readFileSync(join(root, "app.css"), "utf8");
 
