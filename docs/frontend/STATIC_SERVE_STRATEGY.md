@@ -5,15 +5,14 @@
 ## Production
 
 The UI is served by the `openfdd-web` container: React from `frontend/web`,
-listening on **:8501** in-container (published as **:3000**). Central owns the
+listening on **:8080** in-container (published as **:3000**). Central owns the
 API on **:8080**. The UI calls central over the compose network (or host
-`localhost` in local dev) — it is not a static SPA with a same-origin Caddy
-proxy.
+`localhost` in local dev). Optional Caddy fronts the LAN on **:80**.
 
 | Surface | Behavior |
 | --- | --- |
-| UI browser | React on `:3000` (host) → `:8501` (container) |
-| UI via Caddy (optional) | `http://<host>/` → `ui:8501` (`OPENFDD_CADDY=1` / `compose.caddy.yml`) |
+| UI browser | React on `:3000` (host) → `:8080` (container nginx) |
+| UI via Caddy (optional) | `http://<host>/` → `web:8080` (`OPENFDD_CADDY=1` / `compose.caddy.react.yml`) |
 | API | Central on `:8080` (`/api/health`, JWT routes, FDD) |
 | API via Caddy | `http://<host>/api*` → `central:8080` |
 | Docs / OpenAPI | Served by central on `:8080` |
