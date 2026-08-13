@@ -259,7 +259,12 @@ matrix:
   - zone
   - heatpump
   required_roles: &id020 []
-  optional_roles: &id021 []
+  optional_roles: &id021
+  - oa_t
+  - mat
+  - zone_t
+  - rat
+  - sat
   operational_proof_roles: &id022 []
   default_thresholds: &id023
     stale_hours:
@@ -2258,10 +2263,7 @@ matrix:
   title: Chiller running with no building load
   equipment_types: &id199
   - chiller
-  required_roles: &id200
-  - chw_supply_t
-  - chw_supply_sp
-  - chw_pump_cmd
+  required_roles: &id200 []
   optional_roles: &id201
   - chiller-status
   - chw-pump-status
@@ -3825,6 +3827,15 @@ concepts:
       unit: degF
       frontend_control: slider
       sql_placeholder: FLATLINE_TOL
+    flatline_hours:
+      label: Flatline window
+      default: 1.0
+      min: 0.25
+      max: 12.0
+      step: 0.25
+      unit: h
+      frontend_control: slider
+      sql_placeholder: FLATLINE_HOURS
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
@@ -4023,6 +4034,15 @@ concepts:
       unit: h
       frontend_control: slider
       sql_placeholder: STALE_HOURS
+    stale_tol:
+      label: Stale tolerance
+      default: 0.05
+      min: 0.0
+      max: 1.0
+      step: 0.01
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: STALE_TOL
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
@@ -4123,6 +4143,15 @@ concepts:
       unit: min
       frontend_control: slider
       sql_placeholder: PERSISTENCE_MIN
+    steady_fault_per_hour:
+      label: Steady-state slew limit
+      default: 6.0
+      min: 1.0
+      max: 60.0
+      step: 0.5
+      unit: degF_per_h
+      frontend_control: slider
+      sql_placeholder: STEADY_FAULT_PER_HOUR
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
@@ -4591,6 +4620,15 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
+    delta_os_max:
+      label: Max operating-state entries per hour
+      default: 5.0
+      min: 1.0
+      max: 30.0
+      step: 1.0
+      unit: count
+      frontend_control: slider
+      sql_placeholder: DELTA_OS_MAX
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
@@ -4807,6 +4845,15 @@ concepts:
       unit: degF
       frontend_control: slider
       sql_placeholder: DELTA_T_MIN
+    min_cfm_design:
+      label: Design minimum outdoor airflow
+      default: 5000.0
+      min: 0.0
+      max: 200000.0
+      step: 100.0
+      unit: cfm
+      frontend_control: slider
+      sql_placeholder: MIN_CFM_DESIGN
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
@@ -6997,15 +7044,6 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
-    sat_band_f:
-      label: AHU SAT≈SP band
-      default: 2.0
-      min: 0.5
-      max: 6.0
-      step: 0.5
-      unit: degF
-      frontend_control: slider
-      sql_placeholder: SAT_BAND_F
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
@@ -7763,6 +7801,15 @@ concepts:
       unit: cfm
       frontend_control: slider
       sql_placeholder: HIGH_MIN_FLOW_SP
+    flow_on_min:
+      label: Airflow-on min
+      default: 25.0
+      min: 0.0
+      max: 200.0
+      step: 5.0
+      unit: cfm
+      frontend_control: slider
+      sql_placeholder: FLOW_ON_MIN
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
