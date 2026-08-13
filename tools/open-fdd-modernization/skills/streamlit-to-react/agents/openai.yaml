@@ -1,4 +1,0 @@
-interface:
-  display_name: "Streamlit to React"
-  short_description: "Port Streamlit apps to pixel-matched React"
-  default_prompt: "Use $streamlit-to-react to port this Streamlit app into a visually faithful React client. For Open-FDD, backend is Rust central /api (no FastAPI sidecar); follow openfdd_agent_spec and AGENT_SKILL_BRIDGE."

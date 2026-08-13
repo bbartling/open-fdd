@@ -155,8 +155,8 @@ def check_multi_building_fixture_inventory() -> None:
         )
     else:
         print(
-            "SKIP: services/ui/scripts/validate_building100.py absent "
-            "(Streamlit product removed; BUILDING_100 path relocates later)"
+            "SKIP: frontend/web/scripts/validate_building100.py absent "
+            "(React product removed; BUILDING_100 path relocates later)"
         )
         print(
             f"PASS multi-building inventory: {len(required)} family fixtures "

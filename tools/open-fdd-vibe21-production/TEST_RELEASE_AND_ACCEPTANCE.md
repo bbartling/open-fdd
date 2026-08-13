@@ -20,7 +20,7 @@ Only `QUALIFIED` counts as done for a shipping capability.
 - Rust format/clippy; TypeScript typecheck; real ESLint; Python offline tooling
   lint/tests where relevant.
 - Dependency/license/security scans.
-- No production import/dependency on Streamlit, Flask, FastAPI, pandas,
+- No production import/dependency on React, Flask, FastAPI, pandas,
   scikit-learn, joblib, or Python executables.
 - Route/OpenAPI/capability/MCP/docs inventory agreement.
 - Archive, ownership, cookbook, schema, and status consistency.
@@ -42,7 +42,7 @@ Only `QUALIFIED` counts as done for a shipping capability.
 
 ### L3 — differential/oracle tests
 
-For Streamlit/Python pandas and Vibe 21 oracles:
+For React SPA/Python pandas and Vibe 21 oracles:
 
 - identical frozen input and parameter set;
 - raw values compared before display rounding;

@@ -1,9 +1,9 @@
-# Streamlit interaction baseline (P1-M1-03)
+# React interaction baseline (P1-M1-03)
 
 Machine-readable scenario index. **M1 gate:** every capability row has either a
 screenshot under `evidence/screenshots/` **or** an explicit `NONVISUAL`
 classification. Visual capture moves to P1-M3 once the React shell + Playwright
-job exists; Streamlit screenshots are not required to close M1.
+job exists; React screenshots are not required to close M1.
 
 | scenario_id | capability_ids | route/section | widgets | states | viewport | evidence |
 |---|---|---|---|---|---|---|
@@ -28,7 +28,7 @@ job exists; Streamlit screenshots are not required to close M1.
 ## Capture protocol (P1-M3+)
 
 ```bash
-# Playwright against Streamlit or React flag UI.
+# Playwright against React or React flag UI.
 # Mask timestamps, tokens, and absolute paths before storing under
 # docs/migration/react-rust/evidence/screenshots/<commit>/
 ```

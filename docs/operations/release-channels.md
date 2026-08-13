@@ -16,7 +16,7 @@ Open-FDD publishes **three GHCR channels**. Only **stable** is intended for prod
 | **Beta** | `:beta` (+ immutable semver e.g. `3.3.0-beta.1`) | Maintainer promotion after bench milestone | Pilot integrators, early OT sites |
 | **Stable** | `:latest` (+ immutable semver e.g. `3.3.0`) | Maintainer promotion after beta sign-off | Production-ish edge deployments |
 
-Every stack image (`openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`,
+Every stack image (`openfdd-central`, `openfdd-web`, `openfdd-fieldbus`,
 `openfdd-mqtt`, `openfdd-mcp`) shares the same channel tags and moves together:
 
 ```text

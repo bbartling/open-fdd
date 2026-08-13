@@ -26,12 +26,12 @@ worker remain **residuals**.
 | Slice | Status |
 |-------|--------|
 | D0 — C→D gap register + cookbook fortress CI | **Done** (#590) |
-| D1 — Historian DF + Streamlit central cutover | **Done** (#591) |
+| D1 — Historian DF + React central cutover | **Done** (#591) |
 | D2 — `rule_parity_mutation_check.py` + multi-building inventory | **Done** (#592) |
 | D3 — Job-native WattLab handoff UI + payload tests | **Done** (#593) |
 | D3 — Zip remains additive; job-native documented as SoT | **Done** |
 | D4 — `RunnerPolicy` validation + `POST .../eplus/runs` QUEUED stub | **Done** (#593) |
-| D5 — Vite `:5173` production hint scrub (Streamlit `:8501`) | **Done** |
+| D5 — Vite `:5173` production hint scrub (React `:8501`) | **Done** |
 | D5 — Closeout / acceptance / gap register / BUILD_CHECKPOINTS | **Done** |
 
 ## Explicit residuals (not claimed)
@@ -39,14 +39,14 @@ worker remain **residuals**.
 - Live external EnergyPlus worker claiming QUEUED runs + full artifact attach UX
 - Logical SQL gate mutation tests (fan-on / occupancy / ΔT) beyond path guards
 - `PROVEN_MULTI_BUILDING` qualification
-- Remaining analytics family DF MemTable + full Streamlit cutover (C3–C9, C8 plant)
+- Remaining analytics family DF MemTable + full React cutover (C3–C9, C8 plant)
 - Production pandas path retirement and immutable `sha-*` full-stack acceptance
 - Playground GHCR retirement / dead workflow purge beyond Vite hint scrub
 
 ## Engine / ownership honesty
 
 - Central does **not** execute EnergyPlus or attach a Docker socket.
-- Production UI is **Streamlit** (`services/ui`), not Vite/Caddy.
+- Production UI is **React SPA** (`frontend/web`), not Vite/Caddy.
 - Dual cookbooks remain protected; registry 63 vs public ~59 stays honest.
 
 ## Related

@@ -239,7 +239,7 @@ def run_vibe19(
     results_by_key: dict[tuple[str, str], dict] = {}
     # Also try JSON results
     for jf in out_host.rglob("*.json"):
-        if jf.name in ("streamlit_bootstrap.json", "session_config.json"):
+        if jf.name in ("session_bootstrap.json", "session_config.json"):
             continue
         try:
             data = json.loads(jf.read_text())

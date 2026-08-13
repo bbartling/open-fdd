@@ -8,7 +8,7 @@ Safety:
 - Immutable inputs: `tests/react_parity/manifest.json` content hashes
 - Comparison artifact: `docs/migration/react-rust/evidence/shadow/latest_shadow_report.json`
 - **Does not** write production findings
-- **Does not** invoke pandas / Streamlit as a request fallback
+- **Does not** invoke pandas / React as a request fallback
 
 Comparisons:
 1. Fixture directory hashes vs manifest (exact)
@@ -34,5 +34,5 @@ Exercise matrix (authorized synthetic / CI evidence):
 ## Result
 
 **PASS** for synthetic shadow gate at this commit. Next canary prerequisite:
-recorded promotion decision (P2-M3) with Streamlit fallback still available;
+recorded promotion decision (P2-M3) with React fallback still available;
 minimum observation via migration metrics (`/api/ui/migration-metrics`).

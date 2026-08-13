@@ -6,7 +6,7 @@ Planning date: 2026-07-30
 
 ## Mission
 
-Replace the Open-FDD Streamlit product UI with a React application while moving
+Replace the Open-FDD React product UI with a React application while moving
 production application behavior out of Python. Deterministic analytics and FDD
 belong in DataFusion SQL. Ingestion, orchestration, durable jobs, validation,
 exports, protocol handling, and APIs belong in Rust. React owns presentation,
@@ -14,9 +14,9 @@ interaction state, routing, and browser-side behavior.
 
 This is not a big-bang rewrite. It is a contract-first strangler migration:
 
-1. freeze the current Streamlit behavior as an executable reference;
+1. freeze the current React SPA behavior as an executable reference;
 2. expose stable Rust-owned contracts;
-3. reproduce the Streamlit UX in React one vertical slice at a time;
+3. reproduce the React UX in React one vertical slice at a time;
 4. dual-run new and old computation paths where independent comparison is useful;
 5. cut traffic over behind reversible flags;
 6. delete production Python only after proof and a rollback window.
@@ -43,7 +43,7 @@ Python
      until a separate product decision removes it
 ```
 
-The phrase “remove Python” means no Python interpreter, Streamlit server,
+The phrase “remove Python” means no Python interpreter, React SPA server,
 pandas fallback, Python job store, Python report worker, or Python computation
 path is required to operate the product. Deleting the historical oracle source
 is a separate decision; keeping a non-shipping oracle does not violate the
@@ -53,18 +53,18 @@ runtime goal.
 
 | Concern | Current Open-FDD source | Modernization direction |
 | --- | --- | --- |
-| Product UI | `services/ui/streamlit_app.py`, `services/ui/app/` | React SPA, initially behavior-compatible |
+| Product UI | `frontend/web`, `frontend/web` | React SPA, initially behavior-compatible |
 | Product FDD | `sql_rules/`, `crates/fdd_rules`, `POST /api/fdd/run` | Keep and expand; never move math into React |
 | Data execution | `crates/fdd_sql`, DataFusion 43 | Canonical deterministic analytics engine |
 | Central API | `services/central/` | Primary browser API and durable state owner |
-| Jobs | `services/central/src/jobs.rs`; Python client in `services/ui/app/job_store.py` | Rust remains source of truth; React consumes it |
+| Jobs | `services/central/src/jobs.rs`; Python client in `frontend/web` | Rust remains source of truth; React consumes it |
 | CSV/package ingest | UI package helpers plus edge/central routes | Rust endpoint and asynchronous job |
 | Oracle/legacy analytics | `open_fdd.rules`, `open_fdd.analytics`, `open_fdd.reporting`, UI cookbook | Frozen comparison source during migration |
 | Edge/protocols | `edge/`, `services/fieldbus/`, `openfdd_mqtt` | Phase 3 live-data extension |
 | BACnet ownership | fieldbus owns UDP 47808 and publishes MQTTS | Preserve exactly; React never touches BACnet wire |
 
 Several checked-in statements currently prohibit React (`frontend/README.md`,
-`services/ui/AGENTS.md`, architecture and web-app docs). Those are current-state
+`frontend/web`, architecture and web-app docs). Those are current-state
 locks, not files to ignore. Phase 1 Milestone 0 must replace them in one
 architecture-decision PR before React implementation begins.
 
@@ -83,9 +83,9 @@ MQTT behavior during Phases 1 or 2.
 
 | Document | Use |
 | --- | --- |
-| [AGENTS.md](AGENTS.md) | Open-FDD Streamlit→React agent law (Rust/central; no FastAPI) |
-| [AGENT_SKILL_BRIDGE.md](AGENT_SKILL_BRIDGE.md) | Bridges `openfdd_agent_spec` skills ↔ this kit + streamlit-to-react |
-| [skills/streamlit-to-react/SKILL.md](skills/streamlit-to-react/SKILL.md) | **Required** skill for every UI parity/port PR |
+| [AGENTS.md](AGENTS.md) | Open-FDD React SPA→React agent law (Rust/central; no FastAPI) |
+| [AGENT_SKILL_BRIDGE.md](AGENT_SKILL_BRIDGE.md) | Bridges `openfdd_agent_spec` skills ↔ this kit + openfdd-react-spa |
+| [openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md | **Required** skill for every UI parity/port PR |
 | [PHASE_1_PREP_AND_REACT_PARITY.md](PHASE_1_PREP_AND_REACT_PARITY.md) | Detailed Phase 1 milestones, PRs, tests, and exit gate |
 | [PHASE_2_CUTOVER_AND_PYTHON_EXIT.md](PHASE_2_CUTOVER_AND_PYTHON_EXIT.md) | Detailed Phase 2 cutover, deletion, rollback, and qualification |
 | [PHASE_3_EDGE_STREAMING_OUTLOOK.md](PHASE_3_EDGE_STREAMING_OUTLOOK.md) | Later BACnet/MQTTS/live-data architecture and prerequisites |
@@ -117,7 +117,7 @@ user behavior
   -> React state and presentation
 ```
 
-Do not make the SPA scrape Streamlit output, call Python-only endpoints, or
+Do not make the SPA scrape React SPA output, call Python-only endpoints, or
 depend on Python filesystem layouts.
 
 ### DataFusion SQL is the computation boundary
@@ -146,7 +146,7 @@ Disallowed Phase 1 Python changes:
 
 ### Deletion follows proof
 
-No Python or Streamlit module is deleted because a similar React component
+No Python or React SPA module is deleted because a similar React component
 exists. Deletion requires:
 
 1. ownership assigned to React, Rust, or DataFusion SQL;
@@ -169,7 +169,7 @@ exists. Deletion requires:
 
 ### Phase 1 exit
 
-- all in-scope Streamlit workflows exist in React behind a feature flag;
+- all in-scope React SPA workflows exist in React behind a feature flag;
 - React talks only to Rust-owned/versioned APIs;
 - core CSV-to-findings flow runs without Python;
 - all deterministic production analytics and FDD used by that flow execute in
@@ -181,9 +181,9 @@ exists. Deletion requires:
 ### Phase 2 exit
 
 - React is the default UI and has completed the defined soak period;
-- production images and compose recipes contain no Python/Streamlit dependency;
+- production images and compose recipes contain no Python/React SPA dependency;
 - no production route invokes pandas or a Python subprocess;
-- Streamlit/Python runtime code, CI jobs, requirements, images, and docs have
+- React SPA/Python runtime code, CI jobs, requirements, images, and docs have
   been removed or moved to a clearly non-shipping oracle archive;
 - rollback no longer depends on silently maintaining two product implementations;
 - release evidence is reproducible from immutable image SHAs/digests.
@@ -196,7 +196,7 @@ Agents must surface, not silently decide:
   or is deleted after Phase 2;
 - whether historical static HTML/report formats must remain byte-compatible or
   only semantically compatible;
-- which Streamlit behaviors are intentional product requirements versus demo
+- which React SPA behaviors are intentional product requirements versus demo
   artifacts;
 - supported browsers and minimum screen sizes;
 - authentication and tenancy behavior for the SPA;

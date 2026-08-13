@@ -16,27 +16,27 @@ Pandas may remain as:
 
 | Class | When |
 |-------|------|
-| UI boundary | Tiny final frame for Streamlit/Plotly **after** DF aggregation |
+| UI boundary | Tiny final frame for React SPA/Plotly **after** DF aggregation |
 | Test oracle | Independent reference vs SQL (online Pandas cookbook + vibe19 playground) |
 | Non-SQL | ZIP/IO, IDF, DOCX, config parse, Plotly figure build |
-| In-tree catalog | `services/ui/app/rules/` — **do not delete**; emergency FDD only with `OPENFDD_ALLOW_PANDAS_FDD=1` |
+| In-tree catalog | `frontend/web/app/rules/` — **do not delete**; emergency FDD only with `OPENFDD_ALLOW_PANDAS_FDD=1` |
 
 ## Forbidden
 
 - Silent pandas FDD fallback when DataFusion fails
-- Millions of raw rows into Streamlit for Python downsample
+- Millions of raw rows into React for Python downsample
 - Downsampling before fault math
 - Vibe-coding away the pandas cookbook because SQL exists
-- A second Streamlit app for WattLab/EnergyPlus (keep Export handoff in the united UI)
+- A second React app for WattLab/EnergyPlus (keep Export handoff in the united UI)
 
 ## Production FDD today
 
 Canonical path: `sql_rules/` + `crates/fdd_rules` + `POST /api/fdd/run`.  
 Pandas cookbook only with explicit `OPENFDD_ALLOW_PANDAS_FDD=1`.
 
-UI: **one** Streamlit app (`services/ui`) for vibe19 + WattLab export as the
+UI: **one** React app (`frontend/web`) for vibe19 + WattLab export as the
 **default** product surface. Phase 1 authorizes a React SPA behind a flag
-([ADR-001](adr-001-react-rust-modernization.md)); Streamlit remains fallback
+([ADR-001](adr-001-react-rust-modernization.md)); React remains fallback
 until Phase 2. Deterministic FDD stays DataFusion SQL either way.
 
 See [VIBE19_VIBE20_OPENFDD_AUDIT.md](../migration/VIBE19_VIBE20_OPENFDD_AUDIT.md) · [Rule Cookbook](../rules/cookbook/) · [React/Rust modernization](../migration/react-rust/).

@@ -15,9 +15,9 @@ Hard rules
 2. Custom rule ids **must** start with ``CUSTOM-`` (e.g. ``CUSTOM-SAT-HIGH``).
 3. ``compute(df, params, poll_seconds) -> pd.Series`` of **bool** (raw fault mask), index-aligned.
 4. Prefer cookbook roles (``sat``, ``fan_status``, …) after role_map — do not hardcode raw CSV names.
-5. Always include ``CONFIRM_PARAM()`` so Streamlit gets a 0–60 min fault-delay slider (default 5).
+5. Always include ``CONFIRM_PARAM()`` so UI gets a 0–60 min fault-delay slider (default 5).
 6. After adding rules: ``python scripts/generate_rule_configs.py`` is **not** required for custom-only
-   (configs are canonical). Run ``pytest`` instead. Smoke with agent API or Streamlit.
+   (configs are canonical). Run ``pytest`` instead. Smoke with agent API or product UI.
 
 How an agent adds a rule
 ------------------------
@@ -136,7 +136,7 @@ def compute_rolling_zscore_anomaly(d: pd.DataFrame, p: dict, poll: float) -> pd.
 
     This is a teaching stand-in for unsupervised anomaly detection. Agents may
     replace the body with sklearn IsolationForest / a small regressor **if** they
-    add that dependency — keep Streamlit+pandas by default.
+    add that dependency — keep pandas by default.
     """
     del poll
     role = str(p.get("signal_role", "discharge-air-temp") or "discharge-air-temp")

@@ -29,7 +29,7 @@ This is a **partial** Milestone C closeout — not full pandas retirement or
 | Analytics envelope + query_version contracts | **Done** |
 | `POST /api/analytics/runtime` — Δt run hours + gap clip | **Live** |
 | `POST /api/analytics/economizer` — fan-on, ΔT gate, OA frac, MAT resid | **Live** |
-| Streamlit typed client for runtime + economizer | **Wired** (central preferred) |
+| React typed client for runtime + economizer | **Wired** (central preferred) |
 | Sensor health — coverage / flatline / missingness / min-max-mean | **Minimal compute** |
 | Schedule — occupied hours + optional after-hours fan hours | **Minimal compute** |
 | Mechanical cooling — evidence hierarchy (pump/valve ≠ compressor) | **Minimal compute** |
@@ -48,7 +48,7 @@ This is a **partial** Milestone C closeout — not full pandas retirement or
 
 - DataFusion SQL / MemTable per family; bump `engine` only when SQL path is live
 - Historian / job Feather load into analytics handlers
-- Full Streamlit cutover; pandas production retirement (oracle stays)
+- Full React cutover; pandas production retirement (oracle stays)
 - SQL rule parity + mutation checks; filled benches; `sha-*` soak
 - Phase 8 WattLab job-native + restricted EnergyPlus runner
 

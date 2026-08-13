@@ -1,0 +1,19 @@
+# Optional WattLab workspace mount for React / central recipes.
+#
+#   OPENFDD_WATTLAB=1 ./scripts/openfdd_stack_up.sh react
+#   # or: --wattlab
+#
+# Host paths (override as needed):
+#   OPENFDD_WATTLAB_HOST_WORKSPACE  → /data in central (default: ~/wattlab_workspace)
+#   OPENFDD_WATTLAB_HOST_SRC        → optional source tree (default: playground vibe20)
+
+services:
+  central:
+    environment:
+      WATTLAB_STUDIO_WORKSPACE: /data
+      WATTLAB_WORKSPACE: /data
+      OPENFDD_WATTLAB_WORKSPACE: /data
+      OPENFDD_ENERGYPLUS_MCP: ${OPENFDD_ENERGYPLUS_MCP:-0}
+    volumes:
+      - ${OPENFDD_WATTLAB_HOST_WORKSPACE:-${HOME}/wattlab_workspace}:/data
+      - ${OPENFDD_WATTLAB_HOST_SRC:-${HOME}/py-bacnet-stacks-playground/vibe_code_apps_20}:/opt/wattlab_src:ro

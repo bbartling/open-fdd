@@ -1,4 +1,4 @@
-# Caddy edge for React recipes (web SPA, not Streamlit ui).
+# Caddy edge for React recipes (openfdd-web SPA).
 #
 #   OPENFDD_CADDY=1 ./scripts/openfdd_stack_up.sh react-ot
 #   (enabled by default for react / react-ot unless OPENFDD_CADDY=0)

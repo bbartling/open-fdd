@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI wrapper for the importable Agent AFDD API (no Streamlit / no HTTP server).
+"""CLI wrapper for the importable Agent AFDD API (no HTTP server).
 
 Examples
 --------
@@ -60,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--no-bootstrap",
         action="store_true",
-        help="Do not write Streamlit .last_agent_session.json bootstrap",
+        help="Do not write session bootstrap JSON (.last_agent_session.json)",
     )
     parser.add_argument(
         "--export-profile",
@@ -156,9 +156,9 @@ def main(argv: list[str] | None = None) -> int:
             auto_run_rules=True,
             notes=f"CLI bootstrap for {dataset.building_id}",
         )
-        for bp in write_bootstrap(boot, path=Path(args.out) / "streamlit_bootstrap.json", also_default=True):
+        for bp in write_bootstrap(boot, path=Path(args.out) / "session_bootstrap.json", also_default=True):
             written[f"bootstrap:{bp.name}"] = bp
-            print(f"Streamlit bootstrap -> {bp}")
+            print(f"Session bootstrap -> {bp}")
 
     print(f"Wrote {len(written)} artifacts -> {Path(args.out).resolve()}")
     for key, path in sorted(written.items()):

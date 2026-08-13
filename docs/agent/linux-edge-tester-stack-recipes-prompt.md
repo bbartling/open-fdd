@@ -21,7 +21,7 @@ compose build recipes, validates BACnet / Modbus / Haystack / (new) REST drivers
 **leaves the standalone stack running** for human Niagara Workbench validation of hosted
 devices **599999** (bench) and **600000** (Pi edge, if present).
 
-**UI is Streamlit** (`services/ui` → `:3000`). Do not assert React LabShell / `/srv/assets/index-*.js`
+**UI is React SPA** (`frontend/web` → `:3000`). Do not assert React LabShell / `/srv/assets/index-*.js`
 (see #564). Operator FDD is central DataFusion SQL; with JWT auth set
 `OPENFDD_ADMIN_PASSWORD` (or `OPENFDD_API_TOKEN`) on **both** central and ui.
 
@@ -44,7 +44,7 @@ Charter:
 - GHCR tip for this soak: prefer `OPENFDD_IMAGE_TAG=sha-8850b0b` (or `:nightly` with
   matching `org.opencontainers.image.revision=8850b0bf62ad…` on **every** stack image —
   central, ui, fieldbus, mqtt, and mcp). No local product builds, no product code PRs.
-- UI is **Streamlit** at http://<bench-ip>:3000 (not React). JWT stacks need
+- UI is **React SPA** at http://<bench-ip>:3000 (not React). JWT stacks need
   `OPENFDD_ADMIN_PASSWORD` (or `OPENFDD_API_TOKEN`) on ui **and** central so Run Rules /
   package / delete authenticate.
 - Test, document, file/comment GitHub issues. The WSL product agent owns closing/keeping issues after your report.
@@ -73,7 +73,7 @@ Goal:
    - assert rules_succeeded≥1; note poll_seconds / grid_minutes for 1-min fixtures
    - assert response includes results[] rows with rule_id / equipment_id / status (not aggregates-only)
 5. openfdd_package_v1 ZIP:
-   - prefer IN-LAB Streamlit upload (sidebar) OR POST /api/csv/import/package (Bearer if JWT on)
+   - prefer IN-LAB React upload (sidebar) OR POST /api/csv/import/package (Bearer if JWT on)
    - assert equipment roles + parquet + feather_store; edit roles via package roles API
    - session_config.json inside the zip should seed GET /api/fdd/session-config (#515)
    - Delete dataset from UI clears central data and keeps rule-tuning session params
@@ -94,16 +94,16 @@ Goal:
    - Assert GET point decode + scale, JSONPath miss → structured error, bearer/API-key auth,
      write 403 when disabled, write clamp, circuit-breaker on sim kill,
      FD-count stability across ≥500 polls (no #535-style leak on reqwest).
-10. Lab UX IA gate (**Streamlit** — FAIL if any miss; do NOT require React LabShell — #564):
-   - Preferred harness: `scripts/release/smoke_streamlit_ui_gates.sh` (CENTRAL/UI env).
-   - UI http://<bench-ip>:3000 is Streamlit (`<title>Streamlit</title>` / CMD streamlit run).
+10. Lab UX IA gate (**React SPA** — FAIL if any miss; do NOT require React LabShell — #564):
+   - Preferred harness: `scripts/release/smoke_react_web_image.sh` (CENTRAL/UI env).
+   - UI http://<bench-ip>:3000 is React (`<title>React SPA</title>` / CMD nginx SPA).
    - Sections: Overview / Data Model / Run Rules / Results / FDD Plots / RCx / Metering / Export.
    - Left rail: package ZIP + **Delete dataset** + Rule tuning sliders (`confirm_min`, etc.).
    - Run Rules → central `POST /api/fdd/run` (DataFusion); with JWT, no Bearer errors.
    - Slider legitimacy: `confirm_min` must change fault hours; `eps_dsp` positive control still works.
    - FDD Plots: live series or honest empty (no fake sine). Run is explicit (sliders do not auto-run).
-11. #549 dashboard API matrix: covered by the same smoke script + Streamlit operator loop.
-    Skip React shell asserts. Only note if Streamlit still calls a broken central route.
+11. #549 dashboard API matrix: covered by the same smoke script + React operator loop.
+    Skip React shell asserts. Only note if React still calls a broken central route.
 12. #550 / SQL honesty: dual catalog UI~59 vs SQL~63 OK to note; do not claim full pandas parity.
     Operator + agent paths must be SQL (pandas only if OPENFDD_ALLOW_PANDAS_FDD=1).
     Smoke script asserts registry catalog without false “54 full parity” claims.
@@ -136,7 +136,7 @@ Never:
 - Silently accept a stale local image when GHCR pull fails on arm64
 - Treat MCP “process up” as accuracy PASS
 - Claim SQL↔Pandas full parity for ported_from_cookbook rules
-- Assert React LabShell / `/srv/assets/index-*.js` (product UI is Streamlit)
+- Assert React LabShell / `/srv/assets/index-*.js` (product UI is React)
 
 GitHub issue workflow (required):
 1. Before testing: `gh issue list --state open --limit 40` and note numbers that apply to this soak.
@@ -160,10 +160,10 @@ KEEP OPEN / retest:
 
 Expect CLOSED on tip nightlies (confirm still green; do not reopen if PASS):
 - #570 obsolete `openfdd-edge-rust` Who-Is report (closed — use fieldbus tip)
-- #564 Streamlit gates (in-repo smoke; overlays may still lag)
+- #564 React gates (in-repo smoke; overlays may still lag)
 - #526 fieldbus Who-Is co-located hosted (#567 synthesize `hosted_local`) — confirm on tip Who-Is
 - #514 package ZIP, #515 session_config
-- #549 React dashboard APIs (superseded by Streamlit #559)
+- #549 React dashboard APIs (superseded by React #559)
 - #550 phase-1 honesty docs; full oracle backlog is ongoing narrative not a reopen trigger unless soak finds new P0
 - #560 UI JWT Bearer, #561 confirm_min→SQL, #562 param aliases, #563 pandas quarantine (#565)
 - #535 BACnet client UDP FD leak (P0) — verify FD flat over soak

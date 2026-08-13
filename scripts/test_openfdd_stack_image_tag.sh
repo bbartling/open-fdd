@@ -12,7 +12,6 @@ export OPENFDD_WEB_IMAGE=ghcr.io/bbartling/openfdd-web:nightly
 export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:nightly
 export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:nightly
 export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:nightly
-export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:nightly
 
 export OPENFDD_IMAGE_TAG=sha-deadbeef
 openfdd_stack_export_image_env
@@ -22,7 +21,6 @@ openfdd_stack_export_image_env
 [[ "$OPENFDD_MQTT_IMAGE" == "ghcr.io/bbartling/openfdd-mqtt:sha-deadbeef" ]]
 [[ "$OPENFDD_FIELDBUS_IMAGE" == "ghcr.io/bbartling/openfdd-fieldbus:sha-deadbeef" ]]
 [[ "$OPENFDD_MCP_IMAGE" == "ghcr.io/bbartling/openfdd-mcp:sha-deadbeef" ]]
-[[ "$OPENFDD_UI_IMAGE" == "ghcr.io/bbartling/openfdd-ui:sha-deadbeef" ]]
 
 # Custom non-GHCR override preserved when IMAGE_TAG set.
 export OPENFDD_CENTRAL_IMAGE=registry.example/openfdd-central:dev

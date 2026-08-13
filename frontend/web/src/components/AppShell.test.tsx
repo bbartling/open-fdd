@@ -50,7 +50,7 @@ describe("AppShell layout parity", () => {
     vi.clearAllMocks();
   });
 
-  it("renders Streamlit section order, brand, and Rule tuning", async () => {
+  it("renders main section order, brand, and Rule tuning", async () => {
     render(
       <MemoryRouter>
         <AppShell title="Home" caption="Parity shell">

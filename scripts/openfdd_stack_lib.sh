@@ -72,8 +72,6 @@ openfdd_stack_images() {
   echo "ghcr.io/bbartling/openfdd-fieldbus:${tag}"
   echo "ghcr.io/bbartling/openfdd-mqtt:${tag}"
   echo "ghcr.io/bbartling/openfdd-mcp:${tag}"
-  # Archive/oracle only — not required for react / react-ot product topology.
-  echo "ghcr.io/bbartling/openfdd-ui:${tag}"
 }
 
 # Apply OPENFDD_IMAGE_TAG to default GHCR image vars.
@@ -100,7 +98,6 @@ openfdd_stack_apply_image_tag() {
 openfdd_stack_export_image_env() {
   local tag="${OPENFDD_IMAGE_TAG:-nightly}"
   openfdd_stack_apply_image_tag OPENFDD_CENTRAL_IMAGE central "$tag"
-  openfdd_stack_apply_image_tag OPENFDD_UI_IMAGE ui "$tag"
   openfdd_stack_apply_image_tag OPENFDD_WEB_IMAGE web "$tag"
   openfdd_stack_apply_image_tag OPENFDD_FIELDBUS_IMAGE fieldbus "$tag"
   openfdd_stack_apply_image_tag OPENFDD_MQTT_IMAGE mqtt "$tag"

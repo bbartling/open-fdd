@@ -1,6 +1,6 @@
 //! `openfdd_session_v1` session / fault settings save-load (#515).
 //!
-//! Mirrors the vibe19 Streamlit `session_config.json` contract (vibe19
+//! Mirrors the vibe19 `session_config.json` contract (vibe19
 //! `docs/PACKAGE_SPEC.md`): `unit_system`, `prefer_web_oat`, `chw_leave_max_f`,
 //! per-equipment `role_map`, per-rule `params`. Unknown keys are ignored with a
 //! warning; the deprecated `include_ahu_chw_valve` is always coerced off.

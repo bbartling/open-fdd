@@ -1,8 +1,7 @@
 ---
-description: Phase 1 React/Rust parity — require openfdd_agent_spec + streamlit-to-react skills
+description: Phase 1 React/Rust parity — require openfdd_agent_spec + React SPA skill
 globs:
   - frontend/web/**
-  - services/ui/**
   - docs/migration/react-rust/**
   - tools/open-fdd-modernization/**
   - openfdd_agent_spec/**
@@ -12,15 +11,14 @@ alwaysApply: false
 
 # Open-FDD Phase 1 React parity
 
-When editing files matched by this rule you are in the Streamlit→React /
-Python-exit program.
+When editing files matched by this rule you are in the React/Rust product program.
 
 ## Required reads before substantive edits
 
 1. `AGENTS.md` (repo root)
 2. `openfdd_agent_spec/AGENTS.md`
 3. `tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md`
-4. `tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md` (+ needed references)
+4. `openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md`
 5. `tools/open-fdd-modernization/AGENTS.md`
 6. `tools/open-fdd-modernization/AGENT_EXECUTION_SYSTEM.md`
 7. Current ledgers under `docs/migration/react-rust/`
@@ -40,6 +38,6 @@ cookbooks, GHCR, ECM, or ownership.
 
 ## Parity method
 
-Follow the streamlit-to-react skill workflow: inventory → measure → contract →
-implement → verify. Prefer running Streamlit as the visual/behavioral reference.
+Follow the openfdd-react-spa skill workflow: inventory → measure → contract →
+implement → verify. Use product screenshots and ledgers as the visual reference.
 Document intentional differences in `docs/migration/react-rust/DECISIONS.md`.

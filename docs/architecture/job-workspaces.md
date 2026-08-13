@@ -8,7 +8,7 @@ nav_order: 11
 
 **Status:** Milestone B complete — UI `job_store` + central `/api/jobs` (SoT when central is up).
 
-A browser session is not the project database. `st.session_state` is not durable storage.
+A browser session is not the project database. `URL/session state` is not durable storage.
 
 ## Layout
 
@@ -52,10 +52,10 @@ Telemetry stays in Feather / parquet (site historian). Jobs hold **pointers**, c
 
 | Piece | Path |
 |-------|------|
-| Store (thin client; central SoT when up) | [`services/ui/app/job_store.py`](../../services/ui/app/job_store.py) |
+| Store (thin client; central SoT when up) | [`frontend/web/app/job_store.py`](../../frontend/web/app/job_store.py) |
 | Central API | [`services/central/src/jobs.rs`](../../services/central/src/jobs.rs) |
-| Streamlit entry | [`services/ui/app/ui_jobs.py`](../../services/ui/app/ui_jobs.py) |
-| Tests | `services/ui/app/test_job_store.py` |
+| React entry | [`frontend/web/app/ui_jobs.py`](../../frontend/web/app/ui_jobs.py) |
+| Tests | `frontend/web/app/test_job_store.py` |
 
 ## `job.json` (schema_version 1)
 
@@ -102,8 +102,8 @@ Duplicate copies mapping/config/dataset_refs — **not** runs, findings, or repo
 ## WattLab (job-native SoT)
 
 **Production source of truth** is job-native handoffs under `wattlab/handoffs/*.json`
-(central `POST /api/jobs/{id}/wattlab/handoffs`, Streamlit helper
-[`ui_wattlab_job.py`](../../services/ui/app/ui_wattlab_job.py)). Zip dumps from Export
+(central `POST /api/jobs/{id}/wattlab/handoffs`, React helper
+[`ui_wattlab_job.py`](../../frontend/web/app/ui_wattlab_job.py)). Zip dumps from Export
 remain **additive** for offline / vibe20 / backup — they do not replace the job
 manifest. External EnergyPlus run metadata (when queued) lands under
 `wattlab/runs/*.json`; central tracks status/artifacts only.

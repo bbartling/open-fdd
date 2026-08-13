@@ -1,6 +1,6 @@
 """Merge agent custom rules with the canonical cookbook (PyPI).
 
-Agent-editable customs stay in ``app.rules.custom_rules`` so Streamlit UI / Cloud
+Agent-editable customs stay in ``app.rules.custom_rules`` so React SPA / Cloud
 edits do not require patching the installed wheel.
 """
 

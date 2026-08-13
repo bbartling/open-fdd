@@ -1,6 +1,6 @@
 # Central + fieldbus deployment runbook
 
-Open-FDD is a four-container MQTTS stack (`openfdd-central`, `openfdd-ui`,
+Open-FDD is a four-container MQTTS stack (`openfdd-central`, `openfdd-web`,
 `openfdd-fieldbus`, `openfdd-mqtt`) plus the slim `openfdd-mcp` server. Central
 never touches the BACnet wire — `fieldbus` is the sole BACnet/IP runtime and
 publishes to central over MQTTS. This runbook covers deploying, pinning, and
@@ -53,7 +53,7 @@ cd /path/to/open-fdd
 
 ```bash
 export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-<sha>
-export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-<sha>
+export OPENFDD_WEB_IMAGE=ghcr.io/bbartling/openfdd-web
 export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-<sha>
 export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-<sha>
 ```
@@ -130,7 +130,7 @@ OPENFDD_IMAGE_TAG=<previous-sha> ./scripts/openfdd_stack_up.sh standalone
 | Variable | Image |
 |----------|-------|
 | `OPENFDD_CENTRAL_IMAGE` | `ghcr.io/bbartling/openfdd-central` |
-| `OPENFDD_UI_IMAGE` | `ghcr.io/bbartling/openfdd-ui` |
+| `OPENFDD_WEB_IMAGE` | `ghcr.io/bbartling/openfdd-web` |
 | `OPENFDD_FIELDBUS_IMAGE` | `ghcr.io/bbartling/openfdd-fieldbus` |
 | `OPENFDD_MQTT_IMAGE` | `ghcr.io/bbartling/openfdd-mqtt` |
 | `OPENFDD_MCP_IMAGE` | `ghcr.io/bbartling/openfdd-mcp` |

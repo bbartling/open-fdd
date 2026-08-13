@@ -14,8 +14,8 @@ nav_order: 1
 **Hard product rules (2026-07-25):**
 
 1. Open-FDD Rust/central FDD = **DataFusion SQL only** (`sql_rules/registry.yaml`).
-2. **Pandas is not deleted** — online Pandas cookbook + vibe19 playground are the oracle/test home; in-tree `services/ui/app/rules/` stays.
-3. **One Streamlit app** unites vibe19 + vibe20 concepts (WattLab = Export handoff, not a second app).
+2. **Pandas is not deleted** — online Pandas cookbook + vibe19 playground are the oracle/test home; in-tree `frontend/web/app/rules/` stays.
+3. **One React app** unites vibe19 + vibe20 concepts (WattLab = Export handoff, not a second app).
 
 Reference checkouts (not vendored into open-fdd):
 
@@ -23,7 +23,7 @@ Reference checkouts (not vendored into open-fdd):
 |------|------|
 | vibe19 | `/mnt/c/Users/ben/Documents/py-bacnet-stacks-playground/vibe_code_apps_19` (`develop`) |
 | vibe20 | `/mnt/c/Users/ben/Documents/py-bacnet-stacks-playground/vibe_code_apps_20` (`develop`) |
-| open-fdd UI (vendored vibe19 lab) | [`services/ui/`](../../services/ui/) |
+| open-fdd UI (vendored vibe19 lab) | [`frontend/web/`](../../frontend/web/) |
 
 Companion matrices:
 
@@ -40,7 +40,7 @@ Companion matrices:
 | Image | Role (code truth) |
 |-------|-------------------|
 | `openfdd-central` | JWT REST, Feather ingest, DataFusion FDD (`POST /api/fdd/run` registry mode) |
-| `openfdd-ui` | **One Streamlit app** (`services/ui`) — vibe19 FDD/RCx/Jobs + vibe20 WattLab **export** (not a second Streamlit; EnergyPlus stays external) |
+| `openfdd-web` | **One React app** (`frontend/web`) — vibe19 FDD/RCx/Jobs + vibe20 WattLab **export** (not a second React SPA; EnergyPlus stays external) |
 | `openfdd-fieldbus` | BACnet / Modbus / Haystack / REST OT |
 | `openfdd-mqtt` | MQTTS broker |
 | `openfdd-mcp` | Optional MCP stdio → central |
@@ -58,7 +58,7 @@ Package / CSV / OT → Feather + parquet (.cache/parquet)
 ```
 
 - Canonical registry: [`sql_rules/registry.yaml`](../../sql_rules/registry.yaml) — **63** rules / **63** SQL files.
-- Pandas cookbook: [`services/ui/app/rules/cookbook_catalog.py`](../../services/ui/app/rules/cookbook_catalog.py) — **59** rules; emergency only via `OPENFDD_ALLOW_PANDAS_FDD=1`.
+- Pandas cookbook: [`frontend/web/app/rules/cookbook_catalog.py`](../../frontend/web/app/rules/cookbook_catalog.py) — **59** rules; emergency only via `OPENFDD_ALLOW_PANDAS_FDD=1`.
 - Parity tags (2026-07-19 matrix): **18** `proven_building_100`, **44** `ported_from_cookbook`, **1** `skipped_missing_roles` (`FC7`).
 
 ### Durable site state (not analysis Jobs)
@@ -73,17 +73,17 @@ Under bind-mounted [`workspace/`](../quick-start/site-lifecycle.md):
 | `workspace/data/feather_store/` | Historian |
 | `workspace/data/import_jobs/` | CSV **import** tickets (`import-{millis}`) — not FDD analysis Jobs |
 
-Streamlit continuity today: `st.session_state` + browser download/upload of `session_config.json` ([`streamlit_app.py`](../../services/ui/streamlit_app.py)).
+React continuity today: `URL/session state` + browser download/upload of `session_config.json` ([`frontend/web App.tsx`](../../frontend/web App.tsx)).
 
 ### UI sections (frozen contract)
 
-[`dashboard_contract.py`](../../services/ui/app/dashboard_contract.py): Overview · Data Model · Run Rules · Results by Category · FDD Plots · RCx Plots · Metering · Export.  
-**Jobs:** sidebar **Jobs (persistent)** → `workspace/jobs/` ([`ui_jobs.py`](../../services/ui/app/ui_jobs.py) / [`job_store.py`](../../services/ui/app/job_store.py)).  
-**United app:** vibe19 + WattLab export share this single Streamlit process — not separate apps.
+[`dashboard_contract.py`](../../frontend/web/app/dashboard_contract.py): Overview · Data Model · Run Rules · Results by Category · FDD Plots · RCx Plots · Metering · Export.  
+**Jobs:** sidebar **Jobs (persistent)** → `workspace/jobs/` ([`ui_jobs.py`](../../frontend/web/app/ui_jobs.py) / [`job_store.py`](../../frontend/web/app/job_store.py)).  
+**United app:** vibe19 + WattLab export share this single React process — not separate apps.
 
 ### WattLab / EnergyPlus
 
-- Export handoff implemented: [`wattlab_dump.py`](../../services/ui/app/wattlab_dump.py) (`wattlab_dump_v3`).
+- Export handoff implemented: [`wattlab_dump.py`](../../frontend/web/app/wattlab_dump.py) (`wattlab_dump_v3`).
 - EnergyPlus / ECM / calibration live in **external** vibe20 (`wattlab/`), not in this repo.
 
 ---
@@ -99,7 +99,7 @@ Streamlit continuity today: `st.session_state` + browser download/upload of `ses
 | Engineering findings as first-class entities | reporting / HITL in playground | Export CSVs only; no persisted dispositions |
 | Filled RCx DOCX | playground reporting pipeline | Template download only (`docx_report.py`) |
 | Dual BAS vs web OAT honesty | Present | Present in UI/weather helpers — keep |
-| Mech cooling proof hierarchy | Specs under `services/ui/docs/superpowers/` | Logic in pandas analytics; needs DF migration later |
+| Mech cooling proof hierarchy | Specs under `frontend/web/docs/superpowers/` | Logic in pandas analytics; needs DF migration later |
 
 See [vibe19_parity_matrix.md](vibe19_parity_matrix.md) for Intake → Findings rows.
 
@@ -121,7 +121,7 @@ Do **not** vendor EnergyPlus into open-fdd.
 
 ---
 
-## D. Pandas inventory (significant `services/ui` uses)
+## D. Pandas inventory (significant `frontend/web` uses)
 
 | Module | Class | Notes |
 |--------|-------|-------|
@@ -130,7 +130,7 @@ Do **not** vendor EnergyPlus into open-fdd.
 | `app/rcx_plots.py`, `ui_rcx_tab.py` | **MIGRATE_TO_DATAFUSION** | Plot datasets must be DF-prepared |
 | `app/metering.py` | **MIGRATE_TO_DATAFUSION** | Meter aggregations |
 | `app/wattlab_dump.py`, `model_seed.py` | **MIGRATE_TO_DATAFUSION** (prep) + **KEEP_NON_SQL** (zip/IO) | Stats/profiles → SQL; zip assembly stays Python |
-| `app/charts.py`, `streamlit_app.py`, `reports.py` | **UI_BOUNDARY** | After aggregation only |
+| `app/charts.py`, `frontend/web App.tsx`, `reports.py` | **UI_BOUNDARY** | After aggregation only |
 | `app/data_loader.py`, `package_io.py`, `sql_sources.py`, weather helpers | **KEEP_NON_SQL** / thin frames | I/O and package validation |
 | `app/agent_api.py` | Mixed | Prefer central SQL for FDD; analytics still pandas |
 
@@ -142,7 +142,7 @@ Do **not** vendor EnergyPlus into open-fdd.
 |---------|-----------|------------|
 | Rule catalog | `sql_rules/registry.yaml` vs cookbook 59 | SQL is production SoT; cookbook = oracle |
 | FC13 naming | SQL `FC13-SAT-HIGH` + alias `FC13` | Keep alias; document |
-| Session config | central `session_config` vs Streamlit download | Unify under Job config revision |
+| Session config | central `session_config` vs React download | Unify under Job config revision |
 | WattLab findings | `wattlab_dump.fdd_findings_table` vs Results UI | One findings schema under Job |
 | RCx presets | UI `REQUIRED_RCX_PRESET_IDS` vs playground | Keep open-fdd contract; port behavior not bugs |
 
@@ -181,7 +181,7 @@ SQLite (if introduced later) = **job metadata index only**.
 
 ```text
                 ┌─────────────────────┐
-                │   STREAMLIT UI      │
+                │   REACT SPA      │
                 │ Jobs + engineering  │
                 └──────────┬──────────┘
                            │ thin typed calls
@@ -233,4 +233,4 @@ Contracts: [datafusion-first](../architecture/datafusion-first.md) · [job-works
 
 ### Next recommended code PR
 
-**PR1 — Job contract** under `workspace/jobs/<job_id>/` with create / list / get / archive, atomic `job.json` writes, reopen restores metadata + mapping pointers, thin Streamlit Jobs entry. Defer multipage IA rewrite to PR5.
+**PR1 — Job contract** under `workspace/jobs/<job_id>/` with create / list / get / archive, atomic `job.json` writes, reopen restores metadata + mapping pointers, thin React Jobs entry. Defer multipage IA rewrite to PR5.

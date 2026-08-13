@@ -18,7 +18,7 @@ QUALIFIED status without evidence paths.
 
 | Item | Truth |
 | --- | --- |
-| Producer | vibe19 / `services/ui` Export (v3 preferred) |
+| Producer | vibe19 / `frontend/web` Export (v3 preferred) |
 | Consumer | vibe20 Studio / WattLab loaders |
 | Spec pointers | playground vibe19 `docs/PACKAGE_SPEC.md`; vibe20 `DATA_CONTRACT.md` |
 

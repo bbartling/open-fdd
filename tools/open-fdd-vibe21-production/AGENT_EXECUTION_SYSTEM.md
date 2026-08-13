@@ -15,7 +15,7 @@ role. A phase closeout requires independent verification.
 |---|---|
 | Scout | inventory code/contracts/tests/docs and reproduce baseline |
 | Implementer | make the bounded change and focused tests |
-| Oracle steward | maintain frozen Streamlit/pandas/Vibe 21 fixtures |
+| Oracle steward | maintain frozen pandas/Vibe 21 fixtures |
 | Verifier | rerun gates from clean state and challenge claims |
 | Security reviewer | evaluate trust boundaries and adversarial fixtures |
 | Release operator | build/publish/boot/upgrade/rollback release artifacts |
@@ -68,7 +68,7 @@ If the work cannot be verified independently within one PR, split it.
 
 ### 4. Characterize before replacement
 
-Before rewriting Streamlit/Python/Vibe 21 behavior:
+Before rewriting React SPA/Python/Vibe 21 behavior:
 
 - capture representative, boundary, invalid, and branch cases;
 - preserve raw values before rounding;

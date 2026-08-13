@@ -1,4 +1,4 @@
-"""Importable Agent API for AFDD / RCx — no HTTP server, Streamlit-free.
+"""Importable Agent API for AFDD / RCx — no HTTP server.
 
 Agents load packages/folders, run the 50-rule cookbook, analytics, and RCx
 coverage, then export a machine-readable bundle.
@@ -1006,7 +1006,7 @@ def export_agent_bundle(
         man_payload["package_file_count"] = package_file_count
         man_path.write_text(json.dumps(man_payload, indent=2, default=str), encoding="utf-8")
 
-    # Streamlit bridge: write bootstrap so the next app start auto-loads this run
+    # Session bootstrap: write JSON so the next product session can auto-load this run
     if not include_bootstrap:
         return written
     try:
@@ -1031,7 +1031,7 @@ def export_agent_bundle(
             auto_run_rules=True,
             notes=f"building_id={dataset.building_id}",
         )
-        for bp in write_bootstrap(boot, path=out / "streamlit_bootstrap.json", also_default=True):
+        for bp in write_bootstrap(boot, path=out / "session_bootstrap.json", also_default=True):
             written[f"bootstrap:{bp.name}"] = bp
     except Exception:
         pass  # bootstrap is best-effort; never fail the export

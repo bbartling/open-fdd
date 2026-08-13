@@ -37,7 +37,7 @@ body {
   background: var(--color-bg);
 }
 
-/* Streamlit-like light gray sidebar (Sites / controls) */
+/* Sidebar light gray panel (Sites / controls) */
 .app-sidebar {
   width: var(--sidebar-width);
   flex-shrink: 0;
@@ -237,7 +237,7 @@ body {
   color: var(--color-text-muted);
 }
 
-/* Streamlit horizontal radio circles */
+/* Horizontal radio circles */
 .app-section-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -450,7 +450,7 @@ body {
   }
 }
 
-/* —— Streamlit oracle sidebar / Overview hero (dev parity) —— */
+/* —— Sidebar / Overview hero —— */
 .oracle-sidebar {
   padding: 0.25rem var(--space-md) var(--space-xl);
   font-size: var(--font-size-sm);
@@ -511,7 +511,7 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-/* Streamlit file_uploader feel: soft dashed drop zone */
+/* Upload drop zone: soft dashed border */
 .oracle-sidebar__file-wrap {
   border: 1px dashed rgba(49, 51, 63, 0.35);
   border-radius: var(--radius-md);
@@ -1002,7 +1002,7 @@ body {
   color: var(--color-info);
 }
 
-/* —— Populated Overview (Streamlit oracle order / density) —— */
+/* —— Populated Overview (product order / density) —— */
 .overview-populated {
   display: flex;
   flex-direction: column;

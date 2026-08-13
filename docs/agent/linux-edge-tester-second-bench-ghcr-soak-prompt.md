@@ -70,12 +70,12 @@ gh run list --repo "$REPO" --workflow "Publish Open-FDD stack to GHCR" --branch 
 ```bash
 # Example pin form (replace after inspect):
 # export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-<7>
-# export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-<7>
+# export OPENFDD_WEB_IMAGE=ghcr.io/bbartling/openfdd-web
 # export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-<7>
 # export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-<7>
 
 export OPENFDD_CENTRAL_IMAGE=${OPENFDD_CENTRAL_IMAGE:-ghcr.io/bbartling/openfdd-central:nightly}
-export OPENFDD_UI_IMAGE=${OPENFDD_UI_IMAGE:-ghcr.io/bbartling/openfdd-ui:nightly}
+export OPENFDD_WEB_IMAGE=${OPENFDD_WEB_IMAGE:-ghcr.io/bbartling/openfdd-web
 export OPENFDD_FIELDBUS_IMAGE=${OPENFDD_FIELDBUS_IMAGE:-ghcr.io/bbartling/openfdd-fieldbus:nightly}
 export OPENFDD_MQTT_IMAGE=${OPENFDD_MQTT_IMAGE:-ghcr.io/bbartling/openfdd-mqtt:nightly}
 ```
@@ -84,13 +84,13 @@ Pull and capture digests:
 
 ```bash
 set -a && source .env && set +a
-for img in "$OPENFDD_CENTRAL_IMAGE" "$OPENFDD_UI_IMAGE" "$OPENFDD_FIELDBUS_IMAGE" "$OPENFDD_MQTT_IMAGE"; do
+for img in "$OPENFDD_CENTRAL_IMAGE" "$OPENFDD_WEB_IMAGE" "$OPENFDD_FIELDBUS_IMAGE" "$OPENFDD_MQTT_IMAGE"; do
   docker pull "$img"
 done
 
 {
   echo "pulled_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  for img in "$OPENFDD_CENTRAL_IMAGE" "$OPENFDD_UI_IMAGE" "$OPENFDD_FIELDBUS_IMAGE" "$OPENFDD_MQTT_IMAGE"; do
+  for img in "$OPENFDD_CENTRAL_IMAGE" "$OPENFDD_WEB_IMAGE" "$OPENFDD_FIELDBUS_IMAGE" "$OPENFDD_MQTT_IMAGE"; do
     echo "=== $img ==="
     docker image inspect "$img" --format '{{.Id}} {{index .RepoDigests 0}} {{.Architecture}}'
   done
@@ -224,7 +224,7 @@ docker compose -f docker/compose.standalone.yml -f docker/compose.standalone.loc
   echo "bench_device_under_test=5007"
   echo "images:"
   echo "  $OPENFDD_CENTRAL_IMAGE"
-  echo "  $OPENFDD_UI_IMAGE"
+  echo "  $OPENFDD_WEB_IMAGE"
   echo "  $OPENFDD_FIELDBUS_IMAGE"
   echo "  $OPENFDD_MQTT_IMAGE"
   echo "artifacts=workspace/reports/bench-soak/"

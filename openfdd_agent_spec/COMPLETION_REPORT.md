@@ -18,7 +18,7 @@ playground GHCR retirement.
 | --- | --- | --- |
 | #578 | open-fdd | PyPI 4.1.0 oracle rules/analytics/reporting |
 | #579 | open-fdd | UI consume oracle |
-| #580 | open-fdd | UI runner/analytics shims + Streamlit docs |
+| #580 | open-fdd | UI runner/analytics shims + React docs |
 | #582 | open-fdd | openfdd_agent_spec |
 | #55–#59 | playground | charts, ECM adapter, twins, vibe19 consume |
 

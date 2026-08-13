@@ -1,8 +1,8 @@
 # React / TypeScript dashboard cutover plan
 
-> **OBSOLETE (2026-07-25).** Product UI is **Streamlit** (`services/ui` / `openfdd-ui`). The React dashboard was retired. Kept as historical cutover notes only — do not implement.
+> **OBSOLETE (2026-07-25).** Product UI is **React SPA** (`frontend/web` / `openfdd-web`). The React dashboard was retired. Kept as historical cutover notes only — do not implement.
 
-**Former status:** Shipped then superseded by Streamlit #559. Registry APIs remain on central; chart parity lives in Streamlit Plotly helpers.
+**Former status:** Shipped then superseded by React #559. Registry APIs remain on central; chart parity lives in React Plotly helpers.
 
 ## Current layout
 

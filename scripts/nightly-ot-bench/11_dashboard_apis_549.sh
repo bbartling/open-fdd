@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Gate 11 — central dashboard / product APIs (≠404) + React Reports page honesty.
-# Post–Phase-2: no Streamlit openfdd-ui bundle inspect.
+# Post–Phase-2: no React openfdd-web bundle inspect.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -89,7 +89,7 @@ else
   ok "POST /api/reports/draft reachable (HTTP $DRAFT_CODE) for explicit create"
 fi
 
-# React SPA assets: reports route + draft API string (no Streamlit ReportBuilderPage)
+# React SPA assets: reports route + draft API string (no React ReportBuilderPage)
 JS="$ART/web_assets_549.js"
 if web_asset_js "$JS"; then
   if grep -qF '/reports' "$JS" && grep -qF '/api/reports' "$JS"; then

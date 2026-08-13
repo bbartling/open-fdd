@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Gate 10 — React SPA product surface (post–Phase-2).
 # Asserts SPA routes + HTML shell + web asset markers + UI generation APIs.
-# Replaces Streamlit LabShell /lab gate (10_lab_ux_ia.sh).
+# Replaces React LabShell /lab gate (10_lab_ux_ia.sh).
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -38,11 +38,11 @@ if grep -qiE '<div id="root"|/assets/.*\.js' <<<"$HTML"; then
 else
   bad "SPA index missing React shell markers"
 fi
-# Must not look like Streamlit
-if grep -qiE 'streamlit|stApp|MainMenu' <<<"$HTML"; then
-  bad "SPA index looks like Streamlit"
+# Must not look like React SPA
+if grep -qiE 'stApp|MainMenu|_stcore' <<<"$HTML"; then
+  bad "SPA index looks like React SPA"
 else
-  ok "SPA index is not Streamlit"
+  ok "SPA index is not legacy UI"
 fi
 
 # --- Product routes (SPA may return index.html for all; HTTP 200 is enough) ---
@@ -58,7 +58,7 @@ for path in "${ROUTES[@]}"; do
   fi
 done
 
-# Streamlit Lab path must not be the product surface
+# React Lab path must not be the product surface
 lab_code="$(http_code_retry --max-time 10 "$UI_BASE/lab")"
 if [[ "$lab_code" == "000" ]]; then
   bad "SPA host unreachable (HTTP 000) — cannot assess /lab"
@@ -66,7 +66,7 @@ elif [[ "$lab_code" == "200" ]]; then
   # React may still serve index for unknown routes — ensure no LabShell in assets
   skip "HTTP 200 on /lab (SPA fallback) — checking assets for LabShell absence"
 else
-  ok "/lab not a dedicated Streamlit Lab route (HTTP $lab_code)"
+  ok "/lab not a dedicated React Lab route (HTTP $lab_code)"
 fi
 
 # --- Web asset markers -------------------------------------------------------
@@ -84,9 +84,9 @@ if web_asset_js "$JS"; then
     fi
   done
   if grep -qiE 'lab-app-shell|vibe19-lab-sidebar|Energy Model' "$JS"; then
-    bad "Streamlit Lab markers still present in web assets"
+    bad "React Lab markers still present in web assets"
   else
-    ok "no Streamlit LabShell markers in web assets"
+    ok "no React LabShell markers in web assets"
   fi
   [[ "$MISS" -eq 0 ]]
 else

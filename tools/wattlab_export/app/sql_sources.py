@@ -114,22 +114,3 @@ def load_sqlserver_query(cfg: SqlServerConfig, query: str) -> pd.DataFrame:
         df = pd.read_sql(text(q), conn)
     return normalize_timestamp(df)
 
-
-def config_from_streamlit_secrets(section: str = "sqlserver") -> SqlServerConfig | None:
-    try:
-        import streamlit as st
-
-        sec = st.secrets.get(section)
-        if not sec:
-            return None
-        return SqlServerConfig(
-            server=str(sec.get("server", "")),
-            database=str(sec.get("database", "")),
-            username=str(sec.get("username", "")),
-            password=str(sec.get("password", "")),
-            trusted_connection=bool(sec.get("trusted_connection", False)),
-            driver=str(sec.get("driver", "ODBC Driver 18 for SQL Server")),
-            row_limit=int(sec.get("row_limit", 50000)),
-        )
-    except Exception:
-        return None

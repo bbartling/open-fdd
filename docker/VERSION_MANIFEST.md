@@ -12,8 +12,6 @@ All container images in the MQTT / CSV stack share a **coordinated release** tie
 | `ghcr.io/bbartling/openfdd-mqtt` | `services/mqtt/Dockerfile` | Mosquitto MQTTS broker |
 | `ghcr.io/bbartling/openfdd-mcp` | `Dockerfile.mcp` | Optional MCP stdio sidecar → central |
 
-`openfdd-ui` (Streamlit) is **no longer published**.
-
 ## Tags
 
 | Tag | When | Purpose |
@@ -52,7 +50,7 @@ Published successfully from tip **`8850b0bf`** (merge #572 — Jobs contract; #5
 
 | Images | Immutable tag | Workflow |
 |--------|---------------|----------|
-| `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` | `sha-8850b0b` | [30176649928](https://github.com/bbartling/open-fdd/actions/runs/30176649928) — success |
+| `openfdd-central`, `openfdd-web`, `openfdd-fieldbus`, `openfdd-mqtt` | `sha-8850b0b` | [30176649928](https://github.com/bbartling/open-fdd/actions/runs/30176649928) — success |
 | `openfdd-mcp` | `sha-8850b0b` | [30176649926](https://github.com/bbartling/open-fdd/actions/runs/30176649926) — success |
 
 ```bash
@@ -64,7 +62,7 @@ export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-8850b0b
 # or OPENFDD_IMAGE_TAG=sha-8850b0b / :nightly
 ```
 
-Product UI is **React** (`frontend/web` / `openfdd-web`). Streamlit `openfdd-ui` is deleted.  
+Product UI is **React** (`frontend/web` / `openfdd-web`).  
 Production FDD = DataFusion SQL (`sql_rules/`). Pandas cookbook stays as oracle (PyPI / vibe19).
 WattLab dumps use `tools/wattlab_export/` from central.
 

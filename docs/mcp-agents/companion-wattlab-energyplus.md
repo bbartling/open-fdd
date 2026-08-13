@@ -9,7 +9,7 @@ nav_order: 5
 **Read this when the task involves Twin calibrate, Fuel bills, ECM Excel, or IDF/EnergyPlus.**  
 `openfdd-mcp` alone is **FDD / sites / historian** — it does **not** perform EnergyPlus IDF surgery.
 
-**Cutover (2026-07-30):** Operator UI is **openfdd-ui** (WattLab section). vibe19/vibe20 app tips are **frozen**. Prefer baked `wattlab` in GHCR UI + `/data` workspace + EnergyPlus-MCP sidecar — not a separate vibe Studio on `:8520`.
+**Cutover (2026-07-30):** Operator UI is **openfdd-web** (WattLab section). vibe19/vibe20 app tips are **frozen**. Prefer baked `wattlab` in GHCR UI + `/data` workspace + EnergyPlus-MCP sidecar — not a separate vibe Studio on `:8520`.
 
 ## Three surfaces (do not collapse)
 
@@ -17,7 +17,7 @@ nav_order: 5
 |---------|------|---------------------|
 | **openfdd-mcp** | JWT → central REST: health, CSV ingest, FDD SQL, Haystack, reports | Cursor `mcp.json` `openfdd` server; `mcp/INSTRUCTIONS.md` |
 | **EnergyPlus-MCP** | LBNL ~35 tools in `wattlab_workspace/third_party/EnergyPlus-MCP` → image `energyplus-mcp-dev` | Separate MCP server **or** stack `energyplus-ensure` / `mcp-exec` |
-| **WattLab package + `tools/`** | Studio pages (in openfdd-ui), CLIs, Excel builders, skills | Baked/`PYTHONPATH` `wattlab`; files under `~/wattlab_workspace/tools/` |
+| **WattLab package + `tools/`** | Studio pages (in openfdd-web), CLIs, Excel builders, skills | Baked/`PYTHONPATH` `wattlab`; files under `~/wattlab_workspace/tools/` |
 
 Hard rule: **never** embed EnergyPlus IDF surgery inside `openfdd-mcp`. Twin/ECM IDF work → EnergyPlus-MCP; spreadsheet honesty → **PyPI `open_fdd.ecm_engineering`**.
 
@@ -37,7 +37,7 @@ A. Context (every Twin/ECM session)
 
 B. FDD / sites / historian  →  openfdd-mcp (or JWT REST)
 C. Twin / IDF / simulate     →  EnergyPlus-MCP (open-fdd stack companion)
-D. ECM Excel / Compare       →  openfdd-ui WattLab + PyPI open_fdd.ecm_engineering
+D. ECM Excel / Compare       →  openfdd-web WattLab + PyPI open_fdd.ecm_engineering
    Golden book: open_fdd/ecm_engineering/examples/liberty_dual_ahu/ECM_FULL_PARITY.xlsx
 ```
 

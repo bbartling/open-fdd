@@ -1,6 +1,6 @@
 import { apiFetch } from "./client";
 
-export type UiGeneration = "streamlit" | "react";
+export type UiGeneration = "react";
 
 export interface GenerationStatus {
   ok: boolean;

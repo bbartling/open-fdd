@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Gate 12 — #550 honesty: no “54 full parity”; registry proven/ported counts;
-# SCHED-1 string occ_mode ingest spot-check. React SPA assets (not openfdd-ui).
+# SCHED-1 string occ_mode ingest spot-check. React SPA assets (not openfdd-web).
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091

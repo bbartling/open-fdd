@@ -137,7 +137,7 @@ Test representative agents from a clean environment:
 - A clean external agent can complete a representative digital-twin workflow
   using documented MCP tools and human approvals.
 - Dual cookbooks render online and parity CI passes.
-- Agent docs have no stale Streamlit/contract/runtime claims.
+- Agent docs have no stale React SPA/contract/runtime claims.
 - No secrets, arbitrary code execution, arbitrary SQL, or direct model-provider
   keys are required by the Open-FDD stack.
 

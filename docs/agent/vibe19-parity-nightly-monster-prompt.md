@@ -52,7 +52,7 @@ Acknowledged. Channel: vibe19 parity nightly. Repo bbartling/open-fdd.
 
 **Vibe19 product parity — monster nightly build**
 
-One coordinated nightly cycle that delivers full product parity with the vibe19 Streamlit reference:
+One coordinated nightly cycle that delivers full product parity with the vibe19 React reference:
 
 | Deliverable | Target |
 |-------------|--------|
@@ -75,7 +75,7 @@ Success = PR train merged in order, all CI green, fresh `:nightly` images verifi
 
 | Asset | Location |
 |-------|----------|
-| Streamlit app + pandas + Plotly | `vibe_code_apps_19/` |
+| React app + pandas + Plotly | `vibe_code_apps_19/` |
 | 59 validated `CookbookRule`s | cookbook modules |
 | Dashboard contract | `vibe19_agent_spec/docs/DASHBOARD_CONTRACT.md` |
 | Plot catalog | `vibe19_agent_spec/docs/RULE_PLOT_CATALOG.md` |
@@ -453,7 +453,7 @@ Confirm these workflows succeeded on `master` after PR-6 merge:
 
 | Workflow | Images |
 |----------|--------|
-| `ghcr-openfdd-stack` | `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` |
+| `ghcr-openfdd-stack` | `openfdd-central`, `openfdd-web`, `openfdd-fieldbus`, `openfdd-mqtt` |
 | `rust-ghcr-mcp` | `openfdd-mcp` |
 
 ```bash
@@ -473,7 +473,7 @@ Update [docker/VERSION_MANIFEST.md](../../docker/VERSION_MANIFEST.md) with the n
 | Image | Tag |
 |-------|-----|
 | openfdd-central | sha-abc1234 |
-| openfdd-ui | sha-abc1234 |
+| openfdd-web | sha-abc1234 |
 | openfdd-fieldbus | sha-abc1234 |
 | openfdd-mqtt | sha-abc1234 |
 ```

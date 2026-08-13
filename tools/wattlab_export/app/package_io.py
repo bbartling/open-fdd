@@ -1,4 +1,4 @@
-"""Safe zip package ingest for Streamlit Cloud / local demos.
+"""Safe zip package ingest for React SPA Cloud / local demos.
 
 See docs/PACKAGE_SPEC.md (openfdd_package_v1).
 """
@@ -33,11 +33,11 @@ TEMP_MAX_AGE_SEC = 6 * 3600
 # OPENFDD_MAX_ENTRIES, OPENFDD_MAX_EQUIPMENT.
 #
 # Two-tier limits:
-# - Browser Streamlit upload: BROWSER_UPLOAD_MB (500) via .streamlit/config.toml
+# - Browser React SPA upload: BROWSER_UPLOAD_MB (500) via product upload limits
 #   maxUploadSize + optional tighter package_io check on uploaded bytes.
 # - Agent / CLI / zip-from-path / folder: DEFAULT_PACKAGE_MB (2048) safety cap.
 DEFAULT_PACKAGE_MB = 2048  # agent / path / CLI safety (still bounded)
-BROWSER_UPLOAD_MB = 500  # Streamlit file_uploader / YouTube demos
+BROWSER_UPLOAD_MB = 500  # React SPA file_uploader / YouTube demos
 # Real buildings: ~50 equip × (csv + columns + map) + weather + dirs ≈ 250–400 entries.
 DEFAULT_MAX_ENTRIES = 2000
 DEFAULT_MAX_EQUIPMENT = 100
@@ -126,7 +126,7 @@ def effective_package_caps(*, for_browser_upload: bool = False) -> PackageCaps:
     """Resolve zip/equipment caps from env.
 
     Default **2048 MB** for agent/CLI/path loads. Pass ``for_browser_upload=True``
-    when ingesting Streamlit ``st.file_uploader`` bytes so validation aligns with
+    when ingesting React SPA ``st.file_uploader`` bytes so validation aligns with
     ``maxUploadSize`` / ``BROWSER_UPLOAD_MB`` (500). Env overrides always win.
     """
     default_mb = BROWSER_UPLOAD_MB if for_browser_upload else DEFAULT_PACKAGE_MB
@@ -869,7 +869,7 @@ def _validate_equipment_csv(path: Path) -> list[str]:
 def load_package_zip(data: bytes, *, caps: PackageCaps | None = None) -> PackageLoadResult:
     """Extract + validate + load. Caller owns wipe via result.workdir.
 
-    Pass ``caps=effective_package_caps(for_browser_upload=True)`` for Streamlit
+    Pass ``caps=effective_package_caps(for_browser_upload=True)`` for React SPA
     uploader bytes (500 MB). Agent/CLI/path use default 2048 MB caps.
     """
     sweep_old_temp_dirs()
@@ -885,56 +885,3 @@ def load_package_zip(data: bytes, *, caps: PackageCaps | None = None) -> Package
     except Exception:
         wipe_workdir(workdir)
         raise
-
-
-def apply_session_config(cfg: SessionConfig, *, equipment_ids: set[str]) -> list[str]:
-    """Apply optional session_config into streamlit session_state. Returns warnings."""
-    import streamlit as st
-
-    warnings: list[str] = []
-    if cfg.unit_system is not None:
-        st.session_state.unit_system = cfg.unit_system
-    if cfg.prefer_web_oat is not None:
-        st.session_state.prefer_web_oat = bool(cfg.prefer_web_oat)
-    if cfg.chw_leave_max_f is not None:
-        st.session_state.chw_leave_max_f = float(cfg.chw_leave_max_f)
-        # Resync unit-aware display slider on next render
-        st.session_state.pop("_chw_leave_max_f_ui_unit", None)
-    if cfg.use_mech_cooling_status_proof is not None:
-        st.session_state.use_mech_cooling_status_proof = bool(
-            cfg.use_mech_cooling_status_proof
-        )
-    # Legacy session configs may still carry this key; never enable valve→mech-cooling bins.
-    st.session_state.include_ahu_chw_valve = False
-    if cfg.include_ahu_chw_valve:
-        warnings.append(
-            "session_config include_ahu_chw_valve ignored — mech-cooling OAT bins are compressor/chiller/DX only (not valves or pump-alone)"
-        )
-    st.session_state.apply_occupancy_calendar = True
-    if cfg.params:
-        params = dict(st.session_state.get("params") or {})
-        for rid, p in cfg.params.items():
-            if isinstance(p, dict):
-                params[rid] = {**params.get(rid, {}), **p}
-        st.session_state.params = params
-    if cfg.role_map:
-        role_map = dict(st.session_state.get("role_map") or {})
-        for eq_id, roles in cfg.role_map.items():
-            if eq_id not in equipment_ids:
-                warnings.append(f"session_config role_map: unknown equipment {eq_id}")
-                continue
-            if not isinstance(roles, dict):
-                continue
-            cleaned = {str(r): str(c) for r, c in roles.items() if r and c}
-            role_map[eq_id] = {**role_map.get(eq_id, {}), **cleaned}
-        st.session_state.role_map = role_map
-        frames = st.session_state.get("equipment_frames") or {}
-        if frames:
-            from app.site_model import stamp_equipment_type
-
-            for eq_id, df in frames.items():
-                stamp_equipment_type(df, eq_id, role_map=role_map)
-                pg = (role_map.get(eq_id) or {}).get("plant_group")
-                if pg:
-                    df.attrs["plant_group"] = str(pg)
-    return warnings

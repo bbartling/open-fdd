@@ -18,12 +18,12 @@
 | P1-M0-A | Capability ledger + validator | baseline inventory | validator unit tests; complete route/workflow inventory |
 | P1-M0-B | Agent/docs authority reconciliation | M0-A | docs/link/terminology checks |
 | P1-M1-A | Reproducible hardened React image/topology | M0 | image build; header/config tests |
-| P1-M1-B | GHCR `openfdd-web` publication and Streamlit image retirement | M1-A | SHA image/digest/SBOM evidence |
+| P1-M1-B | GHCR `openfdd-web` publication and React SPA image retirement | M1-A | SHA image/digest/SBOM evidence |
 | P1-M1-C | Clean-host no-Python smoke | M1-B | browser/API transcripts; image inspection |
 | P1-M2-A | ESLint + real-stack Playwright harness | M1-A | lint failure fixture; browser smoke |
 | P1-M2-B | Unified error/loading/recovery behavior | M2-A | injected API failure matrix |
 | P1-M2-C | Accessibility/responsive shell | M2-A | axe/keyboard/zoom screenshots |
-| P1-M3-A | Refreshed Streamlit parity inventory/baselines | M0 | same-viewport captures and state manifest |
+| P1-M3-A | Refreshed product parity inventory/baselines | M0 | same-viewport captures and state manifest |
 | P1-M3-B | Real chart component and plot contract | M2-A, M3-A | visual/interaction/accessibility plot tests |
 | P1-M3-C | Auth/shell slice | M2 | real-stack route tests and visual diff |
 | P1-M3-D | Jobs/context slice | M3-C | CRUD/concurrency/deep-link tests |
@@ -36,7 +36,7 @@
 | P1-M4-B-* | RCx/metering algorithm closure | M3-G | equations, golden/adversarial fixtures |
 | P1-M4-C | Report runtime ownership | M1 | no-Python artifact generation proof |
 | P1-M5-A | Independent qualification pack | all above | full acceptance manifest |
-| P1-M5-B | Streamlit supported-runtime retirement | M5-A | dependency/image/docs guard |
+| P1-M5-B | React SPA supported-runtime retirement | M5-A | dependency/image/docs guard |
 
 ## Phase 2 — Rust twin foundation
 

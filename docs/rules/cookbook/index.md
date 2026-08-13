@@ -60,7 +60,7 @@ Product UI is the React SPA. Pandas stays on PyPI for third-party tooling.
 
 **Total validated:** 59. **Default confirmation:** 300 s (5 min) unless noted per rule.
 
-Additional rules documented under **Not yet in validated catalog** remain in the cookbooks for continuity (flagged, not Streamlit-parity-tested).
+Additional rules documented under **Not yet in validated catalog** remain in the cookbooks for continuity (flagged, not legacy UI-parity-tested).
 
 ## Quick start
 

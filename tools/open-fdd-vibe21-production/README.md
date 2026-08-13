@@ -30,7 +30,7 @@ Python is retained only where it is intentionally valuable:
   production web request path.
 
 There is no production Flask, FastAPI, pandas, scikit-learn, joblib, or
-Streamlit process. Unity is authored and built outside Open-FDD; Open-FDD
+React SPA process. Unity is authored and built outside Open-FDD; Open-FDD
 validates and serves an immutable WebGL artifact.
 
 ## Why a recovery phase is required
@@ -42,7 +42,7 @@ closeout documents. Examples include a placeholder SVG chart named
 `PlotlyHost`, RCx coverage stubs, seeded demo findings in the product UI, a fake
 lint command, mock-heavy frontend tests, no published `openfdd-web` image in the
 main stack workflow, and 39 of 63 SQL rules that are not oracle-proven. The
-documentation also contradicts itself about whether React or Streamlit ships.
+documentation also contradicts itself about whether React or React SPA ships.
 
 Phase 1 therefore reopens the migration as an evidence-recovery and
 production-hardening program. It does not throw away the existing work.
@@ -67,7 +67,7 @@ one branch. Each milestone is split into bounded PRs in
 
 1. **Evidence beats status prose.** A checkbox, merged PR, or mocked test is not
    acceptance evidence.
-2. **One product UI.** React is the only supported product UI. Streamlit may
+2. **One product UI.** React is the only supported product UI. React SPA may
    remain in an explicitly non-shipping archive until evidence retention
    expires.
 3. **One production computation authority.** DataFusion SQL owns deterministic

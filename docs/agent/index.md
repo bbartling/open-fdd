@@ -16,11 +16,11 @@ Open-FDD is a **vendor-neutral, local-first edge platform**. It does **not** shi
 
 | Layer | Components |
 |-------|------------|
-| Runtime | `central` (API/FDD), `ui` (Streamlit), `fieldbus` (BACnet→MQTTS), `mqtt` (broker) |
+| Runtime | `central` (API/FDD), `ui` (React), `fieldbus` (BACnet→MQTTS), `mqtt` (broker) |
 | Data | Arrow/Feather historian, DataFusion SQL FDD |
 | Model | Haystack RDF, assignments, FDD wires |
 | API | JWT REST, `/api/agent/tools` catalog |
-| UI | Streamlit (`services/ui`) — vibe19 + WattLab export |
+| UI | React SPA (`frontend/web`) — vibe19 + WattLab export |
 | Optional MCP | `openfdd-mcp` stdio — [mcp/README.md](../../mcp/README.md) |
 
 ## External agent layer (outside Open-FDD)

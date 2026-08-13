@@ -47,7 +47,7 @@ Do not hold HTTP open for FDD/import/report. Poll:
 
 ## Feature flag
 
-`OPENFDD_REACT_UI=1` advertises `capabilities.react_ui: true` (default off). Streamlit remains default product UI in Phase 1.
+`OPENFDD_REACT_UI=1` advertises `capabilities.react_ui: true` (default off). React remains default product UI in Phase 1.
 
 ## TypeScript types
 

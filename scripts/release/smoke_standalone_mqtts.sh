@@ -40,10 +40,10 @@ for f in "${DOCKERFILES[@]}"; do
 done
 
 if [[ -d services/ui ]]; then
-  echo "FAIL: services/ui must be deleted (Streamlit product removed)" >&2
+  echo "FAIL: services/ui must not exist (use frontend/web)" >&2
   exit 1
 fi
-echo "OK Streamlit product tree absent"
+echo "OK no services/ui tree"
 
 if [[ ! -f frontend/web/package.json ]]; then
   echo "FAIL: frontend/web/package.json missing" >&2

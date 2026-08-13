@@ -1,1 +1,1 @@
-"""Vibe19 Streamlit pandas FDD demo — educational lab app."""
+"""Vibe19 React SPA pandas FDD demo — educational lab app."""

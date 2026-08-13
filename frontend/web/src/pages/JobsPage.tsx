@@ -411,7 +411,7 @@ export function JobsPage() {
         <Select
           id="jobs-session-select"
           label="Selected job"
-          description="Maps Streamlit openfdd_job_id → URL ?job="
+          description="Maps job id → URL ?job="
           value={selectedJobId}
           options={jobOptions}
           onChange={(value) => setQuery({ jobId: value }, true)}

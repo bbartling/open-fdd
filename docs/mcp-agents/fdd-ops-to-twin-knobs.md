@@ -15,7 +15,7 @@ app tips are **frozen** (2026-07-30 cutover). This page only tells open-fdd agen
 
 | Signal in Open FDD | Continue with |
 |--------------------|---------------|
-| Scheduling / always-on / OA / fan runtime findings | Twin dial (ops schedules) in openfdd-ui WattLab |
+| Scheduling / always-on / OA / fan runtime findings | Twin dial (ops schedules) in openfdd-web WattLab |
 | Monthly bills vs Twin ±% charts wrong shape | `wattlab-twin-ops-reheat-dial` + playbook §2c |
 | Envelope / glass / infil still annual-short | `wattlab-twin-calibrate-dial` Phase 1 |
 | IDF patch / EnergyPlus simulate | EnergyPlus-MCP / stack `mcp-exec` |

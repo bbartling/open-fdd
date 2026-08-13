@@ -21,7 +21,7 @@ is **not** claimed complete.
 | Clippy | `cargo clippy -p openfdd-central -- -D warnings` | Required clean |
 | Ownership | `python3 scripts/architecture_ownership_check.py` | Required green |
 | D2 mutation | `python3 scripts/rule_parity_mutation_check.py` | Required green |
-| D3 handoff shape | `pytest services/ui/app/test_wattlab_job_handoff.py` | Required green |
+| D3 handoff shape | `pytest frontend/web/app/test_wattlab_job_handoff.py` | Required green |
 | Full-stack `sha-*` | Operator / GHCR after merge | **Not claimed** |
 
 ## Slice acceptance

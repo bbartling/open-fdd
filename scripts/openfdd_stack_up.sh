@@ -25,17 +25,17 @@ while [[ $# -gt 0 ]]; do
 Usage: openfdd_stack_up.sh [standalone|central|edge|csv|react|react-ot] [--build|--no-pull] [--caddy]
 
 Recipes:
-  standalone  mqtt + central + streamlit-legacy ui + fieldbus
-  central     mqtt + central + streamlit-legacy ui
+  standalone  mqtt + central + fieldbus (API; use react-ot for product UI)
+  central     mqtt + central (API; use react for product UI)
   edge        fieldbus only (needs OPENFDD_MQTT_HOST)
-  csv         central + streamlit-legacy ui only
+  csv         central + React web (openfdd-web)
   react       mqtt + central + React web (no fieldbus)
   react-ot    mqtt + central + React web + fieldbus (OT bench)
 
 Options:
-  --caddy     Start Caddy on :80 → UI (/api* → central). Default ON for react/react-ot;
-              use OPENFDD_CADDY=0 to disable. Opt-in for Streamlit recipes.
-  --wattlab   Mount WattLab /data + vibe20 PYTHONPATH (compose.wattlab.yml)
+  --caddy     Start Caddy on :80 → web (/api* → central). Default ON for react/react-ot;
+              use OPENFDD_CADDY=0 to disable. Requires a recipe that includes the web service.
+  --wattlab   Mount WattLab workspace onto central (compose.wattlab.react.yml)
 
 Env: OPENFDD_IMAGE_TAG, OPENFDD_*_IMAGE, OPENFDD_JWT_SECRET, OPENFDD_ADMIN_PASSWORD
      OPENFDD_CADDY=1|0, OPENFDD_CENTRAL_BIND=127.0.0.1 (LAN via Caddy)
@@ -77,19 +77,17 @@ if [[ "$DO_PULL" -eq 1 ]]; then
 fi
 
 if [[ "${OPENFDD_CADDY:-0}" == "1" || "${OPENFDD_CADDY:-}" == "true" ]]; then
-  if [[ "$RECIPE" == "edge" ]]; then
-    echo "WARN: --caddy ignored for edge recipe (no UI)" >&2
-  elif [[ "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
+  if [[ "$RECIPE" == "react" || "$RECIPE" == "react-ot" || "$RECIPE" == "csv" ]]; then
     ARGS+=(-f "$ROOT/docker/compose.caddy.react.yml")
   else
-    ARGS+=(-f "$ROOT/docker/compose.caddy.yml")
+    echo "WARN: --caddy requires react, react-ot, or csv (web service); ignored for recipe=$RECIPE" >&2
   fi
 fi
 if [[ "${OPENFDD_WATTLAB:-0}" == "1" || "${OPENFDD_WATTLAB:-}" == "true" ]]; then
   if [[ "$RECIPE" == "edge" ]]; then
-    echo "WARN: --wattlab ignored for edge recipe (no UI)" >&2
+    echo "WARN: --wattlab ignored for edge recipe" >&2
   else
-    ARGS+=(-f "$ROOT/docker/compose.wattlab.yml")
+    ARGS+=(-f "$ROOT/docker/compose.wattlab.react.yml")
   fi
 fi
 

@@ -1,11 +1,11 @@
 # Layout geometry — P1-M3-01
 
-Numeric CSS measurements for the React parity shell. Streamlit has no checked-in
-theme; geometry targets the default wide Streamlit frame plus documented React tokens.
+Numeric CSS measurements for the React parity shell. React has no checked-in
+theme; geometry targets the default wide React frame plus documented React tokens.
 
 | Token / region | Value | Notes |
 |---|---|---|
-| `--sidebar-width` | `21rem` (336px @ 16px root) | Matches Streamlit default sidebar (~21rem) |
+| `--sidebar-width` | `21rem` (336px @ 16px root) | Matches React default sidebar (~21rem) |
 | `--sidebar-width-collapsed` | `3.25rem` | Icon/short-label rail |
 | `--header-height` | `3.5rem` | Title + optional caption |
 | `--section-tabs-height` | `2.75rem` | Horizontal main sections |
@@ -27,7 +27,7 @@ theme; geometry targets the default wide Streamlit frame plus documented React t
 7. Metering  
 8. WattLab  
 
-Source: `services/ui/app/dashboard_contract.py`.
+Source: `frontend/web/app/dashboard_contract.py`.
 
 ## Visual evidence
 

@@ -22,7 +22,7 @@ OpenClaw agents on a fresh Pi bring up the stack from GHCR images — see
 
 ```text
 ghcr.io/bbartling/openfdd-central:latest
-ghcr.io/bbartling/openfdd-ui:latest
+ghcr.io/bbartling/openfdd-web
 ghcr.io/bbartling/openfdd-fieldbus:latest
 ghcr.io/bbartling/openfdd-mqtt:latest
 ```

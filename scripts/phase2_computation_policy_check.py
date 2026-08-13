@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """P2-M1 computation / no-Python product policy gates.
 
-Fails if the React no-Python product path still ships a Streamlit UI service,
+Fails if the React no-Python product path still ships a legacy UI service,
 enables pandas FDD/oracle flags on that compose file, or if central production
 sources spawn/import python/pandas runtimes.
 """
@@ -22,7 +22,14 @@ FORBIDDEN_ENV = (
     "OPENFDD_ANALYTICS_ORACLE",
 )
 
-# Actual runtime invocation / dependency markers (not cutover enum labels).
+FORBIDDEN_COMPOSE_MARKERS = (
+    re.compile(r"image:\s*.*openfdd-ui", re.I),
+    re.compile(r"services/ui", re.I),
+    re.compile(r":8501\b"),
+    re.compile(r"\b_stcore\b", re.I),
+    re.compile(r"import\s+streamlit", re.I),
+)
+
 FORBIDDEN_CENTRAL = (
     re.compile(r"\bpandas\b", re.I),
     re.compile(r"""Command::new\(\s*["'](?:python3?|pip3?|streamlit)["']""", re.I),
@@ -36,7 +43,6 @@ def _strip_yaml_comments(text: str) -> str:
     for line in text.splitlines():
         if line.lstrip().startswith("#"):
             continue
-        # Inline comment: keep code before unquoted #
         if "#" in line:
             code, _, _ = line.partition("#")
             lines.append(code)
@@ -52,11 +58,12 @@ def check_compose_react(errors: list[str]) -> None:
     raw = COMPOSE_REACT.read_text(encoding="utf-8")
     text = _strip_yaml_comments(raw)
     if re.search(r"(?m)^  ui:\s*$", text):
-        errors.append("compose.react.yml must not define a Streamlit `ui` service")
-    if re.search(r"image:\s*.*openfdd-ui", text, re.I):
-        errors.append("compose.react.yml must not pull openfdd-ui image")
-    if re.search(r"\bstreamlit_app\b", text, re.I):
-        errors.append("compose.react.yml must not reference streamlit_app")
+        errors.append("compose.react.yml must not define a legacy `ui` service")
+    for pat in FORBIDDEN_COMPOSE_MARKERS:
+        if pat.search(text):
+            errors.append(
+                f"compose.react.yml must not reference forbidden UI marker {pat.pattern!r}"
+            )
     for env in FORBIDDEN_ENV:
         if env in text:
             errors.append(f"compose.react.yml must not set {env}")

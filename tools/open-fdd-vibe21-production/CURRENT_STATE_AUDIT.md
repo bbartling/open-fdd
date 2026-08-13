@@ -23,7 +23,7 @@ revalidated on a clean writable clone before Phase 1 status is changed.
 |---|---:|---|
 | Directional architecture | 8/10 | React, Rust central, DataFusion, jobs, MQTT, and MCP boundaries are largely the right shape |
 | React product completeness | 4/10 | Useful shell and pages exist; major workflows are thin, placeholder, or demo-oriented |
-| Streamlit visual/behavior parity evidence | 3/10 | Inventories exist, but dedicated browser/a11y/visual qualification was skipped |
+| React SPA visual/behavior parity evidence | 3/10 | Inventories exist, but dedicated browser/a11y/visual qualification was skipped |
 | Production analytics/FDD closure | 4/10 | Registry is broad; only 24/63 rules are proven and RCx is explicitly stubbed |
 | Rust/Python separation | 7/10 | Production topology avoids Python, but archive/release/docs remain contradictory and several deliverables are oracle-only |
 | Test and release credibility | 4/10 | Unit/build coverage exists; real-stack browser, clean-host, full-image, and soak evidence is incomplete |
@@ -41,7 +41,7 @@ acceptance discipline, not lack of code.
 ### Architecture and ownership
 
 - `frontend/web` is a real React 19/Vite application rather than a wrapper
-  around Streamlit.
+  around product UI.
 - `services/central` exposes Rust APIs for jobs, CSV ingestion, FDD, reports,
   analytics, and EnergyPlus job metadata.
 - `crates/fdd_rules`, `crates/fdd_sql`, `sql_rules/`, and DataFusion establish a
@@ -108,20 +108,20 @@ These are acceptable scaffolds, not completed product capabilities.
   suite against a running central service.
 - There is no required Playwright/Cypress route and workflow suite in the main
   CI path.
-- Visual baselines and same-viewport Streamlit comparisons were skipped.
+- Visual baselines and same-viewport React SPA comparisons were skipped.
 - Frontend Docker uses `npm install` after copying only `package.json`; it does
   not use the lockfile-driven `npm ci` reproducibility path.
 
 ### 4. Release topology contradicts “React sole product UI”
 
-- The main GHCR stack workflow publishes `openfdd-ui` from the archived
-  Streamlit Dockerfile.
+- The main GHCR stack workflow publishes `openfdd-web` from the archived
+  React SPA Dockerfile.
 - It does not publish the `openfdd-web` image referenced by
   `docker/compose.react.yml`.
-- Its boot smoke is described as “central + Streamlit UI.”
+- Its boot smoke is described as “central + React SPA.”
 - The React recipe can build locally, but its default remote image is not part
   of the same proven/published stack set.
-- `services/ui` remains source- and image-active even while other docs call it
+- `frontend/web` remains source- and image-active even while other docs call it
   archived.
 
 ### 5. FDD and analytics are broad but not closed
@@ -142,13 +142,13 @@ Catalog presence must not be presented as behavior parity.
 Examples:
 
 - root guidance says React is the sole product UI;
-- `services/ui/AGENTS.md` says Streamlit is the current default;
-- `docs/agent/index.md` describes the runtime and UI as Streamlit;
+- `frontend/web` says React SPA is the current default;
+- `docs/agent/index.md` describes the runtime and UI as React SPA;
 - `frontend/web/README.md` calls React a Phase 1 scaffold and says its flag is
   off by default;
 - several agent-spec files say `open_fdd.contracts` is not shipped even though
   `crates/openfdd_contracts` exists;
-- cookbook pages still say Open-FDD has one Streamlit product UI.
+- cookbook pages still say Open-FDD has one React product UI.
 
 An agent cannot reliably follow contradictory authorities. Phase 1 introduces
 one generated capability/ownership ledger and documentation consistency tests.

@@ -42,7 +42,7 @@ function downloadJson(filename: string, data: unknown): void {
 }
 
 /**
- * Streamlit-oracle sidebar: Sites · Building data · Session restore · Display & site.
+ * Product sidebar: Sites · Building data · Session restore · Display & site.
  * Dev/parity shell — wires zip upload to central when authenticated.
  */
 export function OracleSidebar({ collapsed }: { collapsed: boolean }) {

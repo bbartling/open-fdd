@@ -14,7 +14,7 @@ const ORACLE_MAIN_SECTIONS = [
   "Sites",
 ] as const;
 
-describe("MAIN_SECTIONS Streamlit contract", () => {
+describe("MAIN_SECTIONS navigation contract", () => {
   it("matches REQUIRED_MAIN_SECTIONS labels and order", () => {
     expect(MAIN_SECTIONS.map((s) => s.label)).toEqual([...ORACLE_MAIN_SECTIONS]);
   });

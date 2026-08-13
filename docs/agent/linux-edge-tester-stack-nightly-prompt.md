@@ -48,7 +48,7 @@ If JWT secret is unset, UI auth is open (dev) and `/api/auth/status` returns `au
 cd /home/ben/open-fdd
 set -a && source .env && set +a
 export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:nightly
-export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:nightly
+export OPENFDD_WEB_IMAGE=ghcr.io/bbartling/openfdd-web
 export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:nightly
 export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:nightly
 docker compose -f docker/compose.standalone.yml -f docker/compose.standalone.local.yml pull

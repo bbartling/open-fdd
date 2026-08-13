@@ -5,7 +5,7 @@ Checkpoint commit **`4fe1dc99`** recorded the gutted Open-FDD tree before port.
 ## Removed (531 files)
 
 - **`edge/`** — monolithic edge binary (auth, drivers, csv ingest, old DataFusion FDD)
-- **`workspace/dashboard/`** — React/Vite dashboard (**historical**; production UI is Streamlit `services/ui`, not Vite `:5173`)
+- **`workspace/dashboard/`** — React/Vite dashboard (**historical**; production UI is React `frontend/web`, not Vite `:5173`)
 - **Docker / compose / Caddy** — deployment stacks for old architecture
 - **Legacy docs** — archive, agent prompts, web-app routes, driver guides tied to removed code
 
@@ -20,6 +20,6 @@ Checkpoint commit **`4fe1dc99`** recorded the gutted Open-FDD tree before port.
 - BACnet/Modbus/Haystack live drivers
 - JWT auth / FastAPI edge API
 - MCP server
-- Streamlit / pandas production dashboard
+- Pandas production dashboard
 
 These may return as separate layers on top of the Rust engine later.

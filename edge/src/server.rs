@@ -65,7 +65,7 @@ pub fn run() -> std::io::Result<()> {
     }
     let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     // Default keeps legacy single-image SPA serving. Set OPENFDD_EMBEDDED_UI=0 when
-    // serving the dashboard from openfdd-ui only.
+    // serving the dashboard from openfdd-web only.
     let root = if embedded_ui_enabled() {
         env::var("FRONTEND_DIR").unwrap_or_else(|_| "/app/frontend".to_string())
     } else {
@@ -167,7 +167,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
                 "404 Not Found",
                 json!({
                     "ok": false,
-                    "error": "embedded UI disabled; use openfdd-ui (set OPENFDD_EMBEDDED_UI=1 only for legacy single-image)",
+                    "error": "embedded UI disabled; use openfdd-web (set OPENFDD_EMBEDDED_UI=1 only for legacy single-image)",
                 }),
             );
         }

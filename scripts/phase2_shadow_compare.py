@@ -5,7 +5,7 @@ Replays immutable Phase 1 fixture snapshots (manifest hashes), compares
 categorical rule-outcome expectations, and writes a comparison artifact
 outside production findings.
 
-Never invokes pandas / streamlit as a production fallback.
+Never invokes pandas / pandas as a production fallback.
 """
 
 from __future__ import annotations

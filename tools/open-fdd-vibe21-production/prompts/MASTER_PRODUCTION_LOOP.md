@@ -102,7 +102,7 @@ Run read-only discovery:
 - SQL registry parity counts/statuses;
 - React route/component and real browser-test inventory;
 - GHCR/compose supported image agreement;
-- Python/Streamlit/Flask/FastAPI/pandas/joblib production references;
+- Python/React SPA/Flask/FastAPI/pandas/joblib production references;
 - current twin/model/Unity/MCP contracts if later phases have begun.
 
 Do not trust “done” prose. Compare claims to source and executable evidence.
@@ -149,7 +149,7 @@ mission inside “cleanup.”
 
 ### Characterize the oracle before replacement
 
-For prior Streamlit/pandas or Vibe 21 Python behavior:
+For prior pandas or Vibe 21 Python behavior:
 
 1. pin source/runtime/artifact versions and hashes;
 2. capture nominal, boundary, invalid, missing, and conditional cases;
@@ -187,7 +187,7 @@ as the current scenario.
 
 - Build the capability ledger before accepting legacy completion labels.
 - Publish/test the actual React image; do not continue calling archived
-  Streamlit `openfdd-ui` the product.
+  React SPA `openfdd-web` the product.
 - Replace fake lint with enforceable lint.
 - Require Playwright against real central for golden workflows.
 - Replace the placeholder SVG `PlotlyHost` with the specified real chart

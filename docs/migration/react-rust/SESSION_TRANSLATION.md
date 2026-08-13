@@ -1,8 +1,8 @@
 # Session translation — P1-M3-03
 
-Maps Streamlit `st.session_state` shareable selections to React URL + local drafts.
+Maps React `URL/session state` shareable selections to React URL + local drafts.
 
-| Streamlit key | React destination | Notes |
+| React key | React destination | Notes |
 |---|---|---|
 | `main_section` | Route + `?section=` (reports plots/metering) | SectionTabs |
 | `openfdd_job_id` | `?job=` | JobsPage select |

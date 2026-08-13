@@ -19,8 +19,7 @@ Before changing code:
 1. Resolve repo root and read the complete applicable AGENTS.md hierarchy:
    root AGENTS.md, openfdd_agent_spec/AGENTS.md, tools/open-fdd-modernization/AGENTS.md.
 2. Read tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md and load skills:
-   - ALWAYS for UI/parity work: skills/streamlit-to-react/SKILL.md
-     (+ openfdd_agent_spec/skills/openfdd-streamlit-to-react/SKILL.md)
+   - ALWAYS for UI work: openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md
    - Plus any openfdd_agent_spec/skills/* matching SQL/cookbook/GHCR/ECM/ownership.
 3. Read:
    - docs/migration/react-rust/README.md
@@ -31,9 +30,9 @@ Before changing code:
      API_CONTRACT_MATRIX.md, PARITY_EVIDENCE.md, SESSION_LOG.md
    - openfdd_agent_spec/BUILD_CHECKPOINTS.md (React/Rust section)
 4. Inspect git status/branch/recent history. Preserve unrelated user changes.
-5. Inspect code truth for the selected capability: Streamlit render path,
+5. Inspect code truth for the selected capability: React render path,
    session keys, Python call graph, current Rust routes/crates, SQL, storage,
-   tests, scripts, images, docs, and consumers — following the streamlit-to-react
+   tests, scripts, images, docs, and consumers — following the openfdd-react-spa
    inventory workflow.
 6. Restate the bounded objective, observable acceptance criteria, files likely
    in scope, risks, and tests. Split the work if it combines architecture, API,
@@ -100,10 +99,10 @@ code at the current commit. Build or update:
 - DECISIONS.md
 - SESSION_LOG.md
 
-Inventory all production Python and Streamlit entry points, including imports,
+Inventory all production Python entry points, including imports,
 dynamic imports, CLI entry points, subprocesses, scripts, workflows,
 Dockerfiles, compose, package extras, docs commands, tests, generated artifacts,
-and runtime image references. Trace each user workflow from Streamlit widgets
+and runtime image references. Trace each user workflow from React SPA widgets
 and session state through helpers, API/storage, computation, and downloads.
 
 For every capability record:
@@ -138,7 +137,7 @@ Acceptance:
 ```text
 Characterize capability [ID/SCENARIO] for later React/Rust replacement.
 
-Read instructions and ledgers. Trace the full current Streamlit/Python behavior.
+Read instructions and ledgers. Trace the full current React SPA/Python behavior.
 Create the smallest legal deterministic fixture set covering happy, empty,
 invalid, missing-role/data, permission, and boundary states relevant to the
 capability.
@@ -149,7 +148,7 @@ order, unordered rows, timestamps/timezones, NaN/Inf/missing values, volatile
 IDs/times, and artifact metadata. Stamp source commit, engine/registry versions,
 fixture hashes, parameters, and mapping revision.
 
-Capture the Streamlit interaction manifest and controlled screenshots at the
+Capture the UI interaction manifest and controlled screenshots at the
 defined viewports. Record widget labels/defaults/ranges/options, disabled rules,
 session persistence, network calls, loading/errors, tables/charts/downloads,
 keyboard path, and responsive behavior.
@@ -181,7 +180,7 @@ Read instructions, current contracts, and reference evidence. Define:
 Reuse services/central and existing Open-FDD contracts/crates where appropriate.
 Use DataFusion SQL for deterministic tabular analytics. Never call Python,
 pandas, or a Python subprocess. Do not expose server filesystem paths or
-Streamlit session structures.
+React SPA session structures.
 
 Write failing Rust/domain/route/contract tests first. Add invalid, permission,
 concurrency, and restart cases appropriate to the capability. Generate/check
@@ -199,7 +198,7 @@ Do not redesign unrelated API families or implement the full React page.
 
 ```text
 Implement React capability [ID] against the approved Rust contract [CONTRACT].
-The reference is the characterized Streamlit scenario [EVIDENCE].
+The reference is the characterized React SPA scenario [EVIDENCE].
 
 Read instructions and inspect both implementations. Match user-observable:
 - route/tab/sidebar/page geometry;
@@ -212,7 +211,7 @@ Read instructions and inspect both implementations. Match user-observable:
 - keyboard/focus/accessibility;
 - desktop and narrow viewport.
 
-Use local parity primitives and design tokens. Do not copy Streamlit-generated
+Use local parity primitives and design tokens. Do not copy React SPA-generated
 DOM/CSS blindly. Do not add engineering math, pandas logic, durable domain
 state, filesystem knowledge, or a Python endpoint to React.
 
@@ -272,7 +271,7 @@ Run and record:
 - hostile upload and auth role matrix;
 - performance/load/restart/recovery;
 - production-like container stack with no Python UI/runtime;
-- upgrade and tested Streamlit routing rollback;
+- upgrade and tested React SPA routing rollback;
 - source/image/SBOM scan for new-path Python dependencies.
 
 Inspect artifacts and skipped tests. Classify every failure. Do not call the

@@ -73,7 +73,7 @@ SPA skill: [`skills/openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md).
 - [x] B4 — Run records + statuses
 - [x] B5 — Stale engine (`/stale`)
 - [x] B6 — Findings + dispositions schemas + API
-- [x] B7 — Streamlit Jobs on central API + stale banner
+- [x] B7 — React Jobs on central API + stale banner
 - [x] B8 — WattLab handoff manifest (job-native)
 - [x] B9 — Acceptance doc + GHCR publish on merge
 
@@ -143,24 +143,24 @@ Docs: [`MILESTONE_D_CLOSEOUT.md`](../docs/migration/MILESTONE_D_CLOSEOUT.md),
 
 Program: [`tools/open-fdd-modernization/`](../tools/open-fdd-modernization/README.md) ·
 Skill bridge: [`AGENT_SKILL_BRIDGE.md`](../tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md) ·
-Streamlit→React skill: [`skills/streamlit-to-react`](../tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md) ·
+React SPA skill: [`openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md`](../tools/open-fdd-modernization/openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md ·
 Ledgers: [`docs/migration/react-rust/`](../docs/migration/react-rust/README.md) ·
 ADR: [`ADR-001`](../docs/architecture/adr-001-react-rust-modernization.md)
 
-Agents **must** follow `openfdd_agent_spec` + streamlit-to-react skills for UI PRs
+Agents **must** follow `openfdd_agent_spec` + openfdd-react-spa skills for UI PRs
 (see Cursor rule `.cursor/rules/openfdd-phase1-react-parity.mdc`).
 
 ### Phase 1
 
 - [x] P1-M0-01 — ADR + instruction reconciliation + policy CI
 - [x] P1-M0-02 — Capability / Python-exit / API ledgers
-- [x] P1-M1 — Fixtures / oracle exporter / Streamlit baseline (#615)
+- [x] P1-M1 — Fixtures / oracle exporter / React baseline (#615)
 - [x] P1-M2 — Rust contracts + React shell + async ops (#616–#618)
 - [x] P1-M3 — Parity shell / widgets / navigation (#619+)
 - [x] P1-M4 — Jobs/CSV/map/run vertical slice
 - [x] P1-M5 — Domain families (A–F) + Auth thin slice
 - [x] P1-M6 — No-Python RC qualification (exit approved)
-- [x] Agent skill bridge — `AGENT_SKILL_BRIDGE.md` + `openfdd-streamlit-to-react` skill + Cursor rule
+- [x] Agent skill bridge — `AGENT_SKILL_BRIDGE.md` + `openfdd-react-spa` skill + Cursor rule
 
 ### Phase 2
 
@@ -170,7 +170,7 @@ Agents **must** follow `openfdd_agent_spec` + streamlit-to-react skills for UI P
 - [x] P2-M3 — Canary PROMOTE (#640)
 - [x] P2-M4 — React production default flip (#641)
 - [x] P2-M5 — Fallback closeout (#642)
-- [x] P2-M6 — Streamlit product path removal (#643)
+- [x] P2-M6 — React product path removal (#643)
 - [x] Prompt 8 — Final no-Python qualification PASS (#644)
 
 ### Phase 3 (modernization edge/live) — outlook only
@@ -199,7 +199,7 @@ tracks the recovery program evidence gates.
 - [x] P1-M3 partial — Playwright product markers (Overview/Auth/Jobs/…/WattLab) + nightly gate 16; PlotlyHost/demo strip still open
 - [ ] P1-M3-* — PlotlyHost replacement; remove demo/stub product controls; full browser-qualify workflows
 - [ ] P1-M4-* — SQL oracle closure by family; RCx/metering real algorithms; report no-Python
-- [ ] P1-M5-* — independent qualification pack + Streamlit retirement guard
+- [ ] P1-M5-* — independent qualification pack + React retirement guard
 
 ---
 
@@ -211,9 +211,9 @@ Product voice = React + DataFusion only. Track deletion / GHCR / agent_spec hone
 - [x] Runtime weekly plant bins (`runtime-weekly-v1`) + React plant charts
 - [x] Mech OAT bins on `/api/analytics/mechanical-cooling` + React
 - [x] BAS vs web OAT (`/api/analytics/bas-vs-web-oat`) + React
-- [x] Relocate WattLab exporter off `services/ui` → `tools/wattlab_export/`
-- [x] Delete `services/ui` + `services/overview_oracle`; scrub CI/docs/compose
-- [x] Stop publishing `openfdd-ui` to GHCR (workflow scrub; tip images after master merge)
+- [x] Relocate WattLab exporter off `frontend/web` → `tools/wattlab_export/`
+- [x] Delete `frontend/web` + `services/overview_oracle`; scrub CI/docs/compose
+- [x] Stop publishing `openfdd-web` to GHCR (workflow scrub; tip images after master merge)
 - [x] `openfdd_agent_spec/` updated for cutover direction (keep in sync every PR)
 - [x] #671 DF Overview/RCx color+OAT parity; Rust-only central; present-tense docs (+ #672 rustfmt)
 - [x] bensbench tip `sha-130b1f0` pull + react-ot smoke (BUILDING_100 economizer + RCx OAT scatters; no Python in central)- [x] #674 vibe20 Fuel Phase A (Rust campus/bills analytics + React FuelDashboard) merged `cc63574`

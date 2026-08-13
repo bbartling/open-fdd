@@ -145,7 +145,7 @@ function RuleExpander({
   );
 }
 
-/** Streamlit-oracle left-rail Rule tuning (expanders + sliders). */
+/** Rule tuning left-rail (expanders + sliders). */
 export function RuleTuningPanel() {
   const { query } = useSessionQuery();
   const buildingId = query.siteId ?? "";

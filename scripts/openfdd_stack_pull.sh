@@ -12,13 +12,13 @@ echo "==> Pulling stack images (tag=${OPENFDD_IMAGE_TAG:-nightly}) for recipe=${
 case "$RECIPE" in
   standalone)
     docker pull "$OPENFDD_CENTRAL_IMAGE"
-    docker pull "$OPENFDD_UI_IMAGE"
+    docker pull "$OPENFDD_WEB_IMAGE"
     docker pull "$OPENFDD_FIELDBUS_IMAGE"
     docker pull "$OPENFDD_MQTT_IMAGE"
     ;;
   central)
     docker pull "$OPENFDD_CENTRAL_IMAGE"
-    docker pull "$OPENFDD_UI_IMAGE"
+    docker pull "$OPENFDD_WEB_IMAGE"
     docker pull "$OPENFDD_MQTT_IMAGE"
     ;;
   edge)
@@ -26,7 +26,7 @@ case "$RECIPE" in
     ;;
   csv)
     docker pull "$OPENFDD_CENTRAL_IMAGE"
-    docker pull "$OPENFDD_UI_IMAGE"
+    docker pull "$OPENFDD_WEB_IMAGE"
     ;;
   react)
     docker pull "$OPENFDD_CENTRAL_IMAGE"

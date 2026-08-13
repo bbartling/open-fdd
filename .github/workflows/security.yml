@@ -57,11 +57,11 @@ jobs:
           test ! -f docker/compose.edge.rust.yml
           test ! -d workspace/dashboard/src
 
-      - name: React is sole production UI (Streamlit removed)
+      - name: React sole product UI
         run: |
           ! test -f workspace/dashboard/package.json
           ! test -d services/ui
-          ! grep -q "streamlit-legacy" docker/compose.central.yml docker/compose.csv.yml docker/compose.standalone.yml
+          ! grep -qE 'openfdd-ui|services/ui|:8501' docker/compose.central.yml docker/compose.csv.yml docker/compose.standalone.yml
           test -f docs/architecture/adr-001-react-rust-modernization.md
           python3 scripts/architecture_react_policy_check.py
           python3 -m pip install --user PyYAML
