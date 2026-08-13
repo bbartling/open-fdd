@@ -138,6 +138,25 @@ async fn inject_optional_fan_cols(
         "occ_mode",
         "hw_reset_request_sum",
         "chw_reset_request_sum",
+        // Portable SV / PID / coil / TRIM optional channels
+        "oa_t",
+        "mat",
+        "zone_t",
+        "rat",
+        "sat",
+        "oa_damper_pct",
+        "clg_valve_pct",
+        "htg_valve_pct",
+        "damper_pct",
+        "loop_enabled",
+        "cooling_coil_entering_temp",
+        "cooling_coil_leaving_temp",
+        "heating_coil_entering_temp",
+        "heating_coil_leaving_temp",
+        "duct_static",
+        "duct_static_sp",
+        "static_reset_request",
+        "web_oa_t",
     ];
     let missing: Vec<&str> = needed.into_iter().filter(|c| !have.contains(*c)).collect();
     if missing.is_empty() {
