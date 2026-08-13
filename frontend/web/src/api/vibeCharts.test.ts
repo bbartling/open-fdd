@@ -77,6 +77,37 @@ describe("vibeCharts", () => {
     ).toEqual([-0.05, 1.15]);
   });
 
+  it("ruleResultChart builds from optional-role-only series (SV/PID Plots)", () => {
+    const roles = ["sat", "rat", "oa_damper_pct"];
+    const fig = ruleResultChart(
+      [
+        {
+          timestamp_utc: "2026-03-01T11:00:00Z",
+          sat: 55,
+          rat: 72,
+          oa_damper_pct: 40,
+        },
+        {
+          timestamp_utc: "2026-03-01T12:00:00Z",
+          sat: 56,
+          rat: 71,
+          oa_damper_pct: 85,
+        },
+      ],
+      {
+        equipmentId: "AHU_1",
+        ruleId: "PID-HUNT-1",
+        roles,
+        confirmedFault: [0, 1],
+      },
+    );
+    expect(fig).toBeTruthy();
+    expect(fig?.data.some((t) => t.name === "confirmed_fault")).toBe(true);
+    expect(fig?.data.some((t) => String(t.name).toLowerCase().includes("damper"))).toBe(
+      true,
+    );
+  });
+
   it("ruleResultChart rejects PrimitiveArray timestamp dumps", () => {
     const fig = ruleResultChart(
       [

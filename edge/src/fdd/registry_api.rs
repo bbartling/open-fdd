@@ -478,6 +478,24 @@ pub fn results_response(building_id: Option<&str>) -> Value {
     json!({"ok": true, "count": rows.len(), "results": rows})
 }
 
+/// Roles used for FDD Plots series SELECT (required ∪ optional, SQL-safe).
+///
+/// Portable rules keep `required_roles` empty and put sensors in
+/// `optional_roles`; Plots still need those columns or the UI shows
+/// "No plottable series".
+fn series_plot_columns(rule: &RuleSpec) -> Vec<&str> {
+    let mut columns: Vec<&str> = rule
+        .required_roles
+        .iter()
+        .chain(rule.optional_roles.iter())
+        .map(String::as_str)
+        .filter(|name| name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+        .collect();
+    columns.sort_unstable();
+    columns.dedup();
+    columns
+}
+
 /// Downsampled history series for one equipment/rule. Rule math continues to
 /// use full-resolution parquet; only this display response is capped.
 pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&str>) -> Value {
@@ -492,21 +510,11 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
     else {
         return json!({"ok": false, "error": format!("unknown rule_id {rule_id}")});
     };
-    let columns: Vec<&str> = rule
-        .required_roles
-        .iter()
-        .map(String::as_str)
-        .filter(|name| name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
-        .collect();
+    let columns = series_plot_columns(rule);
     if columns.is_empty() {
-        return json!({"ok": true, "equipment_id": equipment_id, "rule_id": rule.rule_id, "rows": []});
+        return json!({"ok": true, "equipment_id": equipment_id, "rule_id": rule.rule_id, "rows": [], "roles": []});
     }
     let escaped_equipment = equipment_id.replace('\'', "''");
-    let sql = format!(
-        "SELECT timestamp_utc, equipment_id, {} FROM history WHERE equipment_id = '{}' ORDER BY timestamp_utc LIMIT 5000",
-        columns.join(", "),
-        escaped_equipment
-    );
     let root = parquet_root();
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -516,12 +524,15 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
         Err(e) => return json!({"ok": false, "error": format!("runtime: {e}")}),
     };
     rt.block_on(async {
+        let mut columns = columns;
         let ctx = datafusion::prelude::SessionContext::new();
         if let Err(e) = register_parquet_tree(&ctx, &root).await {
             return json!({"ok": false, "error": e.to_string()});
         }
         let _ = register_weather_if_present(&ctx, &root).await;
-        // Preflight required roles against history schema (no SchemaError banners).
+        // Prefer columns present on this equipment's history schema. Required
+        // roles still hard-fail when missing; optional roles are skipped so
+        // portable SV/PID rules can plot whatever is mapped.
         let history_columns: std::collections::HashSet<String> = match ctx.table("history").await {
             Ok(df) => df
                 .schema()
@@ -532,26 +543,46 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
             Err(_) => std::collections::HashSet::new(),
         };
         if !history_columns.is_empty() {
-            let missing: Vec<String> = columns
+            let missing_required: Vec<String> = rule
+                .required_roles
                 .iter()
-                .map(|c| (*c).to_string())
-                .filter(|role| !history_columns.contains(&role.to_ascii_lowercase()))
+                .filter(|role| {
+                    role.chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_')
+                        && !history_columns.contains(&role.to_ascii_lowercase())
+                })
+                .cloned()
                 .collect();
-            if !missing.is_empty() {
+            if !missing_required.is_empty() {
                 return json!({
                     "ok": false,
                     "error": format!(
                         "missing roles for rule {}: {}",
                         rule.rule_id,
-                        missing.join(", ")
+                        missing_required.join(", ")
                     ),
-                    "missing_roles": missing,
+                    "missing_roles": missing_required,
                     "equipment_id": equipment_id,
                     "rule_id": rule.rule_id,
                     "rows": [],
                 });
             }
+            columns.retain(|c| history_columns.contains(&c.to_ascii_lowercase()));
         }
+        if columns.is_empty() {
+            return json!({
+                "ok": true,
+                "equipment_id": equipment_id,
+                "rule_id": rule.rule_id,
+                "rows": [],
+                "roles": [],
+            });
+        }
+        let sql = format!(
+            "SELECT timestamp_utc, equipment_id, {} FROM history WHERE equipment_id = '{}' ORDER BY timestamp_utc LIMIT 5000",
+            columns.join(", "),
+            escaped_equipment
+        );
         match run_sql(&ctx, &sql).await {
             Ok(mut result) => {
                 // Overlay confirmed_fault for the FDD Plots swim lane (vibe19).
@@ -1241,6 +1272,36 @@ pub fn preview_sql(rule_id: &str, overrides: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn series_plot_columns_unions_optional_roles_for_portable_rules() {
+        let reg = load_reg().expect("registry");
+        let pid = reg
+            .rules
+            .iter()
+            .find(|r| r.rule_id == "PID-HUNT-1")
+            .expect("PID-HUNT-1");
+        assert!(
+            pid.required_roles.is_empty(),
+            "PID-HUNT-1 should keep required_roles empty"
+        );
+        let cols = series_plot_columns(pid);
+        assert!(
+            cols.iter()
+                .any(|c| *c == "oa_damper_pct" || *c == "damper_pct"),
+            "expected optional AO roles in plot columns, got {cols:?}"
+        );
+        let sv = reg
+            .rules
+            .iter()
+            .find(|r| r.rule_id == "SV-FLATLINE")
+            .expect("SV-FLATLINE");
+        let sv_cols = series_plot_columns(sv);
+        assert!(
+            !sv_cols.is_empty(),
+            "SV-FLATLINE must expose optional sensor roles for Plots"
+        );
+    }
 
     #[test]
     fn list_rules_loads_repo_registry() {

@@ -160,6 +160,36 @@ describe("PlotlyHost", () => {
     expect(layout2.uirevision).not.toEqual(layout.uirevision);
   });
 
+  it("passes named PNG stem via toImageButtonOptions", async () => {
+    const figure = {
+      data: [{ x: ["2026-01-01"], y: [10], type: "bar", name: "AHU" }],
+      layout: {},
+    };
+    render(
+      <PlotlyHost
+        id="mech"
+        label="Mech"
+        figure={figure}
+        height={300}
+        downloadFilename="mech_cooling_oat_bins"
+        testId="overview-mech-plot"
+      />,
+    );
+    await waitFor(() => {
+      expect(react.mock.calls.length + newPlot.mock.calls.length).toBeGreaterThan(
+        0,
+      );
+    });
+    const call = (react.mock.calls[0] ?? newPlot.mock.calls[0]) as unknown[];
+    const config = call[3] as {
+      toImageButtonOptions?: { format?: string; filename?: string };
+    };
+    expect(config.toImageButtonOptions).toEqual({
+      format: "png",
+      filename: "mech_cooling_oat_bins",
+    });
+  });
+
   it("cancels Plotly wait timers on unmount so vitest teardown stays clean", async () => {
     delete window.Plotly;
     const { unmount } = render(

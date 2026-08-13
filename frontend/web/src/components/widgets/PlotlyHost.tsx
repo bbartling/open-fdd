@@ -11,6 +11,11 @@ export interface PlotlyHostProps extends Omit<WidgetBaseProps, "label"> {
   figure?: PlotlyFigure | null;
   figureId?: string;
   height?: number;
+  /**
+   * Stable PNG stem for the mode-bar camera button. Without this Plotly
+   * downloads as `newplot.png`, which breaks vibe19-style named exports.
+   */
+  downloadFilename?: string;
 }
 
 type PlotlyStatic = {
@@ -144,6 +149,7 @@ export function PlotlyHost({
   figure,
   figureId,
   height = 320,
+  downloadFilename,
 }: PlotlyHostProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [renderErr, setRenderErr] = useState<string | null>(null);
@@ -206,11 +212,18 @@ export function PlotlyHost({
           data: clean.data as Array<{ yaxis?: string }>,
         },
       );
-      const config = {
+      const config: Record<string, unknown> = {
         responsive: true,
         displayModeBar: true,
         displaylogo: false,
       };
+      // Named downloads match vibe19/pandas stems (avoid Plotly's newplot.png).
+      if (downloadFilename) {
+        config.toImageButtonOptions = {
+          format: "png",
+          filename: downloadFilename,
+        };
+      }
       try {
         await (Plotly.react ?? Plotly.newPlot)(el, clean.data, layout, config);
         if (cancelled) {
@@ -241,7 +254,7 @@ export function PlotlyHost({
         /* ignore */
       }
     };
-  }, [clean, height, figureId, id]);
+  }, [clean, height, figureId, id, downloadFilename]);
 
   const statusMsg = loading
     ? "Loading chart…"

@@ -536,6 +536,11 @@ export function ReportsPage() {
             label={figure?.layout?.title ?? "FDD series"}
             figure={figure}
             loading={loading}
+            downloadFilename={
+              equipmentId && ruleId
+                ? `${equipmentId}_${ruleId}_series`
+                : "fdd_series"
+            }
             testId="plots-chart"
           />
 
@@ -601,6 +606,7 @@ export function ReportsPage() {
               label="Coverage heatmap"
               figure={sensorFigure}
               loading={sensorLoading}
+              downloadFilename="sensor_health_coverage"
               testId="sensor-health-chart"
             />
             {sensorRows.length ? (
@@ -646,6 +652,7 @@ export function ReportsPage() {
               label="Sensor fault chart"
               figure={sensorFaultFigure}
               loading={sensorFaultLoading}
+              downloadFilename="sensor_fault_chart"
               testId="sensor-fault-chart"
             />
           </Expander>

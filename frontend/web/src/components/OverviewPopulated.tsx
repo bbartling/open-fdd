@@ -910,6 +910,7 @@ export function OverviewPopulated({
                 figure={plant.figure}
                 loading={loadingOverview && !overview}
                 height={340}
+                downloadFilename={`motor_weekly_${plant.plant_group}`}
                 testId={`overview-motor-${plant.plant_group}-plot`}
               />
             )}
@@ -971,6 +972,7 @@ export function OverviewPopulated({
           figure={overview?.mech_cooling.figure ?? null}
           loading={loadingOverview && !overview}
           height={360}
+          downloadFilename="mech_cooling_oat_bins"
           testId="overview-mech-plot"
         />
         {overview?.mech_cooling.bins?.length ? (
@@ -1140,6 +1142,7 @@ export function OverviewPopulated({
           figure={overview?.economizer_free_cooling.delta_scatter ?? null}
           loading={loadingOverview && !overview}
           height={380}
+          downloadFilename="economizer_free_cooling_delta"
           testId="overview-econ-delta-plot"
         />
         {!overview?.economizer_free_cooling.delta_scatter && !loadingOverview ? (
@@ -1154,6 +1157,7 @@ export function OverviewPopulated({
           figure={overview?.economizer_free_cooling.mat_residual ?? null}
           loading={loadingOverview && !overview}
           height={320}
+          downloadFilename="economizer_mat_residual"
           testId="overview-econ-mat-resid-plot"
         />
         <p className="oracle-sidebar__caption">
@@ -1194,6 +1198,7 @@ export function OverviewPopulated({
             figure={overview?.economizer_free_cooling.temps_overlay ?? null}
             loading={loadingOverview && !overview}
             height={360}
+            downloadFilename="economizer_temps_oa_damper"
             testId="overview-econ-temps-plot"
           />
         </Expander>
@@ -1241,6 +1246,7 @@ export function OverviewPopulated({
             figure={overview?.bas_vs_web_oat.overlay ?? null}
             loading={loadingOverview && !overview}
             height={360}
+            downloadFilename="bas_vs_web_oat"
             testId="overview-bas-overlay-plot"
           />
         )}
@@ -1257,6 +1263,7 @@ export function OverviewPopulated({
             figure={overview?.bas_vs_web_oat.histogram ?? null}
             loading={loadingOverview && !overview}
             height={300}
+            downloadFilename="bas_web_oat_deviation_hist"
             testId="overview-bas-hist-plot"
           />
         </Expander>
@@ -1321,6 +1328,7 @@ export function OverviewPopulated({
             4000,
             Math.max(280, (inspectSelectedCols.length || inspectCols.length || 1) * 160),
           )}
+          downloadFilename={`${inspectPick || "equipment"}_inspect`}
           testId="overview-inspect-plot"
         />
         <Button

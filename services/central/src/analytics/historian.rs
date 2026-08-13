@@ -186,7 +186,11 @@ fn col_on_gt(col: &str, threshold: f64) -> String {
     format!("CASE WHEN {col} IS NOT NULL AND {col} > {threshold} THEN true ELSE false END")
 }
 
-/// Mechanical-cooling proof (never fan). Prefers chiller/compressor status, then amps.
+/// Mechanical-cooling proof (never fan).
+///
+/// Hierarchy matches pandas `_chiller_on_mask` / `_select_mech_cooling_proof`:
+/// prefer cmd/status; only fall back to amps when **no** status/cmd column exists.
+/// OR-ing status with amps inflates Building 100 hours (amps linger after status off).
 fn cooling_on_expr(cols: &HashSet<String>) -> Option<String> {
     let status_names = [
         "chiller_status",
@@ -195,38 +199,49 @@ fn cooling_on_expr(cols: &HashSet<String>) -> Option<String> {
         "comp_1_status",
         "comp_2_status",
         "dx_status",
+        "chiller_cmd",
+        "compressor_cmd",
     ];
-    let mut parts: Vec<String> = Vec::new();
+    let mut status_parts: Vec<String> = Vec::new();
     for name in status_names {
         if cols.contains(name) {
-            parts.push(col_on_gt(name, 0.05));
+            status_parts.push(col_on_gt(name, 0.05));
         }
     }
-    // Any remaining column name that clearly looks like chiller/compressor status.
+    // Any remaining column name that clearly looks like chiller/compressor status/cmd.
     for c in cols {
         let u = c.to_ascii_lowercase();
-        if parts.iter().any(|p| p.contains(c.as_str())) {
+        if status_parts.iter().any(|p| p.contains(c.as_str())) {
             continue;
         }
-        if (u.contains("chiller") && u.contains("status"))
-            || (u.contains("comp") && u.contains("status") && !u.contains("occup"))
-            || (u.contains("dx") && u.contains("status"))
+        if (u.contains("chiller") && (u.contains("status") || u.contains("cmd")))
+            || (u.contains("comp")
+                && (u.contains("status") || u.contains("cmd"))
+                && !u.contains("occup"))
+            || (u.contains("dx") && (u.contains("status") || u.contains("cmd")))
         {
-            parts.push(col_on_gt(c, 0.05));
+            status_parts.push(col_on_gt(c, 0.05));
         }
     }
+    if !status_parts.is_empty() {
+        if status_parts.len() == 1 {
+            return Some(status_parts.remove(0));
+        }
+        return Some(format!("({})", status_parts.join(" OR ")));
+    }
+    let mut amp_parts: Vec<String> = Vec::new();
     for name in ["chiller_amps", "comp_amps", "compressor_amps", "amps"] {
         if cols.contains(name) {
-            parts.push(col_on_gt(name, 2.0));
+            amp_parts.push(col_on_gt(name, 2.0));
         }
     }
-    if parts.is_empty() {
+    if amp_parts.is_empty() {
         return None;
     }
-    if parts.len() == 1 {
-        return Some(parts.remove(0));
+    if amp_parts.len() == 1 {
+        return Some(amp_parts.remove(0));
     }
-    Some(format!("({})", parts.join(" OR ")))
+    Some(format!("({})", amp_parts.join(" OR ")))
 }
 
 /// Plant weekly / equipment runtime on-proof: fan OR chiller/boiler/pump status.
@@ -327,9 +342,16 @@ fn mech_oat_col(cols: &HashSet<String>) -> Option<&'static str> {
 }
 
 fn web_oat_col(cols: &HashSet<String>) -> Option<&'static str> {
-    ["web_oa_t", "oa_t_web", "oat_meteo", "oa_t_meteo"]
-        .into_iter()
-        .find(|&c| cols.contains(c))
+    // dry_bulb_f is common on weather CSVs before role remap to web_oa_t.
+    [
+        "web_oa_t",
+        "oa_t_web",
+        "oat_meteo",
+        "oa_t_meteo",
+        "dry_bulb_f",
+    ]
+    .into_iter()
+    .find(|&c| cols.contains(c))
 }
 
 /// Prefer web/meteo OAT for weekly plant avg-while-on (vibe19 `prefer_web_oat`).
@@ -1599,14 +1621,64 @@ pub async fn mech_oat_bins_from_history(
     let max_gap = max_gap_seconds.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
     let chiller_filter = chiller_like_equipment_sql();
+    // Prefer web/meteo OAT; when only `oa_t` exists, broadcast from weather
+    // equipment (pandas Overview) so AHU BAS oa_t does not dilute site AVG.
+    let (oat_prefix, oat_by_ts_body, oat_label, oat_join) = if web_oat_col(&cols).is_some() {
+        (
+            String::new(),
+            format!(
+                "SELECT {ts_col} AS ts, AVG({oat}) AS oat_f
+  FROM history
+  WHERE {oat} IS NOT NULL AND {oat} >= 40.0 AND {oat} <= 110.0
+  GROUP BY {ts_col}"
+            ),
+            oat,
+            "site_broadcast_web_by_ts",
+        )
+    } else if oat == "oa_t" {
+        (
+            format!(
+                "weather_oat AS (
+  SELECT {ts_col} AS ts, AVG(oa_t) AS oat_f
+  FROM history
+  WHERE oa_t IS NOT NULL AND oa_t >= 40.0 AND oa_t <= 110.0
+    AND UPPER(CAST(equipment_id AS VARCHAR)) LIKE '%WEATHER%'
+  GROUP BY {ts_col}
+),
+fallback_oat AS (
+  SELECT {ts_col} AS ts, AVG(oa_t) AS oat_f
+  FROM history
+  WHERE oa_t IS NOT NULL AND oa_t >= 40.0 AND oa_t <= 110.0
+  GROUP BY {ts_col}
+),"
+            ),
+            "SELECT ts, oat_f FROM weather_oat
+  UNION ALL
+  SELECT f.ts, f.oat_f FROM fallback_oat f
+  WHERE NOT EXISTS (SELECT 1 FROM weather_oat LIMIT 1)"
+                .to_string(),
+            "oa_t@weather_else_site",
+            "weather_equipment_oa_t_by_ts",
+        )
+    } else {
+        (
+            String::new(),
+            format!(
+                "SELECT {ts_col} AS ts, AVG({oat}) AS oat_f
+  FROM history
+  WHERE {oat} IS NOT NULL AND {oat} >= 40.0 AND {oat} <= 110.0
+  GROUP BY {ts_col}"
+            ),
+            oat,
+            "site_broadcast_by_ts",
+        )
+    };
     // Site OAT broadcast by timestamp (Liberty chillers often lack inline OAT).
     let sql = format!(
         r#"
-WITH oat_by_ts AS (
-  SELECT {ts_col} AS ts, AVG({oat}) AS oat_f
-  FROM history
-  WHERE {oat} IS NOT NULL AND {oat} >= 40.0 AND {oat} <= 110.0
-  GROUP BY {ts_col}
+WITH {oat_prefix}
+oat_by_ts AS (
+  {oat_by_ts_body}
 ),
 chiller_samp AS (
   SELECT
@@ -1757,8 +1829,8 @@ ORDER BY series_kind, equipment_id, bin_lo
         "history_rows": n,
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
-        "oat_column": oat,
-        "oat_join": "site_broadcast_by_ts",
+        "oat_column": oat_label,
+        "oat_join": oat_join,
     }));
     Ok(Some(env))
 }
@@ -3058,6 +3130,27 @@ mod tests {
         let expr = cooling_on_expr(&cols).expect("cooling proof");
         assert!(expr.contains("chiller_status"));
         assert!(!expr.contains("fan_"));
+    }
+
+    #[test]
+    fn cooling_on_expr_prefers_status_over_amps() {
+        let mut cols = HashSet::new();
+        cols.insert("chiller_status".into());
+        cols.insert("chiller_amps".into());
+        let expr = cooling_on_expr(&cols).expect("cooling proof");
+        assert!(expr.contains("chiller_status"), "{expr}");
+        assert!(
+            !expr.contains("chiller_amps"),
+            "status must win over amps (status-before-amps hierarchy); got {expr}"
+        );
+    }
+
+    #[test]
+    fn cooling_on_expr_falls_back_to_amps_without_status() {
+        let mut cols = HashSet::new();
+        cols.insert("chiller_amps".into());
+        let expr = cooling_on_expr(&cols).expect("amps proof");
+        assert!(expr.contains("chiller_amps"));
     }
 
     #[tokio::test]

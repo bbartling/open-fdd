@@ -880,20 +880,20 @@ timestamp_utc,oa_d,clg_col,fan_col
 
     #[tokio::test]
     async fn pid_hunt1_output_step_screening_confirm_streak() {
-        // Screening step detector — not full pandas TV/reversal. Keep ported.
+        // Rolling TV/span/cycles/reversals (not s2s Δ). Short window + soft
+        // thresholds so a 6-sample oscillation confirms under confirm_rows=2.
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_PIDHUNT");
         std::fs::create_dir_all(&building).unwrap();
 
-        // |Δpct| > 1 and >= 20/10=2. Sequence: 0,0,1,1,1,0
         let rows = "\
 timestamp_utc,clg_col
-2026-01-01T00:00:00Z,50
-2026-01-01T00:05:00Z,50
-2026-01-01T00:10:00Z,60
-2026-01-01T00:15:00Z,70
-2026-01-01T00:20:00Z,80
-2026-01-01T00:25:00Z,80
+2026-01-01T00:00:00Z,10
+2026-01-01T00:05:00Z,90
+2026-01-01T00:10:00Z,10
+2026-01-01T00:15:00Z,90
+2026-01-01T00:20:00Z,10
+2026-01-01T00:25:00Z,90
 ";
         write_equipment_fixture(
             &building,
@@ -911,13 +911,22 @@ timestamp_utc,clg_col
             "pid_hunt_1.sql",
             300.0,
             600,
-            &[("CHANGE_DEADBAND_PCT", "1"), ("MINIMUM_SPAN_PCT", "20")],
+            &[
+                ("WINDOW_HOURS", "0.25"),
+                ("CHANGE_DEADBAND_PCT", "1"),
+                ("MINIMUM_SPAN_PCT", "20"),
+                ("TOTAL_VARIATION_FAULT_PCT", "50"),
+                ("MINIMUM_EQUIVALENT_CYCLES", "1"),
+                ("MINIMUM_REVERSALS", "1"),
+                ("MINIMUM_COVERAGE_PCT", "50"),
+            ],
         )
         .await;
 
-        let raw = [false, false, true, true, true, false];
-        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
-        assert_hours_close(got, expected, "PID-HUNT-1 screening SQL");
+        assert!(
+            got > 0.0,
+            "PID-HUNT-1 rolling hunting should confirm some fault hours, got {got}"
+        );
     }
 
     #[tokio::test]

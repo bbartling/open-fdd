@@ -4242,6 +4242,15 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
+    window_hours:
+      label: Hunting lookback window
+      default: 1.0
+      min: 0.25
+      max: 4.0
+      step: 0.25
+      unit: h
+      frontend_control: slider
+      sql_placeholder: WINDOW_HOURS
     change_deadband_pct:
       label: Ignore changes below
       default: 1.0
@@ -4260,6 +4269,42 @@ concepts:
       unit: pct
       frontend_control: slider
       sql_placeholder: MINIMUM_SPAN_PCT
+    total_variation_fault_pct:
+      label: Total variation fault threshold
+      default: 500.0
+      min: 50.0
+      max: 2000.0
+      step: 50.0
+      unit: pct
+      frontend_control: slider
+      sql_placeholder: TOTAL_VARIATION_FAULT_PCT
+    minimum_equivalent_cycles:
+      label: Min equivalent cycles
+      default: 2.5
+      min: 0.5
+      max: 10.0
+      step: 0.5
+      unit: count
+      frontend_control: slider
+      sql_placeholder: MINIMUM_EQUIVALENT_CYCLES
+    minimum_reversals:
+      label: Min direction reversals
+      default: 4.0
+      min: 1.0
+      max: 20.0
+      step: 1.0
+      unit: count
+      frontend_control: slider
+      sql_placeholder: MINIMUM_REVERSALS
+    minimum_coverage_pct:
+      label: Min window sample coverage
+      default: 80.0
+      min: 50.0
+      max: 100.0
+      step: 5.0
+      unit: pct
+      frontend_control: slider
+      sql_placeholder: MINIMUM_COVERAGE_PCT
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id

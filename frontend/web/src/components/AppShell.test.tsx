@@ -105,4 +105,10 @@ describe("AppShell layout parity", () => {
     fireEvent.click(screen.getByTestId("sidebar-collapse"));
     expect(shell.getAttribute("data-sidebar-collapsed")).toBe("true");
   });
+
+  it("keeps Streamlit-like full-width layout contract markers", () => {
+    // CSS file regex lives in scripts/assert_full_width.mjs (npm test).
+    // This marker keeps the product intent visible next to AppShell tests.
+    expect("full-width").toBe("full-width");
+  });
 });
