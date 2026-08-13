@@ -65,6 +65,8 @@ Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:808
 - **Lab → FDD Plots:** `session_config` `confirm_min` (and rule params) apply to the series overlay (`sql_detail_session`). After **Update this rule**, Reports/FDD Plots must refetch on `RULES_UPDATED`.
 - **SCHED-1 occupancy:** treat numeric `0` / `0.0` / `false` **and** string `unoccupied` (and related tokens) as unoccupied — SQL + pandas cookbook stay aligned.
 - **Synthetic-59:** soak via `scripts/synthetic_59_*.py` under `reports/wattlab-parity/fixtures/synthetic_59/`. Do not greenwash `expected_faults.csv`. B100 dump-parity remains **paused**.
+- **Overview layout:** full width beside sidebar (Streamlit-like); named Plotly PNG stems via `downloadFilename`; Lab rule menu A–Z; FDD series = required∪optional roles.
+- **Mech OAT bins:** status/cmd before amps; prefer web/weather OAT. Analytics envelopes: `scripts/synthetic_59_overview_analytics_soak.py`.
 
 ## Low-RAM hosts (bensbench)
 

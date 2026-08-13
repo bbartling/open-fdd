@@ -23,6 +23,18 @@ function familyOf(ruleId: string): string {
   return i > 0 ? ruleId.slice(0, i) : ruleId;
 }
 
+/** Lab UX: A–Z by rule_id after category filter (registry order stays for the engine). */
+export function visibleRulesForLab(
+  rules: FddRuleSummary[],
+  family: string,
+): FddRuleSummary[] {
+  const filtered =
+    family === "(all)"
+      ? [...rules]
+      : rules.filter((r) => familyOf(r.rule_id) === family);
+  return filtered.sort((a, b) => a.rule_id.localeCompare(b.rule_id));
+}
+
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -197,10 +209,10 @@ export function RuleTuningPanel() {
     return ["(all)", ...[...s].sort()];
   }, [rules]);
 
-  const visible = useMemo(() => {
-    if (family === "(all)") return rules;
-    return rules.filter((r) => familyOf(r.rule_id) === family);
-  }, [rules, family]);
+  const visible = useMemo(
+    () => visibleRulesForLab(rules, family),
+    [rules, family],
+  );
 
   const persistSession = useCallback(
     async (nextParams: RuleParamMap) => {

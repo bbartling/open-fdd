@@ -314,7 +314,9 @@ body {
 .app-content {
   flex: 1;
   padding: var(--space-md) var(--content-gutter) var(--space-2xl);
-  max-width: var(--content-max-width);
+  /* Full width beside sidebar (Streamlit-like). Narrow max-width made Overview
+     plots look constrained vs vibe19; keep gutter only. */
+  max-width: none;
   width: 100%;
 }
 
@@ -1007,7 +1009,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  max-width: 72rem;
+  /* Stretch like Streamlit: no fixed rem cap on Overview plots. */
+  max-width: none;
+  width: 100%;
 }
 
 .overview-toolbar {
