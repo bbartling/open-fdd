@@ -3,7 +3,6 @@
 use crate::auth::config::AuthConfig;
 use serde_json::{json, Value};
 use std::env;
-use std::path::PathBuf;
 
 pub fn insecure_dev_enabled() -> bool {
     env::var("OPENFDD_ALLOW_INSECURE_AUTH")
