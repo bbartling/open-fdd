@@ -105,6 +105,13 @@ pub fn normalize_role(role: &str) -> String {
         }
         "duct_static" | "da_p_inwc" | "duct_static_inwc" => "duct_static".into(),
         "duct_static_sp" | "da_p_setpoint_inwc" | "duct_press_sp" => "duct_static_sp".into(),
+        "vav_pressure_request_sum" | "static_reset_request" => "static_reset_request".into(),
+        "cooling_coil_entering_temp" | "ccet" => "cooling_coil_entering_temp".into(),
+        "cooling_coil_leaving_temp" | "cclt" => "cooling_coil_leaving_temp".into(),
+        "heating_coil_entering_temp" | "hcet" => "heating_coil_entering_temp".into(),
+        "heating_coil_leaving_temp" | "hclt" => "heating_coil_leaving_temp".into(),
+        "chiller_status" | "chiller_proof" => "chiller_status".into(),
+        "loop_enabled" | "pid_enable" => "loop_enabled".into(),
         "chws_t" | "chw_supply" | "chwst" | "chws_t_f" | "chw_supply_t" => "chw_supply_t".into(),
         "chwr_t" | "chw_return" | "chwrt" | "chwr_t_f" | "chw_return_t" => "chw_return_t".into(),
         "hws_t" | "hw_supply" | "hwst" | "hws_t_f" | "hw_supply_t" => "hw_supply_t".into(),
@@ -297,6 +304,11 @@ mod tests {
     #[test]
     fn liberty_web_prefixed_econ_roles_normalize() {
         // OFDD-070: web_oa_t stays first-class (mech_oat/econ SQL); rat/mat aliases map.
+        assert_eq!(normalize_role("duct_static"), "duct_static");
+        assert_eq!(
+            normalize_role("vav_pressure_request_sum"),
+            "static_reset_request"
+        );
         assert_eq!(normalize_role("web_oa_t"), "web_oa_t");
         assert_eq!(normalize_role("oa_temp"), "oa_t");
         assert_eq!(normalize_role("web_ra_t"), "rat");

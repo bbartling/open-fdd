@@ -1,11 +1,12 @@
 -- mech_oat_1.sql — Mechanical cooling below 60°F web OAT
--- Uses clg_valve as proxy when compressor/chiller proof roles absent.
+-- Proof: chiller_status OR cooling valve (pandas mechanical_proof_mask).
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
     web_oa_t,
-    CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg
+    CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
+    CASE WHEN chiller_status IS NULL THEN NULL WHEN chiller_status > 0.05 THEN 1.0 ELSE 0.0 END AS chill_on
   FROM history
 ),
 base AS (
@@ -13,8 +14,10 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN web_oa_t IS NULL OR clg IS NULL THEN 0
-      WHEN web_oa_t < {{MECH_OAT_MAX_F}} AND clg > 0.05 THEN 1
+      WHEN web_oa_t IS NULL THEN 0
+      WHEN web_oa_t >= {{MECH_OAT_MAX_F}} THEN 0
+      WHEN chill_on IS NOT NULL AND chill_on > 0.05 THEN 1
+      WHEN clg IS NOT NULL AND clg > 0.05 THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

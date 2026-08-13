@@ -1,12 +1,16 @@
--- sv_rate.sql — Context-aware sensor rate of change
--- Simplified SQL variant. Full context-aware rate logic validated in Pandas.
--- Screening placeholder: does not latch until site-tuned profiles are coded.
+-- sv_rate.sql — Context-aware sensor rate of change (portable channels)
+-- Still a screening placeholder vs full pandas rate profiles; wires mat/zone/rat/sat
+-- so cases without oa_t are not silently PASS-0.
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    oa_t,
+    oa_t, mat, zone_t, rat, sat,
     LAG(oa_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_oa_t,
+    LAG(mat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_mat,
+    LAG(zone_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_zone_t,
+    LAG(rat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_rat,
+    LAG(sat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_sat,
     LAG(timestamp_utc) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_ts
   FROM history
 ),
@@ -15,11 +19,13 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      -- Simplified screen: sustained |ΔT| > 5°F/min between samples (tune via params unused here)
-      WHEN oa_t IS NULL OR prev_oa_t IS NULL OR prev_ts IS NULL THEN 0
-      WHEN ABS(oa_t - prev_oa_t) > 5.0
-       AND CAST(EXTRACT(EPOCH FROM (timestamp_utc - prev_ts)) AS DOUBLE) <= {{PERSISTENCE_MIN}} * 60.0
-      THEN 1
+      WHEN prev_ts IS NULL THEN 0
+      WHEN CAST(EXTRACT(EPOCH FROM (timestamp_utc - prev_ts)) AS DOUBLE) > {{PERSISTENCE_MIN}} * 60.0 THEN 0
+      WHEN oa_t IS NOT NULL AND prev_oa_t IS NOT NULL AND ABS(oa_t - prev_oa_t) > 5.0 THEN 1
+      WHEN mat IS NOT NULL AND prev_mat IS NOT NULL AND ABS(mat - prev_mat) > 5.0 THEN 1
+      WHEN zone_t IS NOT NULL AND prev_zone_t IS NOT NULL AND ABS(zone_t - prev_zone_t) > 5.0 THEN 1
+      WHEN rat IS NOT NULL AND prev_rat IS NOT NULL AND ABS(rat - prev_rat) > 5.0 THEN 1
+      WHEN sat IS NOT NULL AND prev_sat IS NOT NULL AND ABS(sat - prev_sat) > 5.0 THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h
