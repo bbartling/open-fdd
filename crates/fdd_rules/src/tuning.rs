@@ -113,10 +113,19 @@ pub fn effective_param_strings(
 }
 
 pub fn assert_sql_placeholders(sql: &str, rule: &RuleSpec) -> Result<()> {
+    // `<PREFIX>_HOURS` parameters also expose the derived integer row counts
+    // `<PREFIX>_ROWS` / `<PREFIX>_ROWS_PRECEDING` (see params::substitute_sql).
+    let derived = rule.parameters.values().flat_map(|p| {
+        p.sql_placeholder
+            .strip_suffix("_HOURS")
+            .map(|prefix| vec![format!("{prefix}_ROWS"), format!("{prefix}_ROWS_PRECEDING")])
+            .unwrap_or_default()
+    });
     let allowed: HashSet<String> = rule
         .parameters
         .values()
         .map(|p| p.sql_placeholder.clone())
+        .chain(derived)
         .chain([
             "POLL_SECONDS".into(),
             "CONFIRM_ROWS".into(),

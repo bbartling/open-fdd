@@ -1,23 +1,41 @@
 -- chw_noload_1.sql — Chiller running with no building load
--- Simplified: chiller/pump on while CHWS within sat_band of SP (plant-local).
+-- Mechanical proof (chiller status, CHW pump status, or CHW pump command) while
+-- the building-wide load-satisfied flag is true: the plant is making chilled
+-- water nobody is asking for.
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    chw_supply_t, chw_supply_sp,
-    CASE WHEN chw_pump_cmd IS NULL THEN NULL WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END AS pump
+    chiller_status,
+    chw_pump_status,
+    CASE WHEN chw_pump_cmd IS NULL THEN NULL WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END AS pump_cmd,
+    building_zone_load_satisfied
   FROM history
+),
+proof AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    building_zone_load_satisfied,
+    CASE
+      WHEN chiller_status IS NULL AND chw_pump_status IS NULL AND pump_cmd IS NULL THEN NULL
+      WHEN COALESCE(chiller_status, 0) > 0.05 THEN 1
+      WHEN COALESCE(chw_pump_status, 0) > 0.05 THEN 1
+      WHEN COALESCE(pump_cmd, 0) > 0.05 THEN 1
+      ELSE 0
+    END AS running
+  FROM h
 ),
 base AS (
   SELECT
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN chw_supply_t IS NULL OR chw_supply_sp IS NULL OR pump IS NULL THEN 0
-      WHEN pump > 0.05 AND ABS(chw_supply_t - chw_supply_sp) <= {{SAT_BAND_F}} THEN 1
+      WHEN running IS NULL OR building_zone_load_satisfied IS NULL THEN 0
+      WHEN running = 1 AND building_zone_load_satisfied > 0.5 THEN 1
       ELSE 0
     END AS INT) AS raw_fault
-  FROM h
+  FROM proof
 ),
 lagged AS (
   SELECT

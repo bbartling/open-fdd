@@ -1,19 +1,55 @@
 -- sv_stale.sql — Stale data (no fresh samples)
 -- Pandas gate is `always` — do not filter fan_cmd (off-period stale still counts).
-WITH mx AS (
-  SELECT MAX(timestamp_utc) AS max_ts FROM history
+-- Every mapped analog must sit inside STALE_TOL across the trailing STALE_HOURS
+-- window: one live sensor is enough to prove the feed is still updating.
+-- {{STALE_ROWS}} / {{STALE_ROWS_PRECEDING}} are derived from STALE_HOURS and
+-- POLL_SECONDS (DataFusion requires literal ROWS frame bounds).
+WITH win AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    COUNT(oa_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_oa_t,
+    MAX(oa_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(oa_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_oa_t,
+    COUNT(mat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_mat,
+    MAX(mat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(mat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_mat,
+    COUNT(zone_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_zone_t,
+    MAX(zone_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(zone_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_zone_t,
+    COUNT(rat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_rat,
+    MAX(rat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(rat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_rat,
+    COUNT(sat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_sat,
+    MAX(sat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(sat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_sat
+  FROM history
+),
+scored AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    CASE WHEN n_oa_t >= {{STALE_ROWS}} THEN 1 ELSE 0 END
+      + CASE WHEN n_mat >= {{STALE_ROWS}} THEN 1 ELSE 0 END
+      + CASE WHEN n_zone_t >= {{STALE_ROWS}} THEN 1 ELSE 0 END
+      + CASE WHEN n_rat >= {{STALE_ROWS}} THEN 1 ELSE 0 END
+      + CASE WHEN n_sat >= {{STALE_ROWS}} THEN 1 ELSE 0 END AS roles_mapped,
+    CASE WHEN n_oa_t >= {{STALE_ROWS}} AND span_oa_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
+      + CASE WHEN n_mat >= {{STALE_ROWS}} AND span_mat <= {{STALE_TOL}} THEN 1 ELSE 0 END
+      + CASE WHEN n_zone_t >= {{STALE_ROWS}} AND span_zone_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
+      + CASE WHEN n_rat >= {{STALE_ROWS}} AND span_rat <= {{STALE_TOL}} THEN 1 ELSE 0 END
+      + CASE WHEN n_sat >= {{STALE_ROWS}} AND span_sat <= {{STALE_TOL}} THEN 1 ELSE 0 END AS roles_stale
+  FROM win
 ),
 base AS (
   SELECT
-    h.equipment_id,
-    h.timestamp_utc,
+    equipment_id,
+    timestamp_utc,
     CAST(CASE
-      WHEN CAST(EXTRACT(EPOCH FROM (mx.max_ts - h.timestamp_utc)) AS DOUBLE)
-           > {{STALE_HOURS}} * 3600.0 THEN 1
+      WHEN roles_mapped > 0 AND roles_stale = roles_mapped THEN 1
       ELSE 0
     END AS INT) AS raw_fault
-  FROM history h
-  CROSS JOIN mx
+  FROM scored
 ),
 lagged AS (
   SELECT

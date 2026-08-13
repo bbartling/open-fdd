@@ -111,6 +111,9 @@ pub fn normalize_role(role: &str) -> String {
         "heating_coil_entering_temp" | "hcet" => "heating_coil_entering_temp".into(),
         "heating_coil_leaving_temp" | "hclt" => "heating_coil_leaving_temp".into(),
         "chiller_status" | "chiller_proof" => "chiller_status".into(),
+        "vav_total_airflow" | "vav_total_flow" | "total_airflow" | "ahu_total_airflow" => {
+            "vav_total_flow".into()
+        }
         "loop_enabled" | "pid_enable" => "loop_enabled".into(),
         "chws_t" | "chw_supply" | "chwst" | "chws_t_f" | "chw_supply_t" => "chw_supply_t".into(),
         "chwr_t" | "chw_return" | "chwrt" | "chwr_t_f" | "chw_return_t" => "chw_return_t".into(),
@@ -142,6 +145,13 @@ pub const COOKBOOK_ROLES: &[&str] = &[
     "htg_valve_pct",
     "zone_t",
     "zone_flow",
+    "vav_total_flow",
+    "min_flow_sp",
+    "chiller_status",
+    "chw_pump_status",
+    "chw_pump_cmd",
+    "building_zone_load_satisfied",
+    "building_ahu_load_satisfied",
     "chw_supply_t",
     "chw_return_t",
     "hw_supply_t",

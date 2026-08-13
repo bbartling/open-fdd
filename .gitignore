@@ -2,6 +2,10 @@
 /edge/target
 /.cache/
 
+# Local cargo home / docker-build caches (never commit)
+.cargo-ben/
+.cargo-docker/
+
 # Local cutover / MQTT provision artifacts (never commit CA or kits)
 /backups/
 /reports/

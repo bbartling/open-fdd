@@ -1,6 +1,8 @@
 -- sv_rate.sql — Context-aware sensor rate of change (portable channels)
--- Still a screening placeholder vs full pandas rate profiles; wires mat/zone/rat/sat
--- so cases without oa_t are not silently PASS-0.
+-- Rate is normalized to °F/h so the threshold is poll-interval independent, and
+-- the exceedance must be *sustained* (two consecutive samples) to separate a
+-- slew from a one-sample SV-SPIKE. Samples separated by more than
+-- PERSISTENCE_MIN are treated as a data gap, not a slew.
 WITH h AS (
   SELECT
     equipment_id,
@@ -14,21 +16,46 @@ WITH h AS (
     LAG(timestamp_utc) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_ts
   FROM history
 ),
-base AS (
+rates AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    CAST(EXTRACT(EPOCH FROM (timestamp_utc - prev_ts)) AS DOUBLE) / 3600.0 AS dt_hours,
+    oa_t - prev_oa_t AS d_oa_t,
+    mat - prev_mat AS d_mat,
+    zone_t - prev_zone_t AS d_zone_t,
+    rat - prev_rat AS d_rat,
+    sat - prev_sat AS d_sat,
+    prev_ts
+  FROM h
+),
+flagged AS (
   SELECT
     equipment_id,
     timestamp_utc,
     CAST(CASE
       WHEN prev_ts IS NULL THEN 0
       WHEN CAST(EXTRACT(EPOCH FROM (timestamp_utc - prev_ts)) AS DOUBLE) > {{PERSISTENCE_MIN}} * 60.0 THEN 0
-      WHEN oa_t IS NOT NULL AND prev_oa_t IS NOT NULL AND ABS(oa_t - prev_oa_t) > 5.0 THEN 1
-      WHEN mat IS NOT NULL AND prev_mat IS NOT NULL AND ABS(mat - prev_mat) > 5.0 THEN 1
-      WHEN zone_t IS NOT NULL AND prev_zone_t IS NOT NULL AND ABS(zone_t - prev_zone_t) > 5.0 THEN 1
-      WHEN rat IS NOT NULL AND prev_rat IS NOT NULL AND ABS(rat - prev_rat) > 5.0 THEN 1
-      WHEN sat IS NOT NULL AND prev_sat IS NOT NULL AND ABS(sat - prev_sat) > 5.0 THEN 1
+      WHEN dt_hours IS NULL OR dt_hours <= 0.0 THEN 0
+      WHEN ABS(d_oa_t) / dt_hours > {{STEADY_FAULT_PER_HOUR}} THEN 1
+      WHEN ABS(d_mat) / dt_hours > {{STEADY_FAULT_PER_HOUR}} THEN 1
+      WHEN ABS(d_zone_t) / dt_hours > {{STEADY_FAULT_PER_HOUR}} THEN 1
+      WHEN ABS(d_rat) / dt_hours > {{STEADY_FAULT_PER_HOUR}} THEN 1
+      WHEN ABS(d_sat) / dt_hours > {{STEADY_FAULT_PER_HOUR}} THEN 1
       ELSE 0
+    END AS INT) AS over_rate
+  FROM rates
+),
+base AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    CAST(CASE
+      WHEN over_rate = 1
+       AND COALESCE(LAG(over_rate) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 1
+      THEN 1 ELSE 0
     END AS INT) AS raw_fault
-  FROM h
+  FROM flagged
 ),
 lagged AS (
   SELECT

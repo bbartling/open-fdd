@@ -204,7 +204,7 @@ fn read_csv_batch(path: &Path, columns_path: &Path) -> Result<(RecordBatch, u64)
                     str_cols[j].push(Some(cell.to_string()));
                 }
             } else {
-                num_cols[j].push(cell.parse::<f64>().ok());
+                num_cols[j].push(parse_numeric_cell(cell));
             }
         }
     }
@@ -242,6 +242,19 @@ fn read_csv_batch(path: &Path, columns_path: &Path) -> Result<(RecordBatch, u64)
     let schema = Schema::new(fields);
     let batch = RecordBatch::try_new(std::sync::Arc::new(schema), arrays)?;
     Ok((batch, rows))
+}
+
+/// Parse a numeric CSV cell, accepting the boolean literals BAS exports use for
+/// status/proof points (`True`/`False`, `on`/`off`, `yes`/`no`) as 1.0/0.0.
+fn parse_numeric_cell(cell: &str) -> Option<f64> {
+    if let Ok(v) = cell.parse::<f64>() {
+        return Some(v);
+    }
+    match cell.to_ascii_lowercase().as_str() {
+        "true" | "t" | "yes" | "y" | "on" => Some(1.0),
+        "false" | "f" | "no" | "n" | "off" => Some(0.0),
+        _ => None,
+    }
 }
 
 fn is_utf8_role(role: &str) -> bool {
@@ -337,6 +350,37 @@ mod tests {
             .map(|f| f.name().clone())
             .collect();
         assert!(names.iter().any(|n| n == "oa_t"), "fields: {names:?}");
+    }
+
+    #[test]
+    fn boolean_status_cells_become_numeric() {
+        use arrow::array::Array;
+        let tmp = TempDir::new().unwrap();
+        let mut f = std::fs::File::create(tmp.path().join("columns.csv")).unwrap();
+        writeln!(f, "col,point_role\nload_sat,building_zone_load_satisfied").unwrap();
+        let mut h = std::fs::File::create(tmp.path().join("history_wide.csv")).unwrap();
+        writeln!(h, "timestamp_utc,load_sat").unwrap();
+        writeln!(h, "2026-01-01T00:00:00Z,True").unwrap();
+        writeln!(h, "2026-01-01T00:05:00Z,False").unwrap();
+        writeln!(h, "2026-01-01T00:10:00Z,").unwrap();
+        let (batch, rows) = read_csv_batch(
+            &tmp.path().join("history_wide.csv"),
+            &tmp.path().join("columns.csv"),
+        )
+        .unwrap();
+        assert_eq!(rows, 3);
+        let idx = batch
+            .schema()
+            .index_of("building_zone_load_satisfied")
+            .unwrap();
+        let col = batch
+            .column(idx)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+        assert_eq!(col.value(0), 1.0);
+        assert_eq!(col.value(1), 0.0);
+        assert!(col.is_null(2));
     }
 
     #[test]
