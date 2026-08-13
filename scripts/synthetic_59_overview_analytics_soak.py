@@ -136,7 +136,6 @@ def assert_runtime(base: str, token: str, building: str, checks: list[dict]) -> 
         r
         for r in rows
         if float(r.get("run_hours") or r.get("hours") or 0) > 0
-        and str(r.get("kind") or "") not in ("weekly_plant", "weekly_equipment")
     ]
     check(
         "runtime_positive_hours",
