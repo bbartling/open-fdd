@@ -543,15 +543,16 @@ timestamp_utc,oat_col
         let building = tmp.path().join("BUILDING_SVSPIKE");
         std::fs::create_dir_all(&building).unwrap();
 
-        // |Δ| > 16 × SPIKE_SCALE (1.0). Sequence: 0,0,1,1,1,0
+        // |Δ| > 36 × SPIKE_SCALE (pandas SENSOR_LIMITS outside-air-temp spike).
+        // Sequence: 0,0,1,1,1,0
         let rows = "\
 timestamp_utc,oat_col
 2026-01-01T00:00:00Z,70
 2026-01-01T00:05:00Z,72
-2026-01-01T00:10:00Z,90
-2026-01-01T00:15:00Z,110
-2026-01-01T00:20:00Z,130
-2026-01-01T00:25:00Z,131
+2026-01-01T00:10:00Z,120
+2026-01-01T00:15:00Z,170
+2026-01-01T00:20:00Z,220
+2026-01-01T00:25:00Z,221
 ";
         write_equipment_fixture(
             &building,

@@ -1,4 +1,5 @@
 -- vav4_damper_full_open.sql — Damper stuck at full open
+-- Sustain window (pandas sustain_hours) before counting confirmed hours.
 WITH h AS (
   SELECT
     equipment_id,
@@ -12,10 +13,9 @@ WITH h AS (
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
-
   FROM history
 ),
-base AS (
+cond AS (
   SELECT
     equipment_id,
     timestamp_utc,
@@ -24,17 +24,17 @@ base AS (
       WHEN dmp IS NULL THEN 0
       WHEN COALESCE(zone_flow, 0) > {{FLOW_ON_MIN}} AND dmp > {{FULL_OPEN_PCT}} THEN 1
       ELSE 0
-    END AS INT) AS raw_fault
+    END AS INT) AS cond_fault
   FROM h
 ),
 lagged AS (
   SELECT
     *,
     CASE
-      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+      WHEN cond_fault = LAG(cond_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM cond
 ),
 grp AS (
   SELECT
@@ -49,11 +49,27 @@ ranked AS (
     ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
   FROM grp
 ),
+base AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    -- Only latch after sustain window; then apply confirm streak if larger.
+    CAST(CASE
+      WHEN cond_fault = 1
+       AND streak_len >= CASE
+            WHEN {{CONFIRM_ROWS}} > CAST(CEIL({{SUSTAIN_HOURS}} * 3600.0 / {{POLL_SECONDS}}) AS INT)
+            THEN {{CONFIRM_ROWS}}
+            ELSE CAST(CEIL({{SUSTAIN_HOURS}} * 3600.0 / {{POLL_SECONDS}}) AS INT)
+          END
+      THEN 1 ELSE 0
+    END AS INT) AS raw_fault
+  FROM ranked
+),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
-  FROM ranked
+    raw_fault AS confirmed
+  FROM base
 )
 SELECT
   equipment_id,

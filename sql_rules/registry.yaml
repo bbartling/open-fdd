@@ -155,6 +155,7 @@ rules:
     pandas_function: oat_vs_meteo
     description: Equipment OAT vs weather-staged wx OAT
     required_roles: [oa_t]
+    optional_roles: [web_oa_t]
     output_columns: [equipment_id, fault_hours, fault_pct]
     priority: P0
     parity_status: sql_screening
@@ -530,8 +531,8 @@ rules:
     sql_file: sv_range.sql
     pandas_function: null
     description: Sensor out of hard range
-    required_roles: [oa_t]
-    optional_roles: [fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
+    required_roles: []
+    optional_roles: [oa_t, mat, zone_t, rat, sat, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -563,8 +564,8 @@ rules:
     sql_file: sv_flatline.sql
     pandas_function: null
     description: Sensor flatline (stuck)
-    required_roles: [oa_t]
-    optional_roles: [fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
+    required_roles: []
+    optional_roles: [oa_t, mat, zone_t, rat, sat, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -596,8 +597,8 @@ rules:
     sql_file: sv_spike.sql
     pandas_function: null
     description: Sensor rate-of-change spike
-    required_roles: [oa_t]
-    optional_roles: [fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
+    required_roles: []
+    optional_roles: [oa_t, mat, zone_t, rat, sat, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -663,7 +664,8 @@ rules:
     sql_file: sv_rate.sql
     pandas_function: null
     description: Context-aware sensor rate of change
-    required_roles: [oa_t]
+    required_roles: []
+    optional_roles: [oa_t, mat, zone_t, rat, sat]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -695,8 +697,8 @@ rules:
     sql_file: pid_hunt_1.sql
     pandas_function: null
     description: Suspected control-output hunting
-    required_roles: [clg_valve_pct]
-    optional_roles: [fan_status, fan_cmd]
+    required_roles: []
+    optional_roles: [oa_damper_pct, clg_valve_pct, htg_valve_pct, damper_pct, loop_enabled, fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -845,8 +847,8 @@ rules:
     sql_file: fc14_chw_coil_dt_inactive.sql
     pandas_function: null
     description: CHW coil ΔT when inactive (GL36 L)
-    required_roles: [mat, sat, clg_valve_pct, oa_damper_pct, fan_cmd]
-    optional_roles: [fan_status, fan_cmd]
+    required_roles: [clg_valve_pct]
+    optional_roles: [cooling_coil_entering_temp, cooling_coil_leaving_temp, mat, sat, oa_damper_pct, fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -878,8 +880,8 @@ rules:
     sql_file: fc15_hw_coil_dt_inactive.sql
     pandas_function: null
     description: HW coil ΔT when inactive (GL36 M)
-    required_roles: [mat, sat, htg_valve_pct, fan_cmd]
-    optional_roles: [fan_status, fan_cmd]
+    required_roles: []
+    optional_roles: [heating_coil_entering_temp, heating_coil_leaving_temp, mat, sat, htg_valve_pct, clg_valve_pct, fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1214,7 +1216,8 @@ rules:
     sql_file: mech_oat_1.sql
     pandas_function: null
     description: Mechanical cooling below 60°F web OAT
-    required_roles: [web_oa_t, clg_valve_pct]
+    required_roles: [web_oa_t]
+    optional_roles: [clg_valve_pct, chiller_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1473,6 +1476,15 @@ rules:
         unit: cfm
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
+      sustain_hours:
+        label: Sustain window
+        default: 1.5
+        min: 0.5
+        max: 6.0
+        step: 0.5
+        unit: h
+        frontend_control: slider
+        sql_placeholder: SUSTAIN_HOURS
 
   - rule_id: VAV-5
     equipment_kinds: [vav]
@@ -2017,8 +2029,8 @@ rules:
     sql_file: trim1_duct_static.sql
     pandas_function: null
     description: Duct static trim advisory
-    required_roles: [duct_static_sp]
-    optional_roles: [fan_status, fan_cmd]
+    required_roles: [duct_static]
+    optional_roles: [duct_static_sp, static_reset_request, fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening

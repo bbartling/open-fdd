@@ -1,14 +1,11 @@
--- sv_range.sql — Sensor out of hard range (OAT example; extend per sensor type)
+-- sv_range.sql — Sensor out of hard range (portable multi-role sweep)
+-- Pandas SENSOR_LIMITS per role; do not force everything through oa_t.
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    oa_t,
-    fan_cmd,
-    fan_status,
-    pump_status,
-    chw_pump_cmd,
-    chiller_status,
+    oa_t, mat, zone_t, rat, sat,
+    fan_cmd, fan_status, pump_status, chw_pump_cmd, chiller_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
@@ -25,8 +22,11 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN COALESCE(energized, 0) = 0 THEN 0
-      WHEN oa_t IS NULL THEN 0
-      WHEN oa_t < -60.0 * {{RANGE_SCALE_TEMPERATURE}} OR oa_t > 130.0 * {{RANGE_SCALE_TEMPERATURE}} THEN 1
+      WHEN oa_t IS NOT NULL AND (oa_t < -60.0 * {{RANGE_SCALE_TEMPERATURE}} OR oa_t > 130.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
+      WHEN mat IS NOT NULL AND (mat < -20.0 * {{RANGE_SCALE_TEMPERATURE}} OR mat > 110.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
+      WHEN zone_t IS NOT NULL AND (zone_t < 40.0 * {{RANGE_SCALE_TEMPERATURE}} OR zone_t > 100.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
+      WHEN rat IS NOT NULL AND (rat < 40.0 * {{RANGE_SCALE_TEMPERATURE}} OR rat > 100.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
+      WHEN sat IS NOT NULL AND (sat < 30.0 * {{RANGE_SCALE_TEMPERATURE}} OR sat > 150.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

@@ -1,16 +1,34 @@
 -- pid_hunt_1.sql — Suspected control-output hunting
--- Simplified SQL variant. Full rolling TV/cycle/reversal logic validated in Pandas.
+-- Portable AO: OA damper, cooling valve, heating valve, VAV damper (pandas sweep).
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    CASE WHEN clg_valve_pct IS NULL THEN NULL
-         WHEN clg_valve_pct > 1.0 THEN clg_valve_pct
-         ELSE clg_valve_pct * 100.0 END AS out_pct,
-    LAG(CASE WHEN clg_valve_pct IS NULL THEN NULL
-             WHEN clg_valve_pct > 1.0 THEN clg_valve_pct
-             ELSE clg_valve_pct * 100.0 END)
-      OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_out,
+    CASE
+      WHEN oa_damper_pct IS NOT NULL THEN
+        CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct ELSE oa_damper_pct * 100.0 END
+      WHEN clg_valve_pct IS NOT NULL THEN
+        CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct ELSE clg_valve_pct * 100.0 END
+      WHEN htg_valve_pct IS NOT NULL THEN
+        CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct ELSE htg_valve_pct * 100.0 END
+      WHEN damper_pct IS NOT NULL THEN
+        CASE WHEN damper_pct > 1.0 THEN damper_pct ELSE damper_pct * 100.0 END
+      ELSE NULL
+    END AS out_pct,
+    LAG(
+      CASE
+        WHEN oa_damper_pct IS NOT NULL THEN
+          CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct ELSE oa_damper_pct * 100.0 END
+        WHEN clg_valve_pct IS NOT NULL THEN
+          CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct ELSE clg_valve_pct * 100.0 END
+        WHEN htg_valve_pct IS NOT NULL THEN
+          CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct ELSE htg_valve_pct * 100.0 END
+        WHEN damper_pct IS NOT NULL THEN
+          CASE WHEN damper_pct > 1.0 THEN damper_pct ELSE damper_pct * 100.0 END
+        ELSE NULL
+      END
+    ) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_out,
+    COALESCE(loop_enabled, 1.0) AS loop_on,
     fan_cmd,
     fan_status,
     CASE
@@ -18,7 +36,6 @@ WITH h AS (
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
-
   FROM history
 ),
 base AS (
@@ -27,6 +44,7 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN COALESCE(fan_on, 0) = 0 THEN 0
+      WHEN loop_on IS NOT NULL AND loop_on <= 0.05 THEN 0
       WHEN out_pct IS NULL OR prev_out IS NULL THEN 0
       WHEN ABS(out_pct - prev_out) > {{CHANGE_DEADBAND_PCT}}
        AND ABS(out_pct - prev_out) >= {{MINIMUM_SPAN_PCT}} / 10.0

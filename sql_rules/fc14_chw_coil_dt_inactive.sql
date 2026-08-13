@@ -1,10 +1,11 @@
 -- fc14_chw_coil_dt_inactive.sql — CHW coil ΔT when inactive (GL36 L)
--- Simplified: uses MAT/SAT as coil enter/leave proxy when dedicated coil temps absent.
+-- Prefer dedicated coil temps; fall back to MAT/SAT proxy when coil sensors absent.
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    mat, sat,
+    COALESCE(cooling_coil_entering_temp, mat) AS enter_t,
+    COALESCE(cooling_coil_leaving_temp, sat) AS leave_t,
     CASE WHEN clg_valve_pct IS NULL THEN 0.0 WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
     CASE WHEN oa_damper_pct IS NULL THEN 0.0 WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END AS oa_d,
     CASE WHEN fan_cmd IS NULL THEN 0.0 WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan,
@@ -13,7 +14,6 @@ WITH h AS (
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
-
   FROM history
 ),
 base AS (
@@ -22,10 +22,10 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
-      WHEN mat IS NULL OR sat IS NULL THEN 0
+      WHEN enter_t IS NULL OR leave_t IS NULL THEN 0
       WHEN fan < 0.05 THEN 0
       WHEN clg > 0.01 THEN 0
-      WHEN ABS(mat - sat) >= SQRT(2.0 * {{MIX_TOL}} * {{MIX_TOL}}) + 0.55 THEN 1
+      WHEN ABS(enter_t - leave_t) >= SQRT(2.0 * {{MIX_TOL}} * {{MIX_TOL}}) + 0.55 THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

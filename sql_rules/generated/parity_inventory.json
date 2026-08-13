@@ -51,10 +51,13 @@
         "zone",
         "heatpump"
       ],
-      "required_roles": [
-        "oa_t"
-      ],
+      "required_roles": [],
       "optional_roles": [
+        "oa_t",
+        "mat",
+        "zone_t",
+        "rat",
+        "sat",
         "fan_status",
         "fan_cmd",
         "pump_status",
@@ -136,10 +139,13 @@
         "zone",
         "heatpump"
       ],
-      "required_roles": [
-        "oa_t"
-      ],
+      "required_roles": [],
       "optional_roles": [
+        "oa_t",
+        "mat",
+        "zone_t",
+        "rat",
+        "sat",
         "fan_status",
         "fan_cmd",
         "pump_status",
@@ -197,10 +203,13 @@
         "zone",
         "heatpump"
       ],
-      "required_roles": [
-        "oa_t"
-      ],
+      "required_roles": [],
       "optional_roles": [
+        "oa_t",
+        "mat",
+        "zone_t",
+        "rat",
+        "sat",
         "fan_status",
         "fan_cmd",
         "pump_status",
@@ -333,10 +342,14 @@
         "zone",
         "heatpump"
       ],
-      "required_roles": [
-        "oa_t"
+      "required_roles": [],
+      "optional_roles": [
+        "oa_t",
+        "mat",
+        "zone_t",
+        "rat",
+        "sat"
       ],
-      "optional_roles": [],
       "operational_proof_roles": [],
       "default_thresholds": {
         "persistence_min": {
@@ -413,9 +426,7 @@
         "boiler",
         "heatpump"
       ],
-      "required_roles": [
-        "clg_valve_pct"
-      ],
+      "required_roles": [],
       "optional_roles": [
         "loop-enabled"
       ],
@@ -1761,6 +1772,11 @@
         "cooling-valve"
       ],
       "optional_roles": [
+        "cooling_coil_entering_temp",
+        "cooling_coil_leaving_temp",
+        "mat",
+        "sat",
+        "oa_damper_pct",
         "fan_status",
         "fan_cmd"
       ],
@@ -1871,6 +1887,12 @@
         "cooling-valve"
       ],
       "optional_roles": [
+        "heating_coil_entering_temp",
+        "heating_coil_leaving_temp",
+        "mat",
+        "sat",
+        "htg_valve_pct",
+        "clg_valve_pct",
         "fan_status",
         "fan_cmd"
       ],
@@ -2147,7 +2169,9 @@
         "outside-air-temp",
         "web-outside-air-temp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "web_oa_t"
+      ],
       "operational_proof_roles": [],
       "default_thresholds": {
         "oat_err": {
@@ -2623,8 +2647,7 @@
         "heatpump"
       ],
       "required_roles": [
-        "web_oa_t",
-        "clg_valve_pct"
+        "web_oa_t"
       ],
       "optional_roles": [
         "web-outside-air-temp",
@@ -3749,6 +3772,8 @@
         "vav-pressure-request-sum"
       ],
       "optional_roles": [
+        "duct_static_sp",
+        "static_reset_request",
         "fan_status",
         "fan_cmd"
       ],
@@ -4410,10 +4435,13 @@
         "zone",
         "heatpump"
       ],
-      "required_roles": [
-        "oa_t"
-      ],
+      "required_roles": [],
       "optional_roles": [
+        "oa_t",
+        "mat",
+        "zone_t",
+        "rat",
+        "sat",
         "fan_status",
         "fan_cmd",
         "pump_status",
@@ -4613,10 +4641,13 @@
         "zone",
         "heatpump"
       ],
-      "required_roles": [
-        "oa_t"
-      ],
+      "required_roles": [],
       "optional_roles": [
+        "oa_t",
+        "mat",
+        "zone_t",
+        "rat",
+        "sat",
         "fan_status",
         "fan_cmd",
         "pump_status",
@@ -4792,10 +4823,13 @@
         "zone",
         "heatpump"
       ],
-      "required_roles": [
-        "oa_t"
-      ],
+      "required_roles": [],
       "optional_roles": [
+        "oa_t",
+        "mat",
+        "zone_t",
+        "rat",
+        "sat",
         "fan_status",
         "fan_cmd",
         "pump_status",
@@ -5166,10 +5200,14 @@
         "zone",
         "heatpump"
       ],
-      "required_roles": [
-        "oa_t"
+      "required_roles": [],
+      "optional_roles": [
+        "oa_t",
+        "mat",
+        "zone_t",
+        "rat",
+        "sat"
       ],
-      "optional_roles": [],
       "operational_proof_roles": [],
       "default_thresholds": {
         "persistence_min": {
@@ -5362,9 +5400,7 @@
         "boiler",
         "heatpump"
       ],
-      "required_roles": [
-        "clg_valve_pct"
-      ],
+      "required_roles": [],
       "optional_roles": [
         "loop-enabled"
       ],
@@ -8203,6 +8239,11 @@
         "cooling-valve"
       ],
       "optional_roles": [
+        "cooling_coil_entering_temp",
+        "cooling_coil_leaving_temp",
+        "mat",
+        "sat",
+        "oa_damper_pct",
         "fan_status",
         "fan_cmd"
       ],
@@ -8425,6 +8466,12 @@
         "cooling-valve"
       ],
       "optional_roles": [
+        "heating_coil_entering_temp",
+        "heating_coil_leaving_temp",
+        "mat",
+        "sat",
+        "htg_valve_pct",
+        "clg_valve_pct",
         "fan_status",
         "fan_cmd"
       ],
@@ -9159,7 +9206,9 @@
         "outside-air-temp",
         "web-outside-air-temp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "web_oa_t"
+      ],
       "operational_proof_roles": [],
       "default_thresholds": {
         "oat_err": {
@@ -10604,8 +10653,7 @@
         "heatpump"
       ],
       "required_roles": [
-        "web_oa_t",
-        "clg_valve_pct"
+        "web_oa_t"
       ],
       "optional_roles": [
         "web-outside-air-temp",
@@ -11416,6 +11464,16 @@
           "unit": "cfm",
           "frontend_control": "slider",
           "sql_placeholder": "FLOW_ON_MIN"
+        },
+        "sustain_hours": {
+          "label": "Sustain window",
+          "default": 1.5,
+          "min": 0.5,
+          "max": 6.0,
+          "step": 0.5,
+          "unit": "h",
+          "frontend_control": "slider",
+          "sql_placeholder": "SUSTAIN_HOURS"
         }
       },
       "time_semantics": "row_or_interval_per_sql_file",
@@ -13881,6 +13939,8 @@
         "vav-pressure-request-sum"
       ],
       "optional_roles": [
+        "duct_static_sp",
+        "static_reset_request",
         "fan_status",
         "fan_cmd"
       ],

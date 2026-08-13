@@ -1,11 +1,13 @@
 -- trim1_duct_static.sql — Duct static trim advisory
+-- Pandas trim1: high actual duct static + low VAV pressure-request sum.
+-- Prefer duct_static (measured); fall back to duct_static_sp when only SP is mapped.
 WITH base AS (
   SELECT
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN duct_static_sp IS NULL THEN 0
-      WHEN duct_static_sp > {{DUCT_HI}}
+      WHEN COALESCE(duct_static, duct_static_sp) IS NULL THEN 0
+      WHEN COALESCE(duct_static, duct_static_sp) > {{DUCT_HI}}
        AND COALESCE(static_reset_request, 0) <= {{REQUEST_LO}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault,

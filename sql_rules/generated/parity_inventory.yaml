@@ -45,9 +45,13 @@ matrix:
   - weather
   - zone
   - heatpump
-  required_roles: &id002
-  - oa_t
+  required_roles: &id002 []
   optional_roles: &id003
+  - oa_t
+  - mat
+  - zone_t
+  - rat
+  - sat
   - fan_status
   - fan_cmd
   - pump_status
@@ -117,9 +121,13 @@ matrix:
   - weather
   - zone
   - heatpump
-  required_roles: &id008
-  - oa_t
+  required_roles: &id008 []
   optional_roles: &id009
+  - oa_t
+  - mat
+  - zone_t
+  - rat
+  - sat
   - fan_status
   - fan_cmd
   - pump_status
@@ -168,9 +176,13 @@ matrix:
   - weather
   - zone
   - heatpump
-  required_roles: &id014
-  - oa_t
+  required_roles: &id014 []
   optional_roles: &id015
+  - oa_t
+  - mat
+  - zone_t
+  - rat
+  - sat
   - fan_status
   - fan_cmd
   - pump_status
@@ -284,9 +296,13 @@ matrix:
   - weather
   - zone
   - heatpump
-  required_roles: &id026
+  required_roles: &id026 []
+  optional_roles: &id027
   - oa_t
-  optional_roles: &id027 []
+  - mat
+  - zone_t
+  - rat
+  - sat
   operational_proof_roles: &id028 []
   default_thresholds: &id029
     persistence_min:
@@ -351,8 +367,7 @@ matrix:
   - chiller
   - boiler
   - heatpump
-  required_roles: &id032
-  - clg_valve_pct
+  required_roles: &id032 []
   optional_roles: &id033
   - loop-enabled
   operational_proof_roles: &id034
@@ -1484,6 +1499,11 @@ matrix:
   - outside-air-damper
   - cooling-valve
   optional_roles: &id117
+  - cooling_coil_entering_temp
+  - cooling_coil_leaving_temp
+  - mat
+  - sat
+  - oa_damper_pct
   - fan_status
   - fan_cmd
   operational_proof_roles: &id118
@@ -1577,6 +1597,12 @@ matrix:
   - outside-air-damper
   - cooling-valve
   optional_roles: &id123
+  - heating_coil_entering_temp
+  - heating_coil_leaving_temp
+  - mat
+  - sat
+  - htg_valve_pct
+  - clg_valve_pct
   - fan_status
   - fan_cmd
   operational_proof_roles: &id124
@@ -1803,7 +1829,8 @@ matrix:
   required_roles: &id146
   - outside-air-temp
   - web-outside-air-temp
-  optional_roles: &id147 []
+  optional_roles: &id147
+  - web_oa_t
   operational_proof_roles: &id148 []
   default_thresholds: &id149
     oat_err:
@@ -2195,7 +2222,6 @@ matrix:
   - heatpump
   required_roles: &id194
   - web_oa_t
-  - clg_valve_pct
   optional_roles: &id195
   - web-outside-air-temp
   - compressor-status
@@ -3127,6 +3153,8 @@ matrix:
   - duct-static-pressure
   - vav-pressure-request-sum
   optional_roles: &id303
+  - duct_static_sp
+  - static_reset_request
   - fan_status
   - fan_cmd
   operational_proof_roles: &id304
@@ -7312,6 +7340,15 @@ concepts:
       unit: cfm
       frontend_control: slider
       sql_placeholder: FLOW_ON_MIN
+    sustain_hours:
+      label: Sustain window
+      default: 1.5
+      min: 0.5
+      max: 6.0
+      step: 0.5
+      unit: h
+      frontend_control: slider
+      sql_placeholder: SUSTAIN_HOURS
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id

@@ -67,6 +67,14 @@ fn haystack_point_to_role(point: &str) -> String {
         "fan-status" => "fan_status".into(),
         "duct-static-pressure" => "duct_static".into(),
         "duct-static-pressure-sp" => "duct_static_sp".into(),
+        // TRIM / duct-static reset request (pandas vav-pressure-request-sum)
+        "vav-pressure-request-sum" | "static-reset-request" => "static_reset_request".into(),
+        "cooling-coil-entering-temp" => "cooling_coil_entering_temp".into(),
+        "cooling-coil-leaving-temp" => "cooling_coil_leaving_temp".into(),
+        "heating-coil-entering-temp" => "heating_coil_entering_temp".into(),
+        "heating-coil-leaving-temp" => "heating_coil_leaving_temp".into(),
+        "chiller-status" => "chiller_status".into(),
+        "loop-enabled" => "loop_enabled".into(),
         "zone-air-temp" => "zone_t".into(),
         "zone-airflow" => "zone_flow".into(),
         "min-flow-sp" => "min_flow_sp".into(),
@@ -1290,6 +1298,15 @@ mod tests {
 
     #[test]
     fn haystack_points_translate_to_sql_roles() {
+        assert_eq!(
+            haystack_point_to_role("vav-pressure-request-sum"),
+            "static_reset_request"
+        );
+        assert_eq!(
+            haystack_point_to_role("cooling-coil-entering-temp"),
+            "cooling_coil_entering_temp"
+        );
+        assert_eq!(haystack_point_to_role("chiller-status"), "chiller_status");
         assert_eq!(haystack_point_to_role("fan-cmd"), "fan_cmd");
         assert_eq!(
             haystack_point_to_role("duct-static-pressure"),
