@@ -11,37 +11,37 @@ implementation commit.
 | Path | Current role | Required modernization action |
 | --- | --- | --- |
 | `AGENTS.md` | Container stack, central/UI/fieldbus/MQTT ownership, safety | Add approved React/Rust future state without weakening operations |
-| `services/ui/AGENTS.md` | Locks Streamlit UX and DataFusion-via-central execution | Supersede Streamlit-only/“no React” instruction after ADR |
+| `frontend/web` | Locks React UX and DataFusion-via-central execution | Supersede React-only/“no React” instruction after ADR |
 | `services/fieldbus/AGENTS.md` | BACnet socket/write/server rules | Preserve; Phase 3 work must obey it |
 | `openfdd_agent_spec/AGENTS.md` | Engineering agent OS and current Python oracle policy | Reconcile the new runtime-exit decision and preserve history |
 | `openfdd_agent_spec/MILESTONE_A.md` | Prior unified-library/oracle program | Treat as completed/parallel historical architecture, not Phase 1 |
 | `openfdd_agent_spec/DATA_CONTRACT.md` | Existing portable artifact guidance | Extend/replace with Rust-owned browser contracts |
-| `docs/architecture/index.md` | Current Streamlit container stack index | Update as milestones become true |
+| `docs/architecture/index.md` | Current web container stack index | Update as milestones become true |
 | `docs/architecture/datafusion-first.md` | SQL-first/pandas policy | Keep SQL-first; tighten runtime Python prohibition |
 | `docs/architecture/job-workspaces.md` | Durable job source of truth and revisions | Preserve semantics; React consumes central directly |
-| `docs/web-app/index.md` | Declares one Streamlit app, not React | Supersede after ADR and update at default cutover |
+| `docs/web-app/index.md` | Declares one React SPA, not React | Supersede after ADR and update at default cutover |
 | `docs/web-app/routes.md` | Historical React/dashboard route vocabulary | Audit for reusable intent; do not assume code still exists |
 | `frontend/README.md` | Explicitly says React is retired | Replace only in architecture-authorization PR |
 
 The repository contains historical layers that appear contradictory: current
-product documentation says Streamlit-only, while route docs describe an older
+product documentation says React-only, while route docs describe an older
 dashboard and migration docs contain Rust/DataFusion stages. Agents must label
 files CURRENT, HISTORICAL, TARGET, or UNKNOWN before using them as requirements.
 
-## Streamlit product UI
+## React product UI
 
 ### Entry and package
 
 | Path | Inspect for | Target |
 | --- | --- | --- |
-| `services/ui/streamlit_app.py` | section order, page config, sidebar, tabs, state initialization, top-level errors | React route/shell and scenario inventory |
-| `services/ui/pyproject.toml` | Streamlit/pandas/Plotly/DuckDB/open-fdd dependencies | Delete from product in P2; replace gates first |
-| `services/ui/Dockerfile` | runtime, ports, health, asset/package assumptions | React/web delivery image or central-served assets |
-| `services/ui/README.md` | stated capabilities and quick start | Update progressively; final removal in P2 |
+| `frontend/web` | section order, page config, sidebar, tabs, state initialization, top-level errors | React route/shell and scenario inventory |
+| `frontend/web` | pandas/Plotly/DuckDB/open-fdd dependencies | Delete from product in P2; replace gates first |
+| `frontend/web` | runtime, ports, health, asset/package assumptions | React/web delivery image or central-served assets |
+| `frontend/web` | stated capabilities and quick start | Update progressively; final removal in P2 |
 
 ### Required UI module audit
 
-Inspect every file in `services/ui/app/`, with special attention to:
+Inspect every file in `frontend/web`, with special attention to:
 
 - central API clients, JWT handling, error translation;
 - `job_store.py` and `ui_jobs.py`;
@@ -57,18 +57,18 @@ Inspect every file in `services/ui/app/`, with special attention to:
 Do not build the Python exit matrix from this list alone. Enumerate actual files
 and trace dynamic imports, callbacks, and UI-only utilities.
 
-### Streamlit specifications and tests
+### React SPA specifications and tests
 
 | Path | Value |
 | --- | --- |
-| `services/ui/docs/STREAMLIT_AGENT_SPEC.md` | interaction/behavior requirements |
-| `services/ui/docs/STREAMLIT_DEMO_SPEC.md` | scenario/demo behavior |
-| `services/ui/docs/STREAMLIT_RULE_INVENTORY.md` | rule/tuning inventory |
-| `services/ui/app/test_job_store.py` | job semantics |
-| `services/ui/app/test_jobs_central_client.py` | central client behavior |
-| `scripts/smoke_streamlit_app.py` | existing browser/process smoke |
-| `scripts/e2e_streamlit_package_ui.py` | package UI workflow |
-| `scripts/release/smoke_streamlit_ui_gates.sh` | release expectations |
+| `frontend/web` | interaction/behavior requirements |
+| `frontend/web` | scenario/demo behavior |
+| `frontend/web` | rule/tuning inventory |
+| `frontend/web` | job semantics |
+| `frontend/web` | central client behavior |
+| `scripts/smoke_frontend/web App.tsx` | existing browser/process smoke |
+| `scripts/e2e_react_package_ui.py` | package UI workflow |
+| `scripts/release/smoke_react_web_image.sh` | release expectations |
 
 Reuse scenario intent and fixtures where correct. Replace Python/UI-specific
 assertions with contract and React browser tests before deleting these gates.
@@ -272,7 +272,7 @@ only `nightly`.
 Adapt patterns to the host:
 
 ```text
-rg -n "streamlit|st\\." services/ui
+rg -n "frontend/web"
 rg -n "session_state|cache_data|cache_resource|download_button|file_uploader"
 rg -n "pandas|numpy|duckdb|python|pip|pytest|uvicorn|fastapi"
 rg -n "subprocess|Command::new|python3?|open-fdd"
@@ -280,7 +280,7 @@ rg -n "/api/fdd/run|/api/jobs|faults|wattlab|session-config"
 rg -n "workspace/jobs|job.json|meta_revision|correlation_key"
 rg -n "sql_rules|DataFusion|SessionContext|run_all_rules"
 rg -n "BACnet|47808|MQTT|MQTTS|write-dry-run"
-rg -n "openfdd-ui|services/ui|streamlit" docker .github scripts docs
+rg -n "openfdd-web|frontend/web|removed-ui" docker .github scripts docs
 ```
 
 Also inspect package manifests, lock files, runtime images, and generated client

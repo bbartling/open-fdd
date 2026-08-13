@@ -5,7 +5,7 @@
 | SPA | `frontend/web` → `openfdd-web` (nginx) | Serves static assets; proxies `/api` to central |
 | API | `services/central` → `openfdd-central` | `OPENFDD_REACT_UI=1` |
 | Broker | `services/mqtt` → `openfdd-mqtt` | Optional for pure CSV/FDD lab |
-| Streamlit UI | **absent** | Not in `docker/compose.react.yml` |
+| React SPA | **absent** | Not in `docker/compose.react.yml` |
 
 Compose file: [`docker/compose.react.yml`](../../docker/compose.react.yml)
 
@@ -15,4 +15,4 @@ docker compose -f docker/compose.react.yml config
 # SPA:    http://localhost:3000/
 ```
 
-Rollback to Streamlit: use `docker/compose.central.yml` (includes `ui` service) — routing flip is Phase 2.
+Rollback to React: use `docker/compose.central.yml` (includes `ui` service) — routing flip is Phase 2.

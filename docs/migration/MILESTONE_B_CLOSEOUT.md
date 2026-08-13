@@ -12,7 +12,7 @@ nav_order: 21
 
 Milestone B delivers persistent engineering Jobs with provenance fingerprints,
 run records, stale detection, findings files, WattLab handoff manifests, and a
-Streamlit Jobs UI that prefers central `/api/jobs` (filesystem fallback).
+React Jobs UI that prefers central `/api/jobs` (filesystem fallback).
 
 Milestone A was closed with residuals in [`MILESTONE_A_CLOSEOUT.md`](MILESTONE_A_CLOSEOUT.md).
 
@@ -55,7 +55,7 @@ Dual cookbooks unchanged; ownership CI + cookbook-parity remain green.
 
 - Full findings disposition UI and audit history UX
 - Report PDF attachment wiring to Job folders
-- Deeper Streamlit restore of all session knobs
+- Deeper React restore of all session knobs
 - Browser Playwright jobs soak
 - Playground GHCR retirement still deferred
 - `open_fdd.contracts` still deferred from Milestone A residuals

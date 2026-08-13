@@ -32,7 +32,7 @@ Do not begin cutover until:
 4. **Rollback changes routing, not data interpretation.** Schema evolution must
    remain backward readable during the rollback window.
 5. **Delete from leaves inward.** Remove unused Python feature modules before
-   removing the Streamlit entry point, packaging, and base image.
+   removing the React SPA entry point, packaging, and base image.
 6. **No silent fallback.** A Rust/DataFusion failure is observable and handled
    according to its contract; it never invokes pandas.
 
@@ -48,7 +48,7 @@ Make cutover measurable and reversible.
 
 Implement and test:
 
-- `ui_generation=streamlit|react` or equivalent;
+- `ui_generation=react` or equivalent;
 - site/tenant cohort rules if multi-site operation requires them;
 - a user-accessible fallback link during approved stages;
 - sticky routing so refreshes do not bounce between UIs;
@@ -81,7 +81,7 @@ Define service-level indicators and alerts:
 | Indicator | Suggested initial gate |
 | --- | --- |
 | React uncaught error sessions | < 0.5% |
-| Core operation success | not worse than Streamlit baseline by > 1 percentage point |
+| Core operation success | not worse than React SPA baseline by > 1 percentage point |
 | API p95 | within approved per-route budget |
 | DataFusion rule failure | no unexplained increase |
 | Upload orphan cleanup | 100% within retention target |
@@ -216,7 +216,7 @@ security posture, maintenance, supported format subset, and fallback behavior.
 - mutation spot-checks for high-risk formulas;
 - query plan regression checks for representative sizes;
 - concurrency/cancellation tests;
-- zero production invocation of `python`, `pip`, `streamlit`, `pandas`, or
+- zero production invocation of `python`, `pip`, `react`, `pandas`, or
   Python entry points in runtime tracing and repository policy scans.
 
 ### Milestone gate
@@ -293,7 +293,7 @@ Suggested sequence:
 5. 10% eligible sessions;
 6. 25%;
 7. 50%;
-8. 100% with Streamlit fallback still available.
+8. 100% with React-only path still available.
 
 Each promotion is a recorded decision, not an automatic elapsed-time step.
 
@@ -338,14 +338,14 @@ without an explicit incident decision.
 ### Goal
 
 Make React the default for all users while retaining an explicit, measured
-Streamlit fallback for a fixed period.
+React-only path for a fixed period.
 
 ### PR P2-M4-01 — Default route flip
 
 - change default route/config;
 - update operator docs and screenshots;
 - preserve deep-link redirects;
-- make Streamlit fallback clearly labeled and instrumented;
+- make React-only path clearly labeled and instrumented;
 - show a feedback/reason path;
 - keep central computation and storage unchanged.
 
@@ -359,7 +359,7 @@ Set an explicit period or usage threshold, such as:
 
 During the window:
 
-- no new Streamlit features;
+- no new React SPA features;
 - only critical reference fixes;
 - every fallback use receives a reason code;
 - deletion PRs may be prepared but not merged;
@@ -374,7 +374,7 @@ During the window:
 
 ---
 
-## Milestone P2-M5 — Production Python and Streamlit deletion
+## Milestone P2-M5 — Production Python and React SPA deletion
 
 ### Goal
 
@@ -401,16 +401,16 @@ For each deleted path include:
 - `rg`/dependency scan;
 - rollback reference.
 
-#### PR P2-M5-02 — Streamlit application and UI package
+#### PR P2-M5-02 — React SPA application and UI package
 
 Remove:
 
-- `services/ui/streamlit_app.py`;
-- migrated `services/ui/app/` production modules;
-- Streamlit UI tests/scripts;
-- `services/ui/pyproject.toml` and requirements;
-- obsolete Streamlit specs;
-- Streamlit container build.
+- `frontend/web`;
+- migrated `frontend/web` production modules;
+- React SPA tests/scripts;
+- `frontend/web` and requirements;
+- obsolete React SPA specs;
+- web container build.
 
 If oracle fixtures/tools stay, relocate them to a name and build target that
 cannot be confused with the product UI.
@@ -432,14 +432,14 @@ human decision required by the program charter.
 
 Remove or update:
 
-- Python/Streamlit workflows;
+- Python/React SPA workflows;
 - pytest gates that only cover deleted production code;
 - Python build/publish steps no longer in product scope;
-- `openfdd-ui` image references if replaced by web/central delivery;
+- `openfdd-web` image references if replaced by web/central delivery;
 - compose services and environment variables;
 - release smoke scripts;
 - architecture diagrams, web-app docs, quick starts, ports, screenshots;
-- stale “current Streamlit” statements.
+- stale “current React SPA” statements.
 
 Preserve historical migration docs with a clear historical banner when useful.
 
@@ -447,9 +447,9 @@ Preserve historical migration docs with a clear historical banner when useful.
 
 - clean repository search for banned production dependencies;
 - clean production image filesystem/package inventory;
-- SBOM contains no Python/Streamlit/pandas package;
+- SBOM contains no Python/pandas package;
 - fresh-host deployment succeeds without Python;
-- upgrade from last Streamlit release succeeds;
+- upgrade from last React SPA release succeeds;
 - browser and API qualification passes;
 - artifact/schema backward-read promises are met;
 - backup restore works.
@@ -486,7 +486,7 @@ and image digests.
 - cutover timeline and cohort decisions;
 - incidents and corrective PRs;
 - immutable image SHAs/digests;
-- last Streamlit release reference;
+- last React SPA release reference;
 - accepted residual risks;
 - Phase 3 prerequisites that are actually met.
 
@@ -498,7 +498,7 @@ Phase 2 is DONE only when:
 - Rust owns application APIs and durable behavior;
 - DataFusion SQL owns deterministic FDD/analytics;
 - production runtime and images require no Python;
-- Streamlit and Python production twins are deleted;
+- React SPA and Python production twins are deleted;
 - all current docs and operations refer to the new topology;
 - a fresh deployment and upgrade deployment both pass;
 - rollback history is preserved without maintaining two active products.
@@ -508,7 +508,7 @@ Phase 2 is DONE only when:
 - deleting Python at the start of cutover;
 - writing production findings from both engines;
 - using visual parity as proof of calculation parity;
-- keeping Streamlit “just in case” with no removal date;
+- keeping React SPA “just in case” with no removal date;
 - declaring success because React returns HTTP 200;
 - merging schema contraction with default-route flip;
 - deleting workflows before equivalent gates exist;

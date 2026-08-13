@@ -65,7 +65,7 @@ MANIFEST="$BACKUP_DIR/pre-cutover-${TS}-image-tags.env"
 {
   echo "# captured $(date -Iseconds) — restore these for rollback"
   echo "OPENFDD_CENTRAL_IMAGE=${OPENFDD_CENTRAL_IMAGE:-ghcr.io/bbartling/openfdd-central:nightly}"
-  echo "OPENFDD_UI_IMAGE=${OPENFDD_UI_IMAGE:-ghcr.io/bbartling/openfdd-ui:nightly}"
+  echo "OPENFDD_WEB_IMAGE=${OPENFDD_WEB_IMAGE:-ghcr.io/bbartling/openfdd-web
   echo "OPENFDD_FIELDBUS_IMAGE=${OPENFDD_FIELDBUS_IMAGE:-ghcr.io/bbartling/openfdd-fieldbus:nightly}"
   echo "OPENFDD_MQTT_IMAGE=${OPENFDD_MQTT_IMAGE:-ghcr.io/bbartling/openfdd-mqtt:nightly}"
   echo "OPENFDD_MCP_IMAGE=${OPENFDD_MCP_IMAGE:-ghcr.io/bbartling/openfdd-mcp:nightly}"

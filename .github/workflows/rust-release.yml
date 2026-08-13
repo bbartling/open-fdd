@@ -86,7 +86,7 @@ jobs:
           test -f frontend/web/Dockerfile
           test -f docker/compose.react.yml
           ! test -d services/ui
-          ! grep -q "streamlit-legacy" docker/compose.central.yml docker/compose.csv.yml docker/compose.standalone.yml
+          ! grep -qE 'openfdd-ui|services/ui|:8501' docker/compose.central.yml docker/compose.csv.yml docker/compose.standalone.yml
       - run: |
           export OPENFDD_SITE_ID=local
           export OPENFDD_EDGE_ID=fieldbus-1

@@ -51,7 +51,7 @@ Statuses: `VERIFIED` | `PARTIAL` | `NOT_DONE` | `DEFERRED`
 | Sensor / schedule / mech / RCx / metering / plant | PARTIAL | Minimal compute; UI mostly pandas |
 | Engine `datafusion` | NOT_DONE | Honest `central-analytics-v1` today |
 | Historian / Feather → analytics | NOT_DONE | Inline samples only |
-| Phase 6 exit: Streamlit → central only | NOT_DONE | |
+| Phase 6 exit: React → central only | NOT_DONE | |
 | Phase 7 SQL parity evidence levels | PARTIAL | Docs residual |
 | Pandas production retirement | NOT_DONE | |
 | Filled benches + `sha-*` soak | NOT_DONE | |

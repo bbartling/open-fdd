@@ -30,27 +30,27 @@ authorization to change BACnet writes, fieldbus socket ownership, or MQTT topics
 ## Deferred product gaps (not Phase 3, not skill violations)
 
 From `PHASE_2_QUALIFICATION.md` accepted risks: CAP-SITE / CAP-WEATHER / CAP-ECM;
-historian metering rate→kWh PROVISIONAL; 38 rules PROVISIONAL; Streamlit source
+historian metering rate→kWh PROVISIONAL; 38 rules PROVISIONAL; React source
 archived in-tree; Plotly npm not required for Phase 2 exit.
 
 ---
 
-## Streamlit→React skill compliance
+## React SPA skill compliance
 
-Canonical: `tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md`  
-Wrapper: `openfdd_agent_spec/skills/openfdd-streamlit-to-react/SKILL.md`
+Canonical: `tools/open-fdd-modernization/openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md`  
+Wrapper: `openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md`
 
 | rule | result | notes |
 |---|---|---|
 | Browser → central `/api` only | **PASS** | `frontend/web/src/api/client.ts` relative/`VITE_API_BASE`; no FastAPI/8501 |
 | No FDD/analytics math in TypeScript | **PASS** | Clients post/get envelopes; monthlySum client mirrors API for parity only |
-| No Python product runtime | **PASS** | `compose.react.yml`; Streamlit `ARCHIVED.md` + `streamlit-legacy` profile |
+| No Python product runtime | **PASS** | `compose.react.yml`; React SPA only |
 | Ledgers updated with UI work | **PASS** | `docs/migration/react-rust/` current through Phase 2 exit |
-| Comparison target | **PASS (post-P2)** | Streamlit is archive/oracle, not shipping default |
+| Comparison target | **PASS (post-P2)** | React is archive/oracle, not shipping default |
 | Policy CI | **PASS** | `architecture_react_policy_check` + `phase2_computation_policy_check` |
 
 No code skill violations found requiring a fix in this pack. Spec/docs drift
-(Streamlit-still-default in `openfdd_agent_spec`) corrected in the same PR.
+(React SPA-still-default in `openfdd_agent_spec`) corrected in the same PR.
 
 ## Digests
 
@@ -58,7 +58,7 @@ No code skill violations found requiring a fix in this pack. Spec/docs drift
 
 | workflow | run | result |
 |---|---|---|
-| Publish Open-FDD stack to GHCR | [30710271297](https://github.com/bbartling/open-fdd/actions/runs/30710271297) | **success** — tags `sha-61fee63` + retarget `:nightly` for `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` |
+| Publish Open-FDD stack to GHCR | [30710271297](https://github.com/bbartling/open-fdd/actions/runs/30710271297) | **success** — tags `sha-61fee63` + retarget `:nightly` for `openfdd-central`, `openfdd-web`, `openfdd-fieldbus`, `openfdd-mqtt` |
 | Publish Open-FDD MCP to GHCR | [30710271292](https://github.com/bbartling/open-fdd/actions/runs/30710271292) | **success** — `openfdd-mcp:sha-61fee63` + `:nightly` |
 
 Immutable pin: `OPENFDD_IMAGE_TAG=sha-61fee63`.
@@ -68,12 +68,12 @@ Local pull smoke (nightly ↔ sha digest equality confirmed):
 | image | digest |
 |---|---|
 | `ghcr.io/bbartling/openfdd-central` | `sha256:6bb9efe10240dab920781bec7dafbb76ec776d7b942aa34d878984f9e71fead0` |
-| `ghcr.io/bbartling/openfdd-ui` | `sha256:46d453e121abc3b33914520b0c7ae62a1064ff78d14c24f43d8235801d4f8e45` |
+| `ghcr.io/bbartling/openfdd-web` | `sha256:46d453e121abc3b33914520b0c7ae62a1064ff78d14c24f43d8235801d4f8e45` |
 | `ghcr.io/bbartling/openfdd-fieldbus` | `sha256:5ea6a1bf6071d2f7bad71712b36cb295f37b0f2f9ea4fba2e6b8943a36282486` |
 | `ghcr.io/bbartling/openfdd-mqtt` | `sha256:c7c094d79536969b75b9038487c88071498d3cac0a37910f3a1d8c3a55934121` |
 | `ghcr.io/bbartling/openfdd-mcp` | `sha256:b8ef84859af54217051f2b966b3902e5bcb6fef84b5a62e13baf3342bf4a6072` |
 
-**Note:** `compose.react.yml` references `openfdd-web` (build from `frontend/web`); stack GHCR publishes `openfdd-ui` (archived Streamlit) alongside central/fieldbus/mqtt — React SPA image is compose-build / future package (`openfdd-web:nightly` not published).
+**Note:** `compose.react.yml` references `openfdd-web` (build from `frontend/web`); stack GHCR publishes `openfdd-web` (archived React) alongside central/fieldbus/mqtt — React SPA image is compose-build / future package (`openfdd-web:nightly` not published).
 
 `docker compose -f docker/compose.react.yml config` → OK.
 

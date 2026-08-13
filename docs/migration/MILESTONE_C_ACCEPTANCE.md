@@ -53,5 +53,5 @@ Honest acceptance for the C1–C2 analytics runtime slice. Full Milestone C
 
 ## GitHub Actions
 
-Rust Stack CI, Streamlit UI, Cookbook parity, Docs, AppSec must stay green on
+Rust Stack CI, React SPA, Cookbook parity, Docs, AppSec must stay green on
 the PR that lands this branch.

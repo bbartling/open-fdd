@@ -74,7 +74,7 @@ async function measureLayout(page) {
         padding: cs.padding,
       };
     };
-    // Streamlit sidebar / main heuristics + Open-FDD shell
+    // React sidebar / main heuristics + Open-FDD shell
     const candidates = [
       '[data-testid="stSidebar"]',
       "section[data-testid='stSidebar']",
@@ -128,7 +128,7 @@ async function shot(page, outPath) {
   await page.screenshot({ path: outPath, fullPage: true });
 }
 
-async function clickStreamlitRadio(page, label) {
+async function clickReact SPARadio(page, label) {
   // Prefer the main-section stRadio group that lists Overview…Export / Uploads…ECMs.
   const groups = page.locator('[data-testid="stRadio"]');
   const n = await groups.count();
@@ -220,7 +220,7 @@ async function main() {
       id: `section-${slug(sec)}`,
       navigate: async (page) => {
         await waitV19Populated(page);
-        const ok = await clickStreamlitRadio(page, sec);
+        const ok = await clickReact SPARadio(page, sec);
         if (!ok) throw new Error(`section radio not found: ${sec}`);
       },
     })),
@@ -240,7 +240,7 @@ async function main() {
     ...V20_PAGES.map((p) => ({
       id: `page-${slug(p)}`,
       navigate: async (page) => {
-        const ok = await clickStreamlitRadio(page, p);
+        const ok = await clickReact SPARadio(page, p);
         if (!ok) throw new Error(`workflow radio not found: ${p}`);
       },
     })),

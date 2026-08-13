@@ -1206,7 +1206,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 FAULT_CONFIRM_SECONDS = 300
 
 # Validated compute lives in economizer_weather.econ3_compute
-# (catalog entry uses a placeholder; the Streamlit engine substitutes this function).
+# (catalog entry uses a placeholder; the React engine substitutes this function).
 def econ3_compute(d: pd.DataFrame, p: dict, poll: float, wx_ok: bool = True) -> pd.Series:
     """Fault: mech cooling while free cooling available but OA damper not integrated-open.
 
@@ -2342,7 +2342,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ## Not yet in validated catalog
 
 {: .important }
-The following rules remain documented for continuity but are **not** in the current validated vibe19 `RULES` catalog. Do not treat them as Streamlit-parity-tested until they are added to the catalog.
+The following rules remain documented for continuity but are **not** in the current validated vibe19 `RULES` catalog. Do not treat them as React SPA-parity-tested until they are added to the catalog.
 
 | ID | Title | Family | Notes |
 |----|-------|--------|-------|

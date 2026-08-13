@@ -1,4 +1,4 @@
-# WattLab / agent AFDD exporter (no Streamlit — used by openfdd-central job dumps)
+# WattLab / agent AFDD exporter (no React SPA — used by openfdd-central job dumps)
 pandas>=2.0
 pyyaml>=6.0
 duckdb>=0.9

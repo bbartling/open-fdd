@@ -32,7 +32,7 @@ function resolveActiveId(
   return null;
 }
 
-/** Streamlit-style horizontal radio section selector. */
+/** Horizontal radio section selector. */
 export function SectionTabs({
   activeSectionId,
   embedded = false,

@@ -66,7 +66,7 @@ Twin / WattLab Studio / EnergyPlus patch + notebook builder code primarily lives
 
 | ID | Priority | Ask |
 |----|----------|-----|
-| **ENH-ECM-001** | High | Wire full-parity Compare into Studio ECMs: populate `ecm_compare.json` `ss_*` + `ep_*` from `ecm_full_parity_compare.json` (or rebuild path) so the Streamlit table shows the 8-measure ballpark. |
+| **ENH-ECM-001** | High | Wire full-parity Compare into Studio ECMs: populate `ecm_compare.json` `ss_*` + `ep_*` from `ecm_full_parity_compare.json` (or rebuild path) so the React table shows the 8-measure ballpark. |
 | **ENH-ECM-002** | High | Promote MCP prototypes (enthalpy econ, CHW OA reset, occ floor proxy) into product patch registry + cascade. |
 | **ENH-ECM-003** | High | Auto on `agent-build`: eio tons/fan HP + Twin AMY calendar + FLH Inputs (collapse BUG-ECM-003). |
 | **ENH-ECM-004** | Med | Write Compare status / ±50% honesty back into xlsx Compare sheet (BUG-ECM-001 / 007). |

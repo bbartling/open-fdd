@@ -26,7 +26,7 @@ if [[ "${SKIP_PULL:-0}" != "1" ]]; then
   TIP="$(git rev-parse --short=7 HEAD)"
   export OPENFDD_IMAGE_TAG="${OPENFDD_IMAGE_TAG:-sha-$TIP}"
   # Drop sticky per-image overrides so IMAGE_TAG tip pin wins (see openfdd_stack_lib).
-  unset OPENFDD_CENTRAL_IMAGE OPENFDD_UI_IMAGE OPENFDD_WEB_IMAGE \
+  unset OPENFDD_CENTRAL_IMAGE OPENFDD_WEB_IMAGE OPENFDD_WEB_IMAGE \
     OPENFDD_FIELDBUS_IMAGE OPENFDD_MQTT_IMAGE OPENFDD_MCP_IMAGE
   echo "==> pull/up react-ot pin=$OPENFDD_IMAGE_TAG"
   ./scripts/openfdd_stack_pull.sh react-ot || true

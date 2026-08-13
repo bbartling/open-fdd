@@ -34,7 +34,7 @@ function familyOf(ruleId: string): string {
   return i > 0 ? ruleId.slice(0, i) : ruleId || "other";
 }
 
-/** Streamlit Results by Category — FDD results grouped by rule family. */
+/** Results by Category — FDD results grouped by rule family. */
 export function FindingsPage() {
   const { query, setQuery } = useSessionQuery();
   const buildingId = query.siteId ?? "";

@@ -10,7 +10,7 @@ nav_order: 2
 
 | Item | State |
 |------|-------|
-| Runtime | Container stack: `openfdd-central` + `openfdd-ui` + `openfdd-fieldbus` + `openfdd-mqtt` |
+| Runtime | Container stack: `openfdd-central` + `openfdd-web` + `openfdd-fieldbus` + `openfdd-mqtt` |
 | Images | `ghcr.io/bbartling/openfdd-{central,ui,fieldbus,mqtt,mcp}` |
 | Services | `central` (API/FDD), `ui` (Caddy), `fieldbus` (BACnet→MQTTS), `mqtt` (broker) |
 | Auth | JWT + RBAC |

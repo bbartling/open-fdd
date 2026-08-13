@@ -11,7 +11,7 @@ Open-FDD runs as a small set of GHCR images composed per recipe. See
 
 ```text
 ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:-nightly}
-ghcr.io/bbartling/openfdd-ui:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-web
 ghcr.io/bbartling/openfdd-fieldbus:${OPENFDD_IMAGE_TAG:-nightly}
 ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_IMAGE_TAG:-nightly}
 ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
@@ -22,14 +22,14 @@ ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
 | Container | Image | Role |
 |-----------|-------|------|
 | `central` | `openfdd-central` | REST API (`:8080`), JWT auth, historian, DataFusion FDD engine, reports, MCP API surface |
-| `ui` | `openfdd-ui` | Streamlit vibe19 lab (`:3000`); talks to central REST for SQL FDD |
+| `ui` | `openfdd-web` | React vibe19 lab (`:3000`); talks to central REST for SQL FDD |
 | `fieldbus` | `openfdd-fieldbus` | BACnet/IP poll (`network_mode: host`), publishes over MQTTS |
 | `mqtt` | `openfdd-mqtt` | Mosquitto broker, MQTTS on `:8883` |
 | `mcp` | `openfdd-mcp` | Slim Rust MCP server for external agents |
 
 ```text
 ┌──────────────────────┐        ┌──────────────────────────────┐
-│ ui (Streamlit :3000) │───────▶│ central (:8080)              │
+│ ui (React :3000) │───────▶│ central (:8080)              │
 └──────────────────────┘  REST  │ JWT · historian · SQL FDD    │
                                  └──────────────────────────────┘
                                           ▲ MQTTS (8883)

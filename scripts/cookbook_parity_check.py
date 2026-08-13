@@ -154,10 +154,10 @@ def run_docs_integrity() -> None:
     home = (ROOT / "docs" / "index.md").read_text(encoding="utf-8")
     if "React" not in home and "openfdd-web" not in home:
         raise AssertionError("docs/index.md must identify React (openfdd-web) product UI")
-    if re.search(r"(?i)Serves a \*\*Streamlit\*\*", home) or re.search(
-        r"(?i)Streamlit\*\* engineering UI", home
+    if re.search(r"(?i)Serves a \*\*React SPA\*\*", home) or re.search(
+        r"(?i)React SPA\*\* engineering UI", home
     ):
-        raise AssertionError("docs/index.md must not claim Streamlit as product UI")
+        raise AssertionError("docs/index.md must not claim React as product UI")
     print("PASS docs/index.md React product UI")
 
     registry = (ROOT / "sql_rules" / "registry.yaml").read_text(encoding="utf-8")

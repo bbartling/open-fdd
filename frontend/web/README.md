@@ -1,9 +1,7 @@
 # Open-FDD React Web UI (`openfdd-web`)
 
-Supported **product** UI after Phase 2 exit / Vibe 21 P1 recovery. Built as a
-non-root Nginx image that proxies same-origin `/api` to central.
-
-Streamlit (`openfdd-ui`) is **archived oracle only** — not this image.
+Supported **product** UI. Built as a non-root Nginx image that proxies
+same-origin `/api` to central.
 
 ## Development
 

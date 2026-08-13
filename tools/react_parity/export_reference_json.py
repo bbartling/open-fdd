@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""P1-M1-02 — normalize Streamlit/oracle reference JSON (characterization only).
+"""P1-M1-02 — normalize React SPA/oracle reference JSON (characterization only).
 
 Not a production service. Emits sorted, timezone-explicit payloads for parity.
 """
@@ -55,7 +55,7 @@ def build_envelope(
             "engine": engine
             or {
                 "fdd": "datafusion_sql",
-                "ui_reference": "streamlit",
+                "ui_reference": "react",
                 "code_commit": "UNKNOWN",
             },
             "payload": payload,

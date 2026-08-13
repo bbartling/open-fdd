@@ -23,7 +23,7 @@ fi
 
 # Re-export image refs against the pin (ignore stale overrides from env).
 unset OPENFDD_CENTRAL_IMAGE OPENFDD_FIELDBUS_IMAGE OPENFDD_MQTT_IMAGE OPENFDD_MCP_IMAGE OPENFDD_WEB_IMAGE
-unset OPENFDD_UI_IMAGE || true
+unset OPENFDD_WEB_IMAGE || true
 openfdd_stack_export_image_env
 
 echo "${DIM}pin=$OPENFDD_IMAGE_TAG source=${PIN_SOURCE:-?} site/edge=${OPENFDD_SITE_ID}/${OPENFDD_EDGE_ID}${RST}"

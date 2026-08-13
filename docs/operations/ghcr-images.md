@@ -10,7 +10,7 @@ nav_order: 3
 
 ```text
 ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:-nightly}
-ghcr.io/bbartling/openfdd-ui:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-web:${OPENFDD_IMAGE_TAG:-nightly}
 ghcr.io/bbartling/openfdd-fieldbus:${OPENFDD_IMAGE_TAG:-nightly}
 ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_IMAGE_TAG:-nightly}
 ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}

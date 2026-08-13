@@ -18,7 +18,7 @@ From strongest to weakest:
 6. implementation similarity.
 
 Implementation similarity is never proof. React and Rust should not mimic
-Streamlit or pandas internals when a cleaner explicit contract exists.
+React SPA or pandas internals when a cleaner explicit contract exists.
 
 ## Parity classes
 
@@ -261,7 +261,7 @@ For each widget/flow:
 - focus after action/error/modal;
 - narrow-screen behavior.
 
-React should preserve user-observable behavior, not Streamlit’s whole-script
+React should preserve user-observable behavior, not React SPA’s whole-script
 rerun implementation.
 
 ## Artifact comparison

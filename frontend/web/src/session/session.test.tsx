@@ -12,7 +12,7 @@ import {
 import { useSessionQuery } from "./useSessionQuery";
 
 describe("sessionQuery", () => {
-  it("parses shareable Streamlit-like keys from search", () => {
+  it("parses shareable URL query keys from search", () => {
     expect(parseSessionSearch("?job=j1&eq=AHU-1&site=b100&section=overview&wl=ECMs")).toEqual({
       jobId: "j1",
       equipment: "AHU-1",

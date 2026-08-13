@@ -1,12 +1,12 @@
 # P2-M1 — Computation closure ledger
 
 Prompt 2 inventory against code truth (commit of this PR). Production React
-callers already use Rust/DataFusion; remaining Python is Streamlit-local,
+callers already use Rust/DataFusion; remaining Python is React SPA-local,
 explicitly gated oracle, or deferred product.
 
 Status values: `CLOSED` | `CUTOVER-NEEDED` | `ORACLE` | `DEFER` | `PROVISIONAL`
 
-| family | React caller | central owner | Streamlit twin | prod Python on React path | status | notes |
+| family | React caller | central owner | React twin | prod Python on React path | status | notes |
 |---|---|---|---|---|---|---|
 | FDD registry run | `fddApi` → `POST /api/fdd/run` | `fdd_rules` + DataFusion SQL | `agent_api` / gated `rules/runner` | No | CLOSED | Pandas only if `OPENFDD_ALLOW_PANDAS_FDD=1` (oracle) |
 | FDD results/series | Rules / Reports | `/api/fdd/results`, `/api/fdd/series` | charts / rule_card | No | CLOSED | |
@@ -16,7 +16,7 @@ Status values: `CLOSED` | `CUTOVER-NEEDED` | `ORACLE` | `DEFER` | `PROVISIONAL`
 | Jobs / findings / dispositions | FindingsPage / JobsPage | `jobs.rs` | `eng_findings`, `ui_jobs` | No | CLOSED | |
 | Reports artifacts | ReportsPage | `/api/reports*` | `reports.py`, downloads | No | CLOSED | PDF/DOCX = ORACLE |
 | WattLab handoff | WattLabPage | jobs wattlab handoffs | `ui_wattlab_*`, dump | No | CLOSED | |
-| Upload / mapping / package | UploadPage / MappingPage | csv_ingest / package.rs | package_io, mapping_wizard | No | CLOSED | Streamlit twins ORACLE until delete |
+| Upload / mapping / package | UploadPage / MappingPage | csv_ingest / package.rs | package_io, mapping_wizard | No | CLOSED | React twins ORACLE until delete |
 | Weather acquisition | — | — | open_meteo / weather_* | — | ORACLE / DEFER | CAP-WEATHER NOT_STARTED; ORACLE-ONLY |
 | ECM workbooks | — | — | ui_ecm_job | — | DEFER | KEEP-AS-LIB `open_fdd/ecm_engineering` |
 | Site delete FS | — | — | site_model | — | DEFER | CAP-SITE NOT_STARTED |
@@ -25,10 +25,10 @@ Status values: `CLOSED` | `CUTOVER-NEEDED` | `ORACLE` | `DEFER` | `PROVISIONAL`
 
 | path | gate | disposition |
 |---|---|---|
-| `services/ui/app/metering.py` | Streamlit Metering/RCx only | DELETE-P2 after canary (`P2-DEL-01`) |
-| `services/ui/app/rules/**` + `OPENFDD_ALLOW_PANDAS_FDD` | explicit env | ORACLE-ONLY (`P2-DEL-08` prod image) |
+| `frontend/web/app/metering.py` | React Metering/RCx only | DELETE-P2 after canary (`P2-DEL-01`) |
+| `frontend/web/app/rules/**` + `OPENFDD_ALLOW_PANDAS_FDD` | explicit env | ORACLE-ONLY (`P2-DEL-08` prod image) |
 | `OPENFDD_ANALYTICS_ORACLE=1` branches | explicit env | ORACLE-ONLY |
-| `open_fdd/analytics` | PyPI / Streamlit shims | REPLACE → delete after observation |
+| `open_fdd/analytics` | PyPI / React shims | REPLACE → delete after observation |
 | `open_fdd/rules` | oracle / emergency | ORACLE-ONLY |
 
 ## Registry production status honesty
@@ -47,9 +47,9 @@ Legacy labels `proven_building_100` / `ported_from_cookbook` are retired. Screen
 
 `scripts/phase2_computation_policy_check.py`:
 
-1. `docker/compose.react.yml` has no Streamlit `ui` / `openfdd-ui` service.
+1. `docker/compose.react.yml` ships the product UI as `openfdd-web` (no alternate UI image).
 2. Product React compose must not set `OPENFDD_ALLOW_PANDAS_FDD` or `OPENFDD_ANALYTICS_ORACLE`.
-3. `services/central/src` (non-test) has no `python`/`pandas`/`pip`/`streamlit` spawn strings.
+3. `services/central/src` (non-test) has no `python`/`pandas`/`pip` interpreter spawn strings.
 4. This ledger file exists.
 
 ## Follow-on PRs (not this PR)
@@ -60,4 +60,4 @@ Legacy labels `proven_building_100` / `ported_from_cookbook` are retired. Screen
 | P2-M3-* | Canary promotion decisions |
 | P2-M4-01 | React production default flip (authorized separately / turnkey) |
 | P2-M5 / DEL-* | Leaf twin deletion per `PHASE_2_DELETION_CANDIDATES.md` |
-| P2-M6 / Prompt 7–8 | Streamlit product removal + final no-Python qual |
+| P2-M6 / Prompt 7–8 | React product removal + final no-Python qual |

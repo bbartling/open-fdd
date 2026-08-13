@@ -26,7 +26,7 @@ fn sql_rules_dir() -> PathBuf {
     PathBuf::from("sql_rules")
 }
 
-/// Map Streamlit / pandas cookbook slider keys onto SQL registry parameter keys.
+/// Map cookbook slider keys onto SQL registry parameter keys.
 fn alias_ui_param_key<'a>(rule_id: &str, key: &'a str) -> &'a str {
     match (rule_id, key) {
         ("VAV-1", "zone_lo") => "zone_t_lo",

@@ -1,5 +1,5 @@
 /**
- * P1-M3-03 — explicit session/URL state translation from Streamlit session_state.
+ * Session/URL state translation for shareable query parameters.
  * Durable domain state stays on Rust APIs; URL holds shareable selection only.
  * Form drafts may use sessionStorage; never the sole home of job/mapping authority.
  */

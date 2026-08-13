@@ -12,7 +12,7 @@ that lacks executable evidence.
 - Root instructions and original migration package read.
 - Current central, React, SQL registry, PyPI, Docker, GHCR, and MCP inventories
   generated from code.
-- Original Streamlit oracle runnable or its unavailable states documented with
+- Original React SPA oracle runnable or its unavailable states documented with
   retained screenshots/fixtures.
 - No phase-complete label is trusted without rerunning its gate.
 
@@ -25,7 +25,7 @@ capability:
 
 - stable capability ID;
 - route/page and user story;
-- prior Streamlit source location;
+- prior React SPA source location;
 - React owner and central API;
 - computation owner;
 - status: `NOT_STARTED`, `SCAFFOLD`, `IMPLEMENTED`, `VERIFIED`, `QUALIFIED`, or
@@ -49,7 +49,7 @@ Update root and nested `AGENTS.md`, `openfdd_agent_spec`, frontend README,
 service archive docs, cookbook product split, and external-agent docs to agree:
 
 - React is the only shipping product UI;
-- Streamlit is a frozen oracle/archive and no image named as the product UI is
+- React SPA is a frozen oracle/archive and no image named as the product UI is
   published from it;
 - Rust central and DataFusion own production behavior;
 - `crates/openfdd_contracts` exists and its actual scope is stated;
@@ -61,7 +61,7 @@ Add a terminology/authority consistency check to CI.
 ### Gate P1-G0
 
 - The ledger validator passes.
-- Every current route and prior Streamlit workflow is represented.
+- Every current route and prior React SPA workflow is represented.
 - Contradictory UI/runtime claims are removed from live docs.
 - Static grep plus a human review finds no “Phase complete” claim unsupported by
   evidence links.
@@ -84,7 +84,7 @@ same-origin `/api` to central. Keep React and central independently testable.
 ### PR P1-M1-B: publish the actual React image
 
 - Add `openfdd-web` to the main GHCR build/tag/digest workflow.
-- Remove the archived Streamlit image from the supported stack publication, or
+- Remove the archived React SPA image from the supported stack publication, or
   rename/tag it unmistakably as an unsupported oracle image in a separate
   manual workflow.
 - Make compose defaults reference images the workflow actually publishes.
@@ -103,7 +103,7 @@ and API transcripts.
 - Published React image exists at SHA and release tags.
 - A single documented command starts the supported stack.
 - `docker exec`/image inspection proves no Python runtime in web or central.
-- Streamlit is absent from the supported running topology.
+- React SPA is absent from the supported running topology.
 - Clean-host evidence is reproducible in CI or a controlled qualification job.
 
 ## P1-M2 — Frontend engineering baseline
@@ -153,7 +153,7 @@ No production workflow silently substitutes fixtures.
 
 ## P1-M3 — Close visual and interaction parity honestly
 
-### PR P1-M3-A: refresh the Streamlit inventory
+### PR P1-M3-A: refresh the React SPA inventory
 
 Record pages, controls, defaults, session state, conditional branches,
 downloads, charts, tables, alerts, and representative states. Capture the
@@ -245,11 +245,11 @@ Run the full matrix in [TEST_RELEASE_AND_ACCEPTANCE.md](TEST_RELEASE_AND_ACCEPTA
 unit, contract, differential, browser, visual, accessibility, security,
 performance, container, clean-host, upgrade, backup/restore, and rollback.
 
-### PR P1-M5-B: Streamlit retirement closure
+### PR P1-M5-B: React SPA retirement closure
 
 After the evidence-retention window:
 
-- remove Streamlit from supported workflows, release images, default compose,
+- remove React SPA from supported workflows, release images, default compose,
   CI boot smokes, and live docs;
 - retain a source snapshot or screenshots/golden fixtures in an archive if
   licensing and maintenance permit;

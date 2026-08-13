@@ -68,12 +68,12 @@ def _check_readme(errors: list[str]) -> None:
         )
     if "React" not in text and "openfdd-web" not in text:
         errors.append("README.md must identify React (openfdd-web) as the operator UI")
-    if "Streamlit" in text and "not Streamlit" not in text and "Streamlit product removed" not in text:
+    if "React SPA" in text and "not legacy UI" not in text and "React product removed" not in text:
         # Allow explicit negation / archive notes only.
-        if re.search(r"(?i)production operator UI is \*\*Streamlit\*\*", text) or re.search(
-            r"(?i)Streamlit UI for CSV", text
+        if re.search(r"(?i)production operator UI is \*\*React SPA\*\*", text) or re.search(
+            r"(?i)React SPA for CSV", text
         ):
-            errors.append("README.md must not claim Streamlit as the production operator UI")
+            errors.append("README.md must not claim React as the production operator UI")
     if "GHCR" not in text and "ghcr.io" not in text:
         errors.append("README.md must mention GHCR stack for production DataFusion FDD")
 

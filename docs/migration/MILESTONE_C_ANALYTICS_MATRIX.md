@@ -29,7 +29,7 @@ Oracle pandas paths in `open_fdd.analytics` / Vibe 19 remain for parity
 | `try_register_history` → `fdd_sql::register_parquet_tree` | Live |
 | Runtime without inline `samples` | Tries DF historian path first (`handle_async`); Δt when `equipment_id` + `timestamp_utc` + `fan_status`/`fan_cmd` exist; else count probe + warning |
 | Inline `samples` present | Still `central-analytics-v1` Δt integration |
-| Streamlit Overview runtime | Central only; pandas weekly only if `OPENFDD_ANALYTICS_ORACLE=1` |
+| React Overview runtime | Central only; pandas weekly only if `OPENFDD_ANALYTICS_ORACLE=1` |
 
 ## Families
 
@@ -39,7 +39,7 @@ Oracle pandas paths in `open_fdd.analytics` / Vibe 19 remain for parity
 | Sensor health | `sensor_health_matrix` | `POST /api/analytics/sensor-health` | `sensor-health-v1` | **Minimal compute** (coverage, flatline, missingness, min/max/mean) | Unit tests in `sensor_health.rs` | Pending | — |
 | Schedule / comfort | occupancy helpers | `POST /api/analytics/schedule` | `schedule-v1` | **Minimal compute** (occupied hours + after-hours fan hours) | Unit tests in `schedule.rs` | Pending | — |
 | Mechanical cooling | `mech_cooling_*` | `POST /api/analytics/mechanical-cooling` | `mechanical-cooling-v1` | **Minimal compute** (evidence hierarchy; pump/valve ≠ compressor) | Unit tests in `mechanical_cooling.rs` | Pending | — |
-| Economizer diagnostics | `economizer_free_cooling_diagnostics` | `POST /api/analytics/economizer` | `economizer-diagnostics-v1` | **Compute live** (fan-on, ΔT gate, OA frac, MAT resid; inline `series`) | Unit tests in `economizer.rs` | Partial Streamlit wire (no silent pandas) | After cutover |
+| Economizer diagnostics | `economizer_free_cooling_diagnostics` | `POST /api/analytics/economizer` | `economizer-diagnostics-v1` | **Compute live** (fan-on, ΔT gate, OA frac, MAT resid; inline `series`) | Unit tests in `economizer.rs` | Partial React wire (no silent pandas) | After cutover |
 | RCx AHU | `rcx_plots` AHU presets | `POST /api/analytics/rcx/ahu` | `rcx-ahu-v1` | **Minimal compute** (sat_sp / duct_static_sp coverage stub) | Unit tests in `rcx.rs` | Pending | — |
 | RCx VAV | zone comfort / VAV presets | `POST /api/analytics/rcx/vav` | `rcx-vav-v1` | **Minimal compute** (zone_temp vs setpoint ranking) | Unit tests in `rcx.rs` | Pending | — |
 | Metering | `app/metering.py` | `POST /api/analytics/metering` | `metering-v1` | **Minimal compute** (monthly kWh sum) | Unit tests in `metering.rs` | Pending | — |

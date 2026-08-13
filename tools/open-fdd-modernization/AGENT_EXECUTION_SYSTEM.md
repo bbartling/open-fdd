@@ -12,10 +12,9 @@ and never overrides, the nearest repository `AGENTS.md`.
 2. Read every applicable `AGENTS.md` from root to the files in scope, including
    `openfdd_agent_spec/AGENTS.md` and `tools/open-fdd-modernization/AGENTS.md`.
 3. Read [`AGENT_SKILL_BRIDGE.md`](AGENT_SKILL_BRIDGE.md) and load the matching
-   skills — for any UI port, **read
-   [`skills/streamlit-to-react/SKILL.md`](skills/streamlit-to-react/SKILL.md)**
-   (and Open-FDD wrapper
-   `openfdd_agent_spec/skills/openfdd-streamlit-to-react/SKILL.md`) before editing.
+   skills — for any UI work, **read
+   [`openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md`](../../openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md)**
+   before editing.
 4. Read the modernization `README.md`, current phase, test strategy, and this file.
 5. Read the latest ledgers under `docs/migration/react-rust/`:
    - `DECISIONS.md`;
@@ -30,7 +29,7 @@ and never overrides, the nearest repository `AGENTS.md`.
 8. Select exactly one bounded milestone/PR objective (`P1-M?-??`).
 
 Never begin by rewriting architecture from memory.
-Never skip the streamlit-to-react skill for shell/widget/parity/slice UI work.
+Never skip the openfdd-react-spa skill for shell/widget/product UI work.
 
 ## Authority and safety
 
@@ -90,7 +89,7 @@ Output: scenario entry in capability matrix plus evidence locations.
 
 Trace:
 
-- Streamlit render functions and session keys;
+- React render functions and session keys;
 - Python helpers and imports;
 - current API routes;
 - Rust modules/crates;

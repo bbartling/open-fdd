@@ -74,7 +74,7 @@ if [[ "$code" == "200" || "$code" == "301" || "$code" == "302" ]]; then
 elif [[ "$code" == "000" ]]; then
   bad "SPA $UI_BASE unreachable (HTTP 000)"
 else
-  bad "SPA $UI_BASE → HTTP $code (expect React web, not Streamlit)"
+  bad "SPA $UI_BASE → HTTP $code (expect React web, not React)"
 fi
 
 # Container health (compose project openfdd-react)
@@ -96,9 +96,9 @@ if docker compose "${CF[@]}" ps --format json 2>/dev/null | head -1 | grep -q .;
   done < <(docker compose "${CF[@]}" ps --format json 2>/dev/null || true)
 fi
 
-# Must not require Streamlit ui container
+# Must not require React ui container
 if docker ps --format '{{.Names}}' | grep -qiE 'openfdd-.*-ui'; then
-  skip "Streamlit ui container present (legacy profile) — product path is React web"
+  skip "React ui container present (legacy profile) — product path is React web"
 fi
 
 summary

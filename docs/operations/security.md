@@ -8,7 +8,7 @@ nav_order: 11
 
 ## Deployment posture
 
-Open-FDD is **local-first** for LAN, VPN, or OT networks. Central binds the API on **:8080** and the `openfdd-ui` Streamlit container serves the engineering UI on **:3000**.
+Open-FDD is **local-first** for LAN, VPN, or OT networks. Central binds the API on **:8080** and the `openfdd-web` React container serves the engineering UI on **:3000**.
 
 {: .warning }
 Do not expose the central API directly on the public internet.
@@ -16,7 +16,7 @@ Do not expose the central API directly on the public internet.
 ## Caddy edge (optional)
 
 Optional compose overlay `docker/compose.caddy.yml` puts **Caddy on :80** so
-`http://<machine-ip>/` serves the Streamlit UI (and `/api*` → central). Enable with:
+`http://<machine-ip>/` serves the React SPA (and `/api*` → central). Enable with:
 
 ```bash
 OPENFDD_CADDY=1 ./scripts/openfdd_stack_up.sh standalone
@@ -36,7 +36,7 @@ central to loopback: `OPENFDD_CENTRAL_BIND=127.0.0.1`. Use
 
 ## TLS
 
-The `openfdd-ui` Streamlit app talks to central’s REST API (`:8080`). For HTTPS
+The `openfdd-web` React app talks to central’s REST API (`:8080`). For HTTPS
 on the LAN edge, use the Caddy TLS Caddyfile (above) or terminate TLS on your
 ingress. MQTT between fieldbus edges and central is always MQTTS (8883) using
 the per-site provisioning kits.

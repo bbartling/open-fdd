@@ -74,20 +74,20 @@
 - Agent law: AGENTS.md + React skill — product UI treated as internet-facing;
   ops handoff only in docs/scripts, never SPA.
 
-## 2026-08-04 — Streamlit delete + WattLab relocate (cutover)
+## 2026-08-04 — React delete + WattLab relocate (cutover)
 
-- Relocated cookbook WattLab exporter → `tools/wattlab_export/`; central shells it (no `services/ui`).
-- Deleted `services/ui` + `services/overview_oracle`; compose/CI assert React-only + ui absent.
-- Stopped `openfdd-ui` GHCR publish in stack + release workflows.
+- Relocated cookbook WattLab exporter → `tools/wattlab_export/`; central shells it (no `frontend/web`).
+- Deleted `frontend/web` + `services/overview_oracle`; compose/CI assert React-only + ui absent.
+- Stopped `openfdd-web` GHCR publish in stack + release workflows.
 - Overview A/B: weekly plant bins, mech OAT bins, `/api/analytics/bas-vs-web-oat`.
 
 ## 2026-08-04 — Turnkey Rust cutover + agent_spec sync
 
-- Locked product path: React + central DataFusion only; Overview via `/api/analytics/*` + client Plotly (no overview-oracle / Streamlit product).
+- Locked product path: React + central DataFusion only; Overview via `/api/analytics/*` + client Plotly (no overview-oracle / React product).
 - In progress on #663 tip: runtime weekly plant bins, mech OAT bins, BAS-vs-web route; React `centralOverview.ts` wiring.
-- Updated `openfdd_agent_spec` (AGENTS/ARCHITECTURE/CONTAINER_AGENT/ownership/skills) so Streamlit is **cutover-delete**, not archived product UI.
+- Updated `openfdd_agent_spec` (AGENTS/ARCHITECTURE/CONTAINER_AGENT/ownership/skills) so React is **cutover-delete**, not archived product UI.
 - Plan: keep `openfdd_agent_spec/` current on every cutover PR (see turnkey plan `agent-spec` todo).
-- Still pending: WattLab relocate → delete `services/ui` + overview_oracle; stop `openfdd-ui` GHCR; bensbench tip pull.
+- Still pending: WattLab relocate → delete `frontend/web` + overview_oracle; stop `openfdd-web` GHCR; bensbench tip pull.
 
 ## 2026-08-02 — P1-M2-A ESLint + Playwright
 
@@ -99,7 +99,7 @@
 ## 2026-08-02 — P1-G0 soak + P1-M1 openfdd-web GHCR
 
 - P1-G0 soak: `reports/nightly-ot-bench_20260802T141626Z/` — gates **14/15 PASS**; suite FAIL on OT/SPA/MCP (honest).
-- P1-M1: hardened `frontend/web` (npm ci, nginx-unprivileged :8080, CSP/cache headers, version.json); GHCR publishes `openfdd-web`; Streamlit UI tagged archive-oracle.
+- P1-M1: hardened `frontend/web` (npm ci, nginx-unprivileged :8080, CSP/cache headers, version.json); GHCR publishes `openfdd-web`; React SPA tagged archive-oracle.
 - Smoke: `scripts/release/smoke_react_web_image.sh`.
 
 Newest first. Append after non-trivial agent work.
@@ -117,8 +117,8 @@ Newest first. Append after non-trivial agent work.
 
 ## 2026-08-01 — Phase 2 exit + Phase 3 readiness (agent_spec)
 
-- Modernization Phase 1+2 exits approved; React sole product UI; Streamlit archived.
-- Updated AGENTS/ARCHITECTURE/BUILD_CHECKPOINTS + `openfdd-streamlit-to-react` for post-P2 truth.
+- Modernization Phase 1+2 exits approved; React sole product UI; DONE.
+- Updated AGENTS/ARCHITECTURE/BUILD_CHECKPOINTS + `openfdd-react-spa` for post-P2 truth.
 - Phase 3 (edge/live) remains outlook-only — `PHASE_3_READINESS.md`; no BACnet/MQTT work.
 - Milestone A Phase 2/3 checkboxes unchanged (different program).
 
@@ -126,8 +126,8 @@ Newest first. Append after non-trivial agent work.
 
 - Added `tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md` linking agent_spec ↔ modernization.
 - Rewrote modernization `AGENTS.md` for Open-FDD (Rust/central; no FastAPI template).
-- Added `openfdd_agent_spec/skills/openfdd-streamlit-to-react` wrapper + Cursor rule.
-- Prompt 0 / AGENT_EXECUTION_SYSTEM require streamlit-to-react before UI edits.
+- Added `openfdd_agent_spec/skills/openfdd-react-spa` wrapper + Cursor rule.
+- Prompt 0 / AGENT_EXECUTION_SYSTEM require openfdd-react-spa before UI edits.
 - BUILD_CHECKPOINTS Phase 1 status refreshed through M2 / M3 partial.
 
 ## 2026-07-31 — Phase 1 pause (M1 WIP on branch)
@@ -221,7 +221,7 @@ Newest first. Append after non-trivial agent work.
 
 - Playground #59: vibe19 runner/analytics → PyPI shims; pin `>=4.1.1`; vibe20
   workspace_tools `pick_best_twin_run` + `agent_build_ecm_packages`.
-- open-fdd #580: `services/ui` runner/analytics shims; Streamlit docs honesty.
+- open-fdd #580: `frontend/web` runner/analytics shims; React docs honesty.
 - GHCR: vibe19/vibe20 `:develop` green; open-fdd stack `:nightly` matches
   `sha-f5207f6` (post-#580); MCP GHCR green.
 - Prior: PyPI 4.1.0/4.1.1; playground #55–#58; open-fdd #578/#579; eight vibe20

@@ -29,10 +29,10 @@ describe("cutoverApi", () => {
   it("puts generation while production default remains flipped", async () => {
     vi.mocked(apiFetch).mockResolvedValue({
       ok: true,
-      generation: "streamlit",
+      generation: "react",
       production_default_flipped: true,
     });
-    const out = await setUiGeneration("streamlit", "rollback cohort");
+    const out = await setUiGeneration("react", "cohort pin");
     expect(apiFetch).toHaveBeenCalledWith(
       "/api/ui/generation",
       expect.objectContaining({ method: "PUT" }),

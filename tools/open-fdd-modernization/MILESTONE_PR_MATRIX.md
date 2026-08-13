@@ -37,11 +37,11 @@ first vertical slice must integrate their approved versions.
 | P1-M0-02 | Capability, Python exit, API, decision, parity, and session ledgers | `docs/migration/react-rust/` | 100% discovered entry-point coverage | M0-01 |
 | P1-M1-01 | Deterministic fixture catalog | test fixtures/generators | hashes, schema, happy/error/boundary coverage | M0 |
 | P1-M1-02 | Normalized frozen Python oracle export | oracle-only test tooling | three byte-stable normalized runs | M1-01 |
-| P1-M1-03 | Streamlit interaction and screenshot baseline | UI e2e/reference evidence | scenario manifests, desktop/narrow/error states | M1-01 |
+| P1-M1-03 | UI interaction and screenshot baseline | UI e2e/reference evidence | scenario manifests, desktop/narrow/error states | M1-01 |
 | P1-M2-01 | Cross-route Rust contract conventions | contracts/central/types | compatibility and error/auth/state tests | M0 |
 | P1-M2-02 | Strict React project and delivery shell | new frontend/web build | lint/type/unit/build/container smoke | M0-01, M2-01 |
 | P1-M2-03 | Async operations substrate | central/domain/client | state machine, cancellation, restart | M2-01 |
-| P1-M3-01 | Streamlit-like frame/tokens | React/CSS | geometry and controlled visual diffs | M1-03, M2-02 |
+| P1-M3-01 | product frame/tokens | React/CSS | geometry and controlled visual diffs | M1-03, M2-02 |
 | P1-M3-02 | Accessible parity widget primitives | React components | component/keyboard/a11y/visual states | M3-01 |
 | P1-M3-03 | Routing and explicit session-state translation | React router/query/state | refresh/back/deep-link tests | M2, M3-02 |
 | P1-M4-01 | React durable Jobs | React + central jobs client | CRUD/revision/reload/browser tests | M2, M3 |
@@ -79,7 +79,7 @@ the entire M5 category.
 | P2-M4-01 | React default route | configuration/docs | pre/post/rollback smoke | 100% canary approval |
 | P2-M4-02 | Fallback observation closeout | evidence/docs | fallback reasons and healthy window | M4-01 |
 | P2-M5-01 | Delete leaf Python production twins | Python/Rust wiring | call-site/full regression/no-Python | M4-02 |
-| P2-M5-02 | Delete Streamlit product | `services/ui`, image/scripts | browser/container/upgrade/SBOM | M5-01 |
+| P2-M5-02 | Delete React product | `frontend/web`, image/scripts | browser/container/upgrade/SBOM | M5-01 |
 | P2-M5-03 | Apply root oracle/package decision | `open_fdd`, packaging | explicit human decision + consumer tests | M5-02 |
 | P2-M5-04 | CI/compose/release/docs cleanup | workflows/containers/docs | clean deployment and link/policy scans | M5-02/03 |
 | P2-M6-01 | Final no-Python qualification | all/evidence | immutable clean-host and upgrade matrix | all P2 |

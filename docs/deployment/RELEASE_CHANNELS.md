@@ -17,7 +17,7 @@ Open-FDD uses separate channels for automated nightly builds and manual promoted
 
 ```
 ghcr.io/bbartling/openfdd-central
-ghcr.io/bbartling/openfdd-ui
+ghcr.io/bbartling/openfdd-web
 ghcr.io/bbartling/openfdd-fieldbus
 ghcr.io/bbartling/openfdd-mqtt
 ghcr.io/bbartling/openfdd-mcp
@@ -30,7 +30,7 @@ ghcr.io/bbartling/openfdd-mcp
 The container stack:
 
 - `openfdd-central` — HTTP API at `/api/*` and the DataFusion FDD engine
-- `openfdd-ui` — Streamlit engineering UI (vibe19 + WattLab export), talks to central REST
+- `openfdd-web` — React engineering UI (vibe19 + WattLab export), talks to central REST
 - `openfdd-fieldbus` — BACnet/IP poller publishing over MQTTS
 - `openfdd-mqtt` — Mosquitto broker
 - `openfdd-mcp` — slim Rust MCP server

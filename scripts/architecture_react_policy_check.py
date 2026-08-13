@@ -2,10 +2,11 @@
 """Phase 1 architecture policy gates (P1-M0-01).
 
 1. Reject production React/TS clients that hardcode Python service bases
-   (FastAPI/uvicorn/Streamlit ports or http://...:8501 style UI backends).
-2. Reject pandas / Streamlit runtime dependencies in new production frontend
+   (FastAPI/uvicorn legacy UI ports or http://...:8501 style backends).
+2. Reject pandas / legacy UI runtime dependencies in new production frontend
    package manifests (frontend/, web/, apps/web/).
 3. Require ADR-001 and migration README to exist once modernization has started.
+4. Forbid reintroduction of removed product UI paths (openfdd-ui, services/ui, _stcore).
 """
 
 from __future__ import annotations
@@ -20,7 +21,6 @@ ROOT = Path(__file__).resolve().parents[1]
 ADR = ROOT / "docs" / "architecture" / "adr-001-react-rust-modernization.md"
 MIG_README = ROOT / "docs" / "migration" / "react-rust" / "README.md"
 
-# Production-ish frontend roots that may appear during Phase 1+.
 FRONTEND_ROOTS = (
     ROOT / "frontend",
     ROOT / "web",
@@ -28,7 +28,6 @@ FRONTEND_ROOTS = (
     ROOT / "services" / "web",
 )
 
-# Patterns that indicate a browser client aimed at a Python UI/API process.
 FORBIDDEN_CLIENT_PATTERNS = (
     re.compile(r"localhost:8501", re.I),
     re.compile(r"127\.0\.0\.1:8501", re.I),
@@ -40,13 +39,10 @@ FORBIDDEN_CLIENT_PATTERNS = (
     re.compile(r"OPENFDD_PYTHON_API", re.I),
     re.compile(r"VITE_.*PYTHON", re.I),
     re.compile(r"REACT_APP_.*PYTHON", re.I),
-)
-
-CLIENT_GLOBS = (
-    "**/*.{ts,tsx,js,jsx,mjs,cjs}",
-    "**/vite.config.*",
-    "**/next.config.*",
-    "**/.env*",
+    re.compile(r"openfdd-ui", re.I),
+    re.compile(r"services/ui", re.I),
+    re.compile(r"_stcore", re.I),
+    re.compile(r"import\s+streamlit", re.I),
 )
 
 FORBIDDEN_PKG_DEPS = frozenset(
@@ -60,7 +56,6 @@ FORBIDDEN_PKG_DEPS = frozenset(
     }
 )
 
-# Files under frontend that are historical / retired notes — skip scan noise.
 SKIP_NAME_PARTS = (
     "/node_modules/",
     "/dist/",
@@ -105,7 +100,6 @@ def check_adr(errors: list[str]) -> None:
         "central",
         "DataFusion",
         "FastAPI",
-        "Streamlit",
         "Accepted",
     ):
         if needle not in text:
@@ -122,7 +116,6 @@ def check_react_clients(errors: list[str]) -> None:
             "package.json",
             "package-lock.json",
         }:
-            # Only scan package.json for deps; skip other JSON.
             if path.name != "package.json":
                 continue
         try:
@@ -148,39 +141,34 @@ def check_react_clients(errors: list[str]) -> None:
                         "(production frontend; use Rust/DataFusion)"
                     )
             continue
-        # Skip retired README-only frontend without sources
         if path.name == "README.md":
             continue
         for pat in FORBIDDEN_CLIENT_PATTERNS:
             if pat.search(text):
-                # Allow comments that say "do not use fastapi"
                 line_hits = [
                     ln
                     for ln in text.splitlines()
                     if pat.search(ln)
-                    and not re.search(r"\b(not|never|reject|forbid|ban|no)\b", ln, re.I)
+                    and not re.search(r"\b(not|never|reject|forbid|ban|no|forbidden)\b", ln, re.I)
                 ]
                 if line_hits:
                     errors.append(
-                        f"{path.relative_to(ROOT)} appears to point a client at a "
-                        f"Python service ({pat.pattern})"
+                        f"{path.relative_to(ROOT)} appears to reference a forbidden "
+                        f"product UI marker ({pat.pattern})"
                     )
                     break
 
 
 def check_instruction_alignment(errors: list[str]) -> None:
-    """Ensure key instruction files authorize React; Streamlit product tree gone."""
     ui_root = ROOT / "services" / "ui"
     if ui_root.exists():
-        errors.append(
-            "services/ui must not exist (Streamlit product removed; use frontend/web)"
-        )
+        errors.append("services/ui must not exist (use frontend/web as sole product UI)")
     frontend_readme = ROOT / "frontend" / "README.md"
     if frontend_readme.is_file():
         text = frontend_readme.read_text(encoding="utf-8")
         if "Do not recreate a React UI here" in text and "Phase 1" not in text:
             errors.append(
-                "frontend/README.md must be updated for Phase 1 React authorization"
+                "frontend/README.md must authorize React as the product UI"
             )
 
 

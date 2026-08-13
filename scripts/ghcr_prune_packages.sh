@@ -53,8 +53,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ "$ALL_IMAGES" -eq 1 ]] && PACKAGES=(openfdd-central openfdd-ui openfdd-fieldbus openfdd-mqtt openfdd-mcp)
-[[ ${#PACKAGES[@]} -eq 0 ]] && PACKAGES=(openfdd-central openfdd-ui openfdd-fieldbus openfdd-mqtt openfdd-mcp)
+[[ "$ALL_IMAGES" -eq 1 ]] && PACKAGES=(openfdd-central openfdd-web openfdd-fieldbus openfdd-mqtt openfdd-mcp)
+[[ ${#PACKAGES[@]} -eq 0 ]] && PACKAGES=(openfdd-central openfdd-web openfdd-fieldbus openfdd-mqtt openfdd-mcp)
 
 load_protected() {
   if [[ -n "$PROTECTED_FILE" && -f "$PROTECTED_FILE" ]]; then

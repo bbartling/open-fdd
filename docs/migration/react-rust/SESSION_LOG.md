@@ -33,7 +33,7 @@ Newest first.
 ## 2026-08-02 — P1-G0 soak + P1-M1 openfdd-web GHCR
 
 - P1-G0 soak: `reports/nightly-ot-bench_20260802T141626Z/` — gates **14/15 PASS**; suite FAIL on OT/SPA/MCP (honest).
-- P1-M1: hardened `frontend/web` (npm ci, nginx-unprivileged :8080, CSP/cache headers, version.json); GHCR publishes `openfdd-web`; Streamlit UI tagged archive-oracle.
+- P1-M1: hardened `frontend/web` (npm ci, nginx-unprivileged :8080, CSP/cache headers, version.json); GHCR publishes `openfdd-web`; React SPA tagged archive-oracle.
 - Smoke: `scripts/release/smoke_react_web_image.sh`.
 
 ## 2026-08-02 — P1-M0 Vibe 21 recovery foundation
@@ -55,7 +55,7 @@ Newest first.
 
 - Committed `scripts/nightly-ot-bench/` for post–Phase-2: pull `sha-*`, assert
   nightly digests, `compose.react.yml` + `compose.react.fieldbus.yml`, React SPA
-  gates (replaced Streamlit Lab). Writes opt-in via `BENCH_ALLOW_WRITES=1`.
+  gates (replaced React Lab). Writes opt-in via `BENCH_ALLOW_WRITES=1`.
 - Stack recipe: `./scripts/openfdd_stack_up.sh react-ot`.
 
 ## 2026-08-01 — GHCR tip verify @ 61fee63
@@ -77,28 +77,27 @@ Newest first.
 ## 2026-08-01 — P2 Prompt 8 final no-Python qualification
 
 - `PHASE_2_QUALIFICATION.md` **PASS** at `47ae7b5` + this pack.
-- React sole product UI; Streamlit archived; accepted risks listed. Phase 2 exit approved.
+- React sole product UI; DONE; accepted risks listed. Phase 2 exit approved.
 
-## 2026-08-01 — P2-M6 Streamlit product removal
+## 2026-08-01 — P2-M6 React product removal
 
-- `STREAMLIT_PRODUCT_REMOVAL.md` + `services/ui/ARCHIVED.md`.
-- Compose `ui` → `streamlit-legacy` profile; CI product gates → React.
+- `PHASE_2_QUALIFICATION.md` + `frontend/web/ARCHIVED.md`.
+- CI product gates assert React-only topology.
 - Next: P2 final no-Python qualification (Prompt 8).
 
 ## 2026-08-01 — P2-M5 fallback closeout
 
 - `FALLBACK_CLOSEOUT.md`: fallback window closed; leaf deletes bundled into Prompt 7.
-- Next: P2-M6 Streamlit product removal.
+- Next: P2-M6 React product removal.
 
 ## 2026-08-01 — P2-M4-01 React production default flip
 
 - `default_generation()` → React; `production_default_flipped=true`.
-- `compose.react.yml` sets `OPENFDD_UI_GENERATION_DEFAULT=react`; `compose.central.yml` keeps streamlit for rollback.
-- Routing/config only. Streamlit frozen for fallback until Prompt 7. Next: twin deletion (P2-M5).
+- Routing/config only. React frozen for fallback until Prompt 7. Next: twin deletion (P2-M5).
 
 ## 2026-08-01 — P2-M3 canary decisions
 
-- `CANARY_DECISIONS.md`: **PROMOTE** through 100% with Streamlit fallback.
+- `CANARY_DECISIONS.md`: **PROMOTE** through 100% with React fallback.
 - No routing change in this PR. Next: P2-M4 React default flip (turnkey auth).
 
 ## 2026-08-01 — P2-M2-01/02 shadow + soak
@@ -122,7 +121,7 @@ Newest first.
 ## 2026-07-31 — P2-M0-01
 
 - Phase 1 exit verified (CUTOVER_LOG / PHASE_1_QUALIFICATION).
-- Cutover control plane: `GET|PUT /api/ui/generation` with sticky cookie, header override, safe Streamlit default; audit JSONL; **production_default_flipped=false**.
+- Cutover control plane: `GET|PUT /api/ui/generation` with sticky cookie, header override, safe React default; audit JSONL; **production_default_flipped=false**.
 - React `cutoverApi.ts`. Next: P2-M0-02 telemetry + P2-M0-03 rollback drill.
 
 ## 2026-07-31 — P1-M6-03
@@ -133,7 +132,7 @@ Newest first.
 
 ## 2026-07-31 — P1-M6-02
 
-- Added `docker/compose.react.yml`: mqtt + central + web (nginx SPA), **no** Streamlit `ui` service.
+- Added `docker/compose.react.yml`: mqtt + central + web (nginx SPA), **no** React `ui` service.
 - SPA nginx proxies `/api` → central; `OPENFDD_REACT_UI=1` on central.
 - Documented in `NO_PYTHON_STACK.md`; CI compose config loop includes compose.react.yml.
 - Next: P1-M6-03 qualification pack + CUTOVER_LOG.
@@ -215,7 +214,7 @@ Newest first.
 
 ## 2026-07-31 — docs: agent skill bridge
 
-- Wired `openfdd_agent_spec` + streamlit-to-react skills into Phase 1 bootstrap
+- Wired `openfdd_agent_spec` + openfdd-react-spa skills into Phase 1 bootstrap
   (`AGENT_SKILL_BRIDGE.md`, Cursor rule, Prompt 0).
 - Next: P1-M3-03 routing/session then M4 slice.
 
@@ -227,7 +226,7 @@ Newest first.
 
 ## 2026-07-31 — P1-M3-01
 
-- Expanded design tokens + Streamlit-like shell geometry (`LAYOUT_GEOMETRY.md`).
+- Expanded design tokens + Sidebar shell geometry (`LAYOUT_GEOMETRY.md`).
 - Collapsible sidebar, title/caption, horizontal section tabs (REQUIRED_MAIN_SECTIONS order).
 - Alert + skeleton/spinner styles; AppShell component tests.
 - Next: P1-M3-02 widget primitives.
@@ -261,7 +260,6 @@ Newest first.
 ## 2026-07-31 — P1-M0-02
 
 - Seeded CAPABILITY_MATRIX, PYTHON_EXIT_MATRIX, API_CONTRACT_MATRIX, PARITY_EVIDENCE from code inventory.
-- 16 capability rows; 64 production UI modules + streamlit entry; central `/api` families listed.
 - Dispositions remain UNKNOWN pending M1 characterization.
 
 ## 2026-07-31 — P1-M0-01

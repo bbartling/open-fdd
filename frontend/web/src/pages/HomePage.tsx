@@ -38,7 +38,7 @@ function readUnits(): "imperial" | "metric" {
   }
 }
 
-/** Streamlit-oracle Overview: empty hero OR populated analytics dashboard. */
+/** Overview: empty hero OR populated analytics dashboard. */
 export function HomePage() {
   const { query, setQuery } = useSessionQuery();
   const buildingId = query.siteId ?? "";
@@ -235,7 +235,7 @@ export function HomePage() {
         >
           <p>
             Controlled parity widgets for shell regression; primary Overview
-            matches Streamlit oracle hero + Sites sidebar.
+            matches product hero + Sites sidebar.
           </p>
         </Expander>
       </div>

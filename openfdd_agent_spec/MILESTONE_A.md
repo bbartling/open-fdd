@@ -41,7 +41,7 @@ blocker.
 
 ### Vibe 19
 
-Educational pandas rule/analytics oracle; Streamlit demo; CSV/mapping/weather/
+Educational pandas rule/analytics oracle; React demo; CSV/mapping/weather/
 reports/custom rules test bed; standalone GHCR demo. May keep pandas
 intentionally. Must not remain the canonical home of duplicated Open-FDD rule,
 analytics, reporting, schema, or generic engineering implementations once
@@ -185,7 +185,7 @@ nightly GHCR channel.
 **Still required:**
 
 - Full KEEP/SHIM/MOVE/DELETE matrix for significant modules.
-- Keep: Streamlit UX, custom `CUSTOM-*` loading, demos, prototype-only utils.
+- Keep: React UX, custom `CUSTOM-*` loading, demos, prototype-only utils.
 - Characterization + parity before any further deletes.
 - GHCR smoke after cutovers (sidebar version, package upload, rules, WattLab export).
 

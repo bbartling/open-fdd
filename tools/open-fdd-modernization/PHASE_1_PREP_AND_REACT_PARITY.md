@@ -4,12 +4,12 @@
 
 Build a production-capable React replacement behind a reversible routing flag
 while shifting all required runtime behavior onto Rust and DataFusion-owned
-contracts. Streamlit remains available only as the behavioral reference and
+contracts. React SPA remains available only as the behavioral reference and
 fallback during this phase. Python is frozen, characterized, and progressively
 removed from the new path.
 
 Phase 1 is complete when a user can execute the agreed end-to-end workflows in
-React with no Python process involved, even though the old Streamlit deployment
+React with no Python process involved, even though the old React SPA deployment
 still exists for comparison and rollback.
 
 ## Scope baseline
@@ -32,8 +32,8 @@ Inventory these current user-facing areas before assigning work:
 - WattLab dump/job-native handoff;
 - authentication, authorization, errors, empty states, and long-running work.
 
-The starting sources include `services/ui/streamlit_app.py`,
-`services/ui/app/`, `services/ui/docs/STREAMLIT_AGENT_SPEC.md`,
+The starting sources include `frontend/web`,
+`frontend/web`, `frontend/web`,
 `docs/migration/vibe19_parity_matrix.md`, `docs/web-app/`, and
 `docs/architecture/job-workspaces.md`. The inventory must be regenerated from
 code; historical matrices are evidence, not proof of current behavior.
@@ -72,7 +72,7 @@ Changes:
 - select the existing central Rust service as the browser backend;
 - establish DataFusion SQL as deterministic analytics/FDD authority;
 - state that no FastAPI compatibility backend will be introduced;
-- document the temporary Streamlit fallback and final deletion intent;
+- document the temporary React-only path and final deletion intent;
 - define browser delivery approach: static assets served by central or a
   separately deployable web container, with one stable `/api` origin contract;
 - document auth token/cookie, CSRF, CORS, CSP, and artifact-download direction;
@@ -83,12 +83,12 @@ Required tests:
 - docs link check;
 - architecture-policy test that rejects a production React import/client
   pointing at a Python service;
-- policy test that rejects pandas/Streamlit dependencies in new production
+- policy test that rejects pandas/React SPA dependencies in new production
   packages.
 
 Acceptance:
 
-- root `AGENTS.md`, `services/ui/AGENTS.md`, `frontend/README.md`,
+- root `AGENTS.md`, `frontend/web`, `frontend/README.md`,
   `docs/architecture/index.md`, and `docs/web-app/index.md` agree;
 - no existing safety rule for BACnet, secrets, destructive workspace actions,
   or DataFusion-first execution is weakened.
@@ -109,7 +109,7 @@ Each capability row must contain:
 ```text
 capability_id
 user scenario
-Streamlit/Python owner
+owner
 current API/storage owner
 target React route/component
 target Rust module/route
@@ -125,7 +125,7 @@ PR links
 
 Acceptance:
 
-- every callable Python module under `services/ui/app/` is represented;
+- every callable Python module under `frontend/web` is represented;
 - all `open_fdd/` production consumers are located with `rg`, imports, CLI
   entry points, workflow files, Dockerfiles, compose files, and subprocess
   calls—not merely directory names;
@@ -201,7 +201,7 @@ Reference JSON must:
 
 This exporter is an oracle tool, not a new production service.
 
-### PR P1-M1-03 — Streamlit interaction and screenshot baseline
+### PR P1-M1-03 — UI interaction and screenshot baseline
 
 For every in-scope scenario, capture:
 
@@ -224,7 +224,7 @@ unstable values and define permitted screenshot regions explicitly.
 - fixture parser coverage: every error class has a test;
 - UI scenario coverage: 100% of capability rows have at least one baseline
   screenshot or an explicit NONVISUAL classification;
-- zero unexplained network calls in captured Streamlit flows.
+- zero unexplained network calls in captured React SPA flows.
 
 ### Milestone gate
 
@@ -238,7 +238,7 @@ unstable values and define permitted screenshot regions explicitly.
 
 ### Goal
 
-Give React a stable, typed, observable Rust API without copying Streamlit’s
+Give React a stable, typed, observable Rust API without copying React SPA’s
 session-state architecture.
 
 ### PR P1-M2-01 — Contract conventions
@@ -291,7 +291,7 @@ Create a production React/TypeScript project with:
 - container/static delivery path.
 
 Do not import a large component library until a short evaluation proves it can
-match the Streamlit geometry and interaction requirements. Wrapping primitives
+match the React SPA geometry and interaction requirements. Wrapping primitives
 behind local components makes later library experiments reversible.
 
 ### PR P1-M2-03 — Async operation substrate
@@ -334,7 +334,7 @@ contract that can later support SSE/WebSocket.
 
 ### Goal
 
-Reproduce the recognizable Streamlit application frame before migrating deep
+Reproduce the recognizable React SPA application frame before migrating deep
 features.
 
 ### PR P1-M3-01 — Layout and design-token parity
@@ -343,7 +343,7 @@ Implement:
 
 - page max width and gutters;
 - top chrome and title/caption rhythm;
-- Streamlit-like sidebar width, padding, collapsed behavior, and sections;
+- product sidebar width, padding, collapsed behavior, and sections;
 - top-level tabs with exact order, labels, active indicator, and overflow;
 - cards, borders, radius, shadows, typography, muted text, and status colors;
 - responsive stacking behavior;
@@ -358,7 +358,7 @@ fixture, and state. Record numeric CSS measurements for critical geometry.
 Build local parity components for:
 
 - select/multiselect;
-- slider/range slider with Streamlit-equivalent keyboard behavior;
+- slider/range slider with React-equivalent keyboard behavior;
 - checkbox/radio/toggle;
 - file upload/drop target;
 - button and download button;
@@ -383,7 +383,7 @@ Every primitive must define:
 
 ### PR P1-M3-03 — Navigation and session semantics
 
-Map Streamlit rerun/session behavior to explicit React state:
+Map React SPA rerun/session behavior to explicit React state:
 
 - URL state for shareable page/tab/job/equipment selection;
 - server state through a query cache;
@@ -493,7 +493,7 @@ Implement:
 
 - the full slice works against Rust services and DataFusion;
 - artifacts are deterministic enough for semantic comparison;
-- Streamlit remains a selectable fallback, not a dependency.
+- React SPA remains a selectable fallback, not a dependency.
 
 ---
 
@@ -603,7 +603,7 @@ Tests:
 ### Milestone gate
 
 - every in-scope capability is DONE or has an approved defer decision;
-- no React screen calls an endpoint implemented only for Streamlit;
+- no React screen calls an endpoint implemented only for React SPA;
 - no deterministic analytics remains on the new path in pandas.
 
 ---
@@ -664,7 +664,7 @@ Run:
 - upload/load/soak tests;
 - restart/recovery;
 - upgrade from current persisted jobs;
-- rollback to Streamlit against unchanged data where supported.
+- rollback to React SPA against unchanged data where supported.
 
 Publish evidence with exact commit, image digest, fixture hashes, environment,
 commands, failures, waivers, and reviewer approvals.

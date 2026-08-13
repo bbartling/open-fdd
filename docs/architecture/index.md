@@ -8,7 +8,7 @@ permalink: /architecture/
 
 # Architecture
 
-Open-FDD is a **container stack** (central / Streamlit UI / fieldbus / mqtt / mcp) with Arrow historian, DataFusion SQL FDD, and Project Haystack semantic model.
+Open-FDD is a **container stack** (central / React SPA / fieldbus / mqtt / mcp) with Arrow historian, DataFusion SQL FDD, and Project Haystack semantic model.
 
 | Topic | Document |
 |-------|----------|
@@ -18,6 +18,6 @@ Open-FDD is a **container stack** (central / Streamlit UI / fieldbus / mqtt / mc
 | [Storage & DataFusion](storage-and-datafusion.html) | Feather historian and SQL rules |
 | [DataFusion-first](datafusion-first.html) | Pandas policy and production SQL rule |
 | [Job workspaces](job-workspaces.html) | Persistent analysis Jobs under `workspace/jobs/` |
-| [Analytics boundary](analytics-boundary.html) | Typed DF analytics vs Streamlit |
+| [Analytics boundary](analytics-boundary.html) | Typed DF analytics vs React |
 
 Modernization ledgers: [React / Rust migration](../migration/react-rust/).

@@ -18,7 +18,7 @@ description: >-
 | `open_fdd.reporting` | Portable reports |
 | Extras | `oracle`, `reporting`, `vibe19` |
 
-Not production FDD. Consumers: vibe19, `services/ui` lab paths, tests, notebooks.
+Not production FDD. Consumers: vibe19, `frontend/web` lab paths, tests, notebooks.
 
 ## Agent rules
 

@@ -16,7 +16,7 @@ nav_order: 20
 | Item | State |
 |------|-------|
 | Architecture decision | Accepted (ADR-001); Phase 2 cutover complete |
-| Streamlit product UI | **Archived** (`ARCHIVED.md`; `--profile streamlit-legacy`) |
+| Product UI | **React SPA** (`frontend/web` → `openfdd-web`) |
 | React SPA | **Sole production UI** (`compose.react.yml`; default generation React) |
 | Production Python exit | **Phase 2 exit APPROVED** (`PHASE_2_QUALIFICATION.md`) |
 | Phase 3 (edge/live) | **Outlook only** (`PHASE_3_READINESS.md` / `PHASE_3_EDGE_STREAMING_OUTLOOK.md`) |

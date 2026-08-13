@@ -9,7 +9,7 @@ interface AppShellProps {
   title: string;
   caption?: string;
   children: React.ReactNode;
-  /** Streamlit section id for top tab highlight */
+  /** Main section id for top tab highlight */
   activeSectionId?: string;
   /** When true, omit page H1 (hero supplies brand on Overview empty state). */
   hideHeader?: boolean;

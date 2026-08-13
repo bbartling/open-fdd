@@ -11,7 +11,7 @@ sequenceDiagram
   participant C as openfdd-central
   participant F as Feather historian
   participant R as DataFusion FDD
-  participant UI as openfdd-ui
+  participant UI as openfdd-web
 
   FB->>MQTT: telemetry envelope (QoS 1, mTLS)
   MQTT->>C: ingest subscriber

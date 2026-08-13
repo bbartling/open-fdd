@@ -1,7 +1,4 @@
-//! UI generation cutover control plane (P2-M0-01 / P2-M4-01).
-//!
-//! P2-M4: production default is React. Streamlit remains available via sticky
-//! cookie/header or `OPENFDD_UI_GENERATION_DEFAULT=streamlit` (rollback stack).
+//! UI generation status (React product UI).
 
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
@@ -15,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub const COOKIE_NAME: &str = "openfdd_ui_generation";
-pub const HEADER_NAME: &str = "x-openfdd-ui-generation";
+pub const HEADER_NAME: &str = "x-openfdd-web-generation";
 pub const ENV_DEFAULT: &str = "OPENFDD_UI_GENERATION_DEFAULT";
 
 static GEN_GETS: AtomicU64 = AtomicU64::new(0);
@@ -27,28 +24,22 @@ static DF_SKIPS: AtomicU64 = AtomicU64::new(0);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum UiGeneration {
-    Streamlit,
     React,
 }
 
 impl UiGeneration {
     pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Streamlit => "streamlit",
-            Self::React => "react",
-        }
+        "react"
     }
 
     pub fn parse(raw: &str) -> Option<Self> {
         match raw.trim().to_ascii_lowercase().as_str() {
-            "streamlit" | "st" => Some(Self::Streamlit),
             "react" | "spa" => Some(Self::React),
             _ => None,
         }
     }
 }
 
-/// Safe default when config is absent/invalid: React (P2-M4).
 pub fn default_generation() -> UiGeneration {
     match std::env::var(ENV_DEFAULT) {
         Ok(v) => UiGeneration::parse(&v).unwrap_or(UiGeneration::React),
@@ -56,7 +47,6 @@ pub fn default_generation() -> UiGeneration {
     }
 }
 
-/// True after the authorized P2-M4 production default flip.
 pub fn production_default_flipped() -> bool {
     true
 }
@@ -165,7 +155,7 @@ async fn put_generation(
             StatusCode::BAD_REQUEST,
             Json(json!({
                 "ok": false,
-                "error": "generation must be streamlit|react"
+                "error": "generation must be react"
             })),
         ));
     };
@@ -213,7 +203,7 @@ async fn migration_metrics() -> Json<Value> {
         "notes": [
             "Counters are process-local (reset on restart).",
             "Do not log tokens or sensitive payloads here.",
-            "Alert hooks: React uncaught <0.5%; core success not worse than Streamlit by >1pp (budgets in PHASE_2 doc)."
+            "Alert hooks: React uncaught error budgets in PHASE_2 doc."
         ]
     }))
 }
@@ -261,7 +251,7 @@ mod tests {
         headers.insert(HEADER_NAME, HeaderValue::from_static("react"));
         headers.insert(
             header::COOKIE,
-            HeaderValue::from_static("openfdd_ui_generation=streamlit"),
+            HeaderValue::from_static("openfdd_ui_generation=legacy"),
         );
         let (g, src) = resolve_generation(&headers);
         assert_eq!(g, UiGeneration::React);

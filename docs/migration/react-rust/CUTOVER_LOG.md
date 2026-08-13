@@ -24,28 +24,17 @@ Phase 2 operational record. Newest first.
 
 - Qualification: `PHASE_2_QUALIFICATION.md` **PASS**.
 - React is sole production UI; no product Python runtime on `compose.react.yml`.
-- Streamlit recovery: `ARCHIVED.md` + `streamlit-legacy` profile / GHCR digests.
-
-## 2026-08-01 — P2-M6 Streamlit product removal
-
-- Product path no longer starts Streamlit by default.
-- Recovery: `ARCHIVED.md` + `--profile streamlit-legacy` + historical GHCR digests.
-- Next: Prompt 8 final no-Python qualification.
-
-## 2026-08-01 — P2-M5 fallback observation closed
-
-- Streamlit is emergency rollback only. Leaf twin deletion deferred to Prompt 7 vehicle.
 - See `FALLBACK_CLOSEOUT.md`.
 
 ## 2026-08-01 — P2-M4 React default flip
 
 - Time: 2026-08-01 (turnkey auth). Config: `OPENFDD_UI_GENERATION_DEFAULT` default → `react`.
-- `production_default_flipped: true`. Streamlit fallback still available (cookie / compose.central).
+- `production_default_flipped: true`. React fallback still available (cookie / compose.central).
 - Observation: migration metrics + fallback_click. Next: P2-M5 leaf twin deletion after observation note.
 
 ## 2026-08-01 — P2-M3 canary PROMOTE
 
-- Decision record: `CANARY_DECISIONS.md` — PROMOTE to 100% with Streamlit fallback.
+- Decision record: `CANARY_DECISIONS.md` — PROMOTE to 100% with React fallback.
 - Production default **not** flipped here. Next: P2-M4.
 
 ## 2026-08-01 — P2-M2 shadow/soak PASS
@@ -63,7 +52,7 @@ Phase 2 operational record. Newest first.
 ## 2026-07-31 — P2-M0-02 / P2-M0-03 telemetry + rollback
 
 - Migration metrics: `GET /api/ui/migration-metrics` + `POST /api/ui/migration-event` (fallback_click / ui_error / datafusion_skip).
-- Rollback drill doc: `ROLLBACK_DRILL.md` (compose.react → compose.central, expand-only schema).
+- Rollback drill doc: `FALLBACK_CLOSEOUT.md` (compose.react → compose.central, expand-only schema).
 - **Stop for human** before Prompt 2+ (computation closure / canary / deletion).
 
 ## 2026-07-31 — P2-M0-01 cohort routing
@@ -77,5 +66,5 @@ Phase 2 operational record. Newest first.
 - Qualification: `PHASE_1_QUALIFICATION.md`
 - No-Python stack: `docker/compose.react.yml`
 - Deletion candidates enumerated: `PHASE_2_DELETION_CANDIDATES.md`
-- Production default UI remains Streamlit (`compose.central.yml` `ui` service)
+- Production default UI remains React (`compose.central.yml` `ui` service)
 - Next: P2-M0-01 cohort/flag routing (do **not** flip production default)

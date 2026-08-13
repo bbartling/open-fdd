@@ -5,7 +5,7 @@ Agents executing Open-FDD Phase 1 must treat **both** trees as law:
 | Tree | Role |
 | --- | --- |
 | [`openfdd_agent_spec/`](../../openfdd_agent_spec/) | Product/engineering OS: ownership, Milestone A/B/C skills, PR protocol, checkpoints |
-| [`tools/open-fdd-modernization/`](./) | React/Rust Phase 1–3 program: milestones, prompts, parity tests, **streamlit-to-react skill** |
+| [`tools/open-fdd-modernization/`](./) | React/Rust Phase 1–3 program: milestones, prompts, parity tests |
 | [`docs/migration/react-rust/`](../../docs/migration/react-rust/) | Durable ledgers updated in every Phase 1 PR |
 
 They are complementary, not alternatives. Milestone A skills still apply when a
@@ -16,9 +16,9 @@ Phase 1 PR touches SQL FDD, cookbooks, GHCR, ECM, or packaging.
 1. Root [`AGENTS.md`](../../AGENTS.md)
 2. [`openfdd_agent_spec/AGENTS.md`](../../openfdd_agent_spec/AGENTS.md)
 3. [`openfdd_agent_spec/PR_PROTOCOL.md`](../../openfdd_agent_spec/PR_PROTOCOL.md) (bounded PRs)
-4. [`AGENTS.md`](AGENTS.md) (this kit — Open-FDD Streamlit→React)
+4. [`AGENTS.md`](AGENTS.md) (this kit — Open-FDD React product UI)
 5. This bridge
-6. [`skills/streamlit-to-react/SKILL.md`](skills/streamlit-to-react/SKILL.md) **before any UI port**
+6. [`openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md`](../../openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md) **before any UI work**
 7. [`AGENT_EXECUTION_SYSTEM.md`](AGENT_EXECUTION_SYSTEM.md)
 8. Phase doc + ledgers for the selected `P1-M?-??`
 
@@ -26,8 +26,7 @@ Phase 1 PR touches SQL FDD, cookbooks, GHCR, ECM, or packaging.
 
 | Work | Skill |
 | --- | --- |
-| Any Streamlit→React port, widget/shell/parity UI | [`skills/streamlit-to-react/SKILL.md`](skills/streamlit-to-react/SKILL.md) (+ references) |
-| Same, from agent_spec skill index | [`openfdd_agent_spec/skills/openfdd-streamlit-to-react/SKILL.md`](../../openfdd_agent_spec/skills/openfdd-streamlit-to-react/SKILL.md) |
+| React SPA pages, shell, widgets, product UI | [`openfdd-react-spa`](../../openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md) |
 | Ownership / forbidden imports | [`openfdd-architecture`](../../openfdd_agent_spec/skills/openfdd-architecture/SKILL.md) |
 | DataFusion / `sql_rules/` / no pandas in central | [`openfdd-sql-fdd`](../../openfdd_agent_spec/skills/openfdd-sql-fdd/SKILL.md) |
 | Pandas oracle / PyPI extras | [`openfdd-pypi-oracle`](../../openfdd_agent_spec/skills/openfdd-pypi-oracle/SKILL.md) |
@@ -39,7 +38,7 @@ Phase 1 PR touches SQL FDD, cookbooks, GHCR, ECM, or packaging.
 
 ## Open-FDD override for generic FastAPI text
 
-The upstream streamlit-to-react skill mentions FastAPI as one possible backend.
+Some generic modernization docs mention FastAPI as one possible backend.
 For this repository:
 
 - **Backend = `services/central` (Rust).**
@@ -58,4 +57,4 @@ When Phase 1 milestone status changes, update **both**:
 ## Cursor rule
 
 Project rule: [`.cursor/rules/openfdd-phase1-react-parity.mdc`](../../.cursor/rules/openfdd-phase1-react-parity.mdc)
-auto-applies when editing React, Streamlit UI, migration ledgers, or this kit.
+auto-applies when editing React, migration ledgers, or this kit.

@@ -33,7 +33,7 @@ Statuses: `VERIFIED` | `PARTIALLY_VERIFIED` | `IMPLEMENTED_UNTESTED` | `NOT_IMPL
 | Reject path traversal / bad IDs | VERIFIED | `validate_job_id` + API GET bad id |
 | Unauthorized API (JWT on) | VERIFIED | API IT 401 when `OPENFDD_JWT_SECRET` set |
 | Missing/corrupt result artifacts | PARTIALLY_VERIFIED | malformed findings JSON → Invalid; deeper artifact suite deferred |
-| Streamlit when central down | VERIFIED | `test_jobs_central_client.py` FS fallback |
+| React when central down | VERIFIED | `test_jobs_central_client.py` FS fallback |
 | Run/result lineage | PARTIALLY_VERIFIED | `latest_run_id` + run.json; full artifact graph deferred |
 
 ## Policy locks (C0)

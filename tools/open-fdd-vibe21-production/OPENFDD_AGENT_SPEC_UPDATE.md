@@ -21,19 +21,19 @@ Nested instructions may specialize but never contradict a higher authority.
 
 ## Immediate corrections
 
-- `services/ui/AGENTS.md`: mark Streamlit archive/oracle-only; remove “current
+- `frontend/web`: mark React SPA archive/oracle-only; remove “current
   default product UI.”
-- `docs/agent/index.md`: replace Streamlit runtime/UI table with React web and
+- `docs/agent/index.md`: replace React SPA runtime/UI table with React web and
   Rust central; link current MCP catalog.
 - `frontend/web/README.md`: remove Phase 1 scaffold/default-off language after
   supported React release qualification.
 - `openfdd_agent_spec/AGENTS.md`, `ARCHITECTURE.md`, `DATA_CONTRACT.md`,
   `VERSIONING.md`, `MILESTONE_A.md`, `ownership.yaml`, and checkpoints: reconcile
   the actual `crates/openfdd_contracts` implementation and current status.
-- Cookbook pages: remove “one Streamlit app” claims while preserving pandas as
+- Cookbook pages: remove “one React SPA” claims while preserving pandas as
   oracle.
 - GHCR/runbook docs: name images actually published and stop calling archived
-  Streamlit `openfdd-ui` the product.
+  React SPA `openfdd-web` the product.
 
 ## New specification sections
 

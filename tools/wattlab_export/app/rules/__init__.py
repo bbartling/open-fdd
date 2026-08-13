@@ -1,7 +1,7 @@
 """Open-FDD pandas cookbook registry (+ optional CUSTOM-* agent rules).
 
 Canonical implementations: PyPI ``open_fdd.rules``. This package is a thin
-``app.rules`` compatibility surface for Streamlit UI imports.
+``app.rules`` compatibility surface for React SPA imports.
 """
 
 from open_fdd.rules.base import RuleResult

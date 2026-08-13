@@ -38,5 +38,5 @@ Effective catalog (defaults + overrides): `open_fdd.catalog.effective_catalog(ov
 
 ## Do not
 
-- Import Streamlit or application UI into Open-FDD.
+- Import React or application UI into Open-FDD.
 - Treat matching rule counts as semantic parity. Use golden fixtures + `rule_catalog_hash`.

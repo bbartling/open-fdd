@@ -1,13 +1,12 @@
-"""Agent → Streamlit bootstrap bridge (no HTTP API).
+"""Agent session bootstrap (no HTTP API).
 
 After a headless ``agent_afdd`` / ``export_agent_bundle`` run, write a small JSON
-pointer so the next Streamlit start can auto-load the same package + dialed-in
-fault settings. Browser session_state is filled from this file — agents never
-need to click Streamlit.
+pointer so the next product session can auto-load the same package + dialed-in
+fault settings.
 
 Resolve order:
 1. ``VIBE19_BOOTSTRAP`` env (file path)
-2. ``vibe_code_apps_19/.last_agent_session.json`` (default write target)
+2. ``.last_agent_session.json`` (default write target)
 """
 
 from __future__ import annotations
@@ -61,7 +60,7 @@ def build_bootstrap_payload(
         "column_map_path": str(Path(column_map_path).resolve()) if column_map_path else None,
         "out_dir": str(Path(out_dir).resolve()) if out_dir else None,
         "auto_run_rules": bool(auto_run_rules),
-        "notes": notes or "Written by agent AFDD export for Streamlit auto-load",
+        "notes": notes or "Written by agent AFDD export for session auto-load",
     }
     return payload
 
@@ -72,7 +71,7 @@ def write_bootstrap(
     path: str | Path | None = None,
     also_default: bool = True,
 ) -> list[Path]:
-    """Write bootstrap JSON; always optionally mirror to ``.last_agent_session.json``."""
+    """Write bootstrap JSON; optionally mirror to ``.last_agent_session.json``."""
     if payload.get("schema_version") != BOOTSTRAP_SCHEMA:
         payload = {**payload, "schema_version": BOOTSTRAP_SCHEMA}
     written: list[Path] = []
@@ -81,7 +80,6 @@ def write_bootstrap(
         targets.append(Path(path))
     if also_default:
         targets.append(default_bootstrap_path())
-    # de-dupe
     seen: set[str] = set()
     for t in targets:
         key = str(t.resolve())

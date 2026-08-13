@@ -1,6 +1,6 @@
 //! `openfdd_package_v1` ZIP loader (#514).
 //!
-//! Accepts the vibe19 Streamlit package layout (see vibe19 `docs/PACKAGE_SPEC.md`):
+//! Accepts the vibe19 package layout (see vibe19 `docs/PACKAGE_SPEC.md`):
 //! `manifest.json` + per-equipment `history_wide.csv` with a sibling Haystack-style
 //! column map (`history_wide.json` / `history_wide.column_map.json` / `column_map.json`),
 //! optional root `column_map.json`, `session_config.json`, and `weather/history_wide.csv`.

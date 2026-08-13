@@ -1,10 +1,10 @@
 # UI serve strategy
 
-> **Updated 2026-07-27.** Product UI is Streamlit (`services/ui`), not a Vite/Caddy SPA.
+> **Updated 2026-07-27.** Product UI is React SPA (`frontend/web`), not a Vite/Caddy SPA.
 
 ## Production
 
-The UI is served by the `openfdd-ui` container: Streamlit from `services/ui`,
+The UI is served by the `openfdd-web` container: React from `frontend/web`,
 listening on **:8501** in-container (published as **:3000**). Central owns the
 API on **:8080**. The UI calls central over the compose network (or host
 `localhost` in local dev) — it is not a static SPA with a same-origin Caddy
@@ -12,7 +12,7 @@ proxy.
 
 | Surface | Behavior |
 | --- | --- |
-| UI browser | Streamlit on `:3000` (host) → `:8501` (container) |
+| UI browser | React on `:3000` (host) → `:8501` (container) |
 | UI via Caddy (optional) | `http://<host>/` → `ui:8501` (`OPENFDD_CADDY=1` / `compose.caddy.yml`) |
 | API | Central on `:8080` (`/api/health`, JWT routes, FDD) |
 | API via Caddy | `http://<host>/api*` → `central:8080` |
@@ -20,9 +20,9 @@ proxy.
 
 ## Docker
 
-`services/ui/Dockerfile` builds the Streamlit image from the open-fdd repo
+`frontend/web/Dockerfile` builds the React image from the open-fdd repo
 (Python + `open-fdd[oracle]` + app code). Image:
-`ghcr.io/bbartling/openfdd-ui:${OPENFDD_IMAGE_TAG:-nightly}`.
+`ghcr.io/bbartling/openfdd-web`.
 
 Historical Vite/Caddy SPA notes and cutover plans live under
 `docs/frontend/REACT_TYPESCRIPT_CUTOVER_PLAN.md` (obsolete) and

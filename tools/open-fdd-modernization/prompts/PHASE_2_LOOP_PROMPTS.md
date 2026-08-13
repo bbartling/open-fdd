@@ -53,7 +53,7 @@ without the authorization appropriate to this session.
 Implement/verify P2-M0 cutover routing and observability.
 
 Requirements:
-- reversible Streamlit/React cohort flag;
+- reversible React SPA/React cohort flag;
 - sticky behavior through refresh/navigation;
 - safe invalid/missing config default;
 - audit trail for changes;
@@ -177,13 +177,13 @@ breaks, schema contraction, or deletions.
 
 Add/update routing tests and execute pre/post smoke plus rollback rehearsal.
 Record exact time, config, release, metrics, and observation window in
-CUTOVER_LOG. Keep Streamlit frozen and explicitly labeled during the window.
+CUTOVER_LOG. Keep React SPA frozen and explicitly labeled during the window.
 ```
 
 ## Prompt 6 — Python twin deletion
 
 ```text
-Delete the bounded Python/Streamlit twin set [PATHS] only after verifying all
+Delete the bounded Python/React SPA twin set [PATHS] only after verifying all
 deletion gates.
 
 Before deletion:
@@ -216,17 +216,17 @@ CUTOVER_LOG, and SESSION_LOG. Report precisely what was removed and the immutabl
 recovery reference.
 ```
 
-## Prompt 7 — Streamlit product removal
+## Prompt 7 — React product removal
 
 ```text
-Execute the approved Streamlit product removal PR after leaf Python twins have
+Execute the approved React product removal PR after leaf Python twins have
 already been deleted and the fallback window is closed.
 
 Scope candidates must be enumerated explicitly and call-site verified:
-- Streamlit entry point and migrated UI modules;
-- Streamlit-only tests and smoke scripts;
+- React SPA entry point and migrated UI modules;
+- React-only tests and smoke scripts;
 - UI Python dependency manifests;
-- Streamlit container/image/compose wiring;
+- web container/image/compose wiring;
 - obsolete environment variables and docs;
 - stale current-state instructions.
 
@@ -235,9 +235,9 @@ Relocate approved oracle-only tools so they cannot be built into production.
 
 Run clean source scans, Rust/React/full browser/contract/container gates, image
 filesystem and SBOM scans, fresh deploy, and upgrade test. Verify no docs,
-workflows, or release recipes tell operators to run Streamlit.
+workflows, or release recipes tell operators to run product UI.
 
-Record the last immutable Streamlit release/digests and recovery procedure.
+Record the last immutable React SPA release/digests and recovery procedure.
 ```
 
 ## Prompt 8 — Final no-Python qualification
@@ -247,7 +247,7 @@ Qualify Open-FDD Phase 2 at commit [SHA] as a production no-Python release.
 
 Use immutable images and a clean host/environment with no Python installation
 available to product services. Verify fresh install and upgrade from the last
-Streamlit release.
+React SPA release.
 
 Run:
 - Rust fmt/clippy/workspace/integration;
@@ -259,12 +259,12 @@ Run:
 - performance/concurrency/restart/retention;
 - backup/restore;
 - source, workflow, compose, image filesystem, package inventory, and SBOM scans
-  for Python/Streamlit/pandas;
+  for Python/pandas;
 - documentation/link/quick-start checks.
 
 Inspect skips and artifacts. Produce a final capability matrix, Python exit
 matrix, contract statement, cutover history, incidents/corrections, exact
-digests, last Streamlit recovery reference, accepted risk, and Phase 3 readiness.
+digests, last React SPA recovery reference, accepted risk, and Phase 3 readiness.
 
 PASS only if React is the sole production UI, all production behavior is
 Rust/DataFusion-owned, no runtime Python exists, current docs match topology,
