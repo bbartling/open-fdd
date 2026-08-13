@@ -510,7 +510,7 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
     else {
         return json!({"ok": false, "error": format!("unknown rule_id {rule_id}")});
     };
-    let mut columns = series_plot_columns(rule);
+    let columns = series_plot_columns(rule);
     if columns.is_empty() {
         return json!({"ok": true, "equipment_id": equipment_id, "rule_id": rule.rule_id, "rows": [], "roles": []});
     }
