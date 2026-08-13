@@ -13,7 +13,7 @@ The stack images are:
 | Image | Role |
 |-------|------|
 | `ghcr.io/bbartling/openfdd-central` | API + FDD engine (DataFusion rule registry) |
-| `ghcr.io/bbartling/openfdd-web` | React engineering UI (`frontend/web`, port 3000 → 8501) |
+| `ghcr.io/bbartling/openfdd-web` | React engineering UI (`frontend/web`, port 3000 → 8080) |
 | `ghcr.io/bbartling/openfdd-fieldbus` | BACnet/IP poller, publishes over MQTTS |
 | `ghcr.io/bbartling/openfdd-mqtt` | Mosquitto broker (MQTTS on 8883) |
 | `ghcr.io/bbartling/openfdd-mcp` | Slim Rust MCP server (talks to central) |
