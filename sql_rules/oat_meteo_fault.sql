@@ -1,7 +1,13 @@
 -- oat_meteo_fault.sql — BAS OAT vs meteo reference (|Δ| > threshold) + confirm
--- Prefer equipment web_oa_t (pandas); fall back to weather.oa_t join.
+-- Prefer equipment web_oa_t (pandas); fall back to a weather join only when the
+-- equipment has no web reference. `weather` may resolve to a view spanning
+-- several weather-ish equipment, so collapse it to one row per timestamp first —
+-- otherwise the join fans out and multiplies fault_hours.
 WITH wx AS (
-  SELECT timestamp_utc, oa_t AS wx_oa_t FROM weather WHERE oa_t IS NOT NULL
+  SELECT timestamp_utc, MAX(oa_t) AS wx_oa_t
+  FROM weather
+  WHERE oa_t IS NOT NULL
+  GROUP BY timestamp_utc
 ),
 joined AS (
   SELECT
@@ -10,7 +16,9 @@ joined AS (
     h.oa_t,
     COALESCE(h.web_oa_t, wx.wx_oa_t) AS ref_oa_t
   FROM history h
-  LEFT JOIN wx ON h.timestamp_utc = wx.timestamp_utc
+  LEFT JOIN wx
+    ON h.timestamp_utc = wx.timestamp_utc
+   AND h.web_oa_t IS NULL
   WHERE h.equipment_id LIKE 'AHU%' OR h.equipment_id LIKE 'AHU_%'
 ),
 base AS (

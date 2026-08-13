@@ -1,12 +1,15 @@
--- fc4_pid_hunting.sql — PID hunting / OS oscillation
--- Simplified SQL variant. Full operating-state transition counting validated in Pandas.
+-- fc4_os_hunting.sql — PID hunting (operating-state oscillation), GL36 fault 4
+-- ΔOS > ΔOSmax during the clock hour: count how many times the AHU *enters* each
+-- operating state within the hour and flag the whole hour when any state is
+-- entered more than DELTA_OS_MAX times.
+-- Operating states: 1 = min OA / heating, 2 = economizer, 3 = mechanical cooling
+-- (0 = fan off, not counted).
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
     CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END AS oa_d,
     CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
-    fan_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1.0 ELSE 0.0 END
       WHEN fan_cmd IS NULL THEN NULL
@@ -17,7 +20,9 @@ WITH h AS (
 ),
 modes AS (
   SELECT
-    *,
+    equipment_id,
+    timestamp_utc,
+    DATE_TRUNC('hour', timestamp_utc) AS clock_hour,
     CASE
       WHEN fan IS NULL OR fan < 0.05 THEN 0
       WHEN clg IS NOT NULL AND clg > 0.1 THEN 3
@@ -26,17 +31,43 @@ modes AS (
     END AS op_mode
   FROM h
 ),
+entries AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    clock_hour,
+    op_mode,
+    CASE
+      WHEN op_mode = 0 THEN 0
+      WHEN LAG(op_mode) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) IS NULL THEN 0
+      WHEN op_mode <> LAG(op_mode) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) THEN 1
+      ELSE 0
+    END AS is_entry
+  FROM modes
+),
+hourly AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    SUM(CASE WHEN is_entry = 1 AND op_mode = 1 THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id, clock_hour) AS entries_min_oa,
+    SUM(CASE WHEN is_entry = 1 AND op_mode = 2 THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id, clock_hour) AS entries_econ,
+    SUM(CASE WHEN is_entry = 1 AND op_mode = 3 THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id, clock_hour) AS entries_mech
+  FROM entries
+),
 base AS (
   SELECT
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN op_mode = 0 THEN 0
-      WHEN LAG(op_mode) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) IS NULL THEN 0
-      WHEN op_mode <> LAG(op_mode) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) THEN 1
+      WHEN entries_min_oa > {{DELTA_OS_MAX}} THEN 1
+      WHEN entries_econ > {{DELTA_OS_MAX}} THEN 1
+      WHEN entries_mech > {{DELTA_OS_MAX}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
-  FROM modes
+  FROM hourly
 ),
 lagged AS (
   SELECT

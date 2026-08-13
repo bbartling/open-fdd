@@ -497,12 +497,14 @@ timestamp_utc,oat_col
     }
 
     #[tokio::test]
-    async fn sv_flatline_screening_confirm_streak() {
+    async fn sv_flatline_rolling_window_confirm_streak() {
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_SVFLAT");
         std::fs::create_dir_all(&building).unwrap();
 
-        // |Δ| <= 0.1 flatline. Sequence: 0 (no prev), 0 (Δ=5), 1,1,1, 0 (Δ=5)
+        // FLATLINE_HOURS=0.25 at poll=300s → 3-sample rolling window.
+        // Rolling span <= 0.1: rows 0/1 have a partial window, row 2 still spans
+        // the 70→75 step, rows 3/4 are flat, row 5 spans the 75→80 step.
         let rows = "\
 timestamp_utc,oat_col
 2026-01-01T00:00:00Z,70
@@ -528,13 +530,58 @@ timestamp_utc,oat_col
             "sv_flatline.sql",
             300.0,
             600,
-            &[("FLATLINE_TOL", "0.1")],
+            &[("FLATLINE_TOL", "0.1"), ("FLATLINE_HOURS", "0.25")],
         )
         .await;
 
-        let raw = [false, false, true, true, true, false];
+        let raw = [false, false, false, true, true, false];
         let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
-        assert_hours_close(got, expected, "SV-FLATLINE screening SQL");
+        assert_hours_close(expected, 0.08333333333333333, "pandas reference");
+        assert_hours_close(got, expected, "SV-FLATLINE rolling SQL");
+    }
+
+    #[tokio::test]
+    async fn sv_flatline_ignores_deenergized_equipment() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SVFLAT_OFF");
+        std::fs::create_dir_all(&building).unwrap();
+
+        // Perfectly flat sensor, but the fan is proven off the whole time.
+        let rows = "\
+timestamp_utc,oat_col,fan_st
+2026-01-01T00:00:00Z,70,0
+2026-01-01T00:05:00Z,70,0
+2026-01-01T00:10:00Z,70,0
+2026-01-01T00:15:00Z,70,0
+2026-01-01T00:20:00Z,70,0
+2026-01-01T00:25:00Z,70,0
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "oat_col",
+                    role: "oa_t",
+                },
+                RoleCol {
+                    csv_col: "fan_st",
+                    role: "fan_status",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "sv_flatline.sql",
+            300.0,
+            0,
+            &[("FLATLINE_TOL", "0.1"), ("FLATLINE_HOURS", "0.25")],
+        )
+        .await;
+        assert_hours_close(got, 0.0, "SV-FLATLINE energized gate");
     }
 
     #[tokio::test]
@@ -580,22 +627,21 @@ timestamp_utc,oat_col
     }
 
     #[tokio::test]
-    async fn sv_stale_screening_confirm_streak() {
-        // Age vs MAX(ts) > STALE_HOURS. Keep ported (not pandas multi-point stale).
-        // OFDD-065: fan-on gate — fixture keeps fan_cmd=1 so expected hours unchanged.
+    async fn sv_stale_rolling_window_confirm_streak() {
+        // Every mapped analog frozen across the trailing STALE_HOURS window.
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_SVSTALE");
         std::fs::create_dir_all(&building).unwrap();
 
-        // STALE_HOURS=0.1 (6 min): first four rows older than 6 min from max.
+        // STALE_HOURS=0.25 at poll=300s → 3-sample window. Feed resumes at row 4.
         let rows = "\
 timestamp_utc,oat_col,fan_col
 2026-01-01T00:00:00Z,70,1
 2026-01-01T00:05:00Z,70,1
 2026-01-01T00:10:00Z,70,1
 2026-01-01T00:15:00Z,70,1
-2026-01-01T00:20:00Z,70,1
-2026-01-01T00:25:00Z,70,1
+2026-01-01T00:20:00Z,71,1
+2026-01-01T00:25:00Z,72,1
 ";
         write_equipment_fixture(
             &building,
@@ -619,14 +665,58 @@ timestamp_utc,oat_col,fan_col
             "sv_stale.sql",
             300.0,
             600,
-            &[("STALE_HOURS", "0.1")],
+            &[("STALE_HOURS", "0.25"), ("STALE_TOL", "0.05")],
         )
         .await;
 
-        // ages min: 25,20,15,10,5,0 → stale if >6: T,T,T,T,F,F
-        let raw = [true, true, true, true, false, false];
+        let raw = [false, false, true, true, false, false];
         let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
-        assert_hours_close(got, expected, "SV-STALE screening SQL");
+        assert_hours_close(expected, 0.08333333333333333, "pandas reference");
+        assert_hours_close(got, expected, "SV-STALE rolling SQL");
+    }
+
+    #[tokio::test]
+    async fn sv_stale_requires_every_mapped_sensor_frozen() {
+        // One live analog proves the feed is still updating → no stale fault.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SVSTALE_PARTIAL");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,oat_col,zone_col
+2026-01-01T00:00:00Z,70,72.0
+2026-01-01T00:05:00Z,70,72.4
+2026-01-01T00:10:00Z,70,72.8
+2026-01-01T00:15:00Z,70,73.2
+2026-01-01T00:20:00Z,70,73.6
+2026-01-01T00:25:00Z,70,74.0
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "oat_col",
+                    role: "oa_t",
+                },
+                RoleCol {
+                    csv_col: "zone_col",
+                    role: "zone_t",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "sv_stale.sql",
+            300.0,
+            0,
+            &[("STALE_HOURS", "0.25"), ("STALE_TOL", "0.05")],
+        )
+        .await;
+        assert_hours_close(got, 0.0, "SV-STALE AND across mapped sensors");
     }
 
     #[tokio::test]
@@ -667,9 +757,10 @@ timestamp_utc,oat_col,fan_col
             "sv_stale.sql",
             300.0,
             600,
-            &[("STALE_HOURS", "0.1")],
+            &[("STALE_HOURS", "0.25"), ("STALE_TOL", "0.05")],
         )
         .await;
+        // Rows 2–5 have a full frozen window; confirm_rows=2 drops the first.
         assert_hours_close(
             got,
             0.25,
@@ -678,21 +769,32 @@ timestamp_utc,oat_col,fan_col
     }
 
     #[tokio::test]
-    async fn fc4_os_mode_change_screening_confirm_streak() {
-        // Screening: consecutive OS mode changes. Full pandas OS/TV hunting not claimed.
+    async fn fc4_flags_clock_hour_over_delta_os_max() {
+        // GL36 fault 4: ΔOS entries per clock hour > ΔOSmax flags the whole hour.
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_FC4");
         std::fs::create_dir_all(&building).unwrap();
 
-        // Modes: 1 (min OA), 2 (econ), 3 (mech). Sequence of mode flips => raw 0,0,1,1,1,0
+        // Hour 00: 12 samples alternating econ (mode 2) / mech (mode 3) → 6 entries
+        // per mode, above ΔOSmax=5. Hour 01: steady min-OA, 1 entry.
         let rows = "\
 timestamp_utc,oa_d,clg_col,fan_col
-2026-01-01T00:00:00Z,0.2,0,50
-2026-01-01T00:05:00Z,0.2,0,50
+2026-01-01T00:00:00Z,0.8,0,50
+2026-01-01T00:05:00Z,0.2,50,50
 2026-01-01T00:10:00Z,0.8,0,50
 2026-01-01T00:15:00Z,0.2,50,50
-2026-01-01T00:20:00Z,0.2,0,50
-2026-01-01T00:25:00Z,0.2,0,50
+2026-01-01T00:20:00Z,0.8,0,50
+2026-01-01T00:25:00Z,0.2,50,50
+2026-01-01T00:30:00Z,0.8,0,50
+2026-01-01T00:35:00Z,0.2,50,50
+2026-01-01T00:40:00Z,0.8,0,50
+2026-01-01T00:45:00Z,0.2,50,50
+2026-01-01T00:50:00Z,0.8,0,50
+2026-01-01T00:55:00Z,0.2,50,50
+2026-01-01T01:00:00Z,0.2,0,50
+2026-01-01T01:05:00Z,0.2,0,50
+2026-01-01T01:10:00Z,0.2,0,50
+2026-01-01T01:15:00Z,0.2,0,50
 ";
         write_equipment_fixture(
             &building,
@@ -715,11 +817,65 @@ timestamp_utc,oa_d,clg_col,fan_col
             rows,
         );
 
-        let got = run_rule_fault_hours(&building, "fc4_os_hunting.sql", 300.0, 600, &[]).await;
+        let got = run_rule_fault_hours(
+            &building,
+            "fc4_os_hunting.sql",
+            300.0,
+            0,
+            &[("DELTA_OS_MAX", "5")],
+        )
+        .await;
 
-        let raw = [false, false, true, true, true, false];
-        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
-        assert_hours_close(got, expected, "FC4 screening SQL");
+        // Whole 00 hour flagged (12 samples), 01 hour clean.
+        assert_hours_close(got, 1.0, "FC4 hourly ΔOS SQL");
+    }
+
+    #[tokio::test]
+    async fn fc4_steady_operating_state_is_clean() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_FC4_STEADY");
+        std::fs::create_dir_all(&building).unwrap();
+
+        // Two mode changes in the hour — well under ΔOSmax.
+        let rows = "\
+timestamp_utc,oa_d,clg_col,fan_col
+2026-01-01T00:00:00Z,0.2,0,50
+2026-01-01T00:05:00Z,0.2,0,50
+2026-01-01T00:10:00Z,0.8,0,50
+2026-01-01T00:15:00Z,0.8,0,50
+2026-01-01T00:20:00Z,0.2,50,50
+2026-01-01T00:25:00Z,0.2,50,50
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "oa_d",
+                    role: "oa_damper_pct",
+                },
+                RoleCol {
+                    csv_col: "clg_col",
+                    role: "clg_valve_pct",
+                },
+                RoleCol {
+                    csv_col: "fan_col",
+                    role: "fan_cmd",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "fc4_os_hunting.sql",
+            300.0,
+            0,
+            &[("DELTA_OS_MAX", "5")],
+        )
+        .await;
+        assert_hours_close(got, 0.0, "FC4 steady operating state");
     }
 
     #[tokio::test]
@@ -771,6 +927,8 @@ timestamp_utc,clg_col
         std::fs::create_dir_all(&building).unwrap();
 
         // under min_flow_sp: flow 100 vs sp 200 => raw 1. Sequence length 6 with confirm_rows=2.
+        // Final row is a closed box (0 CFM): below the SP but not delivering air,
+        // so FLOW_ON_MIN must keep it out of the fault.
         let rows = "\
 timestamp_utc,flow_col,min_col
 2026-01-01T00:00:00Z,250,200
@@ -778,7 +936,7 @@ timestamp_utc,flow_col,min_col
 2026-01-01T00:10:00Z,100,200
 2026-01-01T00:15:00Z,100,200
 2026-01-01T00:20:00Z,100,200
-2026-01-01T00:25:00Z,250,200
+2026-01-01T00:25:00Z,0,200
 ";
         write_equipment_fixture(
             &building,
@@ -802,7 +960,7 @@ timestamp_utc,flow_col,min_col
             "vav7_min_airflow.sql",
             300.0,
             600,
-            &[("HIGH_MIN_FLOW_SP", "2000")], // keep high-min branch inactive
+            &[("HIGH_MIN_FLOW_SP", "2000"), ("FLOW_ON_MIN", "25")], // keep high-min branch inactive
         )
         .await;
 
@@ -813,13 +971,14 @@ timestamp_utc,flow_col,min_col
     }
 
     #[tokio::test]
-    async fn sv_rate_screening_confirm_streak() {
-        // Documents SV-RATE as a screening SQL (hard-coded 5°F Δ), not full pandas context.
+    async fn sv_rate_sustained_slew_confirm_streak() {
+        // Rate normalized to °F/h and required to persist for two samples so a
+        // single step (SV-SPIKE territory) does not trip SV-RATE.
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_SVRATE");
         std::fs::create_dir_all(&building).unwrap();
 
-        // Jump >5°F within persistence window on consecutive samples.
+        // 10°F per 5 min = 120°F/h, far above the 6°F/h steady limit.
         let rows = "\
 timestamp_utc,oat_col
 2026-01-01T00:00:00Z,70
@@ -845,31 +1004,70 @@ timestamp_utc,oat_col
             "sv_rate.sql",
             300.0,
             600,
-            &[("PERSISTENCE_MIN", "10")],
+            &[("PERSISTENCE_MIN", "10"), ("STEADY_FAULT_PER_HOUR", "6")],
         )
         .await;
 
-        // raw: row0 no prev=0; 70->70=0; 70->80=1; 80->90=1; 90->100=1; 100->100=0
-        let raw = [false, false, true, true, true, false];
+        // over_rate: 0,0,1,1,1,0 → sustained (needs the previous sample too): 0,0,0,1,1,0
+        let raw = [false, false, false, true, true, false];
         let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
-        assert_hours_close(got, expected, "SV-RATE screening SQL");
+        assert_hours_close(expected, 0.08333333333333333, "pandas reference");
+        assert_hours_close(got, expected, "SV-RATE sustained slew SQL");
     }
 
     #[tokio::test]
-    async fn chw_noload_confirm_matches_screening_reference() {
+    async fn sv_rate_single_step_is_not_a_slew() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SVRATE_STEP");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,oat_col
+2026-01-01T00:00:00Z,70
+2026-01-01T00:05:00Z,70
+2026-01-01T00:10:00Z,80
+2026-01-01T00:15:00Z,80
+2026-01-01T00:20:00Z,80
+2026-01-01T00:25:00Z,80
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[RoleCol {
+                csv_col: "oat_col",
+                role: "oa_t",
+            }],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "sv_rate.sql",
+            300.0,
+            0,
+            &[("PERSISTENCE_MIN", "10"), ("STEADY_FAULT_PER_HOUR", "6")],
+        )
+        .await;
+        assert_hours_close(got, 0.0, "SV-RATE single step");
+    }
+
+    #[tokio::test]
+    async fn chw_noload_needs_running_plant_and_satisfied_load() {
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_CHW");
         std::fs::create_dir_all(&building).unwrap();
 
-        // pump on + supply within band of SP => fault. sat_band default-like 1.5°F
+        // Load satisfied throughout; the plant only proves running from row 2,
+        // and the chiller drops out on the last row.
         let rows = "\
-timestamp_utc,t_col,sp_col,pump_col
-2026-01-01T00:00:00Z,44,44,0
-2026-01-01T00:05:00Z,44,44,0
-2026-01-01T00:10:00Z,44,44,50
-2026-01-01T00:15:00Z,44,44,50
-2026-01-01T00:20:00Z,44,44,50
-2026-01-01T00:25:00Z,50,44,50
+timestamp_utc,ch_col,pump_col,load_col
+2026-01-01T00:00:00Z,0,0,1
+2026-01-01T00:05:00Z,0,0,1
+2026-01-01T00:10:00Z,1,50,1
+2026-01-01T00:15:00Z,1,50,1
+2026-01-01T00:20:00Z,1,50,1
+2026-01-01T00:25:00Z,0,0,1
 ";
         write_equipment_fixture(
             &building,
@@ -877,33 +1075,64 @@ timestamp_utc,t_col,sp_col,pump_col
             5,
             &[
                 RoleCol {
-                    csv_col: "t_col",
-                    role: "chw_supply_t",
-                },
-                RoleCol {
-                    csv_col: "sp_col",
-                    role: "chw_supply_sp",
+                    csv_col: "ch_col",
+                    role: "chiller_status",
                 },
                 RoleCol {
                     csv_col: "pump_col",
                     role: "chw_pump_cmd",
                 },
+                RoleCol {
+                    csv_col: "load_col",
+                    role: "building_zone_load_satisfied",
+                },
             ],
             rows,
         );
 
-        let got = run_rule_fault_hours(
-            &building,
-            "chw_noload_1.sql",
-            300.0,
-            600,
-            &[("SAT_BAND_F", "1.5")],
-        )
-        .await;
+        let got = run_rule_fault_hours(&building, "chw_noload_1.sql", 300.0, 600, &[]).await;
 
-        // pump>0.05 and |t-sp|<=1.5: rows 2,3,4 fault; 5 has |50-44|=6 => 0
         let raw = [false, false, true, true, true, false];
         let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
-        assert_hours_close(got, expected, "CHW-NOLOAD-1 screening SQL");
+        assert_hours_close(expected, 0.16666666666666666, "pandas reference");
+        assert_hours_close(got, expected, "CHW-NOLOAD-1 SQL");
+    }
+
+    #[tokio::test]
+    async fn chw_noload_clean_when_building_still_calling() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_CHW_LOADED");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,ch_col,pump_col,load_col
+2026-01-01T00:00:00Z,1,50,0
+2026-01-01T00:05:00Z,1,50,0
+2026-01-01T00:10:00Z,1,50,0
+2026-01-01T00:15:00Z,1,50,0
+";
+        write_equipment_fixture(
+            &building,
+            "CHILLER_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "ch_col",
+                    role: "chiller_status",
+                },
+                RoleCol {
+                    csv_col: "pump_col",
+                    role: "chw_pump_cmd",
+                },
+                RoleCol {
+                    csv_col: "load_col",
+                    role: "building_zone_load_satisfied",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(&building, "chw_noload_1.sql", 300.0, 0, &[]).await;
+        assert_hours_close(got, 0.0, "CHW-NOLOAD-1 loaded building");
     }
 }

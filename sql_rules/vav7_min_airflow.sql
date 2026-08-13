@@ -1,7 +1,9 @@
 -- vav7_min_airflow.sql — Min airflow / fixed high flow
--- Phase-1 (#550): SQL screens the under-min-flow branch only.
+-- Phase-1 (#550): SQL screens the under-min-flow branch only, and only while the
+-- box is actually delivering air (zone_flow > FLOW_ON_MIN). Without that guard a
+-- closed box overnight reads 0 CFM and would "underflow" against its min SP.
 -- Pandas also faults on rolling "fixed high" flow and high min-flow SP while air is on
--- (params flow_on_min / fixed_flow_* / high_min_flow_sp). Those windows are not ported yet;
+-- (params fixed_flow_* / high_min_flow_sp). Those windows are not ported yet;
 -- {{HIGH_MIN_FLOW_SP}} is accepted so registry substitution stays valid but is unused here.
 WITH h AS (
   SELECT
@@ -25,7 +27,7 @@ base AS (
     CAST(CASE
       WHEN COALESCE(fan_on, 0) = 0 THEN 0
       WHEN zone_flow IS NULL OR min_flow_sp IS NULL THEN 0
-      WHEN zone_flow < min_flow_sp THEN 1
+      WHEN zone_flow > {{FLOW_ON_MIN}} AND zone_flow < min_flow_sp THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h
