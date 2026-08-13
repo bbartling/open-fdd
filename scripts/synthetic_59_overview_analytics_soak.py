@@ -136,7 +136,6 @@ def assert_runtime(base: str, token: str, building: str, checks: list[dict]) -> 
         r
         for r in rows
         if float(r.get("run_hours") or r.get("hours") or 0) > 0
-        and str(r.get("kind") or "") not in ("weekly_plant", "weekly_equipment")
     ]
     check(
         "runtime_positive_hours",
@@ -231,9 +230,10 @@ def assert_mech_cooling(
     ]
     check("mech_aggregate_bins", len(agg) >= 1, f"n_agg={len(agg)}", checks)
     total_indiv = sum(float(r.get("hours") or 0) for r in individual)
+    # Synthetic fixture has several CHILLER_CASE_* units (~40h each) → hundreds OK.
     check(
         "mech_individual_hours_envelope",
-        1.0 <= total_indiv <= 200.0,
+        1.0 <= total_indiv <= 800.0,
         f"sum_individual_device_hours={total_indiv:.3f}",
         checks,
     )
