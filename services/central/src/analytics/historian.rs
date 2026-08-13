@@ -343,9 +343,15 @@ fn mech_oat_col(cols: &HashSet<String>) -> Option<&'static str> {
 
 fn web_oat_col(cols: &HashSet<String>) -> Option<&'static str> {
     // dry_bulb_f is common on weather CSVs before role remap to web_oa_t.
-    ["web_oa_t", "oa_t_web", "oat_meteo", "oa_t_meteo", "dry_bulb_f"]
-        .into_iter()
-        .find(|&c| cols.contains(c))
+    [
+        "web_oa_t",
+        "oa_t_web",
+        "oat_meteo",
+        "oa_t_meteo",
+        "dry_bulb_f",
+    ]
+    .into_iter()
+    .find(|&c| cols.contains(c))
 }
 
 /// Prefer web/meteo OAT for weekly plant avg-while-on (vibe19 `prefer_web_oat`).
@@ -3135,7 +3141,7 @@ mod tests {
         assert!(expr.contains("chiller_status"), "{expr}");
         assert!(
             !expr.contains("chiller_amps"),
-            "status must win over amps (pandas hierarchy); got {expr}"
+            "status must win over amps (status-before-amps hierarchy); got {expr}"
         );
     }
 

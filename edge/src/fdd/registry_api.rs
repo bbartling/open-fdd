@@ -1287,7 +1287,8 @@ mod tests {
         );
         let cols = series_plot_columns(pid);
         assert!(
-            cols.iter().any(|c| *c == "oa_damper_pct" || *c == "damper_pct"),
+            cols.iter()
+                .any(|c| *c == "oa_damper_pct" || *c == "damper_pct"),
             "expected optional AO roles in plot columns, got {cols:?}"
         );
         let sv = reg

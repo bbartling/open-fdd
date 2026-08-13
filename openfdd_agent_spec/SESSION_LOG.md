@@ -1,5 +1,13 @@
 # Session log
 
+## 2026-08-13 — Parity plots CI hardening (#715)
+
+- Full-width Overview (Streamlit-like), A–Z Lab rule menu, named Plotly PNG stems.
+- FDD series = required∪optional roles (SV/PID plots); PID-HUNT-1 rolling 1h TV/reversals.
+- Mech OAT bins: status-before-amps + web/weather OAT; B100 notes in `docs/agent/B100_MECH_OAT_BINS_FIX.md`.
+- `scripts/synthetic_59_overview_analytics_soak.py`; agent_spec laws 30–35.
+- PR: https://github.com/bbartling/open-fdd/pull/715 — tip soak 59/59 after GHCR.
+
 ## 2026-08-12 — Overview expanders, session confirm overlay, SCHED-1 occupancy
 
 - Overview plot Expanders default open (`OverviewPopulated`) so charts are not caret-hidden.
