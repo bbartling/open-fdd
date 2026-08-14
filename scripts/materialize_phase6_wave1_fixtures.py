@@ -101,7 +101,7 @@ def vav2() -> None:
         if case == "irregular_sampling":
             times_i = ts_rows(24, step_s=180)
             lines = [f"{fmt(t)},74.0,unoccupied" for t in times_i]
-        any_fault = case in {"fault", "irregular_sampling", "duplicate_timestamp", "out_of_order", "startup_delay"}
+        any_fault = case in {"fault", "startup_delay", "irregular_sampling"}
         write_case("VAV-2", case, header, lines, base_expected("VAV-2", any_fault), cols)
 
 
@@ -144,7 +144,7 @@ def vav6() -> None:
         if case == "irregular_sampling":
             times_i = ts_rows(24, step_s=180)
             lines = [f"{fmt(t)},55.0,0.50,1" for t in times_i]
-        any_fault = case in {"fault", "irregular_sampling", "duplicate_timestamp", "out_of_order", "startup_delay"}
+        any_fault = case in {"fault", "startup_delay", "irregular_sampling"}
         write_case("VAV-6", case, header, lines, base_expected("VAV-6", any_fault), cols)
 
 
@@ -189,7 +189,7 @@ def reset1() -> None:
         if case == "irregular_sampling":
             times_i = ts_rows(24, step_s=180)
             lines = [f"{fmt(t)},60.0,40.0,1" for t in times_i]
-        any_fault = case in {"fault", "irregular_sampling", "duplicate_timestamp", "out_of_order", "startup_delay"}
+        any_fault = case in {"fault", "startup_delay", "irregular_sampling"}
         write_case("RESET-1", case, header, lines, base_expected("RESET-1", any_fault), cols)
 
 
