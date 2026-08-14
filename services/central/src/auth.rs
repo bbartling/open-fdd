@@ -360,3 +360,4 @@ mod tests {
         // Covered by env in integration; unit: loopback still ok.
         assert!(is_loopback_bind("localhost"));
     }
+}
