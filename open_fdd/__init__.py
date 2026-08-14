@@ -9,7 +9,7 @@ Production FDD runs as DataFusion SQL in the GHCR container stack.
 from open_fdd.ecm_engineering import ECMJob
 from open_fdd.compat import maybe_warn_vibe19_from_env
 
-__version__ = "4.3.0"
+__version__ = "4.4.0"
 
 maybe_warn_vibe19_from_env()
 

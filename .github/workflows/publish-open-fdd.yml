@@ -85,9 +85,13 @@ jobs:
           import open_fdd
           from open_fdd.ecm_engineering import ECMJob
           from open_fdd.rules import CANONICAL_RULE_COUNT, RULES_BY_ID
-          assert open_fdd.__version__ == version("open-fdd") == "4.3.0"
+          assert open_fdd.__version__ == version("open-fdd") == "4.4.0"
           assert CANONICAL_RULE_COUNT == 62
           assert "SCHED-1" in RULES_BY_ID
+          assert "VAV-2" in RULES_BY_ID
+          from open_fdd.analytics.vav_health import vav_health_matrix, SCHEMA_VERSION
+          assert SCHEMA_VERSION == "vav_health_matrix_v1"
+          assert callable(vav_health_matrix)
           out = Path(tempfile.mkdtemp()) / "smoke.xlsx"
           path = (
               ECMJob("CI Smoke", path=out)
