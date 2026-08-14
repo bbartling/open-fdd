@@ -20,7 +20,7 @@
     <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
   </a>
   <a href="https://bbartling.github.io/open-fdd/rules/cookbook/">
-    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-59%20rules%20SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — DataFusion SQL + Pandas">
+    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-62%20rules%20SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — DataFusion SQL + Pandas">
   </a>
   <a href="https://pypi.org/project/open-fdd/">
     <img src="https://img.shields.io/pypi/v/open-fdd?style=for-the-badge&label=PyPI&color=3775A9" alt="Open-FDD on PyPI">
@@ -47,7 +47,7 @@ The platform includes:
 
 - Haystack-style point roles in JSON (`column_map`) — not RDF-first
 - React SPA (`openfdd-web`) for CSV / zip FDD, RCx, Overview, and findings
-- Arrow historian + DataFusion SQL fault detection (59 cookbook rules; **63** SQL registry ids)
+- Arrow historian + DataFusion SQL fault detection (62 cookbook rules; **66** SQL registry ids)
 - ECM / industry helpers on **PyPI**; EnergyPlus remains a stack companion (MCP/DinD)
 - Docker compose images on GHCR (`central`, `web`, `fieldbus`, `mqtt`, `mcp`)
 
@@ -68,7 +68,7 @@ Mosquitto **MQTTS** (`openfdd-mqtt`); central consumes from the broker. Use
 
 ## FDD Rule Cookbook (the heart of the project)
 
-The **[HVAC FDD Rule Cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/)** is the validated catalog of **59 fault-detection rules**, published in two parity-matched flavors:
+The **[HVAC FDD Rule Cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/)** is the validated catalog of **62 fault-detection rules**, published in two parity-matched flavors:
 
 - **[DataFusion SQL cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/datafusion-sql-cookbook.html)** — copy-paste SQL that runs on the edge/central Arrow historian
 - **[Pandas cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html)** — the same rules for notebooks, CSV exports, and RCx studies

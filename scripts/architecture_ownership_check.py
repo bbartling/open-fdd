@@ -62,9 +62,9 @@ def _check_readme(errors: list[str]) -> None:
         # Allow explicit negation ("not a Vite/Caddy SPA") but not the old develop hint.
         if "Vite :5173" in text:
             errors.append("README.md must not claim Vite :5173 as the UI develop path")
-    if "59" not in text or "63" not in text:
+    if "62" not in text or "66" not in text:
         errors.append(
-            "README.md must state both public cookbook 59 and SQL registry 63 (count contract)"
+            "README.md must state both public cookbook 62 and SQL registry 66 (count contract)"
         )
     if "React" not in text and "openfdd-web" not in text:
         errors.append("README.md must identify React (openfdd-web) as the operator UI")
@@ -153,8 +153,8 @@ def main() -> int:
             if text.count("#") < 20:
                 errors.append(f"{name}: too few markdown headings (catalog must not shrink)")
         if name == "parity-matrix.md":
-            if "59" not in text or "63" not in text:
-                errors.append("parity-matrix.md must state cookbook 59 and registry 63")
+            if "62" not in text or "66" not in text:
+                errors.append("parity-matrix.md must state cookbook 62 and registry 66")
 
     _check_readme(errors)
 

@@ -11,7 +11,7 @@ Both expression cookbooks are **permanent project deliverables**.
 
 Product UI is **React** (`frontend/web` → `openfdd-web`). Product FDD execution is **Rust/DataFusion**. Pandas is the **PyPI reference/oracle** only — never a central/web request-path dependency.
 
-Catalog arithmetic: **59** pandas diagnostic concepts + **4** SQL analytics (`FAN-RUNTIME-HOURS`, `AVG-ZONE-TEMP`, `ZONE-COMFORT-PCT`, `FAULT-ELAPSED-HOURS`) = **63** SQL registry entries. `FC13-SAT-HIGH` is the SQL canonical id (`FC13` alias). `SV-SLEW` aliases `SV-RATE`.
+Catalog arithmetic: **62** pandas diagnostic concepts + **4** SQL analytics (`FAN-RUNTIME-HOURS`, `AVG-ZONE-TEMP`, `ZONE-COMFORT-PCT`, `FAULT-ELAPSED-HOURS`) = **66** SQL registry entries. `FC13-SAT-HIGH` is the SQL canonical id (`FC13` alias). `SV-SLEW` aliases `SV-RATE`.
 
 ## Rules for agents
 

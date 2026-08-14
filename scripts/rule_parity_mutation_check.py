@@ -23,8 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 COOKBOOK = ROOT / "docs" / "rules" / "cookbook"
 REGISTRY = ROOT / "sql_rules" / "registry.yaml"
 
-MIN_RULE_HEADINGS = 59
-MIN_REGISTRY_RULES = 63
+MIN_RULE_HEADINGS = 62
+MIN_REGISTRY_RULES = 66
 RULE_HEADING_RE = re.compile(r"^### [A-Z][A-Z0-9-]* —", re.MULTILINE)
 
 # Dual cookbooks that must exist (mutation: deleting either must fail this script).

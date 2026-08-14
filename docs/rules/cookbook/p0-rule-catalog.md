@@ -52,9 +52,11 @@ All **thresholds are defaults** — site-adjustable. **confirmation_seconds** de
 | `MECH-OAT-1` | `ahu` | ahu, chiller, heatpump |  | 600 | Proven DX/chiller mechanical cooling while web dry-bulb < 60°F. Uses compressor/chiller/pump/amps/power proof — not A… |
 | `CHW-NOLOAD-1` | `plant` | chiller |  | 1800 | Chiller/plant proven running while building load is satisfied: all mapped zones inside comfort band OR all mapped AHU… |
 | `VAV-1` | `vav` | vav, zone | zone-air-temp | 900 | Zone temp < 70°F or > 75°F. |
+| `VAV-2` | `vav` | vav, zone | zone-air-temp, occupied | 900 | Unoccupied AND zone temp > setback_hi (default 68°F). |
 | `VAV-3` | `vav` | vav | outside-air-temp, reheat-valve | 300 | Air flowing AND OAT > 78°F AND reheat valve > 52%. |
 | `VAV-4` | `vav` | vav | damper | 900 | Air flowing AND damper > 97.5% sustained across the window. |
 | `VAV-5` | `vav` | vav | zone-airflow, damper | 900 | Airflow > 50 cfm while damper < 10% (implausible flow). |
+| `VAV-6` | `vav` | vav | outside-air-temp, reheat-valve | 900 | OAT < 65°F AND reheat valve > 25%. |
 | `VAV-REHEAT` | `vav` | vav | reheat-valve, vav-discharge-air-temp, vav-inlet-air-temp | 900 | Air flowing AND reheat valve > 30% AND box discharge temp rises < 3°F above duct inlet (air from AHU) — stuck or fail… |
 | `VAV-AHU-LEAVE` | `vav` | vav | vav-discharge-air-temp, ahu-discharge-air-temp | 900 | Air flowing AND \\|VAV discharge − parent AHU SAT\\| > band. Needs package topology (vav_to_ahu) so ahu_sat is enrich… |
 | `VAV-7` | `vav` | vav | zone-airflow | 900 | Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too hig… |
@@ -76,6 +78,7 @@ All **thresholds are defaults** — site-adjustable. **confirmation_seconds** de
 | `OA-1` | `ahu` | ahu | mixed-air-temp, return-air-temp, outside-air-temp, fan-status | 900 | Estimated OA fraction < 15% with adequate OAT/RAT split. |
 | `DMP-1` | `ahu` | ahu | outside-air-temp, mixed-air-temp, outside-air-damper | 900 | Damper ≤ 5% but MAT tracks OAT within 2°F — leaking OA damper. |
 | `VLV-1` | `ahu` | ahu | discharge-air-temp, discharge-air-temp-sp, cooling-valve | 900 | Cooling valve ≤ 5% AND (SAT < sat_sp − sat_err OR SAT < MAT − mat_leak_delta). Fan proven on when fan_status/fan_cmd … |
+| `RESET-1` | `ahu` | ahu | discharge-air-temp-sp, outside-air-temp | 900 | Fan on AND \\|SAT SP − (52 + 0.25×(OAT−65))\\| > 3°F. |
 
 ---
 

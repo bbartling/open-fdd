@@ -74,9 +74,11 @@ RULE_GATES: dict[str, GateSpec] = {
     "MECH-OAT-1": GateSpec("always"),  # needs cold-weather samples even if proof drops
     "CHW-NOLOAD-1": GateSpec("always"),  # confirmation delay is 30 min; do not pre-filter offs
     "VAV-1": GateSpec("conditional"),
+    "VAV-2": GateSpec("always"),
     "VAV-3": GateSpec("fan_running", startup_delay_seconds=300),
     "VAV-4": GateSpec("control_loop", startup_delay_seconds=300),
     "VAV-5": GateSpec("fan_running", startup_delay_seconds=300),
+    "VAV-6": GateSpec("fan_running", startup_delay_seconds=300),
     "VAV-REHEAT": GateSpec("fan_running", startup_delay_seconds=600),
     "VAV-AHU-LEAVE": GateSpec("fan_running", startup_delay_seconds=600),
     "VAV-7": GateSpec("fan_running", startup_delay_seconds=300),
@@ -94,6 +96,7 @@ RULE_GATES: dict[str, GateSpec] = {
     "TRIM-4": GateSpec("hydronic_flow", startup_delay_seconds=600),
     "SCHED-1": GateSpec("always"),
     "SCHED-247": GateSpec("always"),  # always-on detection must see the full window
+    "RESET-1": GateSpec("fan_running", startup_delay_seconds=300),
     "CMD-1": GateSpec("always"),
     "OA-1": GateSpec("fan_running", startup_delay_seconds=600),
     "DMP-1": GateSpec("conditional", startup_delay_seconds=300),

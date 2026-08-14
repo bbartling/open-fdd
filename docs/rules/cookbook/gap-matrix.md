@@ -26,8 +26,8 @@ Comparison of **Open-FDD cookbook coverage** against public FDD, re-tuning, and 
 | Sensor validation (bounds, flatline, ROC, stale, rate) | ✅ SV-RANGE / FLATLINE / SPIKE / STALE / RATE |
 | Control hunting | ✅ PID-HUNT-1 (+ FC4) |
 | Economizer & ventilation | ✅ ECON-1–7, OA-1, OAT-METEO, MECH-OAT-1 |
-| VAV terminals | ✅ VAV-1/3/4/5/7, VAV-REHEAT, VAV-AHU-LEAVE · 🚩 VAV-2/6 |
-| Reset / schedule / override | ✅ SCHED-1, SCHED-247 · 🚩 RESET-1, OVR-1, SP-HIGH/LOW, PLANT-1 |
+| VAV terminals | ✅ VAV-1–7, VAV-REHEAT, VAV-AHU-LEAVE |
+| Reset / schedule / override | ✅ SCHED-1, SCHED-247, RESET-1 · 🚩 OVR-1, SP-HIGH/LOW, PLANT-1 |
 | Command vs status | ✅ CMD-1 |
 | Valve / damper leakage | ✅ VLV-1, DMP-1, FC14–15 |
 | Plant performance | ✅ CHW-1–4, CHW-NOLOAD-1, CW-APR-1, CW-FAN-1, CW-OPT-1 · 🚩 TOWER-1 |

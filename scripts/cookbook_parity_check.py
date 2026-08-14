@@ -29,7 +29,7 @@ REQUIRED_PAGES = [
 ]
 
 # Guard against accidental gut-outs of the public cookbook.
-MIN_RULE_HEADINGS = 59
+MIN_RULE_HEADINGS = 62
 RULE_HEADING_RE = re.compile(r"^### [A-Z][A-Z0-9-]* —", re.MULTILINE)
 
 
@@ -163,21 +163,21 @@ def run_docs_integrity() -> None:
     registry = (ROOT / "sql_rules" / "registry.yaml").read_text(encoding="utf-8")
     # Count top-level rule id entries of form `- id:` or `id:` under rules list.
     reg_ids = re.findall(r"(?m)^\s+-\s+rule_id:\s+\S+", registry)
-    if len(reg_ids) < 63:
+    if len(reg_ids) < 66:
         raise AssertionError(
-            f"sql_rules/registry.yaml expected >= 63 rule ids, found {len(reg_ids)}"
+            f"sql_rules/registry.yaml expected >= 66 rule ids, found {len(reg_ids)}"
         )
     print(f"PASS sql_rules/registry.yaml ({len(reg_ids)} rule ids)")
 
     hub = (COOKBOOK / "index.md").read_text(encoding="utf-8")
-    if "63" not in hub or "59" not in hub:
+    if "66" not in hub or "62" not in hub:
         raise AssertionError(
-            "cookbook/index.md must state both SQL registry 63 and pandas catalog 59"
+            "cookbook/index.md must state both SQL registry 66 and pandas catalog 62"
         )
     sql_intro = (COOKBOOK / "datafusion-sql-cookbook.md").read_text(encoding="utf-8")[:2500]
     pd_intro = (COOKBOOK / "pandas-cookbook.md").read_text(encoding="utf-8")[:2500]
-    if "63" not in sql_intro:
-        raise AssertionError("datafusion-sql-cookbook.md intro must mention registry 63")
+    if "66" not in sql_intro:
+        raise AssertionError("datafusion-sql-cookbook.md intro must mention registry 66")
     if "59" not in pd_intro or "not" not in pd_intro.lower():
         # require "not" near keep/delete messaging — soft check for retention language
         if "not vibe-coded away" not in pd_intro and "intentionally maintained" not in pd_intro:

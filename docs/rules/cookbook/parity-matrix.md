@@ -12,18 +12,18 @@ Regenerate with `python3 scripts/generate_parity_inventory.py`. Drift fails CI v
 **Audit:** 2026-08-07 — legacy `proven_building_100` / `ported_from_cookbook` labels removed.  
 **Audit:** 2026-08-11 — flat `matrix[]` columns (title, roles, proof, thresholds, docs, tests, difference class).
 
-## Why 59 versus 63 (do not pad)
+## Why 62 versus 66 (do not pad)
 
 | Surface | Count | Source |
 |---------|------:|------|
-| Pandas diagnostics | **59** | `CookbookRule(...)` in `open_fdd/rules/cookbook_catalog.py` (`CANONICAL_RULE_COUNT`) |
-| SQL twins of those 59 | 59 | `sql_rules/registry.yaml` |
+| Pandas diagnostics | **62** | `CookbookRule(...)` in `open_fdd/rules/cookbook_catalog.py` (`CANONICAL_RULE_COUNT`) |
+| SQL twins of those 62 | 62 | `sql_rules/registry.yaml` |
 | SQL-only analytics | **4** | `FAN-RUNTIME-HOURS`, `AVG-ZONE-TEMP`, `ZONE-COMFORT-PCT`, `FAULT-ELAPSED-HOURS` |
-| SQL registry total | **63** | 59 diagnostics + 4 analytics |
+| SQL registry total | **66** | 62 diagnostics + 4 analytics |
 
 Aliases are **not** extra rules: `SV-SLEW` → `SV-RATE`, `FC13` → `FC13-SAT-HIGH`, `excess_runtime` → `SCHED-1`.
 
-Building 100 `48 × 59 = 2,832` is the pandas diagnostic cartesian product, not 63.
+Building 100 `48 × 62` is the pandas diagnostic cartesian product, not 66.
 
 Product UI is **React** (`frontend/web`). Do not delete pandas because SQL exists. Do not put pandas on the product request path.
 

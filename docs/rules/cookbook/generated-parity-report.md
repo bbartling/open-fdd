@@ -9,12 +9,12 @@ nav_order: 7
 Auto-generated from `sql_rules/generated/parity_inventory.yaml`.
 Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.
 
-59 is the executable pandas cookbook (CookbookRule constructors). 63 is the SQL registry: those 59 twins plus 4 SQL-only analytics. Aliases SV-SLEW, FC13, and excess_runtime are not extra rules.
+62 is the executable pandas cookbook (CookbookRule constructors). 66 is the SQL registry: those 62 twins plus 4 SQL-only analytics. Aliases SV-SLEW, FC13, and excess_runtime are not extra rules.
 
-- Pandas diagnostics: **59**
+- Pandas diagnostics: **62**
 - SQL analytics: **4**
-- SQL registry: **63**
-- Building 100 cartesian: 48 equipment × 59 diagnostics = 2832 results
+- SQL registry: **66**
+- Building 100 cartesian: 48 equipment × 62 diagnostics
 
 ## Difference classes
 
@@ -23,7 +23,7 @@ Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.
 | `alias` | 3 |
 | `intentional_non_applicability` | 4 |
 | `missing_implementation` | 1 |
-| `none` | 55 |
+| `none` | 58 |
 
 ## Matrix
 
@@ -64,9 +64,11 @@ Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.
 | `MECH-OAT-1` | Mechanical cooling below 60°F web OAT | `mech_oat1_compute` | `mech_oat_1.sql` | `sql_screening` | `none` |
 | `CHW-NOLOAD-1` | Chiller running with no building load | `chw_noload1_compute` | `chw_noload_1.sql` | `sql_screening` | `none` |
 | `VAV-1` | Zone comfort band | `vav1` | `vav1_comfort_fault.sql` | `sql_screening` | `none` |
+| `VAV-2` | Night setback miss | `vav2` | `vav2_night_setback.sql` | `sql_screening` | `none` |
 | `VAV-3` | Excessive reheat during warm weather | `vav3` | `vav3_excessive_reheat.sql` | `sql_screening` | `none` |
 | `VAV-4` | Damper stuck at full open | `vav4` | `vav4_damper_full_open.sql` | `sql_screening` | `none` |
 | `VAV-5` | Airflow sensor bias | `vav5` | `vav5_airflow_bias.sql` | `sql_screening` | `none` |
+| `VAV-6` | Reheat when cooling available | `vav6` | `vav6_reheat_free_cool.sql` | `sql_screening` | `none` |
 | `VAV-REHEAT` | Reheat valve stuck / no temp rise | `vav_reheat_stuck` | `vav_reheat.sql` | `sql_screening` | `none` |
 | `VAV-AHU-LEAVE` | VAV leave vs parent AHU SAT (fedBy) | `vav_vs_ahu_leave` | `vav_ahu_leave.sql` | `sql_screening` | `none` |
 | `VAV-7` | Min airflow / fixed high flow | `vav7` | `vav7_min_airflow.sql` | `sql_screening` | `none` |
@@ -84,6 +86,7 @@ Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.
 | `TRIM-4` | CHW plant reset advisory | `trim4` | `trim4_chw_reset.sql` | `sql_screening` | `none` |
 | `SCHED-1` | Unoccupied runtime | `sched1` | `sched1_unoccupied_runtime.sql` | `sql_screening` | `alias` |
 | `SCHED-247` | Always-on fan or pump runtime | `_sched247` | `sched247_always_on.sql` | `sql_screening` | `none` |
+| `RESET-1` | SAT reset not tracking outdoor air | `reset1` | `reset1_sat_oa_reset.sql` | `sql_screening` | `none` |
 | `CMD-1` | Fan cmd/status mismatch | `cmd1` | `cmd1_fan_mismatch.sql` | `sql_screening` | `none` |
 | `OA-1` | Low OA fraction | `oa1` | `oa1_low_oa_frac.sql` | `sql_screening` | `none` |
 | `DMP-1` | OA damper leakage | `dmp1` | `dmp1_oa_damper_leak.sql` | `sql_screening` | `none` |
