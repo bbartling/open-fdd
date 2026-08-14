@@ -187,7 +187,6 @@ pub async fn run_all_rules_with_overrides(
             .collect(),
         Err(_) => Vec::new(),
     };
-    let units = unit_system.unwrap_or("imperial");
 
     let mut timings = Vec::new();
     let mut rules_succeeded = 0usize;
