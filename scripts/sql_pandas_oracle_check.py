@@ -43,7 +43,7 @@ def import_oracle():
             "open_fdd.rules oracle not importable — CI must pip install "
             f"open-fdd[oracle] (or editable .[oracle]). Import error: {e}"
         )
-    if len(RULES) < 59:
+    if len(RULES) < 62:
         fail(f"canonical RULES shrunk: {len(RULES)} < 59")
     if "SV-SLEW" not in RULES_BY_ID:
         fail("RULES_BY_ID missing SV-SLEW alias")

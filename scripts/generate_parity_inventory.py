@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate sql_rules/generated/parity_inventory.{yaml,json} from registry + pandas catalog.
 
-Contract: 59 pandas diagnostics + 4 SQL-only analytics = 63 SQL registry entries.
+Contract: 62 pandas diagnostics + 4 SQL-only analytics = 66 SQL registry entries.
 Aliases (SV-SLEW, FC13, excess_runtime) are not extra rules.
 
 Does not claim mask/duration parity — statuses come from registry.yaml plus
@@ -316,14 +316,14 @@ def _difference(rule_id: str, aliases: list[str]) -> tuple[str, str]:
 
 def build_inventory() -> dict:
     pandas_ids = pandas_ids_from_catalog()
-    if len(pandas_ids) != 59:
+    if len(pandas_ids) != 62:
         raise SystemExit(
-            f"FAIL: expected 59 pandas CookbookRule ids, found {len(pandas_ids)}"
+            f"FAIL: expected 62 pandas CookbookRule ids, found {len(pandas_ids)}"
         )
 
     reg = load_registry()
-    if len(reg) != 63:
-        raise SystemExit(f"FAIL: expected 63 registry rules, found {len(reg)}")
+    if len(reg) != 66:
+        raise SystemExit(f"FAIL: expected 66 registry rules, found {len(reg)}")
 
     by_sql = {r["rule_id"]: r for r in reg if isinstance(r, dict) and "rule_id" in r}
     aliases_index: dict[str, str] = {}
@@ -342,6 +342,9 @@ def build_inventory() -> dict:
         "ECON-4": {"fault"},
         "FC1": {"normal", "fault"},
         "VAV-1": {"missing_required_role"},
+        "VAV-2": {"fault", "normal", "missing_required_role"},
+        "VAV-6": {"fault", "normal", "missing_required_role"},
+        "RESET-1": {"fault", "normal", "missing_required_role"},
         "CHW-1": {"missing_required_role", "equipment_off", "fault", "threshold_boundary"},
         "SCHED-247": {"fault", "normal"},
     }
@@ -507,16 +510,16 @@ def build_inventory() -> dict:
         "schema_version": "parity-inventory-v2",
         "generated_by": "scripts/generate_parity_inventory.py",
         "counts": {
-            "pandas_diagnostics": 59,
+            "pandas_diagnostics": 62,
             "sql_analytics": 4,
-            "sql_registry": 63,
+            "sql_registry": 66,
             "concepts": len(concepts),
             "aliases": len(aliases_index),
-            "building_100_cartesian": "48 equipment × 59 diagnostics = 2832 results",
+            "building_100_cartesian": "48 equipment × 62 diagnostics",
         },
         "count_explanation": (
-            "59 is the executable pandas cookbook (CookbookRule constructors). "
-            "63 is the SQL registry: those 59 twins plus 4 SQL-only analytics. "
+            "62 is the executable pandas cookbook (CookbookRule constructors). "
+            "66 is the SQL registry: those 62 twins plus 4 SQL-only analytics. "
             "Aliases SV-SLEW, FC13, and excess_runtime are not extra rules."
         ),
         "parity_levels": sorted(PARITY_LEVELS),

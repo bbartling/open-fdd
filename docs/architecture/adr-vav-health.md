@@ -6,7 +6,7 @@ nav_order: 40
 
 # ADR — `vav_health_matrix_v1`
 
-VAV Health is a **cohort analytic**, not a 60th cookbook diagnostic. Catalog remains **59 pandas + 4 SQL analytics = 63**.
+VAV Health is a **cohort analytic**, not a cookbook diagnostic. Catalog remains **62 pandas + 4 SQL analytics = 66**.
 
 ## Three independent dimensions
 

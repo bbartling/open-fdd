@@ -1,14 +1,14 @@
 schema_version: parity-inventory-v2
 generated_by: scripts/generate_parity_inventory.py
 counts:
-  pandas_diagnostics: 59
+  pandas_diagnostics: 62
   sql_analytics: 4
-  sql_registry: 63
-  concepts: 63
+  sql_registry: 66
+  concepts: 66
   aliases: 3
-  building_100_cartesian: 48 equipment × 59 diagnostics = 2832 results
-count_explanation: '59 is the executable pandas cookbook (CookbookRule constructors).
-  63 is the SQL registry: those 59 twins plus 4 SQL-only analytics. Aliases SV-SLEW,
+  building_100_cartesian: 48 equipment × 62 diagnostics
+count_explanation: '62 is the executable pandas cookbook (CookbookRule constructors).
+  66 is the SQL registry: those 62 twins plus 4 SQL-only analytics. Aliases SV-SLEW,
   FC13, and excess_runtime are not extra rules.'
 parity_levels:
 - concept_only
@@ -26,7 +26,7 @@ difference_classes:
 - documentation_error
 - semantic_gap
 difference_class_counts:
-  none: 55
+  none: 58
   alias: 3
   missing_implementation: 1
   intentional_non_applicability: 4
@@ -2358,24 +2358,60 @@ matrix:
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
-- rule_id: VAV-3
-  title: Excessive reheat during warm weather
+- rule_id: VAV-2
+  title: Night setback miss
   equipment_types: &id211
   - vav
+  - zone
   required_roles: &id212
+  - zone-air-temp
+  - occupied
+  optional_roles: &id213
+  - occ-mode
+  operational_proof_roles: &id214 []
+  default_thresholds: &id215
+    setback_hi:
+      default: 68.0
+      unit: °F
+      min: 55.0
+      max: 72.0
+      step: 0.5
+      label: Setback high
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 900.0
+      unit: sec
+  pandas_implementation: vav2
+  datafusion_sql_implementation: vav2_night_setback.sql
+  documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-2
+  test_coverage: &id216 []
+  parity_status: sql_screening
+  known_semantic_differences: ''
+  difference_class: none
+- rule_id: VAV-3
+  title: Excessive reheat during warm weather
+  equipment_types: &id217
+  - vav
+  required_roles: &id218
   - outside-air-temp
   - reheat-valve
-  optional_roles: &id213
+  optional_roles: &id219
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id214
+  operational_proof_roles: &id220
   - fan-status
   - fan-speed-feedback
   - fan-current
   - fan-power
   - airflow-proof
   - fan-cmd
-  default_thresholds: &id215
+  default_thresholds: &id221
     reheat_oat:
       default: 78.0
       unit: °F
@@ -2410,20 +2446,20 @@ matrix:
   pandas_implementation: vav3
   datafusion_sql_implementation: vav3_excessive_reheat.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-3
-  test_coverage: &id216 []
+  test_coverage: &id222 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: VAV-4
   title: Damper stuck at full open
-  equipment_types: &id217
+  equipment_types: &id223
   - vav
-  required_roles: &id218
+  required_roles: &id224
   - damper
-  optional_roles: &id219
+  optional_roles: &id225
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id220
+  operational_proof_roles: &id226
   - fan-status
   - fan-speed-feedback
   - fan-current
@@ -2431,7 +2467,7 @@ matrix:
   - airflow-proof
   - fan-cmd
   - loop-enabled
-  default_thresholds: &id221
+  default_thresholds: &id227
     full_open_pct:
       default: 0.975
       unit: frac
@@ -2466,29 +2502,29 @@ matrix:
   pandas_implementation: vav4
   datafusion_sql_implementation: vav4_damper_full_open.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-4
-  test_coverage: &id222
+  test_coverage: &id228
   - scripts/materialize_vav_oracle_fixtures.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: VAV-5
   title: Airflow sensor bias
-  equipment_types: &id223
+  equipment_types: &id229
   - vav
-  required_roles: &id224
+  required_roles: &id230
   - zone-airflow
   - damper
-  optional_roles: &id225
+  optional_roles: &id231
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id226
+  operational_proof_roles: &id232
   - fan-status
   - fan-speed-feedback
   - fan-current
   - fan-power
   - airflow-proof
   - fan-cmd
-  default_thresholds: &id227
+  default_thresholds: &id233
     confirm_min:
       default: 15.0
       unit: min
@@ -2502,29 +2538,77 @@ matrix:
   pandas_implementation: vav5
   datafusion_sql_implementation: vav5_airflow_bias.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-5
-  test_coverage: &id228 []
+  test_coverage: &id234 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
-- rule_id: VAV-REHEAT
-  title: Reheat valve stuck / no temp rise
-  equipment_types: &id229
+- rule_id: VAV-6
+  title: Reheat when cooling available
+  equipment_types: &id235
   - vav
-  required_roles: &id230
+  required_roles: &id236
+  - outside-air-temp
   - reheat-valve
-  - vav-discharge-air-temp
-  - vav-inlet-air-temp
-  optional_roles: &id231
-  - fan_status
-  - fan_cmd
-  operational_proof_roles: &id232
+  optional_roles: &id237
+  - cooling-available
+  operational_proof_roles: &id238
   - fan-status
   - fan-speed-feedback
   - fan-current
   - fan-power
   - airflow-proof
   - fan-cmd
-  default_thresholds: &id233
+  default_thresholds: &id239
+    free_cool_oat:
+      default: 65.0
+      unit: °F
+      min: 45.0
+      max: 75.0
+      step: 1.0
+      label: Free-cool OAT
+    reheat_pct:
+      default: 0.25
+      unit: frac
+      min: 0.05
+      max: 1.0
+      step: 0.05
+      label: Reheat frac
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 900.0
+      unit: sec
+  pandas_implementation: vav6
+  datafusion_sql_implementation: vav6_reheat_free_cool.sql
+  documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-6
+  test_coverage: &id240 []
+  parity_status: sql_screening
+  known_semantic_differences: ''
+  difference_class: none
+- rule_id: VAV-REHEAT
+  title: Reheat valve stuck / no temp rise
+  equipment_types: &id241
+  - vav
+  required_roles: &id242
+  - reheat-valve
+  - vav-discharge-air-temp
+  - vav-inlet-air-temp
+  optional_roles: &id243
+  - fan_status
+  - fan_cmd
+  operational_proof_roles: &id244
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
+  default_thresholds: &id245
     reheat_cmd:
       default: 0.3
       unit: frac
@@ -2559,28 +2643,28 @@ matrix:
   pandas_implementation: vav_reheat_stuck
   datafusion_sql_implementation: vav_reheat.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-reheat
-  test_coverage: &id234 []
+  test_coverage: &id246 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: VAV-AHU-LEAVE
   title: VAV leave vs parent AHU SAT (fedBy)
-  equipment_types: &id235
+  equipment_types: &id247
   - vav
-  required_roles: &id236
+  required_roles: &id248
   - vav-discharge-air-temp
   - ahu-discharge-air-temp
-  optional_roles: &id237
+  optional_roles: &id249
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id238
+  operational_proof_roles: &id250
   - fan-status
   - fan-speed-feedback
   - fan-current
   - fan-power
   - airflow-proof
   - fan-cmd
-  default_thresholds: &id239
+  default_thresholds: &id251
     delta_f:
       default: 8.0
       unit: °F
@@ -2608,28 +2692,28 @@ matrix:
   pandas_implementation: vav_vs_ahu_leave
   datafusion_sql_implementation: vav_ahu_leave.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-ahu-leave
-  test_coverage: &id240 []
+  test_coverage: &id252 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: VAV-7
   title: Min airflow / fixed high flow
-  equipment_types: &id241
+  equipment_types: &id253
   - vav
-  required_roles: &id242
+  required_roles: &id254
   - zone-airflow
-  optional_roles: &id243
+  optional_roles: &id255
   - min_flow_sp
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id244
+  operational_proof_roles: &id256
   - fan-status
   - fan-speed-feedback
   - fan-current
   - fan-power
   - airflow-proof
   - fan-cmd
-  default_thresholds: &id245
+  default_thresholds: &id257
     flow_on_min:
       default: 25.0
       unit: cfm
@@ -2671,7 +2755,7 @@ matrix:
   pandas_implementation: vav7
   datafusion_sql_implementation: vav7_min_airflow.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-7
-  test_coverage: &id246
+  test_coverage: &id258
   - scripts/materialize_vav_oracle_fixtures.py
   - tests/analytics/test_vav_health.py
   parity_status: sql_screening
@@ -2679,12 +2763,12 @@ matrix:
   difference_class: none
 - rule_id: CHW-1
   title: Low chilled-water ΔT
-  equipment_types: &id247
+  equipment_types: &id259
   - chiller
-  required_roles: &id248
+  required_roles: &id260
   - chilled-water-supply-temp
   - chilled-water-return-temp
-  optional_roles: &id249
+  optional_roles: &id261
   - chw_pump_cmd
   - pump_status
   - chiller_status
@@ -2692,7 +2776,7 @@ matrix:
   - chiller_amps
   - chiller_power
   - chw_flow
-  operational_proof_roles: &id250
+  operational_proof_roles: &id262
   - pump-status
   - chw-pump-status
   - hw-pump-status
@@ -2706,7 +2790,7 @@ matrix:
   - pump-cmd
   - chw-pump-cmd
   - hw-pump-cmd
-  default_thresholds: &id251
+  default_thresholds: &id263
     min_dt:
       default: 4.0
       unit: °F
@@ -2727,7 +2811,7 @@ matrix:
   pandas_implementation: chw1
   datafusion_sql_implementation: chw1_low_dt.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-1
-  test_coverage: &id252
+  test_coverage: &id264
   - tests/rules/test_chw1_gate.py
   - tests/rules/test_effective_catalog.py
   - tests/rules/test_parity_inventory.py
@@ -2738,14 +2822,14 @@ matrix:
   difference_class: none
 - rule_id: CHW-2
   title: DP below SP at max pump speed
-  equipment_types: &id253
+  equipment_types: &id265
   - chiller
-  required_roles: &id254
+  required_roles: &id266
   - chw-diff-pressure
   - chw-diff-pressure-sp
   - chw-pump-cmd
-  optional_roles: &id255 []
-  operational_proof_roles: &id256
+  optional_roles: &id267 []
+  operational_proof_roles: &id268
   - pump-status
   - chw-pump-status
   - hw-pump-status
@@ -2759,7 +2843,7 @@ matrix:
   - pump-cmd
   - chw-pump-cmd
   - hw-pump-cmd
-  default_thresholds: &id257
+  default_thresholds: &id269
     dp_margin:
       default: 2.2
       unit: psi
@@ -2787,20 +2871,20 @@ matrix:
   pandas_implementation: chw2
   datafusion_sql_implementation: chw2_dp_low.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-2
-  test_coverage: &id258 []
+  test_coverage: &id270 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: CHW-3
   title: Plant supply temp outside deadband
-  equipment_types: &id259
+  equipment_types: &id271
   - chiller
-  required_roles: &id260
+  required_roles: &id272
   - chilled-water-supply-temp
   - chilled-water-supply-temp-sp
   - chw-pump-cmd
-  optional_roles: &id261 []
-  operational_proof_roles: &id262
+  optional_roles: &id273 []
+  operational_proof_roles: &id274
   - pump-status
   - chw-pump-status
   - hw-pump-status
@@ -2814,7 +2898,7 @@ matrix:
   - pump-cmd
   - chw-pump-cmd
   - hw-pump-cmd
-  default_thresholds: &id263
+  default_thresholds: &id275
     sp_band:
       default: 2.2
       unit: °F
@@ -2835,19 +2919,19 @@ matrix:
   pandas_implementation: chw3
   datafusion_sql_implementation: chw3_supply_band.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-3
-  test_coverage: &id264 []
+  test_coverage: &id276 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: CHW-4
   title: Flow high at max pump
-  equipment_types: &id265
+  equipment_types: &id277
   - chiller
-  required_roles: &id266
+  required_roles: &id278
   - chw-flow
   - chw-pump-cmd
-  optional_roles: &id267 []
-  operational_proof_roles: &id268
+  optional_roles: &id279 []
+  operational_proof_roles: &id280
   - pump-status
   - chw-pump-status
   - hw-pump-status
@@ -2861,7 +2945,7 @@ matrix:
   - pump-cmd
   - chw-pump-cmd
   - hw-pump-cmd
-  default_thresholds: &id269
+  default_thresholds: &id281
     flow_hi:
       default: 1100
       unit: gpm
@@ -2889,27 +2973,27 @@ matrix:
   pandas_implementation: chw4
   datafusion_sql_implementation: chw4_flow_high.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-4
-  test_coverage: &id270 []
+  test_coverage: &id282 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: HP-1
   title: Discharge cold when heating
-  equipment_types: &id271
+  equipment_types: &id283
   - heatpump
-  required_roles: &id272
+  required_roles: &id284
   - discharge-air-temp
   - zone-air-temp
   - fan-cmd
-  optional_roles: &id273
+  optional_roles: &id285
   - compressor_status
   - fan_status
-  operational_proof_roles: &id274
+  operational_proof_roles: &id286
   - compressor-status
   - equipment-enable
   - fan-status
   - fan-cmd
-  default_thresholds: &id275
+  default_thresholds: &id287
     min_sat:
       default: 85.0
       unit: °F
@@ -2937,19 +3021,19 @@ matrix:
   pandas_implementation: hp1
   datafusion_sql_implementation: hp1_discharge_cold.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#hp-1
-  test_coverage: &id276 []
+  test_coverage: &id288 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: WX-1
   title: OA temperature spike
-  equipment_types: &id277
+  equipment_types: &id289
   - weather
-  required_roles: &id278
+  required_roles: &id290
   - outside-air-temp
-  optional_roles: &id279 []
-  operational_proof_roles: &id280 []
-  default_thresholds: &id281
+  optional_roles: &id291 []
+  operational_proof_roles: &id292 []
+  default_thresholds: &id293
     spike_limit:
       default: 16.0
       unit: °F
@@ -2970,23 +3054,23 @@ matrix:
   pandas_implementation: wx1
   datafusion_sql_implementation: wx1_oa_spike.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#wx-1
-  test_coverage: &id282 []
+  test_coverage: &id294 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: CW-OPT-1
   title: Condenser water not optimized vs wet-bulb
-  equipment_types: &id283
+  equipment_types: &id295
   - chiller
   - cooling_tower
-  required_roles: &id284
+  required_roles: &id296
   - condenser-water-supply-temp
-  optional_roles: &id285
+  optional_roles: &id297
   - pump_status
   - chiller_status
   - chw_flow
   - chw_pump_cmd
-  operational_proof_roles: &id286
+  operational_proof_roles: &id298
   - pump-status
   - chw-pump-status
   - hw-pump-status
@@ -3000,7 +3084,7 @@ matrix:
   - pump-cmd
   - chw-pump-cmd
   - hw-pump-cmd
-  default_thresholds: &id287
+  default_thresholds: &id299
     cw_approach:
       default: 7.0
       unit: °F
@@ -3028,23 +3112,23 @@ matrix:
   pandas_implementation: cw_opt
   datafusion_sql_implementation: cw_opt_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-opt-1
-  test_coverage: &id288 []
+  test_coverage: &id300 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: CW-APR-1
   title: High CW approach at full tower fan
-  equipment_types: &id289
+  equipment_types: &id301
   - chiller
   - cooling_tower
-  required_roles: &id290
+  required_roles: &id302
   - condenser-water-supply-temp
-  optional_roles: &id291
+  optional_roles: &id303
   - tower-fan-cmd
   - cw-fan-cmd
   - fan-cmd
   - web-outside-air-wetbulb
-  operational_proof_roles: &id292
+  operational_proof_roles: &id304
   - pump-status
   - chw-pump-status
   - hw-pump-status
@@ -3058,7 +3142,7 @@ matrix:
   - pump-cmd
   - chw-pump-cmd
   - hw-pump-cmd
-  default_thresholds: &id293
+  default_thresholds: &id305
     approach_max_f:
       default: 8.0
       unit: °F
@@ -3086,23 +3170,23 @@ matrix:
   pandas_implementation: cw_apr
   datafusion_sql_implementation: cw_apr_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-apr-1
-  test_coverage: &id294 []
+  test_coverage: &id306 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: CW-FAN-1
   title: Excess tower fan energy vs wet-bulb limit
-  equipment_types: &id295
+  equipment_types: &id307
   - chiller
   - cooling_tower
-  required_roles: &id296
+  required_roles: &id308
   - condenser-water-supply-temp
-  optional_roles: &id297
+  optional_roles: &id309
   - tower-fan-cmd
   - cw-fan-cmd
   - fan-cmd
   - web-outside-air-wetbulb
-  operational_proof_roles: &id298
+  operational_proof_roles: &id310
   - pump-status
   - chw-pump-status
   - hw-pump-status
@@ -3116,7 +3200,7 @@ matrix:
   - pump-cmd
   - chw-pump-cmd
   - hw-pump-cmd
-  default_thresholds: &id299
+  default_thresholds: &id311
     cw_approach:
       default: 7.0
       unit: °F
@@ -3151,30 +3235,30 @@ matrix:
   pandas_implementation: cw_fan_excess
   datafusion_sql_implementation: cw_fan_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-fan-1
-  test_coverage: &id300 []
+  test_coverage: &id312 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: TRIM-1
   title: Duct static trim advisory
-  equipment_types: &id301
+  equipment_types: &id313
   - ahu
-  required_roles: &id302
+  required_roles: &id314
   - duct-static-pressure
   - vav-pressure-request-sum
-  optional_roles: &id303
+  optional_roles: &id315
   - duct_static_sp
   - static_reset_request
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id304
+  operational_proof_roles: &id316
   - fan-status
   - fan-speed-feedback
   - fan-current
   - fan-power
   - airflow-proof
   - fan-cmd
-  default_thresholds: &id305
+  default_thresholds: &id317
     duct_hi:
       default: 1.35
       unit: in. w.c.
@@ -3202,23 +3286,23 @@ matrix:
   pandas_implementation: trim1
   datafusion_sql_implementation: trim1_duct_static.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-1
-  test_coverage: &id306 []
+  test_coverage: &id318 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: TRIM-3
   title: HWST trim advisory
-  equipment_types: &id307
+  equipment_types: &id319
   - boiler
-  required_roles: &id308
+  required_roles: &id320
   - hot-water-supply-temp
   - hw-reset-request-sum
-  optional_roles: &id309
+  optional_roles: &id321
   - pump_status
   - chiller_status
   - chw_flow
   - chw_pump_cmd
-  operational_proof_roles: &id310
+  operational_proof_roles: &id322
   - pump-status
   - chw-pump-status
   - hw-pump-status
@@ -3232,7 +3316,7 @@ matrix:
   - pump-cmd
   - chw-pump-cmd
   - hw-pump-cmd
-  default_thresholds: &id311
+  default_thresholds: &id323
     hwst_hi:
       default: 160.0
       unit: °F
@@ -3260,23 +3344,23 @@ matrix:
   pandas_implementation: trim3
   datafusion_sql_implementation: trim3_hwst.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-3
-  test_coverage: &id312 []
+  test_coverage: &id324 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: TRIM-4
   title: CHW plant reset advisory
-  equipment_types: &id313
+  equipment_types: &id325
   - chiller
-  required_roles: &id314
+  required_roles: &id326
   - chilled-water-supply-temp
   - chw-reset-request-sum
-  optional_roles: &id315
+  optional_roles: &id327
   - pump_status
   - chiller_status
   - chw_flow
   - chw_pump_cmd
-  operational_proof_roles: &id316
+  operational_proof_roles: &id328
   - pump-status
   - chw-pump-status
   - hw-pump-status
@@ -3290,7 +3374,7 @@ matrix:
   - pump-cmd
   - chw-pump-cmd
   - hw-pump-cmd
-  default_thresholds: &id317
+  default_thresholds: &id329
     chw_lo:
       default: 45.0
       unit: °F
@@ -3318,21 +3402,21 @@ matrix:
   pandas_implementation: trim4
   datafusion_sql_implementation: trim4_chw_reset.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-4
-  test_coverage: &id318 []
+  test_coverage: &id330 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: SCHED-1
   title: Unoccupied runtime
-  equipment_types: &id319
+  equipment_types: &id331
   - ahu
-  required_roles: &id320
+  required_roles: &id332
   - occupied
   - fan-status
-  optional_roles: &id321
+  optional_roles: &id333
   - zone-air-temp
-  operational_proof_roles: &id322 []
-  default_thresholds: &id323
+  operational_proof_roles: &id334 []
+  default_thresholds: &id335
     comfort_low_f:
       default: 70.0
       unit: °F
@@ -3360,7 +3444,7 @@ matrix:
   pandas_implementation: sched1
   datafusion_sql_implementation: sched1_unoccupied_runtime.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sched-1
-  test_coverage: &id324
+  test_coverage: &id336
   - tests/reporting/test_findings_smoke.py
   - tests/rules/test_catalog_smoke.py
   - tests/rules/test_quality.py
@@ -3369,14 +3453,14 @@ matrix:
   difference_class: alias
 - rule_id: SCHED-247
   title: Always-on fan or pump runtime
-  equipment_types: &id325
+  equipment_types: &id337
   - ahu
   - vav
   - chiller
   - boiler
   - heatpump
-  required_roles: &id326 []
-  optional_roles: &id327
+  required_roles: &id338 []
+  optional_roles: &id339
   - fan-status
   - pump-status
   - chw-pump-status
@@ -3390,8 +3474,8 @@ matrix:
   - hw-pump-cmd
   - duct-static-pressure
   - chw-diff-pressure
-  operational_proof_roles: &id328 []
-  default_thresholds: &id329
+  operational_proof_roles: &id340 []
+  default_thresholds: &id341
     always_on_pct:
       default: 0.95
       unit: frac
@@ -3419,7 +3503,7 @@ matrix:
   pandas_implementation: _sched247
   datafusion_sql_implementation: sched247_always_on.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sched-247
-  test_coverage: &id330
+  test_coverage: &id342
   - tests/rules/test_parity_inventory.py
   - tests/rules/test_sched247_proof.py
   - tests/test_wattlab_parity_diff.py
@@ -3428,16 +3512,79 @@ matrix:
     is inferred runtime only and does not OR into the FAULT mask. SQL uses the same
     rank.'
   difference_class: none
+- rule_id: RESET-1
+  title: SAT reset not tracking outdoor air
+  equipment_types: &id343
+  - ahu
+  required_roles: &id344
+  - discharge-air-temp-sp
+  - outside-air-temp
+  optional_roles: &id345
+  - fan-status
+  - fan-cmd
+  operational_proof_roles: &id346
+  - fan-status
+  - fan-speed-feedback
+  - fan-current
+  - fan-power
+  - airflow-proof
+  - fan-cmd
+  default_thresholds: &id347
+    reset_err_f:
+      default: 3.0
+      unit: °F
+      min: 0.5
+      max: 10.0
+      step: 0.5
+      label: Reset error
+    reset_sat_at_65:
+      default: 52.0
+      unit: °F
+      min: 45.0
+      max: 65.0
+      step: 0.5
+      label: SAT SP at 65°F OAT
+    reset_slope:
+      default: 0.25
+      unit: °F/°F
+      min: 0.05
+      max: 1.0
+      step: 0.05
+      label: Reset slope
+    reset_oat_ref:
+      default: 65.0
+      unit: °F
+      min: 50.0
+      max: 80.0
+      step: 1.0
+      label: Reset OAT ref
+    confirm_min:
+      default: 15.0
+      unit: min
+      min: 0.0
+      max: 60.0
+      step: 1.0
+      label: Fault confirm delay
+    confirm_seconds:
+      default: 900.0
+      unit: sec
+  pandas_implementation: reset1
+  datafusion_sql_implementation: reset1_sat_oa_reset.sql
+  documentation_link: docs/rules/cookbook/pandas-cookbook.md#reset-1
+  test_coverage: &id348 []
+  parity_status: sql_screening
+  known_semantic_differences: ''
+  difference_class: none
 - rule_id: CMD-1
   title: Fan cmd/status mismatch
-  equipment_types: &id331
+  equipment_types: &id349
   - ahu
-  required_roles: &id332
+  required_roles: &id350
   - fan-cmd
   - fan-status
-  optional_roles: &id333 []
-  operational_proof_roles: &id334 []
-  default_thresholds: &id335
+  optional_roles: &id351 []
+  operational_proof_roles: &id352 []
+  default_thresholds: &id353
     confirm_min:
       default: 10.0
       unit: min
@@ -3451,30 +3598,30 @@ matrix:
   pandas_implementation: cmd1
   datafusion_sql_implementation: cmd1_fan_mismatch.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cmd-1
-  test_coverage: &id336 []
+  test_coverage: &id354 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: OA-1
   title: Low OA fraction
-  equipment_types: &id337
+  equipment_types: &id355
   - ahu
-  required_roles: &id338
+  required_roles: &id356
   - mixed-air-temp
   - return-air-temp
   - outside-air-temp
   - fan-status
-  optional_roles: &id339
+  optional_roles: &id357
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id340
+  operational_proof_roles: &id358
   - fan-status
   - fan-speed-feedback
   - fan-current
   - fan-power
   - airflow-proof
   - fan-cmd
-  default_thresholds: &id341
+  default_thresholds: &id359
     min_oa_frac:
       default: 0.15
       unit: frac
@@ -3502,23 +3649,23 @@ matrix:
   pandas_implementation: oa1
   datafusion_sql_implementation: oa1_low_oa_frac.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#oa-1
-  test_coverage: &id342 []
+  test_coverage: &id360 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: DMP-1
   title: OA damper leakage
-  equipment_types: &id343
+  equipment_types: &id361
   - ahu
-  required_roles: &id344
+  required_roles: &id362
   - outside-air-temp
   - mixed-air-temp
   - outside-air-damper
-  optional_roles: &id345
+  optional_roles: &id363
   - fan_status
   - fan_cmd
-  operational_proof_roles: &id346 []
-  default_thresholds: &id347
+  operational_proof_roles: &id364 []
+  default_thresholds: &id365
     leak_delta:
       default: 2.0
       unit: °F
@@ -3539,24 +3686,24 @@ matrix:
   pandas_implementation: dmp1
   datafusion_sql_implementation: dmp1_oa_damper_leak.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#dmp-1
-  test_coverage: &id348 []
+  test_coverage: &id366 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: VLV-1
   title: Cooling valve leakage
-  equipment_types: &id349
+  equipment_types: &id367
   - ahu
-  required_roles: &id350
+  required_roles: &id368
   - discharge-air-temp
   - discharge-air-temp-sp
   - cooling-valve
-  optional_roles: &id351
+  optional_roles: &id369
   - mixed-air-temp
   - fan-status
   - fan-cmd
-  operational_proof_roles: &id352 []
-  default_thresholds: &id353
+  operational_proof_roles: &id370 []
+  default_thresholds: &id371
     sat_err:
       default: 2.0
       unit: °F
@@ -3584,18 +3731,18 @@ matrix:
   pandas_implementation: vlv1
   datafusion_sql_implementation: vlv1_clg_valve_leak.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vlv-1
-  test_coverage: &id354 []
+  test_coverage: &id372 []
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
 - rule_id: AVG-ZONE-TEMP
   title: Average zone temperature per equipment
   equipment_types: []
-  required_roles: &id355
+  required_roles: &id373
   - zone_t
   optional_roles: []
   operational_proof_roles: []
-  default_thresholds: &id356
+  default_thresholds: &id374
     zone_t_lo:
       default: 68.0
       unit: degF
@@ -3613,22 +3760,22 @@ matrix:
   pandas_implementation: null
   datafusion_sql_implementation: avg_zone_temp.sql
   documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#avg-zone-temp
-  test_coverage: &id357 []
+  test_coverage: &id375 []
   parity_status: sql_screening
   known_semantic_differences: SQL analytics rollup — not a pandas diagnostic
   difference_class: intentional_non_applicability
 - rule_id: FAN-RUNTIME-HOURS
   title: Fan running hours where fan_cmd > 5% (normalized 0-1)
   equipment_types: []
-  required_roles: &id358
+  required_roles: &id376
   - fan_cmd
   optional_roles: []
   operational_proof_roles: []
-  default_thresholds: &id359 {}
+  default_thresholds: &id377 {}
   pandas_implementation: null
   datafusion_sql_implementation: fan_runtime_hours.sql
   documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fan-runtime-hours
-  test_coverage: &id360
+  test_coverage: &id378
   - tests/rules/test_parity_inventory.py
   parity_status: sql_screening
   known_semantic_differences: SQL analytics rollup — not a pandas diagnostic
@@ -3636,11 +3783,11 @@ matrix:
 - rule_id: FAULT-ELAPSED-HOURS
   title: Comfort fault sample count → hours
   equipment_types: []
-  required_roles: &id361
+  required_roles: &id379
   - zone_t
   optional_roles: []
   operational_proof_roles: []
-  default_thresholds: &id362
+  default_thresholds: &id380
     zone_t_lo:
       default: 68.0
       unit: degF
@@ -3658,18 +3805,18 @@ matrix:
   pandas_implementation: null
   datafusion_sql_implementation: fault_elapsed_hours.sql
   documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fault-elapsed-hours
-  test_coverage: &id363 []
+  test_coverage: &id381 []
   parity_status: sql_screening
   known_semantic_differences: SQL analytics rollup — not a pandas diagnostic
   difference_class: intentional_non_applicability
 - rule_id: ZONE-COMFORT-PCT
   title: Percent of samples in comfort band
   equipment_types: []
-  required_roles: &id364
+  required_roles: &id382
   - zone_t
   optional_roles: []
   operational_proof_roles: []
-  default_thresholds: &id365
+  default_thresholds: &id383
     zone_t_lo:
       default: 68.0
       unit: degF
@@ -3687,7 +3834,7 @@ matrix:
   pandas_implementation: null
   datafusion_sql_implementation: zone_comfort_pct.sql
   documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#zone-comfort-pct
-  test_coverage: &id366 []
+  test_coverage: &id384 []
   parity_status: sql_screening
   known_semantic_differences: SQL analytics rollup — not a pandas diagnostic
   difference_class: intentional_non_applicability
@@ -7261,10 +7408,10 @@ concepts:
     required: true
     present: false
     oracle_seed: false
-- canonical_id: VAV-3
-  pandas_id: VAV-3
-  rule_id: VAV-3
-  title: Excessive reheat during warm weather
+- canonical_id: VAV-2
+  pandas_id: VAV-2
+  rule_id: VAV-2
+  title: Night setback miss
   aliases: []
   kind: diagnostic
   equipment_types: *id211
@@ -7273,12 +7420,111 @@ concepts:
   optional_roles: *id213
   operational_proof_roles: *id214
   default_thresholds: *id215
+  pandas_implementation: vav2
+  datafusion_sql_implementation: vav2_night_setback.sql
+  sql_file: vav2_night_setback.sql
+  documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-2
+  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-2
+  test_coverage: *id216
+  parity_status: sql_screening
+  parity_level: sql_screening
+  difference_class: none
+  known_semantic_differences: ''
+  operational_gate: always
+  startup_delay_seconds: 0.0
+  confirm_seconds: 900
+  parameters:
+    setback_hi:
+      label: Setback high
+      default: 68.0
+      min: 55.0
+      max: 72.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: SETBACK_HI
+    confirm_seconds:
+      label: Confirm time
+      default: 900
+      min: 0
+      max: 3600
+      step: 300
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/VAV-2/normal
+    required: true
+    present: true
+    oracle_seed: true
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/VAV-2/fault
+    required: true
+    present: true
+    oracle_seed: true
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/VAV-2/threshold_boundary
+    required: true
+    present: true
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/VAV-2/missing_required_role
+    required: true
+    present: true
+    oracle_seed: true
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/VAV-2/equipment_off
+    required: true
+    present: true
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/VAV-2/startup_delay
+    required: true
+    present: true
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/VAV-2/irregular_sampling
+    required: true
+    present: true
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/VAV-2/data_gap
+    required: true
+    present: true
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/VAV-2/duplicate_timestamp
+    required: true
+    present: true
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/VAV-2/out_of_order
+    required: true
+    present: true
+    oracle_seed: false
+- canonical_id: VAV-3
+  pandas_id: VAV-3
+  rule_id: VAV-3
+  title: Excessive reheat during warm weather
+  aliases: []
+  kind: diagnostic
+  equipment_types: *id217
+  equipment_kinds: *id217
+  required_roles: *id218
+  optional_roles: *id219
+  operational_proof_roles: *id220
+  default_thresholds: *id221
   pandas_implementation: vav3
   datafusion_sql_implementation: vav3_excessive_reheat.sql
   sql_file: vav3_excessive_reheat.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-3
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-3
-  test_coverage: *id216
+  test_coverage: *id222
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -7384,18 +7630,18 @@ concepts:
   title: Damper stuck at full open
   aliases: []
   kind: diagnostic
-  equipment_types: *id217
-  equipment_kinds: *id217
-  required_roles: *id218
-  optional_roles: *id219
-  operational_proof_roles: *id220
-  default_thresholds: *id221
+  equipment_types: *id223
+  equipment_kinds: *id223
+  required_roles: *id224
+  optional_roles: *id225
+  operational_proof_roles: *id226
+  default_thresholds: *id227
   pandas_implementation: vav4
   datafusion_sql_implementation: vav4_damper_full_open.sql
   sql_file: vav4_damper_full_open.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-4
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-4
-  test_coverage: *id222
+  test_coverage: *id228
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -7501,18 +7747,18 @@ concepts:
   title: Airflow sensor bias
   aliases: []
   kind: diagnostic
-  equipment_types: *id223
-  equipment_kinds: *id223
-  required_roles: *id224
-  optional_roles: *id225
-  operational_proof_roles: *id226
-  default_thresholds: *id227
+  equipment_types: *id229
+  equipment_kinds: *id229
+  required_roles: *id230
+  optional_roles: *id231
+  operational_proof_roles: *id232
+  default_thresholds: *id233
   pandas_implementation: vav5
   datafusion_sql_implementation: vav5_airflow_bias.sql
   sql_file: vav5_airflow_bias.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-5
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-5
-  test_coverage: *id228
+  test_coverage: *id234
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -7585,24 +7831,132 @@ concepts:
     required: true
     present: false
     oracle_seed: false
+- canonical_id: VAV-6
+  pandas_id: VAV-6
+  rule_id: VAV-6
+  title: Reheat when cooling available
+  aliases: []
+  kind: diagnostic
+  equipment_types: *id235
+  equipment_kinds: *id235
+  required_roles: *id236
+  optional_roles: *id237
+  operational_proof_roles: *id238
+  default_thresholds: *id239
+  pandas_implementation: vav6
+  datafusion_sql_implementation: vav6_reheat_free_cool.sql
+  sql_file: vav6_reheat_free_cool.sql
+  documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-6
+  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-6
+  test_coverage: *id240
+  parity_status: sql_screening
+  parity_level: sql_screening
+  difference_class: none
+  known_semantic_differences: ''
+  operational_gate: fan_running
+  startup_delay_seconds: 300
+  confirm_seconds: 900
+  parameters:
+    free_cool_oat:
+      label: Free-cool OAT
+      default: 65.0
+      min: 45.0
+      max: 75.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: FREE_COOL_OAT
+    reheat_pct:
+      label: Reheat frac
+      default: 0.25
+      min: 0.05
+      max: 1.0
+      step: 0.05
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: REHEAT_PCT
+    confirm_seconds:
+      label: Confirm time
+      default: 900.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/VAV-6/normal
+    required: true
+    present: true
+    oracle_seed: true
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/VAV-6/fault
+    required: true
+    present: true
+    oracle_seed: true
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/VAV-6/threshold_boundary
+    required: true
+    present: true
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/VAV-6/missing_required_role
+    required: true
+    present: true
+    oracle_seed: true
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/VAV-6/equipment_off
+    required: true
+    present: true
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/VAV-6/startup_delay
+    required: true
+    present: true
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/VAV-6/irregular_sampling
+    required: true
+    present: true
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/VAV-6/data_gap
+    required: true
+    present: true
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/VAV-6/duplicate_timestamp
+    required: true
+    present: true
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/VAV-6/out_of_order
+    required: true
+    present: true
+    oracle_seed: false
 - canonical_id: VAV-REHEAT
   pandas_id: VAV-REHEAT
   rule_id: VAV-REHEAT
   title: Reheat valve stuck / no temp rise
   aliases: []
   kind: diagnostic
-  equipment_types: *id229
-  equipment_kinds: *id229
-  required_roles: *id230
-  optional_roles: *id231
-  operational_proof_roles: *id232
-  default_thresholds: *id233
+  equipment_types: *id241
+  equipment_kinds: *id241
+  required_roles: *id242
+  optional_roles: *id243
+  operational_proof_roles: *id244
+  default_thresholds: *id245
   pandas_implementation: vav_reheat_stuck
   datafusion_sql_implementation: vav_reheat.sql
   sql_file: vav_reheat.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-reheat
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-reheat
-  test_coverage: *id234
+  test_coverage: *id246
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -7708,18 +8062,18 @@ concepts:
   title: VAV leave vs parent AHU SAT (fedBy)
   aliases: []
   kind: diagnostic
-  equipment_types: *id235
-  equipment_kinds: *id235
-  required_roles: *id236
-  optional_roles: *id237
-  operational_proof_roles: *id238
-  default_thresholds: *id239
+  equipment_types: *id247
+  equipment_kinds: *id247
+  required_roles: *id248
+  optional_roles: *id249
+  operational_proof_roles: *id250
+  default_thresholds: *id251
   pandas_implementation: vav_vs_ahu_leave
   datafusion_sql_implementation: vav_ahu_leave.sql
   sql_file: vav_ahu_leave.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-ahu-leave
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-ahu-leave
-  test_coverage: *id240
+  test_coverage: *id252
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -7816,18 +8170,18 @@ concepts:
   title: Min airflow / fixed high flow
   aliases: []
   kind: diagnostic
-  equipment_types: *id241
-  equipment_kinds: *id241
-  required_roles: *id242
-  optional_roles: *id243
-  operational_proof_roles: *id244
-  default_thresholds: *id245
+  equipment_types: *id253
+  equipment_kinds: *id253
+  required_roles: *id254
+  optional_roles: *id255
+  operational_proof_roles: *id256
+  default_thresholds: *id257
   pandas_implementation: vav7
   datafusion_sql_implementation: vav7_min_airflow.sql
   sql_file: vav7_min_airflow.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-7
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-7
-  test_coverage: *id246
+  test_coverage: *id258
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -7951,18 +8305,18 @@ concepts:
   title: Low chilled-water ΔT
   aliases: []
   kind: diagnostic
-  equipment_types: *id247
-  equipment_kinds: *id247
-  required_roles: *id248
-  optional_roles: *id249
-  operational_proof_roles: *id250
-  default_thresholds: *id251
+  equipment_types: *id259
+  equipment_kinds: *id259
+  required_roles: *id260
+  optional_roles: *id261
+  operational_proof_roles: *id262
+  default_thresholds: *id263
   pandas_implementation: chw1
   datafusion_sql_implementation: chw1_low_dt.sql
   sql_file: chw1_low_dt.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-1
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#chw-1
-  test_coverage: *id252
+  test_coverage: *id264
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -8051,18 +8405,18 @@ concepts:
   title: DP below SP at max pump speed
   aliases: []
   kind: diagnostic
-  equipment_types: *id253
-  equipment_kinds: *id253
-  required_roles: *id254
-  optional_roles: *id255
-  operational_proof_roles: *id256
-  default_thresholds: *id257
+  equipment_types: *id265
+  equipment_kinds: *id265
+  required_roles: *id266
+  optional_roles: *id267
+  operational_proof_roles: *id268
+  default_thresholds: *id269
   pandas_implementation: chw2
   datafusion_sql_implementation: chw2_dp_low.sql
   sql_file: chw2_dp_low.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-2
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#chw-2
-  test_coverage: *id258
+  test_coverage: *id270
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -8159,18 +8513,18 @@ concepts:
   title: Plant supply temp outside deadband
   aliases: []
   kind: diagnostic
-  equipment_types: *id259
-  equipment_kinds: *id259
-  required_roles: *id260
-  optional_roles: *id261
-  operational_proof_roles: *id262
-  default_thresholds: *id263
+  equipment_types: *id271
+  equipment_kinds: *id271
+  required_roles: *id272
+  optional_roles: *id273
+  operational_proof_roles: *id274
+  default_thresholds: *id275
   pandas_implementation: chw3
   datafusion_sql_implementation: chw3_supply_band.sql
   sql_file: chw3_supply_band.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-3
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#chw-3
-  test_coverage: *id264
+  test_coverage: *id276
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -8258,18 +8612,18 @@ concepts:
   title: Flow high at max pump
   aliases: []
   kind: diagnostic
-  equipment_types: *id265
-  equipment_kinds: *id265
-  required_roles: *id266
-  optional_roles: *id267
-  operational_proof_roles: *id268
-  default_thresholds: *id269
+  equipment_types: *id277
+  equipment_kinds: *id277
+  required_roles: *id278
+  optional_roles: *id279
+  operational_proof_roles: *id280
+  default_thresholds: *id281
   pandas_implementation: chw4
   datafusion_sql_implementation: chw4_flow_high.sql
   sql_file: chw4_flow_high.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-4
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#chw-4
-  test_coverage: *id270
+  test_coverage: *id282
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -8366,18 +8720,18 @@ concepts:
   title: Discharge cold when heating
   aliases: []
   kind: diagnostic
-  equipment_types: *id271
-  equipment_kinds: *id271
-  required_roles: *id272
-  optional_roles: *id273
-  operational_proof_roles: *id274
-  default_thresholds: *id275
+  equipment_types: *id283
+  equipment_kinds: *id283
+  required_roles: *id284
+  optional_roles: *id285
+  operational_proof_roles: *id286
+  default_thresholds: *id287
   pandas_implementation: hp1
   datafusion_sql_implementation: hp1_discharge_cold.sql
   sql_file: hp1_discharge_cold.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#hp-1
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#hp-1
-  test_coverage: *id276
+  test_coverage: *id288
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -8474,18 +8828,18 @@ concepts:
   title: OA temperature spike
   aliases: []
   kind: diagnostic
-  equipment_types: *id277
-  equipment_kinds: *id277
-  required_roles: *id278
-  optional_roles: *id279
-  operational_proof_roles: *id280
-  default_thresholds: *id281
+  equipment_types: *id289
+  equipment_kinds: *id289
+  required_roles: *id290
+  optional_roles: *id291
+  operational_proof_roles: *id292
+  default_thresholds: *id293
   pandas_implementation: wx1
   datafusion_sql_implementation: wx1_oa_spike.sql
   sql_file: wx1_oa_spike.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#wx-1
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#wx-1
-  test_coverage: *id282
+  test_coverage: *id294
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -8573,18 +8927,18 @@ concepts:
   title: Condenser water not optimized vs wet-bulb
   aliases: []
   kind: diagnostic
-  equipment_types: *id283
-  equipment_kinds: *id283
-  required_roles: *id284
-  optional_roles: *id285
-  operational_proof_roles: *id286
-  default_thresholds: *id287
+  equipment_types: *id295
+  equipment_kinds: *id295
+  required_roles: *id296
+  optional_roles: *id297
+  operational_proof_roles: *id298
+  default_thresholds: *id299
   pandas_implementation: cw_opt
   datafusion_sql_implementation: cw_opt_1.sql
   sql_file: cw_opt_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-opt-1
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#cw-opt-1
-  test_coverage: *id288
+  test_coverage: *id300
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -8681,18 +9035,18 @@ concepts:
   title: High CW approach at full tower fan
   aliases: []
   kind: diagnostic
-  equipment_types: *id289
-  equipment_kinds: *id289
-  required_roles: *id290
-  optional_roles: *id291
-  operational_proof_roles: *id292
-  default_thresholds: *id293
+  equipment_types: *id301
+  equipment_kinds: *id301
+  required_roles: *id302
+  optional_roles: *id303
+  operational_proof_roles: *id304
+  default_thresholds: *id305
   pandas_implementation: cw_apr
   datafusion_sql_implementation: cw_apr_1.sql
   sql_file: cw_apr_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-apr-1
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#cw-apr-1
-  test_coverage: *id294
+  test_coverage: *id306
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -8789,18 +9143,18 @@ concepts:
   title: Excess tower fan energy vs wet-bulb limit
   aliases: []
   kind: diagnostic
-  equipment_types: *id295
-  equipment_kinds: *id295
-  required_roles: *id296
-  optional_roles: *id297
-  operational_proof_roles: *id298
-  default_thresholds: *id299
+  equipment_types: *id307
+  equipment_kinds: *id307
+  required_roles: *id308
+  optional_roles: *id309
+  operational_proof_roles: *id310
+  default_thresholds: *id311
   pandas_implementation: cw_fan_excess
   datafusion_sql_implementation: cw_fan_1.sql
   sql_file: cw_fan_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-fan-1
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#cw-fan-1
-  test_coverage: *id300
+  test_coverage: *id312
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -8906,18 +9260,18 @@ concepts:
   title: Duct static trim advisory
   aliases: []
   kind: diagnostic
-  equipment_types: *id301
-  equipment_kinds: *id301
-  required_roles: *id302
-  optional_roles: *id303
-  operational_proof_roles: *id304
-  default_thresholds: *id305
+  equipment_types: *id313
+  equipment_kinds: *id313
+  required_roles: *id314
+  optional_roles: *id315
+  operational_proof_roles: *id316
+  default_thresholds: *id317
   pandas_implementation: trim1
   datafusion_sql_implementation: trim1_duct_static.sql
   sql_file: trim1_duct_static.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-1
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#trim-1
-  test_coverage: *id306
+  test_coverage: *id318
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -9014,18 +9368,18 @@ concepts:
   title: HWST trim advisory
   aliases: []
   kind: diagnostic
-  equipment_types: *id307
-  equipment_kinds: *id307
-  required_roles: *id308
-  optional_roles: *id309
-  operational_proof_roles: *id310
-  default_thresholds: *id311
+  equipment_types: *id319
+  equipment_kinds: *id319
+  required_roles: *id320
+  optional_roles: *id321
+  operational_proof_roles: *id322
+  default_thresholds: *id323
   pandas_implementation: trim3
   datafusion_sql_implementation: trim3_hwst.sql
   sql_file: trim3_hwst.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-3
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#trim-3
-  test_coverage: *id312
+  test_coverage: *id324
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -9122,18 +9476,18 @@ concepts:
   title: CHW plant reset advisory
   aliases: []
   kind: diagnostic
-  equipment_types: *id313
-  equipment_kinds: *id313
-  required_roles: *id314
-  optional_roles: *id315
-  operational_proof_roles: *id316
-  default_thresholds: *id317
+  equipment_types: *id325
+  equipment_kinds: *id325
+  required_roles: *id326
+  optional_roles: *id327
+  operational_proof_roles: *id328
+  default_thresholds: *id329
   pandas_implementation: trim4
   datafusion_sql_implementation: trim4_chw_reset.sql
   sql_file: trim4_chw_reset.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-4
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#trim-4
-  test_coverage: *id318
+  test_coverage: *id330
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -9231,18 +9585,18 @@ concepts:
   aliases:
   - excess_runtime
   kind: diagnostic
-  equipment_types: *id319
-  equipment_kinds: *id319
-  required_roles: *id320
-  optional_roles: *id321
-  operational_proof_roles: *id322
-  default_thresholds: *id323
+  equipment_types: *id331
+  equipment_kinds: *id331
+  required_roles: *id332
+  optional_roles: *id333
+  operational_proof_roles: *id334
+  default_thresholds: *id335
   pandas_implementation: sched1
   datafusion_sql_implementation: sched1_unoccupied_runtime.sql
   sql_file: sched1_unoccupied_runtime.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sched-1
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#sched-1
-  test_coverage: *id324
+  test_coverage: *id336
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: alias
@@ -9339,18 +9693,18 @@ concepts:
   title: Always-on fan or pump runtime
   aliases: []
   kind: diagnostic
-  equipment_types: *id325
-  equipment_kinds: *id325
-  required_roles: *id326
-  optional_roles: *id327
-  operational_proof_roles: *id328
-  default_thresholds: *id329
+  equipment_types: *id337
+  equipment_kinds: *id337
+  required_roles: *id338
+  optional_roles: *id339
+  operational_proof_roles: *id340
+  default_thresholds: *id341
   pandas_implementation: _sched247
   datafusion_sql_implementation: sched247_always_on.sql
   sql_file: sched247_always_on.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sched-247
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#sched-247
-  test_coverage: *id330
+  test_coverage: *id342
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -9425,24 +9779,150 @@ concepts:
     required: true
     present: false
     oracle_seed: false
+- canonical_id: RESET-1
+  pandas_id: RESET-1
+  rule_id: RESET-1
+  title: SAT reset not tracking outdoor air
+  aliases: []
+  kind: diagnostic
+  equipment_types: *id343
+  equipment_kinds: *id343
+  required_roles: *id344
+  optional_roles: *id345
+  operational_proof_roles: *id346
+  default_thresholds: *id347
+  pandas_implementation: reset1
+  datafusion_sql_implementation: reset1_sat_oa_reset.sql
+  sql_file: reset1_sat_oa_reset.sql
+  documentation_link: docs/rules/cookbook/pandas-cookbook.md#reset-1
+  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#reset-1
+  test_coverage: *id348
+  parity_status: sql_screening
+  parity_level: sql_screening
+  difference_class: none
+  known_semantic_differences: ''
+  operational_gate: fan_running
+  startup_delay_seconds: 300
+  confirm_seconds: 900
+  parameters:
+    reset_err_f:
+      label: Reset error
+      default: 3.0
+      min: 0.5
+      max: 10.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: RESET_ERR_F
+    reset_sat_at_65:
+      label: SAT SP at 65F OAT
+      default: 52.0
+      min: 45.0
+      max: 65.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: RESET_SAT_AT_65
+    reset_slope:
+      label: Reset slope
+      default: 0.25
+      min: 0.05
+      max: 1.0
+      step: 0.05
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: RESET_SLOPE
+    reset_oat_ref:
+      label: Reset OAT ref
+      default: 65.0
+      min: 50.0
+      max: 80.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: RESET_OAT_REF
+    confirm_seconds:
+      label: Confirm time
+      default: 900.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/RESET-1/normal
+    required: true
+    present: true
+    oracle_seed: true
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/RESET-1/fault
+    required: true
+    present: true
+    oracle_seed: true
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/RESET-1/threshold_boundary
+    required: true
+    present: true
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/RESET-1/missing_required_role
+    required: true
+    present: true
+    oracle_seed: true
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/RESET-1/equipment_off
+    required: true
+    present: true
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/RESET-1/startup_delay
+    required: true
+    present: true
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/RESET-1/irregular_sampling
+    required: true
+    present: true
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/RESET-1/data_gap
+    required: true
+    present: true
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/RESET-1/duplicate_timestamp
+    required: true
+    present: true
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/RESET-1/out_of_order
+    required: true
+    present: true
+    oracle_seed: false
 - canonical_id: CMD-1
   pandas_id: CMD-1
   rule_id: CMD-1
   title: Fan cmd/status mismatch
   aliases: []
   kind: diagnostic
-  equipment_types: *id331
-  equipment_kinds: *id331
-  required_roles: *id332
-  optional_roles: *id333
-  operational_proof_roles: *id334
-  default_thresholds: *id335
+  equipment_types: *id349
+  equipment_kinds: *id349
+  required_roles: *id350
+  optional_roles: *id351
+  operational_proof_roles: *id352
+  default_thresholds: *id353
   pandas_implementation: cmd1
   datafusion_sql_implementation: cmd1_fan_mismatch.sql
   sql_file: cmd1_fan_mismatch.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cmd-1
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#cmd-1
-  test_coverage: *id336
+  test_coverage: *id354
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -9521,18 +10001,18 @@ concepts:
   title: Low OA fraction
   aliases: []
   kind: diagnostic
-  equipment_types: *id337
-  equipment_kinds: *id337
-  required_roles: *id338
-  optional_roles: *id339
-  operational_proof_roles: *id340
-  default_thresholds: *id341
+  equipment_types: *id355
+  equipment_kinds: *id355
+  required_roles: *id356
+  optional_roles: *id357
+  operational_proof_roles: *id358
+  default_thresholds: *id359
   pandas_implementation: oa1
   datafusion_sql_implementation: oa1_low_oa_frac.sql
   sql_file: oa1_low_oa_frac.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#oa-1
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#oa-1
-  test_coverage: *id342
+  test_coverage: *id360
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -9629,18 +10109,18 @@ concepts:
   title: OA damper leakage
   aliases: []
   kind: diagnostic
-  equipment_types: *id343
-  equipment_kinds: *id343
-  required_roles: *id344
-  optional_roles: *id345
-  operational_proof_roles: *id346
-  default_thresholds: *id347
+  equipment_types: *id361
+  equipment_kinds: *id361
+  required_roles: *id362
+  optional_roles: *id363
+  operational_proof_roles: *id364
+  default_thresholds: *id365
   pandas_implementation: dmp1
   datafusion_sql_implementation: dmp1_oa_damper_leak.sql
   sql_file: dmp1_oa_damper_leak.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#dmp-1
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#dmp-1
-  test_coverage: *id348
+  test_coverage: *id366
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -9728,18 +10208,18 @@ concepts:
   title: Cooling valve leakage
   aliases: []
   kind: diagnostic
-  equipment_types: *id349
-  equipment_kinds: *id349
-  required_roles: *id350
-  optional_roles: *id351
-  operational_proof_roles: *id352
-  default_thresholds: *id353
+  equipment_types: *id367
+  equipment_kinds: *id367
+  required_roles: *id368
+  optional_roles: *id369
+  operational_proof_roles: *id370
+  default_thresholds: *id371
   pandas_implementation: vlv1
   datafusion_sql_implementation: vlv1_clg_valve_leak.sql
   sql_file: vlv1_clg_valve_leak.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vlv-1
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vlv-1
-  test_coverage: *id354
+  test_coverage: *id372
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
@@ -9838,16 +10318,16 @@ concepts:
   kind: sql_analytics
   equipment_types: []
   equipment_kinds: null
-  required_roles: *id355
+  required_roles: *id373
   optional_roles: []
   operational_proof_roles: []
-  default_thresholds: *id356
+  default_thresholds: *id374
   pandas_implementation: null
   datafusion_sql_implementation: avg_zone_temp.sql
   sql_file: avg_zone_temp.sql
   documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#avg-zone-temp
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#avg-zone-temp
-  test_coverage: *id357
+  test_coverage: *id375
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: intentional_non_applicability
@@ -9889,16 +10369,16 @@ concepts:
   kind: sql_analytics
   equipment_types: []
   equipment_kinds: null
-  required_roles: *id358
+  required_roles: *id376
   optional_roles: []
   operational_proof_roles: []
-  default_thresholds: *id359
+  default_thresholds: *id377
   pandas_implementation: null
   datafusion_sql_implementation: fan_runtime_hours.sql
   sql_file: fan_runtime_hours.sql
   documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fan-runtime-hours
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fan-runtime-hours
-  test_coverage: *id360
+  test_coverage: *id378
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: intentional_non_applicability
@@ -9921,16 +10401,16 @@ concepts:
   kind: sql_analytics
   equipment_types: []
   equipment_kinds: null
-  required_roles: *id361
+  required_roles: *id379
   optional_roles: []
   operational_proof_roles: []
-  default_thresholds: *id362
+  default_thresholds: *id380
   pandas_implementation: null
   datafusion_sql_implementation: fault_elapsed_hours.sql
   sql_file: fault_elapsed_hours.sql
   documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fault-elapsed-hours
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fault-elapsed-hours
-  test_coverage: *id363
+  test_coverage: *id381
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: intentional_non_applicability
@@ -9971,16 +10451,16 @@ concepts:
   kind: sql_analytics
   equipment_types: []
   equipment_kinds: null
-  required_roles: *id364
+  required_roles: *id382
   optional_roles: []
   operational_proof_roles: []
-  default_thresholds: *id365
+  default_thresholds: *id383
   pandas_implementation: null
   datafusion_sql_implementation: zone_comfort_pct.sql
   sql_file: zone_comfort_pct.sql
   documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#zone-comfort-pct
   sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#zone-comfort-pct
-  test_coverage: *id366
+  test_coverage: *id384
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: intentional_non_applicability

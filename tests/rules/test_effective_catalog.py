@@ -17,9 +17,9 @@ from open_fdd.version import CATALOG_SCHEMA_VERSION, manifest
 def test_schema_version_and_counts():
     doc = effective_catalog()
     assert doc["schema_version"] == CATALOG_SCHEMA_VERSION
-    assert doc["rule_count"] == 59
+    assert doc["rule_count"] == 62
     assert doc["sql_analytics_count"] == 4
-    assert len(doc["rules"]) == 59
+    assert len(doc["rules"]) == 62
     chw = next(r for r in doc["rules"] if r["rule_id"] == "CHW-1")
     assert "chilled-water-supply-temp" in chw["required_roles"]
     assert chw["thresholds"]["min_dt"] == 4.0

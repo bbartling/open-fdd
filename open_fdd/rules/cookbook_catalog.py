@@ -922,10 +922,31 @@ def _vav_air_on(d: pd.DataFrame, flow_min: float) -> pd.Series:
     return pd.Series(True, index=d.index)
 
 
+def _unoccupied_mask(d: pd.DataFrame) -> pd.Series:
+    col = next((c for c in ("occupied", "occ-mode") if c in d.columns), None)
+    if col is None:
+        return _false(d.index)
+    occ_raw = d[col]
+    occ_str = occ_raw.astype(str).str.strip().str.lower()
+    label_unocc = occ_str.isin(
+        {"unoccupied", "unocc", "off", "false", "night", "standby", "setback", "no"}
+    )
+    occ_num = pd.to_numeric(occ_raw, errors="coerce")
+    numeric_unocc = occ_num.notna() & (occ_num <= 0.05)
+    return label_unocc | numeric_unocc
+
+
 def vav1(d, p, poll):
     lo = _f(p, "zone_lo", 70.0)
     hi = _f(p, "zone_hi", 75.0)
     return d["zone-air-temp"].notna() & ((d["zone-air-temp"] < lo) | (d["zone-air-temp"] > hi))
+
+
+def vav2(d, p, poll):
+    """Unoccupied zone stays warmer than heating setback (night setback miss)."""
+    hi = _f(p, "setback_hi", 68.0)
+    zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
+    return zt.notna() & _unoccupied_mask(d) & (zt > hi)
 
 
 def vav3(d, p, poll):
@@ -951,6 +972,18 @@ def vav4(d, p, poll):
 def vav5(d, p, poll):
     dmp = norm_cmd(d["damper"]).fillna(0)
     return d["zone-airflow"].notna() & (d["zone-airflow"] > 50.0) & (dmp < 0.10)
+
+
+def vav6(d, p, poll):
+    """Reheat open while OA is cool enough for free cooling."""
+    oat_hi = _f(p, "free_cool_oat", 65.0)
+    reheat_thr = _f(p, "reheat_pct", 0.25)
+    reheat = norm_cmd(d["reheat-valve"]).fillna(0)
+    oat = pd.to_numeric(d["outside-air-temp"], errors="coerce")
+    clg = pd.Series(True, index=d.index)
+    if "cooling-available" in d.columns and d["cooling-available"].notna().any():
+        clg = as_bool(d["cooling-available"])
+    return oat.notna() & clg.fillna(False) & (oat < oat_hi) & (reheat > reheat_thr)
 
 
 def vav7(d, p, poll):
@@ -1210,6 +1243,23 @@ def trim4(d, p, poll):
 # ---------------------------------------------------------------------------
 # Extended families
 # ---------------------------------------------------------------------------
+
+
+def reset1(d, p, poll):
+    """SAT SP not tracking the OA reset curve."""
+    err = _f(p, "reset_err_f", 3.0)
+    intercept = _f(p, "reset_sat_at_65", 52.0)
+    slope = _f(p, "reset_slope", 0.25)
+    oat_ref = _f(p, "reset_oat_ref", 65.0)
+    oat = pd.to_numeric(d["outside-air-temp"], errors="coerce")
+    sat_sp = pd.to_numeric(d["discharge-air-temp-sp"], errors="coerce")
+    expected = intercept + slope * (oat - oat_ref)
+    fan = pd.Series(True, index=d.index)
+    if "fan-status" in d.columns and d["fan-status"].notna().any():
+        fan = as_bool(d["fan-status"])
+    elif "fan-cmd" in d.columns:
+        fan = norm_cmd(d["fan-cmd"]).fillna(0) > 0.05
+    return sat_sp.notna() & oat.notna() & fan.fillna(False) & ((sat_sp - expected).abs() > err)
 
 
 def sched1(d, p, poll):
@@ -1664,6 +1714,13 @@ RULES: list[CookbookRule] = [
             CookbookParam("zone_lo", "Zone low", "°F", 55.0, 72.0, 0.5, 70.0),
             CookbookParam("zone_hi", "Zone high", "°F", 72.0, 85.0, 0.5, 75.0),
             CONFIRM_PARAM()], confirm_seconds=900),
+    CookbookRule("VAV-2", "Night setback miss", "vav", ["vav", "zone"],
+        ["zone-air-temp", "occupied"],
+        "Unoccupied AND zone temp > setback_hi (default 68°F) — heating setback not taken.",
+        vav2, params=[
+            CookbookParam("setback_hi", "Setback high", "°F", 55.0, 72.0, 0.5, 68.0),
+            CONFIRM_PARAM()],
+        optional_roles=["occ-mode"], confirm_seconds=900),
     CookbookRule("VAV-3", "Excessive reheat during warm weather", "vav", ["vav"],
         ["outside-air-temp", "reheat-valve"], "Air flowing AND OAT > 78°F AND reheat valve > 52%.",
         vav3, params=[
@@ -1681,6 +1738,14 @@ RULES: list[CookbookRule] = [
     CookbookRule("VAV-5", "Airflow sensor bias", "vav", ["vav"],
         ["zone-airflow", "damper"], "Airflow > 50 cfm while damper < 10% (implausible flow).",
         vav5, params=[CONFIRM_PARAM()], confirm_seconds=900),
+    CookbookRule("VAV-6", "Reheat when cooling available", "vav", ["vav"],
+        ["outside-air-temp", "reheat-valve"],
+        "OAT < 65°F AND reheat valve > 25% (optional cooling-available must be true when mapped).",
+        vav6, params=[
+            CookbookParam("free_cool_oat", "Free-cool OAT", "°F", 45.0, 75.0, 1.0, 65.0),
+            CookbookParam("reheat_pct", "Reheat frac", "frac", 0.05, 1.0, 0.05, 0.25),
+            CONFIRM_PARAM()],
+        optional_roles=["cooling-available"], confirm_seconds=900),
     CookbookRule("VAV-REHEAT", "Reheat valve stuck / no temp rise", "vav", ["vav"],
         ["reheat-valve", "vav-discharge-air-temp", "vav-inlet-air-temp"],
         "Air flowing AND reheat valve > 30% AND box discharge temp rises < 3°F above duct inlet "
@@ -1872,6 +1937,16 @@ RULES: list[CookbookRule] = [
         ],
         confirm_seconds=3600,
     ),
+    CookbookRule("RESET-1", "SAT reset not tracking outdoor air", "ahu", ["ahu"],
+        ["discharge-air-temp-sp", "outside-air-temp"],
+        "Fan on AND |SAT SP − (52 + 0.25×(OAT−65))| > 3°F.",
+        reset1, params=[
+            CookbookParam("reset_err_f", "Reset error", "°F", 0.5, 10.0, 0.5, 3.0),
+            CookbookParam("reset_sat_at_65", "SAT SP at 65°F OAT", "°F", 45.0, 65.0, 0.5, 52.0),
+            CookbookParam("reset_slope", "Reset slope", "°F/°F", 0.05, 1.0, 0.05, 0.25),
+            CookbookParam("reset_oat_ref", "Reset OAT ref", "°F", 50.0, 80.0, 1.0, 65.0),
+            CONFIRM_PARAM()],
+        optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
     CookbookRule("CMD-1", "Fan cmd/status mismatch", "ahu", ["ahu"],
         ["fan-cmd", "fan-status"], "Fan command and proven status disagree.",
         cmd1, params=[CONFIRM_PARAM()], confirm_seconds=600),
@@ -1920,6 +1995,10 @@ RULE_SUMMARY_OVERRIDES: dict[str, str] = {
     "FC1": "Flags duct static too low while the supply fan is near full speed.",
     "FC2": "Flags mixed-air temperature colder than the OAT/RAT mixing envelope allows.",
     "FC3": "Flags mixed-air temperature warmer than the OAT/RAT mixing envelope allows.",
+    "VAV-1": "Flags occupied-band zone temperature violations.",
+    "VAV-2": "Flags unoccupied zones that never drop into heating setback.",
+    "VAV-6": "Flags reheat while outdoor air is cool enough for free cooling.",
+    "RESET-1": "Flags SAT setpoint that is not tracking the outdoor-air reset curve.",
     "VAV-REHEAT": "Flags reheat commanded open with airflow but almost no discharge temperature rise.",
     "VAV-AHU-LEAVE": "Flags VAV discharge far from the parent AHU SAT when topology feeds are known.",
     "OAT-METEO": "Flags large disagreement between BAS outdoor-air temp and web weather OAT.",

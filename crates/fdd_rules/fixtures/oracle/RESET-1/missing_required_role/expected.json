@@ -1,0 +1,10 @@
+{
+  "pandas_rule_id": "RESET-1",
+  "equipment_id": "EQ_1",
+  "equipment_type": "AHU",
+  "poll_seconds": 300,
+  "any_fault": false,
+  "datafusion_compare": "pending",
+  "expect_missing_roles": true,
+  "expect_status": "SKIPPED_MISSING_ROLES"
+}

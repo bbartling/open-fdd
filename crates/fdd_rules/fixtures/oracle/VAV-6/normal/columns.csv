@@ -1,0 +1,4 @@
+col,point_role
+oa_t,outside-air-temp
+reheat_valve_pct,reheat-valve
+clg_available,cooling-available

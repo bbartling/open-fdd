@@ -6,9 +6,9 @@ nav_order: 2
 
 # Pandas FDD Cookbook
 
-**Oracle / documentation catalog:** packaged as `open_fdd.rules` on PyPI (`pip install "open-fdd[oracle]"`) — **59** executable diagnostics. Source of truth: [`open_fdd/rules/cookbook_catalog.py`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py). Consumers pin the wheel rather than maintaining a second copy.
+**Oracle / documentation catalog:** packaged as `open_fdd.rules` on PyPI (`pip install "open-fdd[oracle]"`) — **62** executable diagnostics. Source of truth: [`open_fdd/rules/cookbook_catalog.py`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py). Consumers pin the wheel rather than maintaining a second copy.
 
-This cookbook is **intentionally maintained**. Production Open-FDD FDD math runs **Rust + Apache Arrow + DataFusion SQL** (`sql_rules/registry.yaml`, **63** entries = 59 twins + 4 SQL analytics). Use this pandas catalog for notebooks, CSV exports, RCx studies, and SQL↔pandas parity testing.
+This cookbook is **intentionally maintained**. Production Open-FDD FDD math runs **Rust + Apache Arrow + DataFusion SQL** (`sql_rules/registry.yaml`, **66** entries = 62 twins + 4 SQL analytics). Use this pandas catalog for notebooks, CSV exports, RCx studies, and SQL↔pandas parity testing.
 
 See also the [DataFusion SQL cookbook](datafusion-sql-cookbook.html), [parity matrix](parity-matrix.html), [generated parity report](generated-parity-report.html), and [P0 rule catalog](p0-rule-catalog.html).
 
@@ -1437,6 +1437,44 @@ d = apply_fault(d, mech_oat1_compute(d, params, POLL_SECONDS))
 d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
+### RESET-1 — SAT reset not tracking outdoor air
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan on AND |SAT SP − (52 + 0.25×(OAT−65))| > 3°F.  
+**Default confirmation:** 900 s
+
+**Required roles:** `discharge-air-temp-sp`, `outside-air-temp`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `reset_err_f` | Reset error | °F | 3.0 | 0.5–10.0 |
+| `reset_sat_at_65` | SAT SP at 65°F OAT | °F | 52.0 | 45.0–65.0 |
+| `reset_slope` | Reset slope | °F/°F | 0.25 | 0.05–1.0 |
+| `reset_oat_ref` | Reset OAT ref | °F | 65.0 | 50.0–80.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def reset1(d, p, poll):
+    err = _f(p, "reset_err_f", 3.0)
+    intercept = _f(p, "reset_sat_at_65", 52.0)
+    slope = _f(p, "reset_slope", 0.25)
+    oat_ref = _f(p, "reset_oat_ref", 65.0)
+    oat = pd.to_numeric(d["outside-air-temp"], errors="coerce")
+    sat_sp = pd.to_numeric(d["discharge-air-temp-sp"], errors="coerce")
+    expected = intercept + slope * (oat - oat_ref)
+    fan = pd.Series(True, index=d.index)
+    if "fan-status" in d.columns and d["fan-status"].notna().any():
+        fan = as_bool(d["fan-status"])
+    elif "fan-cmd" in d.columns:
+        fan = norm_cmd(d["fan-cmd"]).fillna(0) > 0.05
+    return sat_sp.notna() & oat.notna() & fan.fillna(False) & ((sat_sp - expected).abs() > err)
+
+d = apply_fault(d, reset1(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
 ### CMD-1 — Fan cmd/status mismatch
 **Family:** `ahu` · **Equipment:** `ahu`  
 **Equation:** Fan command and proven status disagree.  
@@ -1584,6 +1622,31 @@ d = apply_fault(d, vav1(d, params, POLL_SECONDS))
 d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
+### VAV-2 — Night setback miss
+**Family:** `vav` · **Equipment:** `vav`, `zone`  
+**Equation:** Unoccupied AND zone temp > setback_hi (default 68°F) — heating setback not taken.  
+**Default confirmation:** 900 s
+
+**Required roles:** `zone-air-temp`, `occupied`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `setback_hi` | Setback high | °F | 68.0 | 55.0–72.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def vav2(d, p, poll):
+    hi = _f(p, "setback_hi", 68.0)
+    zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
+    return zt.notna() & _unoccupied_mask(d) & (zt > hi)
+
+d = apply_fault(d, vav2(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
 ### VAV-3 — Excessive reheat during warm weather
 **Family:** `vav` · **Equipment:** `vav`  
 **Equation:** Air flowing AND OAT > 78°F AND reheat valve > 52%.  
@@ -1665,6 +1728,37 @@ def vav5(d, p, poll):
     return d["zone-airflow"].notna() & (d["zone-airflow"] > 50.0) & (dmp < 0.10)
 
 d = apply_fault(d, vav5(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### VAV-6 — Reheat when cooling available
+**Family:** `vav` · **Equipment:** `vav`  
+**Equation:** OAT < 65°F AND reheat valve > 25% (optional cooling-available must be true when mapped).  
+**Default confirmation:** 900 s
+
+**Required roles:** `outside-air-temp`, `reheat-valve`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `free_cool_oat` | Free-cool OAT | °F | 65.0 | 45.0–75.0 |
+| `reheat_pct` | Reheat frac | frac | 0.25 | 0.05–1.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def vav6(d, p, poll):
+    oat_hi = _f(p, "free_cool_oat", 65.0)
+    reheat_thr = _f(p, "reheat_pct", 0.25)
+    reheat = norm_cmd(d["reheat-valve"]).fillna(0)
+    oat = pd.to_numeric(d["outside-air-temp"], errors="coerce")
+    clg = pd.Series(True, index=d.index)
+    if "cooling-available" in d.columns and d["cooling-available"].notna().any():
+        clg = as_bool(d["cooling-available"])
+    return oat.notna() & clg.fillna(False) & (oat < oat_hi) & (reheat > reheat_thr)
+
+d = apply_fault(d, vav6(d, params, POLL_SECONDS))
 d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
@@ -2346,11 +2440,8 @@ The following rules remain documented for continuity but are **not** in the curr
 
 | ID | Title | Family | Notes |
 |----|-------|--------|-------|
-| `VAV-2` | Night setback miss | `vav` | Zone temp miss setback band during unoccupied hours. |
-| `VAV-6` | Reheat when cooling available | `vav` | Reheat valve open while OA is cool enough for free cooling. |
 | `TOWER-1` | Cooling tower approach high | `plant` | Tower leaving CW approach above design vs wet-bulb. |
 | `CTRL-2` | Generic control loop hunting | `control` | Simplified duct-static hunting screen (pandas-complete logic differs). |
-| `RESET-1` | SAT reset not tracking outdoor air | `ahu` | SAT SP not following expected OA reset curve. |
 | `OVR-1` | Persistent override | `ahu` | Manual override / hand mode held beyond confirm window. |
 | `OA-2` | DCV minimum OA not met | `ahu` | Estimated OA fraction below DCV/minimum OA setpoint. |
 | `PLANT-1` | CHW DP reset missing | `plant` | CHW differential pressure SP not resetting with load. |

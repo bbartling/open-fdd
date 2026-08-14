@@ -22,6 +22,13 @@ pub fn substitute_sql(sql: &str, params: &HashMap<String, String>) -> String {
         ("SUSTAIN_HOURS", "1.5"),
         ("HTG_FULL_MIN", "0.9"),
         ("SAT_ERR", "1"),
+        ("SETBACK_HI", "68"),
+        ("FREE_COOL_OAT", "65"),
+        ("REHEAT_PCT", "0.25"),
+        ("RESET_ERR_F", "3"),
+        ("RESET_SAT_AT_65", "52"),
+        ("RESET_SLOPE", "0.25"),
+        ("RESET_OAT_REF", "65"),
     ] {
         params.entry(k.into()).or_insert_with(|| v.into());
     }

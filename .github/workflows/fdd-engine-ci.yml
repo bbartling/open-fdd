@@ -58,8 +58,8 @@ jobs:
               print("Missing SQL files:", missing)
               sys.exit(1)
           n = len(reg.get("rules", []))
-          if n < 59:
-              print(f"Expected >= 59 registry rules (vibe19 catalog), got {n}")
+          if n < 66:
+              print(f"Expected >= 66 registry rules (validated catalog), got {n}")
               sys.exit(1)
           print(f"OK: {n} rules")
           PY

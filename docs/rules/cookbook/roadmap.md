@@ -8,15 +8,16 @@ nav_order: 7
 
 Implementation order for expanding the public Open-FDD cookbooks. Priorities derive from **public literature frequency** (ASHRAE GL36 AFDD, Berkeley fault taxonomy, PNNL AIRCx, NIST Cx) and the **validated vibe19 catalog**.
 
-## P0 — validated pandas catalog ✅ (59 rules)
+## P0 — validated pandas catalog ✅ (62 rules)
 
-Production Open-FDD SQL registry is **63** rules (`sql_rules/registry.yaml`). The **59** figure is the pandas oracle catalog floor (see [parity matrix](parity-matrix.html)).
+Production Open-FDD SQL registry is **66** rules (`sql_rules/registry.yaml`). The **62** figure is the pandas oracle catalog floor (see [parity matrix](parity-matrix.html)).
 
 - Sensor sweeps: SV-RANGE, SV-FLATLINE, SV-SPIKE, SV-STALE, SV-RATE
 - Control: PID-HUNT-1
 - AHU GL36 FC1–FC15 + AHU-SATDEV / AHU-DUCTHI / AHU-SIMUL
 - Economizer / OA: ECON-1–7, OA-1, OAT-METEO, MECH-OAT-1, VLV-1, DMP-1, CMD-1
-- VAV: VAV-1, VAV-3–5, VAV-7, VAV-REHEAT, VAV-AHU-LEAVE
+- VAV: VAV-1 through VAV-7, VAV-REHEAT, VAV-AHU-LEAVE
+- RESET-1
 - Plant / CW: CHW-1–4, CHW-NOLOAD-1, CW-APR-1, CW-FAN-1, CW-OPT-1
 - HP-1, WX-1, TRIM-1/3/4, SCHED-1, SCHED-247
 - Framework docs + [P0 rule catalog](p0-rule-catalog.html)
@@ -25,11 +26,8 @@ Production Open-FDD SQL registry is **63** rules (`sql_rules/registry.yaml`). Th
 
 | Rule ID | Description |
 |---------|-------------|
-| VAV-2 | Night setback miss |
-| VAV-6 | Reheat when cooling available |
 | TOWER-1 | Cooling tower approach high |
 | CTRL-2 | Generic loop hunting |
-| RESET-1 | SAT OA reset missing |
 | OVR-1 | Persistent override |
 | OA-2 | DCV minimum OA |
 | PLANT-1 | CHW DP reset missing |

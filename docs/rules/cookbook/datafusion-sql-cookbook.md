@@ -6,9 +6,9 @@ nav_order: 1
 
 # DataFusion SQL FDD Cookbook
 
-Open-FDD executes production fault detection as **DataFusion SQL** against Apache Arrow / parquet historian tables via the canonical registry [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) (**63** entries = 59 diagnostic twins + 4 SQL analytics). Operator path: React **Run Rules** → `POST /api/fdd/run` (`mode=registry`). Integrators may also exercise rules through the registry APIs — raw arbitrary SQL is rejected.
+Open-FDD executes production fault detection as **DataFusion SQL** against Apache Arrow / parquet historian tables via the canonical registry [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) (**66** entries = 62 diagnostic twins + 4 SQL analytics). Operator path: React **Run Rules** → `POST /api/fdd/run` (`mode=registry`). Integrators may also exercise rules through the registry APIs — raw arbitrary SQL is rejected.
 
-**Pandas mirror:** the [Pandas cookbook](pandas-cookbook.html) documents the **59**-rule PyPI oracle (`open_fdd.rules`). Do **not** treat “59” as the production registry size. See [parity matrix](parity-matrix.html) and the [generated parity report](generated-parity-report.html).
+**Pandas mirror:** the [Pandas cookbook](pandas-cookbook.html) documents the **62**-rule PyPI oracle (`open_fdd.rules`). Do **not** treat “62” as the production registry size. See [parity matrix](parity-matrix.html) and the [generated parity report](generated-parity-report.html).
 
 **Updated:** 2026-08-11 · PyPI `open-fdd` 4.3.0
 
@@ -1145,6 +1145,19 @@ FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-id'
 ```
 
+### RESET-1 — SAT reset not tracking outdoor air
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan on AND |SAT SP − (52 + 0.25×(OAT−65))| > 3°F.  
+**Default confirmation:** 900 s
+
+_No extra cookbook params beyond confirmation in this snippet; production SQL uses `sql_rules/reset1_sat_oa_reset.sql`._
+
+```sql
+-- confirmation_seconds: 900
+-- See sql_rules/reset1_sat_oa_reset.sql
+SELECT equipment_id, fault_hours FROM reset1_sat_oa_reset_result
+```
+
 ### CMD-1 — Fan cmd/status mismatch
 **Family:** `ahu` · **Equipment:** `ahu`  
 **Equation:** Fan command and proven status disagree.  
@@ -1268,6 +1281,21 @@ FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-vav'
 ```
 
+### VAV-2 — Night setback miss
+**Family:** `vav` · **Equipment:** `vav`, `zone`  
+**Equation:** Unoccupied AND zone temp > setback_hi (default 68°F).  
+**Default confirmation:** 900 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `setback_hi` | Setback high | °F | 68.0 | 55.0–72.0 |
+
+```sql
+-- confirmation_seconds: 900
+-- See sql_rules/vav2_night_setback.sql
+SELECT equipment_id, fault_hours FROM vav2_night_setback_result
+```
+
 ### VAV-3 — Excessive reheat during warm weather
 **Family:** `vav` · **Equipment:** `vav`  
 **Equation:** Air flowing AND OAT > 78°F AND reheat valve > 52%.  
@@ -1341,6 +1369,22 @@ SELECT
   END AS fault_raw
 FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-id'
+```
+
+### VAV-6 — Reheat when cooling available
+**Family:** `vav` · **Equipment:** `vav`  
+**Equation:** OAT < 65°F AND reheat valve > 25% (optional cooling-available).  
+**Default confirmation:** 900 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `free_cool_oat` | Free-cool OAT | °F | 65.0 | 45.0–75.0 |
+| `reheat_pct` | Reheat frac | frac | 0.25 | 0.05–1.0 |
+
+```sql
+-- confirmation_seconds: 900
+-- See sql_rules/vav6_reheat_free_cool.sql
+SELECT equipment_id, fault_hours FROM vav6_reheat_free_cool_result
 ```
 
 ### VAV-REHEAT — Reheat valve stuck / no temp rise
@@ -1854,11 +1898,8 @@ Documented for continuity — **not** in the current validated vibe19 catalog.
 
 | ID | Title | Family |
 |----|-------|--------|
-| `VAV-2` | Night setback miss | `vav` |
-| `VAV-6` | Reheat when cooling available | `vav` |
 | `TOWER-1` | Cooling tower approach high | `plant` |
 | `CTRL-2` | Generic control loop hunting | `control` |
-| `RESET-1` | SAT reset not tracking outdoor air | `ahu` |
 | `OVR-1` | Persistent override | `ahu` |
 | `OA-2` | DCV minimum OA not met | `ahu` |
 | `PLANT-1` | CHW DP reset missing | `plant` |

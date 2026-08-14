@@ -1,0 +1,4 @@
+col,point_role
+sat_sp,discharge-air-temp-sp
+oa_t,outside-air-temp
+fan_status,fan-status

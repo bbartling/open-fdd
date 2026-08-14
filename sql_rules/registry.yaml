@@ -56,6 +56,38 @@ rules:
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
+  - rule_id: VAV-2
+    equipment_kinds: [vav, zone]
+    sql_file: vav2_night_setback.sql
+    pandas_function: vav2
+    description: Night setback miss — unoccupied zone above heating setback
+    required_roles: [zone_t, occ_mode]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      setback_hi:
+        label: Setback high
+        default: 68.0
+        min: 55.0
+        max: 72.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SETBACK_HI
+      confirm_seconds:
+        label: Confirm time
+        default: 900
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
   - rule_id: AVG-ZONE-TEMP
     sql_file: avg_zone_temp.sql
     pandas_function: null
@@ -1602,6 +1634,48 @@ rules:
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
+  - rule_id: VAV-6
+    equipment_kinds: [vav]
+    sql_file: vav6_reheat_free_cool.sql
+    pandas_function: vav6
+    description: Reheat when cooling available
+    required_roles: [oa_t, reheat_valve_pct]
+    optional_roles: [clg_available]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      free_cool_oat:
+        label: Free-cool OAT
+        default: 65.0
+        min: 45.0
+        max: 75.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: FREE_COOL_OAT
+      reheat_pct:
+        label: Reheat frac
+        default: 0.25
+        min: 0.05
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: REHEAT_PCT
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
   - rule_id: VAV-REHEAT
     equipment_kinds: [vav]
     sql_file: vav_reheat.sql
@@ -1763,6 +1837,66 @@ rules:
         unit: cfm
         frontend_control: slider
         sql_placeholder: FIXED_FLOW_MIN_MEAN
+
+  - rule_id: RESET-1
+    equipment_kinds: [ahu]
+    sql_file: reset1_sat_oa_reset.sql
+    pandas_function: reset1
+    description: SAT reset not tracking outdoor air
+    required_roles: [sat_sp, oa_t]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      reset_err_f:
+        label: Reset error
+        default: 3.0
+        min: 0.5
+        max: 10.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: RESET_ERR_F
+      reset_sat_at_65:
+        label: SAT SP at 65F OAT
+        default: 52.0
+        min: 45.0
+        max: 65.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: RESET_SAT_AT_65
+      reset_slope:
+        label: Reset slope
+        default: 0.25
+        min: 0.05
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: RESET_SLOPE
+      reset_oat_ref:
+        label: Reset OAT ref
+        default: 65.0
+        min: 50.0
+        max: 80.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: RESET_OAT_REF
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: CHW-NOLOAD-1
     equipment_kinds: [chiller]

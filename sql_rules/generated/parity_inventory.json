@@ -2,14 +2,14 @@
   "schema_version": "parity-inventory-v2",
   "generated_by": "scripts/generate_parity_inventory.py",
   "counts": {
-    "pandas_diagnostics": 59,
+    "pandas_diagnostics": 62,
     "sql_analytics": 4,
-    "sql_registry": 63,
-    "concepts": 63,
+    "sql_registry": 66,
+    "concepts": 66,
     "aliases": 3,
-    "building_100_cartesian": "48 equipment \u00d7 59 diagnostics = 2832 results"
+    "building_100_cartesian": "48 equipment \u00d7 62 diagnostics"
   },
-  "count_explanation": "59 is the executable pandas cookbook (CookbookRule constructors). 63 is the SQL registry: those 59 twins plus 4 SQL-only analytics. Aliases SV-SLEW, FC13, and excess_runtime are not extra rules.",
+  "count_explanation": "62 is the executable pandas cookbook (CookbookRule constructors). 66 is the SQL registry: those 62 twins plus 4 SQL-only analytics. Aliases SV-SLEW, FC13, and excess_runtime are not extra rules.",
   "parity_levels": [
     "concept_only",
     "duration_parity",
@@ -28,7 +28,7 @@
     "semantic_gap"
   ],
   "difference_class_counts": {
-    "none": 55,
+    "none": 58,
     "alias": 3,
     "missing_implementation": 1,
     "intentional_non_applicability": 4
@@ -2815,6 +2815,51 @@
       "difference_class": "none"
     },
     {
+      "rule_id": "VAV-2",
+      "title": "Night setback miss",
+      "equipment_types": [
+        "vav",
+        "zone"
+      ],
+      "required_roles": [
+        "zone-air-temp",
+        "occupied"
+      ],
+      "optional_roles": [
+        "occ-mode"
+      ],
+      "operational_proof_roles": [],
+      "default_thresholds": {
+        "setback_hi": {
+          "default": 68.0,
+          "unit": "\u00b0F",
+          "min": 55.0,
+          "max": 72.0,
+          "step": 0.5,
+          "label": "Setback high"
+        },
+        "confirm_min": {
+          "default": 15.0,
+          "unit": "min",
+          "min": 0.0,
+          "max": 60.0,
+          "step": 1.0,
+          "label": "Fault confirm delay"
+        },
+        "confirm_seconds": {
+          "default": 900.0,
+          "unit": "sec"
+        }
+      },
+      "pandas_implementation": "vav2",
+      "datafusion_sql_implementation": "vav2_night_setback.sql",
+      "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-2",
+      "test_coverage": [],
+      "parity_status": "sql_screening",
+      "known_semantic_differences": "",
+      "difference_class": "none"
+    },
+    {
       "rule_id": "VAV-3",
       "title": "Excessive reheat during warm weather",
       "equipment_types": [
@@ -2991,6 +3036,65 @@
       "pandas_implementation": "vav5",
       "datafusion_sql_implementation": "vav5_airflow_bias.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-5",
+      "test_coverage": [],
+      "parity_status": "sql_screening",
+      "known_semantic_differences": "",
+      "difference_class": "none"
+    },
+    {
+      "rule_id": "VAV-6",
+      "title": "Reheat when cooling available",
+      "equipment_types": [
+        "vav"
+      ],
+      "required_roles": [
+        "outside-air-temp",
+        "reheat-valve"
+      ],
+      "optional_roles": [
+        "cooling-available"
+      ],
+      "operational_proof_roles": [
+        "fan-status",
+        "fan-speed-feedback",
+        "fan-current",
+        "fan-power",
+        "airflow-proof",
+        "fan-cmd"
+      ],
+      "default_thresholds": {
+        "free_cool_oat": {
+          "default": 65.0,
+          "unit": "\u00b0F",
+          "min": 45.0,
+          "max": 75.0,
+          "step": 1.0,
+          "label": "Free-cool OAT"
+        },
+        "reheat_pct": {
+          "default": 0.25,
+          "unit": "frac",
+          "min": 0.05,
+          "max": 1.0,
+          "step": 0.05,
+          "label": "Reheat frac"
+        },
+        "confirm_min": {
+          "default": 15.0,
+          "unit": "min",
+          "min": 0.0,
+          "max": 60.0,
+          "step": 1.0,
+          "label": "Fault confirm delay"
+        },
+        "confirm_seconds": {
+          "default": 900.0,
+          "unit": "sec"
+        }
+      },
+      "pandas_implementation": "vav6",
+      "datafusion_sql_implementation": "vav6_reheat_free_cool.sql",
+      "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-6",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
@@ -4097,6 +4201,82 @@
       ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "4.3: ranked proof status/current > command; pressure is inferred runtime only and does not OR into the FAULT mask. SQL uses the same rank.",
+      "difference_class": "none"
+    },
+    {
+      "rule_id": "RESET-1",
+      "title": "SAT reset not tracking outdoor air",
+      "equipment_types": [
+        "ahu"
+      ],
+      "required_roles": [
+        "discharge-air-temp-sp",
+        "outside-air-temp"
+      ],
+      "optional_roles": [
+        "fan-status",
+        "fan-cmd"
+      ],
+      "operational_proof_roles": [
+        "fan-status",
+        "fan-speed-feedback",
+        "fan-current",
+        "fan-power",
+        "airflow-proof",
+        "fan-cmd"
+      ],
+      "default_thresholds": {
+        "reset_err_f": {
+          "default": 3.0,
+          "unit": "\u00b0F",
+          "min": 0.5,
+          "max": 10.0,
+          "step": 0.5,
+          "label": "Reset error"
+        },
+        "reset_sat_at_65": {
+          "default": 52.0,
+          "unit": "\u00b0F",
+          "min": 45.0,
+          "max": 65.0,
+          "step": 0.5,
+          "label": "SAT SP at 65\u00b0F OAT"
+        },
+        "reset_slope": {
+          "default": 0.25,
+          "unit": "\u00b0F/\u00b0F",
+          "min": 0.05,
+          "max": 1.0,
+          "step": 0.05,
+          "label": "Reset slope"
+        },
+        "reset_oat_ref": {
+          "default": 65.0,
+          "unit": "\u00b0F",
+          "min": 50.0,
+          "max": 80.0,
+          "step": 1.0,
+          "label": "Reset OAT ref"
+        },
+        "confirm_min": {
+          "default": 15.0,
+          "unit": "min",
+          "min": 0.0,
+          "max": 60.0,
+          "step": 1.0,
+          "label": "Fault confirm delay"
+        },
+        "confirm_seconds": {
+          "default": 900.0,
+          "unit": "sec"
+        }
+      },
+      "pandas_implementation": "reset1",
+      "datafusion_sql_implementation": "reset1_sat_oa_reset.sql",
+      "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#reset-1",
+      "test_coverage": [],
+      "parity_status": "sql_screening",
+      "known_semantic_differences": "",
       "difference_class": "none"
     },
     {
@@ -11265,6 +11445,164 @@
       ]
     },
     {
+      "canonical_id": "VAV-2",
+      "pandas_id": "VAV-2",
+      "rule_id": "VAV-2",
+      "title": "Night setback miss",
+      "aliases": [],
+      "kind": "diagnostic",
+      "equipment_types": [
+        "vav",
+        "zone"
+      ],
+      "equipment_kinds": [
+        "vav",
+        "zone"
+      ],
+      "required_roles": [
+        "zone-air-temp",
+        "occupied"
+      ],
+      "optional_roles": [
+        "occ-mode"
+      ],
+      "operational_proof_roles": [],
+      "default_thresholds": {
+        "setback_hi": {
+          "default": 68.0,
+          "unit": "\u00b0F",
+          "min": 55.0,
+          "max": 72.0,
+          "step": 0.5,
+          "label": "Setback high"
+        },
+        "confirm_min": {
+          "default": 15.0,
+          "unit": "min",
+          "min": 0.0,
+          "max": 60.0,
+          "step": 1.0,
+          "label": "Fault confirm delay"
+        },
+        "confirm_seconds": {
+          "default": 900.0,
+          "unit": "sec"
+        }
+      },
+      "pandas_implementation": "vav2",
+      "datafusion_sql_implementation": "vav2_night_setback.sql",
+      "sql_file": "vav2_night_setback.sql",
+      "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-2",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-2",
+      "test_coverage": [],
+      "parity_status": "sql_screening",
+      "parity_level": "sql_screening",
+      "difference_class": "none",
+      "known_semantic_differences": "",
+      "operational_gate": "always",
+      "startup_delay_seconds": 0.0,
+      "confirm_seconds": 900,
+      "parameters": {
+        "setback_hi": {
+          "label": "Setback high",
+          "default": 68.0,
+          "min": 55.0,
+          "max": 72.0,
+          "step": 0.5,
+          "unit": "degF",
+          "frontend_control": "slider",
+          "sql_placeholder": "SETBACK_HI"
+        },
+        "confirm_seconds": {
+          "label": "Confirm time",
+          "default": 900,
+          "min": 0,
+          "max": 3600,
+          "step": 300,
+          "unit": "sec",
+          "frontend_control": "slider",
+          "sql_placeholder": "CONFIRM_SECONDS"
+        }
+      },
+      "time_semantics": "row_or_interval_per_sql_file",
+      "output_schema": [
+        "equipment_id",
+        "fault_hours"
+      ],
+      "proof_fixtures": [
+        {
+          "case": "normal",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-2/normal",
+          "required": true,
+          "present": true,
+          "oracle_seed": true
+        },
+        {
+          "case": "fault",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-2/fault",
+          "required": true,
+          "present": true,
+          "oracle_seed": true
+        },
+        {
+          "case": "threshold_boundary",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-2/threshold_boundary",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "missing_required_role",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-2/missing_required_role",
+          "required": true,
+          "present": true,
+          "oracle_seed": true
+        },
+        {
+          "case": "equipment_off",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-2/equipment_off",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "startup_delay",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-2/startup_delay",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "irregular_sampling",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-2/irregular_sampling",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "data_gap",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-2/data_gap",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "duplicate_timestamp",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-2/duplicate_timestamp",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "out_of_order",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-2/out_of_order",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        }
+      ]
+    },
+    {
       "canonical_id": "VAV-3",
       "pandas_id": "VAV-3",
       "rule_id": "VAV-3",
@@ -11808,6 +12146,187 @@
           "path": "crates/fdd_rules/fixtures/oracle/VAV-5/out_of_order",
           "required": true,
           "present": false,
+          "oracle_seed": false
+        }
+      ]
+    },
+    {
+      "canonical_id": "VAV-6",
+      "pandas_id": "VAV-6",
+      "rule_id": "VAV-6",
+      "title": "Reheat when cooling available",
+      "aliases": [],
+      "kind": "diagnostic",
+      "equipment_types": [
+        "vav"
+      ],
+      "equipment_kinds": [
+        "vav"
+      ],
+      "required_roles": [
+        "outside-air-temp",
+        "reheat-valve"
+      ],
+      "optional_roles": [
+        "cooling-available"
+      ],
+      "operational_proof_roles": [
+        "fan-status",
+        "fan-speed-feedback",
+        "fan-current",
+        "fan-power",
+        "airflow-proof",
+        "fan-cmd"
+      ],
+      "default_thresholds": {
+        "free_cool_oat": {
+          "default": 65.0,
+          "unit": "\u00b0F",
+          "min": 45.0,
+          "max": 75.0,
+          "step": 1.0,
+          "label": "Free-cool OAT"
+        },
+        "reheat_pct": {
+          "default": 0.25,
+          "unit": "frac",
+          "min": 0.05,
+          "max": 1.0,
+          "step": 0.05,
+          "label": "Reheat frac"
+        },
+        "confirm_min": {
+          "default": 15.0,
+          "unit": "min",
+          "min": 0.0,
+          "max": 60.0,
+          "step": 1.0,
+          "label": "Fault confirm delay"
+        },
+        "confirm_seconds": {
+          "default": 900.0,
+          "unit": "sec"
+        }
+      },
+      "pandas_implementation": "vav6",
+      "datafusion_sql_implementation": "vav6_reheat_free_cool.sql",
+      "sql_file": "vav6_reheat_free_cool.sql",
+      "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-6",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-6",
+      "test_coverage": [],
+      "parity_status": "sql_screening",
+      "parity_level": "sql_screening",
+      "difference_class": "none",
+      "known_semantic_differences": "",
+      "operational_gate": "fan_running",
+      "startup_delay_seconds": 300,
+      "confirm_seconds": 900,
+      "parameters": {
+        "free_cool_oat": {
+          "label": "Free-cool OAT",
+          "default": 65.0,
+          "min": 45.0,
+          "max": 75.0,
+          "step": 1.0,
+          "unit": "degF",
+          "frontend_control": "slider",
+          "sql_placeholder": "FREE_COOL_OAT"
+        },
+        "reheat_pct": {
+          "label": "Reheat frac",
+          "default": 0.25,
+          "min": 0.05,
+          "max": 1.0,
+          "step": 0.05,
+          "unit": "frac",
+          "frontend_control": "slider",
+          "sql_placeholder": "REHEAT_PCT"
+        },
+        "confirm_seconds": {
+          "label": "Confirm time",
+          "default": 900.0,
+          "min": 0.0,
+          "max": 3600.0,
+          "step": 300.0,
+          "unit": "sec",
+          "frontend_control": "slider",
+          "sql_placeholder": "CONFIRM_SECONDS"
+        }
+      },
+      "time_semantics": "row_or_interval_per_sql_file",
+      "output_schema": [
+        "equipment_id",
+        "fault_hours"
+      ],
+      "proof_fixtures": [
+        {
+          "case": "normal",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-6/normal",
+          "required": true,
+          "present": true,
+          "oracle_seed": true
+        },
+        {
+          "case": "fault",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-6/fault",
+          "required": true,
+          "present": true,
+          "oracle_seed": true
+        },
+        {
+          "case": "threshold_boundary",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-6/threshold_boundary",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "missing_required_role",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-6/missing_required_role",
+          "required": true,
+          "present": true,
+          "oracle_seed": true
+        },
+        {
+          "case": "equipment_off",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-6/equipment_off",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "startup_delay",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-6/startup_delay",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "irregular_sampling",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-6/irregular_sampling",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "data_gap",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-6/data_gap",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "duplicate_timestamp",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-6/duplicate_timestamp",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "out_of_order",
+          "path": "crates/fdd_rules/fixtures/oracle/VAV-6/out_of_order",
+          "required": true,
+          "present": true,
           "oracle_seed": false
         }
       ]
@@ -14994,6 +15513,224 @@
           "path": "crates/fdd_rules/fixtures/oracle/SCHED-247/out_of_order",
           "required": true,
           "present": false,
+          "oracle_seed": false
+        }
+      ]
+    },
+    {
+      "canonical_id": "RESET-1",
+      "pandas_id": "RESET-1",
+      "rule_id": "RESET-1",
+      "title": "SAT reset not tracking outdoor air",
+      "aliases": [],
+      "kind": "diagnostic",
+      "equipment_types": [
+        "ahu"
+      ],
+      "equipment_kinds": [
+        "ahu"
+      ],
+      "required_roles": [
+        "discharge-air-temp-sp",
+        "outside-air-temp"
+      ],
+      "optional_roles": [
+        "fan-status",
+        "fan-cmd"
+      ],
+      "operational_proof_roles": [
+        "fan-status",
+        "fan-speed-feedback",
+        "fan-current",
+        "fan-power",
+        "airflow-proof",
+        "fan-cmd"
+      ],
+      "default_thresholds": {
+        "reset_err_f": {
+          "default": 3.0,
+          "unit": "\u00b0F",
+          "min": 0.5,
+          "max": 10.0,
+          "step": 0.5,
+          "label": "Reset error"
+        },
+        "reset_sat_at_65": {
+          "default": 52.0,
+          "unit": "\u00b0F",
+          "min": 45.0,
+          "max": 65.0,
+          "step": 0.5,
+          "label": "SAT SP at 65\u00b0F OAT"
+        },
+        "reset_slope": {
+          "default": 0.25,
+          "unit": "\u00b0F/\u00b0F",
+          "min": 0.05,
+          "max": 1.0,
+          "step": 0.05,
+          "label": "Reset slope"
+        },
+        "reset_oat_ref": {
+          "default": 65.0,
+          "unit": "\u00b0F",
+          "min": 50.0,
+          "max": 80.0,
+          "step": 1.0,
+          "label": "Reset OAT ref"
+        },
+        "confirm_min": {
+          "default": 15.0,
+          "unit": "min",
+          "min": 0.0,
+          "max": 60.0,
+          "step": 1.0,
+          "label": "Fault confirm delay"
+        },
+        "confirm_seconds": {
+          "default": 900.0,
+          "unit": "sec"
+        }
+      },
+      "pandas_implementation": "reset1",
+      "datafusion_sql_implementation": "reset1_sat_oa_reset.sql",
+      "sql_file": "reset1_sat_oa_reset.sql",
+      "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#reset-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#reset-1",
+      "test_coverage": [],
+      "parity_status": "sql_screening",
+      "parity_level": "sql_screening",
+      "difference_class": "none",
+      "known_semantic_differences": "",
+      "operational_gate": "fan_running",
+      "startup_delay_seconds": 300,
+      "confirm_seconds": 900,
+      "parameters": {
+        "reset_err_f": {
+          "label": "Reset error",
+          "default": 3.0,
+          "min": 0.5,
+          "max": 10.0,
+          "step": 0.5,
+          "unit": "degF",
+          "frontend_control": "slider",
+          "sql_placeholder": "RESET_ERR_F"
+        },
+        "reset_sat_at_65": {
+          "label": "SAT SP at 65F OAT",
+          "default": 52.0,
+          "min": 45.0,
+          "max": 65.0,
+          "step": 0.5,
+          "unit": "degF",
+          "frontend_control": "slider",
+          "sql_placeholder": "RESET_SAT_AT_65"
+        },
+        "reset_slope": {
+          "label": "Reset slope",
+          "default": 0.25,
+          "min": 0.05,
+          "max": 1.0,
+          "step": 0.05,
+          "unit": "frac",
+          "frontend_control": "slider",
+          "sql_placeholder": "RESET_SLOPE"
+        },
+        "reset_oat_ref": {
+          "label": "Reset OAT ref",
+          "default": 65.0,
+          "min": 50.0,
+          "max": 80.0,
+          "step": 1.0,
+          "unit": "degF",
+          "frontend_control": "slider",
+          "sql_placeholder": "RESET_OAT_REF"
+        },
+        "confirm_seconds": {
+          "label": "Confirm time",
+          "default": 900.0,
+          "min": 0.0,
+          "max": 3600.0,
+          "step": 300.0,
+          "unit": "sec",
+          "frontend_control": "slider",
+          "sql_placeholder": "CONFIRM_SECONDS"
+        }
+      },
+      "time_semantics": "row_or_interval_per_sql_file",
+      "output_schema": [
+        "equipment_id",
+        "fault_hours"
+      ],
+      "proof_fixtures": [
+        {
+          "case": "normal",
+          "path": "crates/fdd_rules/fixtures/oracle/RESET-1/normal",
+          "required": true,
+          "present": true,
+          "oracle_seed": true
+        },
+        {
+          "case": "fault",
+          "path": "crates/fdd_rules/fixtures/oracle/RESET-1/fault",
+          "required": true,
+          "present": true,
+          "oracle_seed": true
+        },
+        {
+          "case": "threshold_boundary",
+          "path": "crates/fdd_rules/fixtures/oracle/RESET-1/threshold_boundary",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "missing_required_role",
+          "path": "crates/fdd_rules/fixtures/oracle/RESET-1/missing_required_role",
+          "required": true,
+          "present": true,
+          "oracle_seed": true
+        },
+        {
+          "case": "equipment_off",
+          "path": "crates/fdd_rules/fixtures/oracle/RESET-1/equipment_off",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "startup_delay",
+          "path": "crates/fdd_rules/fixtures/oracle/RESET-1/startup_delay",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "irregular_sampling",
+          "path": "crates/fdd_rules/fixtures/oracle/RESET-1/irregular_sampling",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "data_gap",
+          "path": "crates/fdd_rules/fixtures/oracle/RESET-1/data_gap",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "duplicate_timestamp",
+          "path": "crates/fdd_rules/fixtures/oracle/RESET-1/duplicate_timestamp",
+          "required": true,
+          "present": true,
+          "oracle_seed": false
+        },
+        {
+          "case": "out_of_order",
+          "path": "crates/fdd_rules/fixtures/oracle/RESET-1/out_of_order",
+          "required": true,
+          "present": true,
           "oracle_seed": false
         }
       ]

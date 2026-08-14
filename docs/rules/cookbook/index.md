@@ -14,8 +14,8 @@ Open-source, **standards-first** fault detection for commercial HVAC. Rules use 
 
 | Catalog | Count | Role |
 |---------|------:|------|
-| **DataFusion SQL** — [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) | **63** | **Production** FDD in Open-FDD Rust / central (`POST /api/fdd/run`) |
-| **Pandas** — `open_fdd.rules` (`pip install "open-fdd[oracle]"`) | **59** | **Oracle / docs / notebooks** — packaged on PyPI; consumers pin the wheel |
+| **DataFusion SQL** — [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) | **66** | **Production** FDD in Open-FDD Rust / central (`POST /api/fdd/run`) |
+| **Pandas** — `open_fdd.rules` (`pip install "open-fdd[oracle]"`) | **62** | **Oracle / docs / notebooks** — packaged on PyPI; consumers pin the wheel |
 
 Parity honesty ([parity matrix](parity-matrix.html), [generated report](generated-parity-report.html)): see live `sql_rules/registry.yaml` counts. SQL presence ≠ oracle-proven. Do not claim “54 full parity.”
 
@@ -50,15 +50,15 @@ Product UI is the React SPA. Pandas stays on PyPI for third-party tooling.
 |--------|------:|----------|
 | Sensor validation (sweep) | 5 | SV-RANGE, SV-FLATLINE, SV-SPIKE, SV-STALE, SV-RATE |
 | Control hunting | 1 | PID-HUNT-1 |
-| Air handling / economizer | 31 | FC1–FC15, ECON-1–7, OAT-METEO, VLV-1, DMP-1, CMD-1 |
-| VAV terminals | 7 | VAV-1, VAV-3–5, VAV-7, VAV-REHEAT, VAV-AHU-LEAVE |
+| Air handling / economizer | 32 | FC1–FC15, ECON-1–7, OAT-METEO, VLV-1, DMP-1, CMD-1, RESET-1 |
+| VAV terminals | 9 | VAV-1–7, VAV-REHEAT, VAV-AHU-LEAVE |
 | Central plant / CW | 8 | CHW-1–4, CHW-NOLOAD-1, CW-APR-1, CW-FAN-1, CW-OPT-1 |
 | Heat pump | 1 | HP-1 |
 | Weather | 1 | WX-1 |
 | Trim & respond | 3 | TRIM-1, TRIM-3, TRIM-4 |
 | Schedule | 2 | SCHED-1, SCHED-247 |
 
-**Total validated:** 59. **Default confirmation:** 300 s (5 min) unless noted per rule.
+**Total validated:** 62. **Default confirmation:** 300 s (5 min) unless noted per rule.
 
 Additional rules documented under **Not yet in validated catalog** remain in the cookbooks for continuity (flagged, not legacy UI-parity-tested).
 
