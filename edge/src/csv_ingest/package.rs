@@ -11,6 +11,7 @@
 //! `/api/fdd/run` registry mode works immediately.
 
 use crate::historian::store::workspace_dir;
+use fdd_core::haystack_point_to_role;
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
@@ -47,69 +48,6 @@ const MAX_COMPRESSION_RATIO: f64 = 100.0;
 
 /// Unix symlink mode nibble — mirrors vibe19 `package_io.stat_is_symlink`.
 const UNIX_SYMLINK_MODE: u32 = 0o120000;
-
-/// Project-Haystack-style point tags used by vibe19 column maps → SQL cookbook roles.
-/// Mirrors vibe19 `app/column_map_json.py` POINT_DISPLAY vocabulary.
-fn haystack_point_to_role(point: &str) -> String {
-    let slug = point.trim().to_lowercase().replace([' ', '_'], "-");
-    match slug.as_str() {
-        "discharge-air-temp" => "sat".into(),
-        "discharge-air-temp-sp" => "sat_sp".into(),
-        "mixed-air-temp" => "mat".into(),
-        "return-air-temp" => "rat".into(),
-        "outside-air-temp" | "bas-outside-air-temp" => "oa_t".into(),
-        "outside-air-humidity" => "oa_h".into(),
-        "outside-air-damper" => "oa_damper_pct".into(),
-        "cooling-valve" => "clg_valve_pct".into(),
-        "heating-valve" => "htg_valve_pct".into(),
-        "fan-cmd" => "fan_cmd".into(),
-        "return-fan-cmd" => "return_fan".into(),
-        "fan-status" => "fan_status".into(),
-        "duct-static-pressure" => "duct_static".into(),
-        "duct-static-pressure-sp" => "duct_static_sp".into(),
-        // TRIM / duct-static reset request (pandas vav-pressure-request-sum)
-        "vav-pressure-request-sum" | "static-reset-request" => "static_reset_request".into(),
-        "cooling-coil-entering-temp" => "cooling_coil_entering_temp".into(),
-        "cooling-coil-leaving-temp" => "cooling_coil_leaving_temp".into(),
-        "heating-coil-entering-temp" => "heating_coil_entering_temp".into(),
-        "heating-coil-leaving-temp" => "heating_coil_leaving_temp".into(),
-        "chiller-status" => "chiller_status".into(),
-        "loop-enabled" => "loop_enabled".into(),
-        "zone-air-temp" => "zone_t".into(),
-        "zone-airflow" => "zone_flow".into(),
-        "vav-total-airflow" => "vav_total_flow".into(),
-        "min-flow-sp" => "min_flow_sp".into(),
-        "chw-pump-status" => "chw_pump_status".into(),
-        "compressor-status" => "compressor_status".into(),
-        "building-zone-load-satisfied" => "building_zone_load_satisfied".into(),
-        "building-ahu-load-satisfied" => "building_ahu_load_satisfied".into(),
-        "damper" => "damper_pct".into(),
-        "reheat-valve" => "reheat_valve_pct".into(),
-        "vav-discharge-air-temp" => "vav_discharge_t".into(),
-        "vav-inlet-air-temp" => "vav_inlet_t".into(),
-        "ahu-discharge-air-temp" => "ahu_sat".into(),
-        "chilled-water-supply-temp" => "chw_supply_t".into(),
-        "chilled-water-return-temp" => "chw_return_t".into(),
-        "chilled-water-supply-temp-sp" => "chw_supply_sp".into(),
-        "hot-water-supply-temp" => "hw_supply_t".into(),
-        "hot-water-return-temp" => "hw_return_t".into(),
-        "occupied" => "occ_mode".into(),
-        "chw-diff-pressure" => "chw_dp".into(),
-        "chw-diff-pressure-sp" => "chw_dp_sp".into(),
-        "chw-flow" => "chw_flow".into(),
-        "chw-pump-cmd" => "chw_pump_cmd".into(),
-        "cw-pump-cmd" => "cw_pump_cmd".into(),
-        "tower-fan-cmd" | "cw-fan-cmd" => "tower_fan_cmd".into(),
-        "condenser-water-supply-temp" => "cw_supply_t".into(),
-        "condenser-water-return-temp" => "cw_return_t".into(),
-        "preheat-leaving-temp" => "preheat_leave_t".into(),
-        "web-outside-air-temp" => "web_oa_t".into(),
-        "web-outside-air-dewpoint" => "web_oa_dp".into(),
-        "web-outside-air-wetbulb" => "web_wb_t".into(),
-        "web-outside-air-humidity" => "web_oa_h".into(),
-        other => fdd_core::normalize_role(&other.replace('-', "_")),
-    }
-}
 
 #[derive(Debug)]
 struct PackageManifest {

@@ -64,6 +64,10 @@ enum Commands {
         /// Stored CSV units: imperial (°F) or metric/si (°C converted at query).
         #[arg(long, default_value = "imperial")]
         unit_system: String,
+        /// Override every rule confirm window (seconds). Use 0 to match synthetic
+        /// soak `confirm_min=0` / exact-equation isolation.
+        #[arg(long)]
+        confirm_seconds: Option<f64>,
     },
     /// Compare pandas oracle JSON vs SQL results JSON
     Compare {
@@ -130,13 +134,23 @@ async fn main() -> Result<()> {
             rules_dir,
             out,
             unit_system,
+            confirm_seconds,
         } => {
             let registry = load_registry(&rules_dir)?;
+            let mut overrides = std::collections::HashMap::new();
+            if let Some(cs) = confirm_seconds {
+                for rule in &registry.rules {
+                    overrides.insert(
+                        rule.rule_id.clone(),
+                        std::collections::HashMap::from([("confirm_seconds".into(), cs)]),
+                    );
+                }
+            }
             let report = run_all_rules_with_overrides(
                 &parquet,
                 &registry,
                 &out,
-                &std::collections::HashMap::new(),
+                &overrides,
                 None,
                 None,
                 Some(unit_system.as_str()),

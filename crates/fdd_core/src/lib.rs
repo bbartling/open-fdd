@@ -8,8 +8,8 @@ pub mod units;
 pub mod validate;
 
 pub use columns::{
-    cookbook_role_catalog, is_known_cookbook_role, load_column_role_map, normalize_role,
-    COOKBOOK_ROLES,
+    cookbook_role_catalog, haystack_point_to_role, is_known_cookbook_role, load_column_role_map,
+    normalize_role, COOKBOOK_ROLES,
 };
 pub use role_rank::{is_zone_t_limit_or_alarm_column, score_column_for_role};
 

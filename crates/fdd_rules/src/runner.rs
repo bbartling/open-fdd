@@ -245,7 +245,12 @@ pub async fn run_all_rules_with_overrides(
             rules_failed += 1;
             continue;
         }
-        let confirm_secs = rule.confirm_seconds;
+        let mut confirm_secs = rule.confirm_seconds;
+        if let Some(ov) = overrides.get(&rule.rule_id) {
+            if let Some(cs) = ov.get("confirm_seconds") {
+                confirm_secs = cs.round().max(0.0) as u32;
+            }
+        }
         let mut params = rule_params(poll_seconds, confirm_secs);
         let session_override = overrides.get(&rule.rule_id);
         if let Ok(tuned) = effective_param_strings(rule, &tuning, None, None, session_override) {
@@ -260,8 +265,8 @@ pub async fn run_all_rules_with_overrides(
                 params.insert(k, v);
             }
         }
-        // Always re-assert confirm from the (possibly mutated) rule spec.
-        let confirm_params = rule_params(poll_seconds, rule.confirm_seconds);
+        // Always re-assert confirm from the (possibly overridden) window.
+        let confirm_params = rule_params(poll_seconds, confirm_secs);
         for (k, v) in confirm_params {
             params.insert(k, v);
         }
