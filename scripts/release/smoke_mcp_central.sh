@@ -27,6 +27,7 @@ docker build -f Dockerfile.mcp -t "$MCP_IMAGE" . >/dev/null
 docker run -d --name "$CENTRAL_NAME" --network "$NETWORK" \
   -p 127.0.0.1:18080:8080 \
   -e OPENFDD_MQTT_ENABLED=0 \
+  -e OPENFDD_ALLOW_OPEN_BIND=1 \
   -e OPENFDD_WORKSPACE=/workspace \
   -e OPENFDD_PARQUET_ROOT=/workspace/.cache/parquet \
   "$CENTRAL_IMAGE" >/dev/null
