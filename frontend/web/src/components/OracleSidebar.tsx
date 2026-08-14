@@ -5,6 +5,7 @@ import { listPackageBuildings } from "../api/mappingApi";
 import { uploadPackage } from "../api/uploadApi";
 import { ApiClientError } from "../api/client";
 import { RuleTuningPanel } from "./RuleTuningPanel";
+import { displayScalar, displayUnitLabel, storeScalar } from "../api/roleUnits";
 
 const UNITS_KEY = "openfdd.ui.unit_system";
 const PREFER_WEB_OAT_KEY = "openfdd.ui.prefer_web_oat";
@@ -543,19 +544,24 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
         </label>
         <label className="oracle-sidebar__field">
           <span className="oracle-sidebar__label">
-            CHW leave proof max (°F)
+            CHW leave proof max (
+            {displayUnitLabel("°F", unitSystem)})
           </span>
           <input
             type="range"
-            min={35}
-            max={50}
-            step={0.5}
-            value={chwLeaveMaxF}
+            min={displayScalar(35, "°F", unitSystem)}
+            max={displayScalar(50, "°F", unitSystem)}
+            step={unitSystem === "metric" ? 0.2 : 0.5}
+            value={displayScalar(chwLeaveMaxF, "°F", unitSystem)}
             disabled={useStatusProof}
-            onChange={(e) => setChwLeaveMaxF(Number(e.target.value))}
+            onChange={(e) =>
+              setChwLeaveMaxF(storeScalar(Number(e.target.value), "°F", unitSystem))
+            }
             className="oracle-sidebar__slider"
           />
-          <span className="oracle-sidebar__caption">{chwLeaveMaxF}</span>
+          <span className="oracle-sidebar__caption">
+            {displayScalar(chwLeaveMaxF, "°F", unitSystem)}
+          </span>
         </label>
         <p className="oracle-sidebar__caption">
           Occupancy: Overview weekly calendar always sets <code>occ_mode</code>{" "}

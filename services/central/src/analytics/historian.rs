@@ -80,6 +80,29 @@ pub fn parquet_root() -> PathBuf {
     PathBuf::from(".cache/parquet")
 }
 
+fn session_is_metric() -> bool {
+    let path = if let Ok(ws) = std::env::var("OPENFDD_WORKSPACE") {
+        PathBuf::from(ws).join("data/session_config.json")
+    } else {
+        PathBuf::from("workspace/data/session_config.json")
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(v) = serde_json::from_str::<Value>(&text) else {
+        return false;
+    };
+    v.get("unit_system")
+        .and_then(|u| u.as_str())
+        .map(fdd_core::is_metric_unit_system)
+        .unwrap_or(false)
+}
+
+/// History temperature column as °F for bin/SQL physics.
+fn history_temp_sql(col: &str) -> String {
+    fdd_core::sql_temp_to_fahrenheit(col, session_is_metric())
+}
+
 /// Sanitize a `building_id` for use as a Hive path segment. Rejects any value
 /// with path separators or `..` so a query field can never escape the parquet
 /// root; returns `None` for empty/unsafe ids (caller falls back to whole tree).
@@ -1621,15 +1644,17 @@ pub async fn mech_oat_bins_from_history(
     let max_gap = max_gap_seconds.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
     let chiller_filter = chiller_like_equipment_sql();
+    let oat_f = history_temp_sql(oat);
+    let oa_t_f = history_temp_sql("oa_t");
     // Prefer web/meteo OAT; when only `oa_t` exists, broadcast from weather
     // equipment (pandas Overview) so AHU BAS oa_t does not dilute site AVG.
     let (oat_prefix, oat_by_ts_body, oat_label, oat_join) = if web_oat_col(&cols).is_some() {
         (
             String::new(),
             format!(
-                "SELECT {ts_col} AS ts, AVG({oat}) AS oat_f
+                "SELECT {ts_col} AS ts, AVG({oat_f}) AS oat_f
   FROM history
-  WHERE {oat} IS NOT NULL AND {oat} >= 40.0 AND {oat} <= 110.0
+  WHERE {oat} IS NOT NULL AND {oat_f} >= 40.0 AND {oat_f} <= 110.0
   GROUP BY {ts_col}"
             ),
             oat,
@@ -1639,16 +1664,16 @@ pub async fn mech_oat_bins_from_history(
         (
             format!(
                 "weather_oat AS (
-  SELECT {ts_col} AS ts, AVG(oa_t) AS oat_f
+  SELECT {ts_col} AS ts, AVG({oa_t_f}) AS oat_f
   FROM history
-  WHERE oa_t IS NOT NULL AND oa_t >= 40.0 AND oa_t <= 110.0
+  WHERE oa_t IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0
     AND UPPER(CAST(equipment_id AS VARCHAR)) LIKE '%WEATHER%'
   GROUP BY {ts_col}
 ),
 fallback_oat AS (
-  SELECT {ts_col} AS ts, AVG(oa_t) AS oat_f
+  SELECT {ts_col} AS ts, AVG({oa_t_f}) AS oat_f
   FROM history
-  WHERE oa_t IS NOT NULL AND oa_t >= 40.0 AND oa_t <= 110.0
+  WHERE oa_t IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0
   GROUP BY {ts_col}
 ),"
             ),
@@ -1664,9 +1689,9 @@ fallback_oat AS (
         (
             String::new(),
             format!(
-                "SELECT {ts_col} AS ts, AVG({oat}) AS oat_f
+                "SELECT {ts_col} AS ts, AVG({oat_f}) AS oat_f
   FROM history
-  WHERE {oat} IS NOT NULL AND {oat} >= 40.0 AND {oat} <= 110.0
+  WHERE {oat} IS NOT NULL AND {oat_f} >= 40.0 AND {oat_f} <= 110.0
   GROUP BY {ts_col}"
             ),
             oat,

@@ -1,0 +1,5 @@
+col,column,point_name,unit,point_role,equipment_id,test_target_rule_id
+web-outside-air-temp,web-outside-air-temp,Synthetic MECH-OAT-1 web-outside-air-temp,degF,web-outside-air-temp,CHILLER_CASE_MECH_OAT_1,MECH-OAT-1
+chiller-status,chiller-status,Synthetic MECH-OAT-1 chiller-status,bool,chiller-status,CHILLER_CASE_MECH_OAT_1,MECH-OAT-1
+chw-pump-status,chw-pump-status,Synthetic MECH-OAT-1 chw-pump-status,bool,chw-pump-status,CHILLER_CASE_MECH_OAT_1,MECH-OAT-1
+chw-pump-cmd,chw-pump-cmd,Synthetic MECH-OAT-1 chw-pump-cmd,fraction,chw-pump-cmd,CHILLER_CASE_MECH_OAT_1,MECH-OAT-1

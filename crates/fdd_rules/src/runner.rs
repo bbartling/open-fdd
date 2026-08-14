@@ -72,6 +72,7 @@ fn sql_with_optional_null_roles(
     sql: &str,
     optional_roles: &[String],
     history_columns: &std::collections::HashSet<String>,
+    history_table: &str,
 ) -> String {
     let missing: Vec<String> = optional_roles
         .iter()
@@ -94,12 +95,15 @@ fn sql_with_optional_null_roles(
         })
         .collect::<Vec<_>>()
         .join(", ");
-    let cte = format!("history_opt AS (SELECT history.*, {null_cols} FROM history)");
+    let cte =
+        format!("history_opt AS (SELECT {history_table}.*, {null_cols} FROM {history_table})");
+    let from = format!(" FROM {history_table}");
+    let from_nl = format!("\nFROM {history_table}");
     let rewritten = sql
-        .replace(" FROM history", " FROM history_opt")
-        .replace(" from history", " from history_opt")
-        .replace("\nFROM history", "\nFROM history_opt")
-        .replace("\nfrom history", "\nfrom history_opt");
+        .replace(&from, " FROM history_opt")
+        .replace(&from.to_ascii_lowercase(), " FROM history_opt")
+        .replace(&from_nl, "\nFROM history_opt")
+        .replace(&from_nl.to_ascii_lowercase(), "\nFROM history_opt");
     if let Some(idx) = rewritten.find("WITH ") {
         let (pre, rest) = rewritten.split_at(idx);
         let rest = rest.trim_start_matches("WITH ");
@@ -118,7 +122,16 @@ pub async fn run_all_rules(
     registry: &RuleRegistry,
     out_dir: &Path,
 ) -> Result<RuleRunReport> {
-    run_all_rules_with_overrides(parquet_root, registry, out_dir, &HashMap::new(), None, None).await
+    run_all_rules_with_overrides(
+        parquet_root,
+        registry,
+        out_dir,
+        &HashMap::new(),
+        None,
+        None,
+        None,
+    )
+    .await
 }
 
 /// Run registry rules with request/session parameter overrides.
@@ -135,6 +148,7 @@ pub async fn run_all_rules_with_overrides(
     overrides: &HashMap<String, HashMap<String, f64>>,
     equipment_filter: Option<&str>,
     weather_root: Option<&Path>,
+    unit_system: Option<&str>,
 ) -> Result<RuleRunReport> {
     let started = std::time::Instant::now();
     std::fs::create_dir_all(out_dir)?;
@@ -151,15 +165,41 @@ pub async fn run_all_rules_with_overrides(
 
     // History columns for preflighting required_roles (case-insensitive). When
     // history cannot be described we fall back to per-rule SQL error classifying.
-    let history_columns: std::collections::HashSet<String> = match ctx.table("history").await {
+    let history_names: Vec<String> = match ctx.table("history").await {
         Ok(df) => df
             .schema()
             .fields()
             .iter()
-            .map(|f| f.name().to_ascii_lowercase())
+            .map(|f| f.name().to_string())
             .collect(),
-        Err(_) => std::collections::HashSet::new(),
+        Err(_) => Vec::new(),
     };
+    let history_columns: std::collections::HashSet<String> = history_names
+        .iter()
+        .map(|n| n.to_ascii_lowercase())
+        .collect();
+    let weather_names: Vec<String> = match ctx.table("weather").await {
+        Ok(df) => df
+            .schema()
+            .fields()
+            .iter()
+            .map(|f| f.name().to_string())
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+
+    let units = unit_system.unwrap_or("imperial");
+    if fdd_core::is_metric_unit_system(units) {
+        let sel = fdd_core::metric_select_list(&history_names);
+        let df = ctx.sql(&format!("SELECT {sel} FROM history")).await?;
+        ctx.register_table("history_si", df.into_view())?;
+        if !weather_names.is_empty() {
+            let wsel = fdd_core::metric_select_list(&weather_names);
+            if let Ok(wdf) = ctx.sql(&format!("SELECT {wsel} FROM weather")).await {
+                let _ = ctx.register_table("weather_si", wdf.into_view());
+            }
+        }
+    }
 
     let mut timings = Vec::new();
     let mut rules_succeeded = 0usize;
@@ -218,7 +258,12 @@ pub async fn run_all_rules_with_overrides(
             rules_failed += 1;
             continue;
         }
-        let confirm_secs = rule.confirm_seconds;
+        let mut confirm_secs = rule.confirm_seconds;
+        if let Some(ov) = overrides.get(&rule.rule_id) {
+            if let Some(cs) = ov.get("confirm_seconds") {
+                confirm_secs = cs.round().max(0.0) as u32;
+            }
+        }
         let mut params = rule_params(poll_seconds, confirm_secs);
         let session_override = overrides.get(&rule.rule_id);
         if let Ok(tuned) = effective_param_strings(rule, &tuning, None, None, session_override) {
@@ -233,8 +278,8 @@ pub async fn run_all_rules_with_overrides(
                 params.insert(k, v);
             }
         }
-        // Always re-assert confirm from the (possibly mutated) rule spec.
-        let confirm_params = rule_params(poll_seconds, rule.confirm_seconds);
+        // Always re-assert confirm from the (possibly overridden) window.
+        let confirm_params = rule_params(poll_seconds, confirm_secs);
         for (k, v) in confirm_params {
             params.insert(k, v);
         }
@@ -247,11 +292,18 @@ pub async fn run_all_rules_with_overrides(
                 escaped
             );
         }
+        sql = fdd_core::sql_with_metric_to_imperial(&sql, &history_names, &weather_names, units);
+        let history_table = if fdd_core::is_metric_unit_system(units) {
+            "history_si"
+        } else {
+            "history"
+        };
         sql = sql_with_optional_null_roles(
             &rule.rule_id,
             &sql,
             &rule.optional_roles,
             &history_columns,
+            history_table,
         );
         match run_sql(&ctx, &sql).await {
             Ok(result) => {

@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-08-14 — Metric boundary, slice CI, plot contracts, hourly append
+
+- FDD SQL stays °F; `unit_system=metric` converts temperature roles at query; Lab sliders show °C.
+- CI: `tests/fixtures/synthetic_slice` + `compare_synthetic_slice.py` + metric twin; plot JSON contracts; package append API + MCP `openfdd_csv_package_append`.
+- Low-RAM: GHA publishes GHCR; no local stack compile.
+
 ## 2026-08-13 — Parity plots CI hardening (#715)
 
 - Full-width Overview (Streamlit-like), A–Z Lab rule menu, named Plotly PNG stems.

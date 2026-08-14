@@ -1,0 +1,5 @@
+col,column,point_name,unit,point_role,equipment_id,test_target_rule_id
+outside-air-damper,outside-air-damper,Synthetic PID-HUNT-1 outside-air-damper,fraction,outside-air-damper,AHU_CASE_PID_HUNT_1,PID-HUNT-1
+loop-enabled,loop-enabled,Synthetic PID-HUNT-1 loop-enabled,bool,loop-enabled,AHU_CASE_PID_HUNT_1,PID-HUNT-1
+fan-status,fan-status,Synthetic PID-HUNT-1 fan-status,bool,fan-status,AHU_CASE_PID_HUNT_1,PID-HUNT-1
+fan-cmd,fan-cmd,Synthetic PID-HUNT-1 fan-cmd,fraction,fan-cmd,AHU_CASE_PID_HUNT_1,PID-HUNT-1

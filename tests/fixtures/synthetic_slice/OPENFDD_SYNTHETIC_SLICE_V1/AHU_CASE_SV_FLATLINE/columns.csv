@@ -1,0 +1,4 @@
+col,column,point_name,unit,point_role,equipment_id,test_target_rule_id
+zone-air-temp,zone-air-temp,Synthetic SV-FLATLINE zone-air-temp,degF,zone-air-temp,AHU_CASE_SV_FLATLINE,SV-FLATLINE
+fan-status,fan-status,Synthetic SV-FLATLINE fan-status,bool,fan-status,AHU_CASE_SV_FLATLINE,SV-FLATLINE
+fan-cmd,fan-cmd,Synthetic SV-FLATLINE fan-cmd,fraction,fan-cmd,AHU_CASE_SV_FLATLINE,SV-FLATLINE

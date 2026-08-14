@@ -33,6 +33,7 @@ pub fn contract_json() -> Value {
             "POST /api/csv/import/plan",
             "POST /api/csv/import/preflight — must verdict pass before execute",
             "POST /api/csv/import/execute with confirm:true",
+            "Hourly IoT: seed once with POST /api/csv/import/package then POST /api/csv/import/package/append (confirm:true, JWT)",
             "Optional POST /api/model/commissioning-import",
             "POST /api/fdd-rules/{id}/test-sql then POST /api/rules/batch",
             "POST /api/reports/from-fdd-sql-run"
@@ -53,6 +54,19 @@ fn historian_wide_csv_profile() -> Value {
         "equipment_id_format": "equip:<slug> e.g. equip:liberty-100-ahu-1",
         "site_id_format": "site:<slug>",
         "import_plan_mode": "single or append or join",
+        "package_append": {
+            "method": "POST",
+            "path": "/api/csv/import/package/append",
+            "auth": "JWT integrator|agent",
+            "confirm": true,
+            "idempotent": "timestamp+equipment last-write-wins",
+            "body": {
+                "confirm": true,
+                "building_id": "BUILDING_50",
+                "equipment_id": "AHU_1",
+                "csv": "timestamp_utc,sat,...\\n..."
+            }
+        },
         "example_mapping": {
             "point_role_outside_air_temp": "oa_t",
             "point_role_zone_temp": "zn_t",

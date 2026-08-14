@@ -8,6 +8,9 @@ on:
       - "sql_rules/**"
       - "rule_tuning/**"
       - "examples/sample_data/**"
+      - "tests/fixtures/**"
+      - "scripts/compare_synthetic_slice.py"
+      - "scripts/make_metric_history_twin.py"
       - ".github/workflows/fdd-engine-ci.yml"
   pull_request:
     paths:
@@ -15,6 +18,9 @@ on:
       - "sql_rules/**"
       - "rule_tuning/**"
       - "examples/sample_data/**"
+      - "tests/fixtures/**"
+      - "scripts/compare_synthetic_slice.py"
+      - "scripts/make_metric_history_twin.py"
       - ".github/workflows/fdd-engine-ci.yml"
 
 env:
@@ -63,3 +69,14 @@ jobs:
         run: |
           cargo run -p fdd_cli --release -- ingest --data-root examples/sample_data --building BUILDING_FIXTURE --out .cache/parquet
           cargo run -p fdd_cli --release -- run-rules --parquet .cache/parquet --rules-dir sql_rules --out .cache/rule_results
+      - name: synthetic slice ingest + run-rules
+        run: |
+          cargo run -p fdd_cli --release -- ingest --data-root tests/fixtures/synthetic_slice --building OPENFDD_SYNTHETIC_SLICE_V1 --out .cache/parquet_slice
+          cargo run -p fdd_cli --release -- run-rules --parquet .cache/parquet_slice --rules-dir sql_rules --out .cache/rule_results_slice --confirm-seconds 0
+          python3 scripts/compare_synthetic_slice.py tests/fixtures/synthetic_slice/expected_faults_slice.csv .cache/rule_results_slice
+      - name: metric twin invariance
+        run: |
+          python3 scripts/make_metric_history_twin.py tests/fixtures/synthetic_slice/OPENFDD_SYNTHETIC_SLICE_V1 .cache/metric_twin/OPENFDD_SYNTHETIC_SLICE_V1
+          cargo run -p fdd_cli --release -- ingest --data-root .cache/metric_twin --building OPENFDD_SYNTHETIC_SLICE_V1 --out .cache/parquet_metric
+          cargo run -p fdd_cli --release -- run-rules --parquet .cache/parquet_metric --rules-dir sql_rules --out .cache/rule_results_metric --unit-system metric --confirm-seconds 0
+          python3 scripts/compare_synthetic_slice.py tests/fixtures/synthetic_slice/expected_faults_slice.csv .cache/rule_results_metric

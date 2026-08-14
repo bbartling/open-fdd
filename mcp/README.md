@@ -108,6 +108,7 @@ docker run -i --rm --network host \
 | `openfdd_csv_import_plan` | Append/join plan + validation preview |
 | `openfdd_csv_fusion_preview` | Merged grid preview |
 | `openfdd_csv_import_execute` | Save to Arrow (write gate) |
+| `openfdd_csv_package_append` | Hourly package history append (write gate) |
 | `openfdd_historian_query` | Historian pivot query |
 | `openfdd_fdd_rules_list` | Legacy wire/SQL FDD rule catalog |
 | `openfdd_fdd_registry` | Production DataFusion registry |

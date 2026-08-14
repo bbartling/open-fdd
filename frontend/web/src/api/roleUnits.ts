@@ -46,8 +46,58 @@ const UNIT_FAMILY: Record<string, string> = {
 
 const ORDER_PREF = ["temp_F", "pct", "static", "flow", "bool"];
 
-export function resolveRoleUnit(role: string): string {
-  return DEFAULT_ROLE_UNITS[role] ?? "";
+export function resolveRoleUnit(
+  role: string,
+  unitSystem: "imperial" | "metric" = "imperial",
+): string {
+  const base = DEFAULT_ROLE_UNITS[role] ?? "";
+  if (unitSystem === "metric" && (base === "°F" || base === "degF")) return "°C";
+  return base;
+}
+
+export function isTempUnit(unit: string | undefined): boolean {
+  const u = (unit || "").trim();
+  return u === "°F" || u === "degF" || u === "F" || u === "°C";
+}
+
+export function fahrenheitToCelsius(f: number): number {
+  return (f - 32) * (5 / 9);
+}
+
+export function celsiusToFahrenheit(c: number): number {
+  return c * (9 / 5) + 32;
+}
+
+/** Slider display: registry stores °F; metric UI shows °C. */
+export function displayScalar(
+  value: number,
+  unit: string | undefined,
+  unitSystem: "imperial" | "metric",
+): number {
+  if (unitSystem === "metric" && isTempUnit(unit) && unit !== "°C") {
+    return Math.round(fahrenheitToCelsius(value) * 10) / 10;
+  }
+  return value;
+}
+
+export function storeScalar(
+  display: number,
+  unit: string | undefined,
+  unitSystem: "imperial" | "metric",
+): number {
+  if (unitSystem === "metric" && isTempUnit(unit) && unit !== "°C") {
+    return celsiusToFahrenheit(display);
+  }
+  return display;
+}
+
+export function displayUnitLabel(
+  unit: string | undefined,
+  unitSystem: "imperial" | "metric",
+): string {
+  if (!unit) return "";
+  if (unitSystem === "metric" && isTempUnit(unit)) return "°C";
+  return unit;
 }
 
 export function unitFamily(unit: string): string {

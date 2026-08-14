@@ -76,6 +76,8 @@ retest. Do not confuse those with this engineering OS.
 33. **FDD Plots series roles:** `series_response` SELECT = `required_roles ∪ optional_roles` (SV-*/PID-HUNT keep required empty). Soft-empty when none present on equipment.
 34. **Mech cooling OAT bins:** status/cmd proof **before** amps (never OR amps when status exists); prefer web/`dry_bulb_f`/weather OAT over site-averaged AHU BAS `oa_t`. Version `mechanical-cooling-oat-bins-v2`.
 35. **Synthetic analytics soak:** `scripts/synthetic_59_overview_analytics_soak.py` asserts runtime + mech bin envelopes (separate from FDD pair scores).
+36. **Metric CSVs:** store as-uploaded; convert temperature roles C→F at run-rules/historian query. Do not duplicate 59 SQL files. Sliders display user units.
+37. **Package append:** `POST /api/csv/import/package/append` is the IoT hourly path (JWT + confirm). Vendor pullers are out-of-repo.
 
 ---
 

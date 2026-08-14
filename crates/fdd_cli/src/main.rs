@@ -6,7 +6,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use fdd_bench::{compare_results, run_benchmark, write_compare_markdown};
 use fdd_core::validate_building;
-use fdd_rules::{load_registry, run_all_rules};
+use fdd_rules::{load_registry, run_all_rules_with_overrides};
 use fdd_sql::{register_parquet_tree, run_sql_file};
 use fdd_store::ingest_building;
 use inventory::write_inventory;
@@ -61,6 +61,13 @@ enum Commands {
         rules_dir: PathBuf,
         #[arg(long, default_value = ".cache/rule_results")]
         out: PathBuf,
+        /// Stored CSV units: imperial (°F) or metric/si (°C converted at query).
+        #[arg(long, default_value = "imperial")]
+        unit_system: String,
+        /// Override every rule confirm window (seconds). Use 0 to match synthetic
+        /// soak `confirm_min=0` / exact-equation isolation.
+        #[arg(long)]
+        confirm_seconds: Option<f64>,
     },
     /// Compare pandas oracle JSON vs SQL results JSON
     Compare {
@@ -126,9 +133,29 @@ async fn main() -> Result<()> {
             parquet,
             rules_dir,
             out,
+            unit_system,
+            confirm_seconds,
         } => {
             let registry = load_registry(&rules_dir)?;
-            let report = run_all_rules(&parquet, &registry, &out).await?;
+            let mut overrides = std::collections::HashMap::new();
+            if let Some(cs) = confirm_seconds {
+                for rule in &registry.rules {
+                    overrides.insert(
+                        rule.rule_id.clone(),
+                        std::collections::HashMap::from([("confirm_seconds".into(), cs)]),
+                    );
+                }
+            }
+            let report = run_all_rules_with_overrides(
+                &parquet,
+                &registry,
+                &out,
+                &overrides,
+                None,
+                None,
+                Some(unit_system.as_str()),
+            )
+            .await?;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
         Commands::Compare {

@@ -39,6 +39,7 @@ Typical flow:
 | Task | MCP / API |
 |------|-----------|
 | CSV import | `openfdd_csv_import_preflight`, `/api/csv/import/execute` |
+| Hourly CSV append | `openfdd_csv_package_append` → `POST /api/csv/import/package/append` (JWT + `confirm:true`) |
 | Model bind | `/api/model/assignments/save` |
 | Rule deploy | `/api/rules/batch`, `/api/fdd-rules/{id}/activate` |
 | Site health | `/api/health`, `/api/dashboard/summary` |

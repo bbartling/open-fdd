@@ -46,6 +46,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/csv/import/preview", post(csv_preview))
         .route("/api/csv/import/package", post(csv_import_package))
         .route(
+            "/api/csv/import/package/append",
+            post(csv_import_package_append),
+        )
+        .route(
             "/api/csv/import/package/roles",
             post(csv_import_package_roles),
         )
@@ -795,9 +799,9 @@ pub async fn agent_tools() -> Json<AgentToolsResponse> {
                 path: "/api/csv/import/preview".into(),
             },
             AgentTool {
-                name: "csv.import.execute".into(),
+                name: "csv.import.package.append".into(),
                 method: "POST".into(),
-                path: "/api/csv/import/execute".into(),
+                path: "/api/csv/import/package/append".into(),
             },
             AgentTool {
                 name: "datasets.list".into(),
@@ -1140,6 +1144,16 @@ pub async fn csv_import_package(headers: HeaderMap, body: Bytes) -> Json<Value> 
             obj.insert("action_id".into(), json!(aid));
         }
     }
+    Json(result)
+}
+
+pub async fn csv_import_package_append(headers: HeaderMap, body: Bytes) -> Json<Value> {
+    let ct = content_type(&headers);
+    let result = tokio::task::spawn_blocking(move || {
+        open_fdd_edge_prototype::csv_ingest::package::append_package_handler(&ct, &body)
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("package append task: {e}")}));
     Json(result)
 }
 

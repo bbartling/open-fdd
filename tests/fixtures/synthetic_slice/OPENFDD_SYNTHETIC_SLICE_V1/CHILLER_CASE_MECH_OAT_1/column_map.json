@@ -1,0 +1,18 @@
+{
+  "equipment_type": "CHW_PLANT",
+  "equipType": "chwPlant",
+  "device": "CHILLER_CASE_MECH_OAT_1",
+  "column_roles": {
+    "web-outside-air-temp": "web-outside-air-temp",
+    "chiller-status": "chiller-status",
+    "chw-pump-status": "chw-pump-status",
+    "chw-pump-cmd": "chw-pump-cmd"
+  },
+  "points": {
+    "web-outside-air-temp": "web-outside-air-temp",
+    "chiller-status": "chiller-status",
+    "chw-pump-status": "chw-pump-status",
+    "chw-pump-cmd": "chw-pump-cmd"
+  },
+  "test_target_rule_id": "MECH-OAT-1"
+}

@@ -1,0 +1,15 @@
+{
+  "ruleResultChart": {
+    "xaxis_title": "timestamp",
+    "fault_trace": "confirmed_fault",
+    "fault_axis_title": "fault"
+  },
+  "overview_png_stems": [
+    "mech_cooling_oat_bins",
+    "economizer_free_cooling_delta",
+    "economizer_mat_residual",
+    "economizer_temps_oa_damper",
+    "bas_vs_web_oat",
+    "bas_web_oat_deviation_hist"
+  ]
+}

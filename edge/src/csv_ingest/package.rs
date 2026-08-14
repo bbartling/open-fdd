@@ -11,6 +11,7 @@
 //! `/api/fdd/run` registry mode works immediately.
 
 use crate::historian::store::workspace_dir;
+use fdd_core::haystack_point_to_role;
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
@@ -47,69 +48,6 @@ const MAX_COMPRESSION_RATIO: f64 = 100.0;
 
 /// Unix symlink mode nibble — mirrors vibe19 `package_io.stat_is_symlink`.
 const UNIX_SYMLINK_MODE: u32 = 0o120000;
-
-/// Project-Haystack-style point tags used by vibe19 column maps → SQL cookbook roles.
-/// Mirrors vibe19 `app/column_map_json.py` POINT_DISPLAY vocabulary.
-fn haystack_point_to_role(point: &str) -> String {
-    let slug = point.trim().to_lowercase().replace([' ', '_'], "-");
-    match slug.as_str() {
-        "discharge-air-temp" => "sat".into(),
-        "discharge-air-temp-sp" => "sat_sp".into(),
-        "mixed-air-temp" => "mat".into(),
-        "return-air-temp" => "rat".into(),
-        "outside-air-temp" | "bas-outside-air-temp" => "oa_t".into(),
-        "outside-air-humidity" => "oa_h".into(),
-        "outside-air-damper" => "oa_damper_pct".into(),
-        "cooling-valve" => "clg_valve_pct".into(),
-        "heating-valve" => "htg_valve_pct".into(),
-        "fan-cmd" => "fan_cmd".into(),
-        "return-fan-cmd" => "return_fan".into(),
-        "fan-status" => "fan_status".into(),
-        "duct-static-pressure" => "duct_static".into(),
-        "duct-static-pressure-sp" => "duct_static_sp".into(),
-        // TRIM / duct-static reset request (pandas vav-pressure-request-sum)
-        "vav-pressure-request-sum" | "static-reset-request" => "static_reset_request".into(),
-        "cooling-coil-entering-temp" => "cooling_coil_entering_temp".into(),
-        "cooling-coil-leaving-temp" => "cooling_coil_leaving_temp".into(),
-        "heating-coil-entering-temp" => "heating_coil_entering_temp".into(),
-        "heating-coil-leaving-temp" => "heating_coil_leaving_temp".into(),
-        "chiller-status" => "chiller_status".into(),
-        "loop-enabled" => "loop_enabled".into(),
-        "zone-air-temp" => "zone_t".into(),
-        "zone-airflow" => "zone_flow".into(),
-        "vav-total-airflow" => "vav_total_flow".into(),
-        "min-flow-sp" => "min_flow_sp".into(),
-        "chw-pump-status" => "chw_pump_status".into(),
-        "compressor-status" => "compressor_status".into(),
-        "building-zone-load-satisfied" => "building_zone_load_satisfied".into(),
-        "building-ahu-load-satisfied" => "building_ahu_load_satisfied".into(),
-        "damper" => "damper_pct".into(),
-        "reheat-valve" => "reheat_valve_pct".into(),
-        "vav-discharge-air-temp" => "vav_discharge_t".into(),
-        "vav-inlet-air-temp" => "vav_inlet_t".into(),
-        "ahu-discharge-air-temp" => "ahu_sat".into(),
-        "chilled-water-supply-temp" => "chw_supply_t".into(),
-        "chilled-water-return-temp" => "chw_return_t".into(),
-        "chilled-water-supply-temp-sp" => "chw_supply_sp".into(),
-        "hot-water-supply-temp" => "hw_supply_t".into(),
-        "hot-water-return-temp" => "hw_return_t".into(),
-        "occupied" => "occ_mode".into(),
-        "chw-diff-pressure" => "chw_dp".into(),
-        "chw-diff-pressure-sp" => "chw_dp_sp".into(),
-        "chw-flow" => "chw_flow".into(),
-        "chw-pump-cmd" => "chw_pump_cmd".into(),
-        "cw-pump-cmd" => "cw_pump_cmd".into(),
-        "tower-fan-cmd" | "cw-fan-cmd" => "tower_fan_cmd".into(),
-        "condenser-water-supply-temp" => "cw_supply_t".into(),
-        "condenser-water-return-temp" => "cw_return_t".into(),
-        "preheat-leaving-temp" => "preheat_leave_t".into(),
-        "web-outside-air-temp" => "web_oa_t".into(),
-        "web-outside-air-dewpoint" => "web_oa_dp".into(),
-        "web-outside-air-wetbulb" => "web_wb_t".into(),
-        "web-outside-air-humidity" => "web_oa_h".into(),
-        other => fdd_core::normalize_role(&other.replace('-', "_")),
-    }
-}
 
 #[derive(Debug)]
 struct PackageManifest {
@@ -801,6 +739,126 @@ pub fn import_package_handler(content_type: &str, body: &[u8]) -> Value {
         return json!({"ok": false, "error": "empty upload"});
     }
     import_package_zip(&zip_bytes)
+}
+
+/// Append hourly history into an existing package. JSON:
+/// `{ "confirm": true, "building_id": "...", "equipment_id": "...", "csv": "header\\n..." }`
+/// or `{ "confirm": true, "building_id": "...", "files": [{ "equipment_id", "csv" }] }`.
+/// ZIP body is also accepted (same layout as package import, merged not replaced).
+pub fn append_package_handler(content_type: &str, body: &[u8]) -> Value {
+    let ct = content_type.to_ascii_lowercase();
+    if ct.contains("application/json") {
+        let v: Value = match serde_json::from_slice(body) {
+            Ok(v) => v,
+            Err(e) => return json!({"ok": false, "error": format!("json: {e}")}),
+        };
+        return append_package_json(&v);
+    }
+    if ct.contains("multipart/form-data") || body.starts_with(b"PK") {
+        let zip_bytes: Vec<u8> = if ct.contains("multipart/form-data") {
+            let parsed = super::upload::parse_multipart_files(content_type, body);
+            match parsed {
+                Ok((files, _)) => files
+                    .into_iter()
+                    .find(|(n, _)| n.to_lowercase().ends_with(".zip"))
+                    .map(|(_, b)| b)
+                    .unwrap_or_default(),
+                Err(e) => return json!({"ok": false, "error": e}),
+            }
+        } else {
+            body.to_vec()
+        };
+        return append_package_zip(&zip_bytes);
+    }
+    json!({"ok": false, "error": "send application/json or a package zip"})
+}
+
+fn append_package_json(body: &Value) -> Value {
+    if body.get("confirm").and_then(|v| v.as_bool()) != Some(true) {
+        return json!({"ok": false, "error": "confirm:true required"});
+    }
+    let building_id = match validate_id(
+        body.get("building_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or(""),
+    ) {
+        Ok(id) => id,
+        Err(e) => return json!({"ok": false, "error": format!("building_id: {e}")}),
+    };
+    let data_root = workspace_dir().join("data").join("csv_buildings");
+    let building_root = data_root.join(&building_id);
+    if !building_root.is_dir() {
+        return json!({
+            "ok": false,
+            "error": format!("building {building_id} not ingested — seed with POST /api/csv/import/package first"),
+        });
+    }
+    let mut files: Vec<(String, String)> = Vec::new();
+    if let Some(arr) = body.get("files").and_then(|v| v.as_array()) {
+        for f in arr {
+            let eq = f.get("equipment_id").and_then(|v| v.as_str()).unwrap_or("");
+            let csv = f.get("csv").and_then(|v| v.as_str()).unwrap_or("");
+            files.push((eq.to_string(), csv.to_string()));
+        }
+    } else {
+        let eq = body
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let csv = body.get("csv").and_then(|v| v.as_str()).unwrap_or("");
+        files.push((eq.to_string(), csv.to_string()));
+    }
+    let mut merges = Vec::new();
+    for (eq, csv) in files {
+        let equipment_id = match validate_id(&eq) {
+            Ok(id) => id,
+            Err(e) => return json!({"ok": false, "error": format!("equipment_id: {e}")}),
+        };
+        if csv.trim().is_empty() {
+            return json!({"ok": false, "error": "csv required"});
+        }
+        let eq_dir = building_root.join(&equipment_id);
+        let hist = eq_dir.join("history_wide.csv");
+        if !hist.is_file() {
+            return json!({
+                "ok": false,
+                "error": format!("equipment {equipment_id} missing history_wide.csv"),
+            });
+        }
+        let existing = std::fs::read_to_string(&hist).unwrap_or_default();
+        match fdd_store::merge_history_wide_text(&hist, &csv, &hist, Some(existing)) {
+            Ok(r) => merges.push(json!({
+                "equipment_id": equipment_id,
+                "rows_in": r.rows_in,
+                "rows_added": r.rows_added,
+                "rows_duped": r.rows_duped,
+                "rows_out": r.rows_out,
+                "ts_min": r.ts_min,
+                "ts_max": r.ts_max,
+            })),
+            Err(e) => return json!({"ok": false, "error": e.to_string()}),
+        }
+    }
+    let out_dir = parquet_out_dir();
+    match fdd_store::ingest_building(&data_root, &building_id, &out_dir) {
+        Ok(report) => json!({
+            "ok": true,
+            "building_id": building_id,
+            "merges": merges,
+            "equipment_written": report.equipment_written,
+            "total_rows": report.total_rows,
+            "total_ms": report.total_ms,
+        }),
+        Err(e) => json!({"ok": false, "error": format!("parquet ingest: {e:#}")}),
+    }
+}
+
+fn append_package_zip(zip_bytes: &[u8]) -> Value {
+    json!({
+        "ok": false,
+        "error": "zip append: POST application/json with confirm, building_id, equipment_id, csv (hourly chunk). Full zip re-import remains POST /api/csv/import/package",
+        "hint": format!("zip_bytes={}", zip_bytes.len()),
+    })
 }
 
 /// Update role assignments for one ingested package equipment and re-ingest.
@@ -1601,5 +1659,55 @@ mod tests {
             "single AHU sibling fallback"
         );
         assert_eq!(infer_parent_ahu("AHU_1", &siblings), None);
+    }
+
+    #[test]
+    fn append_json_requires_confirm_and_merges() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!("openfdd_pkg_append_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", &tmp);
+        std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.join(".cache/parquet"));
+
+        let map = r#"{"equipType":"ahu","points":{"fan-cmd":"SF_SPD","duct-static-pressure":"DA_P","duct-static-pressure-sp":"DA_P_SP"}}"#;
+        let zip = build_zip(&[
+            (
+                "manifest.json",
+                r#"{"schema_version":"openfdd_package_v1","building_id":"B_APPEND","grid_minutes":15}"#,
+            ),
+            ("AHU_1/history_wide.csv", &history_csv()),
+            ("AHU_1/history_wide.json", map),
+        ]);
+        let seed = import_package_zip(&zip);
+        assert_eq!(seed["ok"], json!(true), "{seed}");
+
+        let deny = append_package_json(&json!({
+            "building_id": "B_APPEND",
+            "equipment_id": "AHU_1",
+            "csv": "timestamp_utc,SF_SPD,DA_P,DA_P_SP\n2024-01-01T01:00:00Z,80,1.1,1.0\n"
+        }));
+        assert_eq!(deny["ok"], json!(false), "{deny}");
+
+        let hour = append_package_json(&json!({
+            "confirm": true,
+            "building_id": "B_APPEND",
+            "equipment_id": "AHU_1",
+            "csv": "timestamp_utc,SF_SPD,DA_P,DA_P_SP\n2024-01-01T01:00:00Z,80,1.1,1.0\n"
+        }));
+        assert_eq!(hour["ok"], json!(true), "{hour}");
+        assert_eq!(hour["merges"][0]["rows_added"], json!(1), "{hour}");
+
+        let replay = append_package_json(&json!({
+            "confirm": true,
+            "building_id": "B_APPEND",
+            "equipment_id": "AHU_1",
+            "csv": "timestamp_utc,SF_SPD,DA_P,DA_P_SP\n2024-01-01T01:00:00Z,80,1.1,1.0\n"
+        }));
+        assert_eq!(replay["ok"], json!(true), "{replay}");
+        assert_eq!(replay["merges"][0]["rows_added"], json!(0), "{replay}");
+        assert_eq!(replay["merges"][0]["rows_duped"], json!(1), "{replay}");
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

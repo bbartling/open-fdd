@@ -40,6 +40,7 @@ Read-first sidecar. JWT via `OPENFDD_MCP_TOKEN`. Bind `127.0.0.1` or site VLAN o
 | `openfdd_model_commissioning_import` | `POST /api/model/commissioning-import` | JWT + write gate |
 | `openfdd_csv_fusion_preview` | `GET /api/csv/import/sessions/{id}/fusion-preview` | JWT |
 | `openfdd_csv_import_execute` | `POST /api/csv/import/execute` | JWT + write gate + preflight pass |
+| `openfdd_csv_package_append` | `POST /api/csv/import/package/append` | JWT + write gate + `confirm:true` |
 | `openfdd_historian_query` | `GET/POST /api/historian/query` | JWT |
 | `openfdd_fdd_rules_list` | `GET /api/fdd-rules` | JWT |
 | `openfdd_fdd_rule_test_sql` | `POST /api/fdd-rules/{id}/test-sql` | JWT |

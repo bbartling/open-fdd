@@ -1,0 +1,9 @@
+{
+  "schema_version": "openfdd_package_v1",
+  "building_id": "OPENFDD_SYNTHETIC_SLICE_V1",
+  "site_id": "OPENFDD_TEST_SITE",
+  "grid_minutes": 5,
+  "timezone": "UTC",
+  "notes": "CI slice: FC1, VAV-1, SCHED-1, PID-HUNT-1, SV-FLATLINE, MECH-OAT-1. Hours copied from golden expected_faults.csv; do not retune goldens.",
+  "fixture_contract": "test_contract/README.md"
+}

@@ -1,0 +1,16 @@
+{
+  "equipment_type": "AHU",
+  "equipType": "ahu",
+  "device": "AHU_CASE_SV_FLATLINE",
+  "column_roles": {
+    "zone-air-temp": "zone-air-temp",
+    "fan-status": "fan-status",
+    "fan-cmd": "fan-cmd"
+  },
+  "points": {
+    "zone-air-temp": "zone-air-temp",
+    "fan-status": "fan-status",
+    "fan-cmd": "fan-cmd"
+  },
+  "test_target_rule_id": "SV-FLATLINE"
+}

@@ -1,0 +1,14 @@
+{
+  "equipment_type": "VAV",
+  "equipType": "vav",
+  "device": "VAV_CASE_VAV_1",
+  "column_roles": {
+    "zone-air-temp": "zone-air-temp",
+    "zone-airflow": "zone-airflow"
+  },
+  "points": {
+    "zone-air-temp": "zone-air-temp",
+    "zone-airflow": "zone-airflow"
+  },
+  "test_target_rule_id": "VAV-1"
+}

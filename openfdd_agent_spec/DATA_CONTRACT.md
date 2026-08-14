@@ -85,6 +85,20 @@ Agents must not treat pandas oracle output as production FDD execution.
 
 ---
 
+## Package append (hourly IoT)
+
+| Item | Truth |
+| --- | --- |
+| Seed | `POST /api/csv/import/package` |
+| Append | `POST /api/csv/import/package/append` with JWT + `confirm: true` |
+| Body | `{ building_id, equipment_id, csv }` history_wide chunk |
+| Dedup | exact `timestamp` last-write-wins |
+| Units | session `unit_system`; FDD converts metric→°F at query |
+
+Do not commit vendor appenders or full Building 50 zips. CI uses `tests/fixtures/hourly_append/`.
+
+---
+
 ## Units and roles
 
 Role aliases and equipment types: `open_fdd.analytics` / site model helpers and

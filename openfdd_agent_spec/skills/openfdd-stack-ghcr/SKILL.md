@@ -27,5 +27,7 @@ Product central image is Rust/debian only (no Python).
 images before pull; wait for GH Actions publish; then pull +
 `openfdd_stack_up.sh … --no-pull`. See [`CONTAINER_AGENT.md`](../../CONTAINER_AGENT.md).
 
+Hourly CSV append is API `POST /api/csv/import/package/append` on central (GHA image), not a local compile.
+
 Workflow: `ghcr-openfdd-stack.yml` (retargets nightly on master).
 MCP: separate `rust-ghcr-mcp.yml`.

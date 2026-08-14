@@ -15,8 +15,15 @@ import {
   type RuleParamMap,
 } from "../lib/ruleParams";
 import { useSessionQuery } from "../session";
+import {
+  displayScalar,
+  displayUnitLabel,
+  storeScalar,
+  isTempUnit,
+} from "../api/roleUnits";
 
 export const RULES_UPDATED_EVENT = "openfdd:rules-updated";
+const UNITS_KEY = "openfdd.ui.unit_system";
 
 function familyOf(ruleId: string): string {
   const i = ruleId.indexOf("-");
@@ -46,6 +53,7 @@ function RuleExpander({
   onUpdateRule,
   updating,
   buildingId,
+  unitSystem,
 }: {
   rule: FddRuleSummary;
   values: Record<string, number>;
@@ -53,6 +61,7 @@ function RuleExpander({
   onUpdateRule: (ruleId: string) => void;
   updating: boolean;
   buildingId: string;
+  unitSystem: "imperial" | "metric";
 }) {
   const [open, setOpen] = useState(false);
   const [defs, setDefs] = useState<Record<string, FddRuleParamDef> | null>(null);
@@ -109,22 +118,33 @@ function RuleExpander({
           <p className="oracle-sidebar__caption">No tunable params.</p>
         ) : null}
         {entries.map(([key, def]) => {
-          const val = values[key] ?? def.default;
+          const stored = values[key] ?? def.default;
+          const val = displayScalar(stored, def.unit, unitSystem);
+          const min = displayScalar(def.min, def.unit, unitSystem);
+          const max = displayScalar(def.max, def.unit, unitSystem);
+          const step = isTempUnit(def.unit) && unitSystem === "metric"
+            ? Math.max(0.1, (def.step || 0.1) * (5 / 9))
+            : def.step || 0.1;
+          const unitLabel = displayUnitLabel(def.unit, unitSystem);
           return (
             <label key={key} className="oracle-sidebar__field">
               <span className="oracle-sidebar__label">
                 {def.label || key}
-                {def.unit ? ` (${def.unit})` : ""}
+                {unitLabel ? ` (${unitLabel})` : ""}
               </span>
               <input
                 type="range"
                 className="oracle-sidebar__slider"
-                min={def.min}
-                max={def.max}
-                step={def.step || 0.1}
+                min={min}
+                max={max}
+                step={step}
                 value={val}
                 onChange={(e) =>
-                  onChange(rule.rule_id, key, Number(e.target.value))
+                  onChange(
+                    rule.rule_id,
+                    key,
+                    storeScalar(Number(e.target.value), def.unit, unitSystem),
+                  )
                 }
                 title={def.label}
               />
@@ -172,6 +192,18 @@ export function RuleTuningPanel() {
   const [persistErr, setPersistErr] = useState<string | null>(null);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistGen = useRef(0);
+  const [unitSystem, setUnitSystem] = useState<"imperial" | "metric">(() =>
+    localStorage.getItem(UNITS_KEY) === "metric" ? "metric" : "imperial",
+  );
+
+  useEffect(() => {
+    const onUnits = (e: Event) => {
+      const d = (e as CustomEvent<"imperial" | "metric">).detail;
+      if (d === "metric" || d === "imperial") setUnitSystem(d);
+    };
+    window.addEventListener("openfdd:unit-system-changed", onUnits);
+    return () => window.removeEventListener("openfdd:unit-system-changed", onUnits);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -324,9 +356,10 @@ export function RuleTuningPanel() {
     <section className="oracle-sidebar__block" data-testid="sidebar-rule-tuning">
       <h3 className="oracle-sidebar__h3">Rule tuning</h3>
       <p className="oracle-sidebar__caption">
-        Sliders write session config. After tuning, click{" "}
-        <strong>Update this rule</strong> next to the slider (or{" "}
-        <strong>Run all rules</strong> on Overview).
+        Sliders are in the selected unit system (metric shows °C for temperature
+        tuners; FDD SQL stays °F internally). After switching units or moving a
+        slider, click <strong>Update this rule</strong> or{" "}
+        <strong>Run all rules</strong> on Overview.
       </p>
       <label className="oracle-sidebar__check">
         <input
@@ -385,6 +418,7 @@ export function RuleTuningPanel() {
             onUpdateRule={(id) => void onUpdateRule(id)}
             updating={updatingRuleId === rule.rule_id}
             buildingId={buildingId}
+            unitSystem={unitSystem}
           />
         ))}
       </div>
