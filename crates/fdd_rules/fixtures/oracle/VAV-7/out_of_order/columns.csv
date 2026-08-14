@@ -1,4 +1,4 @@
 col,point_role
-zone_flow,zone_flow
-min_flow_sp,min_flow_sp
-fan_status,fan_status
+zone_flow,zone-airflow
+min_flow_sp,min-flow-sp
+fan_status,fan-status

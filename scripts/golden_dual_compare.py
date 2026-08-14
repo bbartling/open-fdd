@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run shared oracle fixtures on pandas; optionally compare DataFusion hours.
 
-Does not claim full 59/59 parity. FC7 remains concept_only. Fixtures with
+Does not claim full 59/59 parity. FC7 remains sql_screening (not duration_parity). Fixtures with
 datafusion_compare=pending are pandas-only.
 """
 

@@ -108,10 +108,10 @@ export function VavHealthSection({
         {(["3/3", "2/3", "1/3", "0/3", "?/3"] as const).map((g) => (
           <Metric
             key={g}
-            id={`vav-health-${g}`}
+            id={`vav-health-card-${g.replace("/", "-").replace("?", "q")}`}
             label={g === "?/3" ? "insufficient" : g}
             value={String(groups?.[g] ?? rows.filter((r) => r.score_label === g).length)}
-            testId={`vav-health-card-${g.replace("/", "-")}`}
+            testId={`vav-health-card-${g.replace("/", "-").replace("?", "q")}`}
           />
         ))}
       </div>
@@ -161,6 +161,7 @@ export function VavHealthSection({
       {filtered.length ? (
         <DataTable
           id="vav-health-table"
+          label="VAV health matrix"
           columns={[
             { key: "score_label", header: "Score" },
             { key: "equipment_id", header: "Equipment" },
@@ -169,16 +170,14 @@ export function VavHealthSection({
             { key: "rogue_damper", header: "Rogue" },
             { key: "confidence", header: "Confidence" },
           ]}
-          rows={filtered.slice(0, 400).map((r) => {
-            const eid = String(r.equipment_id ?? "");
-            return {
-              ...r,
-              equipment_id: eid,
-              broken_box: tri(r.broken_box),
-              poor_zone_performance: tri(r.poor_zone_performance),
-              rogue_damper: tri(r.rogue_damper),
-            };
-          })}
+          rows={filtered.slice(0, 400).map((r) => ({
+            score_label: String(r.score_label ?? ""),
+            equipment_id: String(r.equipment_id ?? ""),
+            broken_box: tri(r.broken_box),
+            poor_zone_performance: tri(r.poor_zone_performance),
+            rogue_damper: tri(r.rogue_damper),
+            confidence: String(r.confidence ?? ""),
+          }))}
           testId="vav-health-table"
         />
       ) : null}

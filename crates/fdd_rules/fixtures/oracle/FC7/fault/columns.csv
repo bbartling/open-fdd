@@ -1,5 +1,5 @@
 col,point_role
-sat,sat
-sat_sp,sat_sp
-htg_valve_pct,htg_valve_pct
-fan_status,fan_status
+sat,discharge-air-temp
+sat_sp,discharge-air-temp-sp
+htg_valve_pct,heating-valve
+fan_status,fan-cmd

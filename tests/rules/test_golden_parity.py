@@ -30,5 +30,5 @@ def test_seeded_goldens_match_pandas():
 def test_fc7_not_claimed_full_parity():
     inv = yaml.safe_load(INV.read_text(encoding="utf-8"))
     fc7 = next(c for c in inv["concepts"] if c["canonical_id"] == "FC7")
-    assert fc7["parity_level"] == "concept_only"
-    assert fc7["difference_class"] == "missing_implementation"
+    assert fc7["parity_level"] == "sql_screening"
+    assert fc7["parity_level"] != "duration_parity"

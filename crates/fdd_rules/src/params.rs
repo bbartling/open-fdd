@@ -11,7 +11,21 @@ use serde_json::Value;
 /// (see [`derive_window_row_params`]) so rolling rules can use literal `ROWS`
 /// frame bounds.
 pub fn substitute_sql(sql: &str, params: &HashMap<String, String>) -> String {
-    let derived = derive_window_row_params(params);
+    let mut params = params.clone();
+    for (k, v) in [
+        ("FIXED_FLOW_HOURS", "1"),
+        ("FIXED_FLOW_MAX_STD", "15"),
+        ("FIXED_FLOW_MIN_MEAN", "200"),
+        ("HIGH_MIN_FLOW_SP", "250"),
+        ("FLOW_ON_MIN", "25"),
+        ("FULL_OPEN_PCT", "0.975"),
+        ("SUSTAIN_HOURS", "1.5"),
+        ("HTG_FULL_MIN", "0.9"),
+        ("SAT_ERR", "1"),
+    ] {
+        params.entry(k.into()).or_insert_with(|| v.into());
+    }
+    let derived = derive_window_row_params(&params);
     let mut out = sql.to_string();
     for (key, val) in params.iter().chain(derived.iter()) {
         out = out.replace(&format!("{{{{{key}}}}}"), val);

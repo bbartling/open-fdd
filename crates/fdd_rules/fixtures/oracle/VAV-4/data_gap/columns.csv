@@ -1,4 +1,4 @@
 col,point_role
-damper_pct,damper_pct
-zone_flow,zone_flow
-fan_status,fan_status
+damper_pct,damper
+zone_flow,zone-airflow
+fan_status,fan-status

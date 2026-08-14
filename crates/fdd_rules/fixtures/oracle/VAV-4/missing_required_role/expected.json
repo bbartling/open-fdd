@@ -1,6 +1,7 @@
 {
   "pandas_rule_id": "VAV-4",
   "equipment_id": "VAV_1",
+  "equipment_type": "VAV",
   "poll_seconds": 300,
   "any_fault": false,
   "expect_status": "SKIPPED_MISSING_ROLES",

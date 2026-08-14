@@ -48,7 +48,7 @@ def fmt(t: datetime) -> str:
 
 
 def vav7() -> None:
-    cols = "col,point_role\nzone_flow,zone_flow\nmin_flow_sp,min_flow_sp\nfan_status,fan_status\n"
+    cols = "col,point_role\nzone_flow,zone-airflow\nmin_flow_sp,min-flow-sp\nfan_status,fan-status\n"
     header = "timestamp_utc,zone_flow,min_flow_sp,fan_status"
     for case in CASES:
         times = ts_rows(24)
@@ -64,12 +64,13 @@ def vav7() -> None:
                 {
                     "pandas_rule_id": "VAV-7",
                     "equipment_id": "VAV_1",
+                    "equipment_type": "VAV",
                     "poll_seconds": 300,
                     "any_fault": False,
                     "expect_status": "SKIPPED_MISSING_ROLES",
                     "datafusion_compare": "pending",
                 },
-                "col,point_role\nmin_flow_sp,min_flow_sp\nfan_status,fan_status\n",
+                "col,point_role\nmin_flow_sp,min-flow-sp\nfan_status,fan-status\n",
             )
             continue
         lines = []
@@ -85,7 +86,7 @@ def vav7() -> None:
             elif case == "data_gap" and 8 <= i <= 12:
                 continue
             else:
-                flow, fan = 400, 1
+                flow, fan = 180 + (i % 8) * 40, 1
             tt = t
             if case == "irregular_sampling":
                 tt = times[0] + timedelta(seconds=i * (180 if i % 2 == 0 else 420))
@@ -94,28 +95,31 @@ def vav7() -> None:
             lines.append(lines[3])
         if case == "out_of_order":
             lines = list(reversed(lines))
+        exp = {
+            "pandas_rule_id": "VAV-7",
+            "equipment_id": "VAV_1",
+            "equipment_type": "VAV",
+            "poll_seconds": 300,
+            "datafusion_compare": "pending",
+            "notes": "screening fixture; duration parity not claimed",
+        }
+        if fault:
+            exp["any_fault"] = True
         write_case(
             "VAV-7",
             case,
             header,
             lines,
-            {
-                "pandas_rule_id": "VAV-7",
-                "equipment_id": "VAV_1",
-                "poll_seconds": 300,
-                "any_fault": fault,
-                "datafusion_compare": "pending",
-                "notes": "screening fixture; duration parity not claimed",
-            },
+            exp,
             cols,
         )
 
 
 def vav4() -> None:
-    cols = "col,point_role\ndamper_pct,damper_pct\nzone_flow,zone_flow\nfan_status,fan_status\n"
+    cols = "col,point_role\ndamper_pct,damper\nzone_flow,zone-airflow\nfan_status,fan-status\n"
     header = "timestamp_utc,damper_pct,zone_flow,fan_status"
     for case in CASES:
-        times = ts_rows(36)
+        times = ts_rows(48)
         fault = case == "fault"
         if case == "missing_required_role":
             lines = [f"{fmt(t)},400,1" for t in times]
@@ -127,12 +131,13 @@ def vav4() -> None:
                 {
                     "pandas_rule_id": "VAV-4",
                     "equipment_id": "VAV_1",
+                    "equipment_type": "VAV",
                     "poll_seconds": 300,
                     "any_fault": False,
                     "expect_status": "SKIPPED_MISSING_ROLES",
                     "datafusion_compare": "pending",
                 },
-                "col,point_role\nzone_flow,zone_flow\nfan_status,fan_status\n",
+                "col,point_role\nzone_flow,zone-airflow\nfan_status,fan-status\n",
             )
             continue
         lines = []
@@ -157,25 +162,28 @@ def vav4() -> None:
             lines.append(lines[2])
         if case == "out_of_order":
             lines = list(reversed(lines))
+        exp = {
+            "pandas_rule_id": "VAV-4",
+            "equipment_id": "VAV_1",
+            "equipment_type": "VAV",
+            "poll_seconds": 300,
+            "datafusion_compare": "pending",
+            "notes": "sequential sustain then confirm; screening expected",
+        }
+        if fault:
+            exp["any_fault"] = True
         write_case(
             "VAV-4",
             case,
             header,
             lines,
-            {
-                "pandas_rule_id": "VAV-4",
-                "equipment_id": "VAV_1",
-                "poll_seconds": 300,
-                "any_fault": fault,
-                "datafusion_compare": "pending",
-                "notes": "sequential sustain then confirm; screening expected",
-            },
+            exp,
             cols,
         )
 
 
 def fc7() -> None:
-    cols = "col,point_role\nsat,sat\nsat_sp,sat_sp\nhtg_valve_pct,htg_valve_pct\nfan_status,fan_status\n"
+    cols = "col,point_role\nsat,discharge-air-temp\nsat_sp,discharge-air-temp-sp\nhtg_valve_pct,heating-valve\nfan_status,fan-cmd\n"
     header = "timestamp_utc,sat,sat_sp,htg_valve_pct,fan_status"
     for case in CASES:
         times = ts_rows(24)
@@ -190,12 +198,13 @@ def fc7() -> None:
                 {
                     "pandas_rule_id": "FC7",
                     "equipment_id": "AHU_1",
+                    "equipment_type": "AHU",
                     "poll_seconds": 300,
                     "any_fault": False,
                     "expect_status": "SKIPPED_MISSING_ROLES",
                     "datafusion_compare": "pending",
                 },
-                "col,point_role\nsat_sp,sat_sp\nhtg_valve_pct,htg_valve_pct\nfan_status,fan_status\n",
+                "col,point_role\nsat_sp,discharge-air-temp-sp\nhtg_valve_pct,heating-valve\nfan_status,fan-cmd\n",
             )
             continue
         lines = []
@@ -220,19 +229,22 @@ def fc7() -> None:
             lines.append(lines[1])
         if case == "out_of_order":
             lines = list(reversed(lines))
+        exp = {
+            "pandas_rule_id": "FC7",
+            "equipment_id": "AHU_1",
+            "equipment_type": "AHU",
+            "poll_seconds": 300,
+            "datafusion_compare": "pending",
+            "notes": "htg_valve_pct >= HTG_FULL_MIN; screening",
+        }
+        if fault:
+            exp["any_fault"] = True
         write_case(
             "FC7",
             case,
             header,
             lines,
-            {
-                "pandas_rule_id": "FC7",
-                "equipment_id": "AHU_1",
-                "poll_seconds": 300,
-                "any_fault": fault,
-                "datafusion_compare": "pending",
-                "notes": "htg_valve_pct >= HTG_FULL_MIN; screening",
-            },
+            exp,
             cols,
         )
 

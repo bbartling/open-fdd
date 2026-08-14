@@ -135,6 +135,7 @@ jobs:
           OPENFDD_EDGE_ID: fieldbus-1
           OPENFDD_MQTT_HOST: 127.0.0.1
           OPENFDD_JWT_SECRET: ci-compose-config-secret-not-for-prod
+          OPENFDD_ADMIN_PASSWORD: ci-compose-admin-not-for-prod
         run: |
           mkdir -p deploy/mqtt/kits/local__fieldbus-1
           export OPENFDD_EDGE_KIT_DIR="$PWD/deploy/mqtt/kits/local__fieldbus-1"

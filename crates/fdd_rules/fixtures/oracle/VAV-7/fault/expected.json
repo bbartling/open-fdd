@@ -1,8 +1,9 @@
 {
   "pandas_rule_id": "VAV-7",
   "equipment_id": "VAV_1",
+  "equipment_type": "VAV",
   "poll_seconds": 300,
-  "any_fault": true,
   "datafusion_compare": "pending",
-  "notes": "screening fixture; duration parity not claimed"
+  "notes": "screening fixture; duration parity not claimed",
+  "any_fault": true
 }
