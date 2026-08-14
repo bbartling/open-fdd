@@ -17,6 +17,6 @@ pub use error::CoreError;
 pub use models::*;
 pub use units::{
     celsius_to_fahrenheit, fahrenheit_to_celsius, is_metric_unit_system, is_temperature_role,
-    sql_temp_to_fahrenheit, sql_with_metric_to_imperial, TEMPERATURE_ROLES,
+    metric_select_list, sql_temp_to_fahrenheit, sql_with_metric_to_imperial, TEMPERATURE_ROLES,
 };
 pub use validate::{validate_building, ValidationReport};

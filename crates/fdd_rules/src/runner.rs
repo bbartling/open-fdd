@@ -188,6 +188,19 @@ pub async fn run_all_rules_with_overrides(
         Err(_) => Vec::new(),
     };
 
+    let units = unit_system.unwrap_or("imperial");
+    if fdd_core::is_metric_unit_system(units) {
+        let sel = fdd_core::metric_select_list(&history_names);
+        let df = ctx.sql(&format!("SELECT {sel} FROM history")).await?;
+        ctx.register_table("history_si", df.into_view())?;
+        if !weather_names.is_empty() {
+            let wsel = fdd_core::metric_select_list(&weather_names);
+            if let Ok(wdf) = ctx.sql(&format!("SELECT {wsel} FROM weather")).await {
+                let _ = ctx.register_table("weather_si", wdf.into_view());
+            }
+        }
+    }
+
     let mut timings = Vec::new();
     let mut rules_succeeded = 0usize;
     let mut rules_failed = 0usize;
@@ -279,7 +292,6 @@ pub async fn run_all_rules_with_overrides(
                 escaped
             );
         }
-        let units = unit_system.unwrap_or("imperial");
         sql = fdd_core::sql_with_metric_to_imperial(&sql, &history_names, &weather_names, units);
         let history_table = if fdd_core::is_metric_unit_system(units) {
             "history_si"

@@ -61,50 +61,34 @@ pub fn sql_temp_to_fahrenheit(column: &str, metric: bool) -> String {
 }
 
 /// Wrap `FROM history` / `FROM weather` so metric CSVs run against °F SQL.
+/// Callers must register `history_si` / `weather_si` views (converted SELECT)
+/// on the DataFusion context; this helper only rewrites table names so nested
+/// `WITH` queries do not shadow those views with CTEs in the wrong order.
 pub fn sql_with_metric_to_imperial(
     sql: &str,
-    history_columns: &[String],
+    _history_columns: &[String],
     weather_columns: &[String],
     unit_system: &str,
 ) -> String {
     if !is_metric_unit_system(unit_system) {
         return sql.to_string();
     }
-    let history_select = select_converted(history_columns);
-    let mut ctes = vec![format!(
-        "history_si AS (SELECT {history_select} FROM history)"
-    )];
     let mut rewritten = sql
         .replace(" FROM history", " FROM history_si")
         .replace(" from history", " FROM history_si")
         .replace("\nFROM history", "\nFROM history_si")
         .replace("\nfrom history", "\nFROM history_si");
     if !weather_columns.is_empty() {
-        let weather_select = select_converted(weather_columns);
-        ctes.push(format!(
-            "weather_si AS (SELECT {weather_select} FROM weather)"
-        ));
         rewritten = rewritten
             .replace(" FROM weather", " FROM weather_si")
             .replace(" from weather", " FROM weather_si")
             .replace("\nFROM weather", "\nFROM weather_si")
             .replace("\nfrom weather", "\nFROM weather_si");
     }
-    let cte = ctes.join(", ");
-    if let Some(idx) = rewritten.find("WITH ") {
-        let (pre, rest) = rewritten.split_at(idx);
-        let rest = rest.trim_start_matches("WITH ");
-        format!("{pre}WITH {cte}, {rest}")
-    } else if let Some(idx) = rewritten.find("with ") {
-        let (pre, rest) = rewritten.split_at(idx);
-        let rest = rest.trim_start_matches("with ");
-        format!("{pre}WITH {cte}, {rest}")
-    } else {
-        format!("WITH {cte} {rewritten}")
-    }
+    rewritten
 }
 
-fn select_converted(columns: &[String]) -> String {
+pub fn metric_select_list(columns: &[String]) -> String {
     if columns.is_empty() {
         return "*".into();
     }
@@ -155,12 +139,13 @@ mod tests {
             &[],
             "metric",
         );
-        assert!(out.contains("history_si"));
-        assert!(out.contains("* 9.0 / 5.0"));
         assert!(out.contains("FROM history_si"));
         assert!(
             !sql_with_metric_to_imperial(sql, &["sat".into()], &[], "imperial")
                 .contains("history_si")
         );
+        let sel = metric_select_list(&["timestamp".into(), "sat".into(), "fan_cmd".into()]);
+        assert!(sel.contains("* 9.0 / 5.0"));
+        assert!(sel.contains("AS \"sat\""));
     }
 }
