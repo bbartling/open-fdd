@@ -76,6 +76,15 @@ PRESETS: list[RcxPreset] = [
         family="Zones / VAV",
     ),
     RcxPreset(
+        "vav_health_matrix",
+        "Zones — VAV health (broken / comfort / rogue)",
+        "Canonical vav_health_matrix_v1 cohort: three independent dimensions. Not a 60th FDD rule.",
+        "zone-air-temp",
+        ("VAV",),
+        "ranking",
+        family="Zones / VAV",
+    ),
+    RcxPreset(
         "ahu_sat_reset_scatter",
         "AHU — SAT vs web dry-bulb (scatter)",
         "SAT / leave-air temp vs Open-Meteo dry bulb — look for SAT reset with outdoor air.",

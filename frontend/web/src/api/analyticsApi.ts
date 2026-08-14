@@ -188,6 +188,12 @@ export async function postSensorHealth(
   return postAnalytics("/api/analytics/sensor-health", body);
 }
 
+export async function postVavHealth(
+  body: AnalyticsRequest,
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/vav-health", body);
+}
+
 export async function postRcxChiller(
   body: AnalyticsRequest,
 ): Promise<AnalyticsEnvelope> {

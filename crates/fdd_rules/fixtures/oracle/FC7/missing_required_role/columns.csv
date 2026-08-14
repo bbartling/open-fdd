@@ -1,0 +1,4 @@
+col,point_role
+sat_sp,discharge-air-temp-sp
+htg_valve_pct,heating-valve
+fan_status,fan-cmd

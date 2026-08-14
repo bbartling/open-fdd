@@ -195,6 +195,25 @@ def main() -> int:
     if seeds_ok < 3:
         fail(f"need >=3 oracle_seed fixtures present, found {seeds_ok}")
 
+    # Advertised executable fixtures (present=true) must have history + expected.
+    for c in diag:
+        rid = str(c.get("rule_id") or "")
+        for fx in c.get("proof_fixtures") or []:
+            path = ROOT / fx["path"]
+            hist = path / "history_wide.csv"
+            expected = path / "expected.json"
+            if fx.get("present"):
+                if not hist.is_file() or not expected.is_file():
+                    fail(
+                        f"advertised executable fixture missing history/expected: {fx['path']}"
+                    )
+            if rid in {"VAV-7", "VAV-4", "FC7"} and fx.get("required"):
+                cols = path / "columns.csv"
+                if not (hist.is_file() and expected.is_file() and cols.is_file()):
+                    fail(
+                        f"{rid} required fixture must include history_wide.csv, columns.csv, expected.json: {fx['path']}"
+                    )
+
     print("OK: parity inventory contract")
     print("parity_level counts:", dict(levels))
     print(f"oracle_seed fixtures: {seeds_ok}")

@@ -18,6 +18,7 @@ from open_fdd.analytics.runtime_intervals import (
     interval_durations,
 )
 from open_fdd.analytics.site_model import equipment_type_from_id, resolve_equipment_type
+from open_fdd.analytics.vav_health import vav_health_matrix, vav_health_summary
 
 __all__ = [
     "OccupancySchedule",
@@ -38,5 +39,7 @@ __all__ = [
     "occupied_mask",
     "rcx_preset_coverage",
     "resolve_equipment_type",
+    "vav_health_matrix",
+    "vav_health_summary",
     "zone_comfort_fail_ranking",
 ]

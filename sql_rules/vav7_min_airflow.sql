@@ -1,10 +1,5 @@
--- vav7_min_airflow.sql — Min airflow / fixed high flow
--- Phase-1 (#550): SQL screens the under-min-flow branch only, and only while the
--- box is actually delivering air (zone_flow > FLOW_ON_MIN). Without that guard a
--- closed box overnight reads 0 CFM and would "underflow" against its min SP.
--- Pandas also faults on rolling "fixed high" flow and high min-flow SP while air is on
--- (params fixed_flow_* / high_min_flow_sp). Those windows are not ported yet;
--- {{HIGH_MIN_FLOW_SP}} is accepted so registry substitution stays valid but is unused here.
+-- vav7_min_airflow.sql — three pandas branches: under-min, fixed-high flow, high min SP.
+-- Rolling windows use poll-derived {{FIXED_FLOW_ROWS}} (1h sample count), matching pandas.
 WITH h AS (
   SELECT
     equipment_id,
@@ -16,9 +11,27 @@ WITH h AS (
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN zone_flow IS NOT NULL AND zone_flow > {{FLOW_ON_MIN}} THEN 1
       ELSE 1
     END AS fan_on
   FROM history
+),
+rolled AS (
+  SELECT
+    *,
+    STDDEV_SAMP(zone_flow) OVER (
+      PARTITION BY equipment_id ORDER BY timestamp_utc
+      ROWS BETWEEN {{FIXED_FLOW_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW
+    ) AS roll_std,
+    AVG(zone_flow) OVER (
+      PARTITION BY equipment_id ORDER BY timestamp_utc
+      ROWS BETWEEN {{FIXED_FLOW_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW
+    ) AS roll_mean,
+    COUNT(zone_flow) OVER (
+      PARTITION BY equipment_id ORDER BY timestamp_utc
+      ROWS BETWEEN {{FIXED_FLOW_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW
+    ) AS roll_n
+  FROM h
 ),
 base AS (
   SELECT
@@ -26,11 +39,19 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN COALESCE(fan_on, 0) = 0 THEN 0
-      WHEN zone_flow IS NULL OR min_flow_sp IS NULL THEN 0
-      WHEN zone_flow > {{FLOW_ON_MIN}} AND zone_flow < min_flow_sp THEN 1
+      WHEN zone_flow IS NULL THEN 0
+      WHEN min_flow_sp IS NOT NULL AND zone_flow > {{FLOW_ON_MIN}} AND zone_flow < min_flow_sp THEN 1
+      WHEN roll_n >= {{FIXED_FLOW_MIN_PERIODS}}
+           AND zone_flow IS NOT NULL
+           AND roll_std < {{FIXED_FLOW_MAX_STD}}
+           AND roll_mean > {{FIXED_FLOW_MIN_MEAN}} THEN 1
+      WHEN min_flow_sp IS NOT NULL
+           AND roll_n >= {{FIXED_FLOW_MIN_PERIODS}}
+           AND min_flow_sp > {{HIGH_MIN_FLOW_SP}}
+           AND roll_std < {{FIXED_FLOW_MAX_STD}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
-  FROM h
+  FROM rolled
 ),
 lagged AS (
   SELECT

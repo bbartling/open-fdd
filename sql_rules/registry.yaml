@@ -360,10 +360,11 @@ rules:
     sql_file: fc7_sat_low_heating.sql
     pandas_function: fc7
     description: SAT low while heating at full
-    required_roles: [sat, sat_sp, htg_valve_pct, fan_cmd]
+    required_roles: [sat, sat_sp, htg_valve_pct]
+    optional_roles: [fan_cmd, fan_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: concept_only
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     blocker: "htg_valve_pct missing on some AHUs — Python and SQL both skip"
@@ -1699,8 +1700,8 @@ rules:
     sql_file: vav7_min_airflow.sql
     pandas_function: null
     description: Min airflow / fixed high flow
-    required_roles: [zone_flow, min_flow_sp]
-    optional_roles: [fan_status, fan_cmd]
+    required_roles: [zone_flow]
+    optional_roles: [min_flow_sp, fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1735,6 +1736,33 @@ rules:
         unit: cfm
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
+      fixed_flow_hours:
+        label: Fixed-flow rolling window
+        default: 1.0
+        min: 0.25
+        max: 6.0
+        step: 0.25
+        unit: h
+        frontend_control: slider
+        sql_placeholder: FIXED_FLOW_HOURS
+      fixed_flow_max_std:
+        label: Fixed-flow max std
+        default: 15.0
+        min: 1.0
+        max: 80.0
+        step: 1.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FIXED_FLOW_MAX_STD
+      fixed_flow_min_mean:
+        label: Fixed-flow min mean
+        default: 200.0
+        min: 50.0
+        max: 2000.0
+        step: 10.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FIXED_FLOW_MIN_MEAN
 
   - rule_id: CHW-NOLOAD-1
     equipment_kinds: [chiller]

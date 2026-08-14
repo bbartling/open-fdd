@@ -14,6 +14,7 @@ pub mod rcx_presets;
 pub mod runtime;
 pub mod schedule;
 pub mod sensor_health;
+pub mod vav_health;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

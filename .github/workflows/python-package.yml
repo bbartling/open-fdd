@@ -55,7 +55,7 @@ jobs:
         run: python scripts/release/check_version.py
 
       - name: Pytest package suites
-        run: python -m pytest tests/ecm tests/rules tests/analytics tests/reporting -q
+        run: PYTHONPATH=tools/wattlab_export python -m pytest tests/ecm tests/rules tests/analytics tests/reporting -q
 
       - name: Build and inspect wheel
         run: |

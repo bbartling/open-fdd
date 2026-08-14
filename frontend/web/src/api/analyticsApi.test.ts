@@ -106,3 +106,28 @@ describe("listFddEquipment", () => {
     expect(items).toHaveLength(1);
   });
 });
+
+describe("postVavHealth", () => {
+  it("POSTs /api/analytics/vav-health", async () => {
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      analytics: {
+        schema_version: "analytics-envelope-v1",
+        query_version: "vav-health-v1",
+        generated_at: "2024-01-01T00:00:00Z",
+        engine: "datafusion",
+        warnings: [],
+        rows: [],
+        equipment: [],
+        points: [],
+        skipped: [],
+      },
+    });
+    const { postVavHealth } = await import("./analyticsApi");
+    await postVavHealth({ building_id: "B1" });
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/analytics/vav-health",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+});

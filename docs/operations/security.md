@@ -11,7 +11,25 @@ nav_order: 11
 Open-FDD is **local-first** for LAN, VPN, or OT networks. Central binds the API on **:8080** and the `openfdd-web` React container serves the engineering UI on **:3000**.
 
 {: .warning }
-Do not expose the central API directly on the public internet.
+Open-FDD is **not internet-ready**. LAN / VPN / OT only until the checklist below is complete **and** independently reviewed.
+
+## Not internet-ready until
+
+- [x] Fail-closed when Central binds non-loopback without a ≥32-char `OPENFDD_JWT_SECRET` and `OPENFDD_ADMIN_PASSWORD`
+- [x] Open mode (unset JWT secret) is loopback-only
+- [x] Startup logs `auth_enabled` **without** secrets
+- [ ] Dedicated reverse proxy / TLS on every deployment (expose **web proxy only**; do not publish `:8080` to the internet)
+- [ ] Per-building tenancy (JWT role is **not** multi-tenant isolation)
+- [x] Viewer is read-only; mutations require operator/admin
+- [x] Login throttle + generic credential errors
+- [x] Package zip-slip / bomb caps on archive ingest
+- [x] No wildcard CORS in the SPA nginx config
+- [x] SPA CSP without `unsafe-eval` (Unity `/twins` may use `wasm-unsafe-eval` only)
+- [ ] Production secret rotation, SSO, and WAF as required by the site
+
+OT writes stay **off** unless an operator explicitly enables them.
+
+## Deployment posture
 
 ## Caddy edge (optional)
 

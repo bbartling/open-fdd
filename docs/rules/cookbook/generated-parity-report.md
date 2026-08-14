@@ -41,7 +41,7 @@ Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.
 | `FC4` | PID hunting (operating-state oscillation) | `fc4` | `fc4_os_hunting.sql` | `sql_screening` | `none` |
 | `FC5` | SAT cold when heating commanded (GL36 D) | `fc5` | `fc5_sat_cold_heating.sql` | `sql_screening` | `none` |
 | `FC6` | Estimated OA fraction mismatch | `fc6` | `fc6_oa_frac_mismatch.sql` | `sql_screening` | `none` |
-| `FC7` | SAT low with full heating (GL36 E) | `fc7` | `fc7_sat_low_heating.sql` | `concept_only` | `missing_implementation` |
+| `FC7` | SAT low with full heating (GL36 E) | `fc7` | `fc7_sat_low_heating.sql` | `sql_screening` | `missing_implementation` |
 | `FC8` | SAT/MAT mismatch in economizer (GL36 F) | `fc8` | `fc8_sat_mat_econ.sql` | `sql_screening` | `none` |
 | `FC9` | OAT too warm for free cooling (GL36 G) | `fc9` | `fc9_oa_sat_sp_econ.sql` | `sql_screening` | `none` |
 | `FC10` | OAT/MAT mismatch + mech cooling (GL36 H) | `fc10` | `fc10_mat_oa_clg.sql` | `sql_screening` | `none` |

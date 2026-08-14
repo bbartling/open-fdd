@@ -94,6 +94,48 @@ pub struct AuthConfig {
     pub admin_password: Option<String>,
 }
 
+pub fn is_loopback_bind(host: &str) -> bool {
+    matches!(
+        host.trim(),
+        "127.0.0.1" | "::1" | "localhost" | "localhost.localdomain"
+    )
+}
+
+/// Fail closed when Central is reachable off-loopback without a strong secret + admin identity.
+pub fn assert_bind_auth_policy(
+    host: &str,
+    secret: Option<&str>,
+    admin_password: Option<&str>,
+) -> Result<(), String> {
+    if is_loopback_bind(host) {
+        return Ok(());
+    }
+    let secret = secret.map(str::trim).filter(|s| !s.is_empty());
+    let Some(secret) = secret else {
+        return Err(
+            "fail-closed: non-loopback bind requires OPENFDD_JWT_SECRET (open mode is loopback-only)"
+                .into(),
+        );
+    };
+    if secret.len() < 32 {
+        return Err(
+            "fail-closed: OPENFDD_JWT_SECRET must be at least 32 characters on non-loopback binds"
+                .into(),
+        );
+    }
+    if admin_password
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_none()
+    {
+        return Err(
+            "fail-closed: non-loopback bind requires OPENFDD_ADMIN_PASSWORD (admin identity)"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
 impl AuthConfig {
     pub fn load() -> Self {
         let secret = std::env::var("OPENFDD_JWT_SECRET")
@@ -103,13 +145,17 @@ impl AuthConfig {
             .ok()
             .filter(|s| !s.trim().is_empty());
         if secret.is_none() {
-            warn!(
-                "OPENFDD_JWT_SECRET unset — central API is open for local/dev (no Bearer required)"
+            warn!("auth_enabled=false (OPENFDD_JWT_SECRET unset) — open mode is loopback-only");
+        } else {
+            tracing::info!(
+                auth_enabled = true,
+                "JWT auth configured (secret not logged)"
             );
-        } else if admin_password.is_none() {
-            warn!(
-                "OPENFDD_JWT_SECRET set but OPENFDD_ADMIN_PASSWORD unset — UI login will fail until password is configured"
-            );
+            if admin_password.is_none() {
+                warn!(
+                    "OPENFDD_ADMIN_PASSWORD unset — UI login will fail until password is configured"
+                );
+            }
         }
         Self {
             secret,
@@ -271,5 +317,34 @@ mod tests {
         )
         .unwrap();
         assert!(cfg.verify_bearer(&token).is_err());
+    }
+
+    #[test]
+    fn rbac_viewer_read_only_operator_admin_mutate() {
+        let cases = [
+            (Role::Viewer, false),
+            (Role::Operator, true),
+            (Role::Admin, true),
+        ];
+        for (role, can_mutate) in cases {
+            assert_eq!(role.can_issue_commands(), can_mutate, "{role}");
+        }
+    }
+
+    #[test]
+    fn non_loopback_fails_closed_without_secret() {
+        assert!(assert_bind_auth_policy("0.0.0.0", None, Some("pw")).is_err());
+        assert!(assert_bind_auth_policy("0.0.0.0", Some("short"), Some("pw")).is_err());
+        assert!(
+            assert_bind_auth_policy("0.0.0.0", Some("abcdefghijklmnopqrstuvwxyz012345"), None)
+                .is_err()
+        );
+        assert!(assert_bind_auth_policy(
+            "0.0.0.0",
+            Some("abcdefghijklmnopqrstuvwxyz012345"),
+            Some("admin-pw")
+        )
+        .is_ok());
+        assert!(assert_bind_auth_policy("127.0.0.1", None, None).is_ok());
     }
 }

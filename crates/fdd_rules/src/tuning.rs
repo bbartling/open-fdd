@@ -118,7 +118,13 @@ pub fn assert_sql_placeholders(sql: &str, rule: &RuleSpec) -> Result<()> {
     let derived = rule.parameters.values().flat_map(|p| {
         p.sql_placeholder
             .strip_suffix("_HOURS")
-            .map(|prefix| vec![format!("{prefix}_ROWS"), format!("{prefix}_ROWS_PRECEDING")])
+            .map(|prefix| {
+                vec![
+                    format!("{prefix}_ROWS"),
+                    format!("{prefix}_ROWS_PRECEDING"),
+                    format!("{prefix}_MIN_PERIODS"),
+                ]
+            })
             .unwrap_or_default()
     });
     let allowed: HashSet<String> = rule

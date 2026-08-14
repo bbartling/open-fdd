@@ -1,0 +1,4 @@
+col,point_role
+damper_pct,damper
+zone_flow,zone-airflow
+fan_status,fan-status

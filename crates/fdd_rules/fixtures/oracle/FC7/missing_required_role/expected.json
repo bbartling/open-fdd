@@ -1,0 +1,9 @@
+{
+  "pandas_rule_id": "FC7",
+  "equipment_id": "AHU_1",
+  "equipment_type": "AHU",
+  "poll_seconds": 300,
+  "any_fault": false,
+  "expect_status": "SKIPPED_MISSING_ROLES",
+  "datafusion_compare": "pending"
+}

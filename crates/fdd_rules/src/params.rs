@@ -11,7 +11,21 @@ use serde_json::Value;
 /// (see [`derive_window_row_params`]) so rolling rules can use literal `ROWS`
 /// frame bounds.
 pub fn substitute_sql(sql: &str, params: &HashMap<String, String>) -> String {
-    let derived = derive_window_row_params(params);
+    let mut params = params.clone();
+    for (k, v) in [
+        ("FIXED_FLOW_HOURS", "1"),
+        ("FIXED_FLOW_MAX_STD", "15"),
+        ("FIXED_FLOW_MIN_MEAN", "200"),
+        ("HIGH_MIN_FLOW_SP", "250"),
+        ("FLOW_ON_MIN", "25"),
+        ("FULL_OPEN_PCT", "0.975"),
+        ("SUSTAIN_HOURS", "1.5"),
+        ("HTG_FULL_MIN", "0.9"),
+        ("SAT_ERR", "1"),
+    ] {
+        params.entry(k.into()).or_insert_with(|| v.into());
+    }
+    let derived = derive_window_row_params(&params);
     let mut out = sql.to_string();
     for (key, val) in params.iter().chain(derived.iter()) {
         out = out.replace(&format!("{{{{{key}}}}}"), val);
@@ -47,14 +61,21 @@ pub fn derive_window_row_params(params: &HashMap<String, String>) -> HashMap<Str
         else {
             continue;
         };
-        let rows = ((hours * 3600.0 / poll).ceil() as i64).max(1);
+        let mut rows = ((hours * 3600.0 / poll).ceil() as i64).max(1);
+        if prefix == "FIXED_FLOW" {
+            rows = rows.max(6);
+        }
         let rows_key = format!("{prefix}_ROWS");
         let preceding_key = format!("{prefix}_ROWS_PRECEDING");
+        let min_periods_key = format!("{prefix}_MIN_PERIODS");
         if !params.contains_key(&rows_key) {
             out.insert(rows_key, rows.to_string());
         }
         if !params.contains_key(&preceding_key) {
-            out.insert(preceding_key, (rows - 1).to_string());
+            out.insert(preceding_key, (rows - 1).max(0).to_string());
+        }
+        if !params.contains_key(&min_periods_key) {
+            out.insert(min_periods_key, (rows / 2).max(3).to_string());
         }
     }
     out

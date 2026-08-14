@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
@@ -44,6 +45,8 @@ pub struct AppState {
     pub ingest_dup: Mutex<u64>,
     pub ingest_reject: Mutex<u64>,
     pub mqtt_publisher: Mutex<Option<AsyncClient>>,
+    /// Login failures keyed by ip+username (generic throttle; no secrets).
+    pub login_failures: Mutex<HashMap<String, (u32, std::time::Instant)>>,
 }
 
 impl AppState {
@@ -59,10 +62,41 @@ impl AppState {
             ingest_dup: Mutex::new(0),
             ingest_reject: Mutex::new(0),
             mqtt_publisher: Mutex::new(None),
+            login_failures: Mutex::new(HashMap::new()),
         }
     }
 
     pub fn set_mqtt_publisher(&self, client: AsyncClient) {
         *self.mqtt_publisher.lock().unwrap() = Some(client);
+    }
+
+    /// Returns true if this key is currently locked out.
+    pub fn login_is_throttled(&self, key: &str) -> bool {
+        const MAX_FAILS: u32 = 8;
+        const WINDOW: Duration = Duration::from_secs(15 * 60);
+        let mut map = self.login_failures.lock().unwrap();
+        match map.get(key) {
+            Some((n, at)) if *n >= MAX_FAILS && at.elapsed() < WINDOW => true,
+            Some((_, at)) if at.elapsed() >= WINDOW => {
+                map.remove(key);
+                false
+            }
+            _ => false,
+        }
+    }
+
+    pub fn login_record_failure(&self, key: &str) {
+        let mut map = self.login_failures.lock().unwrap();
+        let entry = map.entry(key.to_string()).or_insert((0, Instant::now()));
+        if entry.1.elapsed() > Duration::from_secs(15 * 60) {
+            *entry = (1, Instant::now());
+        } else {
+            entry.0 = entry.0.saturating_add(1);
+            entry.1 = Instant::now();
+        }
+    }
+
+    pub fn login_record_success(&self, key: &str) {
+        self.login_failures.lock().unwrap().remove(key);
     }
 }

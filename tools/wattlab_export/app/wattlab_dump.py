@@ -916,6 +916,16 @@ _MANIFEST_HINTS: dict[str, dict[str, str]] = {
         "purpose": "Aggregate FDD results per rule × equipment",
         "how_to_use": "Bridge to ECM suggestions; filter status=FAULT / fault_hours>0",
     },
+    "vav_health_matrix.csv": {
+        "kind": "analytics",
+        "purpose": "VAV health matrix v1: broken box, occupied comfort, rogue damper",
+        "how_to_use": "Read MANIFEST first. Missing evidence is not PASS. Score 3/3..?/3.",
+    },
+    "vav_health_summary.json": {
+        "kind": "analytics",
+        "purpose": "Counts of VAVs in 3/3, 2/3, 1/3, 0/3, insufficient",
+        "how_to_use": "Cohort summary; drill via vav_health_matrix.csv",
+    },
     "fdd_findings.csv": {
         "kind": "fdd",
         "purpose": "Long-format findings with flattened metrics",

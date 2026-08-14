@@ -5,7 +5,15 @@ WITH h AS (
     timestamp_utc,
     sat,
     sat_sp,
-    COALESCE(CASE WHEN fan_cmd IS NULL THEN 0.0 WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END, 0.0) AS fan,
+    COALESCE(
+      CASE
+        WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1.0 ELSE 0.0 END
+        WHEN fan_cmd IS NULL THEN 0.0
+        WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0
+        ELSE fan_cmd
+      END,
+      0.0
+    ) AS fan,
     COALESCE(CASE WHEN htg_valve_pct IS NULL THEN NULL WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END, 0.0) AS htg_valve_pct
   FROM history
 ),
@@ -15,7 +23,7 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN sat IS NOT NULL AND sat_sp IS NOT NULL AND fan > 0.01
-       AND sat < sat_sp - {{SAT_ERR}} AND htg_valve_pct > {{HTG_FULL_MIN}}
+       AND sat < sat_sp - {{SAT_ERR}} AND htg_valve_pct >= {{HTG_FULL_MIN}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),

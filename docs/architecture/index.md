@@ -12,7 +12,7 @@ Open-FDD is a **container stack** (central / React SPA / fieldbus / mqtt / mcp) 
 
 | Topic | Document |
 |-------|----------|
-| [ADR-001 React/Rust](adr-001-react-rust-modernization.html) | Phase 1 SPA + Python-exit decision |
+| [ADR — VAV health matrix](adr-vav-health.html) | Cohort analytic (not a 60th rule) |
 | [Services](services.html) | Stack images and compose roles |
 | [Data flow](data-flow.html) | Drivers → model → historian → FDD → UI |
 | [Storage & DataFusion](storage-and-datafusion.html) | Feather historian and SQL rules |

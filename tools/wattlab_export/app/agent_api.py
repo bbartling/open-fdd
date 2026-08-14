@@ -307,27 +307,30 @@ def run_rules(
     rule_ids: list[str] | set[str] | None = None,
     *,
     require_operational_gates: bool = True,
+    engine: str | None = None,
 ) -> AgentRun:
-    """Run FDD via central DataFusion SQL (default). Pandas only if explicitly allowed."""
+    """Run FDD. ``engine`` is pandas or datafusion — never a silent fallback."""
     import os
 
-    from app import central_client
     from app.rules.base import RuleResult
+
+    requested = (engine or os.environ.get("OPENFDD_FDD_ENGINE") or "pandas").strip().lower()
+    if requested not in {"pandas", "datafusion"}:
+        raise ValueError(f"engine must be pandas or datafusion, got {requested!r}")
 
     merged_params = {**dataset.params, **(params or {})}
     eq_filter = set(equipment_ids) if equipment_ids is not None else None
     t_rules = time.perf_counter()
+    actual = requested
 
-    allow_pandas = (os.environ.get("OPENFDD_ALLOW_PANDAS_FDD") or "").strip() in {
-        "1",
-        "true",
-        "TRUE",
-        "yes",
-        "YES",
-    }
-    engine = "datafusion"
-
-    if not allow_pandas:
+    if requested == "datafusion":
+        try:
+            from app import central_client
+        except ImportError as e:
+            raise RuntimeError(
+                "datafusion engine requires app.central_client; ingest the package to central first"
+            ) from e
+        engine = "datafusion"
         # Prefer SQL — dataset must already be ingested to central (same building_id).
         float_params: dict[str, dict[str, float]] = {}
         for rid, block in merged_params.items():
@@ -347,9 +350,7 @@ def run_rules(
         )
         if not body.get("ok", False):
             err = body.get("error") or "SQL FDD run failed"
-            raise RuntimeError(
-                f"{err} (set OPENFDD_ALLOW_PANDAS_FDD=1 only for emergency local pandas)"
-            )
+            raise RuntimeError(f"{err} (requested_engine=datafusion; no pandas fallback)")
         rows = body.get("results") or []
         if not isinstance(rows, list) or not rows:
             cached = central_client.fdd_results()
@@ -464,6 +465,8 @@ def run_rules(
             "require_operational_gates": require_operational_gates,
             "rule_execution_seconds": rule_execution_seconds,
             "fdd_engine": engine,
+            "requested_engine": requested,
+            "actual_engine": actual,
         },
     )
 
@@ -677,6 +680,36 @@ def export_agent_bundle(
             summary.to_csv(p, index=False)
             written["fdd_summary"] = p
             run.summary = summary
+
+    try:
+        from open_fdd.analytics.occupancy import OccupancySchedule as OfOcc
+        from open_fdd.analytics.vav_health import vav_health_matrix, vav_health_summary
+
+        vh = vav_health_matrix(
+            dataset.frames,
+            building_id=str(dataset.building_id or ""),
+            rule_results=run.summary if isinstance(run.summary, pd.DataFrame) else None,
+            occupancy=OfOcc.from_dict(occupancy_schedule),
+        )
+        if vh is not None and not vh.empty:
+            p = out / "vav_health_matrix.csv"
+            vh.to_csv(p, index=False)
+            written["vav_health_matrix"] = p
+            try:
+                pq = out / "vav_health_matrix.parquet"
+                vh.to_parquet(pq, index=False)
+                written["vav_health_matrix_parquet"] = pq
+            except Exception:
+                pass
+            sm = vav_health_summary(vh)
+            sp = out / "vav_health_summary.json"
+            sp.write_text(json.dumps(sm, indent=2), encoding="utf-8")
+            written["vav_health_summary"] = sp
+    except Exception as e:
+        (out / "vav_health_skipped.json").write_text(
+            json.dumps({"error": str(e), "note": "vav_health_matrix_v1 optional on this export"}),
+            encoding="utf-8",
+        )
 
     # Long-format findings + profile-aware evidence + shared telemetry
     if run.results:

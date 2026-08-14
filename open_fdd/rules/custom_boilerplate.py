@@ -11,7 +11,7 @@ Location (copy / extend from here)
 
 Hard rules
 ----------
-1. Never silently drop the **50 canonical** cookbook rules.
+1. Never silently drop the **59 canonical** cookbook rules.
 2. Custom rule ids **must** start with ``CUSTOM-`` (e.g. ``CUSTOM-SAT-HIGH``).
 3. ``compute(df, params, poll_seconds) -> pd.Series`` of **bool** (raw fault mask), index-aligned.
 4. Prefer cookbook roles (``sat``, ``fan_status``, …) after role_map — do not hardcode raw CSV names.
