@@ -1726,10 +1726,7 @@ mod tests {
     #[test]
     fn append_json_requires_confirm_and_merges() {
         let _env = crate::test_support::workspace_env_lock();
-        let tmp = std::env::temp_dir().join(format!(
-            "openfdd_pkg_append_{}",
-            std::process::id()
-        ));
+        let tmp = std::env::temp_dir().join(format!("openfdd_pkg_append_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         std::env::set_var("OPENFDD_WORKSPACE", &tmp);
