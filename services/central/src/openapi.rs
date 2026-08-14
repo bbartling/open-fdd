@@ -156,6 +156,13 @@ mod live_routes {
     pub fn analytics_sensor_health() {}
 
     #[utoipa::path(
+        post, path = "/api/analytics/vav-health", tag = "analytics",
+        request_body = serde_json::Value,
+        responses((status = 200, description = "Building-scoped vav_health_matrix_v1 (broken/comfort/rogue)", body = serde_json::Value))
+    )]
+    pub fn analytics_vav_health() {}
+
+    #[utoipa::path(
         post, path = "/api/analytics/mechanical-cooling", tag = "analytics",
         request_body = serde_json::Value,
         responses((status = 200, description = "Mechanical cooling diagnostics", body = serde_json::Value))
@@ -267,6 +274,7 @@ mod live_routes {
         live_routes::analytics_runtime,
         live_routes::analytics_economizer,
         live_routes::analytics_sensor_health,
+        live_routes::analytics_vav_health,
         live_routes::analytics_mechanical_cooling,
         live_routes::analytics_metering,
         live_routes::analytics_setpoints,
@@ -310,7 +318,9 @@ mod live_routes {
         version = "3.3.0",
         description = "Open-FDD Central control plane — MQTTS ingest, edge shadow, commands, and FDD.\n\n\
             **Auth:** set `OPENFDD_JWT_SECRET` to require `Authorization: Bearer <JWT>` on all `/api/*` routes \
-            except `/api/health` and `/api/auth/*`. When unset, the API is open for local/dev with a startup warning.\n\n\
+            except liveness, login, and non-sensitive capabilities. Open mode is **loopback-only**. \
+            Binding a non-loopback address without a strong JWT secret and admin password **fails closed**. \
+            JWT is not multi-building tenancy.\n\n\
             **Claims:** `sub` (subject), `role` one of `viewer`, `operator`, `admin`. \
             `POST /api/commands` requires `operator` or `admin` when auth is enabled."
     ),

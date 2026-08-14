@@ -27,4 +27,4 @@ workspace/data/csv_buildings/BUILDING_100/weather/columns.csv
 
 Then re-upload/re-ingest Building 100 so historian sees `web_oa_t`. Empty `role` for `dry_bulb_f` leaves only BAS `oa_t` on the stack.
 
-**2026-08-14:** `workspace/.../weather/columns.csv` still has empty `dry_bulb_f` role on bensbench (file not writable from the agent). Operator: `chmod u+w` that file, set `dry_bulb_f,web_oa_t`, re-ingest.
+**2026-08-14:** Operator wrote `dry_bulb_f,web_oa_t` via `sudo tee`. Re-ingest BUILDING_100 after the stack is on `OPENFDD_IMAGE_TAG=sha-*` (`openfdd_stack_up.sh … --no-pull`) so parquet/historian pick up `web_oa_t`. Spot-check mech OAT bins vs vibe19 after that ingest.

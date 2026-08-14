@@ -127,6 +127,28 @@ vi.mock("../api/analyticsApi", () => ({
     ],
     warnings: [],
   })),
+  postVavHealth: vi.fn(async () => ({
+    schema_version: "analytics-envelope-v1",
+    query_version: "vav-health-v1",
+    generated_at: "",
+    engine: "datafusion",
+    warnings: [],
+    rows: [
+      {
+        equipment_id: "VAV_1",
+        score_label: "0/3",
+        broken_box: false,
+        poor_zone_performance: false,
+        rogue_damper: false,
+        confidence: "high",
+        parent_ahu: "AHU_1",
+      },
+    ],
+    equipment: [],
+    points: [],
+    skipped: [],
+    coverage: { groups: { "3/3": 0, "2/3": 0, "1/3": 0, "0/3": 1, "?/3": 0 } },
+  })),
 }));
 
 vi.mock("../api/csvDownload", () => ({ downloadRowsCsv: vi.fn() }));

@@ -57,7 +57,17 @@ async fn main() -> anyhow::Result<()> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(8080);
     let addr: SocketAddr = format!("{host}:{port}").parse()?;
-    info!(%addr, "openfdd-central listening");
+    crate::auth::assert_bind_auth_policy(
+        &host,
+        state.auth.secret.as_deref(),
+        state.auth.admin_password.as_deref(),
+    )
+    .map_err(|e| anyhow::anyhow!(e))?;
+    info!(
+        %addr,
+        auth_enabled = state.auth.required(),
+        "openfdd-central listening (secrets not logged)"
+    );
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())

@@ -498,25 +498,8 @@ WHERE equipment_id = 'equip:your-id'
 | `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
--- confirmation_seconds: 600
--- rule: FC7 — SAT low with full heating (GL36 E)
--- equation: Fan on AND heating > 90% AND SAT < SAT SP − 1.0°F.
-
-SELECT
-  timestamp,
-  equipment_id,
-  discharge_air_temp,
-  discharge_air_temp_sp,
-  fan_cmd,
-  heating_valve,
-  CASE
-    -- Implement FC7 against assigned Haystack → FDD columns
-    -- NULL samples must not latch faults
-    WHEN false THEN false  -- stub: never latch until equation is coded
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-id'
+-- htg_valve_pct >= HTG_FULL_MIN; fan_status then fan_cmd. sql_rules/fc7_sat_low_heating.sql
+SELECT equipment_id, fault_hours FROM fc7_sat_low_heating_result
 ```
 
 ### FC8 — SAT/MAT mismatch in economizer (GL36 F)
@@ -1328,22 +1311,9 @@ WHERE equipment_id = 'equip:your-id'
 | `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
 
 ```sql
--- confirmation_seconds: 900
--- rule: VAV-4 — Damper stuck at full open
--- equation: Air flowing AND damper > 97.5% sustained across the window.
-
-SELECT
-  timestamp,
-  equipment_id,
-  damper,
-  CASE
-    -- Implement VAV-4 against assigned Haystack → FDD columns
-    -- NULL samples must not latch faults
-    WHEN false THEN false  -- stub: never latch until equation is coded
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-id'
+-- Sequential: (1) sustain full-open streak (2) confirm that mask — not max(sustain, confirm).
+-- See sql_rules/vav4_damper_full_open.sql
+SELECT equipment_id, fault_hours FROM vav4_damper_full_open_result
 ```
 
 ### VAV-5 — Airflow sensor bias
@@ -1449,15 +1419,9 @@ WHERE equipment_id = 'equip:your-id'
 
 ```sql
 -- confirmation_seconds: 900
-SELECT
-  timestamp, equipment_id, zone_flow, min_flow_sp,
-  CASE
-    WHEN zone_flow IS NULL OR min_flow_sp IS NULL THEN false
-    WHEN zone_flow < min_flow_sp THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-vav'
+-- Three pandas branches: under-min OR fixed-high rolling std/mean OR high min_flow_sp.
+-- SQL: sql_rules/vav7_min_airflow.sql (timestamp-ordered windows).
+SELECT equipment_id, fault_hours FROM vav7_min_airflow_result
 ```
 
 ## Central plant / condenser water

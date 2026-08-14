@@ -1,0 +1,8 @@
+{
+  "pandas_rule_id": "FC7",
+  "equipment_id": "AHU_1",
+  "poll_seconds": 300,
+  "any_fault": false,
+  "datafusion_compare": "pending",
+  "notes": "htg_valve_pct >= HTG_FULL_MIN; screening"
+}

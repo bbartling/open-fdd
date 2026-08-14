@@ -1,4 +1,3 @@
-# Fixture scaffold — `FC7` / `threshold_boundary`
+# Fixture — `FC7` / `threshold_boundary`
 
-Wave 0 placeholder. Replace with `history_wide.csv`, `columns.csv`, and `expected.json` before claiming predicate/mask/duration parity.
-Missing required fixtures fail `scripts/parity_inventory_check.py`.
+Executable screening fixture (history + expected).

@@ -68,6 +68,19 @@ pub const RCX_PRESETS: &[RcxPresetMeta] = &[
         meter_kind: None,
     },
     RcxPresetMeta {
+        id: "vav_health_matrix",
+        title: "Zones — VAV health (broken / comfort / rogue)",
+        family: "Zones / VAV",
+        chart: "ranking",
+        role_col: "zone_t",
+        eq_kinds: &["VAV"],
+        overlay_col: None,
+        pair_return_col: None,
+        filter_fan_on: false,
+        prefer_wetbulb: false,
+        meter_kind: None,
+    },
+    RcxPresetMeta {
         id: "ahu_sat_reset_scatter",
         title: "AHU — SAT vs web dry-bulb (scatter)",
         family: "AHU / air",
@@ -379,6 +392,9 @@ pub async fn run_preset(
     let Some(meta) = preset_by_id(preset_id) else {
         return Ok(None);
     };
+    if meta.id == "vav_health_matrix" {
+        return super::vav_health::vav_health_from_history(building_id, 70.0, 75.0).await;
+    }
     let out = match meta.chart {
         "timeseries" => {
             historian::rcx_timeseries_from_history(

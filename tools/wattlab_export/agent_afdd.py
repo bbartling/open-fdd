@@ -69,7 +69,11 @@ def main(argv: list[str] | None = None) -> int:
         help="WattLab dump evidence profile (default: summary)",
     )
     parser.add_argument(
-        "--schedule",
+        "--engine",
+        choices=("pandas", "datafusion"),
+        default="pandas",
+        help="FDD engine. pandas is standalone (no central_client). datafusion fails closed if central is missing.",
+    )
         type=str,
         default=None,
         help="JSON occupancy calendar (timezone + days mon..sun). Pins occupied/unoccupied slices.",
@@ -104,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
             dataset,
             params=params or None,
             require_operational_gates=not args.no_gates,
+            engine=args.engine,
         )
         print(
             f"Rules: {run.meta.get('result_count')} results · "

@@ -27,6 +27,7 @@ import { downloadRowsCsv } from "../api/csvDownload";
 import type { OverviewVibe19Response } from "../api/overviewTypes";
 import { fetchCentralOverview } from "../api/centralOverview";
 import { postInspect, type FddEquipmentItem } from "../api/analyticsApi";
+import { VavHealthSection } from "./VavHealthSection";
 import { equipmentInspectionChart } from "../api/inspectChart";
 import type { PlotlyFigure } from "../api/plotDataset";
 import { RULES_UPDATED_EVENT } from "./RuleTuningPanel";
@@ -157,6 +158,7 @@ export function OverviewPopulated({
   const [overview, setOverview] = useState<OverviewVibe19Response | null>(null);
   const [overviewErr, setOverviewErr] = useState<string | null>(null);
   const [loadingOverview, setLoadingOverview] = useState(false);
+  const [vavHealthToken, setVavHealthToken] = useState(0);
   const [zoneLow, setZoneLow] = useState(70);
   const [zoneHigh, setZoneHigh] = useState(75);
   const [week, setWeek] = useState(() => loadStoredSchedule().week);
@@ -285,6 +287,7 @@ export function OverviewPopulated({
           throw new Error(body.error || "Central analytics failed");
         }
         setOverview(body);
+        if (!overlayOnly) setVavHealthToken((n) => n + 1);
         hasOverview.current = true;
         setInspectOptions((prev) => {
           const next = [
@@ -889,6 +892,8 @@ export function OverviewPopulated({
           ) : null}
         </Expander>
       </section>
+
+      <VavHealthSection buildingId={buildingId} refreshToken={vavHealthToken} />
 
       <section className="overview-section" data-testid="overview-motor-runtime">
         <h3>Motor / equipment run hours</h3>

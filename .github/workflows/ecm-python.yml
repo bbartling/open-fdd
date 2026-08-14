@@ -36,7 +36,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[test,dev]" build twine
           python scripts/release/check_version.py
-          python -m pytest tests/ecm tests/rules tests/analytics tests/reporting -q
+          PYTHONPATH=tools/wattlab_export python -m pytest tests/ecm tests/rules tests/analytics tests/reporting -q
           rm -rf dist build *.egg-info
           python -m build
           wheel="$(ls -1t dist/*.whl | head -n 1)"

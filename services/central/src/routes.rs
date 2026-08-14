@@ -181,6 +181,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(jobs_attach_eplus_artifact),
         )
         .route("/api/analytics/runtime", post(analytics_runtime))
+        .route("/api/analytics/vav-health", post(analytics_vav_health))
         .route(
             "/api/analytics/sensor-health",
             post(analytics_sensor_health),
@@ -367,8 +368,24 @@ pub async fn auth_me(
 )]
 pub async fn auth_login(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Json(body): Json<AuthLoginRequest>,
 ) -> Result<Json<AuthLoginResponse>, (axum::http::StatusCode, Json<Value>)> {
+    let ip = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("unknown")
+        .split(',')
+        .next()
+        .unwrap_or("unknown")
+        .trim();
+    let throttle_key = format!("{ip}:{}", body.username.trim().to_lowercase());
+    if state.login_is_throttled(&throttle_key) {
+        return Err((
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({"ok": false, "error": "invalid credentials"})),
+        ));
+    }
     if !state.auth.required() {
         // Dev open mode — mint a placeholder so the UI can store a session token.
         return Ok(Json(AuthLoginResponse {
@@ -381,19 +398,24 @@ pub async fn auth_login(
             error: None,
         }));
     }
-    let (sub, role) = state
+    let (sub, role) = match state
         .auth
         .authenticate_password(&body.username, &body.password)
-        .map_err(|e| {
-            (
+    {
+        Ok(v) => v,
+        Err(_) => {
+            state.login_record_failure(&throttle_key);
+            return Err((
                 axum::http::StatusCode::UNAUTHORIZED,
-                Json(json!({"ok": false, "error": e})),
-            )
-        })?;
-    let token = state.auth.issue_token(&sub, role, 8 * 3600).map_err(|e| {
+                Json(json!({"ok": false, "error": "invalid credentials"})),
+            ));
+        }
+    };
+    state.login_record_success(&throttle_key);
+    let token = state.auth.issue_token(&sub, role, 8 * 3600).map_err(|_| {
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": e})),
+            Json(json!({"ok": false, "error": "login failed"})),
         )
     })?;
     Ok(Json(AuthLoginResponse {
@@ -1824,6 +1846,13 @@ async fn analytics_runtime(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
     Json(json!({
         "ok": true,
         "analytics": env.to_json(),
+    }))
+}
+
+async fn analytics_vav_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::vav_health::handle_async(&req).await.to_json(),
     }))
 }
 

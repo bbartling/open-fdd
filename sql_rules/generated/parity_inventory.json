@@ -1068,7 +1068,10 @@
         "fan-cmd",
         "heating-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_cmd",
+        "fan_status"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -1135,11 +1138,13 @@
       "datafusion_sql_implementation": "fc7_sat_low_heating.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc7",
       "test_coverage": [
+        "scripts/materialize_vav_oracle_fixtures.py",
+        "tests/analytics/test_wattlab_engine.py",
         "tests/rules/test_golden_parity.py",
         "tests/rules/test_parity_inventory.py",
         "tests/test_wattlab_parity_diff.py"
       ],
-      "parity_status": "concept_only",
+      "parity_status": "sql_screening",
       "known_semantic_differences": "concept_only \u2014 SQL file is a placeholder; do not claim twin parity",
       "difference_class": "missing_implementation"
     },
@@ -2940,7 +2945,9 @@
       "pandas_implementation": "vav4",
       "datafusion_sql_implementation": "vav4_damper_full_open.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-4",
-      "test_coverage": [],
+      "test_coverage": [
+        "scripts/materialize_vav_oracle_fixtures.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -3128,6 +3135,7 @@
         "zone-airflow"
       ],
       "optional_roles": [
+        "min_flow_sp",
         "fan_status",
         "fan_cmd"
       ],
@@ -3188,7 +3196,10 @@
       "pandas_implementation": "vav7",
       "datafusion_sql_implementation": "vav7_min_airflow.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-7",
-      "test_coverage": [],
+      "test_coverage": [
+        "scripts/materialize_vav_oracle_fixtures.py",
+        "tests/analytics/test_vav_health.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -6916,7 +6927,10 @@
         "fan-cmd",
         "heating-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_cmd",
+        "fan_status"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -6985,12 +6999,14 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc7",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc7",
       "test_coverage": [
+        "scripts/materialize_vav_oracle_fixtures.py",
+        "tests/analytics/test_wattlab_engine.py",
         "tests/rules/test_golden_parity.py",
         "tests/rules/test_parity_inventory.py",
         "tests/test_wattlab_parity_diff.py"
       ],
-      "parity_status": "concept_only",
-      "parity_level": "concept_only",
+      "parity_status": "sql_screening",
+      "parity_level": "sql_screening",
       "difference_class": "missing_implementation",
       "known_semantic_differences": "concept_only \u2014 SQL file is a placeholder; do not claim twin parity",
       "operational_gate": "fan_running",
@@ -7038,70 +7054,70 @@
           "case": "normal",
           "path": "crates/fdd_rules/fixtures/oracle/FC7/normal",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "fault",
           "path": "crates/fdd_rules/fixtures/oracle/FC7/fault",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "threshold_boundary",
           "path": "crates/fdd_rules/fixtures/oracle/FC7/threshold_boundary",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "missing_required_role",
           "path": "crates/fdd_rules/fixtures/oracle/FC7/missing_required_role",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "equipment_off",
           "path": "crates/fdd_rules/fixtures/oracle/FC7/equipment_off",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "startup_delay",
           "path": "crates/fdd_rules/fixtures/oracle/FC7/startup_delay",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "irregular_sampling",
           "path": "crates/fdd_rules/fixtures/oracle/FC7/irregular_sampling",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "data_gap",
           "path": "crates/fdd_rules/fixtures/oracle/FC7/data_gap",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "duplicate_timestamp",
           "path": "crates/fdd_rules/fixtures/oracle/FC7/duplicate_timestamp",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "out_of_order",
           "path": "crates/fdd_rules/fixtures/oracle/FC7/out_of_order",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         }
       ]
@@ -11520,7 +11536,9 @@
       "sql_file": "vav4_damper_full_open.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-4",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-4",
-      "test_coverage": [],
+      "test_coverage": [
+        "scripts/materialize_vav_oracle_fixtures.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -11580,70 +11598,70 @@
           "case": "normal",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-4/normal",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "fault",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-4/fault",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "threshold_boundary",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-4/threshold_boundary",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "missing_required_role",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-4/missing_required_role",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "equipment_off",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-4/equipment_off",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "startup_delay",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-4/startup_delay",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "irregular_sampling",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-4/irregular_sampling",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "data_gap",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-4/data_gap",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "duplicate_timestamp",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-4/duplicate_timestamp",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "out_of_order",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-4/out_of_order",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         }
       ]
@@ -12194,6 +12212,7 @@
         "zone-airflow"
       ],
       "optional_roles": [
+        "min_flow_sp",
         "fan_status",
         "fan_cmd"
       ],
@@ -12256,7 +12275,10 @@
       "sql_file": "vav7_min_airflow.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-7",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-7",
-      "test_coverage": [],
+      "test_coverage": [
+        "scripts/materialize_vav_oracle_fixtures.py",
+        "tests/analytics/test_vav_health.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -12294,6 +12316,36 @@
           "unit": "cfm",
           "frontend_control": "slider",
           "sql_placeholder": "FLOW_ON_MIN"
+        },
+        "fixed_flow_hours": {
+          "label": "Fixed-flow rolling window",
+          "default": 1.0,
+          "min": 0.25,
+          "max": 6.0,
+          "step": 0.25,
+          "unit": "h",
+          "frontend_control": "slider",
+          "sql_placeholder": "FIXED_FLOW_HOURS"
+        },
+        "fixed_flow_max_std": {
+          "label": "Fixed-flow max std",
+          "default": 15.0,
+          "min": 1.0,
+          "max": 80.0,
+          "step": 1.0,
+          "unit": "cfm",
+          "frontend_control": "slider",
+          "sql_placeholder": "FIXED_FLOW_MAX_STD"
+        },
+        "fixed_flow_min_mean": {
+          "label": "Fixed-flow min mean",
+          "default": 200.0,
+          "min": 50.0,
+          "max": 2000.0,
+          "step": 10.0,
+          "unit": "cfm",
+          "frontend_control": "slider",
+          "sql_placeholder": "FIXED_FLOW_MIN_MEAN"
         }
       },
       "time_semantics": "row_or_interval_per_sql_file",
@@ -12306,70 +12358,70 @@
           "case": "normal",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-7/normal",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "fault",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-7/fault",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "threshold_boundary",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-7/threshold_boundary",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "missing_required_role",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-7/missing_required_role",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "equipment_off",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-7/equipment_off",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "startup_delay",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-7/startup_delay",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "irregular_sampling",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-7/irregular_sampling",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "data_gap",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-7/data_gap",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "duplicate_timestamp",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-7/duplicate_timestamp",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "out_of_order",
           "path": "crates/fdd_rules/fixtures/oracle/VAV-7/out_of_order",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         }
       ]

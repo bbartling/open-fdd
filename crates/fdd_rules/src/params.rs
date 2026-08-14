@@ -47,14 +47,21 @@ pub fn derive_window_row_params(params: &HashMap<String, String>) -> HashMap<Str
         else {
             continue;
         };
-        let rows = ((hours * 3600.0 / poll).ceil() as i64).max(1);
+        let mut rows = ((hours * 3600.0 / poll).ceil() as i64).max(1);
+        if prefix == "FIXED_FLOW" {
+            rows = rows.max(6);
+        }
         let rows_key = format!("{prefix}_ROWS");
         let preceding_key = format!("{prefix}_ROWS_PRECEDING");
+        let min_periods_key = format!("{prefix}_MIN_PERIODS");
         if !params.contains_key(&rows_key) {
             out.insert(rows_key, rows.to_string());
         }
         if !params.contains_key(&preceding_key) {
-            out.insert(preceding_key, (rows - 1).to_string());
+            out.insert(preceding_key, (rows - 1).max(0).to_string());
+        }
+        if !params.contains_key(&min_periods_key) {
+            out.insert(min_periods_key, (rows / 2).max(3).to_string());
         }
     }
     out

@@ -1,0 +1,8 @@
+{
+  "pandas_rule_id": "VAV-7",
+  "equipment_id": "VAV_1",
+  "poll_seconds": 300,
+  "any_fault": false,
+  "expect_status": "SKIPPED_MISSING_ROLES",
+  "datafusion_compare": "pending"
+}

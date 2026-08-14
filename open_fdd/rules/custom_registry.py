@@ -1,4 +1,4 @@
-"""Merge agent custom rules with the 50 canonical cookbook rules."""
+"""Merge agent custom rules with the 59 canonical cookbook rules."""
 
 from __future__ import annotations
 
