@@ -3,6 +3,6 @@
   "equipment_id": "EQ_1",
   "equipment_type": "VAV",
   "poll_seconds": 300,
-  "any_fault": false,
+  "any_fault": true,
   "datafusion_compare": "pending"
 }
