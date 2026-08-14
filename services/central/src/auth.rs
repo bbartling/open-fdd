@@ -107,6 +107,9 @@ pub fn assert_bind_auth_policy(
     secret: Option<&str>,
     admin_password: Option<&str>,
 ) -> Result<(), String> {
+    if is_loopback_bind(host) {
+        return Ok(());
+    }
     if std::env::var("OPENFDD_ALLOW_OPEN_BIND")
         .ok()
         .filter(|s| matches!(s.trim(), "1" | "true" | "yes"))
