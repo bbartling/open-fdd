@@ -54,6 +54,7 @@ After `openfdd_model_assignments_save` (with `confirm: true`), the **FDD wireshe
 4. **`openfdd_csv_import_plan`** — `session_id` + `plan` (mode, files, timezone, value_columns).
 5. **`openfdd_csv_import_preflight`** — **required**; loop until `verdict: "pass"` (read `validation.checks` + `agent_hints`).
 6. **`openfdd_csv_import_execute`** — `confirm: true` + write gate → Arrow + historian (fail-closed unless preflight pass).
+7. **Hourly IoT** — seed package then **`openfdd_csv_package_append`** (`confirm: true`, `building_id`, `equipment_id`, `csv`).
 7. Optional **`openfdd_model_commissioning_import`** — sites/equipment/points/assignments/rules bundle.
 8. **`openfdd_fdd_rule_test_sql`** → **`openfdd_rules_batch`** (not `openfdd_fdd_run` for saved rules).
 9. **`openfdd_reports_from_fdd_sql_run`** — PDF with `download_url`.

@@ -272,6 +272,7 @@ export function PlotlyHost({
     <div
       className={`widget widget--plotly${error || renderErr ? " widget--error" : ""}`}
       data-testid={widgetTestId(`plotly-host-${id}`, testId)}
+      data-download-filename={downloadFilename}
       aria-disabled={disabled || undefined}
       aria-busy={loading || (!drawn && Boolean(clean)) || undefined}
     >

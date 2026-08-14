@@ -1,0 +1,6 @@
+{
+  "synthetic": true,
+  "trusted_start_utc": "2026-01-05 00:00:00+00:00",
+  "trusted_end_utc": "2026-01-11 23:55:00+00:00",
+  "notes": "Values intentionally cross diagnostic thresholds during the documented scenario window."
+}

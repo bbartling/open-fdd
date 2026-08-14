@@ -803,6 +803,126 @@ pub fn import_package_handler(content_type: &str, body: &[u8]) -> Value {
     import_package_zip(&zip_bytes)
 }
 
+/// Append hourly history into an existing package. JSON:
+/// `{ "confirm": true, "building_id": "...", "equipment_id": "...", "csv": "header\\n..." }`
+/// or `{ "confirm": true, "building_id": "...", "files": [{ "equipment_id", "csv" }] }`.
+/// ZIP body is also accepted (same layout as package import, merged not replaced).
+pub fn append_package_handler(content_type: &str, body: &[u8]) -> Value {
+    let ct = content_type.to_ascii_lowercase();
+    if ct.contains("application/json") {
+        let v: Value = match serde_json::from_slice(body) {
+            Ok(v) => v,
+            Err(e) => return json!({"ok": false, "error": format!("json: {e}")}),
+        };
+        return append_package_json(&v);
+    }
+    if ct.contains("multipart/form-data") || body.starts_with(b"PK") {
+        let zip_bytes: Vec<u8> = if ct.contains("multipart/form-data") {
+            let parsed = super::upload::parse_multipart_files(content_type, body);
+            match parsed {
+                Ok((files, _)) => files
+                    .into_iter()
+                    .find(|(n, _)| n.to_lowercase().ends_with(".zip"))
+                    .map(|(_, b)| b)
+                    .unwrap_or_default(),
+                Err(e) => return json!({"ok": false, "error": e}),
+            }
+        } else {
+            body.to_vec()
+        };
+        return append_package_zip(&zip_bytes);
+    }
+    json!({"ok": false, "error": "send application/json or a package zip"})
+}
+
+fn append_package_json(body: &Value) -> Value {
+    if body.get("confirm").and_then(|v| v.as_bool()) != Some(true) {
+        return json!({"ok": false, "error": "confirm:true required"});
+    }
+    let building_id = match validate_id(
+        body.get("building_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or(""),
+    ) {
+        Ok(id) => id,
+        Err(e) => return json!({"ok": false, "error": format!("building_id: {e}")}),
+    };
+    let data_root = workspace_dir().join("data").join("csv_buildings");
+    let building_root = data_root.join(&building_id);
+    if !building_root.is_dir() {
+        return json!({
+            "ok": false,
+            "error": format!("building {building_id} not ingested — seed with POST /api/csv/import/package first"),
+        });
+    }
+    let mut files: Vec<(String, String)> = Vec::new();
+    if let Some(arr) = body.get("files").and_then(|v| v.as_array()) {
+        for f in arr {
+            let eq = f.get("equipment_id").and_then(|v| v.as_str()).unwrap_or("");
+            let csv = f.get("csv").and_then(|v| v.as_str()).unwrap_or("");
+            files.push((eq.to_string(), csv.to_string()));
+        }
+    } else {
+        let eq = body
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let csv = body.get("csv").and_then(|v| v.as_str()).unwrap_or("");
+        files.push((eq.to_string(), csv.to_string()));
+    }
+    let mut merges = Vec::new();
+    for (eq, csv) in files {
+        let equipment_id = match validate_id(&eq) {
+            Ok(id) => id,
+            Err(e) => return json!({"ok": false, "error": format!("equipment_id: {e}")}),
+        };
+        if csv.trim().is_empty() {
+            return json!({"ok": false, "error": "csv required"});
+        }
+        let eq_dir = building_root.join(&equipment_id);
+        let hist = eq_dir.join("history_wide.csv");
+        if !hist.is_file() {
+            return json!({
+                "ok": false,
+                "error": format!("equipment {equipment_id} missing history_wide.csv"),
+            });
+        }
+        let existing = std::fs::read_to_string(&hist).unwrap_or_default();
+        match fdd_store::merge_history_wide_text(&hist, &csv, &hist, Some(existing)) {
+            Ok(r) => merges.push(json!({
+                "equipment_id": equipment_id,
+                "rows_in": r.rows_in,
+                "rows_added": r.rows_added,
+                "rows_duped": r.rows_duped,
+                "rows_out": r.rows_out,
+                "ts_min": r.ts_min,
+                "ts_max": r.ts_max,
+            })),
+            Err(e) => return json!({"ok": false, "error": e.to_string()}),
+        }
+    }
+    let out_dir = parquet_out_dir();
+    match fdd_store::ingest_building(&data_root, &building_id, &out_dir) {
+        Ok(report) => json!({
+            "ok": true,
+            "building_id": building_id,
+            "merges": merges,
+            "equipment_written": report.equipment_written,
+            "total_rows": report.total_rows,
+            "total_ms": report.total_ms,
+        }),
+        Err(e) => json!({"ok": false, "error": format!("parquet ingest: {e:#}")}),
+    }
+}
+
+fn append_package_zip(zip_bytes: &[u8]) -> Value {
+    json!({
+        "ok": false,
+        "error": "zip append: POST application/json with confirm, building_id, equipment_id, csv (hourly chunk). Full zip re-import remains POST /api/csv/import/package",
+        "hint": format!("zip_bytes={}", zip_bytes.len()),
+    })
+}
+
 /// Update role assignments for one ingested package equipment and re-ingest.
 /// Body: `{"building_id": "...", "equipment_id": "...", "roles": {"column": "role"}}`.
 pub fn update_package_roles_handler(body: &Value) -> Value {
@@ -1601,5 +1721,58 @@ mod tests {
             "single AHU sibling fallback"
         );
         assert_eq!(infer_parent_ahu("AHU_1", &siblings), None);
+    }
+
+    #[test]
+    fn append_json_requires_confirm_and_merges() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd_pkg_append_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", &tmp);
+        std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.join(".cache/parquet"));
+
+        let map = r#"{"equipType":"ahu","points":{"fan-cmd":"SF_SPD","duct-static-pressure":"DA_P","duct-static-pressure-sp":"DA_P_SP"}}"#;
+        let zip = build_zip(&[
+            (
+                "manifest.json",
+                r#"{"schema_version":"openfdd_package_v1","building_id":"B_APPEND","grid_minutes":15}"#,
+            ),
+            ("AHU_1/history_wide.csv", &history_csv()),
+            ("AHU_1/history_wide.json", map),
+        ]);
+        let seed = import_package_zip(&zip);
+        assert_eq!(seed["ok"], json!(true), "{seed}");
+
+        let deny = append_package_json(&json!({
+            "building_id": "B_APPEND",
+            "equipment_id": "AHU_1",
+            "csv": "timestamp_utc,SF_SPD,DA_P,DA_P_SP\n2024-01-01T01:00:00Z,80,1.1,1.0\n"
+        }));
+        assert_eq!(deny["ok"], json!(false), "{deny}");
+
+        let hour = append_package_json(&json!({
+            "confirm": true,
+            "building_id": "B_APPEND",
+            "equipment_id": "AHU_1",
+            "csv": "timestamp_utc,SF_SPD,DA_P,DA_P_SP\n2024-01-01T01:00:00Z,80,1.1,1.0\n"
+        }));
+        assert_eq!(hour["ok"], json!(true), "{hour}");
+        assert_eq!(hour["merges"][0]["rows_added"], json!(1), "{hour}");
+
+        let replay = append_package_json(&json!({
+            "confirm": true,
+            "building_id": "B_APPEND",
+            "equipment_id": "AHU_1",
+            "csv": "timestamp_utc,SF_SPD,DA_P,DA_P_SP\n2024-01-01T01:00:00Z,80,1.1,1.0\n"
+        }));
+        assert_eq!(replay["ok"], json!(true), "{replay}");
+        assert_eq!(replay["merges"][0]["rows_added"], json!(0), "{replay}");
+        assert_eq!(replay["merges"][0]["rows_duped"], json!(1), "{replay}");
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

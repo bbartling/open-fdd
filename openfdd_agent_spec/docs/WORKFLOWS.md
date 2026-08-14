@@ -14,6 +14,8 @@ Actual workflow files under `.github/workflows/` (open-fdd). Re-list with
 | `docs-pdf.yml` | Docs PDF |
 | `publish-open-fdd.yml` | Publish `open-fdd` to PyPI |
 | `ghcr-openfdd-stack.yml` | Publish stack images; retarget `:nightly` on master |
+
+Low-RAM hosts: **never** local `docker build` of stack images. Wait for this workflow, prune, pull `sha-*`, `openfdd_stack_up.sh --no-pull`.
 | `rust-ghcr-mcp.yml` | Publish `openfdd-mcp` (`:nightly`) |
 | `ghcr-prune.yml` | GHCR retention |
 | `rust-release.yml` | Rust release |

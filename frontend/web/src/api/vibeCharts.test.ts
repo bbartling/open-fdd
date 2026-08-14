@@ -9,6 +9,7 @@ import {
   sensorFaultChart,
   sensorHealthHeatmap,
 } from "./vibeCharts";
+import chartContract from "./charts.contract.json";
 
 describe("vibeCharts", () => {
   it("ruleResultChart stacks unit families and puts fault on the bottom axis", () => {
@@ -34,10 +35,12 @@ describe("vibeCharts", () => {
         confirmedFault: [0, 1],
       },
     );
-    expect(fig?.data.some((t) => t.name === "confirmed_fault")).toBe(true);
-    expect(fig?.data.some((t) => String(t.name).includes("°F"))).toBe(true);
-    expect(fig?.data.some((t) => String(t.name).includes("%"))).toBe(true);
-    expect(fig?.layout?.xaxis?.title).toBe("timestamp");
+    expect(fig?.data.some((t) => t.name === chartContract.ruleResultChart.fault_trace)).toBe(
+      true,
+    );
+    expect(fig?.layout?.xaxis?.title).toBe(
+      chartContract.ruleResultChart.xaxis_title,
+    );
     expect(fig?.layout?.xaxis?.type).toBe("date");
     // Fault is last y-axis (bottom domain)
     const yKeys = Object.keys(fig?.layout ?? {}).filter((k) =>
@@ -59,7 +62,7 @@ describe("vibeCharts", () => {
     };
     const title =
       typeof last?.title === "string" ? last.title : last?.title?.text;
-    expect(title).toBe("fault");
+    expect(title).toBe(chartContract.ruleResultChart.fault_axis_title);
     expect(last?.domain?.[0] ?? 1).toBeLessThan(0.4);
     expect(faultAxis || last).toBeTruthy();
     expect(

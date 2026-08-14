@@ -47,6 +47,16 @@ pub fn get_session_config() -> Value {
     })
 }
 
+/// Persisted `unit_system` (imperial|metric|si). Defaults to imperial.
+pub fn unit_system_from_session() -> String {
+    get_session_config()
+        .get("config")
+        .and_then(|c| c.get("unit_system"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("imperial")
+        .to_string()
+}
+
 /// Normalize an incoming session config: keep known keys, warn on unknown ones,
 /// coerce the deprecated `include_ahu_chw_valve` off, validate value shapes.
 pub fn normalize_session_config(raw: &Value) -> Result<(Value, Vec<String>), String> {

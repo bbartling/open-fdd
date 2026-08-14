@@ -1,0 +1,18 @@
+{
+  "equipment_type": "AHU",
+  "equipType": "ahu",
+  "device": "AHU_CASE_FC1",
+  "column_roles": {
+    "duct-static-pressure": "duct-static-pressure",
+    "duct-static-pressure-sp": "duct-static-pressure-sp",
+    "fan-cmd": "fan-cmd",
+    "fan-status": "fan-status"
+  },
+  "points": {
+    "duct-static-pressure": "duct-static-pressure",
+    "duct-static-pressure-sp": "duct-static-pressure-sp",
+    "fan-cmd": "fan-cmd",
+    "fan-status": "fan-status"
+  },
+  "test_target_rule_id": "FC1"
+}

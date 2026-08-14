@@ -129,4 +129,25 @@ test.describe("react product workflows (real stack)", () => {
       });
     }
   });
+
+  test("overview Plotly hosts expose named PNG stems when charts render", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await expect(page.getByTestId("overview-page")).toBeVisible({ timeout: 20_000 });
+    const hosts = page.locator("[data-download-filename]");
+    const n = await hosts.count();
+    if (n === 0) {
+      test.info().annotations.push({
+        type: "note",
+        description: "no Plotly hosts yet (empty site) — skip filename assert",
+      });
+      return;
+    }
+    for (let i = 0; i < n; i++) {
+      const name = await hosts.nth(i).getAttribute("data-download-filename");
+      expect(name, "download filename must be a non-empty stem").toBeTruthy();
+      expect(name).not.toBe("newplot");
+    }
+  });
 });

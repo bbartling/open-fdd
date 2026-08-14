@@ -1,0 +1,5 @@
+col,column,point_name,unit,point_role,equipment_id,test_target_rule_id
+duct-static-pressure,duct-static-pressure,Synthetic FC1 duct-static-pressure,in_wg,duct-static-pressure,AHU_CASE_FC1,FC1
+duct-static-pressure-sp,duct-static-pressure-sp,Synthetic FC1 duct-static-pressure-sp,in_wg,duct-static-pressure-sp,AHU_CASE_FC1,FC1
+fan-cmd,fan-cmd,Synthetic FC1 fan-cmd,fraction,fan-cmd,AHU_CASE_FC1,FC1
+fan-status,fan-status,Synthetic FC1 fan-status,bool,fan-status,AHU_CASE_FC1,FC1

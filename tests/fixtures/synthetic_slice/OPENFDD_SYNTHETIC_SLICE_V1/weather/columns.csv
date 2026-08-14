@@ -1,0 +1,5 @@
+col,column,point_name,unit,point_role
+web-outside-air-temp,web-outside-air-temp,Synthetic shared weather web-outside-air-temp,degF,web-outside-air-temp
+web-outside-air-humidity,web-outside-air-humidity,Synthetic shared weather web-outside-air-humidity,%RH,web-outside-air-humidity
+web-outside-air-dewpoint,web-outside-air-dewpoint,Synthetic shared weather web-outside-air-dewpoint,degF,web-outside-air-dewpoint
+web-outside-air-wetbulb,web-outside-air-wetbulb,Synthetic shared weather web-outside-air-wetbulb,degF,web-outside-air-wetbulb

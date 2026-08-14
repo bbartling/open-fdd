@@ -1186,6 +1186,11 @@ pub fn run_registry(payload: &Value) -> Value {
         Ok(r) => r,
         Err(e) => return json!({"ok": false, "error": format!("runtime: {e}")}),
     };
+    let session_units = crate::fdd::session_config::unit_system_from_session();
+    let unit_system = payload
+        .get("unit_system")
+        .and_then(Value::as_str)
+        .unwrap_or(session_units.as_str());
     match rt.block_on(run_all_rules_with_overrides(
         &history_root,
         &effective,
@@ -1193,6 +1198,7 @@ pub fn run_registry(payload: &Value) -> Value {
         &session_overrides,
         payload.get("equipment_id").and_then(Value::as_str),
         Some(weather_root.as_path()),
+        Some(unit_system),
     )) {
         Ok(report) => {
             let normalized = results_response(building_id);

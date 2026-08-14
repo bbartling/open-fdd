@@ -1,0 +1,18 @@
+{
+  "equipment_type": "AHU",
+  "equipType": "ahu",
+  "device": "AHU_CASE_PID_HUNT_1",
+  "column_roles": {
+    "outside-air-damper": "outside-air-damper",
+    "loop-enabled": "loop-enabled",
+    "fan-status": "fan-status",
+    "fan-cmd": "fan-cmd"
+  },
+  "points": {
+    "outside-air-damper": "outside-air-damper",
+    "loop-enabled": "loop-enabled",
+    "fan-status": "fan-status",
+    "fan-cmd": "fan-cmd"
+  },
+  "test_target_rule_id": "PID-HUNT-1"
+}

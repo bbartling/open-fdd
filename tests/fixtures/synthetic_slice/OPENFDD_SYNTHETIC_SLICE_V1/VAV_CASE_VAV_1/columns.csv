@@ -1,0 +1,3 @@
+col,column,point_name,unit,point_role,equipment_id,test_target_rule_id
+zone-air-temp,zone-air-temp,Synthetic VAV-1 zone-air-temp,degF,zone-air-temp,VAV_CASE_VAV_1,VAV-1
+zone-airflow,zone-airflow,Synthetic VAV-1 zone-airflow,cfm,zone-airflow,VAV_CASE_VAV_1,VAV-1

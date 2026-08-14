@@ -1,0 +1,5 @@
+col,column,point_name,unit,point_role,equipment_id,test_target_rule_id
+occupied,occupied,Synthetic SCHED-1 occupied,mode,occupied,AHU_CASE_SCHED_1,SCHED-1
+fan-status,fan-status,Synthetic SCHED-1 fan-status,bool,fan-status,AHU_CASE_SCHED_1,SCHED-1
+zone-air-temp,zone-air-temp,Synthetic SCHED-1 zone-air-temp,degF,zone-air-temp,AHU_CASE_SCHED_1,SCHED-1
+fan-cmd,fan-cmd,Synthetic SCHED-1 fan-cmd,fraction,fan-cmd,AHU_CASE_SCHED_1,SCHED-1

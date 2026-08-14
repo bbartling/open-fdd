@@ -6,7 +6,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use fdd_bench::{compare_results, run_benchmark, write_compare_markdown};
 use fdd_core::validate_building;
-use fdd_rules::{load_registry, run_all_rules};
+use fdd_rules::{load_registry, run_all_rules_with_overrides};
 use fdd_sql::{register_parquet_tree, run_sql_file};
 use fdd_store::ingest_building;
 use inventory::write_inventory;
@@ -61,6 +61,9 @@ enum Commands {
         rules_dir: PathBuf,
         #[arg(long, default_value = ".cache/rule_results")]
         out: PathBuf,
+        /// Stored CSV units: imperial (°F) or metric/si (°C converted at query).
+        #[arg(long, default_value = "imperial")]
+        unit_system: String,
     },
     /// Compare pandas oracle JSON vs SQL results JSON
     Compare {
@@ -126,9 +129,19 @@ async fn main() -> Result<()> {
             parquet,
             rules_dir,
             out,
+            unit_system,
         } => {
             let registry = load_registry(&rules_dir)?;
-            let report = run_all_rules(&parquet, &registry, &out).await?;
+            let report = run_all_rules_with_overrides(
+                &parquet,
+                &registry,
+                &out,
+                &std::collections::HashMap::new(),
+                None,
+                None,
+                Some(unit_system.as_str()),
+            )
+            .await?;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
         Commands::Compare {

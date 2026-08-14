@@ -2870,6 +2870,7 @@ dependencies = [
  "open_fdd_edge_prototype",
  "openfdd_contracts",
  "openfdd_mqtt",
+ "reqwest 0.12.28",
  "rumqttc",
  "serde",
  "serde_json",

@@ -1,0 +1,18 @@
+{
+  "equipment_type": "AHU",
+  "equipType": "ahu",
+  "device": "AHU_CASE_SCHED_1",
+  "column_roles": {
+    "occupied": "occupied",
+    "fan-status": "fan-status",
+    "zone-air-temp": "zone-air-temp",
+    "fan-cmd": "fan-cmd"
+  },
+  "points": {
+    "occupied": "occupied",
+    "fan-status": "fan-status",
+    "zone-air-temp": "zone-air-temp",
+    "fan-cmd": "fan-cmd"
+  },
+  "test_target_rule_id": "SCHED-1"
+}

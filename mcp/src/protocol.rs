@@ -185,6 +185,12 @@ impl Server {
                 "session_id": {"type": "string"},
                 "confirm": {"type": "boolean", "description": "Must be true"}
             })),
+            tool("openfdd_csv_package_append", "POST /api/csv/import/package/append — hourly history append into an existing building (write: confirm:true)", json!({
+                "confirm": {"type": "boolean", "description": "Must be true"},
+                "building_id": {"type": "string"},
+                "equipment_id": {"type": "string"},
+                "csv": {"type": "string", "description": "history_wide.csv chunk including header"}
+            })),
             tool("openfdd_datasets", "GET /api/datasets — list Feather/Arrow datasets in registry", json!({})),
             tool("openfdd_timeseries_series", "GET /api/timeseries/series — plot catalog after CSV save", json!({"site_id": {"type": "string"}})),
             tool("openfdd_auth_credentials_hint", "Where MCP/agents find Open-FDD login (workspace/bootstrap_credentials.once.txt, auth.env.local) — no secrets returned", json!({})),
@@ -365,6 +371,30 @@ impl Server {
                 self.bridge.post(
                     "/api/csv/import/execute",
                     &json!({ "session_id": session_id, "confirm": true }),
+                )
+            }
+            "openfdd_csv_package_append" => {
+                require_write_confirm(args, "openfdd_csv_package_append")?;
+                let building_id = args
+                    .get("building_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("building_id required")?;
+                let equipment_id = args
+                    .get("equipment_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("equipment_id required")?;
+                let csv = args
+                    .get("csv")
+                    .and_then(|v| v.as_str())
+                    .ok_or("csv required")?;
+                self.bridge.post(
+                    "/api/csv/import/package/append",
+                    &json!({
+                        "confirm": true,
+                        "building_id": building_id,
+                        "equipment_id": equipment_id,
+                        "csv": csv,
+                    }),
                 )
             }
             "openfdd_datasets" => self.bridge.get("/api/datasets"),
