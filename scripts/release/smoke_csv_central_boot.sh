@@ -21,6 +21,7 @@ echo "== CSV recipe boot smoke (central + React web) =="
 export OPENFDD_CENTRAL_IMAGE="$CENTRAL_IMAGE"
 export OPENFDD_WEB_IMAGE="$WEB_IMAGE"
 export OPENFDD_MQTT_ENABLED=0
+export OPENFDD_ALLOW_OPEN_BIND="${OPENFDD_ALLOW_OPEN_BIND:-1}"
 
 docker build -f services/central/Dockerfile -t "$CENTRAL_IMAGE" . >/dev/null
 docker build \

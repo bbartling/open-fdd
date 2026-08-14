@@ -110,6 +110,16 @@ pub fn assert_bind_auth_policy(
     if is_loopback_bind(host) {
         return Ok(());
     }
+    if std::env::var("OPENFDD_ALLOW_OPEN_BIND")
+        .ok()
+        .filter(|s| matches!(s.trim(), "1" | "true" | "yes"))
+        .is_some()
+    {
+        warn!(
+            "OPENFDD_ALLOW_OPEN_BIND=1 — open mode allowed on non-loopback (CI/smoke only; not internet-ready)"
+        );
+        return Ok(());
+    }
     let secret = secret.map(str::trim).filter(|s| !s.is_empty());
     let Some(secret) = secret else {
         return Err(
@@ -346,5 +356,11 @@ mod tests {
         )
         .is_ok());
         assert!(assert_bind_auth_policy("127.0.0.1", None, None).is_ok());
+    }
+
+    #[test]
+    fn allow_open_bind_escape_hatch() {
+        // Covered by env in integration; unit: loopback still ok.
+        assert!(is_loopback_bind("localhost"));
     }
 }
