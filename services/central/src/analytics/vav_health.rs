@@ -1,5 +1,7 @@
 //! Building-scoped VAV health matrix (vav_health_matrix_v1). No Python.
 
+use std::collections::HashMap;
+
 use anyhow::Result;
 use datafusion::prelude::SessionContext;
 use fdd_sql::run_sql;
@@ -36,6 +38,69 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 
 pub const QV_VAV_HEALTH: &str = "vav-health-v1";
 pub const SCHEMA_VAV_HEALTH: &str = "vav_health_matrix_v1";
+
+/// Same default IDs as `open_fdd.analytics.vav_health.DEFAULT_BROKEN_RULES`.
+const BROKEN_RULE_IDS: &[&str] = &[
+    "VAV-3",
+    "VAV-4",
+    "VAV-5",
+    "VAV-7",
+    "VAV-REHEAT",
+    "VAV-AHU-LEAVE",
+];
+
+/// Per-equipment broken-box from the last registry run. Empty map + `false`
+/// when no result JSON exists (unknown, not PASS).
+fn broken_box_from_fdd(building_id: &str) -> (bool, HashMap<String, (bool, String, f64)>) {
+    let body = open_fdd_edge_prototype::fdd::registry_api::results_response(Some(building_id));
+    let rows = body
+        .get("results")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if rows.is_empty() {
+        return (false, HashMap::new());
+    }
+    let mut map: HashMap<String, (bool, Vec<String>, f64)> = HashMap::new();
+    for row in rows {
+        let rid = row.get("rule_id").and_then(Value::as_str).unwrap_or("");
+        if !BROKEN_RULE_IDS.contains(&rid) {
+            continue;
+        }
+        let st = row.get("status").and_then(Value::as_str).unwrap_or("");
+        if st.eq_ignore_ascii_case("NOT_APPLICABLE_EQUIPMENT_TYPE") {
+            continue;
+        }
+        let eq = row
+            .get("equipment_id")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        if eq.is_empty() {
+            continue;
+        }
+        let hours = row
+            .get("fault_hours")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0);
+        let fault = st.eq_ignore_ascii_case("FAULT") || hours > 0.0;
+        let e = map.entry(eq).or_insert_with(|| (false, Vec::new(), 0.0));
+        e.2 += hours;
+        if fault {
+            e.0 = true;
+            e.1.push(rid.to_string());
+        }
+    }
+    let out = map
+        .into_iter()
+        .map(|(k, (fault, mut ids, hours))| {
+            ids.sort();
+            ids.dedup();
+            (k, (fault, ids.join(";"), hours))
+        })
+        .collect();
+    (true, out)
+}
 
 pub async fn vav_health_from_history(
     building_id: Option<&str>,
@@ -121,6 +186,7 @@ ORDER BY equipment_id
     let mut n1 = 0u32;
     let mut n0 = 0u32;
     let mut nq = 0u32;
+    let (has_fdd, broken_map) = broken_box_from_fdd(bid);
     for row in result.rows {
         let eq = row
             .get("equipment_id")
@@ -147,12 +213,18 @@ ORDER BY equipment_id
         } else {
             json!(span > 0.0 && (100.0 * open_h / span) >= 95.0)
         };
-        let broken = Value::Null;
+        let (broken, broken_ids, broken_h) = if !has_fdd {
+            (Value::Null, String::new(), 0.0)
+        } else if let Some((fault, ids, hours)) = broken_map.get(eq) {
+            (json!(*fault), ids.clone(), *hours)
+        } else {
+            (json!(false), String::new(), 0.0)
+        };
         let evaluable = [&poor, &rogue, &broken]
             .iter()
             .filter(|v| !v.is_null())
             .count();
-        let hit = [&poor, &rogue]
+        let hit = [&poor, &rogue, &broken]
             .iter()
             .filter(|v| v.as_bool() == Some(true))
             .count();
@@ -183,8 +255,8 @@ ORDER BY equipment_id
             "dimensions_hit": hit,
             "dimensions_evaluable": evaluable,
             "score_label": label,
-            "broken_rule_ids": "",
-            "broken_fault_hours": 0.0,
+            "broken_rule_ids": broken_ids,
+            "broken_fault_hours": broken_h,
             "occupied_comfort_fail_pct": if span > 0.0 { json!(100.0 * fail_h / span) } else { Value::Null },
             "occupied_hours": span,
             "damper_full_open_pct": if span > 0.0 { json!(100.0 * open_h / span) } else { Value::Null },
@@ -194,7 +266,11 @@ ORDER BY equipment_id
             "confidence": if evaluable < 3 { "insufficient" } else { "medium" },
             "engine": DF_ENGINE,
             "schema_version": SCHEMA_VAV_HEALTH,
-            "notes": "broken_box unknown until Run all rules joins FDD results",
+            "notes": if has_fdd {
+                "broken_box from VAV-3/4/5/7/REHEAT/AHU-LEAVE FDD results"
+            } else {
+                "broken_box unknown until Run all rules joins FDD results"
+            },
         }));
     }
     env.coverage = Some(json!({
@@ -208,8 +284,10 @@ ORDER BY equipment_id
         env.warnings
             .push("no VAV% equipment_id rows in historian".into());
     }
-    env.warnings
-        .push("Run all rules to populate broken_box from VAV-3/4/5/7/REHEAT/AHU-LEAVE".into());
+    if !has_fdd {
+        env.warnings
+            .push("Run all rules to populate broken_box from VAV-3/4/5/7/REHEAT/AHU-LEAVE".into());
+    }
     Ok(Some(env))
 }
 

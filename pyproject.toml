@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "4.3.0"
+version = "4.4.0"
 description = "Open-FDD libraries: ECM engineering workbooks plus pandas oracle rules, analytics, and Engineering Findings reporting. Production FDD remains the DataFusion/GHCR stack."
 readme = "docs/ecm/README.md"
 license = { text = "MIT" }
