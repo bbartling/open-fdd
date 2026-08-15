@@ -1,7 +1,8 @@
-# WattLab-to-WattLab dump parity (Building 100) — 4.4.1 / `sha-2c12c8e`
+# WattLab-to-WattLab dump parity (Building 100) — vibe19 4.4.1 / `sha-2c12c8e`
 
-Oracle: vibe19 Engineering Bundle (`ghcr.io/bbartling/vibe19:latest`, wheel **4.4.0** until Prompt 2 pins **4.4.1**).  
-OpenFDD: DataFusion assembler on **`sha-2c12c8e`** (PR #727), health `3.3.0+2c12c8e814a8`. `:nightly` digest matches `sha-2c12c8e` (`sha256:54e6fbf5…123d82`).
+Oracle: vibe19 Engineering Bundle `ghcr.io/bbartling/vibe19:latest` digest `sha256:101126ab…32760f07`, wheel **4.4.1**, catalog `2e684dbb…cba9` (playground PR **#92** `4b71061`). Diagnostic dump includes `vav_health_matrix.csv`, `mech_cooling_oat_bins.csv`, `motor_hours.csv`, `motor_weekly.csv`.
+
+OpenFDD: DataFusion on **`sha-2c12c8e`** (PR #727 SQL), health `3.3.0+2c12c8e814a8`. `:nightly` digest matched this pin at soak (`sha256:54e6fbf5…123d82`). Stack: `OPENFDD_IMAGE_TAG=sha-2c12c8e` `react-ot --no-pull`. No local docker/cargo build.
 
 ## Cycle header
 
@@ -9,34 +10,43 @@ OpenFDD: DataFusion assembler on **`sha-2c12c8e`** (PR #727), health `3.3.0+2c12
 | --- | --- |
 | Date | 2026-08-15 |
 | OpenFDD pin | `sha-2c12c8e` health `3.3.0+2c12c8e814a8` |
-| PyPI | **open-fdd 4.4.1** (tag `open-fdd-v4.4.1`, Trusted Publishing) |
-| Vibe19 | `:latest` digest `sha256:6a4297b9…e6f54d` (still 4.4.0 wheel; Prompt 2 on Windows) |
-| **blockers** | **405** (unchanged vs `sha-8ab0b5e`) |
-| accepted | 2690 |
-| rows | 3260 |
+| PyPI / vibe19 wheel | **open-fdd 4.4.1** |
+| Vibe19 | `:latest` = `:develop` `sha256:101126ab…32760f07` |
+| **blockers** | **449** (was 405 before vav_health row compare) |
+| accepted | 2689 |
+| rows | 3303 |
 | stop_rule_met | **false** |
 
-Classifier (A2): blockers are FAULT vs PASS and FAULT∩FAULT hours. N/A-omit and one-sided sensor columns are accepted. FDD blockers 217; remaining sensor_diurnal/stats ~187 are two-sided numeric gaps, not one-sided `mean`.
+`vav_health_matrix.csv` is present on both sides. Missing-oracle is a **blocker** again (Prompt 2 closed). 44 of 449 blockers are per-equipment `vav_health` score/label gaps, not a missing file.
 
-## Four B100 examples after ECON SQL follow-on (#727)
+## Synthetic-59 ground truth (expected_faults.csv, ~1 h planted)
 
-| ID | vibe19 pandas | OpenFDD SQL `sha-2c12c8e` | Notes |
+| Side | Target match |
+| --- | --- |
+| vibe19 pandas | **59/59** |
+| OpenFDD SQL | **59/59** |
+| Overview analytics soak | **PASS** (runtime + mech OAT bins) |
+
+Eyeball: ECON-1/2 synth damper is **0–1** (fault hour damper 0.0 / 1.0). That is why SQL `damper_frac` CTE matches goldens here and still fails B100 **0–100**.
+
+## Four B100 FDD examples (`sha-2c12c8e`)
+
+| ID | vibe19 pandas | OpenFDD SQL | Notes |
 | --- | ---: | ---: | --- |
-| `AHU-DUCTHI` AHU_2 | FAULT **0.5 h** | FAULT **1.83 h** | Unchanged vs #725. Residual ~1.3 h FAULT∩FAULT still a blocker. |
-| `ECON-2` AHU_1 | PASS **0 h** | FAULT **1422.92 h** | Still open. Hours **rose** vs 952.5 h after dropping the extra fan AND; 0–100 damper 20 still behaves like raw `20 > 0.42`. `damper_frac` CTE did not fix DataFusion on this historian. |
-| `ECON-1` AHU_1 | FAULT **326 h** | PASS **0 h** | Still a FAULT/PASS blocker. Raw damper 20 is not `< 0.05`; cmd-first fan did not produce the pandas 326 h. |
-| `CHW-NOLOAD-1` CHILLER_2 | FAULT **524.5 h** | **SKIPPED_MISSING_ROLES** | No false PASS. Skip until load-satisfaction enrichment is mapped. Accepted vs FAULT. |
+| `AHU-DUCTHI` AHU_2 | FAULT **0.5 h** | FAULT **1.83 h** | Residual ~1.3 h FAULT∩FAULT |
+| `ECON-2` AHU_1 | PASS **0 h** | FAULT **1422.92 h** | Raw 0–100 damper vs 0.42 |
+| `ECON-1` AHU_1 | FAULT **326.08 h** | PASS **0 h** | Same damper scale |
+| `CHW-NOLOAD-1` CHILLER_2 | FAULT **524.5 h** | **SKIPPED_MISSING_ROLES** | No false PASS; accepted |
 
-Do not greenwash: #727 shipped `damper_frac` + pandas fan/equation; B100 ECON-1/2 are still open. Next SQL attempt should inline the percent CASE in the same SELECT as `FROM history` (no later-CTE column), matching the historian `damper_fb_pct` pattern.
+Follow-on SQL: inline percent `CASE` in the same `SELECT` as `FROM history` (not a later CTE column).
 
 ## Commands
 
 ```bash
 export OPENFDD_IMAGE_TAG=sha-2c12c8e
-docker pull ghcr.io/bbartling/openfdd-central:sha-2c12c8e  # + web/fieldbus/mqtt
 ./scripts/openfdd_stack_up.sh react-ot --no-pull
+python3 scripts/wattlab_parity_oracle_dump.py
 python3 scripts/wattlab_parity_ofdd_rust_bundle.py
 python3 scripts/wattlab_parity_diff.py
+python3 scripts/synthetic_59_target_pair_soak.py --side both
 ```
-
-No local `docker build`. Vibe19 Prompt 2: [`docs/agent/VIBE19_PROMPT2_VAV_HEALTH_EXPORT.md`](../agent/VIBE19_PROMPT2_VAV_HEALTH_EXPORT.md).

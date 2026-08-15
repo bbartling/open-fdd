@@ -69,7 +69,7 @@ retest. Do not confuse those with this engineering OS.
 26. **Overview plot Expanders** default **open** — do not hide motor / mech / econ / BAS plot sections behind carets (`Expander` unmounts children when closed).
 27. **FDD Plots series overlay** honors Lab/`session_config` `confirm_min` (and typed rule params); source may be `sql_detail_session`. After Update-this-rule, listen for `RULES_UPDATED` and refetch results + series.
 28. **SCHED-1 portable occupancy:** numeric/boolean falsey (`0`, `0.0`, `false`) **and** string `unoccupied` (plus related tokens) — keep SQL (`sched1_unoccupied_runtime.sql`) and pandas `sched1` aligned.
-29. **Low-RAM / bensbench:** never local stack `docker build`; prune old images before pull; wait for GHCR publish then pull `sha-*` / `nightly`. Synthetic-59 soaks use `scripts/synthetic_59_*.py`; B100 dump-parity stays paused; never edit goldens to hide misses.
+29. **Low-RAM / bensbench:** never local stack `docker build`; prune old images before pull; wait for GHCR publish then pull `sha-*` / `nightly`. Synthetic-59 soaks use `scripts/synthetic_59_*.py`; B100 dump-parity is active (`wattlab_parity_*.py`); never edit goldens to hide misses.
 30. **Plot PNG downloads:** `PlotlyHost` must pass `toImageButtonOptions.filename` (Overview/Reports). Default Plotly `newplot.png` is a regression.
 31. **Full-width UI:** `.app-content` / `.overview-populated` stretch (`max-width: none`) like Streamlit — do not reintroduce a rem content cap on Overview plots.
 32. **Rule Lab menu:** `RuleTuningPanel` sorts visible rules A–Z by `rule_id` (registry YAML order is engine priority only).

@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-08-15 — vibe19 4.4.1 + Synthetic-59 59/59 + B100 dump
+
+- Playground PR #92: `open-fdd[reporting]==4.4.1`; diagnostic dump writes vav/mech/motor CSVs. bensbench pulled `ghcr.io/bbartling/vibe19:latest` (`sha256:101126ab…`).
+- Synthetic-59: vibe19 and OpenFDD SQL **59/59**; analytics soak PASS. Synth ECON damper is 0–1.
+- B100 dump-vs-dump on `sha-2c12c8e`: 449 blockers (vav_health rows now compared). ECON-1/2 still open on 0–100 damper; inline percent CASE in same SELECT as `FROM history`.
+- Low-RAM: GHA/GHCR only; pin `sha-*` `--no-pull`. B100 dump-parity unpaused in AGENTS.md.
+
 ## 2026-08-14 — Metric boundary, slice CI, plot contracts, hourly append
 
 - FDD SQL stays °F; `unit_system=metric` converts temperature roles at query; Lab sliders show °C.

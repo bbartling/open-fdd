@@ -1,37 +1,24 @@
 -- econ1_stuck_closed.sql — ECON-1 economizer stuck closed
--- Damper is damper_frac (never aliased back to oa_damper_pct).
--- Pandas _fan is fan-cmd first (percent-normalized), then fan-status.
--- Ranked confirm matches other economizer rules (CONFIRM_ROWS from 600 s).
-WITH h AS (
-  SELECT
-    equipment_id,
-    timestamp_utc,
-    oa_t,
-    CASE
-      WHEN oa_damper_pct IS NULL THEN NULL
-      WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0
-      ELSE oa_damper_pct
-    END AS damper_frac,
-    CASE
-      WHEN fan_cmd IS NOT NULL THEN CASE
-        WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1
-        ELSE 0
-      END
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.5 THEN 1 ELSE 0 END
-      ELSE 0
-    END AS fan_on
-  FROM history
-),
-base AS (
+-- Inline damper percent CASE in the same SELECT as FROM history.
+-- Pandas _fan is fan-cmd first (percent-normalized), then fan-status (> 0.5).
+WITH base AS (
   SELECT
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN fan_on = 0 THEN 0
-      WHEN damper_frac IS NOT NULL AND oa_t IS NOT NULL
-       AND damper_frac < {{ECON1_DAMPER_MAX}} AND oa_t > {{ECON1_OAT_MIN}}
+      WHEN CASE
+        WHEN fan_cmd IS NOT NULL THEN CASE
+          WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1
+          ELSE 0
+        END
+        WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.5 THEN 1 ELSE 0 END
+        ELSE 0
+      END = 0 THEN 0
+      WHEN oa_damper_pct IS NOT NULL AND oa_t IS NOT NULL
+       AND (CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END) < {{ECON1_DAMPER_MAX}}
+       AND oa_t > {{ECON1_OAT_MIN}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
-  FROM h
+  FROM history
 ),
 lagged AS (
   SELECT

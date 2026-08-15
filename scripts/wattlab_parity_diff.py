@@ -738,11 +738,7 @@ def compare_vav_health(oracle_dir: Path, ofdd_dir: Path) -> list[dict]:
                 "vibe19": False,
                 "ofdd": r_ok,
                 "delta": "oracle dump missing vav_health_matrix.csv",
-                "severity": "accepted",
-                "rationale": (
-                    "OpenFDD 4.4.0 ships vav_health; vibe19 diagnostic export "
-                    "did not write the CSV even when the wheel is 4.4.0 (Prompt 2)."
-                ),
+                "severity": "blocker",
             }
         )
         return rows
