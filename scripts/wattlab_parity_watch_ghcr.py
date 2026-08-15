@@ -90,6 +90,7 @@ def newest_central(repo: str = "bbartling/openfdd-central") -> dict:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--repo", default="bbartling/openfdd-central")
     p.add_argument(
         "--baseline-created",
         required=True,
@@ -101,17 +102,17 @@ def main() -> int:
 
     baseline = args.baseline_created
     print(
-        f"watching GHCR openfdd-central for created > {baseline} every {args.interval_sec}s",
+        f"watching GHCR {args.repo} for created > {baseline} every {args.interval_sec}s",
         flush=True,
     )
     while True:
         try:
-            info = newest_central()
+            info = newest_central(args.repo)
             args.state.write_text(json.dumps(info, indent=2), encoding="utf-8")
             if info["created"] > baseline:
                 payload = {
                     "prompt": (
-                        "Newest GHCR openfdd-central is newer than baseline. "
+                        f"Newest GHCR {args.repo} is newer than baseline. "
                         f"Pull tag={info['tag']} created={info['created']} "
                         f"digest={info['digest']}, stack up react-ot, re-run "
                         "vibe19 oracle + OFDD Rust capture + wattlab_parity_diff, "

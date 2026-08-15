@@ -41,8 +41,9 @@ def _req(
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
     r = urllib.request.Request(url, data=data, headers=headers, method=method)
+    timeout = 900 if "/api/fdd/run" in url else 120
     try:
-        with urllib.request.urlopen(r, timeout=120) as resp:
+        with urllib.request.urlopen(r, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
             try:
                 return resp.status, json.loads(raw)
@@ -178,6 +179,11 @@ def main() -> int:
         (
             "sensor_health",
             "/api/analytics/sensor-health",
+            {"building_id": args.building_id},
+        ),
+        (
+            "vav_health",
+            "/api/analytics/vav-health",
             {"building_id": args.building_id},
         ),
     ):

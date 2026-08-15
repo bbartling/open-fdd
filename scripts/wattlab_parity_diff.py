@@ -147,11 +147,10 @@ def gate0_schedule(oracle_dir: Path, ofdd_dir: Path, fixture: dict) -> list[dict
                     "BUG-C confirmed on running image; code fix in "
                     "edge/src/fdd/session_config.rs. Accepted until tip publish."
                 ),
-                "severity": "accepted",
+                "severity": "blocker",
                 "rationale": (
-                    "Unit test keeps_occupancy_schedule_calendar proves branch; "
-                    "nightly 83fc4d3 still strips. Disk restore makes compare "
-                    "calendar-equal without claiming PUT is fixed in the image."
+                    "PUT /api/fdd/session-config dropped occupancy_schedule; "
+                    "disk restore is a workaround, not Gate-0 pass."
                 ),
             }
         )
@@ -163,7 +162,7 @@ _RULE_ALIASES = {
     "FC13-SAT-HIGH": "FC13",
 }
 
-# Rust-only SQL analytics / aliases — not in the 4.3.0 pandas cookbook catalog.
+# Rust-only SQL analytics / aliases — not in the pandas cookbook catalog.
 _RUST_ONLY_RULES = frozenset(
     {
         "AVG-ZONE-TEMP",
@@ -173,6 +172,7 @@ _RUST_ONLY_RULES = frozenset(
         "FC13-SAT-HIGH",
     }
 )
+WAVE1_RULES = ("VAV-2", "VAV-6", "RESET-1")
 _SKIP_STATUSES = frozenset(
     {
         "SKIPPED_MISSING_ROLES",
@@ -210,32 +210,18 @@ def _status_ok(o: str, r: str) -> bool:
     return False
 
 
+def _intentional_accepted(
+    rule_id: str, o_status: str, r_status: str, o_hours: float | None, r_hours: float | None
+) -> tuple[bool, str]:
+    """Documented seams for *this* soak only — default empty (do not inherit 4.3.0)."""
+    _ = (rule_id, o_status, r_status, o_hours, r_hours)
+    return False, ""
+
+
 def _intentional_43(
     rule_id: str, o_status: str, r_status: str, o_hours: float | None, r_hours: float | None
 ) -> tuple[bool, str]:
-    """4.3.0 semantic diffs that must not be blockers."""
-    ou, ru = o_status.upper(), r_status.upper()
-    oh = 0.0 if o_hours is None else o_hours
-    rh = 0.0 if r_hours is None else r_hours
-    if rule_id == "CHW-1":
-        if ou in _SKIP_STATUSES and (
-            ru in _SKIP_STATUSES or (ru in _PASS_STATUSES | {"FAULT"} and rh == 0.0)
-        ):
-            return True, "4.3.0 CHW-1 skip/off (missing proof or zeros)"
-        if ru in _SKIP_STATUSES and ou in _SKIP_STATUSES:
-            return True, "4.3.0 CHW-1 skip/off"
-    if rule_id == "SCHED-247":
-        if ou in _PASS_STATUSES and ru == "FAULT":
-            return True, "4.3.0 SCHED-247 pressure-not-fault"
-        if ou in _PASS_STATUSES and ru in _PASS_STATUSES:
-            return True, "4.3.0 SCHED-247 pass"
-        if ou in _SKIP_STATUSES and ru in _SKIP_STATUSES | _PASS_STATUSES:
-            return True, "4.3.0 SCHED-247 skip vs pass"
-        if abs(oh - rh) > 0.05 and (ou in _PASS_STATUSES or ru == "FAULT"):
-            return True, "4.3.0 SCHED-247 pressure-not-fault hours"
-    if rule_id == "FC7":
-        return True, "concept_only — SQL placeholder; htg_valve_pct missing"
-    return False, ""
+    return _intentional_accepted(rule_id, o_status, r_status, o_hours, r_hours)
 
 
 def _sql_screening_pair(
@@ -245,8 +231,8 @@ def _sql_screening_pair(
     o_hours: float | None,
     r_hours: float | None,
 ) -> tuple[bool, str]:
-    """Only documented 4.3.0 / concept_only seams — FAULT∩FAULT hours are blockers."""
-    ok, why = _intentional_43(rule_id, o_status, r_status, o_hours, r_hours)
+    """Empty default — FAULT∩FAULT hours are blockers. Re-admit seams only with soak evidence."""
+    ok, why = _intentional_accepted(rule_id, o_status, r_status, o_hours, r_hours)
     if ok:
         return True, why
     return False, ""
@@ -644,8 +630,14 @@ def compare_fdd(oracle_dir: Path, ofdd_dir: Path, capture_dir: Path | None = Non
         status_ok = bool(o_status) and bool(r_status) and _status_ok(o_status, r_status)
         hours_ok = _sev_num(o_h, r_h, abs_tol=0.05, rel_tol=0.001) != "blocker"
         if not o:
-            sev = "accepted" if accepted else "blocker"
-            delta = "missing on oracle"
+            if rule_id in WAVE1_RULES:
+                accepted = True
+                why = "vibe19 open-fdd wheel does not include VAV-2/VAV-6/RESET-1"
+                sev = "accepted"
+                delta = "catalog_lag Wave 1 missing on oracle"
+            else:
+                sev = "accepted" if accepted else "blocker"
+                delta = "missing on oracle"
         elif not r:
             if o_status.upper() in _SKIP_STATUSES and accepted:
                 sev = "accepted"
@@ -697,6 +689,131 @@ def compare_fdd(oracle_dir: Path, ofdd_dir: Path, capture_dir: Path | None = Non
             "ofdd": len(rust_by),
             "delta": None,
             "severity": "noise",
+        }
+    )
+    return rows
+
+
+def compare_vav_health(oracle_dir: Path, ofdd_dir: Path) -> list[dict]:
+    """vav_health_matrix_v1 dump-vs-dump. Missing oracle file is consumer lag, not PASS."""
+    import csv
+
+    rows: list[dict] = []
+    o_path = oracle_dir / "vav_health_matrix.csv"
+    r_path = ofdd_dir / "vav_health_matrix.csv"
+    o_ok = o_path.is_file() and o_path.stat().st_size > 0
+    r_ok = r_path.is_file() and r_path.stat().st_size > 0
+    if not o_ok and not r_ok:
+        rows.append(
+            {
+                "artifact": "vav_health_matrix.csv",
+                "key": "presence",
+                "vibe19": False,
+                "ofdd": False,
+                "delta": "both missing",
+                "severity": "blocker",
+            }
+        )
+        return rows
+    if not o_ok:
+        rows.append(
+            {
+                "artifact": "vav_health_matrix.csv",
+                "key": "presence",
+                "vibe19": False,
+                "ofdd": r_ok,
+                "delta": "oracle dump missing vav_health_matrix.csv",
+                "severity": "accepted",
+                "rationale": (
+                    "OpenFDD 4.4.0 ships vav_health; vibe19 diagnostic export "
+                    "did not write the CSV even when the wheel is 4.4.0 (Prompt 2)."
+                ),
+            }
+        )
+        return rows
+    if not r_ok:
+        rows.append(
+            {
+                "artifact": "vav_health_matrix.csv",
+                "key": "presence",
+                "vibe19": True,
+                "ofdd": False,
+                "delta": "OpenFDD bundle missing vav_health_matrix.csv",
+                "severity": "blocker",
+            }
+        )
+        return rows
+
+    def _idx(path: Path) -> dict[str, dict]:
+        out = {}
+        with path.open(newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                eq = str(row.get("equipment_id") or "")
+                if eq:
+                    out[eq] = row
+        return out
+
+    o_idx = _idx(o_path)
+    r_idx = _idx(r_path)
+    keys = sorted(set(o_idx) | set(r_idx))
+    n_block = 0
+    for eq in keys:
+        o = o_idx.get(eq) or {}
+        r = r_idx.get(eq) or {}
+        o_lab = str(o.get("score_label") or "")
+        r_lab = str(r.get("score_label") or "")
+        if not o:
+            n_block += 1
+            rows.append(
+                {
+                    "artifact": "vav_health_matrix.csv",
+                    "key": eq,
+                    "vibe19": None,
+                    "ofdd": r_lab or r.get("broken_box"),
+                    "delta": "missing on oracle",
+                    "severity": "blocker",
+                }
+            )
+            continue
+        if not r:
+            n_block += 1
+            rows.append(
+                {
+                    "artifact": "vav_health_matrix.csv",
+                    "key": eq,
+                    "vibe19": o_lab,
+                    "ofdd": None,
+                    "delta": "missing on OFDD",
+                    "severity": "blocker",
+                }
+            )
+            continue
+        mismatch = []
+        for col in ("score_label", "broken_box", "poor_zone_performance", "rogue_damper"):
+            ov = str(o.get(col) or "").lower()
+            rv = str(r.get(col) or "").lower()
+            if ov != rv:
+                mismatch.append(col)
+        if mismatch:
+            n_block += 1
+            rows.append(
+                {
+                    "artifact": "vav_health_matrix.csv",
+                    "key": eq,
+                    "vibe19": {c: o.get(c) for c in mismatch},
+                    "ofdd": {c: r.get(c) for c in mismatch},
+                    "delta": mismatch,
+                    "severity": "blocker",
+                }
+            )
+    rows.append(
+        {
+            "artifact": "vav_health_matrix.csv",
+            "key": "table_summary",
+            "vibe19": len(o_idx),
+            "ofdd": len(r_idx),
+            "delta": {"column_blockers": n_block},
+            "severity": "blocker" if n_block else "noise",
         }
     )
     return rows
@@ -844,6 +961,7 @@ def main() -> int:
     rows.extend(compare_topology(args.oracle))
     rows.extend(compare_analytics_tables(args.oracle, args.ofdd))
     rows.extend(compare_fdd(args.oracle, args.ofdd, args.capture))
+    rows.extend(compare_vav_health(args.oracle, args.ofdd))
 
     blockers = sum(1 for r in rows if r.get("severity") == "blocker")
     accepted = sum(1 for r in rows if r.get("severity") == "accepted")

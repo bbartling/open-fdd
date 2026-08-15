@@ -49,6 +49,7 @@ EXTRA_ANALYTICS = (
     ("diurnal", "/api/analytics/diurnal"),
     ("topology", "/api/analytics/topology"),
     ("sensor_stats_all", "/api/analytics/sensor-stats"),
+    ("vav_health", "/api/analytics/vav-health"),
 )
 
 
@@ -252,6 +253,10 @@ def assemble(capture_dir: Path, bundle_dir: Path) -> dict:
     extra = _load(capture_dir / "extra_analytics.json") or {}
     if not isinstance(extra, dict):
         extra = {}
+    if "vav_health" not in extra:
+        cap_vh = _load(capture_dir / "vav_health.json")
+        if cap_vh is not None:
+            extra["vav_health"] = cap_vh
 
     def _extra_rows(name: str) -> list[dict]:
         wrap = extra.get(name) or {}
@@ -328,6 +333,27 @@ def assemble(capture_dir: Path, bundle_dir: Path) -> dict:
     mark("sensor_stats_fan_off.csv")
     if not stats_off:
         missing_apis.append("missing_table:sensor_stats_fan_off.csv")
+
+    vh_wrap = extra.get("vav_health") or {}
+    _, vh_body = _unwrap(vh_wrap) if isinstance(vh_wrap, dict) else (None, vh_wrap)
+    vh_env = _analytics(vh_body) if isinstance(vh_body, dict) else {}
+    vh_rows = [r for r in (vh_env.get("rows") or []) if isinstance(r, dict)]
+    _write_csv(bundle_dir / "vav_health_matrix.csv", vh_rows)
+    mark("vav_health_matrix.csv")
+    cov = vh_env.get("coverage") if isinstance(vh_env.get("coverage"), dict) else {}
+    _write_json(
+        bundle_dir / "vav_health_summary.json",
+        {
+            "schema_version": vh_env.get("schema_version") or cov.get("schema_version"),
+            "groups": cov.get("groups"),
+            "row_count": len(vh_rows),
+            "engine": vh_env.get("engine"),
+            "warnings": vh_env.get("warnings") or [],
+        },
+    )
+    mark("vav_health_summary.json")
+    if not vh_rows:
+        missing_apis.append("missing_table:vav_health_matrix.csv")
 
     _write_json(
         bundle_dir / "quality_flags.json",

@@ -1,49 +1,32 @@
-# WattLab-to-WattLab dump parity (Building 100)
+# WattLab-to-WattLab dump parity (Building 100) — 4.4.0 cycle
 
-Oracle is playground Vibe19 Engineering Bundle (`openfdd_engineering_bundle_v1`).
-OpenFDD side is a **DataFusion assembler** (`scripts/wattlab_parity_ofdd_rust_bundle.py`) — not pandas `tools/wattlab_export`.
+Oracle: vibe19 Engineering Bundle (`ghcr.io/bbartling/vibe19:latest`, wheel **4.4.0**).  
+OpenFDD: DataFusion assembler [`scripts/wattlab_parity_ofdd_rust_bundle.py`](../../scripts/wattlab_parity_ofdd_rust_bundle.py) on `sha-9e280ae`.
 
-## Baseline (pre-image, capture `sha-2ce9c21`)
+## Cycle header
 
 | Metric | Value |
 | --- | --- |
-| `diff_matrix.csv` rows | 3803 |
-| **blockers** | **3527** |
-| accepted | 153 |
-| stop_rule_met | false |
+| Date | 2026-08-15 |
+| OpenFDD pin | `sha-9e280ae` health `3.3.0+9e280ae294b0` |
+| Vibe19 | `:latest` == `:develop` digest `sha256:6a4297b9…e6f54d` rev `8ca6a3b` |
+| `diff_matrix.csv` / summary rows | 4233 |
+| **blockers** | **2596** |
+| accepted | 63 |
+| stop_rule_met | **false** |
 
-This is the honest dump-vs-dump stop rule. The prior cycle’s `blocker_count=0` was a sql_screening **rollup**. FAULT∩FAULT hour gaps are blockers again.
+Stop rule remains `blocker_count == 0`. FAULT∩FAULT hour gaps are blockers.
 
-Largest FDD families in the matrix: AHU-DUCTHI / AHU-SATDEV / ECON-* / FC* / SV-FLATLINE / SV-STALE (N/A vs PASS on wrong equipment + hour deltas on AHUs).
+Largest FDD class: vibe19 `NOT_APPLICABLE_EQUIPMENT_TYPE` rows omitted by Rust (750) plus skip-vs-PASS (174+118). Sensor/motor analytic tables add ~1100 numeric blockers (schema/denominator seams, not catalog-count parity).
 
-Accepted only: CHW-1 skip/off, SCHED-247 pressure-not-fault, FC7 concept_only, rust `weather`/`unknown` extra equipment, SQL-only analytics ids vs pandas findings.
+Vibe19 diagnostic dump did **not** emit `vav_health_matrix.csv`; OpenFDD did. That is export lag on vibe19 (Prompt 2), not a 4.3.0 pin — the image already imports 4.4.0 / `vav_health_matrix_v1`.
 
-## Code landed this wave (needs GHCR `:nightly` to soak)
-
-- Per-row `wattlab_parity_diff.py` + `diff_matrix.csv`
-- Rust bundle assembler (same filenames as Vibe19)
-- `equipment_kinds` on registry + `NOT_APPLICABLE_EQUIPMENT_TYPE` in `/api/fdd/results`
-- Ranked `fan_status` > `fan_cmd` on AHU/ECON/FC/OA/DMP/VLV/TRIM-1 SQL
-- FC2 mix_tol no longer cancels (`mat+tol < min(rat,oat)-tol`)
-- CHW-2/3/4 hydronic proof CTE
-- SV-STALE no longer filters fan_cmd (pandas `always`); required_roles empty
-- SV-FLATLINE/RANGE/SPIKE `equipment_energized` (fan → pump → compressor)
-- VAV-1 occupied-only when `occ_mode` present (no fan_cmd required)
-- VAV-3/4/5/7/REHEAT/AHU-LEAVE fan_on + FLOW_ON_MIN
-- CW-OPT/APR/FAN + TRIM-3/4 hydronic proof (missing proof → 0 h)
-- HP-1 compressor/fan ranked proof; FC4/PID fan_status over cmd
-- New APIs: `/api/analytics/setpoints`, `/diurnal`, `/topology`, `/sensor-stats`
-- Vibe19 `topology.csv` now gets `vav_to_ahu` + `parent_ahu`
-
-## After tip image
-
-Pull `ghcr.io/bbartling/openfdd-central:nightly` (no local docker build). Re-run:
+## Commands
 
 ```bash
-python scripts/wattlab_parity_ofdd_rust_bundle.py
-python scripts/wattlab_parity_diff.py
+python3 scripts/wattlab_parity_oracle_dump.py
+OPENFDD_ADMIN_PASSWORD=… python3 scripts/wattlab_parity_ofdd_rust_bundle.py
+python3 scripts/wattlab_parity_diff.py
 ```
 
-Stop rule: `blocker_count == 0`. Promote `parity_status` to `duration_parity` per rule when FAULT∩FAULT hours match ±0.05 h / 0.1%.
-
-Runtime: `open_fdd.__version__ == 4.3.0` (no PyPI bump; SQL ships in the image).
+No local `docker build`. Pin `OPENFDD_IMAGE_TAG=sha-9e280ae`.

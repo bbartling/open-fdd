@@ -1,88 +1,76 @@
-# WattLab / Vibe19 parity — Building 100 (OpenFDD 4.3.0)
+# WattLab / Vibe19 parity — Building 100 (OpenFDD 4.4.0)
 
-## Current cycle (synthetic 59)
+New dump-vs-dump cycle 2026-08-15. Oracle is GHCR vibe19 `docker exec scripts/agent_afdd.py` (not `tools/wattlab_export`). OpenFDD is DataFusion JWT APIs (`wattlab_parity_ofdd_rust_bundle.py`).
 
-**Live working copy for this cycle:** [`reports/wattlab-parity/BUGREPORT_WATTLAB_VIBE19_PARITY.md`](../../reports/wattlab-parity/BUGREPORT_WATTLAB_VIBE19_PARITY.md) — primary fixture is the **synthetic 59-rule** golden soak (Vibe19 **58/59**, OpenFDD SQL **42/59**, shared `confirm_min=0` tuning). **B100 dump-parity soak remains paused**; see [`BUGREPORT_WATTLAB_DUMP_PARITY.md`](BUGREPORT_WATTLAB_DUMP_PARITY.md) for the historical dump matrix only.
+Working copy: `reports/wattlab-parity/` (gitignored artifacts).
 
-The narrative below is the earlier Building 100 / engineering-bundle context and is retained for reference.
+## Cycle header
 
----
-
-Oracle is **playground Vibe19** (`py-bacnet-stacks-playground/vibe_code_apps_19`) + live `open-fdd` 4.3.x (PR `#707`), **not** `tools/wattlab_export` and **not** `--skip-rules`.
-
-A working copy also lives at `reports/wattlab-parity/BUGREPORT_WATTLAB_VIBE19_PARITY.md` (gitignored `/reports/`).
-
-## Versions
-
-| Side | Version / SHA |
+| Side | Value |
 | --- | --- |
-| OpenFDD Python | **4.3.0** (not 3.0.1 / 4.2.0) |
-| Python git | `0bb85fe` (occupied strings + hydronic ungate + lean `apply_normalized`) |
-| PyPI 4.3.0 wheel catalog hash | `097eeda2282a17e785e70f1e9f941c554a8eeeb294ae581746d4d3c21b2e6072` |
-| Live catalog hash (repo tree, `sql_rules/` visible) | `5acedd0ddc0bd91e0307539c4f029683197c995fdabb111412b760e74568d274` |
-| Vibe19 app | playground PR `#86` |
-| Rust central image | `ghcr.io/bbartling/openfdd-central:sha-2ce9c21` → health `3.3.0+2ce9c212a8b4` |
-| Bundle schema | `openfdd_engineering_bundle_v1` (`legacy_schema_version`: `wattlab_dump_v3`) |
+| Date | 2026-08-15 |
+| OpenFDD git | `9e280ae` |
+| OpenFDD image | `ghcr.io/bbartling/openfdd-*:sha-9e280ae` |
+| Central health | `3.3.0+9e280ae294b0` |
+| `/api/fdd/rules` | **66** (62 pandas + 4 SQL analytics) |
+| PyPI / vibe19 wheel | **4.4.0** catalog hash `2e684dbb8f3188f06942c3cb0155aef4149713e7244b9f7733262f182465cba9` |
+| Vibe19 image | `:latest` == `:develop` digest `sha256:6a4297b9d461befdba19891a087e6a4ef26af345aff0e5b1274756f528e6f54d` rev `8ca6a3b` |
 | Package | `/home/ben/raw_BUILDING_100_openfdd.zip` sha256 `5a8d9ff2…` |
-| Gate 0 schedule | `fixtures/schedule_b100_7to5.json` (America/Chicago, 07:00–17:00 M–F) |
+| Gate 0 | PUT kept `occupancy_schedule` (no disk restore) |
+| Mech cooling | `web_oa_t` peak **70–75 / 204.58 h**, total **1156.5** |
+| VAV Health (OpenFDD after FDD) | `1/3`: 22, `2/3`: 19, `?/3`: 2 (not all unknown) |
+| `diff_summary.json` | **2596 blockers**, 63 accepted, 4233 rows, `stop_rule_met=false` |
 
-Wheel vs repo catalog hashes differ because `effective_catalog()` reads `sql_rules/registry.yaml` next to the repo root; a site-packages install does not ship that file. Both hashes are accepted by the Vibe19 pin.
+VAV Health is an analytic, not a 63rd diagnostic.
 
-## Before / after
+## Measured blockers (honest)
 
-| | Previous oracle | This run |
+Primary families from `diff_matrix.csv` (`severity=blocker`):
+
+| Artifact | Blockers | Notes |
 | --- | --- | --- |
-| Oracle tree | `tools/wattlab_export` | playground `vibe_code_apps_19` |
-| Rules | `--skip-rules` | `--run-all` → **2832** rows (48 × 59) |
-| Schema | `wattlab_dump_v3` | `openfdd_engineering_bundle_v1` + legacy v3 |
-| Zip | (skip-rules dump) | **7.7 MiB** (`vibe19_oracle_summary.zip`) |
-| Timing | n/a (no rules) | rules **104.1 s** / analytics **9.2 s** / serialization **540.3 s** / zip **2.8 s** |
-| Rust | `3.3.0+a2cca15` (1818 cached rows) | pulled `sha-2ce9c21`, `POST /api/fdd/run`, 1817 rows |
-| Diff stop rule | met only because findings were deferred | **`blocker_count=0`** with rules on |
+| `fdd_findings` | 1429 | See pairs below |
+| sensor_* tables | ~1037 | hour/row schema seams vs pandas dump |
+| `motor_weekly` / `motor_hours` | 83 | |
+| RCx / schedule inference | 47 | |
 
-Serialization is still the long pole (shared telemetry + parquet + findings). Quality no longer triples frames; Building 100 fits in ~2.3 GiB RSS on an 8 GiB host (previous apply_normalized insert loop was OOM-killed).
+FDD status pairs (oracle → OpenFDD):
 
-## Status counts (pandas oracle)
+| vibe19 | ofdd | n |
+| --- | --- | --- |
+| `NOT_APPLICABLE_EQUIPMENT_TYPE` | *(row omitted)* | 750 |
+| `SKIPPED_EQUIPMENT_OFF` | `PASS` | 174 |
+| `SKIPPED_MISSING_ROLES` | `PASS` | 118 |
+| `SKIPPED_MISSING_ROLES` | omitted | 112 |
+| `FAULT` ∩ `FAULT` hour gap | | 97 |
+| `FAULT` vs `PASS` | | 66 |
+| `PASS` vs `FAULT` | | 51 |
+| skip vs `FAULT` | | 56 |
 
-| Status | Count |
-| --- | ---: |
-| NOT_APPLICABLE_EQUIPMENT_TYPE | 2108 |
-| SKIPPED_EQUIPMENT_OFF | 210 |
-| FAULT | 191 |
-| SKIPPED_MISSING_ROLES | 180 |
-| PASS | 143 |
-| **Total** | **2832** |
+SQL omitted N/A rows (863) is the largest FDD class: vibe19 emits N/A per equipment; Rust omits the row. Product follow-on: emit `NOT_APPLICABLE_EQUIPMENT_TYPE` for every (rule, equipment) in the vibe19 universe **or** drop N/A from the oracle dump before compare.
 
-Rust DataFusion: 1627 PASS / 168 FAULT / 22 SKIPPED_MISSING_ROLES (no N/A cartesian; extra SQL analytics ids).
+FAULT∩FAULT hour deltas remain **blockers** (not accepted). Highest-count rules in the FDD blocker set include AHU-SIMUL, CHW-2/3/4, CW-*, ECON-3/5/7, FC5/6/7, OAT-METEO, SV-RATE (48 equipment each — mostly N/A omit).
 
-## Intentional calculation changes (accepted, not blockers)
+## Accepted / consumer lag
 
-- **CHW-1**: missing hydronic proof → `SKIPPED_MISSING_ROLES`; zeros → `SKIPPED_EQUIPMENT_OFF`. SQL often omits the row or reports 0 h.
-- **SCHED-247**: pressure is inferred runtime only; pandas PASS vs SQL FAULT on AHU duct static is 4.3.0 pressure-not-fault.
-- **Occupied / unoccupied strings**: quality no longer marks them `NON_NUMERIC` (fixes SCHED-1 skip).
-- **Hydronic missing proof**: `equipment_energized` continues instead of treating `missing_proof` as off (SV-RANGE / RCx on plants).
-- **`parent_ahu`**: parser recognizes the Building 100 header; AHU_* is never mapped to tower `100`. Observed topology rows without a VAV folder are not `stale_map_ids`.
-- **SQL `sql_screening`**: inventory is not at `mask_parity`. SQL runs all equipment types, lacks pandas skip/off gates, and uses `FC13-SAT-HIGH` as the FC13 alias. Rollup in `diff_summary.json` (`sql_screening_rollup`).
+- `vav_health_matrix.csv` missing from vibe19 **diagnostic** dump even though the image wheel is **4.4.0** and `open_fdd.analytics.vav_health` imports. OpenFDD bundle wrote the matrix. Prompt 2 (Streamlit/WattLab export) still needed on the vibe19 repo — not an OpenFDD SQL bug.
+- Rust extra `weather`/`unknown` equipment vs pandas 48-equip universe.
+- Bundle `topology.csv` empty (`missing_table:topology.csv`) — assembler gap, filed as missing_apis on capture.
+- Oracle quality flags / setpoints calendar medians without a matching Rust route (pre-existing product gaps).
 
-## Remaining OpenFDD work (not blockers this wave)
+## Not done this cycle
 
-Numeric DataFusion hours still diverge on applicable FAULT∩FAULT pairs (AHU-DUCTHI, AHU-SATDEV, ECON-*, FC*) — confirm windows / fan gates. Next wave should promote selected rules from `sql_screening` → `mask_parity` in SQL, not by weakening Vibe19.
+- No greenwash of `expected_faults.csv`.
+- No FC7 parity promotion (needs executable fixtures, not this B100 matrix).
+- No Windows Prompt 2 edits.
 
-No PyPI **4.3.1** bump: pandas API is compatible; occupied-string + lean normalize ship in git/`master` after merge. Image SQL-only changes can ship without a wheel.
+## Commands used
 
-## Bundle / React / Rust readers
-
-Accept **either**:
-
-- `schema_version == openfdd_engineering_bundle_v1`, or
-- `legacy_schema_version == wattlab_dump_v3` / `schema_version == wattlab_dump_v3`
-
-New writes use `README.md` (still emit `README_WATTLAB.md` alias). `calibration_readiness.json` labels fuel + local TZ + geometry missing — do not treat `model_seed.json` as a calibrated EnergyPlus model.
-
-## Runtime confirmation
-
+```bash
+docker pull ghcr.io/bbartling/openfdd-central:sha-9e280ae  # + web/mqtt/fieldbus
+docker pull ghcr.io/bbartling/vibe19:latest
+./scripts/openfdd_stack_up.sh react-ot --no-pull
+python3 scripts/wattlab_parity_oracle_dump.py
+OPENFDD_ADMIN_PASSWORD=… python3 scripts/wattlab_parity_ofdd_rust_bundle.py
+python3 scripts/wattlab_parity_diff.py
 ```
-open_fdd.__version__ == 4.3.0
-```
-
-Host 3.0.1 and Vibe19 `.venv` 4.2.0 are refused by `app.openfdd_runtime.require_supported_open_fdd()`.
