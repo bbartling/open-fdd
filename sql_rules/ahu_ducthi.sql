@@ -1,4 +1,8 @@
 -- ahu_ducthi.sql — Duct static pressure high
+-- Equation: static > SP + DUCT_HIGH_MARGIN.
+-- Gate: fan-on from fan_status then fan_cmd. Missing fan stays NULL
+-- (do not ELSE 1). Pressure-on substitutes only when fan proof is absent,
+-- never when status/cmd is proven 0 (frozen overnight static).
 WITH h AS (
   SELECT
     equipment_id,
@@ -8,9 +12,8 @@ WITH h AS (
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
-      ELSE 1
+      ELSE NULL
     END AS fan_on
-
   FROM history
 ),
 base AS (
@@ -19,8 +22,11 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN duct_static IS NULL OR duct_static_sp IS NULL THEN 0
-      WHEN (COALESCE(fan_on, 0) = 1 OR duct_static > {{PRESSURE_ON_MIN}})
-       AND duct_static > duct_static_sp + {{DUCT_HIGH_MARGIN}} THEN 1
+      WHEN fan_on = 0 THEN 0
+      WHEN fan_on = 1 AND duct_static > duct_static_sp + {{DUCT_HIGH_MARGIN}} THEN 1
+      WHEN fan_on IS NULL
+           AND ABS(duct_static) > {{PRESSURE_ON_MIN}}
+           AND duct_static > duct_static_sp + {{DUCT_HIGH_MARGIN}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

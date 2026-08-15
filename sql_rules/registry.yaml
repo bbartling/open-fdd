@@ -523,6 +523,15 @@ rules:
         unit: degF
         frontend_control: slider
         sql_placeholder: ECON1_OAT_MIN
+      econ1_damper_max:
+        label: Stuck-closed damper frac
+        default: 0.05
+        min: 0.0
+        max: 0.2
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON1_DAMPER_MAX
 
   - rule_id: ECON-4
     equipment_kinds: [ahu]
@@ -1904,7 +1913,7 @@ rules:
     pandas_function: null
     description: Chiller running with no building load
     required_roles: []
-    optional_roles: [chiller_status, chw_pump_status, chw_pump_cmd, building_zone_load_satisfied]
+    optional_roles: [chiller_status, chiller_cmd, chw_pump_status, chw_pump_cmd, building_zone_load_satisfied, building_ahu_load_satisfied]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening

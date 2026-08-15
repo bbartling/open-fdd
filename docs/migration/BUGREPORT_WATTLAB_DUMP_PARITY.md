@@ -17,7 +17,9 @@ OpenFDD: DataFusion assembler [`scripts/wattlab_parity_ofdd_rust_bundle.py`](../
 
 Stop rule remains `blocker_count == 0`. FAULT∩FAULT hour gaps are blockers.
 
-Largest FDD class: vibe19 `NOT_APPLICABLE_EQUIPMENT_TYPE` rows omitted by Rust (750) plus skip-vs-PASS (174+118). Sensor/motor analytic tables add ~1100 numeric blockers (schema/denominator seams, not catalog-count parity).
+Program A (this cycle) patches SQL for AHU-DUCTHI / ECON-1 / ECON-2 / CHW-NOLOAD-1 and treats N/A-omit plus one-sided sensor columns as **accepted**. Re-count blockers after `sha-<7>` retarget. Stop rule remains `blocker_count == 0`.
+
+Largest FDD class previously: vibe19 `NOT_APPLICABLE_EQUIPMENT_TYPE` rows omitted by Rust (750) plus skip-vs-PASS. Those are no longer dump blockers. Remaining blockers should be FAULT vs PASS and FAULT∩FAULT hour gaps.
 
 Vibe19 diagnostic dump did **not** emit `vav_health_matrix.csv`; OpenFDD did. That is export lag on vibe19 (Prompt 2), not a 4.3.0 pin — the image already imports 4.4.0 / `vav_health_matrix_v1`.
 

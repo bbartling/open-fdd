@@ -2322,7 +2322,9 @@
       "pandas_implementation": "econ2",
       "datafusion_sql_implementation": "economizer_fault.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#econ-2",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/test_wattlab_parity_diff.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -9261,14 +9263,14 @@
           "case": "normal",
           "path": "crates/fdd_rules/fixtures/oracle/AHU-DUCTHI/normal",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "fault",
           "path": "crates/fdd_rules/fixtures/oracle/AHU-DUCTHI/fault",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
@@ -9289,7 +9291,7 @@
           "case": "equipment_off",
           "path": "crates/fdd_rules/fixtures/oracle/AHU-DUCTHI/equipment_off",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
@@ -9725,6 +9727,16 @@
           "unit": "degF",
           "frontend_control": "slider",
           "sql_placeholder": "ECON1_OAT_MIN"
+        },
+        "econ1_damper_max": {
+          "label": "Stuck-closed damper frac",
+          "default": 0.05,
+          "min": 0.0,
+          "max": 0.2,
+          "step": 0.01,
+          "unit": "frac",
+          "frontend_control": "slider",
+          "sql_placeholder": "ECON1_DAMPER_MAX"
         }
       },
       "time_semantics": "row_or_interval_per_sql_file",
@@ -9737,14 +9749,14 @@
           "case": "normal",
           "path": "crates/fdd_rules/fixtures/oracle/ECON-1/normal",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "fault",
           "path": "crates/fdd_rules/fixtures/oracle/ECON-1/fault",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
@@ -9779,7 +9791,7 @@
           "case": "irregular_sampling",
           "path": "crates/fdd_rules/fixtures/oracle/ECON-1/irregular_sampling",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
@@ -9869,7 +9881,9 @@
       "sql_file": "economizer_fault.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#econ-2",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#econ-2",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/test_wattlab_parity_diff.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -9919,14 +9933,14 @@
           "case": "normal",
           "path": "crates/fdd_rules/fixtures/oracle/ECON-2/normal",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "fault",
           "path": "crates/fdd_rules/fixtures/oracle/ECON-2/fault",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
@@ -9947,7 +9961,7 @@
           "case": "equipment_off",
           "path": "crates/fdd_rules/fixtures/oracle/ECON-2/equipment_off",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
@@ -11197,14 +11211,14 @@
           "case": "normal",
           "path": "crates/fdd_rules/fixtures/oracle/CHW-NOLOAD-1/normal",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
           "case": "fault",
           "path": "crates/fdd_rules/fixtures/oracle/CHW-NOLOAD-1/fault",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {
@@ -11218,7 +11232,7 @@
           "case": "missing_required_role",
           "path": "crates/fdd_rules/fixtures/oracle/CHW-NOLOAD-1/missing_required_role",
           "required": true,
-          "present": false,
+          "present": true,
           "oracle_seed": false
         },
         {

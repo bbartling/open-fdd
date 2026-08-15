@@ -1,0 +1,4 @@
+col,point_role
+chiller_status,chiller-status
+chw_pump_cmd,chw-pump-cmd
+building_zone_load_satisfied,building-zone-load-satisfied

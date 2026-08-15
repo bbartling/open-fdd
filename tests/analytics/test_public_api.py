@@ -15,6 +15,8 @@ def test_analytics_public_exports():
         "dataset_time_span",
         "equipment_type_from_id",
         "zone_comfort_fail_ranking",
-        "aggregate_load_satisfaction",
+        "vav_health_matrix",
+        "mech_cooling_oat_bins",
+        "dump_tables",
     ):
         assert hasattr(a, name), name

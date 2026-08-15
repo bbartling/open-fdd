@@ -16,7 +16,9 @@ pub use role_rank::{is_zone_t_limit_or_alarm_column, score_column_for_role};
 pub use error::CoreError;
 pub use models::*;
 pub use units::{
-    celsius_to_fahrenheit, fahrenheit_to_celsius, is_metric_unit_system, is_temperature_role,
-    metric_select_list, sql_temp_to_fahrenheit, sql_with_metric_to_imperial, TEMPERATURE_ROLES,
+    celsius_to_fahrenheit, fahrenheit_to_celsius, is_flow_role, is_metric_unit_system,
+    is_pressure_role, is_temperature_role, lps_to_cfm, metric_select_list, pa_to_in_wc,
+    sql_temp_to_fahrenheit, sql_with_metric_to_imperial, FLOW_ROLES, PRESSURE_ROLES,
+    TEMPERATURE_ROLES,
 };
 pub use validate::{validate_building, ValidationReport};
