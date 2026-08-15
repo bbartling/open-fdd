@@ -37,12 +37,7 @@ pub fn is_metric_unit_system(unit_system: &str) -> bool {
 pub const PRESSURE_ROLES: &[&str] = &["duct_static", "duct_static_sp"];
 
 /// Volumetric flow cookbook roles stored as L/s when `unit_system` is metric|si.
-pub const FLOW_ROLES: &[&str] = &[
-    "zone_flow",
-    "vav_total_flow",
-    "min_flow_sp",
-    "chw_flow",
-];
+pub const FLOW_ROLES: &[&str] = &["zone_flow", "vav_total_flow", "min_flow_sp", "chw_flow"];
 
 /// Pascal per inch of water column (I-P static used by SQL placeholders).
 pub const PA_PER_IN_WC: f64 = 248.84;
