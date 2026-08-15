@@ -1,6 +1,6 @@
-# WattLab / Vibe19 parity — Building 100 (OpenFDD 4.4.1 / `sha-8ab0b5e`)
+# WattLab / Vibe19 parity — Building 100 (OpenFDD 4.4.1 / `sha-2c12c8e`)
 
-Dump-vs-dump after Program A SQL patches (PR **#725**). Oracle remains GHCR vibe19 until Windows Prompt 2 pins PyPI **4.4.1**. OpenFDD is DataFusion JWT APIs.
+Dump-vs-dump after ECON-1/2 SQL follow-on (PR **#727**). Oracle remains GHCR vibe19 until Windows Prompt 2 pins PyPI **4.4.1**. OpenFDD is DataFusion JWT APIs. GHCR `:nightly` digest matches `sha-2c12c8e`.
 
 Working copy: `reports/wattlab-parity/` (gitignored artifacts).
 
@@ -9,25 +9,24 @@ Working copy: `reports/wattlab-parity/` (gitignored artifacts).
 | Side | Value |
 | --- | --- |
 | Date | 2026-08-15 |
-| OpenFDD git | `8ab0b5e` (#725) |
-| OpenFDD image | `ghcr.io/bbartling/openfdd-*:sha-8ab0b5e` |
-| Central health | `3.3.0+8ab0b5e347d8` |
+| OpenFDD git | `2c12c8e` (#727) |
+| OpenFDD image | `ghcr.io/bbartling/openfdd-*:sha-2c12c8e` |
+| Central health | `3.3.0+2c12c8e814a8` |
 | `/api/fdd/rules` | **66** (62 pandas + 4 SQL analytics) |
 | PyPI (vibe19 should pin) | **4.4.1** (`open-fdd-v4.4.1`) |
 | Vibe19 image wheel today | still **4.4.0** until Prompt 2 |
 | Vibe19 image | `:latest` digest `sha256:6a4297b9…e6f54d` |
 | Gate 0 | PUT kept `occupancy_schedule` |
-| Mech cooling | `web_oa_t` peak **70–75 / 204.58 h**, total **1156.5** (unchanged this pin) |
 | `diff_summary.json` | **405 blockers**, 2690 accepted, 3260 rows, `stop_rule_met=false` |
 
-Prior cycle (`sha-9e280ae`): **2596** blockers. Drop is mostly A2 classifier (N/A-omit + one-sided columns), plus DUCTHI/CHW SQL.
+Prior cycle (`sha-8ab0b5e`): also **405** blockers. ECON SQL follow-on did not reduce the dump-vs-dump count.
 
-## Four-rule soak (`sha-8ab0b5e`)
+## Four-rule soak (`sha-2c12c8e`)
 
 | ID | pandas | SQL | Outcome |
 | --- | ---: | ---: | --- |
-| AHU-DUCTHI AHU_2 | 0.5 h FAULT | 1.83 h FAULT | Fan-off 7" static gone (was 1341 h) |
-| ECON-2 AHU_1 | 0 h PASS | 952.5 h FAULT | Still open |
+| AHU-DUCTHI AHU_2 | 0.5 h FAULT | 1.83 h FAULT | Unchanged residual |
+| ECON-2 AHU_1 | 0 h PASS | 1422.92 h FAULT | Still open (was 952.5 h; fan AND removed, damper still raw-class) |
 | ECON-1 AHU_1 | 326 h FAULT | 0 h PASS | Still open |
 | CHW-NOLOAD-1 CHILLER_2 | 524.5 h FAULT | SKIPPED_MISSING_ROLES | No false PASS |
 
@@ -51,7 +50,7 @@ Stop rule remains `blocker_count == 0`. Remaining FDD blockers are real FAULT/PA
 ## Commands
 
 ```bash
-export OPENFDD_IMAGE_TAG=sha-8ab0b5e
+export OPENFDD_IMAGE_TAG=sha-2c12c8e
 ./scripts/openfdd_stack_up.sh react-ot --no-pull
 OPENFDD_ADMIN_PASSWORD=… python3 scripts/wattlab_parity_ofdd_rust_bundle.py
 python3 scripts/wattlab_parity_diff.py
