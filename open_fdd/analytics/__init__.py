@@ -18,6 +18,7 @@ from open_fdd.analytics.runtime_intervals import (
     interval_durations,
 )
 from open_fdd.analytics.site_model import equipment_type_from_id, resolve_equipment_type
+from open_fdd.analytics.dump import DUMP_FILENAMES, dump_tables
 from open_fdd.analytics.vav_health import vav_health_matrix, vav_health_summary
 
 __all__ = [
@@ -29,6 +30,8 @@ __all__ = [
     "collect_meter_frames",
     "dataset_time_span",
     "day_type_series",
+    "dump_tables",
+    "DUMP_FILENAMES",
     "equipment_type_from_id",
     "hours_under_mask",
     "infer_poll_seconds",

@@ -10,7 +10,7 @@ Open-FDD executes production fault detection as **DataFusion SQL** against Apach
 
 **Pandas mirror:** the [Pandas cookbook](pandas-cookbook.html) documents the **62**-rule PyPI oracle (`open_fdd.rules`). Do **not** treat “62” as the production registry size. See [parity matrix](parity-matrix.html) and the [generated parity report](generated-parity-report.html).
 
-**Updated:** 2026-08-14 · PyPI `open-fdd` 4.4.0
+**Updated:** 2026-08-15 · PyPI `open-fdd` 4.4.1
 
 ---
 

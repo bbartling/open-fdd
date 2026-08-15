@@ -1,0 +1,8 @@
+{
+  "pandas_rule_id": "ECON-1",
+  "equipment_id": "EQ_1",
+  "equipment_type": "AHU",
+  "poll_seconds": 300,
+  "any_fault": true,
+  "datafusion_compare": "pending"
+}

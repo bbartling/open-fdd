@@ -137,6 +137,8 @@ async fn inject_optional_fan_cols(
         "chw_pump_status",
         "compressor_status",
         "building_zone_load_satisfied",
+        "building_ahu_load_satisfied",
+        "chiller_cmd",
         "vav_total_flow",
         "occ_mode",
         "hw_reset_request_sum",

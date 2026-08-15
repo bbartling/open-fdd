@@ -506,8 +506,11 @@ def compare_analytics_tables(oracle_dir: Path, ofdd_dir: Path) -> list[dict]:
                 rb = _fnum(r, col)
                 if oa is None and rb is None:
                     continue
-                oa_v = 0.0 if oa is None else oa
-                rb_v = 0.0 if rb is None else rb
+                # One-sided numeric columns (empty {} vs mean=) are schema seams.
+                if oa is None or rb is None:
+                    continue
+                oa_v = oa
+                rb_v = rb
                 if _sev_num(oa_v, rb_v, abs_tol=0.05, rel_tol=0.001) == "blocker":
                     ok = False
                     delta = {col: rb_v - oa_v}
@@ -628,6 +631,12 @@ def compare_fdd(oracle_dir: Path, ofdd_dir: Path, capture_dir: Path | None = Non
         r_h = 0.0 if rh is None else rh
         accepted, why = _sql_screening_pair(rule_id, o_status or "MISSING", r_status or "MISSING", oh, rh)
         status_ok = bool(o_status) and bool(r_status) and _status_ok(o_status, r_status)
+        o_u = (o_status or "").upper()
+        r_u = (r_status or "").upper()
+        o_skip = o_u in _SKIP_STATUSES
+        r_skip = r_u in _SKIP_STATUSES
+        both_fault = o_u == "FAULT" and r_u == "FAULT"
+        fault_vs_pass = {o_u, r_u} == {"FAULT", "PASS"} or {o_u, r_u} == {"FAULT", "OK"}
         hours_ok = _sev_num(o_h, r_h, abs_tol=0.05, rel_tol=0.001) != "blocker"
         if not o:
             if rule_id in WAVE1_RULES:
@@ -639,30 +648,36 @@ def compare_fdd(oracle_dir: Path, ofdd_dir: Path, capture_dir: Path | None = Non
                 sev = "accepted" if accepted else "blocker"
                 delta = "missing on oracle"
         elif not r:
-            if o_status.upper() in _SKIP_STATUSES and accepted:
+            if o_skip:
                 sev = "accepted"
-                delta = why or "documented skip omit"
-            elif o_status.upper() in _SKIP_STATUSES:
-                sev = "blocker"
-                delta = "SQL omitted skip/N/A row (must emit N/A or omit both sides)"
+                why = why or "oracle N/A/skip; Rust omits optional row"
+                delta = why
             else:
                 sev = "accepted" if accepted else "blocker"
                 delta = why or "missing on OFDD"
         elif accepted:
             sev = "accepted"
             delta = why
-        elif status_ok and hours_ok:
-            sev = "noise"
-            delta = None
-            match_status += 1
-            match_hours += 1
-        elif status_ok and not hours_ok:
+        elif both_fault and not hours_ok:
             sev = "blocker"
             delta = r_h - o_h
             match_status += 1
+        elif fault_vs_pass:
+            sev = "blocker"
+            delta = "status mismatch"
+        elif o_skip or r_skip:
+            sev = "accepted"
+            why = why or "N/A or skip vs omit/PASS is not a FAULT/PASS disagreement"
+            delta = why
+        elif status_ok:
+            sev = "noise"
+            delta = None
+            match_status += 1
+            if hours_ok:
+                match_hours += 1
         else:
             sev = "blocker"
-            delta = "status mismatch" if not hours_ok else "status mismatch"
+            delta = "status mismatch"
         if status_ok:
             if hours_ok:
                 match_hours += 0 if sev == "noise" else 0

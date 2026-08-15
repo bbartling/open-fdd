@@ -1,0 +1,5 @@
+col,point_role
+oa_t,outside-air-temp
+oa_damper_pct,outside-air-damper
+fan_status,fan-status
+fan_cmd,fan-cmd

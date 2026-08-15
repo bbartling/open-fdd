@@ -1,4 +1,6 @@
 -- economizer_fault.sql — ECON-2 economizing when outdoor unfavorable + confirm
+-- Damper > 1 is always percent (20 → 0.20), never compared raw to ECON2_DAMPER.
+-- Missing fan proof is off/skip (ELSE 0), not ELSE 1.
 WITH h AS (
   SELECT
     equipment_id,
@@ -10,9 +12,8 @@ WITH h AS (
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
-      ELSE 1
+      ELSE 0
     END AS fan_on
-
   FROM history
 ),
 base AS (
@@ -20,7 +21,7 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN COALESCE(fan_on, 1) = 0 THEN 0
+      WHEN fan_on = 0 THEN 0
       WHEN oa_t IS NOT NULL AND oa_damper_pct IS NOT NULL
        AND oa_t > {{ECON2_OAT_HI}} AND oa_damper_pct > {{ECON2_DAMPER}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault

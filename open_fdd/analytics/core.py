@@ -1440,6 +1440,7 @@ def _bin_runtime_rows(
     mask: pd.Series,
     nominal_seconds: float,
     bin_width_f: float,
+    unit_system: str = "imperial",
     equipment_type: str = "",
     cooling_technology: str = "",
     proof_role: str = "",
@@ -1459,7 +1460,10 @@ def _bin_runtime_rows(
     if not bool(usable.any()):
         return []
     idx = durations.index[usable.to_numpy()]
-    clamped = oat_aligned.reindex(idx).clip(40, 110)
+    oat_vals = oat_aligned.reindex(idx)
+    metric = str(unit_system).lower() in {"metric", "si"}
+    oat_f = oat_vals * 9.0 / 5.0 + 32.0 if metric else oat_vals
+    clamped = oat_f.clip(40, 110)
     bin_start = (
         np.floor(clamped.to_numpy(dtype=float) / float(bin_width_f)) * float(bin_width_f)
     ).astype(int)
@@ -1483,6 +1487,12 @@ def _bin_runtime_rows(
             continue
         b_i = int(b)
         hours = float(g["seconds"].sum() / 3600.0)
+        if metric:
+            lo_c = (b_i - 32.0) * 5.0 / 9.0
+            hi_c = (b_i + int(bin_width_f) - 32.0) * 5.0 / 9.0
+            label = f"{lo_c:.0f}–{hi_c:.0f}"
+        else:
+            label = f"{b_i}–{b_i + int(bin_width_f)}"
         rows.append(
             {
                 "equipment_id": equipment_id,
@@ -1491,7 +1501,7 @@ def _bin_runtime_rows(
                 "series_kind": series_kind,
                 "series_id": series_id,
                 "bin_start": b_i,
-                "bin_label": f"{b_i}–{b_i + int(bin_width_f)}",
+                "bin_label": label,
                 "hours": round(hours, 2),
                 "runtime_hours": round(hours, 2),
                 "valid_elapsed_hours": round(valid_elapsed, 2),
@@ -1518,6 +1528,7 @@ def mech_cooling_oat_bins(
     clg_valve_thr_pct: float = 5.0,
     include_total: bool = False,
     use_status_proof: bool = True,
+    unit_system: str = "imperial",
 ) -> pd.DataFrame:
     """
     Mechanical cooling run hours binned by OAT (default: web/Open-Meteo dry bulb).
@@ -1560,6 +1571,7 @@ def mech_cooling_oat_bins(
                 mask=run,
                 nominal_seconds=d["poll_seconds"],
                 bin_width_f=bin_width_f,
+                unit_system=unit_system,
                 equipment_type=d["equipment_type"],
                 cooling_technology=d["cooling_technology"],
                 proof_role=d["proof_role"],
@@ -1634,6 +1646,7 @@ def mech_cooling_oat_bins(
                     mask=any_active,
                     nominal_seconds=nominal,
                     bin_width_f=bin_width_f,
+                    unit_system=unit_system,
                     device_count=n_devices,
                 )
             )

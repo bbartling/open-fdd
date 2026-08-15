@@ -34,6 +34,39 @@ pub fn is_metric_unit_system(unit_system: &str) -> bool {
     )
 }
 
+pub const PRESSURE_ROLES: &[&str] = &["duct_static", "duct_static_sp"];
+
+/// Volumetric flow cookbook roles stored as L/s when `unit_system` is metric|si.
+pub const FLOW_ROLES: &[&str] = &[
+    "zone_flow",
+    "vav_total_flow",
+    "min_flow_sp",
+    "chw_flow",
+];
+
+/// Pascal per inch of water column (I-P static used by SQL placeholders).
+pub const PA_PER_IN_WC: f64 = 248.84;
+/// Litres per second per cubic foot per minute.
+pub const LPS_PER_CFM: f64 = 0.471947;
+
+pub fn is_pressure_role(role: &str) -> bool {
+    let r = role.trim().to_ascii_lowercase();
+    PRESSURE_ROLES.iter().any(|t| *t == r)
+}
+
+pub fn is_flow_role(role: &str) -> bool {
+    let r = role.trim().to_ascii_lowercase();
+    FLOW_ROLES.iter().any(|t| *t == r)
+}
+
+pub fn pa_to_in_wc(pa: f64) -> f64 {
+    pa / PA_PER_IN_WC
+}
+
+pub fn lps_to_cfm(lps: f64) -> f64 {
+    lps / LPS_PER_CFM
+}
+
 pub fn is_temperature_role(role: &str) -> bool {
     let r = role.trim().to_ascii_lowercase();
     if r == "dry_bulb_f" {
@@ -98,6 +131,10 @@ pub fn metric_select_list(columns: &[String]) -> String {
             let ident = c.replace('"', "");
             if is_temperature_role(&ident) {
                 format!("((\"{ident}\" * 9.0 / 5.0) + 32.0) AS \"{ident}\"")
+            } else if is_pressure_role(&ident) {
+                format!("(\"{ident}\" / {PA_PER_IN_WC}) AS \"{ident}\"")
+            } else if is_flow_role(&ident) {
+                format!("(\"{ident}\" / {LPS_PER_CFM}) AS \"{ident}\"")
             } else {
                 format!("\"{ident}\"")
             }
@@ -144,8 +181,17 @@ mod tests {
             !sql_with_metric_to_imperial(sql, &["sat".into()], &[], "imperial")
                 .contains("history_si")
         );
-        let sel = metric_select_list(&["timestamp".into(), "sat".into(), "fan_cmd".into()]);
+        let sel = metric_select_list(&["timestamp".into(), "sat".into(), "duct_static".into()]);
         assert!(sel.contains("* 9.0 / 5.0"));
         assert!(sel.contains("AS \"sat\""));
+        assert!(sel.contains("/ 248.84"));
+    }
+
+    #[test]
+    fn pressure_and_flow_round_trip() {
+        assert!((pa_to_in_wc(248.84) - 1.0).abs() < 1e-9);
+        assert!((lps_to_cfm(0.471947) - 1.0).abs() < 1e-6);
+        assert!(is_pressure_role("duct_static"));
+        assert!(is_flow_role("zone_flow"));
     }
 }

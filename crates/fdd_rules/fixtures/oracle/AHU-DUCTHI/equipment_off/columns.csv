@@ -1,0 +1,5 @@
+col,point_role
+duct_static,duct-static-pressure
+duct_static_sp,duct-static-pressure-sp
+fan_status,fan-status
+fan_cmd,fan-cmd
