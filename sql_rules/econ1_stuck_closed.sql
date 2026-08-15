@@ -17,7 +17,7 @@ WITH h AS (
         WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1
         ELSE 0
       END
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.5 THEN 1 ELSE 0 END
       ELSE 0
     END AS fan_on
   FROM history
