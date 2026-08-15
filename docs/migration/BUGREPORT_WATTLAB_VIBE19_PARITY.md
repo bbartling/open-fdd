@@ -1,6 +1,6 @@
-# WattLab / Vibe19 parity — Building 100 (OpenFDD 4.4.0)
+# WattLab / Vibe19 parity — Building 100 (OpenFDD 4.4.1 / `sha-8ab0b5e`)
 
-New dump-vs-dump cycle 2026-08-15. Oracle is GHCR vibe19 `docker exec scripts/agent_afdd.py` (not `tools/wattlab_export`). OpenFDD is DataFusion JWT APIs (`wattlab_parity_ofdd_rust_bundle.py`).
+Dump-vs-dump after Program A SQL patches (PR **#725**). Oracle remains GHCR vibe19 until Windows Prompt 2 pins PyPI **4.4.1**. OpenFDD is DataFusion JWT APIs.
 
 Working copy: `reports/wattlab-parity/` (gitignored artifacts).
 
@@ -9,68 +9,50 @@ Working copy: `reports/wattlab-parity/` (gitignored artifacts).
 | Side | Value |
 | --- | --- |
 | Date | 2026-08-15 |
-| OpenFDD git | `9e280ae` |
-| OpenFDD image | `ghcr.io/bbartling/openfdd-*:sha-9e280ae` |
-| Central health | `3.3.0+9e280ae294b0` |
+| OpenFDD git | `8ab0b5e` (#725) |
+| OpenFDD image | `ghcr.io/bbartling/openfdd-*:sha-8ab0b5e` |
+| Central health | `3.3.0+8ab0b5e347d8` |
 | `/api/fdd/rules` | **66** (62 pandas + 4 SQL analytics) |
-| PyPI / vibe19 wheel | **4.4.0** catalog hash `2e684dbb8f3188f06942c3cb0155aef4149713e7244b9f7733262f182465cba9` |
-| Vibe19 image | `:latest` == `:develop` digest `sha256:6a4297b9d461befdba19891a087e6a4ef26af345aff0e5b1274756f528e6f54d` rev `8ca6a3b` |
-| Package | `/home/ben/raw_BUILDING_100_openfdd.zip` sha256 `5a8d9ff2…` |
-| Gate 0 | PUT kept `occupancy_schedule` (no disk restore) |
-| Mech cooling | `web_oa_t` peak **70–75 / 204.58 h**, total **1156.5** |
-| VAV Health (OpenFDD after FDD) | `1/3`: 22, `2/3`: 19, `?/3`: 2 (not all unknown) |
-| `diff_summary.json` | **2596 blockers**, 63 accepted, 4233 rows, `stop_rule_met=false` |
+| PyPI (vibe19 should pin) | **4.4.1** (`open-fdd-v4.4.1`) |
+| Vibe19 image wheel today | still **4.4.0** until Prompt 2 |
+| Vibe19 image | `:latest` digest `sha256:6a4297b9…e6f54d` |
+| Gate 0 | PUT kept `occupancy_schedule` |
+| Mech cooling | `web_oa_t` peak **70–75 / 204.58 h**, total **1156.5** (unchanged this pin) |
+| `diff_summary.json` | **405 blockers**, 2690 accepted, 3260 rows, `stop_rule_met=false` |
 
-VAV Health is an analytic, not a 63rd diagnostic.
+Prior cycle (`sha-9e280ae`): **2596** blockers. Drop is mostly A2 classifier (N/A-omit + one-sided columns), plus DUCTHI/CHW SQL.
 
-## Measured blockers (honest)
+## Four-rule soak (`sha-8ab0b5e`)
 
-Primary families from `diff_matrix.csv` (`severity=blocker`):
+| ID | pandas | SQL | Outcome |
+| --- | ---: | ---: | --- |
+| AHU-DUCTHI AHU_2 | 0.5 h FAULT | 1.83 h FAULT | Fan-off 7" static gone (was 1341 h) |
+| ECON-2 AHU_1 | 0 h PASS | 952.5 h FAULT | Still open |
+| ECON-1 AHU_1 | 326 h FAULT | 0 h PASS | Still open |
+| CHW-NOLOAD-1 CHILLER_2 | 524.5 h FAULT | SKIPPED_MISSING_ROLES | No false PASS |
 
-| Artifact | Blockers | Notes |
-| --- | --- | --- |
-| `fdd_findings` | 1429 | See pairs below |
-| sensor_* tables | ~1037 | hour/row schema seams vs pandas dump |
-| `motor_weekly` / `motor_hours` | 83 | |
-| RCx / schedule inference | 47 | |
+## Measured blockers
 
-FDD status pairs (oracle → OpenFDD):
+| Artifact | Blockers |
+| --- | ---: |
+| `fdd_findings` | 217 |
+| `sensor_diurnal_24h.csv` | 89 |
+| `sensor_stats_fan_off.csv` | 74 |
+| `sensor_stats_all.csv` | 21 |
+| other | 4 |
 
-| vibe19 | ofdd | n |
-| --- | --- | --- |
-| `NOT_APPLICABLE_EQUIPMENT_TYPE` | *(row omitted)* | 750 |
-| `SKIPPED_EQUIPMENT_OFF` | `PASS` | 174 |
-| `SKIPPED_MISSING_ROLES` | `PASS` | 118 |
-| `SKIPPED_MISSING_ROLES` | omitted | 112 |
-| `FAULT` ∩ `FAULT` hour gap | | 97 |
-| `FAULT` vs `PASS` | | 66 |
-| `PASS` vs `FAULT` | | 51 |
-| skip vs `FAULT` | | 56 |
+Stop rule remains `blocker_count == 0`. Remaining FDD blockers are real FAULT/PASS and FAULT∩FAULT hours.
 
-SQL omitted N/A rows (863) is the largest FDD class: vibe19 emits N/A per equipment; Rust omits the row. Product follow-on: emit `NOT_APPLICABLE_EQUIPMENT_TYPE` for every (rule, equipment) in the vibe19 universe **or** drop N/A from the oracle dump before compare.
+## Program B handoff
 
-FAULT∩FAULT hour deltas remain **blockers** (not accepted). Highest-count rules in the FDD blocker set include AHU-SIMUL, CHW-2/3/4, CW-*, ECON-3/5/7, FC5/6/7, OAT-METEO, SV-RATE (48 equipment each — mostly N/A omit).
+- PyPI **4.4.1** is on pypi.org (`dump_tables`, metric bins, vav_health).
+- Windows Cursor: [`docs/agent/VIBE19_PROMPT2_VAV_HEALTH_EXPORT.md`](../agent/VIBE19_PROMPT2_VAV_HEALTH_EXPORT.md) for `vibe_code_apps_19`. bensbench does not edit playground; `docker pull ghcr.io/bbartling/vibe19:latest` only.
 
-## Accepted / consumer lag
-
-- `vav_health_matrix.csv` missing from vibe19 **diagnostic** dump even though the image wheel is **4.4.0** and `open_fdd.analytics.vav_health` imports. OpenFDD bundle wrote the matrix. Prompt 2 (Streamlit/WattLab export) still needed on the vibe19 repo — not an OpenFDD SQL bug.
-- Rust extra `weather`/`unknown` equipment vs pandas 48-equip universe.
-- Bundle `topology.csv` empty (`missing_table:topology.csv`) — assembler gap, filed as missing_apis on capture.
-- Oracle quality flags / setpoints calendar medians without a matching Rust route (pre-existing product gaps).
-
-## Not done this cycle
-
-- No greenwash of `expected_faults.csv`.
-- No FC7 parity promotion (needs executable fixtures, not this B100 matrix).
-- No Windows Prompt 2 edits.
-
-## Commands used
+## Commands
 
 ```bash
-docker pull ghcr.io/bbartling/openfdd-central:sha-9e280ae  # + web/mqtt/fieldbus
-docker pull ghcr.io/bbartling/vibe19:latest
+export OPENFDD_IMAGE_TAG=sha-8ab0b5e
 ./scripts/openfdd_stack_up.sh react-ot --no-pull
-python3 scripts/wattlab_parity_oracle_dump.py
 OPENFDD_ADMIN_PASSWORD=… python3 scripts/wattlab_parity_ofdd_rust_bundle.py
 python3 scripts/wattlab_parity_diff.py
 ```
