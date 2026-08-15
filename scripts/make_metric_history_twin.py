@@ -28,20 +28,22 @@ TEMP_HINTS = (
 
 def is_temp_role(role: str, col: str) -> bool:
     blob = f"{role} {col}".lower()
-    if "dry_bulb_f" in blob and "role" in blob:
+    if "static" in blob or "pressure" in blob:
         return False
-    if col.lower() == "dry_bulb_f":
-        return False
-    if is_pressure_role(role, col) or is_flow_role(role, col):
+    if "flow" in blob or "cfm" in blob:
         return False
     return any(h in blob for h in TEMP_HINTS)
 
 
 PRESSURE_HINTS = (
     "duct_static",
+    "duct-static",
     "static_pressure",
+    "static-pressure",
     "in_wc",
     "inwc",
+    "in_wg",
+    "inwg",
 )
 FLOW_HINTS = (
     "zone_flow",
