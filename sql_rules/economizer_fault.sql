@@ -1,19 +1,17 @@
 -- economizer_fault.sql — ECON-2 economizing when outdoor unfavorable + confirm
--- Damper > 1 is always percent (20 → 0.20), never compared raw to ECON2_DAMPER.
--- Missing fan proof is off/skip (ELSE 0), not ELSE 1.
+-- Damper is damper_frac (never aliased back to oa_damper_pct — DataFusion can
+-- keep the raw same-name column in later CTEs, so 20 > 0.42 would still fire).
+-- Pandas econ2 has no fan gate: OAT > ECON2_OAT_HI AND damper_frac > ECON2_DAMPER.
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
     oa_t,
-    CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END AS oa_damper_pct,
-    fan_cmd,
-    fan_status,
     CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
-      ELSE 0
-    END AS fan_on
+      WHEN oa_damper_pct IS NULL THEN NULL
+      WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0
+      ELSE oa_damper_pct
+    END AS damper_frac
   FROM history
 ),
 base AS (
@@ -21,9 +19,8 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN fan_on = 0 THEN 0
-      WHEN oa_t IS NOT NULL AND oa_damper_pct IS NOT NULL
-       AND oa_t > {{ECON2_OAT_HI}} AND oa_damper_pct > {{ECON2_DAMPER}}
+      WHEN oa_t IS NOT NULL AND damper_frac IS NOT NULL
+       AND oa_t > {{ECON2_OAT_HI}} AND damper_frac > {{ECON2_DAMPER}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),
