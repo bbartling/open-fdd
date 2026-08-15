@@ -1,6 +1,6 @@
-# WattLab / Vibe19 parity — Building 100 + Synthetic-59 (4.4.1 / `sha-2c12c8e`)
+# WattLab / Vibe19 parity — Building 100 + Synthetic-59 (4.4.1 / `sha-8525cfc`)
 
-Dump-vs-dump after playground **PR #92** (wheel 4.4.1, `dump_tables` in diagnostic/forensic bundles). OpenFDD is DataFusion JWT APIs on **`sha-2c12c8e`**. bensbench: pull only, `--no-pull` stack-up, no local docker/cargo release.
+Dump-vs-dump after playground **PR #92** (wheel 4.4.1, `dump_tables` in diagnostic/forensic bundles). OpenFDD is DataFusion JWT APIs on **`sha-8525cfc`** (PR **#729**). bensbench: pull only, `--no-pull` stack-up, no local docker/cargo release.
 
 Working copy: `reports/wattlab-parity/` (gitignored).
 
@@ -9,8 +9,8 @@ Working copy: `reports/wattlab-parity/` (gitignored).
 | Side | Value |
 | --- | --- |
 | Date | 2026-08-15 |
-| OpenFDD git/image | `2c12c8e` / `ghcr.io/bbartling/openfdd-*:sha-2c12c8e` |
-| Central health | `3.3.0+2c12c8e814a8` |
+| OpenFDD git/image | `8525cfc` / `ghcr.io/bbartling/openfdd-*:sha-8525cfc` |
+| Central health | `3.3.0+8525cfca140f` |
 | Vibe19 | `:latest` digest `sha256:101126ab…32760f07` |
 | `open_fdd.__version__` | **4.4.1** catalog `2e684dbb…cba9` |
 | Playground merge | PR **#92** `4b71061666d1c34c9c93b3c66fa08e043ae856ae` |
@@ -26,7 +26,7 @@ vibe19 **59/59**, OpenFDD SQL **59/59**, analytics soak PASS. Planted faults are
 | ID | pandas | SQL | Outcome |
 | --- | ---: | ---: | --- |
 | AHU-DUCTHI AHU_2 | 0.5 h FAULT | 1.83 h FAULT | residual |
-| ECON-2 AHU_1 | 0 h PASS | 1422.92 h FAULT | still open |
+| ECON-2 AHU_1 | 0 h PASS | 1422.92 h FAULT | still open after inline CASE |
 | ECON-1 AHU_1 | 326.08 h FAULT | 0 h PASS | still open |
 | CHW-NOLOAD-1 CHILLER_2 | 524.5 h FAULT | SKIPPED_MISSING_ROLES | no false PASS |
 
