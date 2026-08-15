@@ -138,7 +138,7 @@ def econ1() -> None:
         "ECON-1",
         "fault",
         header,
-        [f"{fmt(t)},70,0,1,0" for t in times],
+        [f"{fmt(t)},70,0,1,1" for t in times],
         expected("ECON-1", True),
         cols,
     )
