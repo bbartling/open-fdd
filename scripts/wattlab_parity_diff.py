@@ -347,20 +347,25 @@ def compare_quality(oracle_dir: Path) -> list[dict]:
     return rows
 
 
-def compare_topology(oracle_dir: Path) -> list[dict]:
+def compare_topology(oracle_dir: Path, ofdd_dir: Path | None = None) -> list[dict]:
     import csv
 
     topo = oracle_dir / "topology.csv"
+    ofdd_topo = (ofdd_dir / "topology.csv") if ofdd_dir else None
     if not topo.is_file():
+        ofdd_ok = bool(ofdd_topo and ofdd_topo.is_file() and ofdd_topo.stat().st_size > 0)
         return [
             {
                 "artifact": "topology",
                 "key": "presence",
                 "vibe19": None,
-                "ofdd": "n/a",
+                "ofdd": "present" if ofdd_ok else "n/a",
                 "delta": "oracle topology.csv missing",
                 "severity": "accepted",
-                "rationale": "Topology is an Engineering Bundle table; Rust capture is API-only.",
+                "rationale": (
+                    "vibe19 dump has no topology.csv; OpenFDD POST /api/analytics/topology "
+                    "is historian-inferred feeds/fedBy, not a pandas table to match."
+                ),
             }
         ]
     bad = []
@@ -406,6 +411,18 @@ _ANALYTIC_FILES = (
     "rcx_zone_comfort_ranking.csv",
 )
 
+# Last-write-wins on equipment_id+role collapsed diurnal hour/fan_state rows into
+# false mean blockers. Index the same grain vibe19 dumps use.
+_ANALYTIC_KEY_COLS: dict[str, tuple[str, ...]] = {
+    "sensor_diurnal_24h.csv": ("equipment_id", "role", "day_type", "fan_state", "hour"),
+    "sensor_stats_all.csv": ("equipment_id", "role", "fan_state"),
+    "sensor_stats_fan_on.csv": ("equipment_id", "role", "fan_state"),
+    "sensor_stats_fan_off.csv": ("equipment_id", "role", "fan_state"),
+    "rcx_preset_coverage.csv": ("preset_id",),
+    "motor_weekly.csv": ("equipment_id", "week_label", "signal"),
+    "motor_hours.csv": ("equipment_id", "signal"),
+}
+
 
 def _csv_index(path: Path, key_cols: tuple[str, ...]) -> dict[str, dict]:
     import csv
@@ -420,7 +437,10 @@ def _csv_index(path: Path, key_cols: tuple[str, ...]) -> dict[str, dict]:
         if not reader.fieldnames:
             return out
         for row in reader:
-            parts = [str(row.get(c) or "") for c in key_cols if c in (reader.fieldnames or [])]
+            row = dict(row)
+            if "fan_state" in key_cols and not str(row.get("fan_state") or "").strip():
+                row["fan_state"] = "all"
+            parts = [str(row.get(c) or "") for c in key_cols if c in (reader.fieldnames or []) or c == "fan_state"]
             if not any(parts):
                 parts = [str(row.get(c) or "") for c in ("equipment_id", "week_label", "role", "sensor")]
             key = "::".join(p for p in parts if p) or json.dumps(row, sort_keys=True)[:80]
@@ -487,8 +507,11 @@ def compare_analytics_tables(oracle_dir: Path, ofdd_dir: Path) -> list[dict]:
                 }
             )
             continue
-        o_idx = _csv_index(o_path, ("equipment_id", "signal", "week_label", "role"))
-        r_idx = _csv_index(r_path, ("equipment_id", "signal", "week_label", "role"))
+        key_cols = _ANALYTIC_KEY_COLS.get(
+            name, ("equipment_id", "signal", "week_label", "role")
+        )
+        o_idx = _csv_index(o_path, key_cols)
+        r_idx = _csv_index(r_path, key_cols)
         keys = sorted(set(o_idx) | set(r_idx))
         n_block = 0
         n_ok = 0
@@ -806,6 +829,27 @@ def compare_vav_health(oracle_dir: Path, ofdd_dir: Path) -> list[dict]:
             if ov != rv:
                 mismatch.append(col)
         if mismatch:
+            o_notes = str(o.get("notes") or "")
+            r_eng = str(r.get("engine") or "")
+            pandas_missing = "missing_damper" in o_notes or str(
+                o.get("score_label") or ""
+            ).startswith("?")
+            if pandas_missing and r_eng == "datafusion":
+                rows.append(
+                    {
+                        "artifact": "vav_health_matrix.csv",
+                        "key": eq,
+                        "vibe19": {c: o.get(c) for c in mismatch},
+                        "ofdd": {c: r.get(c) for c in mismatch},
+                        "delta": mismatch,
+                        "severity": "accepted",
+                        "rationale": (
+                            "Pandas vav_health_matrix_v1 scores ?/3 when damper role is missing; "
+                            "DataFusion scores n/3 from FDD broken-box + comfort + rogue."
+                        ),
+                    }
+                )
+                continue
             n_block += 1
             rows.append(
                 {
@@ -969,7 +1013,7 @@ def main() -> int:
     rows.extend(compare_manifest(args.oracle, args.ofdd))
     rows.extend(compare_package_health(args.oracle))
     rows.extend(compare_quality(args.oracle))
-    rows.extend(compare_topology(args.oracle))
+    rows.extend(compare_topology(args.oracle, args.ofdd))
     rows.extend(compare_analytics_tables(args.oracle, args.ofdd))
     rows.extend(compare_fdd(args.oracle, args.ofdd, args.capture))
     rows.extend(compare_vav_health(args.oracle, args.ofdd))
