@@ -31,7 +31,19 @@ pub fn score_column_for_role(role: &str, column: &str) -> i32 {
             }
         }
         "oa_damper_pct" => {
-            if c.contains("ex_dmpr") || c.contains("oa_damper") {
+            if c.contains("enable")
+                || c.contains("minimum")
+                || c.contains("min_pos")
+                || c.contains("minpos")
+            {
+                -100
+            } else if c == "mad_c"
+                || c == "mad-c"
+                || c.contains("mad_c")
+                || c.contains("mixed_air_damper")
+            {
+                100
+            } else if (c.contains("ex_dmpr") || c.contains("oa_damper")) && !c.contains("enable") {
                 90
             } else if c.contains("damper") || c.contains("dmpr") {
                 70
@@ -49,10 +61,11 @@ pub fn score_column_for_role(role: &str, column: &str) -> i32 {
             }
         }
         "mat" => {
-            if c.contains("mixed_air") {
+            if c.contains("mixed_air") && !c.contains("damper") {
                 100
-            } else if c == "mad_c" {
-                80
+            } else if c == "mad_c" || c == "mad-c" || c.contains("mad_c") {
+                // mad_c is damper command; never prefer it as mixed-air temp.
+                -100
             } else {
                 0
             }
@@ -115,5 +128,17 @@ mod tests {
     fn alarm_columns_rejected() {
         assert!(is_zone_t_limit_or_alarm_column("space_temp_f_58"));
         assert!(!is_zone_t_limit_or_alarm_column("vav_7_space_temp_f"));
+    }
+
+    #[test]
+    fn oa_damper_prefers_mad_c_over_fan_enable() {
+        let mad = score_column_for_role("oa_damper_pct", "mad_c");
+        let enable = score_column_for_role("oa_damper_pct", "ex_dmpr_pos_fan_enable_pct");
+        let min_oa = score_column_for_role("oa_damper_pct", "oa_minimum_position_pct");
+        assert!(mad > enable, "mad_c={mad} enable={enable}");
+        assert!(mad > min_oa, "mad_c={mad} min_oa={min_oa}");
+        assert!(enable < 0);
+        assert_eq!(score_column_for_role("mat", "mad_c"), -100);
+        assert_eq!(score_column_for_role("mat", "mixed_air_temp_f"), 100);
     }
 }

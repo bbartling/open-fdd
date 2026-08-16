@@ -161,7 +161,11 @@ def _rank_column(role: str, col: str) -> int:
         return 90
     # Demote setpoints / min-position masquerading as OA damper command
     if role == "outside-air-damper" and (
-        "setpoint" in cl or "minimum" in cl or "min_pos" in cl or "minpos" in cl
+        "setpoint" in cl
+        or "minimum" in cl
+        or "min_pos" in cl
+        or "minpos" in cl
+        or "enable" in cl
     ):
         return 95
     # Zone damper role must not steal AHU OA / MAD columns

@@ -1265,4 +1265,39 @@ timestamp_utc,oa_t,oa_damper_pct,fan_cmd,fan_status
             "ECON-1 percent stuck closed should fault, got {got}h"
         );
     }
+
+    #[tokio::test]
+    async fn econ2_b100_competing_enable_column_uses_mad_c() {
+        // B100: mad_c ~20 (min OA) vs blank-role ex_dmpr_pos_fan_enable_pct ~100.
+        // Ingest must keep mad_c so ECON-2 does not fire at OAT 70.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_ECON2_MAD");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let eq = building.join("AHU_1");
+        std::fs::create_dir_all(&eq).unwrap();
+        std::fs::write(
+            eq.join("columns.csv"),
+            "column,role\n\
+             mad_c,oa_damper_pct\n\
+             ex_dmpr_pos_fan_enable_pct,\n\
+             oa_minimum_position_pct,\n\
+             outside_air_temp_f,oa_t\n",
+        )
+        .unwrap();
+        std::fs::write(
+            eq.join("history_wide.csv"),
+            "timestamp_utc,mad_c,ex_dmpr_pos_fan_enable_pct,oa_minimum_position_pct,outside_air_temp_f\n\
+2026-01-01T00:00:00Z,20,100,20,70\n\
+2026-01-01T00:05:00Z,20,100,20,70\n\
+2026-01-01T00:10:00Z,20,100,20,70\n\
+2026-01-01T00:15:00Z,20,100,20,70\n\
+2026-01-01T00:20:00Z,20,100,20,70\n\
+2026-01-01T00:25:00Z,20,100,20,70\n",
+        )
+        .unwrap();
+
+        let got = run_rule_fault_hours(&building, "economizer_fault.sql", 300.0, 0, &[]).await;
+        assert_hours_close(got, 0.0, "ECON-2 mad_c vs fan-enable");
+    }
 }
