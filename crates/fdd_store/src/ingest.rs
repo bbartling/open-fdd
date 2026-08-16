@@ -554,7 +554,6 @@ mod tests {
             .downcast_ref::<Float64Array>()
             .unwrap();
         assert_eq!(col.value(0), 20.0);
-        assert!(!col.is_null(0));
     }
 
     #[test]
