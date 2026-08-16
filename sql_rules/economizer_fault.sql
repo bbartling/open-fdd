@@ -1,15 +1,21 @@
 -- economizer_fault.sql — ECON-2 economizing when outdoor unfavorable + confirm
--- Inline percent CASE in the same SELECT as FROM history (do not rely on a later
--- CTE column). DataFusion can still see raw oa_damper_pct (0–100) after a
--- damper_frac alias, so 20 > 0.42 would fire. Pandas econ2 has no fan gate.
+-- CAST DOUBLE + percent gate >= 1.5 (not > 1.0) so Utf8/int 0–100 (B100 min OA 20)
+-- becomes 0.20 and does not fire vs ECON2_DAMPER 0.42. Fraction 0–1 stays 0–1.
+-- Pandas econ2 has no fan gate.
 WITH base AS (
   SELECT
     equipment_id,
     timestamp_utc,
     CAST(CASE
       WHEN oa_t IS NOT NULL AND oa_damper_pct IS NOT NULL
-       AND oa_t > {{ECON2_OAT_HI}}
-       AND (CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END) > {{ECON2_DAMPER}}
+       AND CAST(oa_t AS DOUBLE) > {{ECON2_OAT_HI}}
+       AND (
+         CASE
+           WHEN CAST(oa_damper_pct AS DOUBLE) >= 1.5
+           THEN CAST(oa_damper_pct AS DOUBLE) / 100.0
+           ELSE CAST(oa_damper_pct AS DOUBLE)
+         END
+       ) > {{ECON2_DAMPER}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM history
 ),
