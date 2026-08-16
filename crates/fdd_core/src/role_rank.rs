@@ -37,7 +37,10 @@ pub fn score_column_for_role(role: &str, column: &str) -> i32 {
                 || c.contains("minpos")
             {
                 -100
-            } else if c == "mad_c" || c == "mad-c" || c.contains("mad_c") || c.contains("mixed_air_damper")
+            } else if c == "mad_c"
+                || c == "mad-c"
+                || c.contains("mad_c")
+                || c.contains("mixed_air_damper")
             {
                 100
             } else if (c.contains("ex_dmpr") || c.contains("oa_damper")) && !c.contains("enable") {

@@ -334,7 +334,10 @@ fn infer_role_from_column_name(column: &str) -> Option<String> {
     }
     if c.contains("damper") || c.contains("dmpr") {
         // Fan-enable / min-OA setpoints are not the economizer damper command.
-        if c.contains("enable") || c.contains("minimum") || c.contains("min_pos") || c.contains("minpos")
+        if c.contains("enable")
+            || c.contains("minimum")
+            || c.contains("min_pos")
+            || c.contains("minpos")
         {
             return None;
         }

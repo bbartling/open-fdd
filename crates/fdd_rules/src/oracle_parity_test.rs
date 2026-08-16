@@ -1273,11 +1273,7 @@ timestamp_utc,oa_t,oa_damper_pct,fan_cmd,fan_status
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_ECON2_MAD");
         std::fs::create_dir_all(&building).unwrap();
-        std::fs::write(
-            building.join("manifest.json"),
-            r#"{"grid_minutes":5}"#,
-        )
-        .unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
         let eq = building.join("AHU_1");
         std::fs::create_dir_all(&eq).unwrap();
         std::fs::write(
