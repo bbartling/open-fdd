@@ -44,7 +44,7 @@ EXTRA_ANALYTICS = (
     ("rcx_vav", "/api/analytics/rcx/vav"),
     ("rcx_chiller", "/api/analytics/rcx/chiller"),
     ("rcx_boiler", "/api/analytics/rcx/boiler"),
-    ("rcx_preset", "/api/analytics/rcx/preset"),
+    ("rcx_preset", "/api/analytics/rcx/presets"),
     ("setpoints", "/api/analytics/setpoints"),
     ("diurnal", "/api/analytics/diurnal"),
     ("topology", "/api/analytics/topology"),
@@ -74,6 +74,56 @@ def _rows_of(body) -> list:
         if isinstance(val, list) and val:
             return val
     return []
+
+
+DIURNAL_FIELDS = [
+    "equipment_id",
+    "equipment_type",
+    "role",
+    "source",
+    "day_type",
+    "fan_state",
+    "hour",
+    "n",
+    "mean",
+    "std",
+    "min",
+    "p50",
+    "max",
+]
+
+STATS_FIELDS = [
+    "equipment_id",
+    "equipment_type",
+    "role",
+    "source",
+    "source_column",
+    "fan_state",
+    "count",
+    "valid_count",
+    "n",
+    "mean",
+    "std",
+    "min",
+    "p50",
+    "max",
+]
+
+
+def _normalize_analytics_row(row: dict, *, source: str = "role_map") -> dict:
+    out = dict(row)
+    if "p50" not in out or out.get("p50") in (None, ""):
+        for alt in ("median", "p50_approx"):
+            if out.get(alt) not in (None, ""):
+                if alt != "mean":
+                    out["p50"] = out[alt]
+                break
+    if "std" not in out and out.get("stddev") not in (None, ""):
+        out["std"] = out.get("stddev")
+    out["source"] = out.get("source") or source
+    if not out.get("day_type"):
+        out["day_type"] = "all"
+    return out
 
 
 def _write_csv(path: Path, rows: list[dict], fieldnames: list[str] | None = None) -> None:
@@ -240,8 +290,6 @@ def assemble(capture_dir: Path, bundle_dir: Path) -> dict:
     mark("sensor_health_matrix.csv")
     _write_csv(bundle_dir / "sensor_fault_summary.csv", health_rows)
     mark("sensor_fault_summary.csv")
-    _write_csv(bundle_dir / "sensor_stats_all.csv", health_rows)
-    mark("sensor_stats_all.csv")
 
     schedule = _analytics(_unwrap(_load(capture_dir / "schedule.json") or {})[1])
     sched_rows = [r for r in (schedule.get("rows") or schedule.get("equipment") or []) if isinstance(r, dict)]
@@ -287,10 +335,47 @@ def assemble(capture_dir: Path, bundle_dir: Path) -> dict:
     mark("meter_monthly_electric.csv")
 
     rcx_vav = _extra_rows("rcx_vav")
-    rcx_preset = _extra_rows("rcx_preset")
+    rcx_preset_wrap = extra.get("rcx_preset") or {}
+    _, rcx_preset_body = (
+        _unwrap(rcx_preset_wrap) if isinstance(rcx_preset_wrap, dict) else (None, rcx_preset_wrap)
+    )
+    rcx_preset_rows: list[dict] = []
+    if isinstance(rcx_preset_body, dict):
+        presets = rcx_preset_body.get("presets")
+        if isinstance(presets, list):
+            for p in presets:
+                if not isinstance(p, dict):
+                    continue
+                rcx_preset_rows.append(
+                    {
+                        "preset_id": p.get("id") or p.get("preset_id") or "",
+                        "title": p.get("title") or "",
+                        "chart_type": p.get("chart") or p.get("chart_type") or "",
+                        "role": p.get("role_col") or p.get("role") or "",
+                        "series_count": p.get("series_count") or "",
+                        "row_count": p.get("row_count") or "",
+                        "outlier_count": p.get("outlier_count") or "",
+                        "empty_reason": p.get("empty_reason") or "",
+                    }
+                )
+        if not rcx_preset_rows:
+            rcx_preset_rows = [r for r in _rows_of(rcx_preset_body) if isinstance(r, dict)]
     _write_csv(bundle_dir / "rcx_zone_comfort_ranking.csv", rcx_vav)
     mark("rcx_zone_comfort_ranking.csv")
-    _write_csv(bundle_dir / "rcx_preset_coverage.csv", rcx_preset)
+    _write_csv(
+        bundle_dir / "rcx_preset_coverage.csv",
+        rcx_preset_rows,
+        [
+            "preset_id",
+            "title",
+            "chart_type",
+            "role",
+            "series_count",
+            "row_count",
+            "outlier_count",
+            "empty_reason",
+        ],
+    )
     mark("rcx_preset_coverage.csv")
 
     setpoints = _extra_rows("setpoints")
@@ -299,8 +384,8 @@ def assemble(capture_dir: Path, bundle_dir: Path) -> dict:
     if not setpoints:
         missing_apis.append("missing_table:setpoints.csv")
 
-    diurnal = _extra_rows("diurnal")
-    _write_csv(bundle_dir / "sensor_diurnal_24h.csv", diurnal)
+    diurnal = [_normalize_analytics_row(r) for r in _extra_rows("diurnal")]
+    _write_csv(bundle_dir / "sensor_diurnal_24h.csv", diurnal, DIURNAL_FIELDS)
     mark("sensor_diurnal_24h.csv")
     if not diurnal:
         missing_apis.append("missing_table:sensor_diurnal_24h.csv")
@@ -317,19 +402,19 @@ def assemble(capture_dir: Path, bundle_dir: Path) -> dict:
     if not topo_rows:
         missing_apis.append("missing_table:topology.csv")
 
-    stats_all = _extra_rows("sensor_stats_all")
-    _write_csv(bundle_dir / "sensor_stats_all.csv", stats_all or health_rows)
+    stats_all = [_normalize_analytics_row(r) for r in (_extra_rows("sensor_stats_all") or health_rows)]
+    _write_csv(bundle_dir / "sensor_stats_all.csv", stats_all, STATS_FIELDS)
     mark("sensor_stats_all.csv")
 
     # Fan-on / fan-off stats: same endpoint, series.fan_state captured separately
     # when capture_extra posts with body variants (see capture_extra).
-    stats_on = _extra_rows("sensor_stats_fan_on")
-    _write_csv(bundle_dir / "sensor_stats_fan_on.csv", stats_on)
+    stats_on = [_normalize_analytics_row(r) for r in _extra_rows("sensor_stats_fan_on")]
+    _write_csv(bundle_dir / "sensor_stats_fan_on.csv", stats_on, STATS_FIELDS)
     mark("sensor_stats_fan_on.csv")
     if not stats_on:
         missing_apis.append("missing_table:sensor_stats_fan_on.csv")
-    stats_off = _extra_rows("sensor_stats_fan_off")
-    _write_csv(bundle_dir / "sensor_stats_fan_off.csv", stats_off)
+    stats_off = [_normalize_analytics_row(r) for r in _extra_rows("sensor_stats_fan_off")]
+    _write_csv(bundle_dir / "sensor_stats_fan_off.csv", stats_off, STATS_FIELDS)
     mark("sensor_stats_fan_off.csv")
     if not stats_off:
         missing_apis.append("missing_table:sensor_stats_fan_off.csv")
