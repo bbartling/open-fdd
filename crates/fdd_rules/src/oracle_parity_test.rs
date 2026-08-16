@@ -1260,6 +1260,9 @@ timestamp_utc,oa_t,oa_damper_pct,fan_cmd,fan_status
         );
 
         let got = run_rule_fault_hours(&building, "econ1_stuck_closed.sql", 300.0, 0, &[]).await;
-        assert!(got > 0.0, "ECON-1 percent stuck closed should fault, got {got}h");
+        assert!(
+            got > 0.0,
+            "ECON-1 percent stuck closed should fault, got {got}h"
+        );
     }
 }
