@@ -522,6 +522,42 @@ mod tests {
     }
 
     #[test]
+    fn ingest_b100_style_picks_mad_c_not_fan_enable() {
+        let tmp = TempDir::new().unwrap();
+        let mut f = std::fs::File::create(tmp.path().join("columns.csv")).unwrap();
+        writeln!(
+            f,
+            "column,role\n\
+             mad_c,oa_damper_pct\n\
+             ex_dmpr_pos_fan_enable_pct,\n\
+             oa_minimum_position_pct,\n\
+             outside_air_temp_f,oa_t"
+        )
+        .unwrap();
+        let mut h = std::fs::File::create(tmp.path().join("history_wide.csv")).unwrap();
+        writeln!(
+            h,
+            "timestamp_utc,mad_c,ex_dmpr_pos_fan_enable_pct,oa_minimum_position_pct,outside_air_temp_f"
+        )
+        .unwrap();
+        writeln!(h, "2026-01-01T00:00:00Z,20,100,20,70").unwrap();
+        let (batch, rows) = read_csv_batch(
+            &tmp.path().join("history_wide.csv"),
+            &tmp.path().join("columns.csv"),
+        )
+        .unwrap();
+        assert_eq!(rows, 1);
+        let idx = batch.schema().index_of("oa_damper_pct").unwrap();
+        let col = batch
+            .column(idx)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+        assert_eq!(col.value(0), 20.0);
+        assert!(!col.is_null(0));
+    }
+
+    #[test]
     fn ingest_records_weather_error_when_path_missing() {
         let tmp = TempDir::new().unwrap();
         let data = tmp.path().join("BUILDING_100");

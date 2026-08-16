@@ -312,11 +312,15 @@ fn infer_role_from_column_name(column: &str) -> Option<String> {
     {
         return Some("rat".into());
     }
+    // Mixed-air *damper command* (mad_c) is OA damper, not mixed-air temperature.
+    // Mapping mad_c → mat made ingest drop the explicit oa_damper_pct role or
+    // lose the race to ex_dmpr_pos_fan_enable_pct (B100 ECON hours).
+    if c == "mad_c" || c == "mad-c" || c == "mad_c_pct" || c.contains("mixed_air_damper") {
+        return Some("oa_damper_pct".into());
+    }
     if c.contains("mixed_air")
         || c.contains("ma_t")
         || c.contains("ma-t")
-        || c == "mad_c"
-        || c == "mad-c"
         || c.starts_with("web_ma")
         || c == "web_mat"
     {
@@ -329,6 +333,11 @@ fn infer_role_from_column_name(column: &str) -> Option<String> {
         return Some("htg_valve_pct".into());
     }
     if c.contains("damper") || c.contains("dmpr") {
+        // Fan-enable / min-OA setpoints are not the economizer damper command.
+        if c.contains("enable") || c.contains("minimum") || c.contains("min_pos") || c.contains("minpos")
+        {
+            return None;
+        }
         return Some("oa_damper_pct".into());
     }
     if c.contains("zone_t") || c.contains("spacetemp") {
@@ -501,5 +510,44 @@ mod tests {
         assert_eq!(map.get("vav_7_space_temp_f"), Some(&"zone_t".to_string()));
         assert!(!map.contains_key("space_temp_f_58"));
         assert_eq!(map.get("space_temp_f_77"), Some(&"zone_t".to_string()));
+    }
+
+    #[test]
+    fn b100_mad_c_is_oa_damper_not_mat_or_enable() {
+        assert_eq!(
+            infer_role_from_column_name("mad_c").as_deref(),
+            Some("oa_damper_pct")
+        );
+        assert_eq!(
+            infer_role_from_column_name("mad_c_pct").as_deref(),
+            Some("oa_damper_pct")
+        );
+        assert_eq!(
+            infer_role_from_column_name("mixed_air_temp_f").as_deref(),
+            Some("mat")
+        );
+        assert_eq!(
+            infer_role_from_column_name("ex_dmpr_pos_fan_enable_pct"),
+            None
+        );
+        assert_eq!(infer_role_from_column_name("oa_minimum_position_pct"), None);
+
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("columns.csv");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(
+            f,
+            "column,role\n\
+             mad_c,oa_damper_pct\n\
+             mixed_air_temp_f,mat\n\
+             ex_dmpr_pos_fan_enable_pct,\n\
+             oa_minimum_position_pct,"
+        )
+        .unwrap();
+        let map = load_column_role_map(&path).unwrap();
+        assert_eq!(map.get("mad_c"), Some(&"oa_damper_pct".to_string()));
+        assert_eq!(map.get("mixed_air_temp_f"), Some(&"mat".to_string()));
+        assert!(!map.contains_key("ex_dmpr_pos_fan_enable_pct"));
+        assert!(!map.contains_key("oa_minimum_position_pct"));
     }
 }
