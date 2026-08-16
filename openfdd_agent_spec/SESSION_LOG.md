@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-08-16 — Fresh GHCR soak `sha-726211b` + B50 hourly append
+
+- Pin `OPENFDD_IMAGE_TAG=sha-726211b` after `.env` (sticky `sha-8ab0b5e` otherwise). Health `3.3.0+726211b0d370`. vibe19 `:latest` `sha256:159802ca…` / 4.4.1 / `dump_tables` / agent_afdd rc 0.
+- B50 IoT sim: seed hour-0 + 47 appends, replay `rows_added=0`. Synth **59/59** both sides; analytics PASS. Dump **449** blockers. ECON hours unchanged (pandas vs SQL mapping).
+- No Windows playground prompt.
+
 ## 2026-08-16 — ECON CAST/`>= 1.5` (#731) soak `sha-5aebdfc`
 
 - SQL: CAST damper/fan/OAT DOUBLE; percent if `>= 1.5`. GHA: damper 20 → ECON-2 0 h; fan-cmd 60 + damper 0 → ECON-1 > 0; fraction 0.55 still faults.

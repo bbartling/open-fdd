@@ -1,53 +1,64 @@
-# WattLab-to-WattLab dump parity (Building 100) — vibe19 4.4.1 / `sha-5aebdfc`
+# WattLab-to-WattLab dump parity (Building 100) — vibe19 4.4.1 / `sha-726211b`
 
-Oracle: vibe19 Engineering Bundle `ghcr.io/bbartling/vibe19:latest` digest `sha256:101126ab…32760f07`, wheel **4.4.1**, catalog `2e684dbb…cba9` (playground PR **#92** `4b71061`). Diagnostic dump includes `vav_health_matrix.csv`, `mech_cooling_oat_bins.csv`, `motor_hours.csv`, `motor_weekly.csv`.
+Oracle: vibe19 Engineering Bundle `ghcr.io/bbartling/vibe19:latest` digest `sha256:159802ca…f9ae52b0` (OCI revision `11cc1cdc…`), wheel **4.4.1**, catalog `2e684dbb…cba9`. Diagnostic dump includes `vav_health_matrix.csv`, `mech_cooling_oat_bins.csv`, `motor_hours.csv`, `motor_weekly.csv`. `agent_afdd` rc **0**.
 
-OpenFDD: DataFusion on **`sha-5aebdfc`** (PR **#731** CAST DOUBLE + `>= 1.5` percent gate). Health `3.3.0+5aebdfc54434`. `:nightly` digest matches central `sha256:a56846e2…4006351a`. Stack: `OPENFDD_IMAGE_TAG=sha-5aebdfc` `react-ot --no-pull`. No local docker/cargo build. Image SQL contains the CAST gate (docker exec confirmed).
+OpenFDD: DataFusion on **`sha-726211b`** (docs #732 on CAST #731). Health `3.3.0+726211b0d370`. `:nightly` digest matches central `sha256:148e56d3…e0821acc`. Stack: `OPENFDD_IMAGE_TAG=sha-726211b` `react-ot --no-pull` (override sticky `.env` `sha-8ab0b5e`). No local docker/cargo build.
 
 ## Cycle header
 
 | Metric | Value |
 | --- | --- |
 | Date | 2026-08-16 |
-| OpenFDD pin | `sha-5aebdfc` health `3.3.0+5aebdfc54434` |
+| OpenFDD pin | `sha-726211b` health `3.3.0+726211b0d370` |
 | PyPI / vibe19 wheel | **open-fdd 4.4.1** |
-| Vibe19 | `:latest` = `:develop` `sha256:101126ab…32760f07` |
+| Vibe19 | `:latest` `sha256:159802ca…f9ae52b0` |
 | **blockers** | **449** |
 | accepted | 2689 |
 | rows | 3303 |
 | stop_rule_met | **false** |
 
-`vav_health_matrix.csv` is present on both sides. 44 of 449 blockers are per-equipment `vav_health` score/label gaps, not a missing file.
+Gate 0: PUT kept `occupancy_schedule`. Missing API: `topology.csv` on OpenFDD assembler only.
 
-## Synthetic-59 ground truth (expected_faults.csv, ~1 h planted)
+## Building 50 hourly IoT append
+
+Zip `/home/ben/raw_BUILDING_50_openfdd.zip` (51 equipment, **2963** UTC hours in file). Low-RAM sim: seed truncated hour-0 package, then `POST /api/csv/import/package/append` for **47** following hours (`--max-hours 48`, `--sleep 0`). Driver gitignored (`reports/…/hourly_b50_append_sim.py`). Did not commit the zip.
+
+| Check | Result |
+| --- | --- |
+| Seed | `building_id=BUILDING_50` ok |
+| Appends | 47/47, **0** errors; parquet rows 3136 → 26656 |
+| Replay hour `2026-03-16T03` | `rows_added_sum=0`, `rows_duped_sum=588`, **idempotent** |
+| `POST /api/fdd/run` | ok, 2104 results, 5.2 s |
+| BUILDING_100 | left in place (distinct site) |
+
+Full 2963-hour replay would re-ingest parquet every hour; not run on this bench.
+
+## Synthetic-59
 
 | Side | Target match |
 | --- | --- |
-| vibe19 pandas | **59/59** (prior cycle; damper 0–1) |
-| OpenFDD SQL | **59/59** on `sha-5aebdfc` |
-| Overview analytics soak | **PASS** (prior cycle) |
+| vibe19 pandas | **59/59** (`agent_afdd` rc 0, not reused) |
+| OpenFDD SQL | **59/59** |
+| Overview analytics | **PASS** (runtime + mech OAT bins) |
 
-GHA oracle tests on #731: damper **20** + OAT 70 → ECON-2 **0 h**; damper **0** + fan-cmd **60** → ECON-1 hours **> 0**; fraction **0.55** still faults ECON-2.
-
-## Four B100 FDD examples (`sha-5aebdfc` after CAST / `>= 1.5`)
-
-AHU_1 parquet `oa_damper_pct` is **Float64**, min 0 max 100 (not Utf8). When `oa_t > 63`, damper median/p90 is **100**, so fraction 1.0 **does** exceed 0.42. SQL **1422.92 h** matches `frac(damper)>0.42` **and** raw `damper>0.42` on this historian (17075 samples). The “min OA 20 compared as 20 > 0.42” story does **not** hold for current parquet.
+## Four B100 FDD examples (`sha-726211b`)
 
 | ID | vibe19 pandas | OpenFDD SQL | Notes |
 | --- | ---: | ---: | --- |
-| `AHU-DUCTHI` AHU_2 | FAULT **0.5 h** | FAULT **1.83 h** | Residual ~1.3 h FAULT∩FAULT |
-| `ECON-2` AHU_1 | PASS **0 h** | FAULT **1422.92 h** | Unchanged hours. CAST is live; historian damper is ~100% in high OAT, not stuck at min OA 20. Pandas still 0 h → **series/equation mismatch**, not DF types. |
-| `ECON-1` AHU_1 | FAULT **326.08 h** | PASS **0 h** | Unchanged. SQL sees damper open (not stuck closed). |
+| `AHU-DUCTHI` AHU_2 | FAULT **0.5 h** | FAULT **1.83 h** | Residual FAULT∩FAULT |
+| `ECON-2` AHU_1 | PASS **0 h** | FAULT **1422.92 h** | Unchanged vs CAST soak. Historian damper ~100% in high OAT; pandas 0 h is mapping/equation, not missing dump files. |
+| `ECON-1` AHU_1 | FAULT **326.08 h** | PASS **0 h** | Unchanged |
 | `CHW-NOLOAD-1` CHILLER_2 | FAULT **524.5 h** | **SKIPPED_MISSING_ROLES** | No false PASS; accepted |
 
-Do not claim #731 cleared B100 ECON vs pandas. Next: which AHU_1 point pandas uses for econ damper vs historian `oa_damper_pct` (and OAT), not another CAST.
+No Windows vibe19 prompt this cycle (dump CSVs present, 59/59, export rc 0).
 
 ## Commands
 
 ```bash
-export OPENFDD_IMAGE_TAG=sha-5aebdfc
+export OPENFDD_IMAGE_TAG=sha-726211b   # after sourcing .env
 ./scripts/openfdd_stack_up.sh react-ot --no-pull
+python3 scripts/synthetic_59_target_pair_soak.py --side both --workspace /home/ben/wattlab_workspace
+python3 scripts/wattlab_parity_oracle_dump.py
 python3 scripts/wattlab_parity_ofdd_rust_bundle.py
 python3 scripts/wattlab_parity_diff.py
-python3 scripts/synthetic_59_target_pair_soak.py --side ofdd
 ```
