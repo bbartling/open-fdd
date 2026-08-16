@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-08-16 — ECON CAST/`>= 1.5` (#731) soak `sha-5aebdfc`
+
+- SQL: CAST damper/fan/OAT DOUBLE; percent if `>= 1.5`. GHA: damper 20 → ECON-2 0 h; fan-cmd 60 + damper 0 → ECON-1 > 0; fraction 0.55 still faults.
+- GHCR `:nightly` = `sha-5aebdfc` digest `sha256:a56846e2…4006351a`. Pin `--no-pull`. Health `3.3.0+5aebdfc54434`.
+- Synthetic-59 SQL **59/59**. B100 ECON hours **unchanged** (1422.92 / 0). AHU_1 parquet damper is Float64 0–100; when OAT>63 median is **100**, so 1422.92 h is frac-correct on this historian. Pandas 0 h / 326 h is a **point mapping** gap, not Utf8 CAST.
+- Dump parity still **449** blockers. Mech OAT bins soak note committed with #731.
+
 ## 2026-08-15 — vibe19 4.4.1 + Synthetic-59 59/59 + B100 dump
 
 - Playground PR #92: `open-fdd[reporting]==4.4.1`; diagnostic dump writes vav/mech/motor CSVs. bensbench pulled `ghcr.io/bbartling/vibe19:latest` (`sha256:101126ab…`).
