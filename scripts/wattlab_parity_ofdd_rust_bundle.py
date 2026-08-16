@@ -44,7 +44,6 @@ EXTRA_ANALYTICS = (
     ("rcx_vav", "/api/analytics/rcx/vav"),
     ("rcx_chiller", "/api/analytics/rcx/chiller"),
     ("rcx_boiler", "/api/analytics/rcx/boiler"),
-    ("rcx_preset", "/api/analytics/rcx/presets"),
     ("setpoints", "/api/analytics/setpoints"),
     ("diurnal", "/api/analytics/diurnal"),
     ("topology", "/api/analytics/topology"),
@@ -486,6 +485,9 @@ def capture_extra(base: str, token: str | None, building_id: str, capture_dir: P
     for name, path in EXTRA_ANALYTICS:
         st, env = _req("POST", f"{base}{path}", token=token, body=body)
         extra[name] = {"status": st, "body": env}
+    # Catalog is GET /api/analytics/rcx/presets (not the POST single-preset runner).
+    st, env = _req("GET", f"{base}/api/analytics/rcx/presets", token=token)
+    extra["rcx_preset"] = {"status": st, "body": env}
     for fan_state, key in (("on", "sensor_stats_fan_on"), ("off", "sensor_stats_fan_off")):
         st, env = _req(
             "POST",

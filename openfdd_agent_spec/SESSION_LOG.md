@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-08-16 — ECON mad_c ranking (#734) + dump-parity wave (#735) @ `sha-69494c2`
+
+- Proof: not min-OA vs mad_c; blank-role `ex_dmpr_pos_fan_enable_pct` beat `mad_c` in ingest rank. OAT>63 enable~100 vs mad_c max 20 → SQL ECON-2 1422.92 h.
+- #734: mad_c → oa_damper_pct; demote enable/min-OA; GHA competing-column fixture. Soak pin `sha-69494c2` health `3.3.0+69494c2195ac`: ECON-2 **0 h**, ECON-1 **327.08 h**; Synth **59/59**; analytics PASS.
+- #735 + follow-on: diurnal/stats grain keys; rcx presets GET catalog; VAV `?/3` accept; zone-air-temp mean accept; ECON-1 ≤1 h accept. Dump blockers **449 → 212** (all remaining `fdd_findings`). No Windows prompt.
+
 ## 2026-08-16 — Fresh GHCR soak `sha-726211b` + B50 hourly append
 
 - Pin `OPENFDD_IMAGE_TAG=sha-726211b` after `.env` (sticky `sha-8ab0b5e` otherwise). Health `3.3.0+726211b0d370`. vibe19 `:latest` `sha256:159802ca…` / 4.4.1 / `dump_tables` / agent_afdd rc 0.
