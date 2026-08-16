@@ -1144,4 +1144,122 @@ timestamp_utc,ch_col,pump_col,load_col
         let got = run_rule_fault_hours(&building, "chw_noload_1.sql", 300.0, 0, &[]).await;
         assert_hours_close(got, 0.0, "CHW-NOLOAD-1 loaded building");
     }
+
+    #[tokio::test]
+    async fn econ2_percent_min_oa_does_not_fault() {
+        // B100-style 0–100 damper at min OA 20 with OAT 70 must not fire ECON-2
+        // (0.20 < 0.42). Utf8/int 20 > 0.42 without CAST/percent gate would.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_ECON2_PCT");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,oa_t,oa_damper_pct
+2026-01-01T00:00:00Z,70,20
+2026-01-01T00:05:00Z,70,20
+2026-01-01T00:10:00Z,70,20
+2026-01-01T00:15:00Z,70,20
+2026-01-01T00:20:00Z,70,20
+2026-01-01T00:25:00Z,70,20
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "oa_t",
+                    role: "outside-air-temp",
+                },
+                RoleCol {
+                    csv_col: "oa_damper_pct",
+                    role: "outside-air-damper",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(&building, "economizer_fault.sql", 300.0, 0, &[]).await;
+        assert_hours_close(got, 0.0, "ECON-2 percent min OA");
+    }
+
+    #[tokio::test]
+    async fn econ2_fraction_damper_still_faults() {
+        // Synthetic-59 style 0–1 damper 0.55 with OAT 70 must still fault.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_ECON2_FRAC");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,oa_t,oa_damper_pct
+2026-01-01T00:00:00Z,70,0.55
+2026-01-01T00:05:00Z,70,0.55
+2026-01-01T00:10:00Z,70,0.55
+2026-01-01T00:15:00Z,70,0.55
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "oa_t",
+                    role: "outside-air-temp",
+                },
+                RoleCol {
+                    csv_col: "oa_damper_pct",
+                    role: "outside-air-damper",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(&building, "economizer_fault.sql", 300.0, 0, &[]).await;
+        assert!(got > 0.0, "ECON-2 fraction damper should fault, got {got}h");
+    }
+
+    #[tokio::test]
+    async fn econ1_percent_stuck_closed_faults() {
+        // Damper 0 (0–100 or fraction), fan-cmd 60 percent, OAT 70 → ECON-1 hours > 0.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_ECON1_PCT");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,oa_t,oa_damper_pct,fan_cmd,fan_status
+2026-01-01T00:00:00Z,70,0,60,1
+2026-01-01T00:05:00Z,70,0,60,1
+2026-01-01T00:10:00Z,70,0,60,1
+2026-01-01T00:15:00Z,70,0,60,1
+2026-01-01T00:20:00Z,70,0,60,1
+2026-01-01T00:25:00Z,70,0,60,1
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "oa_t",
+                    role: "outside-air-temp",
+                },
+                RoleCol {
+                    csv_col: "oa_damper_pct",
+                    role: "outside-air-damper",
+                },
+                RoleCol {
+                    csv_col: "fan_cmd",
+                    role: "fan-cmd",
+                },
+                RoleCol {
+                    csv_col: "fan_status",
+                    role: "fan-status",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(&building, "econ1_stuck_closed.sql", 300.0, 0, &[]).await;
+        assert!(got > 0.0, "ECON-1 percent stuck closed should fault, got {got}h");
+    }
 }

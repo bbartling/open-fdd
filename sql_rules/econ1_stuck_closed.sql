@@ -1,5 +1,5 @@
 -- econ1_stuck_closed.sql — ECON-1 economizer stuck closed
--- Inline damper percent CASE in the same SELECT as FROM history.
+-- CAST DOUBLE + percent gate >= 1.5 on damper and fan_cmd (B100 0–100).
 -- Pandas _fan is fan-cmd first (percent-normalized), then fan-status (> 0.5).
 WITH base AS (
   SELECT
@@ -8,15 +8,27 @@ WITH base AS (
     CAST(CASE
       WHEN CASE
         WHEN fan_cmd IS NOT NULL THEN CASE
-          WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1
+          WHEN (
+            CASE
+              WHEN CAST(fan_cmd AS DOUBLE) >= 1.5
+              THEN CAST(fan_cmd AS DOUBLE) / 100.0
+              ELSE CAST(fan_cmd AS DOUBLE)
+            END
+          ) > 0.01 THEN 1
           ELSE 0
         END
-        WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.5 THEN 1 ELSE 0 END
+        WHEN fan_status IS NOT NULL THEN CASE WHEN CAST(fan_status AS DOUBLE) > 0.5 THEN 1 ELSE 0 END
         ELSE 0
       END = 0 THEN 0
       WHEN oa_damper_pct IS NOT NULL AND oa_t IS NOT NULL
-       AND (CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END) < {{ECON1_DAMPER_MAX}}
-       AND oa_t > {{ECON1_OAT_MIN}}
+       AND (
+         CASE
+           WHEN CAST(oa_damper_pct AS DOUBLE) >= 1.5
+           THEN CAST(oa_damper_pct AS DOUBLE) / 100.0
+           ELSE CAST(oa_damper_pct AS DOUBLE)
+         END
+       ) < {{ECON1_DAMPER_MAX}}
+       AND CAST(oa_t AS DOUBLE) > {{ECON1_OAT_MIN}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM history
 ),
