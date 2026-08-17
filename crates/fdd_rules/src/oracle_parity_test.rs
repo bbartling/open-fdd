@@ -769,6 +769,250 @@ timestamp_utc,oat_col,fan_col
     }
 
     #[tokio::test]
+    async fn sv_flatline_extra_analog_or_five_temps_healthy() {
+        // Pandas FLATLINE is OR across the catalog. Five air temps live + oa_h
+        // stuck must FAULT after the catalog port (pre-port SQL ignored humidity).
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SVFLAT_OAH");
+        std::fs::create_dir_all(&building).unwrap();
+
+        // FLATLINE_HOURS=0.25 at poll=300s → 3-sample window. Humidity frozen;
+        // each air temp steps 1°F so the five-role spans stay above FLATLINE_TOL.
+        let rows = "\
+timestamp_utc,oat_col,mat_col,zone_col,rat_col,sat_col,rh_col
+2026-01-01T00:00:00Z,70,65,72,73,55,50
+2026-01-01T00:05:00Z,71,66,73,74,56,50
+2026-01-01T00:10:00Z,72,67,74,75,57,50
+2026-01-01T00:15:00Z,73,68,75,76,58,50
+2026-01-01T00:20:00Z,74,69,76,77,59,50
+2026-01-01T00:25:00Z,75,70,77,78,60,50
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "oat_col",
+                    role: "oa_t",
+                },
+                RoleCol {
+                    csv_col: "mat_col",
+                    role: "mat",
+                },
+                RoleCol {
+                    csv_col: "zone_col",
+                    role: "zone_t",
+                },
+                RoleCol {
+                    csv_col: "rat_col",
+                    role: "rat",
+                },
+                RoleCol {
+                    csv_col: "sat_col",
+                    role: "sat",
+                },
+                RoleCol {
+                    csv_col: "rh_col",
+                    role: "oa_h",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "sv_flatline.sql",
+            300.0,
+            600,
+            &[("FLATLINE_TOL", "0.1"), ("FLATLINE_HOURS", "0.25")],
+        )
+        .await;
+
+        let raw = [false, false, true, true, true, true];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(expected, 0.25, "pandas reference");
+        assert_hours_close(got, expected, "SV-FLATLINE extra analog OR");
+    }
+
+    #[tokio::test]
+    async fn sv_stale_five_roles_changing_is_zero() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SVSTALE_HEALTHY");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,oat_col,mat_col,zone_col,rat_col,sat_col
+2026-01-01T00:00:00Z,70,65,72,73,55
+2026-01-01T00:05:00Z,71,66,73,74,56
+2026-01-01T00:10:00Z,72,67,74,75,57
+2026-01-01T00:15:00Z,73,68,75,76,58
+2026-01-01T00:20:00Z,74,69,76,77,59
+2026-01-01T00:25:00Z,75,70,77,78,60
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "oat_col",
+                    role: "oa_t",
+                },
+                RoleCol {
+                    csv_col: "mat_col",
+                    role: "mat",
+                },
+                RoleCol {
+                    csv_col: "zone_col",
+                    role: "zone_t",
+                },
+                RoleCol {
+                    csv_col: "rat_col",
+                    role: "rat",
+                },
+                RoleCol {
+                    csv_col: "sat_col",
+                    role: "sat",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "sv_stale.sql",
+            300.0,
+            600,
+            &[("STALE_HOURS", "0.25"), ("STALE_TOL", "0.05")],
+        )
+        .await;
+        assert_hours_close(got, 0.0, "SV-STALE five roles changing");
+    }
+
+    #[tokio::test]
+    async fn sv_stale_humidity_live_clears_frozen_temps() {
+        // After the catalog port, SV-STALE ANDs oa_h with the five air temps.
+        // Frozen temps + live humidity prove the feed is still updating.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SVSTALE_OAH_LIVE");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,oat_col,mat_col,zone_col,rat_col,sat_col,rh_col
+2026-01-01T00:00:00Z,70,65,72,73,55,40
+2026-01-01T00:05:00Z,70,65,72,73,55,45
+2026-01-01T00:10:00Z,70,65,72,73,55,50
+2026-01-01T00:15:00Z,70,65,72,73,55,55
+2026-01-01T00:20:00Z,70,65,72,73,55,60
+2026-01-01T00:25:00Z,70,65,72,73,55,65
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "oat_col",
+                    role: "oa_t",
+                },
+                RoleCol {
+                    csv_col: "mat_col",
+                    role: "mat",
+                },
+                RoleCol {
+                    csv_col: "zone_col",
+                    role: "zone_t",
+                },
+                RoleCol {
+                    csv_col: "rat_col",
+                    role: "rat",
+                },
+                RoleCol {
+                    csv_col: "sat_col",
+                    role: "sat",
+                },
+                RoleCol {
+                    csv_col: "rh_col",
+                    role: "oa_h",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "sv_stale.sql",
+            300.0,
+            0,
+            &[("STALE_HOURS", "0.25"), ("STALE_TOL", "0.05")],
+        )
+        .await;
+        assert_hours_close(got, 0.0, "SV-STALE AND with live humidity");
+    }
+
+    #[tokio::test]
+    async fn sv_rate_humidity_slew_stays_silent() {
+        // Remaining semantic_gap: SQL SV-RATE still windows five air temps only.
+        // Humidity slew that pandas ROLE_TO_PROFILE would see must not FAULT SQL.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SVRATE_OAH");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,oat_col,mat_col,zone_col,rat_col,sat_col,rh_col
+2026-01-01T00:00:00Z,70,65,72,73,55,20
+2026-01-01T00:05:00Z,70.1,65.1,72.1,73.1,55.1,50
+2026-01-01T00:10:00Z,70.2,65.2,72.2,73.2,55.2,80
+2026-01-01T00:15:00Z,70.3,65.3,72.3,73.3,55.3,20
+2026-01-01T00:20:00Z,70.4,65.4,72.4,73.4,55.4,50
+2026-01-01T00:25:00Z,70.5,65.5,72.5,73.5,55.5,80
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "oat_col",
+                    role: "oa_t",
+                },
+                RoleCol {
+                    csv_col: "mat_col",
+                    role: "mat",
+                },
+                RoleCol {
+                    csv_col: "zone_col",
+                    role: "zone_t",
+                },
+                RoleCol {
+                    csv_col: "rat_col",
+                    role: "rat",
+                },
+                RoleCol {
+                    csv_col: "sat_col",
+                    role: "sat",
+                },
+                RoleCol {
+                    csv_col: "rh_col",
+                    role: "oa_h",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "sv_rate.sql",
+            300.0,
+            600,
+            &[("STEADY_FAULT_PER_HOUR", "6"), ("PERSISTENCE_MIN", "10")],
+        )
+        .await;
+        assert_hours_close(got, 0.0, "SV-RATE humidity slew stays SQL-silent");
+    }
+
+    #[tokio::test]
     async fn fc4_flags_clock_hour_over_delta_os_max() {
         // GL36 fault 4: ΔOS entries per clock hour > ΔOSmax flags the whole hour.
         let tmp = tempfile::TempDir::new().unwrap();
