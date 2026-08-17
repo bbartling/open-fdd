@@ -43,6 +43,10 @@ pub fn load_column_role_map(path: &Path) -> Result<HashMap<String, String>> {
                 (Some("zone_t"), "vav_point") => Some("zone_t".into()),
                 (Some(inferred_role), "vav_point") => Some(inferred_role.to_string()),
                 (Some("min_flow_sp"), "zone_flow") => Some("min_flow_sp".into()),
+                // Historian `other` (CHILLER_2 command/amps) — pandas COL_PATTERN_ROLES
+                // still maps physical names; do not keep a useless `other` parquet col.
+                (Some(inferred_role), "other") => Some(inferred_role.to_string()),
+                (None, "other") => None,
                 _ => Some(normalized),
             }
         };
@@ -128,6 +132,10 @@ pub fn haystack_point_to_role(point: &str) -> String {
         "web-outside-air-dewpoint" => "web_oa_dp".into(),
         "web-outside-air-wetbulb" => "web_wb_t".into(),
         "web-outside-air-humidity" => "web_oa_h".into(),
+        "chiller-power" | "power" => "chiller_power".into(),
+        "chiller-amps" => "chiller_amps".into(),
+        "chiller-current" => "chiller_current".into(),
+        "pump-status" => "pump_status".into(),
         other => normalize_role(&other.replace('-', "_")),
     }
 }
@@ -188,6 +196,10 @@ pub fn normalize_role(role: &str) -> String {
         "loop_enabled" | "pid_enable" => "loop_enabled".into(),
         "chws_t" | "chw_supply" | "chwst" | "chws_t_f" | "chw_supply_t" => "chw_supply_t".into(),
         "chwr_t" | "chw_return" | "chwrt" | "chwr_t_f" | "chw_return_t" => "chw_return_t".into(),
+        "power" | "chiller_power" => "chiller_power".into(),
+        "chiller_amps" | "chiller_amp" => "chiller_amps".into(),
+        "chiller_current" => "chiller_current".into(),
+        "pump_status" => "pump_status".into(),
         "hws_t" | "hw_supply" | "hwst" | "hws_t_f" | "hw_supply_t" => "hw_supply_t".into(),
         "hwr_t" | "hw_return" | "hwrt" | "hwr_t_f" | "hw_return_t" => "hw_return_t".into(),
         "oa_humidity" | "oa_h" | "relative_humidity_pct" | "oa_rh_pct" => "oa_h".into(),
@@ -227,6 +239,10 @@ pub const COOKBOOK_ROLES: &[&str] = &[
     "building_ahu_load_satisfied",
     "chw_supply_t",
     "chw_return_t",
+    "chiller_power",
+    "chiller_amps",
+    "chiller_current",
+    "pump_status",
     "hw_supply_t",
     "hw_return_t",
     "oa_h",
@@ -259,6 +275,10 @@ pub fn is_known_cookbook_role(role: &str) -> bool {
             | "min_flow_sp"
             | "chw_supply_t"
             | "chw_return_t"
+            | "chiller_power"
+            | "chiller_amps"
+            | "chiller_current"
+            | "pump_status"
             | "hw_supply_t"
             | "hw_return_t"
             | "oa_h"
@@ -405,6 +425,19 @@ fn infer_role_from_column_name(column: &str) -> Option<String> {
     }
     if c.contains("chwr") || c.contains("chw_return") {
         return Some("chw_return_t".into());
+    }
+    if c.contains("dew_point") || c.contains("dewpoint") {
+        return Some("web_oa_dp".into());
+    }
+    // Pandas COL_PATTERN_ROLES: chiller_N_command → status, chiller_N_amps → amps.
+    if c.contains("chiller") && c.contains("command") {
+        return Some("chiller_status".into());
+    }
+    if (c.contains("chiller") && c.contains("amps")) || c.ends_with("amps_a") {
+        return Some("chiller_amps".into());
+    }
+    if c.contains("power_demand_this_interval") || c.contains("meter_power_sum") {
+        return Some("chiller_power".into());
     }
     None
 }
@@ -638,5 +671,58 @@ mod tests {
         );
         assert_eq!(map.get("actflow"), Some(&"zone_flow".to_string()));
         assert_eq!(map.get("minflowsp"), Some(&"min_flow_sp".to_string()));
+    }
+
+    #[test]
+    fn chiller_other_and_power_roles_match_pandas() {
+        assert_eq!(haystack_point_to_role("power"), "chiller_power");
+        assert_eq!(
+            infer_role_from_column_name("chiller_2_command").as_deref(),
+            Some("chiller_status")
+        );
+        assert_eq!(
+            infer_role_from_column_name("chiller_2_amps_a").as_deref(),
+            Some("chiller_amps")
+        );
+        assert_eq!(
+            infer_role_from_column_name(
+                "meter_chiller2_chiller2_power_demand_this_interval_element_h_kw"
+            )
+            .as_deref(),
+            Some("chiller_power")
+        );
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("columns.csv");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(
+            f,
+            "col,point_role\n\
+             chiller_2_command,other\n\
+             chiller_2_amps_a,other\n\
+             meter_chiller2_chiller2_power_demand_this_interval_element_h_kw,power\n\
+             meter_chiller2_chiller2_power_demand_peak_element_h_kw,power\n\
+             chwr_t_f,other\n\
+             chws_t_f,other"
+        )
+        .unwrap();
+        let map = load_column_role_map(&path).unwrap();
+        assert_eq!(
+            map.get("chiller_2_command"),
+            Some(&"chiller_status".to_string())
+        );
+        assert_eq!(
+            map.get("chiller_2_amps_a"),
+            Some(&"chiller_amps".to_string())
+        );
+        assert_eq!(
+            map.get("meter_chiller2_chiller2_power_demand_this_interval_element_h_kw"),
+            Some(&"chiller_power".to_string())
+        );
+        assert_eq!(
+            map.get("meter_chiller2_chiller2_power_demand_peak_element_h_kw"),
+            Some(&"chiller_power".to_string())
+        );
+        assert_eq!(map.get("chws_t_f"), Some(&"chw_supply_t".to_string()));
+        assert_eq!(map.get("chwr_t_f"), Some(&"chw_return_t".to_string()));
     }
 }

@@ -113,6 +113,32 @@ pub fn score_column_for_role(role: &str, column: &str) -> i32 {
                 0
             }
         }
+        "chiller_power" => {
+            // Pandas ROLE_COLUMN_RANK: this_interval > meter_power_sum > generic power.
+            // Peak / kVA meters stay on when the chiller is off (B100 CHW-1 hours).
+            if c.contains("peak") || c.contains("kva") || c.contains("va_demand") {
+                -100
+            } else if c.contains("this_interval") {
+                100
+            } else if c.contains("meter_power_sum") {
+                90
+            } else if c.contains("chiller_power") {
+                80
+            } else {
+                0
+            }
+        }
+        "chiller_status" => {
+            if c.contains("override") || c.contains("tstat") {
+                -100
+            } else if c.contains("command") {
+                100
+            } else if c.contains("chiller_status") {
+                90
+            } else {
+                0
+            }
+        }
         _ => 0,
     }
 }
@@ -206,5 +232,21 @@ mod tests {
         assert!(act > input, "actflow={act} flow_input={input}");
         assert!(act > min_sp, "actflow={act} minflowsp={min_sp}");
         assert!(min_sp < 0);
+    }
+
+    #[test]
+    fn chiller_power_prefers_this_interval_over_peak() {
+        let interval = score_column_for_role(
+            "chiller_power",
+            "meter_chiller2_chiller2_power_demand_this_interval_element_h_kw",
+        );
+        let peak = score_column_for_role(
+            "chiller_power",
+            "meter_chiller2_chiller2_power_demand_peak_element_h_kw",
+        );
+        let sum = score_column_for_role("chiller_power", "meter_power_sum_kw");
+        assert!(interval > sum, "interval={interval} sum={sum}");
+        assert!(interval > peak, "interval={interval} peak={peak}");
+        assert!(peak < 0);
     }
 }

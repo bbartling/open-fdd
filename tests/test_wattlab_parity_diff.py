@@ -27,6 +27,14 @@ def test_other_rule_status_mismatch_not_intentional():
     assert not ok
 
 
+def test_econ2_last_interval_quarter_hour_is_accepted():
+    ok, why = _intentional_accepted("ECON-2", "FAULT", "FAULT", 140.58, 140.83)
+    assert ok
+    assert "15-min" in why
+    ok, _ = _intentional_accepted("ECON-2", "FAULT", "FAULT", 140.58, 141.58)
+    assert not ok
+
+
 def test_fault_intersection_hours_are_blockers():
     ok, _ = _sql_screening_pair("FC1", "FAULT", "FAULT", 10.0, 200.0)
     assert not ok

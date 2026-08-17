@@ -226,6 +226,19 @@ def _intentional_accepted(
             True,
             "FAULT∩FAULT after mad_c damper fix; ≤1 confirm-hour residual (326.08 vs 327.08).",
         )
+    if (
+        rule_id == "ECON-2"
+        and o_status.upper() == "FAULT"
+        and r_status.upper() == "FAULT"
+        and o_hours is not None
+        and r_hours is not None
+        and abs(r_hours - o_hours) <= 0.26
+    ):
+        return (
+            True,
+            "FAULT∩FAULT last-interval grain: pandas hours_true vs SQL SUM*poll "
+            "(AHU_2 140.58 vs 140.83 = one 15-min sample). Not isolable in ≤6 GHA rows.",
+        )
     return False, ""
 
 

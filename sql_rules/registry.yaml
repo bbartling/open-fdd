@@ -1154,8 +1154,8 @@ rules:
     sql_file: econ3_mech_without_econ.sql
     pandas_function: null
     description: Mech cooling without integrated economizer
-    required_roles: [web_oa_t, web_oa_dp, oa_damper_pct, clg_valve_pct]
-    optional_roles: [fan_status, fan_cmd]
+    required_roles: [oa_damper_pct, clg_valve_pct]
+    optional_roles: [web_oa_t, web_oa_dp, fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1247,8 +1247,8 @@ rules:
     sql_file: econ6_econ_freezing.sql
     pandas_function: null
     description: Economizing in freezing weather
-    required_roles: [web_oa_t, oa_damper_pct]
-    optional_roles: [fan_status, fan_cmd]
+    required_roles: [oa_damper_pct]
+    optional_roles: [web_oa_t, fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1289,8 +1289,8 @@ rules:
     sql_file: econ7_ok_not_economizing.sql
     pandas_function: null
     description: Economizer OK but not economizing
-    required_roles: [web_oa_t, web_oa_dp, oa_damper_pct, clg_valve_pct]
-    optional_roles: [fan_status, fan_cmd]
+    required_roles: [oa_damper_pct, clg_valve_pct]
+    optional_roles: [web_oa_t, web_oa_dp, fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening

@@ -1644,4 +1644,343 @@ timestamp_utc,duct_static,duct_static_sp
         let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
         assert_hours_close(got, expected, "VAV-6 reheat+OAT vs competing flow");
     }
+
+    #[tokio::test]
+    async fn chw1_missing_proof_is_zero_hours() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_CHW1_NOPROOF");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,chw_supply_t,chw_return_t
+2026-01-01T00:00:00Z,44,45
+2026-01-01T00:05:00Z,44,45
+2026-01-01T00:10:00Z,44,45
+2026-01-01T00:15:00Z,44,45
+2026-01-01T00:20:00Z,44,45
+2026-01-01T00:25:00Z,44,45
+";
+        write_equipment_fixture(
+            &building,
+            "CHILLER_2",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "chw_supply_t",
+                    role: "chw_supply_t",
+                },
+                RoleCol {
+                    csv_col: "chw_return_t",
+                    role: "chw_return_t",
+                },
+            ],
+            rows,
+        );
+
+        let got =
+            run_rule_fault_hours(&building, "chw1_low_dt.sql", 300.0, 600, &[("MIN_DT", "4")])
+                .await;
+        assert_hours_close(got, 0.0, "CHW-1 missing proof");
+    }
+
+    #[tokio::test]
+    async fn chw1_proven_on_low_dt_matches_pandas_confirm() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_CHW1_ON");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,chw_supply_t,chw_return_t,chiller_status
+2026-01-01T00:00:00Z,44,45,1
+2026-01-01T00:05:00Z,44,45,1
+2026-01-01T00:10:00Z,44,45,1
+2026-01-01T00:15:00Z,44,45,1
+2026-01-01T00:20:00Z,44,45,1
+2026-01-01T00:25:00Z,44,45,1
+";
+        write_equipment_fixture(
+            &building,
+            "CHILLER_2",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "chw_supply_t",
+                    role: "chw_supply_t",
+                },
+                RoleCol {
+                    csv_col: "chw_return_t",
+                    role: "chw_return_t",
+                },
+                RoleCol {
+                    csv_col: "chiller_status",
+                    role: "chiller_status",
+                },
+            ],
+            rows,
+        );
+
+        let got =
+            run_rule_fault_hours(&building, "chw1_low_dt.sql", 300.0, 600, &[("MIN_DT", "4")])
+                .await;
+        let raw = [true, true, true, true, true, true];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(expected, 0.4166666666666667, "pandas reference");
+        assert_hours_close(got, expected, "CHW-1 proven-on SQL");
+    }
+
+    #[tokio::test]
+    async fn chw1_competing_peak_uses_this_interval() {
+        // Peak kW stays high while this_interval is 0 → pandas rank → proof off.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_CHW1_PEAK");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let eq = building.join("CHILLER_2");
+        std::fs::create_dir_all(&eq).unwrap();
+        std::fs::write(
+            eq.join("columns.csv"),
+            "col,point_role\n\
+             chws_t_f,other\n\
+             chwr_t_f,other\n\
+             meter_chiller2_chiller2_power_demand_peak_element_h_kw,power\n\
+             meter_chiller2_chiller2_power_demand_this_interval_element_h_kw,power\n",
+        )
+        .unwrap();
+        std::fs::write(
+            eq.join("history_wide.csv"),
+            "timestamp_utc,chws_t_f,chwr_t_f,\
+meter_chiller2_chiller2_power_demand_peak_element_h_kw,\
+meter_chiller2_chiller2_power_demand_this_interval_element_h_kw\n\
+2026-01-01T00:00:00Z,44,45,100,0\n\
+2026-01-01T00:05:00Z,44,45,100,0\n\
+2026-01-01T00:10:00Z,44,45,100,0\n\
+2026-01-01T00:15:00Z,44,45,100,0\n\
+2026-01-01T00:20:00Z,44,45,100,0\n\
+2026-01-01T00:25:00Z,44,45,100,0\n",
+        )
+        .unwrap();
+
+        let got =
+            run_rule_fault_hours(&building, "chw1_low_dt.sql", 300.0, 600, &[("MIN_DT", "4")])
+                .await;
+        assert_hours_close(got, 0.0, "CHW-1 this_interval over peak");
+    }
+
+    #[tokio::test]
+    async fn chw1_command_off_ignores_peak_power() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_CHW1_CMDOFF");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let eq = building.join("CHILLER_2");
+        std::fs::create_dir_all(&eq).unwrap();
+        std::fs::write(
+            eq.join("columns.csv"),
+            "col,point_role\n\
+             chws_t_f,other\n\
+             chwr_t_f,other\n\
+             chiller_2_command,other\n\
+             meter_chiller2_chiller2_power_demand_peak_element_h_kw,power\n",
+        )
+        .unwrap();
+        std::fs::write(
+            eq.join("history_wide.csv"),
+            "timestamp_utc,chws_t_f,chwr_t_f,chiller_2_command,\
+meter_chiller2_chiller2_power_demand_peak_element_h_kw\n\
+2026-01-01T00:00:00Z,44,45,0,100\n\
+2026-01-01T00:05:00Z,44,45,0,100\n\
+2026-01-01T00:10:00Z,44,45,0,100\n\
+2026-01-01T00:15:00Z,44,45,0,100\n\
+2026-01-01T00:20:00Z,44,45,0,100\n\
+2026-01-01T00:25:00Z,44,45,0,100\n",
+        )
+        .unwrap();
+
+        let got =
+            run_rule_fault_hours(&building, "chw1_low_dt.sql", 300.0, 600, &[("MIN_DT", "4")])
+                .await;
+        assert_hours_close(got, 0.0, "CHW-1 command off vs peak");
+    }
+
+    fn write_weather_sidecar(data_root: &std::path::Path, rows: &str) {
+        let wx = data_root.join("weather");
+        std::fs::create_dir_all(&wx).unwrap();
+        std::fs::write(
+            wx.join("columns.csv"),
+            "col,point_role\n\
+             web-outside-air-temp,web-outside-air-temp\n\
+             web-outside-air-dewpoint,web-outside-air-dewpoint\n",
+        )
+        .unwrap();
+        std::fs::write(wx.join("history_wide.csv"), rows).unwrap();
+    }
+
+    #[tokio::test]
+    async fn econ3_weather_sidecar_matches_pandas_confirm() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_ECON3_WX");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,oa_d,clg_col
+2026-01-01T00:00:00Z,0.2,50
+2026-01-01T00:05:00Z,0.2,0
+2026-01-01T00:10:00Z,0.2,50
+2026-01-01T00:15:00Z,0.3,50
+2026-01-01T00:20:00Z,0.4,50
+2026-01-01T00:25:00Z,0.95,50
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "oa_d",
+                    role: "oa_damper_pct",
+                },
+                RoleCol {
+                    csv_col: "clg_col",
+                    role: "clg_valve_pct",
+                },
+            ],
+            rows,
+        );
+        write_weather_sidecar(
+            tmp.path(),
+            "timestamp_utc,web-outside-air-temp,web-outside-air-dewpoint\n\
+2026-01-01T00:00:00Z,50,50\n\
+2026-01-01T00:05:00Z,65,50\n\
+2026-01-01T00:10:00Z,65,50\n\
+2026-01-01T00:15:00Z,68,55\n\
+2026-01-01T00:20:00Z,70,58\n\
+2026-01-01T00:25:00Z,65,50\n",
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "econ3_mech_without_econ.sql",
+            300.0,
+            600,
+            &[
+                ("ECON3_DB_MIN", "60"),
+                ("ECON3_DB_MAX", "72"),
+                ("ECON3_DP_MAX", "60"),
+                ("ECON3_DAMPER_HI", "0.9"),
+            ],
+        )
+        .await;
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "ECON-3 weather join");
+    }
+
+    #[tokio::test]
+    async fn econ6_weather_sidecar_matches_pandas_confirm() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_ECON6_WX");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,oa_d
+2026-01-01T00:00:00Z,0.5
+2026-01-01T00:05:00Z,0.1
+2026-01-01T00:10:00Z,0.5
+2026-01-01T00:15:00Z,0.4
+2026-01-01T00:20:00Z,0.6
+2026-01-01T00:25:00Z,0.1
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[RoleCol {
+                csv_col: "oa_d",
+                role: "oa_damper_pct",
+            }],
+            rows,
+        );
+        write_weather_sidecar(
+            tmp.path(),
+            "timestamp_utc,web-outside-air-temp,web-outside-air-dewpoint\n\
+2026-01-01T00:00:00Z,30,10\n\
+2026-01-01T00:05:00Z,20,10\n\
+2026-01-01T00:10:00Z,20,10\n\
+2026-01-01T00:15:00Z,15,10\n\
+2026-01-01T00:20:00Z,10,10\n\
+2026-01-01T00:25:00Z,20,10\n",
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "econ6_econ_freezing.sql",
+            300.0,
+            600,
+            &[("ECON6_OAT_MAX_F", "25"), ("ECON6_DAMPER_MAX", "0.25")],
+        )
+        .await;
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "ECON-6 weather join");
+    }
+
+    #[tokio::test]
+    async fn econ7_weather_sidecar_matches_pandas_confirm() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_ECON7_WX");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,oa_d,clg_col
+2026-01-01T00:00:00Z,0.2,50
+2026-01-01T00:05:00Z,0.2,0
+2026-01-01T00:10:00Z,0.2,50
+2026-01-01T00:15:00Z,0.3,50
+2026-01-01T00:20:00Z,0.4,50
+2026-01-01T00:25:00Z,0.8,50
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "oa_d",
+                    role: "oa_damper_pct",
+                },
+                RoleCol {
+                    csv_col: "clg_col",
+                    role: "clg_valve_pct",
+                },
+            ],
+            rows,
+        );
+        write_weather_sidecar(
+            tmp.path(),
+            "timestamp_utc,web-outside-air-temp,web-outside-air-dewpoint\n\
+2026-01-01T00:00:00Z,30,50\n\
+2026-01-01T00:05:00Z,50,50\n\
+2026-01-01T00:10:00Z,50,50\n\
+2026-01-01T00:15:00Z,55,55\n\
+2026-01-01T00:20:00Z,60,58\n\
+2026-01-01T00:25:00Z,50,50\n",
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "econ7_ok_not_economizing.sql",
+            300.0,
+            600,
+            &[
+                ("ECON7_DB_MIN", "35"),
+                ("ECON7_DB_MAX", "72"),
+                ("ECON7_DP_MAX", "60"),
+                ("ECON7_DAMPER_MIN", "0.5"),
+            ],
+        )
+        .await;
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "ECON-7 weather join");
+    }
 }

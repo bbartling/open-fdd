@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use datafusion::prelude::SessionContext;
-use fdd_sql::{register_parquet_tree, run_sql};
+use fdd_sql::{register_parquet_tree, register_weather_if_present, run_sql};
 use fdd_store::ingest_building;
 
 use crate::params::{rule_params, substitute_sql};
@@ -62,6 +62,24 @@ pub async fn run_rule_fault_hours(
 
     let ctx = SessionContext::new();
     register_parquet_tree(&ctx, &tmp_parquet).await.unwrap();
+    let wx_ok = register_weather_if_present(&ctx, &tmp_parquet)
+        .await
+        .unwrap();
+    if !wx_ok {
+        ctx.sql(
+            "CREATE OR REPLACE VIEW weather AS \
+             SELECT CAST(NULL AS TIMESTAMP) AS timestamp_utc, \
+                    CAST(NULL AS DOUBLE) AS oa_t, \
+                    CAST(NULL AS DOUBLE) AS web_oa_t, \
+                    CAST(NULL AS DOUBLE) AS web_oa_dp \
+             WHERE 1=0",
+        )
+        .await
+        .unwrap()
+        .collect()
+        .await
+        .unwrap();
+    }
 
     let sql_path = repo_sql_rules().join(sql_file);
     let raw_sql = std::fs::read_to_string(&sql_path)
@@ -162,7 +180,11 @@ async fn inject_optional_fan_cols(
         "duct_static_sp",
         "static_reset_request",
         "web_oa_t",
+        "web_oa_dp",
         "clg_available",
+        "chiller_power",
+        "chiller_amps",
+        "chiller_current",
     ];
     let missing: Vec<&str> = needed.into_iter().filter(|c| !have.contains(*c)).collect();
     if missing.is_empty() {

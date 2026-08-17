@@ -1,19 +1,28 @@
 -- econ6_econ_freezing.sql — Economizing in freezing weather
-WITH h AS (
+-- Web dry-bulb: prefer equipment web_oa_t; else weather sidecar. Never BAS oa_t.
+WITH wx AS (
   SELECT
-    equipment_id,
     timestamp_utc,
-    web_oa_t,
-    CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END AS oa_d,
-    fan_cmd,
-    fan_status,
+    MAX(web_oa_t) AS wx_web_oa_t
+  FROM weather
+  GROUP BY timestamp_utc
+),
+h AS (
+  SELECT
+    h.equipment_id,
+    h.timestamp_utc,
+    COALESCE(h.web_oa_t, wx.wx_web_oa_t) AS web_oa_t,
+    CASE WHEN h.oa_damper_pct IS NULL THEN NULL WHEN h.oa_damper_pct > 1.0 THEN h.oa_damper_pct / 100.0 ELSE h.oa_damper_pct END AS oa_d,
+    h.fan_cmd,
+    h.fan_status,
     CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN h.fan_cmd > 1.0 THEN h.fan_cmd / 100.0 ELSE h.fan_cmd END) > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
-
-  FROM history
+  FROM history h
+  LEFT JOIN wx
+    ON h.timestamp_utc = wx.timestamp_utc
 ),
 base AS (
   SELECT
