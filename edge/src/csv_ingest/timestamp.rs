@@ -306,4 +306,17 @@ mod tests {
             .with_timezone(&Utc);
         assert_eq!(pt.ts_utc, Some(expected));
     }
+
+    #[test]
+    fn rfc3339_z_and_plus00_parse_to_same_utc() {
+        let tz: Tz = "America/Chicago".parse().unwrap();
+        let z = parse_row_timestamp("2026-05-21T20:20:00Z", tz, "first");
+        let plus = parse_row_timestamp("2026-05-21T20:20:00+00:00", tz, "first");
+        assert_eq!(z.status, ParseStatus::Ok);
+        assert_eq!(plus.status, ParseStatus::Ok);
+        assert_eq!(z.ts_utc, plus.ts_utc);
+        let bad = parse_row_timestamp("not-a-timestamp", tz, "first");
+        assert_eq!(bad.status, ParseStatus::Failed);
+        assert!(bad.ts_utc.is_none());
+    }
 }

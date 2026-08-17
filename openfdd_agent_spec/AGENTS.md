@@ -28,6 +28,8 @@ retest. Do not confuse those with this engineering OS.
 | `openfdd_agent_spec/` | Agent law, Milestone A, skills, session log |
 | Playground vibe19/20 | External demos; consumers of PyPI |
 
+**Package / timestamp contract (product + PyPI):** `timestamp_utc` is RFC3339 UTC (`Z` or `+00:00`). Rust ingest skips bad rows (no epoch 0 / now). Pandas oracle uses `open_fdd.timestamps.to_utc_datetime`. String `"equip"` on a Haystack sidecar is metadata. Details: [`../docs/RUST_DATAFUSION_ENGINE.md`](../docs/RUST_DATAFUSION_ENGINE.md).
+
 **Naming (code truth):**
 
 | Concept | Module / extra |

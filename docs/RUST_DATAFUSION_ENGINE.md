@@ -24,6 +24,18 @@ Production-direction deterministic FDD analytics for Open-FDD.
 
 Optional weather: `{data_root}/weather/` (staged for OAT-METEO rules).
 
+### `timestamp_utc` contract
+
+- ISO-8601 UTC with **`Z` or numeric offset** (`+00:00`) — both accepted.
+- Unparseable or empty stamps are **skipped** (never written as epoch 0 / wall-clock now).
+- Mixed suffixes in one CSV are fine; gold fixtures and BAS exports both appear in the wild.
+
+### Map JSON shapes
+
+- Package map: `equip` / `equipment` / `devices` must be an **object** of equipment blocks.
+- Single-equip Haystack sidecars may set `"equip": "AHU_1"` as a **string** device id — that is metadata; roles come from `points` / `column_roles`.
+- Site-specific vendor point names belong in the package preprocess, not in Rust equations.
+
 ## CLI
 
 ```powershell

@@ -50,6 +50,12 @@ labeled points.
 | `confidence` | number 0–1 | no | agent-suggested only; humans may omit |
 | `evidence` | string | no | why this mapping (name/unit/range) |
 
+### Package hygiene (agents)
+
+- `timestamp_utc` is RFC3339 UTC: **`Z` or `+00:00`** — both OK. Do not invent vendor clocks in the app.
+- String `"equip": "AHU_1"` on a single-equip sidecar is **metadata**, not a nested package map. Nested maps use object `equip`/`equipment`/`devices`.
+- Empty charts mean **missing roles** in the zip, not a broken FDD engine. Do not invent site/vendor point names in product code.
+
 ## MCP tools
 
 All entries also live in [`tool-catalog.v1.json`](tool-catalog.v1.json).

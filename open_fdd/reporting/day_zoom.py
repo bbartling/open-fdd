@@ -71,7 +71,9 @@ def worst_fault_day(fault: pd.Series | None) -> date | None:
         numeric = s.map(lambda v: 1.0 if bool(v) else 0.0)
     if not isinstance(s.index, pd.DatetimeIndex):
         try:
-            idx = pd.to_datetime(s.index)
+            from open_fdd.timestamps import to_utc_datetime
+
+            idx = to_utc_datetime(s.index)
             numeric.index = idx
         except Exception:
             return None
@@ -123,7 +125,9 @@ def render_day_zoom_png(
         s = ser.copy()
         if not isinstance(s.index, pd.DatetimeIndex):
             try:
-                s.index = pd.to_datetime(s.index)
+                from open_fdd.timestamps import to_utc_datetime
+
+                s.index = to_utc_datetime(s.index)
             except Exception:
                 return None
         day_start, day_end = _day_bounds(day, s.index)

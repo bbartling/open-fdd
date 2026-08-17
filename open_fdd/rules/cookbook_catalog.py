@@ -650,7 +650,9 @@ def fc4(d, p, poll):
     if isinstance(d.index, pd.DatetimeIndex):
         ts = pd.DatetimeIndex(d.index)
     elif "timestamp" in d.columns:
-        ts = pd.DatetimeIndex(pd.to_datetime(d["timestamp"], utc=True, errors="coerce"))
+        from open_fdd.timestamps import to_utc_datetime
+
+        ts = pd.DatetimeIndex(to_utc_datetime(d["timestamp"], errors="coerce"))
     else:
         return _false(d.index)
     entries = (modes.eq(1) & modes.shift().ne(1))

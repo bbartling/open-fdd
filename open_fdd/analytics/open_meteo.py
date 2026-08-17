@@ -123,9 +123,11 @@ def fetch_open_meteo(
         reason = payload.get("reason") or payload.get("error") or "no data"
         raise ValueError(f"Open-Meteo returned no {block_key} data: {reason}")
 
+    from open_fdd.timestamps import to_utc_datetime
+
     raw = pd.DataFrame(
         {
-            "timestamp_utc": pd.to_datetime(block["time"], utc=True),
+            "timestamp_utc": to_utc_datetime(block["time"]),
             "dry_bulb_f": block.get("temperature_2m"),
             "relative_humidity_pct": block.get("relative_humidity_2m"),
             "dew_point_f": block.get("dew_point_2m"),
@@ -179,7 +181,9 @@ def align_to_index(weather: pd.DataFrame, grid: pd.DatetimeIndex) -> pd.DataFram
     src = weather.copy()
     if not isinstance(src.index, pd.DatetimeIndex):
         if "timestamp_utc" in src.columns:
-            src = src.set_index(pd.to_datetime(src["timestamp_utc"], utc=True))
+            from open_fdd.timestamps import to_utc_datetime
+
+            src = src.set_index(to_utc_datetime(src["timestamp_utc"]))
             src = src.drop(columns=["timestamp_utc"], errors="ignore")
         else:
             raise ValueError("weather must have DatetimeIndex or timestamp_utc column")

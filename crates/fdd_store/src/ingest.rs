@@ -13,6 +13,20 @@ use fdd_core::{load_column_role_map, validate_building};
 
 use crate::meta::{meta_path_for, source_fingerprint, write_meta, SidecarMeta};
 
+/// Parse `timestamp_utc` to UTC nanoseconds.
+///
+/// Accepts RFC3339 with `Z` or numeric offsets (`+00:00`). Returns `None` on
+/// empty / unparseable input — callers must skip the row (never invent epoch 0).
+pub fn parse_timestamp_utc_nanos(raw: &str) -> Option<i64> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    chrono::DateTime::parse_from_rfc3339(trimmed)
+        .ok()
+        .and_then(|dt| dt.with_timezone(&chrono::Utc).timestamp_nanos_opt())
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct IngestTiming {
     pub equipment_id: String,
@@ -186,15 +200,12 @@ fn read_csv_batch(path: &Path, columns_path: &Path) -> Result<(RecordBatch, u64)
 
     for rec in rdr.records() {
         let rec = rec?;
+        let raw_ts = rec.get(ts_idx).unwrap_or("").trim();
+        // Never invent epoch-0 / "now" for bad stamps — skip the row.
+        let Some(ts) = parse_timestamp_utc_nanos(raw_ts) else {
+            continue;
+        };
         rows += 1;
-        let raw_ts = rec.get(ts_idx).unwrap_or("");
-        let ts: i64 = chrono::DateTime::parse_from_rfc3339(raw_ts)
-            .map(|dt| {
-                dt.with_timezone(&chrono::Utc)
-                    .timestamp_nanos_opt()
-                    .unwrap_or(0)
-            })
-            .unwrap_or(0);
         ts_vals.push(ts);
         for (j, (i, _)) in included.iter().enumerate() {
             let cell = rec.get(*i).unwrap_or("").trim();
@@ -419,6 +430,45 @@ mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::TempDir;
+
+    #[test]
+    fn parse_accepts_z_and_plus00_as_same_utc() {
+        let z = parse_timestamp_utc_nanos("2026-05-21T20:20:00Z").unwrap();
+        let plus = parse_timestamp_utc_nanos("2026-05-21T20:20:00+00:00").unwrap();
+        assert_eq!(z, plus);
+        assert!(parse_timestamp_utc_nanos("not-a-timestamp").is_none());
+        assert!(parse_timestamp_utc_nanos("").is_none());
+        assert!(parse_timestamp_utc_nanos("   ").is_none());
+    }
+
+    #[test]
+    fn mixed_z_and_offset_suffixes_ingest_without_epoch_zero() {
+        use arrow::array::Array;
+        let tmp = TempDir::new().unwrap();
+        let mut f = std::fs::File::create(tmp.path().join("columns.csv")).unwrap();
+        writeln!(f, "col,point_role\noat,outside_air_temp").unwrap();
+        let mut h = std::fs::File::create(tmp.path().join("history_wide.csv")).unwrap();
+        writeln!(h, "timestamp_utc,oat").unwrap();
+        writeln!(h, "2026-05-21T20:20:00Z,70").unwrap();
+        writeln!(h, "2026-05-21T20:25:00+00:00,71").unwrap();
+        writeln!(h, "bogus,72").unwrap();
+        writeln!(h, ",73").unwrap();
+        let (batch, rows) = read_csv_batch(
+            &tmp.path().join("history_wide.csv"),
+            &tmp.path().join("columns.csv"),
+        )
+        .unwrap();
+        assert_eq!(rows, 2, "unparseable rows must be skipped, not epoch-0");
+        let ts_idx = batch.schema().index_of("timestamp_utc").unwrap();
+        let ts = batch
+            .column(ts_idx)
+            .as_any()
+            .downcast_ref::<TimestampNanosecondArray>()
+            .unwrap();
+        assert_ne!(ts.value(0), 0);
+        assert_ne!(ts.value(1), 0);
+        assert!(ts.value(1) > ts.value(0));
+    }
 
     #[test]
     fn weather_flat_csv_maps_oa_t() {

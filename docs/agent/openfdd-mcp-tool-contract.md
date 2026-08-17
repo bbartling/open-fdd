@@ -101,6 +101,12 @@ Requires **`OPENFDD_MCP_ALLOW_WRITES=1`** and **`confirm: true`** on each tool c
 | Haystack write | `POST /api/haystack/write` | Station write |
 | Site restore | backup/restore scripts | Data loss |
 
+## Package / CSV ingest notes
+
+- `timestamp_utc` must be RFC3339 UTC (`Z` or `+00:00`). Preflight and ingest skip unparseable rows — they do **not** invent epoch 0 or wall-clock now.
+- Haystack sidecar `"equip": "<string>"` is device metadata; nested package maps use object `equip`/`equipment`/`devices`.
+- Empty analytics after import usually mean missing roles in the zip, not a broken MCP tool.
+
 ## Forbidden
 
 - Exposing `auth.env.local`, password hashes, or JWTs in tool output

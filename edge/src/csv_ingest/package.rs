@@ -1386,6 +1386,28 @@ mod tests {
     }
 
     #[test]
+    fn string_equip_metadata_still_reads_points() {
+        // Haystack single-equip sidecars often set "equip": "AHU_1" (string).
+        // Only dict equip/equipment/devices is a package map.
+        let map = serde_json::json!({
+            "equipType": "ahu",
+            "equipment_type": "ahu",
+            "device": "AHU_1",
+            "equip": "AHU_1",
+            "points": {
+                "fan-cmd": "SF_SPD",
+                "discharge-air-temp": "SAT"
+            }
+        });
+        let roles = points_from_map_json(&map, "AHU_1").expect("roles");
+        assert_eq!(roles.get("fan-cmd").map(String::as_str), Some("SF_SPD"));
+        assert_eq!(
+            roles.get("discharge-air-temp").map(String::as_str),
+            Some("SAT")
+        );
+    }
+
+    #[test]
     fn rejects_wrong_schema_and_traversal() {
         let zip = build_zip(&[(
             "manifest.json",

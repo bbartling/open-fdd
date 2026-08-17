@@ -41,10 +41,14 @@ fn safe_path_part(part: &str) -> String {
     }
 }
 
-fn parse_ts_ms(ts: &str) -> i64 {
-    DateTime::parse_from_rfc3339(ts)
-        .map(|d| d.timestamp_millis())
-        .unwrap_or_else(|_| Utc::now().timestamp_millis())
+fn parse_ts_ms(ts: &str) -> Option<i64> {
+    let trimmed = ts.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    DateTime::parse_from_rfc3339(trimmed)
+        .ok()
+        .map(|d| d.with_timezone(&Utc).timestamp_millis())
 }
 
 fn shard_name() -> String {
@@ -84,7 +88,12 @@ pub fn write_wide_shard(
     }
     let schema = Arc::new(Schema::new(fields));
 
-    let ts_arr = TimestampMillisecondArray::from(vec![parse_ts_ms(timestamp)]);
+    let Some(ts_ms) = parse_ts_ms(timestamp) else {
+        return Err(format!(
+            "unparseable timestamp (need RFC3339 UTC Z or offset): {timestamp}"
+        ));
+    };
+    let ts_arr = TimestampMillisecondArray::from(vec![ts_ms]);
     let site_arr = StringArray::from(vec![site_id.to_string()]);
     let mut arrays: Vec<Arc<dyn arrow::array::Array>> = vec![Arc::new(ts_arr), Arc::new(site_arr)];
     for name in &col_names {

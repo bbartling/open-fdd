@@ -55,8 +55,10 @@ def _ensure_dt_index(d: pd.DataFrame) -> pd.DataFrame:
     if isinstance(d.index, pd.DatetimeIndex):
         return d
     if "timestamp" in d.columns:
+        from open_fdd.timestamps import to_utc_datetime
+
         out = d.copy()
-        out.index = pd.DatetimeIndex(pd.to_datetime(out["timestamp"], utc=True, errors="coerce"))
+        out.index = pd.DatetimeIndex(to_utc_datetime(out["timestamp"], errors="coerce"))
         return out
     raise ValueError("SV-RATE requires a DatetimeIndex or timestamp column")
 
