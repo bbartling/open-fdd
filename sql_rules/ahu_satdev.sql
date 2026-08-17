@@ -1,4 +1,6 @@
 -- ahu_satdev.sql — SAT deviation from setpoint (fan_running + confirm)
+-- Gate: fan-on from fan_status then fan_cmd. Missing fan stays off
+-- (do not ELSE 1 / COALESCE to on — that invents on-hours).
 WITH h AS (
   SELECT
     equipment_id,
@@ -10,7 +12,7 @@ WITH h AS (
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
-      ELSE 1
+      ELSE 0
     END AS fan_on
   FROM history
 ),
@@ -19,7 +21,7 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN COALESCE(fan_on, 1) = 0 THEN 0
+      WHEN COALESCE(fan_on, 0) = 0 THEN 0
       WHEN sat IS NULL OR sat_sp IS NULL THEN 0
       WHEN ABS(sat - sat_sp) > {{SAT_DEV_ERR}} THEN 1
       ELSE 0
