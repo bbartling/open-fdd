@@ -1,8 +1,9 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
-use arrow::array::{Float64Array, StringArray, TimestampNanosecondArray};
+use arrow::array::{Array, ArrayRef, Float64Array, StringArray, TimestampNanosecondArray};
 use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use arrow::record_batch::RecordBatch;
 use parquet::arrow::ArrowWriter;
@@ -281,6 +282,99 @@ fn write_parquet(path: &Path, batch: &RecordBatch) -> Result<()> {
     Ok(())
 }
 
+fn weather_has_col(batch: &RecordBatch, name: &str) -> bool {
+    batch.schema().index_of(name).is_ok()
+}
+
+fn weather_clone_col(batch: &RecordBatch, src: &str, dest: &str) -> Option<(Arc<Field>, ArrayRef)> {
+    let i = batch.schema().index_of(src).ok()?;
+    let col = batch.column(i).clone();
+    Some((
+        Arc::new(Field::new(dest, col.data_type().clone(), true)),
+        col,
+    ))
+}
+
+fn weather_f64<'a>(batch: &'a RecordBatch, name: &str) -> Option<&'a Float64Array> {
+    let i = batch.schema().index_of(name).ok()?;
+    batch.column(i).as_any().downcast_ref::<Float64Array>()
+}
+
+fn dewpoint_f_from_db_rh(db_f: f64, rh_pct: f64) -> Option<f64> {
+    if !db_f.is_finite() || !rh_pct.is_finite() || rh_pct <= 0.0 {
+        return None;
+    }
+    let t_c = (db_f - 32.0) * 5.0 / 9.0;
+    let rh = rh_pct.clamp(0.1, 100.0);
+    let a = 17.625_f64;
+    let b = 243.04_f64;
+    let gamma = (rh / 100.0).ln() + (a * t_c) / (b + t_c);
+    if (a - gamma).abs() < 1e-12 {
+        return None;
+    }
+    let dp_c = (b * gamma) / (a - gamma);
+    Some(dp_c * 9.0 / 5.0 + 32.0)
+}
+
+fn null_f64(n: usize) -> ArrayRef {
+    Arc::new(Float64Array::from(vec![None; n])) as ArrayRef
+}
+
+/// Pandas `enrich_weather_frame` twin: weather parquet always exposes `oa_t`,
+/// `web_oa_t`, and `web_oa_dp` so ECON-3/6/7 can JOIN without schema misses.
+fn ensure_weather_web_roles(batch: RecordBatch) -> Result<RecordBatch> {
+    let n = batch.num_rows();
+    let mut fields: Vec<Arc<Field>> = batch.schema().fields().iter().cloned().collect();
+    let mut arrays: Vec<ArrayRef> = batch.columns().to_vec();
+
+    if !weather_has_col(&batch, "web_oa_t") {
+        if let Some((f, a)) = weather_clone_col(&batch, "oa_t", "web_oa_t") {
+            fields.push(f);
+            arrays.push(a);
+        } else {
+            fields.push(Arc::new(Field::new("web_oa_t", DataType::Float64, true)));
+            arrays.push(null_f64(n));
+        }
+    }
+    if !weather_has_col(&batch, "oa_t") {
+        if let Some((f, a)) = weather_clone_col(&batch, "web_oa_t", "oa_t") {
+            fields.push(f);
+            arrays.push(a);
+        } else {
+            fields.push(Arc::new(Field::new("oa_t", DataType::Float64, true)));
+            arrays.push(null_f64(n));
+        }
+    }
+    if !weather_has_col(&batch, "web_oa_dp") {
+        if let Some((f, a)) = weather_clone_col(&batch, "oa_dp", "web_oa_dp") {
+            fields.push(f);
+            arrays.push(a);
+        } else {
+            let db = weather_f64(&batch, "web_oa_t").or_else(|| weather_f64(&batch, "oa_t"));
+            let rh = weather_f64(&batch, "oa_h").or_else(|| weather_f64(&batch, "web_oa_h"));
+            let dp = match (db, rh) {
+                (Some(db), Some(rh)) => Float64Array::from(
+                    (0..n)
+                        .map(|i| {
+                            if db.is_null(i) || rh.is_null(i) {
+                                None
+                            } else {
+                                dewpoint_f_from_db_rh(db.value(i), rh.value(i))
+                            }
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+                _ => Float64Array::from(vec![None; n]),
+            };
+            fields.push(Arc::new(Field::new("web_oa_dp", DataType::Float64, true)));
+            arrays.push(Arc::new(dp) as ArrayRef);
+        }
+    }
+
+    let schema = Schema::new(fields);
+    Ok(RecordBatch::try_new(Arc::new(schema), arrays)?)
+}
+
 /// Ingest Open-Meteo / weather historian CSV tree into `out_dir/weather/`.
 pub fn ingest_weather_tree(weather_root: &Path, out_dir: &Path) -> Result<usize> {
     let mut written = 0usize;
@@ -312,6 +406,7 @@ pub fn ingest_weather_tree(weather_root: &Path, out_dir: &Path) -> Result<usize>
     std::fs::create_dir_all(&dest)?;
     if let Some((history, columns)) = bundles.into_iter().next() {
         let (batch, _rows) = read_csv_batch(&history, &columns)?;
+        let batch = ensure_weather_web_roles(batch)?;
         let parquet_path = dest.join("history.parquet");
         write_parquet(&parquet_path, &batch)?;
         written += 1;
@@ -350,6 +445,48 @@ mod tests {
             .map(|f| f.name().clone())
             .collect();
         assert!(names.iter().any(|n| n == "oa_t"), "fields: {names:?}");
+    }
+
+    #[test]
+    fn ingest_weather_tree_aliases_web_oa_roles() {
+        let tmp = TempDir::new().unwrap();
+        let wx = tmp.path().join("wx_src");
+        std::fs::create_dir_all(&wx).unwrap();
+        let mut f = std::fs::File::create(wx.join("columns.csv")).unwrap();
+        writeln!(
+            f,
+            "col,point_role\noutside_air_temp_f,outside_air_temp\nrelative_humidity_pct,oa_humidity"
+        )
+        .unwrap();
+        let mut h = std::fs::File::create(wx.join("history_wide.csv")).unwrap();
+        writeln!(h, "timestamp_utc,outside_air_temp_f,relative_humidity_pct").unwrap();
+        writeln!(h, "2026-01-01T00:00:00Z,65.0,41.0").unwrap();
+        let out = tmp.path().join("parquet");
+        let n = ingest_weather_tree(&wx, &out).unwrap();
+        assert_eq!(n, 1);
+        let pq = out.join("weather/history.parquet");
+        let file = std::fs::File::open(&pq).unwrap();
+        let reader = parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(file)
+            .unwrap()
+            .build()
+            .unwrap();
+        let batch = reader.into_iter().next().unwrap().unwrap();
+        let names: Vec<_> = batch
+            .schema()
+            .fields()
+            .iter()
+            .map(|f| f.name().clone())
+            .collect();
+        assert!(names.iter().any(|n| n == "oa_t"), "fields: {names:?}");
+        assert!(names.iter().any(|n| n == "web_oa_t"), "fields: {names:?}");
+        assert!(names.iter().any(|n| n == "web_oa_dp"), "fields: {names:?}");
+        let dp_idx = batch.schema().index_of("web_oa_dp").unwrap();
+        let dp = batch
+            .column(dp_idx)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+        assert!(dp.value(0).is_finite(), "magnus dewpoint {}", dp.value(0));
     }
 
     #[test]
