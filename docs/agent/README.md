@@ -15,5 +15,6 @@ Paste prompts and dev-agent charters for Cursor/Codex on bench and WSL. **Not pu
 | `linux-edge-tester-stack-recipes-prompt.md` | Living daily bench prompt (overwrite in place, never date) |
 | `openfdd-agent-architecture.md` | Architecture reference (repo-only) |
 | `index.md` | Folder index (repo-only) |
+| `fdd_parity_cycles/` | Sequenced leftover dump-blocker cycles (docs-only specs; GHA product PRs later) |
 
 Raw links: `https://github.com/bbartling/open-fdd/blob/master/docs/agent/<file>.md`
