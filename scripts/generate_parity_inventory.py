@@ -90,8 +90,9 @@ KNOWN_DIFFERENCES: dict[str, dict] = {
     "SCHED-247": {
         "class": "none",
         "note": (
-            "4.3: ranked proof status/current > command; pressure is inferred "
-            "runtime only and does not OR into the FAULT mask. SQL uses the same rank."
+            "4.3 ranked proof (status/current > command; pressure inferred only). "
+            "SQL mean(on) >= always_on_pct over the analysis window matches pandas "
+            "_sched247. Keep sql_screening; do not mark proven from B100 hours."
         ),
     },
     "FC7": {

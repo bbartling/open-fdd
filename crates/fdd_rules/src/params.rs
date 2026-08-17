@@ -35,6 +35,7 @@ pub fn substitute_sql(sql: &str, params: &HashMap<String, String>) -> String {
         ("ECON2_DAMPER", "0.42"),
         ("DUCT_HIGH_MARGIN", "0.25"),
         ("PRESSURE_ON_MIN", "0.2"),
+        ("ALWAYS_ON_PCT", "0.95"),
     ] {
         params.entry(k.into()).or_insert_with(|| v.into());
     }

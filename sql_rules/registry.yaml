@@ -2486,3 +2486,12 @@ rules:
         unit: sec
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
+      always_on_pct:
+        label: Always-on fraction
+        default: 0.95
+        min: 0.8
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ALWAYS_ON_PCT

@@ -1,5 +1,7 @@
 -- sched247_always_on.sql — Always-on fan or pump runtime
--- Ranked proof: fan_status / pump_status / chiller_status, else fan_cmd.
+-- Pandas `_sched247`: ranked proof (status > command), then FAULT only when
+-- mean(on) >= always_on_pct over the whole analysis window. Confirmed hours
+-- are the on-mask after that gate (not a streak-only screen).
 -- Pressure is not used for the FAULT mask (4.3 migration).
 WITH h AS (
   SELECT
@@ -21,8 +23,26 @@ proof AS (
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan IS NOT NULL THEN CASE WHEN fan >= 0.05 THEN 1 ELSE 0 END
       ELSE 0
-    END AS INT) AS raw_fault
+    END AS INT) AS on_bit
   FROM h
+),
+win AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    on_bit,
+    AVG(CAST(on_bit AS DOUBLE)) OVER (PARTITION BY equipment_id) AS on_frac
+  FROM proof
+),
+base AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    CAST(CASE
+      WHEN on_frac >= {{ALWAYS_ON_PCT}} AND on_bit = 1 THEN 1
+      ELSE 0
+    END AS INT) AS raw_fault
+  FROM win
 ),
 lagged AS (
   SELECT
@@ -31,7 +51,7 @@ lagged AS (
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM proof
+  FROM base
 ),
 grp AS (
   SELECT
