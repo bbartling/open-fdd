@@ -98,6 +98,14 @@ KNOWN_DIFFERENCES: dict[str, dict] = {
         "class": "missing_implementation",
         "note": "concept_only — SQL file is a placeholder; do not claim twin parity",
     },
+    "SV-RATE": {
+        "class": "semantic_gap",
+        "note": (
+            "Pandas ROLE_TO_PROFILE has 30+ quantity/location slew limits; SQL windows "
+            "five air temps against one STEADY_FAULT_PER_HOUR. Leave sql_screening; "
+            "do not mark proven from B100 hours. Alias SV-SLEW is not an extra rule."
+        ),
+    },
     "FAN-RUNTIME-HOURS": {
         "class": "intentional_non_applicability",
         "note": "SQL analytics rollup — not a pandas diagnostic",

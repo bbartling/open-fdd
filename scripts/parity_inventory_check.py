@@ -107,6 +107,9 @@ def main() -> int:
     sched = next(r for r in matrix if r["rule_id"] == "SCHED-247")
     if sched.get("difference_class") not in {"none", "semantic_gap"}:
         fail(f"SCHED-247 unexpected difference_class={sched.get('difference_class')}")
+    sv_rate = next(r for r in matrix if r["rule_id"] == "SV-RATE")
+    if sv_rate.get("difference_class") != "semantic_gap":
+        fail(f"SV-RATE unexpected difference_class={sv_rate.get('difference_class')}")
     if "count_explanation" not in inv:
         fail("missing count_explanation for 62-versus-66")
 

@@ -20,10 +20,11 @@ Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.
 
 | Class | Count |
 | --- | ---: |
-| `alias` | 3 |
+| `alias` | 2 |
 | `intentional_non_applicability` | 4 |
 | `missing_implementation` | 1 |
 | `none` | 58 |
+| `semantic_gap` | 1 |
 
 ## Matrix
 
@@ -33,7 +34,7 @@ Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.
 | `SV-FLATLINE` | Sensor flatline (stuck) | `_sweep_flatline` | `sv_flatline.sql` | `sql_screening` | `none` |
 | `SV-SPIKE` | Sensor rate-of-change spike | `_sweep_spike` | `sv_spike.sql` | `sql_screening` | `none` |
 | `SV-STALE` | Stale data (no fresh samples) | `_sweep_stale` | `sv_stale.sql` | `sql_screening` | `none` |
-| `SV-RATE` | Context-aware sensor rate of change | `_sv_rate_compute` | `sv_rate.sql` | `sql_screening` | `alias` |
+| `SV-RATE` | Context-aware sensor rate of change | `_sv_rate_compute` | `sv_rate.sql` | `sql_screening` | `semantic_gap` |
 | `PID-HUNT-1` | Suspected control-output hunting | `_pid_hunt_1` | `pid_hunt_1.sql` | `sql_screening` | `none` |
 | `FC1` | Duct static below SP at full fan (GL36 A) | `fc1` | `fc1_duct_static_low.sql` | `sql_screening` | `none` |
 | `FC2` | MAT below OAT/RAT envelope (GL36 B) | `fc2` | `fc2_mat_low.sql` | `sql_screening` | `none` |

@@ -27,6 +27,15 @@ def test_other_rule_status_mismatch_not_intentional():
     assert not ok
 
 
+def test_sv_catalog_and_rate_dump_pairs_are_not_accepted():
+    """Cycle 4: extra-analog / SV-RATE gaps stay blockers until a soak, not this classifier."""
+    for rule_id in ("SV-STALE", "SV-FLATLINE", "SV-RANGE", "SV-SPIKE", "SV-RATE"):
+        ok, _ = _intentional_accepted(rule_id, "PASS", "FAULT", 0.0, 757.67)
+        assert not ok, rule_id
+        ok, _ = _sql_screening_pair(rule_id, "FAULT", "FAULT", 10.0, 757.67)
+        assert not ok, rule_id
+
+
 def test_econ2_last_interval_quarter_hour_is_accepted():
     ok, why = _intentional_accepted("ECON-2", "FAULT", "FAULT", 140.58, 140.83)
     assert ok
