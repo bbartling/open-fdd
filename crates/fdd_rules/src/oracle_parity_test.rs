@@ -1522,4 +1522,125 @@ timestamp_utc,duct_static,duct_static_sp
         let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
         assert_hours_close(got, expected, "AHU-DUCTHI missing-fan pressure-on");
     }
+
+    #[tokio::test]
+    async fn vav4_competing_damper_uses_actuator_not_heating() {
+        // B100: HeatingDamper (damper_pct_40) vs VAVActuatorCommand (vav_point).
+        // SQL must use the actuator analog or VAV-4 is PASS 0.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_VAV4_DMP");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let eq = building.join("VAV_1");
+        std::fs::create_dir_all(&eq).unwrap();
+        std::fs::write(
+            eq.join("columns.csv"),
+            "column,role\n\
+             damper_pct_40,damper\n\
+             vav_1_vavactuatorcommand_pct,vav_point\n\
+             actflow,airflow\n",
+        )
+        .unwrap();
+        std::fs::write(
+            eq.join("history_wide.csv"),
+            "timestamp_utc,damper_pct_40,vav_1_vavactuatorcommand_pct,actflow\n\
+2026-01-01T00:00:00Z,0,100,200\n\
+2026-01-01T00:05:00Z,0,100,200\n\
+2026-01-01T00:10:00Z,0,100,200\n\
+2026-01-01T00:15:00Z,0,100,200\n\
+2026-01-01T00:20:00Z,0,100,200\n\
+2026-01-01T00:25:00Z,0,100,200\n",
+        )
+        .unwrap();
+
+        let got = run_rule_fault_hours(
+            &building,
+            "vav4_damper_full_open.sql",
+            300.0,
+            600,
+            &[("SUSTAIN_HOURS", "0.05")],
+        )
+        .await;
+        let raw = [true, true, true, true, true, true];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "VAV-4 actuator vs heating damper");
+    }
+
+    #[tokio::test]
+    async fn vav4_competing_flow_uses_actflow_not_minflow_sp() {
+        // Same class as mad_c: MinFlowSP as zone_flow is ~0 vs ActFlow live.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_VAV4_FLOW");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let eq = building.join("VAV_1");
+        std::fs::create_dir_all(&eq).unwrap();
+        std::fs::write(
+            eq.join("columns.csv"),
+            "column,role\n\
+             vavactuatorcommand_pct,damper\n\
+             actflow,airflow\n\
+             minflowsp,airflow\n",
+        )
+        .unwrap();
+        std::fs::write(
+            eq.join("history_wide.csv"),
+            "timestamp_utc,vavactuatorcommand_pct,actflow,minflowsp\n\
+2026-01-01T00:00:00Z,100,200,0\n\
+2026-01-01T00:05:00Z,100,200,0\n\
+2026-01-01T00:10:00Z,100,200,0\n\
+2026-01-01T00:15:00Z,100,200,0\n\
+2026-01-01T00:20:00Z,100,200,0\n\
+2026-01-01T00:25:00Z,100,200,0\n",
+        )
+        .unwrap();
+
+        let got = run_rule_fault_hours(
+            &building,
+            "vav4_damper_full_open.sql",
+            300.0,
+            600,
+            &[("SUSTAIN_HOURS", "0.05")],
+        )
+        .await;
+        let raw = [true, true, true, true, true, true];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "VAV-4 actflow vs minflowsp");
+    }
+
+    #[tokio::test]
+    async fn vav6_reheat_free_cool_matches_pandas_confirm() {
+        // VAV-6 SQL is reheat+OAT (not flow). Competing airflow must not zero this rule.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_VAV6");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let eq = building.join("VAV_1");
+        std::fs::create_dir_all(&eq).unwrap();
+        std::fs::write(
+            eq.join("columns.csv"),
+            "column,role\n\
+             oa_t,outside-air-temp\n\
+             reheat_valve_pct,reheat_valve\n\
+             actflow,airflow\n\
+             minflowsp,airflow\n",
+        )
+        .unwrap();
+        std::fs::write(
+            eq.join("history_wide.csv"),
+            "timestamp_utc,oa_t,reheat_valve_pct,actflow,minflowsp\n\
+2026-01-01T00:00:00Z,55,0.6,200,0\n\
+2026-01-01T00:05:00Z,55,0.6,200,0\n\
+2026-01-01T00:10:00Z,55,0.6,200,0\n\
+2026-01-01T00:15:00Z,55,0.6,200,0\n\
+2026-01-01T00:20:00Z,55,0.6,200,0\n\
+2026-01-01T00:25:00Z,55,0.6,200,0\n",
+        )
+        .unwrap();
+
+        let got = run_rule_fault_hours(&building, "vav6_reheat_free_cool.sql", 300.0, 600, &[]).await;
+        let raw = [true, true, true, true, true, true];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "VAV-6 reheat+OAT vs competing flow");
+    }
 }
