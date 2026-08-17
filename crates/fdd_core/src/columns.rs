@@ -41,6 +41,8 @@ pub fn load_column_role_map(path: &Path) -> Result<HashMap<String, String>> {
                     Some("clg_valve_pct".into())
                 }
                 (Some("zone_t"), "vav_point") => Some("zone_t".into()),
+                (Some(inferred_role), "vav_point") => Some(inferred_role.to_string()),
+                (Some("min_flow_sp"), "zone_flow") => Some("min_flow_sp".into()),
                 _ => Some(normalized),
             }
         };
@@ -48,7 +50,7 @@ pub fn load_column_role_map(path: &Path) -> Result<HashMap<String, String>> {
         if role == "zone_t" && is_zone_t_limit_or_alarm_column(&column) {
             continue;
         }
-        if role == "ahu_point" || role == "ignore" {
+        if role == "ahu_point" || role == "ignore" || role == "vav_point" {
             continue;
         }
         // Prefer first mapping per role (supply fan before return fan, etc.)
@@ -95,7 +97,7 @@ pub fn haystack_point_to_role(point: &str) -> String {
         "chiller-status" => "chiller_status".into(),
         "loop-enabled" => "loop_enabled".into(),
         "zone-air-temp" => "zone_t".into(),
-        "zone-airflow" => "zone_flow".into(),
+        "zone-airflow" | "airflow" => "zone_flow".into(),
         "vav-total-airflow" => "vav_total_flow".into(),
         "min-flow-sp" => "min_flow_sp".into(),
         "chw-pump-status" => "chw_pump_status".into(),
@@ -157,12 +159,16 @@ pub fn normalize_role(role: &str) -> String {
         | "supply_fan_speed"
         | "supply_fan_speed_pct" => "fan_cmd".into(),
         "fan_status" | "fan_proof" | "supply_fan_status" | "supply_fan_stat" => "fan_status".into(),
-        "oa_damper" | "outside_air_damper" | "damper" | "oa_damper_pct" | "oa_damper_cmd"
+        "oa_damper" | "outside_air_damper" | "oa_damper_pct" | "oa_damper_cmd"
         | "oa_damper_pos" => "oa_damper_pct".into(),
+        "damper" | "zone_damper" | "vav_damper" | "damper_pct" | "damper_pos" => {
+            "damper_pct".into()
+        }
         "cooling_valve" | "cooling_cmd" | "clg_valve" | "chw_valve" | "clg_valve_pct"
         | "chw_valve_pct" | "cooling_valve_pct" => "clg_valve_pct".into(),
         "heating_valve" | "heating_cmd" | "htg_valve" | "htg_valve_pct" | "heating_valve_pct"
-        | "hw_valve_pct" | "reheat_valve" => "htg_valve_pct".into(),
+        | "hw_valve_pct" => "htg_valve_pct".into(),
+        "reheat_valve" | "reheat_valve_pct" | "rht_valve" => "reheat_valve_pct".into(),
         "sat_setpoint" | "sat_sp" | "dat_reset" | "dat_reset_f" | "sat_sp_f" | "sat_setpoint_f" => {
             "sat_sp".into()
         }
@@ -177,6 +183,8 @@ pub fn normalize_role(role: &str) -> String {
         "vav_total_airflow" | "vav_total_flow" | "total_airflow" | "ahu_total_airflow" => {
             "vav_total_flow".into()
         }
+        "airflow" | "actflow" | "flow_input" | "zone_flow" | "zone_airflow" => "zone_flow".into(),
+        "min_flow_sp" | "minflowsp" | "min_airflow" => "min_flow_sp".into(),
         "loop_enabled" | "pid_enable" => "loop_enabled".into(),
         "chws_t" | "chw_supply" | "chwst" | "chws_t_f" | "chw_supply_t" => "chw_supply_t".into(),
         "chwr_t" | "chw_return" | "chwrt" | "chwr_t_f" | "chw_return_t" => "chw_return_t".into(),
@@ -204,8 +212,10 @@ pub const COOKBOOK_ROLES: &[&str] = &[
     "duct_static",
     "duct_static_sp",
     "oa_damper_pct",
+    "damper_pct",
     "clg_valve_pct",
     "htg_valve_pct",
+    "reheat_valve_pct",
     "zone_t",
     "zone_flow",
     "vav_total_flow",
@@ -240,9 +250,13 @@ pub fn is_known_cookbook_role(role: &str) -> bool {
             | "duct_static"
             | "duct_static_sp"
             | "oa_damper_pct"
+            | "damper_pct"
             | "clg_valve_pct"
             | "htg_valve_pct"
+            | "reheat_valve_pct"
             | "zone_t"
+            | "zone_flow"
+            | "min_flow_sp"
             | "chw_supply_t"
             | "chw_return_t"
             | "hw_supply_t"
@@ -332,8 +346,12 @@ fn infer_role_from_column_name(column: &str) -> Option<String> {
     if c.contains("htg_valve") || c.contains("heating_valve") || c.contains("hhw_valve") {
         return Some("htg_valve_pct".into());
     }
-    if c.contains("damper") || c.contains("dmpr") {
-        // Fan-enable / min-OA setpoints are not the economizer damper command.
+    if c.contains("damper")
+        || c.contains("dmpr")
+        || c.contains("dpr_pos")
+        || c.contains("vavactuator")
+    {
+        // Fan-enable / min-OA setpoints are not a damper command.
         if c.contains("enable")
             || c.contains("minimum")
             || c.contains("min_pos")
@@ -341,7 +359,26 @@ fn infer_role_from_column_name(column: &str) -> Option<String> {
         {
             return None;
         }
-        return Some("oa_damper_pct".into());
+        // OA / mixed-air damper stays oa_damper_pct (mad_c handled above).
+        if c.contains("ex_dmpr")
+            || c.contains("oa_damper")
+            || c.contains("outdoor_air")
+            || c.contains("mixed_air_damper")
+            || c.contains("oad_")
+        {
+            return Some("oa_damper_pct".into());
+        }
+        // Zone / VAV damper — never treat generic damper as OA (pandas role_map).
+        return Some("damper_pct".into());
+    }
+    if c.contains("actflow")
+        || c.contains("flow_input")
+        || (c.contains("airflow") && !c.contains("min") && !c.contains("max") && !c.contains("sp"))
+    {
+        return Some("zone_flow".into());
+    }
+    if c.contains("minflowsp") || (c.contains("min") && c.contains("airflow")) {
+        return Some("min_flow_sp".into());
     }
     if c.contains("zone_t") || c.contains("spacetemp") {
         if is_zone_t_limit_or_alarm_column(column) {
@@ -552,5 +589,54 @@ mod tests {
         assert_eq!(map.get("mixed_air_temp_f"), Some(&"mat".to_string()));
         assert!(!map.contains_key("ex_dmpr_pos_fan_enable_pct"));
         assert!(!map.contains_key("oa_minimum_position_pct"));
+    }
+
+    #[test]
+    fn b100_vav_damper_and_airflow_roles() {
+        assert_eq!(haystack_point_to_role("damper"), "damper_pct");
+        assert_eq!(haystack_point_to_role("airflow"), "zone_flow");
+        assert_eq!(normalize_role("damper"), "damper_pct");
+        assert_eq!(normalize_role("reheat_valve"), "reheat_valve_pct");
+        assert_eq!(
+            infer_role_from_column_name("vav_1_vavactuatorcommand_pct").as_deref(),
+            Some("damper_pct")
+        );
+        assert_eq!(
+            infer_role_from_column_name("vav_1_dpr_pos_pct").as_deref(),
+            Some("damper_pct")
+        );
+        assert_eq!(
+            infer_role_from_column_name("damper_pct_40").as_deref(),
+            Some("damper_pct")
+        );
+        assert_eq!(
+            infer_role_from_column_name("actflow").as_deref(),
+            Some("zone_flow")
+        );
+        assert_eq!(
+            infer_role_from_column_name("minflowsp").as_deref(),
+            Some("min_flow_sp")
+        );
+
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("columns.csv");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(
+            f,
+            "column,role\n\
+             damper_pct_40,damper\n\
+             vav_1_vavactuatorcommand_pct,vav_point\n\
+             actflow,airflow\n\
+             minflowsp,airflow"
+        )
+        .unwrap();
+        let map = load_column_role_map(&path).unwrap();
+        assert_eq!(map.get("damper_pct_40"), Some(&"damper_pct".to_string()));
+        assert_eq!(
+            map.get("vav_1_vavactuatorcommand_pct"),
+            Some(&"damper_pct".to_string())
+        );
+        assert_eq!(map.get("actflow"), Some(&"zone_flow".to_string()));
+        assert_eq!(map.get("minflowsp"), Some(&"min_flow_sp".to_string()));
     }
 }

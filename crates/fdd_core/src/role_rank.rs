@@ -51,6 +51,49 @@ pub fn score_column_for_role(role: &str, column: &str) -> i32 {
                 0
             }
         }
+        "damper_pct" => {
+            // Pandas ROLE_COLUMN_RANK: vavactuatorcommand > actuatorcommand > damper_pct > dpr_pos.
+            // Do not let OA / heating-damper analogs steal the VAV damper.
+            if c.contains("ex_dmpr")
+                || c.contains("oa_damper")
+                || c.contains("outdoor_air")
+                || c.contains("mad_c")
+                || c.contains("oad_")
+                || c.contains("heatingdamper")
+                || c.contains("heating_damper")
+            {
+                -100
+            } else if c.contains("vavactuatorcommand") || c.contains("actuatorcommand") {
+                100
+            } else if c.contains("damper_pct") || c.contains("damper_pos") {
+                80
+            } else if c.contains("dpr_pos") || c.contains("vavactuator") {
+                70
+            } else {
+                0
+            }
+        }
+        "zone_flow" => {
+            if c.contains("setpoint")
+                || c.contains("minflow")
+                || c.contains("maxflow")
+                || c.contains("min_flow")
+                || c.contains("max_flow")
+                || c.contains("_sp")
+                || c.contains("stby")
+                || c.contains("unocc")
+            {
+                -100
+            } else if c.contains("actflow") {
+                100
+            } else if c.contains("flow_input") {
+                90
+            } else if c.contains("airflow") {
+                50
+            } else {
+                0
+            }
+        }
         "fan_cmd" => {
             if c.contains("supply_fan") && !c.contains("status") {
                 100
@@ -140,5 +183,28 @@ mod tests {
         assert!(enable < 0);
         assert_eq!(score_column_for_role("mat", "mad_c"), -100);
         assert_eq!(score_column_for_role("mat", "mixed_air_temp_f"), 100);
+    }
+
+    #[test]
+    fn vav_damper_prefers_actuator_command_over_heating_damper() {
+        let cmd = score_column_for_role("damper_pct", "vav_1_vavactuatorcommand_pct");
+        let heat = score_column_for_role("damper_pct", "damper_pct_40");
+        let dpr = score_column_for_role("damper_pct", "vav_1_dpr_pos_pct");
+        assert!(cmd > heat, "actuator={cmd} heating_damper={heat}");
+        assert!(cmd > dpr, "actuator={cmd} dpr_pos={dpr}");
+        assert_eq!(
+            score_column_for_role("damper_pct", "ex_dmpr_pos_fan_enable_pct"),
+            -100
+        );
+    }
+
+    #[test]
+    fn zone_flow_prefers_actflow_over_minflow_sp() {
+        let act = score_column_for_role("zone_flow", "actflow");
+        let input = score_column_for_role("zone_flow", "flow_input");
+        let min_sp = score_column_for_role("zone_flow", "minflowsp");
+        assert!(act > input, "actflow={act} flow_input={input}");
+        assert!(act > min_sp, "actflow={act} minflowsp={min_sp}");
+        assert!(min_sp < 0);
     }
 }

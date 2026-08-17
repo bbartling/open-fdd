@@ -162,6 +162,7 @@ async fn inject_optional_fan_cols(
         "duct_static_sp",
         "static_reset_request",
         "web_oa_t",
+        "clg_available",
     ];
     let missing: Vec<&str> = needed.into_iter().filter(|c| !have.contains(*c)).collect();
     if missing.is_empty() {
