@@ -67,6 +67,7 @@ Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:808
 - **Synthetic-59:** soak via `scripts/synthetic_59_*.py` under `reports/wattlab-parity/fixtures/synthetic_59/`. Do not greenwash `expected_faults.csv`. B100 dump-parity is **active** (`wattlab_parity_*.py` vs vibe19 `:latest` 4.4.1).
 - **Units:** FDD SQL is °F canonical. Metric CSVs convert at query (`unit_system=metric|si`). Lab sliders show °C when metric is selected; Run all rules after switching.
 - **Hourly append:** seed with `POST /api/csv/import/package`, then `POST /api/csv/import/package/append` (JWT, `confirm:true`). Custom appenders stay outside the repo.
+- **Package timestamps + maps:** `timestamp_utc` accepts ISO-8601 `Z` and `+00:00`. Unparseable rows are skipped (never epoch 0 / now). String `"equip": "AHU_1"` on a sidecar is metadata; package maps need object `equip`/`equipment`. Site vendor names belong in zip preprocess — not product code. See [`docs/RUST_DATAFUSION_ENGINE.md`](docs/RUST_DATAFUSION_ENGINE.md) and [`docs/mcp-agents/roles/package-mapping.md`](docs/mcp-agents/roles/package-mapping.md).
 - **Overview layout:** full width beside sidebar (Streamlit-like); named Plotly PNG stems via `downloadFilename`; Lab rule menu A–Z; FDD series = required∪optional roles.
 - **Mech OAT bins:** status/cmd before amps; prefer web/weather OAT. Analytics envelopes: `scripts/synthetic_59_overview_analytics_soak.py`.
 

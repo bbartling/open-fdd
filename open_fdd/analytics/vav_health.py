@@ -109,7 +109,9 @@ def vav_health_matrix(
         if not isinstance(df.index, pd.DatetimeIndex):
             ts = df.get("timestamp_utc")
             if ts is not None:
-                df = df.set_index(pd.to_datetime(ts, utc=True))
+                from open_fdd.timestamps import to_utc_datetime
+
+                df = df.set_index(to_utc_datetime(ts))
         idx = df.index
         n = len(df)
         coverage = 100.0 if n else 0.0

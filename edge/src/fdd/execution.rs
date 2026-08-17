@@ -204,7 +204,11 @@ fn historian_pivot_to_telemetry_batch(
     let mut devices = Vec::new();
     let mut simulated = Vec::new();
     for row in rows {
-        let ts_ms = store::parse_ts_ms(row.get("timestamp").and_then(|v| v.as_str()).unwrap_or(""));
+        let Some(ts_ms) =
+            store::parse_ts_ms(row.get("timestamp").and_then(|v| v.as_str()).unwrap_or(""))
+        else {
+            continue;
+        };
         let equip = row
             .get("equipment_id")
             .and_then(|v| v.as_str())

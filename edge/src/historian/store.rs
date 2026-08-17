@@ -286,9 +286,11 @@ pub fn pivot_rows_to_batch(rows: &[Value]) -> Result<RecordBatch, String> {
     let mut fan_cmd = Vec::new();
     let mut occ = Vec::new();
     for row in rows {
-        ts.push(parse_ts_ms(
-            row.get("timestamp").and_then(|v| v.as_str()).unwrap_or(""),
-        ));
+        let Some(ts_ms) = parse_ts_ms(row.get("timestamp").and_then(|v| v.as_str()).unwrap_or(""))
+        else {
+            continue;
+        };
+        ts.push(ts_ms);
         equip.push(
             row.get("equipment_id")
                 .and_then(|v| v.as_str())
@@ -349,9 +351,13 @@ fn pivot_schema() -> Schema {
     ])
 }
 
-pub fn parse_ts_ms(s: &str) -> i64 {
-    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
-        return dt.with_timezone(&Utc).timestamp_millis();
+pub fn parse_ts_ms(s: &str) -> Option<i64> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(dt) = DateTime::parse_from_rfc3339(trimmed) {
+        return Some(dt.with_timezone(&Utc).timestamp_millis());
     }
     for fmt in [
         "%m/%d/%Y %H:%M",
@@ -360,11 +366,12 @@ pub fn parse_ts_ms(s: &str) -> i64 {
         "%Y-%m-%d %H:%M",
         "%Y-%m-%dT%H:%M:%S",
     ] {
-        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s.trim(), fmt) {
-            return DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc).timestamp_millis();
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(trimmed, fmt) {
+            return Some(DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc).timestamp_millis());
         }
     }
-    Utc::now().timestamp_millis()
+    // Never invent Utc::now() — callers must skip the row.
+    None
 }
 
 pub struct PivotSample<'a> {
