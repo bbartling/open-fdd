@@ -4233,7 +4233,7 @@
         "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "sql_screening",
-      "known_semantic_differences": "4.3: ranked proof status/current > command; pressure is inferred runtime only and does not OR into the FAULT mask. SQL uses the same rank.",
+      "known_semantic_differences": "4.3 ranked proof (status/current > command; pressure inferred only). SQL mean(on) >= always_on_pct over the analysis window matches pandas _sched247. Keep sql_screening; do not mark proven from B100 hours.",
       "difference_class": "none"
     },
     {
@@ -15498,7 +15498,7 @@
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
-      "known_semantic_differences": "4.3: ranked proof status/current > command; pressure is inferred runtime only and does not OR into the FAULT mask. SQL uses the same rank.",
+      "known_semantic_differences": "4.3 ranked proof (status/current > command; pressure inferred only). SQL mean(on) >= always_on_pct over the analysis window matches pandas _sched247. Keep sql_screening; do not mark proven from B100 hours.",
       "operational_gate": "always",
       "startup_delay_seconds": 0.0,
       "confirm_seconds": 3600,
@@ -15512,6 +15512,16 @@
           "unit": "sec",
           "frontend_control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS"
+        },
+        "always_on_pct": {
+          "label": "Always-on fraction",
+          "default": 0.95,
+          "min": 0.8,
+          "max": 1.0,
+          "step": 0.01,
+          "unit": "frac",
+          "frontend_control": "slider",
+          "sql_placeholder": "ALWAYS_ON_PCT"
         }
       },
       "time_semantics": "row_or_interval_per_sql_file",

@@ -408,8 +408,9 @@ timestamp_utc,web_oat,web_dp,oa_d,clg_col
 
     #[tokio::test]
     async fn sched247_fan_cmd_screening_confirm_streak() {
-        // Screening: SQL confirms fan_cmd>=0.05 streaks — not vibe19 window always_on_pct.
-        // Keep parity_level sql_screening until SQL matches _sched247.
+        // Keep this fixture: 50% duty with a 3-sample streak is below default
+        // always_on_pct=0.95, so pandas `_sched247` is all-false. After the
+        // window-fraction port, SQL must also be 0 — do not streak-tune hours.
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_SCHED247");
         std::fs::create_dir_all(&building).unwrap();
@@ -449,10 +450,50 @@ timestamp_utc,fan_col,fan_st,pump_st,ch_st
         );
 
         let got = run_rule_fault_hours(&building, "sched247_always_on.sql", 300.0, 600, &[]).await;
+        assert_hours_close(got, 0.0, "SCHED-247 below always_on_pct");
+    }
 
-        let raw = [false, false, true, true, true, false];
+    #[tokio::test]
+    async fn sched247_high_duty_short_streak_matches_pandas() {
+        // always_on_pct=0.5 so 4/6 on is over the gate; longest streak is
+        // confirm_rows=2 (not a 3-sample screening run). SQL hours match pandas.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SCHED247_DUTY");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,fan_col
+2026-01-01T00:00:00Z,50
+2026-01-01T00:05:00Z,50
+2026-01-01T00:10:00Z,0
+2026-01-01T00:15:00Z,50
+2026-01-01T00:20:00Z,50
+2026-01-01T00:25:00Z,0
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[RoleCol {
+                csv_col: "fan_col",
+                role: "fan_cmd",
+            }],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "sched247_always_on.sql",
+            300.0,
+            600,
+            &[("ALWAYS_ON_PCT", "0.5")],
+        )
+        .await;
+
+        let raw = [true, true, false, true, true, false];
         let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
-        assert_hours_close(got, expected, "SCHED-247 screening SQL");
+        assert_hours_close(expected, 0.16666666666666666, "pandas reference");
+        assert_hours_close(got, expected, "SCHED-247 window fraction SQL");
     }
 
     #[tokio::test]
