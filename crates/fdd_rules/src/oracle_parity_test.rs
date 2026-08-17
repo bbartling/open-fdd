@@ -1300,4 +1300,226 @@ timestamp_utc,oa_t,oa_damper_pct,fan_cmd,fan_status
         let got = run_rule_fault_hours(&building, "economizer_fault.sql", 300.0, 0, &[]).await;
         assert_hours_close(got, 0.0, "ECON-2 mad_c vs fan-enable");
     }
+
+    #[tokio::test]
+    async fn satdev_missing_fan_does_not_invent_on_hours() {
+        // SAT off-setpoint, no fan_status / fan_cmd. ELSE 1 used to invent on-hours.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SATDEV_NOFAN");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,sat,sat_sp
+2026-01-01T00:00:00Z,65,55
+2026-01-01T00:05:00Z,65,55
+2026-01-01T00:10:00Z,65,55
+2026-01-01T00:15:00Z,65,55
+2026-01-01T00:20:00Z,65,55
+2026-01-01T00:25:00Z,65,55
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "sat",
+                    role: "sat",
+                },
+                RoleCol {
+                    csv_col: "sat_sp",
+                    role: "sat_sp",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "ahu_satdev.sql",
+            300.0,
+            600,
+            &[("SAT_DEV_ERR", "5")],
+        )
+        .await;
+        assert_hours_close(got, 0.0, "AHU-SATDEV missing fan");
+    }
+
+    #[tokio::test]
+    async fn satdev_fan_on_off_setpoint_matches_pandas_confirm() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SATDEV_FAN");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,sat,sat_sp,fan_status
+2026-01-01T00:00:00Z,65,55,1
+2026-01-01T00:05:00Z,65,55,1
+2026-01-01T00:10:00Z,65,55,1
+2026-01-01T00:15:00Z,65,55,1
+2026-01-01T00:20:00Z,65,55,1
+2026-01-01T00:25:00Z,65,55,1
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "sat",
+                    role: "sat",
+                },
+                RoleCol {
+                    csv_col: "sat_sp",
+                    role: "sat_sp",
+                },
+                RoleCol {
+                    csv_col: "fan_status",
+                    role: "fan_status",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "ahu_satdev.sql",
+            300.0,
+            600,
+            &[("SAT_DEV_ERR", "5")],
+        )
+        .await;
+
+        let raw = [true, true, true, true, true, true];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(expected, 0.4166666666666667, "pandas reference");
+        assert_hours_close(got, expected, "AHU-SATDEV fan-on SQL");
+    }
+
+    #[tokio::test]
+    async fn ducthi_fan_on_high_static_matches_pandas_confirm() {
+        // B100 AHU_2 0.5 vs 1.83 h is not isolable as extra confirm rows in 6 samples.
+        // Fan-on + high static must match pandas_confirm_fault_hours — do not patch SQL.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_DUCTHI_ON");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,duct_static,duct_static_sp,fan_status
+2026-01-01T00:00:00Z,2.0,1.0,1
+2026-01-01T00:05:00Z,2.0,1.0,1
+2026-01-01T00:10:00Z,2.0,1.0,1
+2026-01-01T00:15:00Z,2.0,1.0,1
+2026-01-01T00:20:00Z,2.0,1.0,1
+2026-01-01T00:25:00Z,2.0,1.0,1
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_2",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "duct_static",
+                    role: "duct_static",
+                },
+                RoleCol {
+                    csv_col: "duct_static_sp",
+                    role: "duct_static_sp",
+                },
+                RoleCol {
+                    csv_col: "fan_status",
+                    role: "fan_status",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(&building, "ahu_ducthi.sql", 300.0, 600, &[]).await;
+
+        let raw = [true, true, true, true, true, true];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(expected, 0.4166666666666667, "pandas reference");
+        assert_hours_close(got, expected, "AHU-DUCTHI fan-on SQL");
+    }
+
+    #[tokio::test]
+    async fn ducthi_fan_off_high_static_does_not_use_pressure_on() {
+        // Pressure-on substitutes only when fan proof is absent, never when proven 0.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_DUCTHI_OFF");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,duct_static,duct_static_sp,fan_status
+2026-01-01T00:00:00Z,2.0,1.0,0
+2026-01-01T00:05:00Z,2.0,1.0,0
+2026-01-01T00:10:00Z,2.0,1.0,0
+2026-01-01T00:15:00Z,2.0,1.0,0
+2026-01-01T00:20:00Z,2.0,1.0,0
+2026-01-01T00:25:00Z,2.0,1.0,0
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_2",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "duct_static",
+                    role: "duct_static",
+                },
+                RoleCol {
+                    csv_col: "duct_static_sp",
+                    role: "duct_static_sp",
+                },
+                RoleCol {
+                    csv_col: "fan_status",
+                    role: "fan_status",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(&building, "ahu_ducthi.sql", 300.0, 600, &[]).await;
+        assert_hours_close(got, 0.0, "AHU-DUCTHI fan proven off");
+    }
+
+    #[tokio::test]
+    async fn ducthi_missing_fan_pressure_on_matches_pandas_confirm() {
+        // No fan cols: SQL pressure-on (fan_on NULL) should match pandas press-only gate.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_DUCTHI_NOFAN");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,duct_static,duct_static_sp
+2026-01-01T00:00:00Z,2.0,1.0
+2026-01-01T00:05:00Z,2.0,1.0
+2026-01-01T00:10:00Z,2.0,1.0
+2026-01-01T00:15:00Z,2.0,1.0
+2026-01-01T00:20:00Z,2.0,1.0
+2026-01-01T00:25:00Z,2.0,1.0
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_2",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "duct_static",
+                    role: "duct_static",
+                },
+                RoleCol {
+                    csv_col: "duct_static_sp",
+                    role: "duct_static_sp",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(&building, "ahu_ducthi.sql", 300.0, 600, &[]).await;
+
+        let raw = [true, true, true, true, true, true];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "AHU-DUCTHI missing-fan pressure-on");
+    }
 }
