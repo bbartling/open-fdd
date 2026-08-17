@@ -1638,7 +1638,8 @@ timestamp_utc,duct_static,duct_static_sp
         )
         .unwrap();
 
-        let got = run_rule_fault_hours(&building, "vav6_reheat_free_cool.sql", 300.0, 600, &[]).await;
+        let got =
+            run_rule_fault_hours(&building, "vav6_reheat_free_cool.sql", 300.0, 600, &[]).await;
         let raw = [true, true, true, true, true, true];
         let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
         assert_hours_close(got, expected, "VAV-6 reheat+OAT vs competing flow");

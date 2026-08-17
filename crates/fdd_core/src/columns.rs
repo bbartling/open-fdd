@@ -346,7 +346,10 @@ fn infer_role_from_column_name(column: &str) -> Option<String> {
     if c.contains("htg_valve") || c.contains("heating_valve") || c.contains("hhw_valve") {
         return Some("htg_valve_pct".into());
     }
-    if c.contains("damper") || c.contains("dmpr") || c.contains("dpr_pos") || c.contains("vavactuator")
+    if c.contains("damper")
+        || c.contains("dmpr")
+        || c.contains("dpr_pos")
+        || c.contains("vavactuator")
     {
         // Fan-enable / min-OA setpoints are not a damper command.
         if c.contains("enable")
@@ -606,7 +609,10 @@ mod tests {
             infer_role_from_column_name("damper_pct_40").as_deref(),
             Some("damper_pct")
         );
-        assert_eq!(infer_role_from_column_name("actflow").as_deref(), Some("zone_flow"));
+        assert_eq!(
+            infer_role_from_column_name("actflow").as_deref(),
+            Some("zone_flow")
+        );
         assert_eq!(
             infer_role_from_column_name("minflowsp").as_deref(),
             Some("min_flow_sp")
