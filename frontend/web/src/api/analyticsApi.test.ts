@@ -130,4 +130,47 @@ describe("postVavHealth", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("POSTs plant health endpoints", async () => {
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      analytics: {
+        schema_version: "analytics-envelope-v1",
+        query_version: "ahu-health-v1",
+        generated_at: "2024-01-01T00:00:00Z",
+        engine: "datafusion",
+        warnings: [],
+        rows: [],
+        equipment: [],
+        points: [],
+        skipped: [],
+      },
+    });
+    const {
+      postAhuHealth,
+      postChillerHealth,
+      postBoilerHealth,
+      postHpHealth,
+    } = await import("./analyticsApi");
+    await postAhuHealth({ building_id: "B1" });
+    await postChillerHealth({ building_id: "B1" });
+    await postBoilerHealth({ building_id: "B1" });
+    await postHpHealth({ building_id: "B1" });
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/analytics/ahu-health",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/analytics/chiller-health",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/analytics/boiler-health",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/analytics/hp-health",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });

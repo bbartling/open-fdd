@@ -4,6 +4,15 @@ import { MemoryRouter } from "react-router";
 import { AppShell } from "./AppShell";
 import { MAIN_SECTIONS } from "../nav/sections";
 
+vi.mock("../api/client", () => ({
+  apiFetch: vi.fn(async (path: string) => {
+    if (path === "/api/health") {
+      return { ok: true, version: "3.3.1+abcdef123456", service: "openfdd-central" };
+    }
+    return {};
+  }),
+}));
+
 vi.mock("../api/mappingApi", () => ({
   listPackageBuildings: vi.fn(async () => []),
   getSessionConfig: vi.fn(async () => ({
@@ -60,6 +69,8 @@ describe("AppShell layout parity", () => {
     );
 
     expect(screen.getByText("Open-FDD")).toBeTruthy();
+    expect(await screen.findByTestId("app-revision")).toBeTruthy();
+    expect(screen.getByTestId("app-revision").textContent).toBe("3.3.1+abcdef1");
     expect(screen.getByTestId("sidebar-sites")).toBeTruthy();
     expect(screen.queryByTestId("nav-sites")).toBeNull();
     expect(screen.getAllByText("Sites").length).toBeGreaterThanOrEqual(1);
@@ -80,6 +91,7 @@ describe("AppShell layout parity", () => {
     );
     expect(tabText).toEqual([
       "Overview",
+      "Inspect",
       "Data Model",
       "Actions",
       "Results by Category",
@@ -91,7 +103,7 @@ describe("AppShell layout parity", () => {
     ]);
   });
 
-  it("collapses the sidebar when toggle is pressed", () => {
+  it("collapses the sidebar when toggle is pressed", async () => {
     render(
       <MemoryRouter>
         <AppShell title="Jobs">
@@ -102,8 +114,10 @@ describe("AppShell layout parity", () => {
 
     const shell = screen.getByTestId("app-shell");
     expect(shell.getAttribute("data-sidebar-collapsed")).toBe("false");
+    expect(await screen.findByTestId("app-revision")).toBeTruthy();
     fireEvent.click(screen.getByTestId("sidebar-collapse"));
     expect(shell.getAttribute("data-sidebar-collapsed")).toBe("true");
+    expect(screen.getByTestId("app-revision").textContent).toBe("+abcdef1");
   });
 
   it("keeps Streamlit-like full-width layout contract markers", () => {

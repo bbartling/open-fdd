@@ -119,6 +119,7 @@ jobs:
           version="$(grep -E '^version = ' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')"
           echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "run_tag=${version}-n${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
           if [[ "${GITHUB_REF}" == "refs/heads/master" ]]; then
             echo "nightly=true" >> "$GITHUB_OUTPUT"
           else
@@ -137,6 +138,7 @@ jobs:
           tags: |
             ${{ env.CENTRAL_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
             ${{ env.CENTRAL_IMAGE }}:${{ steps.vars.outputs.version }}
+            ${{ env.CENTRAL_IMAGE }}:${{ steps.vars.outputs.run_tag }}
           build-args: |
             OPENFDD_GIT_SHA=${{ github.sha }}
           labels: |
@@ -162,9 +164,11 @@ jobs:
           tags: |
             ${{ env.WEB_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
             ${{ env.WEB_IMAGE }}:${{ steps.vars.outputs.version }}
+            ${{ env.WEB_IMAGE }}:${{ steps.vars.outputs.run_tag }}
           build-args: |
             OPENFDD_GIT_SHA=${{ github.sha }}
             OPENFDD_WEB_VERSION=${{ steps.vars.outputs.version }}
+            OPENFDD_IMAGE_TAG=sha-${{ steps.vars.outputs.short_sha }}
           labels: |
             org.opencontainers.image.title=Open-FDD Web (React SPA)
             org.opencontainers.image.source=https://github.com/bbartling/open-fdd
@@ -189,6 +193,7 @@ jobs:
           tags: |
             ${{ env.FIELDBUS_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
             ${{ env.FIELDBUS_IMAGE }}:${{ steps.vars.outputs.version }}
+            ${{ env.FIELDBUS_IMAGE }}:${{ steps.vars.outputs.run_tag }}
           labels: |
             org.opencontainers.image.title=Open-FDD Fieldbus
             org.opencontainers.image.source=https://github.com/bbartling/open-fdd
@@ -212,6 +217,7 @@ jobs:
           tags: |
             ${{ env.MQTT_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
             ${{ env.MQTT_IMAGE }}:${{ steps.vars.outputs.version }}
+            ${{ env.MQTT_IMAGE }}:${{ steps.vars.outputs.run_tag }}
           labels: |
             org.opencontainers.image.title=Open-FDD MQTT Broker
             org.opencontainers.image.source=https://github.com/bbartling/open-fdd
@@ -236,6 +242,7 @@ jobs:
             esac
             docker buildx imagetools inspect "${ref}:sha-${{ steps.vars.outputs.short_sha }}"
             docker buildx imagetools inspect "${ref}:${{ steps.vars.outputs.version }}"
+            docker buildx imagetools inspect "${ref}:${{ steps.vars.outputs.run_tag }}"
             if [[ "${{ steps.vars.outputs.nightly }}" == "true" ]]; then
               docker buildx imagetools inspect "${ref}:nightly"
             fi

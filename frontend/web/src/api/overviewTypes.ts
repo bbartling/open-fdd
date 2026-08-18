@@ -55,6 +55,7 @@ export interface OverviewVibe19Response {
     caption: string;
     overlay: PlotlyFigure | null;
     histogram: PlotlyFigure | null;
+    hist_table: Array<Record<string, unknown>>;
     oat_err: number;
   };
   devices_by_type: Array<{ type: string; count: number }>;

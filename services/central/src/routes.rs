@@ -182,6 +182,16 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route("/api/analytics/runtime", post(analytics_runtime))
         .route("/api/analytics/vav-health", post(analytics_vav_health))
+        .route("/api/analytics/ahu-health", post(analytics_ahu_health))
+        .route(
+            "/api/analytics/chiller-health",
+            post(analytics_chiller_health),
+        )
+        .route(
+            "/api/analytics/boiler-health",
+            post(analytics_boiler_health),
+        )
+        .route("/api/analytics/hp-health", post(analytics_hp_health))
         .route(
             "/api/analytics/sensor-health",
             post(analytics_sensor_health),
@@ -1853,6 +1863,34 @@ async fn analytics_vav_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> 
     Json(json!({
         "ok": true,
         "analytics": analytics::vav_health::handle_async(&req).await.to_json(),
+    }))
+}
+
+async fn analytics_ahu_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::plant_health::handle_ahu(&req).await.to_json(),
+    }))
+}
+
+async fn analytics_chiller_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::plant_health::handle_chiller(&req).await.to_json(),
+    }))
+}
+
+async fn analytics_boiler_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::plant_health::handle_boiler(&req).await.to_json(),
+    }))
+}
+
+async fn analytics_hp_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::plant_health::handle_hp(&req).await.to_json(),
     }))
 }
 

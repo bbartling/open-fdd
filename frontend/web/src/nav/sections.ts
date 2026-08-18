@@ -1,6 +1,7 @@
 /** Product main section tabs (horizontal radio selector). */
 export const MAIN_SECTIONS = [
   { id: "overview", label: "Overview", path: "/" },
+  { id: "inspect", label: "Inspect", path: "/inspect" },
   { id: "data-model", label: "Data Model", path: "/mapping" },
   { id: "actions", label: "Actions", path: "/actions" },
   { id: "results", label: "Results by Category", path: "/findings" },

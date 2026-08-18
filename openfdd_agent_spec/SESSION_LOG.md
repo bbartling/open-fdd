@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-08-18 — Overview tables, plant health matrices, RCx plots, revision pin
+
+- Overview = DataTables + AHU/chiller/boiler/HP/VAV health matrices (`n/3`, unknown-not-PASS, red tint `--health-broken-*`). Plotly motor/mech/econ/BAS moved to additive RCx presets. CSV overlay is Inspect `/inspect`. Sidebar `GET /api/health` `3.3.1+shortsha`. Cargo **3.3.1**; PyPI stays **4.4.2**. Nightly stamps `version.json` + optional `:3.3.1-n<run>`.
+- Agent docs: [`docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md); skill `openfdd-package-mapping`; MCP/INSTRUCTIONS/DATA_CONTRACT/VERSIONING updated. No vibe19 edits. No new MCP write tools.
+- Vitest in `frontend/web`. Rust plant-health units on GHA. Do not claim dump 212→0 from this UX.
+
 ## 2026-08-16 — ECON mad_c ranking (#734) + dump-parity wave (#735) @ `sha-69494c2`
 
 - Proof: not min-OA vs mad_c; blank-role `ex_dmpr_pos_fan_enable_pct` beat `mad_c` in ingest rank. OAT>63 enable~100 vs mad_c max 20 → SQL ECON-2 1422.92 h.

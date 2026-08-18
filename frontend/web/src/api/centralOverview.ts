@@ -71,7 +71,7 @@ function motorFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | null 
 }
 
 /** Weekly plant bars + optional avg OAT on y2 (vibe19 motor_weekly_runtime_chart). */
-function weeklyPlantFigures(
+export function weeklyPlantFigures(
   rows: Array<Record<string, unknown>>,
 ): OverviewPlantFig[] {
   const weekly = rows.filter((r) => {
@@ -223,7 +223,7 @@ function weeklyPlantFigures(
     });
 }
 
-function mechFigure(rows: Array<Record<string, unknown>>): {
+export function mechFigure(rows: Array<Record<string, unknown>>): {
   figure: PlotlyFigure | null;
   bins: Array<Record<string, unknown>>;
   callout: string | null;
@@ -365,7 +365,7 @@ function mechFigure(rows: Array<Record<string, unknown>>): {
 }
 
 /** vibe19 economizer_delta_scatter: (MAT−RAT) vs (OAT−RAT) + OA-fraction refs. */
-function econDeltaScatter(
+export function econDeltaScatter(
   points: Array<Record<string, unknown>>,
   dtMinF: number,
 ): PlotlyFigure | null {
@@ -459,7 +459,7 @@ function econDeltaScatter(
 }
 
 /** vibe19 economizer_mat_residual_chart. */
-function econMatResidual(
+export function econMatResidual(
   points: Array<Record<string, unknown>>,
 ): PlotlyFigure | null {
   const usable = points.filter(
@@ -506,7 +506,7 @@ function econMatResidual(
 }
 
 /** vibe19 economizer_temps_overlay for one AHU. */
-function econTempsOverlay(
+export function econTempsOverlay(
   points: Array<Record<string, unknown>>,
   equipmentId: string | null,
 ): { figure: PlotlyFigure | null; equipmentId: string | null } {
@@ -597,7 +597,7 @@ function econTempsOverlay(
 }
 
 /** vibe19 bas_vs_web_oat_overlay with ±oat_err band. */
-function basOverlay(
+export function basOverlay(
   points: Array<Record<string, unknown>>,
   oatErr: number,
 ): PlotlyFigure | null {
@@ -660,7 +660,7 @@ function basOverlay(
   };
 }
 
-function basHist(rows: Array<Record<string, unknown>>): PlotlyFigure | null {
+export function basHist(rows: Array<Record<string, unknown>>): PlotlyFigure | null {
   const usable = rows.filter((r) => r.kind === "delta_hist" || num(r.count) != null);
   if (!usable.length) return null;
   const sorted = [...usable].sort(
@@ -860,6 +860,9 @@ export async function fetchCentralOverview(opts: {
       ),
       overlay: basOverlayFig,
       histogram: basHistFig,
+      hist_table: (bas.rows ?? []).filter(
+        (r) => r.kind === "delta_hist" || r.count != null,
+      ),
       oat_err: oatErr,
     },
     devices_by_type: devices,

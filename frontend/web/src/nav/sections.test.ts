@@ -4,6 +4,7 @@ import { MAIN_SECTIONS } from "./sections";
 /** Product main sections — Sites after WattLab; Run Rules removed (Overview + left rail). */
 const ORACLE_MAIN_SECTIONS = [
   "Overview",
+  "Inspect",
   "Data Model",
   "Actions",
   "Results by Category",

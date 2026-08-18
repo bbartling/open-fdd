@@ -163,6 +163,34 @@ mod live_routes {
     pub fn analytics_vav_health() {}
 
     #[utoipa::path(
+        post, path = "/api/analytics/ahu-health", tag = "analytics",
+        request_body = serde_json::Value,
+        responses((status = 200, description = "Building-scoped ahu_health_matrix_v1 (SAT/duct/econ FDD flags)", body = serde_json::Value))
+    )]
+    pub fn analytics_ahu_health() {}
+
+    #[utoipa::path(
+        post, path = "/api/analytics/chiller-health", tag = "analytics",
+        request_body = serde_json::Value,
+        responses((status = 200, description = "Building-scoped chiller_health_matrix_v1 (CHW-1/2/3)", body = serde_json::Value))
+    )]
+    pub fn analytics_chiller_health() {}
+
+    #[utoipa::path(
+        post, path = "/api/analytics/boiler-health", tag = "analytics",
+        request_body = serde_json::Value,
+        responses((status = 200, description = "Building-scoped boiler_health_matrix_v1 (FC5/6/8)", body = serde_json::Value))
+    )]
+    pub fn analytics_boiler_health() {}
+
+    #[utoipa::path(
+        post, path = "/api/analytics/hp-health", tag = "analytics",
+        request_body = serde_json::Value,
+        responses((status = 200, description = "Building-scoped hp_health_matrix_v1 (HP-1/SAT/econ)", body = serde_json::Value))
+    )]
+    pub fn analytics_hp_health() {}
+
+    #[utoipa::path(
         post, path = "/api/analytics/mechanical-cooling", tag = "analytics",
         request_body = serde_json::Value,
         responses((status = 200, description = "Mechanical cooling diagnostics", body = serde_json::Value))
@@ -275,6 +303,10 @@ mod live_routes {
         live_routes::analytics_economizer,
         live_routes::analytics_sensor_health,
         live_routes::analytics_vav_health,
+        live_routes::analytics_ahu_health,
+        live_routes::analytics_chiller_health,
+        live_routes::analytics_boiler_health,
+        live_routes::analytics_hp_health,
         live_routes::analytics_mechanical_cooling,
         live_routes::analytics_metering,
         live_routes::analytics_setpoints,
@@ -315,7 +347,7 @@ mod live_routes {
     modifiers(&SecurityAddon),
     info(
         title = "Open-FDD Central API",
-        version = "3.3.0",
+        version = "3.3.1",
         description = "Open-FDD Central control plane — MQTTS ingest, edge shadow, commands, and FDD.\n\n\
             **Auth:** set `OPENFDD_JWT_SECRET` to require `Authorization: Bearer <JWT>` on all `/api/*` routes \
             except liveness, login, and non-sensitive capabilities. Open mode is **loopback-only**. \

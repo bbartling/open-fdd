@@ -4,12 +4,10 @@ import {
   Expander,
   InlineAlert,
   Metric,
-  Select,
   Button,
   Slider,
   Checkbox,
 } from "./widgets";
-import { PlotlyHost } from "./widgets/PlotlyHost";
 import { SectionTabs } from "./SectionTabs";
 import {
   getFddStatus,
@@ -26,10 +24,9 @@ import {
 import { downloadRowsCsv } from "../api/csvDownload";
 import type { OverviewVibe19Response } from "../api/overviewTypes";
 import { fetchCentralOverview } from "../api/centralOverview";
-import { postInspect, type FddEquipmentItem } from "../api/analyticsApi";
+import type { FddEquipmentItem } from "../api/analyticsApi";
 import { VavHealthSection } from "./VavHealthSection";
-import { equipmentInspectionChart } from "../api/inspectChart";
-import type { PlotlyFigure } from "../api/plotDataset";
+import { PlantHealthSections } from "./PlantHealthSections";
 import { RULES_UPDATED_EVENT } from "./RuleTuningPanel";
 import { naturalCompare } from "../lib/naturalSort";
 import {
@@ -142,7 +139,7 @@ export interface OverviewPopulatedProps {
   unitSystem: "imperial" | "metric";
 }
 
-/** Vibe Overview — metrics through data inspection (central DataFusion). */
+/** Vibe Overview — metrics, tables, and plant health matrices (central DataFusion). */
 export function OverviewPopulated({
   buildingId,
   equipment,
@@ -164,28 +161,13 @@ export function OverviewPopulated({
   const [week, setWeek] = useState(() => loadStoredSchedule().week);
   const [tz, setTz] = useState(() => loadStoredSchedule().tz);
   const [schedOpen, setSchedOpen] = useState(true);
-  // Plot sections default open so Overview does not hide charts behind carets.
   const [motorTableOpen, setMotorTableOpen] = useState(true);
   const [mechBinsOpen, setMechBinsOpen] = useState(true);
   const [mechCoverageOpen, setMechCoverageOpen] = useState(true);
   const [econMetricsOpen, setEconMetricsOpen] = useState(true);
-  const [basHistOpen, setBasHistOpen] = useState(true);
-  const [econOverlayOpen, setEconOverlayOpen] = useState(true);
   const [econSkippedOpen, setEconSkippedOpen] = useState(true);
-  const [econOverlayEq, setEconOverlayEq] = useState("");
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [scheduleNote, setScheduleNote] = useState<string | null>(null);
-  const [inspectOptions, setInspectOptions] = useState<string[]>([]);
-  const [inspectPick, setInspectPick] = useState(equipmentId);
-  const [inspectCols, setInspectCols] = useState<string[]>([]);
-  const [inspectSelectedCols, setInspectSelectedCols] = useState<string[]>([]);
-  const [inspectFig, setInspectFig] = useState<PlotlyFigure | null>(null);
-  const [inspectMeta, setInspectMeta] = useState<{
-    row_count: number;
-    span: string;
-  } | null>(null);
-  const [inspectBusy, setInspectBusy] = useState(false);
-  const [inspectErr, setInspectErr] = useState<string | null>(null);
   const [rulesBusy, setRulesBusy] = useState(false);
   const [rulesNote, setRulesNote] = useState<string | null>(null);
   const [rulesErr, setRulesErr] = useState<string | null>(null);
@@ -194,7 +176,6 @@ export function OverviewPopulated({
   );
   const [overviewElapsedSec, setOverviewElapsedSec] = useState(0);
   const overviewLoadStarted = useRef<number | null>(null);
-  const inspectReqSeq = useRef(0);
   const hasOverview = useRef(false);
   const lastBuildingId = useRef(buildingId);
 
@@ -256,181 +237,56 @@ export function OverviewPopulated({
       setEqKind(
         cookbookKind(eq?.equipment_type || selected?.equipment_type || "—"),
       );
-      const inspectIds = [
-        ...new Set(
-          frames
-            .map((e) => String(e.equipment_id ?? ""))
-            .filter(Boolean)
-            .sort(naturalCompare),
-        ),
-      ];
-      if (inspectIds.length) setInspectOptions(inspectIds);
     } catch {
       /* mapping / registry optional for first paint */
     }
   }, [buildingId, equipmentId, selected?.equipment_type]);
 
-  const refreshOverview = useCallback(
-    async (opts?: { overlayOnly?: boolean; overlayEq?: string }) => {
-      if (!buildingId) return;
-      const overlayOnly = Boolean(opts?.overlayOnly);
-      if (!overlayOnly) setLoadingOverview(true);
-      setOverviewErr(null);
-      try {
-        const body = await fetchCentralOverview({
-          building_id: buildingId,
-          equipment,
-            econ_overlay_equipment_id:
-              opts?.overlayEq ?? econOverlayEq ?? null,
-        });
-        if (!body.ok) {
-          throw new Error(body.error || "Central analytics failed");
-        }
-        setOverview(body);
-        if (!overlayOnly) setVavHealthToken((n) => n + 1);
-        hasOverview.current = true;
-        setInspectOptions((prev) => {
-          const next = [
-            ...new Set(
-              [...prev, ...body.equipment_ids].filter(Boolean).sort(
-                naturalCompare,
-              ),
-            ),
-          ];
-          return next.length ? next : prev;
-        });
-        if (!inspectPick && body.equipment_ids[0]) {
-          setInspectPick(body.equipment_ids[0]);
-        }
-        const results = await getFddResults(buildingId).catch(() => null);
-        if (results) setLastRuleResultCount(results.length);
-      } catch (err) {
-        setOverviewErr(formatErr(err));
-        if (!overlayOnly && !hasOverview.current) {
-          setOverview(null);
-        }
-      } finally {
-        if (!overlayOnly) setLoadingOverview(false);
+  const refreshOverview = useCallback(async () => {
+    if (!buildingId) return;
+    setLoadingOverview(true);
+    setOverviewErr(null);
+    try {
+      const body = await fetchCentralOverview({
+        building_id: buildingId,
+        equipment,
+      });
+      if (!body.ok) {
+        throw new Error(body.error || "Central analytics failed");
       }
-    },
-    [buildingId, equipment, econOverlayEq, inspectPick],
-  );
-
-  const refreshInspect = useCallback(
-    async (opts?: { pick?: string; cols?: string[] }) => {
-      const pick = opts?.pick ?? inspectPick;
-      if (!buildingId || !pick || pick === "(weather)") return;
-      const seq = ++inspectReqSeq.current;
-      setInspectBusy(true);
-      setInspectErr(null);
-      try {
-        const requested = opts?.cols ?? [];
-        const env = await postInspect({
-          building_id: buildingId,
-          equipment_ids: [pick],
-          max_points: 8000,
-          series: {
-            columns: requested.length > 0 ? requested : undefined,
-          },
-        });
-        if (seq !== inspectReqSeq.current) return;
-        const cov = (env.coverage ?? {}) as Record<string, unknown>;
-        const plottable = Array.isArray(cov.plottable_columns)
-          ? (cov.plottable_columns as string[])
-          : [];
-        const plotted = Array.isArray(cov.columns_plotted)
-          ? (cov.columns_plotted as string[])
-          : [];
-        const allCols = plottable.length ? plottable : plotted;
-        setInspectCols(allCols);
-        // Chart-only: never write inspect coverage into the metric strip.
-        const sampleN = Number(env.points?.length ?? cov.point_count ?? 0);
-        const first =
-          cov.first_timestamp != null ? String(cov.first_timestamp) : null;
-        const last =
-          cov.last_timestamp != null ? String(cov.last_timestamp) : null;
-        setInspectMeta({
-          row_count: Number.isFinite(sampleN) ? sampleN : 0,
-          span: first && last ? `${first} → ${last}` : "—",
-        });
-        if (!requested.length && plottable.length && plotted.length < plottable.length) {
-          void refreshInspect({ pick, cols: plottable });
-          return;
-        }
-        if (env.warnings?.length && !env.points?.length) {
-          setInspectFig(null);
-          setInspectErr(env.warnings[0] ?? "Inspection unavailable");
-          return;
-        }
-        const colsForChart = (requested.length ? requested : plotted).filter(
-          (c) =>
-            plottable.includes(c) || plotted.includes(c) || !plottable.length,
-        );
-        setInspectSelectedCols(
-          colsForChart.length ? colsForChart : plotted,
-        );
-        const fig = equipmentInspectionChart(env.points ?? [], {
-          equipmentId: pick,
-          columns: colsForChart.length ? colsForChart : plotted,
-        });
-        setInspectFig(fig);
-        setInspectErr(
-          fig
-            ? null
-            : "No plottable numeric columns for this equipment in historian Parquet.",
-        );
-      } catch (err) {
-        if (seq !== inspectReqSeq.current) return;
-        setInspectErr(formatErr(err));
-        setInspectFig(null);
-      } finally {
-        if (seq === inspectReqSeq.current) setInspectBusy(false);
+      setOverview(body);
+      setVavHealthToken((n) => n + 1);
+      hasOverview.current = true;
+      const results = await getFddResults(buildingId).catch(() => null);
+      if (results) setLastRuleResultCount(results.length);
+    } catch (err) {
+      setOverviewErr(formatErr(err));
+      if (!hasOverview.current) {
+        setOverview(null);
       }
-    },
-    [buildingId, inspectPick],
-  );
+    } finally {
+      setLoadingOverview(false);
+    }
+  }, [buildingId, equipment]);
 
   useEffect(() => {
     void refreshMeta();
   }, [refreshMeta]);
 
-  // Site change only — overlay / inspect must not null building Plotly.
   useEffect(() => {
     if (lastBuildingId.current !== buildingId) {
       lastBuildingId.current = buildingId;
-      inspectReqSeq.current += 1;
       hasOverview.current = false;
       setOverview(null);
       setOverviewErr(null);
-      setInspectFig(null);
-      setInspectErr(null);
-      setInspectCols([]);
-      setInspectSelectedCols([]);
-      setInspectMeta(null);
-      setInspectPick("");
-      setInspectBusy(false);
     }
   }, [buildingId]);
 
   useEffect(() => {
     if (!buildingId) return;
-    // Meta only — do not auto-run Update analytics / Run all rules.
     void refreshMeta();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildingId]);
-
-  useEffect(() => {
-    if (!buildingId || !econOverlayEq || !hasOverview.current) return;
-    void refreshOverview({ overlayOnly: true, overlayEq: econOverlayEq });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [econOverlayEq]);
-
-  // Seed inspect picker from session equipment once; do not auto-plot on change.
-  useEffect(() => {
-    if (!equipmentId) return;
-    setInspectPick((prev) => prev || equipmentId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [equipmentId]);
 
   useEffect(() => {
     void getSessionConfig()
@@ -593,19 +449,15 @@ export function OverviewPopulated({
     return () => window.clearInterval(id);
   }, [busy]);
 
-  const chartCount = (() => {
+  const tableCount = (() => {
     if (!overview) return 0;
     let n = 0;
-    for (const p of overview.motor_weekly.plants) {
-      if (p.figure?.data?.length) n += 1;
-    }
-    if (overview.mech_cooling.figure?.data?.length) n += 1;
-    if (overview.economizer_free_cooling.delta_scatter?.data?.length) n += 1;
-    if (overview.economizer_free_cooling.mat_residual?.data?.length) n += 1;
-    if (overview.economizer_free_cooling.temps_overlay?.data?.length) n += 1;
-    if (overview.bas_vs_web_oat.overlay?.data?.length) n += 1;
-    if (overview.bas_vs_web_oat.histogram?.data?.length) n += 1;
-    if (inspectFig?.data?.length) n += 1;
+    if (overview.motor_weekly.table?.length) n += 1;
+    if (overview.mech_cooling.bins?.length) n += 1;
+    if (overview.economizer_weather.table?.length) n += 1;
+    if (overview.economizer_free_cooling.metrics?.length) n += 1;
+    if (overview.bas_vs_web_oat.hist_table?.length) n += 1;
+    if (overview.devices_by_type?.length) n += 1;
     return n;
   })();
 
@@ -616,8 +468,8 @@ export function OverviewPopulated({
       aria-busy={busy || undefined}
     >
       <p className="oracle-sidebar__caption">
-        Overview analytics from central DataFusion. Charts are drawn in the browser
-        from typed envelopes.
+        Overview analytics from central DataFusion. Tables and health matrices
+        live here; Plotly charts moved to RCx Plots. CSV overlay is under Inspect.
       </p>
 
       {busy ? (
@@ -652,10 +504,10 @@ export function OverviewPopulated({
           variant="info"
           testId="overview-charts-ready"
         >
-          Charts ready: <strong>{chartCount}</strong> Plotly figure
-          {chartCount === 1 ? "" : "s"} for <code>{buildingId}</code> (
-          {overview.elapsed_s}s · {overview.source}). Each plot shows “rendered”
-          when Plotly finishes drawing.
+          Tables ready: <strong>{tableCount}</strong> tabulated section
+          {tableCount === 1 ? "" : "s"} for <code>{buildingId}</code> (
+          {overview.elapsed_s}s · {overview.source}). Motor / economizer / OAT
+          figures are on <strong>RCx Plots</strong>.
         </InlineAlert>
       ) : null}
 
@@ -672,7 +524,6 @@ export function OverviewPopulated({
             onClick={() => {
               void refreshMeta();
               void refreshOverview();
-              void refreshInspect();
             }}
             testId="overview-refresh"
           />
@@ -713,9 +564,9 @@ export function OverviewPopulated({
 
       <p className="oracle-sidebar__caption" data-testid="overview-dual-catalog">
         Two manual actions: <strong>Update analytics</strong> builds Overview
-        charts; <strong>Run all rules</strong> runs the FDD SQL registry.
-        Sidebar <strong>Update this rule</strong> re-runs one rule. Equipment
-        for Data inspection / FDD Plots is chosen in those sections — not here.
+        tables and health matrices; <strong>Run all rules</strong> runs the FDD SQL
+        registry. Sidebar <strong>Update this rule</strong> re-runs one rule.
+        Equipment for Inspect / FDD Plots is chosen in those sections — not here.
       </p>
 
       <SectionTabs activeSectionId="overview" embedded />
@@ -893,36 +744,37 @@ export function OverviewPopulated({
         </Expander>
       </section>
 
+      <PlantHealthSections buildingId={buildingId} refreshToken={vavHealthToken} />
       <VavHealthSection buildingId={buildingId} refreshToken={vavHealthToken} />
 
       <section className="overview-section" data-testid="overview-motor-runtime">
         <h3>Motor / equipment run hours</h3>
         <p className="oracle-sidebar__caption">
           {overview?.motor_weekly.caption ??
-            "Weekly plant motors (AHU fans, boilers, chillers). VAV terminals are excluded."}
+            "Weekly plant motors (AHU fans, boilers, chillers). VAV terminals are excluded. Figures live on RCx Plots."}
         </p>
         {(overview?.motor_weekly.plants ?? []).map((plant) => (
           <div key={plant.plant_group} data-testid={`overview-motor-${plant.plant_group}`}>
             <h4>{plant.title}</h4>
-            {plant.empty || !plant.figure ? (
+            {plant.empty ? (
               <p className="oracle-sidebar__caption">
                 No series for {plant.title.split("—")[0]?.trim().toLowerCase()}.
               </p>
             ) : (
-              <PlotlyHost
-                id={`motor-weekly-${plant.plant_group}`}
-                label={plant.title}
-                figure={plant.figure}
-                loading={loadingOverview && !overview}
-                height={340}
-                downloadFilename={`motor_weekly_${plant.plant_group}`}
-                testId={`overview-motor-${plant.plant_group}-plot`}
-              />
+              <p className="oracle-sidebar__caption">
+                Plot moved to RCx family preset (
+                {plant.plant_group === "air"
+                  ? "ahu_motor_weekly"
+                  : plant.plant_group === "boiler"
+                    ? "boiler_motor_weekly"
+                    : "chiller_motor_weekly"}
+                ).
+              </p>
             )}
           </div>
         ))}
         {!overview && !loadingOverview ? (
-          <p className="oracle-sidebar__caption">No motor charts yet.</p>
+          <p className="oracle-sidebar__caption">No motor table yet.</p>
         ) : null}
         <Expander
           id="weekly-motor-table"
@@ -956,7 +808,7 @@ export function OverviewPopulated({
         <h3>Mechanical cooling hours by OAT bin</h3>
         <p className="oracle-sidebar__caption">
           {overview?.mech_cooling.caption ??
-            "Chillers / DX / VRF compressor-proof; never CHW valves."}
+            "Chillers / DX / VRF compressor-proof; never CHW valves. Figure on RCx Plots (mech_cooling_oat_bins)."}
         </p>
         {overview?.mech_cooling.callout ? (
           <p
@@ -971,16 +823,7 @@ export function OverviewPopulated({
             {overview.mech_cooling.callout}
           </p>
         ) : null}
-        <PlotlyHost
-          id="mech-cooling"
-          label="Mechanical cooling by OAT"
-          figure={overview?.mech_cooling.figure ?? null}
-          loading={loadingOverview && !overview}
-          height={360}
-          downloadFilename="mech_cooling_oat_bins"
-          testId="overview-mech-plot"
-        />
-        {overview && !overview.mech_cooling.figure && !loadingOverview ? (
+        {overview && !overview.mech_cooling.bins?.length && !loadingOverview ? (
           <p className="oracle-sidebar__caption" data-testid="overview-mech-empty">
             {overview.mech_cooling.caption}
           </p>
@@ -1146,72 +989,11 @@ export function OverviewPopulated({
             />
           </Expander>
         ) : null}
-        <PlotlyHost
-          id="econ-delta"
-          label="Economizer free-cooling delta scatter"
-          figure={overview?.economizer_free_cooling.delta_scatter ?? null}
-          loading={loadingOverview && !overview}
-          height={380}
-          downloadFilename="economizer_free_cooling_delta"
-          testId="overview-econ-delta-plot"
-        />
-        {!overview?.economizer_free_cooling.delta_scatter && !loadingOverview ? (
-          <p className="oracle-sidebar__caption">
-            Need AHU/RTU with fan-status (or fan-cmd) on, plus OAT, RAT, and MAT
-            with enough |OAT−RAT|≥10°F samples for the delta scatter.
-          </p>
-        ) : null}
-        <PlotlyHost
-          id="econ-mat-resid"
-          label="MAT residual"
-          figure={overview?.economizer_free_cooling.mat_residual ?? null}
-          loading={loadingOverview && !overview}
-          height={320}
-          downloadFilename="economizer_mat_residual"
-          testId="overview-econ-mat-resid-plot"
-        />
         <p className="oracle-sidebar__caption">
-          MAT residual is measured mixed-air temp minus the ideal mixing-box
-          prediction from RAT, OAT, and OA damper % (fan on, identifiable
-          samples) — near zero means the mixing model matches; large bias
-          suggests sensor, damper, or leakage issues.
+          Economizer Plotly (delta, MAT residual, temps overlay) moved to RCx
+          presets <code>economizer_delta</code>, <code>economizer_mat_resid</code>,{" "}
+          <code>economizer_temps_overlay</code>.
         </p>
-        <Expander
-          id="econ-temps-overlay"
-          label="Free-cooling temps + OA damper overlay"
-          expanded={econOverlayOpen}
-          onChange={setEconOverlayOpen}
-          testId="overview-econ-overlay-exp"
-        >
-          {overview?.economizer_free_cooling.metrics?.length ? (
-            <Select
-              id="econ-overlay-eq"
-              label="AHU for overlay"
-              value={
-                econOverlayEq ||
-                overview.economizer_free_cooling.overlay_equipment_id ||
-                ""
-              }
-              options={overview.economizer_free_cooling.metrics.map((m) => ({
-                value: String(m.equipment_id),
-                label: String(m.equipment_id),
-              }))}
-              onChange={(v) => {
-                setEconOverlayEq(v);
-              }}
-              testId="overview-econ-overlay-eq"
-            />
-          ) : null}
-          <PlotlyHost
-            id="econ-temps"
-            label="Free-cooling temps + OA damper"
-            figure={overview?.economizer_free_cooling.temps_overlay ?? null}
-            loading={loadingOverview && !overview}
-            height={360}
-            downloadFilename="economizer_temps_oa_damper"
-            testId="overview-econ-temps-plot"
-          />
-        </Expander>
         {(overview?.economizer_free_cooling.skipped?.length ?? 0) > 0 ? (
           <Expander
             id="econ-skipped"
@@ -1242,41 +1024,28 @@ export function OverviewPopulated({
         <h3>BAS vs web outdoor-air temperature</h3>
         <p className="oracle-sidebar__caption">
           {overview?.bas_vs_web_oat.caption ??
-            "Overlay of BAS OAT and web dry-bulb with ±oat_err band."}
+            "Overlay of BAS OAT and web dry-bulb. Figure on RCx Weather preset bas_vs_web_oat."}
         </p>
-        {!overview?.bas_vs_web_oat.overlay && !loadingOverview ? (
-          <InlineAlert id="bas-web-need" variant="info">
-            Need both BAS outdoor-air temp and web weather OAT for the overlay
-            chart.
-          </InlineAlert>
+        {overview?.bas_vs_web_oat.hist_table?.length ? (
+          <DataTable
+            id="bas-web-hist-table"
+            label="BAS − web OAT deviation histogram"
+            columns={Object.keys(overview.bas_vs_web_oat.hist_table[0] ?? {}).map(
+              (k) => ({ key: k, header: k }),
+            )}
+            rows={
+              overview.bas_vs_web_oat.hist_table.slice(0, 80) as Array<
+                Record<string, string | number>
+              >
+            }
+            testId="overview-bas-hist-table"
+          />
         ) : (
-          <PlotlyHost
-            id="bas-web-overlay"
-            label="BAS vs web OAT"
-            figure={overview?.bas_vs_web_oat.overlay ?? null}
-            loading={loadingOverview && !overview}
-            height={360}
-            downloadFilename="bas_vs_web_oat"
-            testId="overview-bas-overlay-plot"
-          />
+          <InlineAlert id="bas-web-need" variant="info">
+            Need both BAS outdoor-air temp and web weather OAT for the histogram
+            table. Overlay plot is on RCx Plots.
+          </InlineAlert>
         )}
-        <Expander
-          id="bas-web-hist"
-          label="BAS − web OAT deviation histogram"
-          expanded={basHistOpen}
-          onChange={setBasHistOpen}
-          testId="overview-bas-hist-exp"
-        >
-          <PlotlyHost
-            id="bas-web-hist"
-            label="BAS − web deviation"
-            figure={overview?.bas_vs_web_oat.histogram ?? null}
-            loading={loadingOverview && !overview}
-            height={300}
-            downloadFilename="bas_web_oat_deviation_hist"
-            testId="overview-bas-hist-plot"
-          />
-        </Expander>
       </section>
 
       <p className="oracle-sidebar__caption">
@@ -1296,67 +1065,6 @@ export function OverviewPopulated({
           ]}
           rows={devicesByType}
           testId="overview-devices-table"
-        />
-      </section>
-
-      <section className="overview-section" data-testid="overview-data-inspection">
-        <h3>Data inspection — raw CSV</h3>
-        <p className="oracle-sidebar__caption">
-          Pick any uploaded equipment (or weather) CSV and plot numeric / status
-          columns as stacked Plotly line charts.
-        </p>
-        <Select
-          id="inspect-eq"
-          label="CSV / equipment"
-          value={inspectPick}
-          options={(inspectOptions.length
-            ? inspectOptions
-            : sortedEquipment.map((e) => String(e.equipment_id))
-          ).map((id) => ({ value: id, label: id }))}
-          onChange={(v) => {
-            setInspectPick(v);
-            void refreshInspect({ pick: v });
-          }}
-          testId="overview-inspect-eq"
-        />
-        <p className="oracle-sidebar__caption" data-testid="overview-inspect-meta">
-          {inspectPick || "—"} · chart sample {inspectMeta?.row_count ?? 0}{" "}
-          points · {inspectCols.length} plottable columns
-          {inspectMeta?.span ? ` · ${inspectMeta.span}` : ""}
-        </p>
-        {inspectErr ? (
-          <InlineAlert id="inspect-err" variant="danger">
-            {inspectErr}
-          </InlineAlert>
-        ) : null}
-        <PlotlyHost
-          id="data-inspect"
-          label="Inspection chart"
-          figure={inspectFig}
-          loading={inspectBusy}
-          height={Math.min(
-            4000,
-            Math.max(280, (inspectSelectedCols.length || inspectCols.length || 1) * 160),
-          )}
-          downloadFilename={`${inspectPick || "equipment"}_inspect`}
-          testId="overview-inspect-plot"
-        />
-        <Button
-          id="dl-inspect"
-          label={`Download \`${inspectPick || "csv"}\` JSON sample`}
-          variant="secondary"
-          disabled={!inspectFig?.data?.length}
-          onClick={() => {
-            const rows =
-              (inspectFig?.data?.[0] as { x?: unknown[]; y?: unknown[] } | undefined);
-            if (!rows?.x?.length) return;
-            const preview = rows.x.map((x, i) => ({
-              timestamp: x,
-              value: rows.y?.[i] ?? null,
-            }));
-            downloadRowsCsv(`${inspectPick || "equipment"}_series.csv`, preview);
-          }}
-          testId="overview-dl-inspect"
         />
       </section>
     </div>

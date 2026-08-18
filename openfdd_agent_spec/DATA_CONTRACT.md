@@ -99,8 +99,28 @@ Do not commit vendor appenders or full Building 50 zips. CI uses `tests/fixtures
 
 ---
 
+## Building package zip + sidecar maps
+
+Seed lane: `POST /api/csv/import/package`. Layout (generic `AHU_1` / `VAV_1` / `CHW_1` / `weather/`):
+
+```
+{building}/
+  manifest.json
+  {equipment_id}/history_wide.csv
+  {equipment_id}/history_wide.json   # or column_map.json — Haystack points
+  weather/history_wide.csv           # web-outside-air-temp → web_oa_t
+```
+
+- `timestamp_utc` RFC3339 UTC (`Z` or `+00:00`).
+- Stamp `equipType` (`ahu` `vav` `chwPlant` `boiler` `heatPump` `weather`). `rtu`→AHU; `heatPump`→HP; UV/FCU air-side→ahu; chillers→chwPlant.
+- Sibling JSON `points` keys are Haystack names; ingest translates via `haystack_point_to_role` (`discharge-air-temp` → `sat`). Alias table: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](../docs/migration/vibe19/ROLE_MAPPING_PARITY.md). Authoring: [`docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md).
+- Empty Overview / RCx / Inspect = missing roles in the zip.
+- Motor ≠ compressor ≠ valve (status/cmd before amps; never CHW pump / `clg_valve_pct` as compressor proof).
+
+---
+
 ## Units and roles
 
 Role aliases and equipment types: `open_fdd.analytics` / site model helpers and
-docs under `docs/rules/cookbook/` + migration `ROLE_MAPPING_PARITY.md`.
+docs under `docs/rules/cookbook/` + migration [`ROLE_MAPPING_PARITY.md`](../docs/migration/vibe19/ROLE_MAPPING_PARITY.md).
 Phase 2 consolidates into shared contracts.

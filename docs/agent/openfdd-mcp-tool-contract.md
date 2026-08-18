@@ -103,9 +103,9 @@ Requires **`OPENFDD_MCP_ALLOW_WRITES=1`** and **`confirm: true`** on each tool c
 
 ## Package / CSV ingest notes
 
-- `timestamp_utc` must be RFC3339 UTC (`Z` or `+00:00`). Preflight and ingest skip unparseable rows — they do **not** invent epoch 0 or wall-clock now.
+- Package import expects RFC3339 `timestamp_utc` (`Z` or `+00:00`) and sibling Haystack maps (`points` / `column_roles`). Analytics POSTs (`/api/analytics/*`, health matrices, RCx) run **after** mapping.
 - Haystack sidecar `"equip": "<string>"` is device metadata; nested package maps use object `equip`/`equipment`/`devices`.
-- Empty analytics after import usually mean missing roles in the zip, not a broken MCP tool.
+- Empty analytics after import usually mean missing roles in the zip, not a broken MCP tool. Authoring: [`PACKAGE_AUTHORING.md`](PACKAGE_AUTHORING.md).
 
 ## Forbidden
 

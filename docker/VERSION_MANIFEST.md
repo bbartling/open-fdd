@@ -18,6 +18,7 @@ All container images in the MQTT / CSV stack share a **coordinated release** tie
 |-----|------|---------|
 | `sha-<7-char-git-sha>` | Every publish | Immutable rollback unit |
 | `<workspace.version>` | Every publish | Semver from `Cargo.toml` |
+| `<workspace.version>-n<run>` | Every publish | Extra nightly run pointer (e.g. `3.3.1-n42`) |
 | `nightly` | `master` branch only | Floating integration channel |
 
 Stack publish builds **linux/amd64**. MCP also publishes multi-arch. Re-enable stack multi-arch when a native arm64 runner is available.
@@ -68,6 +69,6 @@ WattLab dumps use `tools/wattlab_export/` from central.
 
 Superset audit: `docs/migration/VIBE19_VIBE20_OPENFDD_AUDIT.md`.
 
-Workspace Cargo version remains **3.3.0**.
+Workspace Cargo version remains **3.3.1**. Displayed UI revision is `{semver}+{shortsha}` from central `/api/health`.
 
 **Human Workbench gate** still required before BACnet OT PASS (hosted **599999**). See `docs/agent/linux-edge-tester-stack-recipes-prompt.md`.

@@ -17,6 +17,7 @@ function resolveActiveId(
   if (pathname.startsWith("/wattlab") || pathname.startsWith("/twin")) {
     return "wattlab";
   }
+  if (pathname.startsWith("/inspect")) return "inspect";
   if (pathname.startsWith("/mapping")) return "data-model";
   if (pathname.startsWith("/sites")) return "sites";
   if (pathname.startsWith("/actions")) return "actions";

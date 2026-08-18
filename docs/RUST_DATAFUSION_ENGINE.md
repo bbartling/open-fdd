@@ -22,7 +22,9 @@ Production-direction deterministic FDD analytics for Open-FDD.
     history_wide.csv     # timestamp_utc + point columns
 ```
 
-Optional weather: `{data_root}/weather/` (staged for OAT-METEO rules).
+Optional weather: `{building}/weather/history_wide.csv` with `web-outside-air-temp` → `web_oa_t` (OAT-METEO / B100). Product does not bake a city.
+
+Haystack `points` names translate via `haystack_point_to_role` (`discharge-air-temp` → `sat`). Package authoring for agents: [`docs/agent/PACKAGE_AUTHORING.md`](agent/PACKAGE_AUTHORING.md). Aliases: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](migration/vibe19/ROLE_MAPPING_PARITY.md).
 
 ### `timestamp_utc` contract
 

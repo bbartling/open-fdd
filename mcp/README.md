@@ -61,6 +61,10 @@ docker run -i --rm --network host \
 
 Interactive MCP clients should use `docker run -i` (or the release binary below), not a detached `up -d`.
 
+## Package mapping
+
+Empty Overview / RCx / Inspect after import means **missing roles** in the zip. Stamp `equipType`; Haystack `points` → SQL via `haystack_point_to_role`. Use existing `openfdd_csv_import_*` + `openfdd_csv_package_append` — do not wait on SCAFFOLD `mapping_suggest`. See [`docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md) and [`INSTRUCTIONS.md`](INSTRUCTIONS.md).
+
 ## Transport
 
 Stdio JSON-RPC (MCP 2024-11-05). Suitable for Cursor **WSL agent** local config:

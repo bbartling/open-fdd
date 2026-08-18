@@ -451,6 +451,16 @@
   border-bottom: none;
 }
 
+.widget-table tr.health-row--broken-1 td {
+  background: var(--health-broken-1);
+}
+.widget-table tr.health-row--broken-2 td {
+  background: var(--health-broken-2);
+}
+.widget-table tr.health-row--broken-3 td {
+  background: var(--health-broken-3);
+}
+
 .widget-table--compact th,
 .widget-table--compact td {
   padding: var(--space-xs) var(--space-sm);

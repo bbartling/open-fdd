@@ -12,6 +12,7 @@ export interface DataTableProps<T extends Record<string, unknown>>
   extends WidgetBaseProps {
   columns: DataTableColumn<T>[];
   rows: T[];
+  rowClassName?: (row: T) => string | undefined;
 }
 
 function renderCell(value: unknown): ReactNode {
@@ -38,6 +39,7 @@ export function DataTable<T extends Record<string, unknown>>({
   density = "comfortable",
   columns,
   rows,
+  rowClassName,
 }: DataTableProps<T>) {
   return (
     <div
@@ -79,13 +81,21 @@ export function DataTable<T extends Record<string, unknown>>({
                 <td colSpan={columns.length}>No data</td>
               </tr>
             ) : (
-              rows.map((row, rowIdx) => (
-                <tr key={rowIdx}>
-                  {columns.map((col) => (
-                    <td key={col.key}>{renderCell(row[col.key])}</td>
-                  ))}
-                </tr>
-              ))
+              rows.map((row, rowIdx) => {
+                const extra = rowClassName?.(row);
+                const broken = extra?.match(/broken-(\d)/)?.[1];
+                return (
+                  <tr
+                    key={rowIdx}
+                    className={extra || undefined}
+                    data-broken={broken ?? undefined}
+                  >
+                    {columns.map((col) => (
+                      <td key={col.key}>{renderCell(row[col.key])}</td>
+                    ))}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
