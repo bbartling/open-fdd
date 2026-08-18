@@ -47,6 +47,7 @@ struct FamilySpec {
         &'static str,
         Option<&'static str>,
     ); 3],
+    broken: &'static [&'static str],
     notes: &'static str,
 }
 
@@ -59,6 +60,7 @@ const AHU_SPEC: FamilySpec = FamilySpec {
         ("duct_high", "Duct", "AHU-DUCTHI", None),
         ("economizer", "Econ", "ECON-1", Some("ECON-2")),
     ],
+    broken: AHU_BROKEN_RULE_IDS,
     notes: "AHU-SATDEV / AHU-DUCTHI / ECON-1 (ECON-2 if ECON-1 is N/A)",
 };
 
@@ -71,6 +73,7 @@ const CHILLER_SPEC: FamilySpec = FamilySpec {
         ("chw_2", "CHW-2", "CHW-2", None),
         ("chw_3", "CHW-3", "CHW-3", None),
     ],
+    broken: CHILLER_BROKEN_RULE_IDS,
     notes: "CHW-1 / CHW-2 / CHW-3 compressor-plant flags",
 };
 
@@ -83,6 +86,7 @@ const BOILER_SPEC: FamilySpec = FamilySpec {
         ("fc6", "FC6", "FC6", None),
         ("fc8", "FC8", "FC8", None),
     ],
+    broken: BOILER_BROKEN_RULE_IDS,
     notes: "FC5 / FC6 / FC8 heating cookbook (no HW-* SQL). N/A skipped.",
 };
 
@@ -95,6 +99,7 @@ const HP_SPEC: FamilySpec = FamilySpec {
         ("sat_dev", "SAT", "AHU-SATDEV", None),
         ("economizer", "Econ", "ECON-1", Some("ECON-2")),
     ],
+    broken: HP_BROKEN_RULE_IDS,
     notes: "HP-1 plus AHU-SATDEV / ECON-1 when id is HP_*",
 };
 
@@ -275,10 +280,7 @@ fn score_label(
 ) -> (String, usize, usize) {
     let evaluable = flags.iter().filter(|f| **f != Flag::Unknown).count();
     let hit = flags.iter().filter(|f| **f == Flag::True).count();
-    let label = if evaluable == 0 {
-        *nq += 1;
-        "?/3"
-    } else if evaluable < 3 {
+    let label = if evaluable < 3 {
         *nq += 1;
         "?/3"
     } else if hit == 3 {
@@ -428,6 +430,7 @@ async fn plant_health_from_history(
         "schema_version": spec.schema,
         "building_id": bid,
         "family": format!("{:?}", spec.family).to_ascii_lowercase(),
+        "broken_rule_ids": spec.broken,
         "groups": {
             "3/3": n3, "2/3": n2, "1/3": n1, "0/3": n0, "?/3": nq
         }
