@@ -41,7 +41,12 @@ struct FamilySpec {
     query_version: &'static str,
     schema: &'static str,
     /// (row key, header label, primary rule, optional fallback rule)
-    flags: [(&'static str, &'static str, &'static str, Option<&'static str>); 3],
+    flags: [(
+        &'static str,
+        &'static str,
+        &'static str,
+        Option<&'static str>,
+    ); 3],
     notes: &'static str,
 }
 
@@ -138,10 +143,7 @@ pub fn is_heat_pump_id(equipment_id: &str) -> bool {
         .to_ascii_uppercase()
         .replace('\\', "/")
         .replace('-', "_");
-    u.starts_with("HP_")
-        || u.contains("/HP_")
-        || u.contains("HEAT_PUMP")
-        || u.contains("HEATPUMP")
+    u.starts_with("HP_") || u.contains("/HP_") || u.contains("HEAT_PUMP") || u.contains("HEATPUMP")
 }
 
 pub fn matches_family(family: PlantFamily, equipment_id: &str) -> bool {
@@ -263,7 +265,14 @@ fn lookup_flag(
     Flag::Unknown
 }
 
-fn score_label(flags: [Flag; 3], n3: &mut u32, n2: &mut u32, n1: &mut u32, n0: &mut u32, nq: &mut u32) -> (String, usize, usize) {
+fn score_label(
+    flags: [Flag; 3],
+    n3: &mut u32,
+    n2: &mut u32,
+    n1: &mut u32,
+    n0: &mut u32,
+    nq: &mut u32,
+) -> (String, usize, usize) {
     let evaluable = flags.iter().filter(|f| **f != Flag::Unknown).count();
     let hit = flags.iter().filter(|f| **f == Flag::True).count();
     let label = if evaluable == 0 {
@@ -315,7 +324,9 @@ async fn plant_health_from_history(
         let mut env = envelope_with_engine(
             spec.query_version,
             &q,
-            vec!["no historian parquet for this building — run ingest then Update analytics".into()],
+            vec![
+                "no historian parquet for this building — run ingest then Update analytics".into(),
+            ],
             DF_ENGINE,
         );
         env.coverage = Some(json!({"schema_version": spec.schema, "building_id": bid}));
@@ -365,7 +376,8 @@ async fn plant_health_from_history(
             lookup_flag(has_fdd, &index, eq, spec.flags[1].2, spec.flags[1].3),
             lookup_flag(has_fdd, &index, eq, spec.flags[2].2, spec.flags[2].3),
         ];
-        let (label, hit, evaluable) = score_label(flags, &mut n3, &mut n2, &mut n1, &mut n0, &mut nq);
+        let (label, hit, evaluable) =
+            score_label(flags, &mut n3, &mut n2, &mut n1, &mut n0, &mut nq);
         let mut broken_ids: Vec<String> = Vec::new();
         for (i, f) in flags.iter().enumerate() {
             if *f == Flag::True {
@@ -394,7 +406,11 @@ async fn plant_health_from_history(
         obj.insert("broken_rule_ids".into(), json!(broken_ids.join(";")));
         obj.insert(
             "confidence".into(),
-            json!(if evaluable < 3 { "insufficient" } else { "medium" }),
+            json!(if evaluable < 3 {
+                "insufficient"
+            } else {
+                "medium"
+            }),
         );
         obj.insert("engine".into(), json!(DF_ENGINE));
         obj.insert("schema_version".into(), json!(spec.schema));
@@ -469,8 +485,14 @@ mod tests {
 
     #[test]
     fn interpret_unknown_not_pass() {
-        assert_eq!(interpret_status("NOT_APPLICABLE_EQUIPMENT_TYPE", 0.0), Flag::Unknown);
-        assert_eq!(interpret_status("SKIPPED_MISSING_ROLES", 0.0), Flag::Unknown);
+        assert_eq!(
+            interpret_status("NOT_APPLICABLE_EQUIPMENT_TYPE", 0.0),
+            Flag::Unknown
+        );
+        assert_eq!(
+            interpret_status("SKIPPED_MISSING_ROLES", 0.0),
+            Flag::Unknown
+        );
         assert_eq!(interpret_status("PASS", 0.0), Flag::False);
         assert_eq!(interpret_status("FAULT", 0.0), Flag::True);
         assert_eq!(interpret_status("PASS", 1.5), Flag::True);

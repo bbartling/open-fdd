@@ -187,7 +187,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/analytics/chiller-health",
             post(analytics_chiller_health),
         )
-        .route("/api/analytics/boiler-health", post(analytics_boiler_health))
+        .route(
+            "/api/analytics/boiler-health",
+            post(analytics_boiler_health),
+        )
         .route("/api/analytics/hp-health", post(analytics_hp_health))
         .route(
             "/api/analytics/sensor-health",
