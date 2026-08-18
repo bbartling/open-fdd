@@ -28,6 +28,10 @@ import {
 import { resolveRoleUnit } from "../api/roleUnits";
 import type { PlotlyFigure } from "../api/plotDataset";
 import {
+  isOverviewRcxPreset,
+  loadOverviewRcxPreset,
+} from "../api/rcxOverviewPresets";
+import {
   familyPickerOptions,
   REQUIRED_RCX_PRESET_IDS,
 } from "../nav/rcxCatalog";
@@ -243,6 +247,14 @@ export function RcxPage() {
     setDonutFigure(null);
     setCompanionNote(null);
     try {
+      if (isOverviewRcxPreset(presetId)) {
+        const loaded = await loadOverviewRcxPreset(buildingId, presetId);
+        setEnv(loaded.env);
+        setFigure(loaded.figure);
+        setCompanionFigure(loaded.companion);
+        if (loaded.error && !loaded.figure) setError(loaded.error);
+        return;
+      }
       const res = await postRcxPreset({
         building_id: buildingId,
         max_points: 8000,
@@ -338,11 +350,11 @@ export function RcxPage() {
 
   useEffect(() => {
     if (!buildingId || !presetId) return;
-    if (family === "Heat pump" || family === "Weather") return;
+    if (familyPresets.length === 0) return;
     void run();
-  }, [buildingId, presetId, family, run]);
+  }, [buildingId, presetId, family, familyPresets.length, run]);
 
-  const emptyFamily = family === "Heat pump" || family === "Weather";
+  const emptyFamily = familyPresets.length === 0;
   const fanTables = fanSummaryTables(env);
 
   return (
@@ -372,8 +384,7 @@ export function RcxPage() {
         />
         {emptyFamily ? (
           <InlineAlert id="rcx-empty-family" variant="info" testId="rcx-empty-family">
-            No RCx chart presets in <strong>{family}</strong> yet — Heat pump /
-            Weather are placeholders until presets exist.
+            No RCx chart presets in <strong>{family}</strong> yet.
           </InlineAlert>
         ) : (
           <Select

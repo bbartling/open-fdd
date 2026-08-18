@@ -8,11 +8,14 @@ RUN npm ci
 COPY . .
 ARG OPENFDD_GIT_SHA=unknown
 ARG OPENFDD_WEB_VERSION=0.1.0
+ARG OPENFDD_IMAGE_TAG=
 ENV VITE_OPENFDD_GIT_SHA=$OPENFDD_GIT_SHA
 ENV VITE_OPENFDD_WEB_VERSION=$OPENFDD_WEB_VERSION
 RUN npm run build \
-  && printf '{"ok":true,"service":"openfdd-web","git_sha":"%s","version":"%s"}\n' \
-       "$OPENFDD_GIT_SHA" "$OPENFDD_WEB_VERSION" > /app/dist/version.json
+  && short="$(printf '%s' "$OPENFDD_GIT_SHA" | cut -c1-7)" \
+  && image_tag="${OPENFDD_IMAGE_TAG:-sha-${short}}" \
+  && printf '{"ok":true,"service":"openfdd-web","git_sha":"%s","git":"%s","version":"%s","image_tag":"%s"}\n' \
+       "$OPENFDD_GIT_SHA" "$short" "$OPENFDD_WEB_VERSION" "$image_tag" > /app/dist/version.json
 
 # Non-root nginx (listens on 8080).
 FROM nginxinc/nginx-unprivileged:1.27-alpine

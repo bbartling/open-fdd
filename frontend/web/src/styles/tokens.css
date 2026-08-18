@@ -46,6 +46,11 @@
   --color-info-bg: #e3f2fd;
   --color-info-border: #90caf9;
 
+  /* Health matrix tint — same danger hue, more flags → darker */
+  --health-broken-1: color-mix(in srgb, var(--color-danger) 16%, transparent);
+  --health-broken-2: color-mix(in srgb, var(--color-danger) 32%, transparent);
+  --health-broken-3: color-mix(in srgb, var(--color-danger) 52%, transparent);
+
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;
   --space-md: 1rem;

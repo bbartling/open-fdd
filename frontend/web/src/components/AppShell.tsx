@@ -1,9 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router";
 import { SectionTabs } from "./SectionTabs";
 import { OracleSidebar } from "./OracleSidebar";
 import { SIDEBAR_NAV } from "../nav/sections";
 import { hrefWithSession } from "../session/sessionQuery";
+import { apiFetch } from "../api/client";
+
+function shortRevision(version: string): { full: string; display: string; collapsed: string } {
+  const raw = version.trim();
+  const plus = raw.indexOf("+");
+  if (plus < 0) {
+    return { full: raw, display: raw, collapsed: raw };
+  }
+  const semver = raw.slice(0, plus);
+  const sha = raw.slice(plus + 1).replace(/[^a-zA-Z0-9]/g, "").slice(0, 7);
+  const display = sha ? `${semver}+${sha}` : semver;
+  return { full: raw, display, collapsed: sha ? `+${sha}` : display };
+}
 
 interface AppShellProps {
   title: string;
@@ -26,7 +39,42 @@ export function AppShell({
   hideSectionTabs = false,
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [revision, setRevision] = useState<{
+    full: string;
+    display: string;
+    collapsed: string;
+  } | null>(null);
   const location = useLocation();
+
+  useEffect(() => {
+    let cancelled = false;
+    void apiFetch<{ version?: string }>("/api/health")
+      .then((h) => {
+        if (cancelled) return;
+        const v = String(h.version ?? "").trim();
+        if (v) setRevision(shortRevision(v));
+      })
+      .catch(async () => {
+        try {
+          const r = await fetch("/version.json");
+          if (!r.ok) return;
+          const j = (await r.json()) as {
+            version?: string;
+            git?: string;
+            git_sha?: string;
+          };
+          if (cancelled) return;
+          const sha = String(j.git ?? j.git_sha ?? "").trim();
+          const ver = String(j.version ?? "openfdd-web").trim();
+          setRevision(shortRevision(sha ? `${ver}+${sha}` : ver));
+        } catch {
+          /* keep brand-only */
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div
@@ -36,7 +84,18 @@ export function AppShell({
     >
       <aside className="app-sidebar" aria-label="Sites and controls">
         <div className="app-sidebar__brand-row">
-          <div className="app-sidebar__brand">Open-FDD</div>
+          <div className="app-sidebar__brand-block">
+            <div className="app-sidebar__brand">Open-FDD</div>
+            {revision ? (
+              <div
+                className="app-sidebar__revision"
+                data-testid="app-revision"
+                title={revision.full}
+              >
+                {collapsed ? revision.collapsed : revision.display}
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             className="app-sidebar__collapse"

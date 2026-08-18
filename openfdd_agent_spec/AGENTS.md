@@ -28,7 +28,7 @@ retest. Do not confuse those with this engineering OS.
 | `openfdd_agent_spec/` | Agent law, Milestone A, skills, session log |
 | Playground vibe19/20 | External demos; consumers of PyPI |
 
-**Package / timestamp contract (product + PyPI):** `timestamp_utc` is RFC3339 UTC (`Z` or `+00:00`). Rust ingest skips bad rows (no epoch 0 / now). Pandas oracle uses `open_fdd.timestamps.to_utc_datetime`. String `"equip"` on a Haystack sidecar is metadata. Details: [`../docs/RUST_DATAFUSION_ENGINE.md`](../docs/RUST_DATAFUSION_ENGINE.md).
+**Package / timestamp contract (product + PyPI):** `timestamp_utc` is RFC3339 UTC (`Z` or `+00:00`). Rust ingest skips bad rows (no epoch 0 / now). Pandas oracle uses `open_fdd.timestamps.to_utc_datetime`. String `"equip"` on a Haystack sidecar is metadata. **Package authoring (any BAS job):** [`../docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md). Aliases: [`../docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](../docs/migration/vibe19/ROLE_MAPPING_PARITY.md).
 
 **Naming (code truth):**
 
@@ -46,7 +46,7 @@ retest. Do not confuse those with this engineering OS.
 1. Product FDD + Overview analytics = **DataFusion SQL** on GHCR. Never silent pandas fallback in central.
 2. Pandas oracle stays forever on **PyPI** + cookbooks + vibe19 — never delete the pandas cookbook because production uses SQL.
 3. Never delete the SQL cookbook because pandas remains the oracle.
-4. **Product UI:** React SPA (`frontend/web` → `openfdd-web`, `compose.react.yml`) only. Overview = central `/api/analytics/*` (DataFusion) + client Plotly. Browser → central Rust `/api` only — **no Python in the product request path**.
+4. **Product UI:** React SPA (`frontend/web` → `openfdd-web`, `compose.react.yml`) only. Overview = central `/api/analytics/*` (DataFusion) **tables + health matrices**. Plotly motor/mech/econ/BAS figures live on RCx (additive presets). Inspect radio hosts the CSV overlay. Browser → central Rust `/api` only — **no Python in the product request path**.
 5. **Internet-facing auth/UI hygiene:** Never put bench/dev secrets, credential file paths, default passwords, or JWT dumps on login or other product surfaces. Generic login errors only.
 6. Test containers on **`OPENFDD_IMAGE_TAG=nightly`**, but **pin/run `sha-*`** per [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md).
 7. Playground images: `ghcr.io/bbartling/vibe19:develop`, `vibe20:develop` (external).
@@ -68,7 +68,7 @@ retest. Do not confuse those with this engineering OS.
 23. **RCx catalog freeze:** every `REQUIRED_RCX_PRESET_IDS` id must stay listed. Family picker order is `RCX_FAMILY_ORDER` (Zones first) plus empty Heat pump / Weather placeholders. Auto-run the selected preset when site+preset are set.
 24. **Actions housekeeping:** default `GET /api/actions?limit=10`; `DELETE /api/actions/:id` and `DELETE /api/actions`; JSONL prune cap 50.
 25. **Section radios:** left, horizontal, **after** hero + Equipment on Overview (never inside `.oracle-hero`, never centered in the logo column). Other pages: same left radio row at the top of the page body.
-26. **Overview plot Expanders** default **open** — do not hide motor / mech / econ / BAS plot sections behind carets (`Expander` unmounts children when closed).
+26. **Overview is tables + health matrices** — no Plotly on Overview. Motor / mech / econ / BAS figures are additive RCx presets (`ahu_motor_weekly`, `economizer_*`, `boiler_motor_weekly`, `chiller_motor_weekly`, `mech_cooling_oat_bins`, `bas_vs_web_oat`). CSV overlay is the **Inspect** radio (`/inspect`). Do not drop `REQUIRED_RCX_PRESET_IDS`.
 27. **FDD Plots series overlay** honors Lab/`session_config` `confirm_min` (and typed rule params); source may be `sql_detail_session`. After Update-this-rule, listen for `RULES_UPDATED` and refetch results + series.
 28. **SCHED-1 portable occupancy:** numeric/boolean falsey (`0`, `0.0`, `false`) **and** string `unoccupied` (plus related tokens) — keep SQL (`sched1_unoccupied_runtime.sql`) and pandas `sched1` aligned.
 29. **Low-RAM / bensbench:** never local stack `docker build`; prune old images before pull; wait for GHCR publish then pull `sha-*` / `nightly`. Synthetic-59 soaks use `scripts/synthetic_59_*.py`; B100 dump-parity is active (`wattlab_parity_*.py`); never edit goldens to hide misses.
@@ -97,13 +97,14 @@ Nested instructions may specialize but never contradict a higher authority.
 
 1. [`../AGENTS.md`](../AGENTS.md)
 2. This file
-3. [`ARCHITECTURE.md`](ARCHITECTURE.md) + [`ownership.yaml`](ownership.yaml)
-4. [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md)
-5. [`tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md`](../tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md)
-6. [`MILESTONE_A.md`](MILESTONE_A.md) if executing Milestone A
-7. [`PR_PROTOCOL.md`](PR_PROTOCOL.md) before opening a PR
-8. Matching skill
-9. Cookbooks under `docs/rules/cookbook/`
+3. [`../docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md)
+4. [`ARCHITECTURE.md`](ARCHITECTURE.md) + [`ownership.yaml`](ownership.yaml)
+5. [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md)
+6. [`tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md`](../tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md)
+7. [`MILESTONE_A.md`](MILESTONE_A.md) if executing Milestone A
+8. [`PR_PROTOCOL.md`](PR_PROTOCOL.md) before opening a PR
+9. Matching skill
+10. Cookbooks under `docs/rules/cookbook/`
 
 ---
 
@@ -113,6 +114,7 @@ Nested instructions may specialize but never contradict a higher authority.
 | --- | --- |
 | [`openfdd-architecture`](skills/openfdd-architecture/SKILL.md) | Ownership / engine boundaries |
 | [`openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md) | Product SPA (`frontend/web`) |
+| [`openfdd-package-mapping`](skills/openfdd-package-mapping/SKILL.md) | Zip / `equipType` / Haystack→SQL / empty charts |
 | [`openfdd-sql-fdd`](skills/openfdd-sql-fdd/SKILL.md) | DataFusion SQL rules |
 | [`openfdd-pypi-oracle`](skills/openfdd-pypi-oracle/SKILL.md) | PyPI pandas oracle packaging |
 | [`openfdd-cookbook-parity`](skills/openfdd-cookbook-parity/SKILL.md) | Dual cookbook honesty |

@@ -55,6 +55,11 @@ labeled points.
 - `timestamp_utc` is RFC3339 UTC: **`Z` or `+00:00`** — both OK. Do not invent vendor clocks in the app.
 - String `"equip": "AHU_1"` on a single-equip sidecar is **metadata**, not a nested package map. Nested maps use object `equip`/`equipment`/`devices`.
 - Empty charts mean **missing roles** in the zip, not a broken FDD engine. Do not invent site/vendor point names in product code.
+- Stamp `equipType` (`ahu` `vav` `chwPlant` `boiler` `heatPump` `weather`). `rtu`→AHU; heatPump→HP; UV/FCU air-side→ahu; chillers→chwPlant.
+- Motor ≠ compressor ≠ valve: status/cmd before amps; never CHW pump or `clg_valve_pct` as compressor proof; never motor hours from leave temp.
+- Weather sidecar: `{building}/weather/` with `web-outside-air-temp` → `web_oa_t`; `prefer_web_oat`; lat/lon in preprocess.
+- Haystack `points` names translate via `haystack_point_to_role`. Alias table: [`ROLE_MAPPING_PARITY.md`](../../migration/vibe19/ROLE_MAPPING_PARITY.md). Authoring: [`PACKAGE_AUTHORING.md`](../../agent/PACKAGE_AUTHORING.md).
+- Until SCAFFOLD tools land in `mcp/`, use existing `openfdd_csv_import_*` + `openfdd_csv_package_append`.
 
 ## MCP tools
 

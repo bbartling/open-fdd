@@ -42,6 +42,7 @@ See [examples/external-agents.md](../examples/external-agents.md).
 | [openfdd-agent-current-standing.md](openfdd-agent-current-standing.md) | What ships in 3.2.x |
 | [model-routing.md](model-routing.md) | Codex/Cursor agent routing |
 | [openfdd-mcp-tool-contract.md](openfdd-mcp-tool-contract.md) | MCP tool surface |
+| [PACKAGE_AUTHORING.md](PACKAGE_AUTHORING.md) | Zip / equipType / Haystack→SQL (any BAS job) |
 | [bench-vs-source.md](bench-vs-source.md) | Bench vs product source trees *(paste-only — not on Pages)* |
 | [vibe19-parity-nightly-monster-prompt.md](vibe19-parity-nightly-monster-prompt.md) | **Product agent** — vibe19 look/feel + 59 rules + security PR train *(paste-only)* |
 | [vibe16-bacnet-feather-port-agent-prompt.md](vibe16-bacnet-feather-port-agent-prompt.md) | **Product agent** — vibe16 BACnet/Feather port cycle *(paste-only)* |

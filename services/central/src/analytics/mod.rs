@@ -9,6 +9,7 @@ pub mod historian;
 pub mod mechanical_cooling;
 pub mod metering;
 pub mod plant;
+pub mod plant_health;
 pub mod rcx;
 pub mod rcx_presets;
 pub mod runtime;

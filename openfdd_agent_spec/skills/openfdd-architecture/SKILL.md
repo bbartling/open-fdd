@@ -21,6 +21,7 @@ Read [`ARCHITECTURE.md`](../../ARCHITECTURE.md) and [`ownership.yaml`](../../own
 - Never delete `edge/` or `os/`.
 - Do not rename `open_fdd.rules` → `open_fdd.oracle` without product decision.
 - Keep [`../../AGENTS.md`](../../AGENTS.md) / [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) / this skill honest when product truth changes.
+- Vendor dictionaries, campus names, and weather lat/lon stay in **preprocess zips**, never in product SQL/UI.
 
 ## Phase 0 coding (when executing)
 

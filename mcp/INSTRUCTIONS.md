@@ -46,6 +46,12 @@ Works with **Cursor, Claude Desktop, Codex CLI, OpenClaw**, or any MCP host. Ope
 
 After `openfdd_model_assignments_save` (with `confirm: true`), the **FDD wiresheet** on Model → **FDD wiresheet** tab auto-syncs (`graph:live-fdd-validation`). Or call `openfdd_fdd_wires_sync` / `openfdd_fdd_wires_propose`.
 
+## Package authoring (any BAS job)
+
+Empty analytics after import = **missing roles**, not a broken MCP tool or FDD engine. Stamp `equipType`; Haystack `points` → SQL via `haystack_point_to_role`; weather at `{building}/weather/`; motor ≠ compressor ≠ valve. Full table: [`docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md) · aliases [`ROLE_MAPPING_PARITY.md`](../docs/migration/vibe19/ROLE_MAPPING_PARITY.md).
+
+Use existing `openfdd_csv_import_*` + `openfdd_csv_package_append`. SCAFFOLD `package_preflight` / `mapping_suggest` are **not** in this crate.
+
 ## CSV agent workflow (agent-first ingest)
 
 1. **`openfdd_ingest_contract`** — read historian_wide_csv + commissioning mold before cleaning.
@@ -65,7 +71,7 @@ Helper script (bash only): `scripts/openfdd_csv_preflight.sh <session_id>`.
 
 ### Liberty Center / Niagara long-format CSV (TADCO)
 
-Field exports such as `hvac_systems_CLEANED/` are **long-format** Niagara grids — not historian-wide shape. Agent must pivot before preflight pass.
+Field exports such as `hvac_systems_CLEANED/` are **long-format** Niagara grids — not historian-wide shape. This is a **preprocess example**, not product hardcoding. Agent must pivot before preflight pass.
 
 1. Copy raw files to `workspace/agent-toolshed/<job-id>/` (gitignored).
 2. Pivot long → wide per `serving_ahu` (or equipment slug) using `point_role` → FDD alias map from **`openfdd_ingest_contract`** (`outside_air_temp`→`oa_t`, `zone_temp`→`zn_t`, `discharge_air_temp`→`duct_t`, …).

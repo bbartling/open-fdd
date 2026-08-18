@@ -157,12 +157,13 @@ Native Rust: `cargo test --workspace`
 ## Releases
 
 **What we run day-to-day:** GHCR **`:nightly`** and immutable **`:sha-<7>`** (every
-`master` merge). Health reports Cargo **`3.3.0+<sha>`** (e.g. `3.3.0+f9047154dab6`).
+`master` merge). Health reports Cargo **`3.3.1+<sha>`** (e.g. `3.3.1+f9047154dab6`).
+The SPA sidebar shows `3.3.1+shortsha` from `GET /api/health`.
 
 | Channel | Tag | Status today |
 |---------|-----|----------------|
 | **Nightly** | `:nightly` / `:sha-*` | **Default** — bench, agents, soaks |
-| **Semver alias** | `:3.3.0` | Often retargeted with nightly publish (same digest as `:nightly` right now) — **not** a signed-off stable cut |
+| **Semver alias** | `:3.3.1` / `:3.3.1-n<run>` | Nightly also stamps an extra run tag; **not** a signed-off stable cut |
 | **Beta** | `:beta` / `3.3.0-beta.N` | **Not published yet** — next candidate in repo `VERSION` is `3.3.0-beta.1` |
 | **Stable** | `:latest` / promoted semver | **Not published yet** |
 
@@ -176,4 +177,4 @@ Open-FDD is for **LAN / VPN / OT networks**, not public internet hosting.
 
 MIT — see [LICENSE](LICENSE).
 
-Version: Cargo **`3.3.0`** on `master` · repo `VERSION` next candidate **`3.3.0-beta.1`** · run **`:nightly` / `:sha-*`** (see [release channels](https://bbartling.github.io/open-fdd/operations/release-channels.html))
+Version: Cargo **`3.3.1`** on `master` · PyPI `open-fdd` **4.4.2** · repo `VERSION` next candidate **`3.3.0-beta.1`** · run **`:nightly` / `:sha-*`** (see [release channels](https://bbartling.github.io/open-fdd/operations/release-channels.html))

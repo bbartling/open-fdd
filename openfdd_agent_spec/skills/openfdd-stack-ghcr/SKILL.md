@@ -27,6 +27,11 @@ Product central image is Rust/debian only (no Python).
 images before pull; wait for GH Actions publish; then pull +
 `openfdd_stack_up.sh … --no-pull`. See [`CONTAINER_AGENT.md`](../../CONTAINER_AGENT.md).
 
+Nightly publish (`ghcr-openfdd-stack.yml`) stamps `OPENFDD_GIT_SHA` into central
+and writes web `version.json` `{ version, git, image_tag, service: openfdd-web }`.
+Optional extra image tag `:3.3.1-n<run_number>` sits **beside** `:nightly` /
+`:sha-*`. UI revision comes from central `/api/health` first.
+
 Hourly CSV append is API `POST /api/csv/import/package/append` on central (GHA image), not a local compile.
 
 Workflow: `ghcr-openfdd-stack.yml` (retargets nightly on master).

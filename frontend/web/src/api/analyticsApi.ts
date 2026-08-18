@@ -194,6 +194,30 @@ export async function postVavHealth(
   return postAnalytics("/api/analytics/vav-health", body);
 }
 
+export async function postAhuHealth(
+  body: AnalyticsRequest,
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/ahu-health", body);
+}
+
+export async function postChillerHealth(
+  body: AnalyticsRequest,
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/chiller-health", body);
+}
+
+export async function postBoilerHealth(
+  body: AnalyticsRequest,
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/boiler-health", body);
+}
+
+export async function postHpHealth(
+  body: AnalyticsRequest,
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/hp-health", body);
+}
+
 export async function postRcxChiller(
   body: AnalyticsRequest,
 ): Promise<AnalyticsEnvelope> {
