@@ -72,11 +72,21 @@ vi.mock("./analyticsApi", () => ({
         run_hours: 85,
         avg_oat_f: 51,
       },
+      {
+        kind: "weekly_equipment",
+        plant_group: "air",
+        equipment_id: "AHU_1_VAV_12",
+        label: "AHU_1_VAV_12 · damper",
+        week_label: "2026-03-23",
+        run_hours: 40,
+        avg_oat_f: 45,
+      },
     ],
     equipment: [
       { equipment_id: "AHU_1", run_hours: 170, coverage_pct: 40, plant_group: "air" },
       { equipment_id: "AHU_2", run_hours: 155, coverage_pct: 38, plant_group: "air" },
       { equipment_id: "VAV_1", run_hours: 3, coverage_pct: 10 },
+      { equipment_id: "AHU_1_VAV_12", run_hours: 9, coverage_pct: 12, plant_group: "air" },
     ],
     points: [],
     skipped: [],
@@ -277,6 +287,10 @@ describe("fetchCentralOverview", () => {
     expect(bars.map((t) => t.name)).toEqual(
       expect.arrayContaining(["AHU_1 · fan-status", "AHU_2 · fan-status"]),
     );
+    expect(bars.map((t) => t.name).join(" ")).not.toMatch(/VAV/);
+    expect(
+      out.motor_weekly.table.map((r) => String(r.equipment_id ?? "")),
+    ).toEqual(["AHU_1", "AHU_2"]);
     expect(bars[0]?.marker?.color).toBe(RAINBOW_PALETTE[0]);
     const oat = (air!.figure?.data ?? []).find((t) =>
       String(t.name).includes("Avg OAT"),

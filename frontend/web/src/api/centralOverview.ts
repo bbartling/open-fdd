@@ -30,6 +30,7 @@ import {
   datasetTimeSpan,
   isWeatherEquipment,
   isWeatherEquipmentId,
+  isZoneTerminalEquipment,
 } from "../lib/overviewMetrics";
 import { naturalCompare } from "../lib/naturalSort";
 
@@ -53,7 +54,9 @@ function groupByType(
 }
 
 function motorFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | null {
-  const usable = rows.filter((r) => num(r.run_hours) != null);
+  const usable = rows.filter(
+    (r) => num(r.run_hours) != null && !isZoneTerminalEquipment(r),
+  );
   if (!usable.length) return null;
   return rowsToBarFigure(usable, {
     xKey: "equipment_id",
@@ -71,13 +74,16 @@ function motorFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | null 
 function weeklyPlantFigures(
   rows: Array<Record<string, unknown>>,
 ): OverviewPlantFig[] {
-  const weekly = rows.filter(
-    (r) => r.kind === "weekly_equipment" || r.kind === "weekly_plant",
-  );
+  const weekly = rows.filter((r) => {
+    if (r.kind !== "weekly_equipment" && r.kind !== "weekly_plant") return false;
+    if (isZoneTerminalEquipment(r)) return false;
+    const g = String(r.plant_group ?? "");
+    return g === "air" || g === "boiler" || g === "chiller";
+  });
   if (!weekly.length) return [];
   const byPlant = new Map<string, Array<Record<string, unknown>>>();
   for (const r of weekly) {
-    const g = String(r.plant_group || "other");
+    const g = String(r.plant_group);
     const list = byPlant.get(g) ?? [];
     list.push(r);
     byPlant.set(g, list);
@@ -738,14 +744,14 @@ export async function fetchCentralOverview(opts: {
       );
 
   const weeklyPlants = weeklyPlantFigures(runtimeRows);
-  const motorFig = motorFigure(
-    equipmentTotals.filter(
-      (r) =>
-        r.kind !== "weekly_plant" &&
-        r.kind !== "weekly_equipment" &&
-        !isWeatherEquipmentId(String(r.equipment_id ?? "")),
-    ),
+  const plantMotorTotals = equipmentTotals.filter(
+    (r) =>
+      r.kind !== "weekly_plant" &&
+      r.kind !== "weekly_equipment" &&
+      !isWeatherEquipmentId(String(r.equipment_id ?? "")) &&
+      !isZoneTerminalEquipment(r),
   );
+  const motorFig = motorFigure(plantMotorTotals);
   const plants: OverviewPlantFig[] =
     weeklyPlants.length > 0
       ? weeklyPlants
@@ -791,20 +797,20 @@ export async function fetchCentralOverview(opts: {
       caption: warnCaption(
         runtime,
         weeklyPlants.length
-          ? "Weekly plant run hours (DataFusion historian Δt)"
-          : "Run hours by equipment (DataFusion historian Δt)",
+          ? "Weekly plant motors (AHU fans, boilers, chillers/CHW pumps). VAV terminals are excluded."
+          : "Plant motor run hours (AHU fans, boilers, chillers). VAV terminals are excluded.",
       ),
       plants,
-      table: equipmentTotals.slice(0, 200),
+      table: plantMotorTotals.slice(0, 200),
     },
     mech_cooling: {
       caption: warnCaption(
         mech,
         mechBins.length
-          ? "Mechanical cooling OAT bin hours from DataFusion"
+          ? "Chiller / DX / VRF compressor hours by site OAT (5°F bins). VAV boxes and CHW valves are not cooling proof."
           : mechFig
             ? "Mechanical cooling evidence from DataFusion"
-            : "No compressor×OAT intervals in historian (need chiller proof + site OAT)",
+            : "No compressor×OAT intervals. Need a chiller/DX status (or CH-1 / CHILLER_* id) plus site web OAT on the historian.",
       ),
       figure: mechFig,
       bins: mechBins,

@@ -13,6 +13,33 @@ export function isWeatherEquipmentId(id: string): boolean {
   return s === "weather" || s === "(weather)";
 }
 
+/** Zone terminals — never plant weekly motors or compressor OAT bins. */
+export function isZoneTerminalId(id: string): boolean {
+  const u = id.trim().toUpperCase().replace(/\\/g, "/");
+  if (!u) return false;
+  return (
+    u.includes("VAV") ||
+    u.includes("ZONE") ||
+    u.includes("VAVFC") ||
+    u.includes("VAVH")
+  );
+}
+
+export function isZoneTerminalEquipment(e: {
+  equipment_id?: unknown;
+  equipment_type?: unknown;
+  label?: unknown;
+}): boolean {
+  const et = String(e.equipment_type ?? "")
+    .trim()
+    .toUpperCase();
+  if (et === "VAV" || et === "ZONE") return true;
+  return (
+    isZoneTerminalId(String(e.equipment_id ?? "")) ||
+    isZoneTerminalId(String(e.label ?? ""))
+  );
+}
+
 export function isWeatherEquipment(e: {
   equipment_id?: string;
   equipment_type?: string;

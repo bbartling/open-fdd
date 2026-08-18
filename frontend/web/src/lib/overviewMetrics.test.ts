@@ -6,6 +6,8 @@ import {
   formatOverviewTs,
   inventoryWithoutWeather,
   isWeatherEquipment,
+  isZoneTerminalEquipment,
+  isZoneTerminalId,
   SQL_ROLLUP_RULE_IDS,
 } from "./overviewMetrics";
 
@@ -18,6 +20,17 @@ describe("overviewMetrics", () => {
     ]);
     expect(items.map((e) => e.equipment_id)).toEqual(["AHU_2", "AHU_10"]);
     expect(isWeatherEquipment({ equipment_id: "weather" })).toBe(true);
+  });
+
+  it("treats VAV/zone ids as terminals even when prefixed with AHU", () => {
+    expect(isZoneTerminalId("VAV_1")).toBe(true);
+    expect(isZoneTerminalId("AHU_1_VAV_12")).toBe(true);
+    expect(isZoneTerminalEquipment({ equipment_id: "AHU-1-VAV-03" })).toBe(
+      true,
+    );
+    expect(isZoneTerminalEquipment({ equipment_type: "VAV" })).toBe(true);
+    expect(isZoneTerminalId("AHU_1")).toBe(false);
+    expect(isZoneTerminalId("CH-1")).toBe(false);
   });
 
   it("formats timestamps like vibe19 and lowercases kind", () => {

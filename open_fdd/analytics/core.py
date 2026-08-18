@@ -247,13 +247,18 @@ def _equipment_plant_group(
 
     # Id fallback only when type is unknown / untyped
     eq = (equipment_id or "").upper().replace("\\", "/")
-    if "/VAV" in eq or eq.startswith("VAV"):
+    if "VAV" in eq or "ZONE" in eq:
         return None
     if eq.startswith("AHU") or "/AHU" in eq or "RTU" in eq:
         return PLANT_AIR
     if "TOWER" in eq or re.search(r"(^|/)CT\d", eq) or eq.startswith("CT_"):
         return PLANT_CHILLER
-    if "CHILLER" in eq or eq.startswith("CHW"):
+    if (
+        "CHILLER" in eq
+        or "CHLR" in eq
+        or eq.startswith("CHW")
+        or re.search(r"(^|/)CH[-_]?[0-9]", eq)
+    ):
         return PLANT_CHILLER
     if "BOILER" in eq:
         return PLANT_BOILER

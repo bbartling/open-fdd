@@ -314,10 +314,10 @@ fn round2(x: f64) -> f64 {
 }
 
 /// Map equipment_id → Overview plant chart group (air / boiler / chiller).
-/// VAVs and unknown meters return `None` (excluded from plant weekly charts).
+/// Zone terminals (VAV / ZONE) and unknown meters return `None`.
 pub fn plant_group_for(equipment_id: &str) -> Option<&'static str> {
     let eq = equipment_id.to_ascii_uppercase().replace('\\', "/");
-    if eq.contains("/VAV") || eq.starts_with("VAV") || eq.contains("VAVFC") || eq.contains("VAVH") {
+    if is_zone_terminal_id(&eq) {
         return None;
     }
     if eq.starts_with("AHU")
@@ -333,6 +333,8 @@ pub fn plant_group_for(equipment_id: &str) -> Option<&'static str> {
         || eq.contains("/CT")
         || (eq.starts_with("CT") && eq.chars().nth(2).is_some_and(|c| c.is_ascii_digit()))
         || eq.contains("CHILLER")
+        || eq.contains("CHLR")
+        || is_short_chiller_id(&eq)
         || eq.starts_with("CHW")
         || eq.contains("CWP")
         || eq.contains("_DX")
@@ -351,6 +353,31 @@ pub fn plant_group_for(equipment_id: &str) -> Option<&'static str> {
     }
     // Do not catch bare FAN/SUPPLY — too broad (exhaust/return/etc.).
     None
+}
+
+fn is_zone_terminal_id(eq: &str) -> bool {
+    eq.contains("/VAV")
+        || eq.starts_with("VAV")
+        || eq.contains("VAVFC")
+        || eq.contains("VAVH")
+        || eq.contains("VAV")
+        || eq.contains("ZONE")
+}
+
+/// Building-100 style ids: CH-1, CH_1, CH1 — not CHANNEL / CHECK / CHW_*.
+fn is_short_chiller_id(eq: &str) -> bool {
+    eq.split('/').any(|part| {
+        let p = part.trim();
+        if p.starts_with("CHW") || p.starts_with("CHECK") || p.starts_with("CHAN") {
+            return false;
+        }
+        if p.starts_with("CH-") || p.starts_with("CH_") {
+            return p.chars().nth(3).is_some_and(|c| c.is_ascii_digit());
+        }
+        p.len() >= 3
+            && p.starts_with("CH")
+            && p.as_bytes().get(2).is_some_and(|b| b.is_ascii_digit())
+    })
 }
 
 /// OAT for mech-cooling bins: prefer web/meteo OAT (pandas Overview default).
@@ -414,8 +441,10 @@ fn equipment_filter_sql(equipment_filter: Option<&[String]>) -> String {
 /// SQL fragment restricting to chiller/DX/tower-like equipment ids.
 /// Kept aligned with [`plant_group_for`] (no bare `CT%` — that matches CTRL_*).
 fn chiller_like_equipment_sql() -> &'static str {
+    // LIKE `_` is a wildcard — do not use `CH_%` (matches CHANNEL / CHW…).
     " AND (\
         UPPER(equipment_id) LIKE '%CHILLER%' \
+        OR UPPER(equipment_id) LIKE '%CHLR%' \
         OR UPPER(equipment_id) LIKE '%TOWER%' \
         OR UPPER(equipment_id) LIKE 'CT_%' \
         OR UPPER(equipment_id) LIKE '%/CT_%' \
@@ -424,7 +453,9 @@ fn chiller_like_equipment_sql() -> &'static str {
         OR UPPER(equipment_id) LIKE 'HP_%' \
         OR UPPER(equipment_id) LIKE '%CWP%' \
         OR UPPER(equipment_id) LIKE 'CHW%' \
-     )"
+        OR UPPER(equipment_id) LIKE 'CH-%' \
+        OR UPPER(equipment_id) LIKE '%/CH-%' \
+     ) AND UPPER(equipment_id) NOT LIKE '%VAV%'"
 }
 
 /// Load runtime hours from historian Parquet via DataFusion.
@@ -3132,6 +3163,12 @@ mod tests {
         assert_eq!(plant_group_for("BOILER_1"), Some("boiler"));
         assert_eq!(plant_group_for("VAV_101"), None);
         assert_eq!(plant_group_for("BUILDING/VAVFC_2"), None);
+        assert_eq!(plant_group_for("AHU_1_VAV_12"), None);
+        assert_eq!(plant_group_for("AHU-1-VAV-03"), None);
+        assert_eq!(plant_group_for("CH-1"), Some("chiller"));
+        assert_eq!(plant_group_for("CH_1"), Some("chiller"));
+        assert_eq!(plant_group_for("CHLR_2"), Some("chiller"));
+        assert_eq!(plant_group_for("CHANNEL_1"), None);
         // Bare FAN/SUPPLY must not swallow unrelated motors.
         assert_eq!(plant_group_for("EXHAUST_FAN_1"), None);
         assert_eq!(plant_group_for("SUPPLY_METER"), None);

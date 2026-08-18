@@ -899,7 +899,7 @@ export function OverviewPopulated({
         <h3>Motor / equipment run hours</h3>
         <p className="oracle-sidebar__caption">
           {overview?.motor_weekly.caption ??
-            "Air side — both AHUs as series (building-wide; not filtered by Equipment)."}
+            "Weekly plant motors (AHU fans, boilers, chillers). VAV terminals are excluded."}
         </p>
         {(overview?.motor_weekly.plants ?? []).map((plant) => (
           <div key={plant.plant_group} data-testid={`overview-motor-${plant.plant_group}`}>
@@ -980,6 +980,11 @@ export function OverviewPopulated({
           downloadFilename="mech_cooling_oat_bins"
           testId="overview-mech-plot"
         />
+        {overview && !overview.mech_cooling.figure && !loadingOverview ? (
+          <p className="oracle-sidebar__caption" data-testid="overview-mech-empty">
+            {overview.mech_cooling.caption}
+          </p>
+        ) : null}
         {overview?.mech_cooling.bins?.length ? (
           <Expander
             id="mech-bins-exp"
