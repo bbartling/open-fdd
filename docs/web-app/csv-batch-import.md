@@ -33,6 +33,24 @@ curl -s -X POST http://127.0.0.1:8080/api/csv/import/package/append \
 
 Write your own vendor puller; OpenFDD only merges + re-ingests parquet. Same-hour replay is idempotent (last-write-wins on timestamp).
 
+### AFDD routine after append (real-world pattern)
+
+After each append (or on a schedule), operators tune rules and re-run FDD:
+
+```bash
+# Update rule params (confirm_min, etc.)
+curl -s -X PUT http://127.0.0.1:8080/api/fdd/session-config \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"schema_version":"openfdd_session_v1","params":{"VAV-1":{"confirm_min":1200}}}'
+
+# Run registry for one building
+curl -s -X POST http://127.0.0.1:8080/api/fdd/run \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"mode":"registry","building_id":"BUILDING_50","rule_ids":["VAV-1","ECON-1"]}'
+```
+
+**Bench orchestrator:** [`scripts/csv_flood_afdd_routine_sim.py`](../../scripts/csv_flood_afdd_routine_sim.py) with [`scripts/fixtures/b50_afdd_routine.json`](../../scripts/fixtures/b50_afdd_routine.json) — see [CSV flood + AFDD routine](../agent/CSV_FLOOD_AFDD_ROUTINE.md).
+
 ```bash
 ./scripts/openfdd_csv_preflight.sh /path/to/file.csv
 ```

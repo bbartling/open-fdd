@@ -3,11 +3,10 @@
 
 Compares expected_faults.csv pairs only (ignore correlated detections).
 
-  --side vibe19   Run agent_afdd inside vibe19 container (or host) against package ZIP
-  --side ofdd     Upload package to OpenFDD central, run registry, compare results
-  --side both     Default
+Uploads package to OpenFDD central, runs registry, compares results to golden.
+(Vibe19 dual-parity retired — use ``--side ofdd`` only.)
 
-Writes reports/wattlab-parity/artifacts/synthetic_59/*.csv + *.json
+Writes reports/eplus-dump/artifacts/synthetic_59/*.csv + *.json
 """
 from __future__ import annotations
 
@@ -15,7 +14,6 @@ import argparse
 import csv
 import json
 import os
-import shutil
 import subprocess
 import time
 import urllib.error
@@ -23,12 +21,11 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from eplus_paths import synthetic_artifacts_dir, synthetic_fixture_dir
+
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = (
-    ROOT
-    / "reports/wattlab-parity/fixtures/synthetic_59/openfdd_synthetic_59_rule_fixture_v1"
-)
-ARTIFACTS = ROOT / "reports/wattlab-parity/artifacts/synthetic_59"
+FIXTURE = synthetic_fixture_dir()
+ARTIFACTS = synthetic_artifacts_dir()
 PKG_ZIP = FIXTURE / "OPENFDD_SYNTHETIC_59_RULE_WEEK_V1.zip"
 EXPECTED = FIXTURE / "expected_faults.csv"
 BUILDING_ID = "OPENFDD_SYNTHETIC_59_RULE_WEEK_V1"
@@ -42,16 +39,11 @@ SQL_RULE_ALIASES: dict[str, list[str]] = {
 
 
 def load_shared_fault_params() -> dict:
-    """Same rule tuning blob for Vibe19 --params and OpenFDD session + /api/fdd/run.
-
-    Source of truth: package session_config.json (confirm_min=0 equation-isolation).
-    Also mirrors params onto SQL primary ids (e.g. FC13 → FC13-SAT-HIGH).
-    """
+    """Rule tuning blob for OpenFDD session + /api/fdd/run."""
     sess = FIXTURE / "OPENFDD_SYNTHETIC_59_RULE_WEEK_V1" / "session_config.json"
     params: dict = {}
     if sess.is_file():
         params = dict((json.loads(sess.read_text()).get("params")) or {})
-    # Mirror alias keys so SQL registry primary ids get the same confirm_min.
     for pandas_id, aliases in SQL_RULE_ALIASES.items():
         if pandas_id not in params:
             continue
@@ -140,9 +132,7 @@ def compare_pair(exp: dict, status: str, fault_hours: float | None) -> dict:
     want_status = exp["expected_status"]
     want_h = float(exp["expected_fault_hours"])
     status_ok = status == want_status
-    # PASS with 0h when expecting FAULT is a clear miss
     hours_ok = hours_match(fault_hours, want_h) if status_ok else False
-    # Allow FAULT with matching hours even if samples unavailable
     contract = status_ok and hours_ok
     return {
         "rule_id": exp["rule_id"],
@@ -162,177 +152,6 @@ def compare_pair(exp: dict, status: str, fault_hours: float | None) -> dict:
     }
 
 
-# ---- Vibe19 -----------------------------------------------------------------
-
-
-def run_vibe19(
-    package_zip: Path,
-    expected: list[dict],
-    host_workspace: Path,
-) -> dict:
-    """Copy package into vibe19 /data bind and run agent_afdd --run-rules."""
-    host_workspace.mkdir(parents=True, exist_ok=True)
-    dest_zip = host_workspace / package_zip.name
-    shutil.copy2(package_zip, dest_zip)
-    out_host = host_workspace / "synthetic_59_agent_out"
-    summary_csv = out_host / "fdd_summary.csv"
-    force = os.environ.get("SYNTH59_FORCE_VIBE19") == "1"
-    reuse = (
-        not force
-        and summary_csv.is_file()
-        and summary_csv.stat().st_size > 1000
-    )
-    if force and out_host.exists():
-        shutil.rmtree(out_host)
-    out_host.mkdir(parents=True, exist_ok=True)
-
-    # Shared fault tuning (identical blob for Vibe19 --params).
-    params_path = host_workspace / "synthetic_59_params.json"
-    params_obj = load_shared_fault_params()
-    params_path.write_text(json.dumps(params_obj, indent=2))
-
-    container_pkg = f"/data/{package_zip.name}"
-    container_out = "/data/synthetic_59_agent_out"
-    container_params = "/data/synthetic_59_params.json"
-
-    cmd = [
-        "docker",
-        "exec",
-        "vibe19",
-        "python",
-        "scripts/agent_afdd.py",
-        "--package",
-        container_pkg,
-        "--out",
-        container_out,
-        "--params",
-        container_params,
-        "--run-rules",
-        "--no-bootstrap",
-        "--export-profile",
-        "summary",
-    ]
-    proc = None
-    t0 = time.time()
-    if reuse:
-        print(f">> reusing existing {summary_csv} (set SYNTH59_FORCE_VIBE19=1 to rerun)")
-        elapsed = 0.0
-    else:
-        print(">>", " ".join(cmd))
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        elapsed = time.time() - t0
-        print(proc.stdout[-2000:] if proc.stdout else "")
-        if proc.returncode != 0:
-            print(proc.stderr[-2000:] if proc.stderr else "")
-            # Export may crash after fdd_summary.csv is written (pandas quantile on bool).
-            if not summary_csv.is_file():
-                raise SystemExit(f"vibe19 agent_afdd failed rc={proc.returncode}")
-            print(
-                f"WARN: agent_afdd rc={proc.returncode} but {summary_csv.name} present; "
-                "continuing with target-pair compare"
-            )
-
-    # Find results summary table
-    summary_candidates = list(out_host.rglob("*summary*.csv")) + list(
-        out_host.rglob("fdd_findings*.csv")
-    )
-    results_by_key: dict[tuple[str, str], dict] = {}
-    # Also try JSON results
-    for jf in out_host.rglob("*.json"):
-        if jf.name in ("session_bootstrap.json", "session_config.json"):
-            continue
-        try:
-            data = json.loads(jf.read_text())
-        except Exception:
-            continue
-        rows = data if isinstance(data, list) else data.get("results") or data.get("rows")
-        if not isinstance(rows, list):
-            continue
-        for r in rows:
-            if not isinstance(r, dict):
-                continue
-            rid = str(r.get("rule_id") or "")
-            eid = str(r.get("equipment_id") or "")
-            if rid and eid:
-                results_by_key[(rid, eid)] = r
-
-    for csv_path in summary_candidates:
-        try:
-            for r in csv.DictReader(csv_path.open()):
-                rid = str(r.get("rule_id") or "")
-                eid = str(r.get("equipment_id") or "")
-                if rid and eid:
-                    results_by_key[(rid, eid)] = r
-        except Exception:
-            continue
-
-    # Fallback: parse run_report / agent meta
-    for p in out_host.rglob("run_report.json"):
-        data = json.loads(p.read_text())
-        for r in data.get("results") or []:
-            rid = str(r.get("rule_id") or "")
-            eid = str(r.get("equipment_id") or "")
-            if rid and eid:
-                results_by_key[(rid, eid)] = r
-
-    pairs = []
-    for exp in expected:
-        key = (exp["rule_id"], exp["equipment_id"])
-        obs = results_by_key.get(key)
-        if not obs:
-            pairs.append(
-                {
-                    **compare_pair(exp, "MISSING", None),
-                    "notes": "no result row for target pair",
-                }
-            )
-            continue
-        status = str(obs.get("status") or "")
-        fh = obs.get("fault_hours")
-        if fh in ("", None):
-            fh = obs.get("confirmed_fault_hours")
-        try:
-            fh_f = float(fh) if fh is not None and fh != "" else None
-        except (TypeError, ValueError):
-            fh_f = None
-        row = compare_pair(exp, status, fh_f)
-        row["notes"] = obs.get("notes") or ""
-        pairs.append(row)
-
-    matched = sum(1 for p in pairs if p["contract_match"])
-    summary = {
-        "side": "vibe19",
-        "building_id": BUILDING_ID,
-        "elapsed_s": round(elapsed, 1),
-        "target_total": len(expected),
-        "target_match": matched,
-        "target_mismatch": len(expected) - matched,
-        "mismatches": [
-            {
-                "rule_id": p["rule_id"],
-                "equipment_id": p["equipment_id"],
-                "observed_status": p["observed_status"],
-                "observed_fault_hours": p["observed_fault_hours"],
-            }
-            for p in pairs
-            if not p["contract_match"]
-        ],
-        "agent_stdout_tail": ((proc.stdout if proc else "") or "")[-500:],
-        "agent_rc": None if proc is None else proc.returncode,
-        "reused_existing_summary": reuse and proc is None,
-        "result_keys_found": len(results_by_key),
-        "generated_at": utc_now(),
-    }
-    write_csv(ARTIFACTS / "vibe19_target_pairs.csv", pairs)
-    (ARTIFACTS / "vibe19_target_pairs_summary.json").write_text(
-        json.dumps(summary, indent=2) + "\n"
-    )
-    return summary
-
-
-# ---- OpenFDD ----------------------------------------------------------------
-
-
 def run_ofdd(
     package_zip: Path,
     expected: list[dict],
@@ -344,7 +163,6 @@ def run_ofdd(
     print(f"logged in → upload {package_zip.name}")
     zip_bytes = package_zip.read_bytes()
     t0 = time.time()
-    # Raw zip body (central accepts multipart, JSON base64, or raw zip)
     imp = http_json(
         "POST",
         f"{base}/api/csv/import/package",
@@ -354,7 +172,6 @@ def run_ofdd(
         timeout=900.0,
     )
     if not imp.get("ok"):
-        # try multipart via curl for robustness
         print("raw zip import failed, trying curl multipart…", imp.get("error"))
         import tempfile
 
@@ -382,7 +199,6 @@ def run_ofdd(
         f"rows={imp.get('total_rows')} ms={imp.get('total_ms')}"
     )
 
-    # Same fault tuning as Vibe19: PUT session-config then pass identical params to run.
     sess_path = FIXTURE / "OPENFDD_SYNTHETIC_59_RULE_WEEK_V1" / "session_config.json"
     sess_cfg = json.loads(sess_path.read_text()) if sess_path.is_file() else {}
     params = load_shared_fault_params()
@@ -430,7 +246,6 @@ def run_ofdd(
 
     results = run.get("results") or []
     if not results:
-        # fetch separately
         res = http_json(
             "GET",
             f"{base}/api/fdd/results?building_id={building}",
@@ -474,7 +289,6 @@ def run_ofdd(
         row["sql_rule_id"] = str(obs.get("rule_id") or "")
         pairs.append(row)
 
-    # Series overlay spot-checks
     spot = []
     for rule_id, equipment_id in (
         ("FC1", "AHU_CASE_FC1"),
@@ -556,7 +370,12 @@ def run_ofdd(
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--side", choices=("vibe19", "ofdd", "both"), default="both")
+    ap.add_argument(
+        "--side",
+        choices=("ofdd",),
+        default="ofdd",
+        help="OpenFDD central only (vibe19 retired)",
+    )
     ap.add_argument("--package", type=Path, default=PKG_ZIP)
     ap.add_argument("--expected", type=Path, default=EXPECTED)
     ap.add_argument("--api-base", default=os.environ.get("OPENFDD_API_BASE", "http://127.0.0.1:8080"))
@@ -565,17 +384,6 @@ def main() -> int:
         "--password",
         default=os.environ.get("OPENFDD_ADMIN_PASSWORD", "bensbench-local-admin"),
     )
-    ap.add_argument(
-        "--workspace",
-        type=Path,
-        default=Path.home() / "wattlab_workspace",
-        help="Host path bind-mounted to vibe19 /data",
-    )
-    ap.add_argument(
-        "--skip-vibe19-rerun",
-        action="store_true",
-        help="Reuse handoff vibe19_integration_observed.csv instead of re-running agent",
-    )
     args = ap.parse_args()
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
     if not args.package.is_file():
@@ -583,73 +391,19 @@ def main() -> int:
     expected = load_expected(args.expected)
     print(f"expected target pairs: {len(expected)}")
 
-    summaries = {}
-    if args.side in ("vibe19", "both"):
-        if args.skip_vibe19_rerun:
-            obs_path = FIXTURE / "vibe19_integration_observed.csv"
-            rows = list(csv.DictReader(obs_path.open()))
-            pairs = []
-            for exp in expected:
-                o = next(
-                    (
-                        r
-                        for r in rows
-                        if r["rule_id"] == exp["rule_id"]
-                        and r["equipment_id"] == exp["equipment_id"]
-                    ),
-                    None,
-                )
-                if not o:
-                    pairs.append(compare_pair(exp, "MISSING", None))
-                    continue
-                fh = o.get("observed_fault_hours")
-                try:
-                    fh_f = float(fh) if fh not in (None, "") else None
-                except ValueError:
-                    fh_f = None
-                row = compare_pair(exp, o.get("observed_status") or "", fh_f)
-                row["contract_match"] = str(o.get("contract_match")).lower() in (
-                    "true",
-                    "1",
-                )
-                pairs.append(row)
-            matched = sum(1 for p in pairs if p["contract_match"])
-            summaries["vibe19"] = {
-                "side": "vibe19",
-                "source": "handoff vibe19_integration_observed.csv",
-                "target_total": len(expected),
-                "target_match": matched,
-                "target_mismatch": len(expected) - matched,
-                "mismatches": [
-                    p for p in pairs if not p["contract_match"]
-                ],
-                "generated_at": utc_now(),
-            }
-            write_csv(ARTIFACTS / "vibe19_target_pairs.csv", pairs)
-            (ARTIFACTS / "vibe19_target_pairs_summary.json").write_text(
-                json.dumps(summaries["vibe19"], indent=2) + "\n"
-            )
-        else:
-            summaries["vibe19"] = run_vibe19(args.package, expected, args.workspace)
-        print(
-            f"Vibe19 target match {summaries['vibe19']['target_match']}/"
-            f"{summaries['vibe19']['target_total']}"
-        )
-
-    if args.side in ("ofdd", "both"):
-        summaries["ofdd"] = run_ofdd(
-            args.package, expected, args.api_base.rstrip("/"), args.user, args.password
-        )
-        print(
-            f"OpenFDD SQL target match {summaries['ofdd']['target_match']}/"
-            f"{summaries['ofdd']['target_total']}"
-        )
+    summary = run_ofdd(
+        args.package, expected, args.api_base.rstrip("/"), args.user, args.password
+    )
+    print(
+        f"OpenFDD SQL target match {summary['target_match']}/"
+        f"{summary['target_total']}"
+    )
 
     (ARTIFACTS / "soak_summary.json").write_text(
-        json.dumps({"generated_at": utc_now(), "sides": summaries}, indent=2) + "\n"
+        json.dumps({"generated_at": utc_now(), "sides": {"ofdd": summary}}, indent=2) + "\n"
     )
     print(f"artifacts → {ARTIFACTS}")
-    return 0
+    return 0 if summary["target_mismatch"] == 0 else 1
 
 
 if __name__ == "__main__":

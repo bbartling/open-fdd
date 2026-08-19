@@ -34,5 +34,9 @@ Optional extra image tag `:3.3.1-n<run_number>` sits **beside** `:nightly` /
 
 Hourly CSV append is API `POST /api/csv/import/package/append` on central (GHA image), not a local compile.
 
+After GHCR publish, poll with `./scripts/ghcr_watch_central.py` (legacy shim: `wattlab_parity_watch_ghcr.py`), then maint pull + `synthetic_59_*` chain — not vibe19 dump-parity.
+
+**BUILDING_50 stream sim:** `scripts/csv_flood_afdd_routine_sim.py` — see [`docs/agent/CSV_FLOOD_AFDD_ROUTINE.md`](../../docs/agent/CSV_FLOOD_AFDD_ROUTINE.md).
+
 Workflow: `ghcr-openfdd-stack.yml` (retargets nightly on master).
 MCP: separate `rust-ghcr-mcp.yml`.
