@@ -238,16 +238,6 @@ fn fdd_index(building_id: &str) -> (bool, FddIndex) {
     (true, map)
 }
 
-fn lookup_flag(
-    has_fdd: bool,
-    index: &FddIndex,
-    eq: &str,
-    primary: &str,
-    fallback: Option<&str>,
-) -> Flag {
-    lookup_flag_with_hours(has_fdd, index, eq, primary, fallback).0
-}
-
 fn lookup_flag_with_hours(
     has_fdd: bool,
     index: &FddIndex,

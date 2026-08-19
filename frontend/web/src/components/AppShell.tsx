@@ -69,7 +69,7 @@ export function AppShell({
   const pendingWidthRef = useRef<number | null>(null);
   const resizeRafRef = useRef<number | null>(null);
 
-  const onSidebarResizeStart = (e: React.MouseEvent<HTMLDivElement>) => {
+  const onSidebarResizeStart = (e: React.MouseEvent<HTMLElement>) => {
     if (collapsed) return;
     // Starting width is captured once, then direction is decided by sidebarLeft vs sidebarRight.
     resizeStateRef.current = { startX: e.clientX, startWidth: sidebarWidthPx };
