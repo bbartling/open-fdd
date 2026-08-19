@@ -20,7 +20,7 @@ Open-FDD is a **vendor-neutral, local-first edge platform**. It does **not** shi
 | Data | Arrow/Feather historian, DataFusion SQL FDD |
 | Model | Haystack RDF, assignments, FDD wires |
 | API | JWT REST, `/api/agent/tools` catalog |
-| UI | React SPA (`frontend/web`) — vibe19 + WattLab export |
+| UI | React SPA (`frontend/web`) — health matrices, E+ dump export (legacy WattLab routes) |
 | Optional MCP | `openfdd-mcp` stdio — [mcp/README.md](../../mcp/README.md) |
 
 ## External agent layer (outside Open-FDD)
@@ -43,6 +43,8 @@ See [examples/external-agents.md](../examples/external-agents.md).
 | [model-routing.md](model-routing.md) | Codex/Cursor agent routing |
 | [openfdd-mcp-tool-contract.md](openfdd-mcp-tool-contract.md) | MCP tool surface |
 | [PACKAGE_AUTHORING.md](PACKAGE_AUTHORING.md) | Zip / equipType / Haystack→SQL (any BAS job) |
+| [CSV_FLOOD_AFDD_ROUTINE.md](CSV_FLOOD_AFDD_ROUTINE.md) | BUILDING_50 hourly append + updatable AFDD routine sim |
+| [EPLUS_DUMP_CLUSTERING.md](EPLUS_DUMP_CLUSTERING.md) | E+ dump zip + pandas clustering export |
 | [bench-vs-source.md](bench-vs-source.md) | Bench vs product source trees *(paste-only — not on Pages)* |
 | [vibe19-parity-nightly-monster-prompt.md](vibe19-parity-nightly-monster-prompt.md) | **Product agent** — vibe19 look/feel + 59 rules + security PR train *(paste-only)* |
 | [vibe16-bacnet-feather-port-agent-prompt.md](vibe16-bacnet-feather-port-agent-prompt.md) | **Product agent** — vibe16 BACnet/Feather port cycle *(paste-only)* |

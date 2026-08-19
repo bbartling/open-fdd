@@ -16,6 +16,8 @@ Open-FDD supports **MCP (Model Context Protocol)** for AI-assisted commissioning
 | [MCP role packs](roles/) | Four agent contexts: package/mapping, surrogate-train, Unity WebGL, operator (portable ZIP lanes; no Jupyter-in-SPA) |
 | [Companion — WattLab + EnergyPlus](companion-wattlab-energyplus.html) | Twin/ECM: three surfaces, golden loop, dual-MCP |
 | [Dual-site MCP IT](dual-site-mcp-it.html) | Liberty B50≠B100 accuracy / historian / findings |
+| [CSV flood + AFDD routine](../agent/CSV_FLOOD_AFDD_ROUTINE.html) | BUILDING_50 hourly append + rule patches (agent doc) |
+| [E+ dump + clustering](../agent/EPLUS_DUMP_CLUSTERING.html) | Dump zip + pandas sklearn export |
 | [FDD ops → Twin knobs](fdd-ops-to-twin-knobs.html) | Pointer: open-fdd findings → vibe20 G14 dial (no IDF in mcp) |
 | [Agent safety](agent-safety.html) | Hard boundaries for automation |
 | [Cursor & OpenClaw](cursor-openclaw.html) | IDE and edge agent wiring |

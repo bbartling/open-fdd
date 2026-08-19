@@ -97,6 +97,32 @@ Agents must not treat pandas oracle output as production FDD execution.
 
 Do not commit vendor appenders or full Building 50 zips. CI uses `tests/fixtures/hourly_append/`.
 
+Bench orchestrator: [`scripts/csv_flood_afdd_routine_sim.py`](../scripts/csv_flood_afdd_routine_sim.py) — slices `raw_BUILDING_50_openfdd.zip` into hourly appends, applies **AFDD routine** JSON (`openfdd_afdd_routine_v1`: `rule_ids`, `params`, `patches[]` at `append_step`), logs to `reports/eplus-dump/artifacts/csv_flood_sim/`. See [`docs/agent/CSV_FLOOD_AFDD_ROUTINE.md`](../docs/agent/CSV_FLOOD_AFDD_ROUTINE.md).
+
+---
+
+## E+ dump and clustering (`eplus_clustering_v1`)
+
+| Item | Truth |
+| --- | --- |
+| Online dump | `POST /api/jobs/{id}/wattlab/dumps` (rename to `/eplus/dumps` pending) |
+| Offline export | `scripts/eplus_dump_clustering_export.py` → `clustering_features.csv`, timeseries long parquet |
+| Artifact root | `EPLUS_DUMP_ROOT` default `reports/eplus-dump/`; legacy `reports/wattlab-parity/` via `scripts/eplus_paths.py` |
+| Engine | `tools/wattlab_export/` optional offline Python |
+
+Doc: [`docs/agent/EPLUS_DUMP_CLUSTERING.md`](../docs/agent/EPLUS_DUMP_CLUSTERING.md).
+
+---
+
+## Parity testing (2026-08+)
+
+| Path | Use |
+| --- | --- |
+| `scripts/synthetic_59_*.py` | Golden 59-rule contract (OpenFDD-only) |
+| `scripts/csv_flood_afdd_routine_sim.py` | Real-site BUILDING_50 stream + AFDD routine |
+| `scripts/retired/vibe19-parity/` | Retired vibe19 dual-parity (do not run) |
+| `scripts/eplus_parity_compare.py` | Dump compare helpers (tests only) |
+
 ---
 
 ## Building package zip + sidecar maps

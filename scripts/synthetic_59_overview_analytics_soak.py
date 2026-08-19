@@ -22,12 +22,11 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from eplus_paths import synthetic_artifacts_dir, synthetic_fixture_dir
+
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = (
-    ROOT
-    / "reports/wattlab-parity/fixtures/synthetic_59/openfdd_synthetic_59_rule_fixture_v1"
-)
-ARTIFACTS = ROOT / "reports/wattlab-parity/artifacts/synthetic_59"
+FIXTURE = synthetic_fixture_dir()
+ARTIFACTS = synthetic_artifacts_dir()
 BUILDING_ID = "OPENFDD_SYNTHETIC_59_RULE_WEEK_V1"
 RUNTIME_LEGEND = (
     FIXTURE / "OPENFDD_SYNTHETIC_59_RULE_WEEK_V1" / "runtime_legend.csv"

@@ -71,7 +71,7 @@ retest. Do not confuse those with this engineering OS.
 26. **Overview is tables + health matrices** — no Plotly on Overview. Motor / mech / econ / BAS figures are additive RCx presets (`ahu_motor_weekly`, `economizer_*`, `boiler_motor_weekly`, `chiller_motor_weekly`, `mech_cooling_oat_bins`, `bas_vs_web_oat`). CSV overlay is the **Inspect** radio (`/inspect`). Do not drop `REQUIRED_RCX_PRESET_IDS`.
 27. **FDD Plots series overlay** honors Lab/`session_config` `confirm_min` (and typed rule params); source may be `sql_detail_session`. After Update-this-rule, listen for `RULES_UPDATED` and refetch results + series.
 28. **SCHED-1 portable occupancy:** numeric/boolean falsey (`0`, `0.0`, `false`) **and** string `unoccupied` (plus related tokens) — keep SQL (`sched1_unoccupied_runtime.sql`) and pandas `sched1` aligned.
-29. **Low-RAM / bensbench:** never local stack `docker build`; prune old images before pull; wait for GHCR publish then pull `sha-*` / `nightly`. Synthetic-59 soaks use `scripts/synthetic_59_*.py`; B100 dump-parity is active (`wattlab_parity_*.py`); never edit goldens to hide misses.
+29. **Low-RAM / bensbench:** never local stack `docker build`; prune old images before pull; wait for GHCR publish then pull `sha-*` / `nightly`. Synthetic-59 soaks: `scripts/synthetic_59_*.py` (OpenFDD-only). GHCR poll: `scripts/ghcr_watch_central.py`. E+ dump/clustering: `scripts/eplus_dump_clustering_export.py`, `scripts/agent_eplus_dump.sh`. Vibe19 B100 dump-parity **retired** → `scripts/retired/vibe19-parity/`. Never edit goldens to hide misses.
 30. **Plot PNG downloads:** `PlotlyHost` must pass `toImageButtonOptions.filename` (Overview/Reports). Default Plotly `newplot.png` is a regression.
 31. **Full-width UI:** `.app-content` / `.overview-populated` stretch (`max-width: none`) like Streamlit — do not reintroduce a rem content cap on Overview plots.
 32. **Rule Lab menu:** `RuleTuningPanel` sorts visible rules A–Z by `rule_id` (registry YAML order is engine priority only).
@@ -79,7 +79,8 @@ retest. Do not confuse those with this engineering OS.
 34. **Mech cooling OAT bins:** status/cmd proof **before** amps (never OR amps when status exists); prefer web/`dry_bulb_f`/weather OAT over site-averaged AHU BAS `oa_t`. Version `mechanical-cooling-oat-bins-v2`.
 35. **Synthetic analytics soak:** `scripts/synthetic_59_overview_analytics_soak.py` asserts runtime + mech bin envelopes (separate from FDD pair scores).
 36. **Metric CSVs:** store as-uploaded; convert temperature roles C→F at run-rules/historian query. Do not duplicate 59 SQL files. Sliders display user units.
-37. **Package append:** `POST /api/csv/import/package/append` is the IoT hourly path (JWT + confirm). Vendor pullers are out-of-repo.
+37. **Package append:** `POST /api/csv/import/package/append` is the IoT hourly path (JWT + confirm). **AFDD routine sim:** `scripts/csv_flood_afdd_routine_sim.py` + `scripts/fixtures/b50_afdd_routine.json` on `raw_BUILDING_50_openfdd.zip` (append → session-config patch → `/api/fdd/run`). Doc: [`docs/agent/CSV_FLOOD_AFDD_ROUTINE.md`](../docs/agent/CSV_FLOOD_AFDD_ROUTINE.md). Vendor pullers stay out-of-repo.
+38. **E+ dump / clustering:** prefer `reports/eplus-dump/` (`EPLUS_DUMP_ROOT`); `scripts/eplus_dump_clustering_export.py` emits sklearn-ready features. Online: `scripts/agent_eplus_dump.sh`. Rust API routes still `/wattlab/dumps` until rename. Doc: [`docs/agent/EPLUS_DUMP_CLUSTERING.md`](../docs/agent/EPLUS_DUMP_CLUSTERING.md).
 
 ---
 

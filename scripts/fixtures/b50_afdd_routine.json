@@ -1,0 +1,30 @@
+{
+  "schema_version": "openfdd_afdd_routine_v1",
+  "name": "liberty_b50_smoke",
+  "description": "Default AFDD routine for BUILDING_50 CSV flood sim — tune via patches mid-stream.",
+  "rule_ids": ["FC1", "ECON-1", "ECON-2", "VAV-1", "SV-STALE"],
+  "params": {
+    "FC1": {"confirm_min": 300},
+    "ECON-1": {"confirm_min": 900},
+    "ECON-2": {"confirm_min": 900},
+    "VAV-1": {"confirm_min": 600},
+    "SV-STALE": {"confirm_min": 3600}
+  },
+  "patches": [
+    {
+      "append_step": 2,
+      "note": "Operator tightens VAV-1 confirm after seeing noise in hour 2",
+      "params": {
+        "VAV-1": {"confirm_min": 1200}
+      }
+    },
+    {
+      "append_step": 4,
+      "note": "Economizer rules get stricter confirm mid-routine",
+      "params": {
+        "ECON-1": {"confirm_min": 1800},
+        "ECON-2": {"confirm_min": 1800}
+      }
+    }
+  ]
+}
