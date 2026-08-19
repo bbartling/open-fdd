@@ -549,7 +549,7 @@ mod tests {
         rules.insert("ECON-2".into(), ("FAULT".into(), 2.0));
         index.insert("AHU_1".into(), rules);
         assert_eq!(
-            lookup_flag(true, &index, "AHU_1", "ECON-1", Some("ECON-2")),
+            lookup_flag_with_hours(true, &index, "AHU_1", "ECON-1", Some("ECON-2")).0,
             Flag::True
         );
     }
@@ -559,11 +559,11 @@ mod tests {
         let mut index: FddIndex = HashMap::new();
         index.insert("AHU_1".into(), HashMap::new());
         assert_eq!(
-            lookup_flag(true, &index, "AHU_1", "AHU-SATDEV", None),
+            lookup_flag_with_hours(true, &index, "AHU_1", "AHU-SATDEV", None).0,
             Flag::Unknown
         );
         assert_eq!(
-            lookup_flag(false, &index, "AHU_1", "AHU-SATDEV", None),
+            lookup_flag_with_hours(false, &index, "AHU_1", "AHU-SATDEV", None).0,
             Flag::Unknown
         );
     }
