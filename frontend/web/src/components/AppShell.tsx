@@ -221,10 +221,9 @@ export function AppShell({
           </button>
         </div>
 
-        <div
+        <button
+          type="button"
           className="app-sidebar__resizer"
-          role="separator"
-          aria-orientation="vertical"
           aria-label="Resize sidebar"
           data-testid="sidebar-resizer"
           onMouseDown={onSidebarResizeStart}

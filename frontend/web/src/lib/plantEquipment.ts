@@ -63,7 +63,7 @@ export function plantEquipmentFamilies(
   let hasBoiler = false;
   let hasHeatPump = false;
   let hasVav = false;
-  let hasWeather = equipment.some((e) => isWeatherEquipment(e));
+  const hasWeather = equipment.some((e) => isWeatherEquipment(e));
 
   for (const e of items) {
     const id = String(e.equipment_id ?? "");

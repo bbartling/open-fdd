@@ -1677,9 +1677,7 @@ LIMIT {limit}
 }
 
 /// Diagnostic warnings when mechanical-cooling OAT bins cannot be computed.
-pub async fn mech_cooling_evidence_warnings(
-    building_id: Option<&str>,
-) -> Result<Vec<String>> {
+pub async fn mech_cooling_evidence_warnings(building_id: Option<&str>) -> Result<Vec<String>> {
     let Some((_ctx, cols, n)) = open_history_scoped(building_id).await? else {
         return Ok(vec![
             "mechanical_cooling: no historian parquet for this building — ingest history first"
