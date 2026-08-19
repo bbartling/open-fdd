@@ -81,6 +81,9 @@ body {
   bottom: 0;
   right: 0;
   width: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
   cursor: col-resize;
   z-index: 20;
   touch-action: none;
