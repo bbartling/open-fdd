@@ -212,8 +212,8 @@ fn col_on_gt(col: &str, threshold: f64) -> String {
 /// Mechanical-cooling proof (never fan).
 ///
 /// Hierarchy matches pandas `_chiller_on_mask` / `_select_mech_cooling_proof`:
-/// prefer cmd/status; only fall back to amps when **no** status/cmd column exists.
-/// OR-ing status with amps inflates Building 100 hours (amps linger after status off).
+/// prefer cmd/status; then amps; then power (`chiller_power` / `compressor_power`);
+/// never OR status with amps/power (amps linger after status off).
 fn cooling_on_expr(cols: &HashSet<String>) -> Option<String> {
     let status_names = [
         "chiller_status",
@@ -258,13 +258,37 @@ fn cooling_on_expr(cols: &HashSet<String>) -> Option<String> {
             amp_parts.push(col_on_gt(name, 2.0));
         }
     }
-    if amp_parts.is_empty() {
+    if !amp_parts.is_empty() {
+        if amp_parts.len() == 1 {
+            return Some(amp_parts.remove(0));
+        }
+        return Some(format!("({})", amp_parts.join(" OR ")));
+    }
+    let mut power_parts: Vec<String> = Vec::new();
+    for name in ["chiller_power", "compressor_power", "comp_power"] {
+        if cols.contains(name) {
+            power_parts.push(col_on_gt(name, 1.0));
+        }
+    }
+    for c in cols {
+        let u = c.to_ascii_lowercase();
+        if power_parts.iter().any(|p| p.contains(c.as_str())) {
+            continue;
+        }
+        if (u.contains("chiller") || u.contains("compressor") || u.contains("comp"))
+            && u.contains("power")
+            && !u.contains("fan")
+        {
+            power_parts.push(col_on_gt(c, 1.0));
+        }
+    }
+    if power_parts.is_empty() {
         return None;
     }
-    if amp_parts.len() == 1 {
-        return Some(amp_parts.remove(0));
+    if power_parts.len() == 1 {
+        return Some(power_parts.remove(0));
     }
-    Some(format!("({})", amp_parts.join(" OR ")))
+    Some(format!("({})", power_parts.join(" OR ")))
 }
 
 /// Plant weekly / equipment runtime on-proof: fan OR chiller/boiler/pump status.
@@ -440,7 +464,7 @@ fn equipment_filter_sql(equipment_filter: Option<&[String]>) -> String {
 
 /// SQL fragment restricting to chiller/DX/tower-like equipment ids.
 /// Kept aligned with [`plant_group_for`] (no bare `CT%` — that matches CTRL_*).
-fn chiller_like_equipment_sql() -> &'static str {
+pub fn chiller_like_equipment_sql() -> &'static str {
     // LIKE `_` is a wildcard — do not use `CH_%` (matches CHANNEL / CHW…).
     " AND (\
         UPPER(equipment_id) LIKE '%CHILLER%' \
@@ -1652,6 +1676,34 @@ LIMIT {limit}
     Ok(Some(env))
 }
 
+/// Diagnostic warnings when mechanical-cooling OAT bins cannot be computed.
+pub async fn mech_cooling_evidence_warnings(building_id: Option<&str>) -> Result<Vec<String>> {
+    let Some((_ctx, cols, n)) = open_history_scoped(building_id).await? else {
+        return Ok(vec![
+            "mechanical_cooling: no historian parquet for this building — ingest history first"
+                .into(),
+        ]);
+    };
+    if n <= 0 {
+        return Ok(vec!["mechanical_cooling: historian parquet is empty".into()]);
+    }
+    let mut warnings = Vec::new();
+    if mech_oat_col(&cols).is_none() {
+        warnings.push(
+            "mechanical_cooling: missing OAT column (need web_oa_t, oa_t, or outside_air_temp)"
+                .into(),
+        );
+    }
+    if cooling_on_expr(&cols).is_none() {
+        warnings.push(
+            "mechanical_cooling: missing cooling-proof column (need chiller/compressor status, \
+             amps, or chiller_power/compressor_power > 1 kW — fan-only proof is rejected)"
+                .into(),
+        );
+    }
+    Ok(warnings)
+}
+
 /// Mechanical-cooling OAT bin hours (5°F bins) from historian when OAT + cooling
 /// proof exist. Never uses AHU fan as mechanical cooling.
 pub async fn mech_oat_bins_from_history(
@@ -2769,13 +2821,33 @@ pub async fn descriptive_counts_from_history(
     note: &str,
     building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
+    descriptive_counts_from_history_filtered(
+        query_version,
+        equipment_filter,
+        note,
+        building_id,
+        None,
+    )
+    .await
+}
+
+/// Like [`descriptive_counts_from_history`] with an optional extra SQL fragment
+/// (e.g. [`chiller_like_equipment_sql`] for mechanical-cooling fallback).
+pub async fn descriptive_counts_from_history_filtered(
+    query_version: &str,
+    equipment_filter: Option<&[String]>,
+    note: &str,
+    building_id: Option<&str>,
+    extra_equipment_sql: Option<&str>,
+) -> Result<Option<AnalyticsEnvelope>> {
     let Some((ctx, _cols, n)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let eq_filter = equipment_filter_sql(equipment_filter);
+    let extra = extra_equipment_sql.unwrap_or("");
     let sql = format!(
         "SELECT equipment_id, COUNT(*) AS history_rows FROM history \
-         WHERE equipment_id IS NOT NULL{eq_filter} \
+         WHERE equipment_id IS NOT NULL{eq_filter}{extra} \
          GROUP BY equipment_id ORDER BY equipment_id"
     );
     let result = run_sql(&ctx, &sql).await?;
@@ -3213,6 +3285,156 @@ mod tests {
         cols.insert("chiller_amps".into());
         let expr = cooling_on_expr(&cols).expect("amps proof");
         assert!(expr.contains("chiller_amps"));
+    }
+
+    #[test]
+    fn cooling_on_expr_uses_chiller_power_when_no_status_or_amps() {
+        let mut cols = HashSet::new();
+        cols.insert("chiller_power".into());
+        cols.insert("web_oa_t".into());
+        let expr = cooling_on_expr(&cols).expect("power proof");
+        assert!(expr.contains("chiller_power"));
+        assert!(expr.contains("> 1"));
+        assert!(!expr.contains("fan_"));
+    }
+
+    #[test]
+    fn cooling_on_expr_prefers_amps_over_power() {
+        let mut cols = HashSet::new();
+        cols.insert("chiller_amps".into());
+        cols.insert("chiller_power".into());
+        let expr = cooling_on_expr(&cols).expect("amps proof");
+        assert!(expr.contains("chiller_amps"), "{expr}");
+        assert!(
+            !expr.contains("chiller_power"),
+            "amps must win over power; got {expr}"
+        );
+    }
+
+    #[test]
+    fn cooling_on_expr_uses_compressor_power_alias() {
+        let mut cols = HashSet::new();
+        cols.insert("compressor_power".into());
+        let expr = cooling_on_expr(&cols).expect("compressor power");
+        assert!(expr.contains("compressor_power"));
+    }
+
+    #[tokio::test]
+    async fn mech_oat_bins_from_chiller_power_only_fixture() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_PWR");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ch = building.join("CHILLER_PWR");
+        std::fs::create_dir_all(&ch).unwrap();
+        std::fs::write(
+            ch.join("columns.csv"),
+            "col,point_role\nchiller_power,chiller_power\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ch.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,chiller_power,web_oa_t").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,5.0,82").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,6.0,83").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,0.2,84").unwrap();
+
+        let parquet = tmp.path().join("parquet_pwr");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_PWR", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_PWR"))
+            .await
+            .unwrap()
+            .expect("chiller_power-only fixture should produce oat bins");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert_eq!(env.engine, DF_ENGINE);
+        assert!(env.rows.iter().any(|r| r["equipment_id"] == "CHILLER_PWR"));
+    }
+
+    #[tokio::test]
+    async fn mech_cooling_evidence_warnings_fan_only() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_FAN2");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nfan_speed_pct,fan_cmd\noa_temp_f,oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,fan_speed_pct,oa_temp_f").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,100,85").unwrap();
+
+        let parquet = tmp.path().join("parquet_fan2");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_FAN2", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let warnings = mech_cooling_evidence_warnings(Some("BUILDING_FAN2"))
+            .await
+            .unwrap();
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(
+            warnings.iter().any(|w| w.contains("cooling-proof")),
+            "{warnings:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn descriptive_counts_filtered_excludes_vav() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_MIX");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+
+        for (eq, cols_line, row_line) in [
+            (
+                "CHILLER_1",
+                "col,point_role\nchiller_status,chiller_status\n",
+                "timestamp_utc,chiller_status\n2026-07-01T00:00:00Z,1\n",
+            ),
+            (
+                "VAV_101",
+                "col,point_role\ndamper_pct,damper\n",
+                "timestamp_utc,damper_pct\n2026-07-01T00:00:00Z,50\n",
+            ),
+        ] {
+            let dir = building.join(eq);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("columns.csv"), cols_line).unwrap();
+            std::fs::write(dir.join("history_wide.csv"), row_line).unwrap();
+        }
+
+        let parquet = tmp.path().join("parquet_mix");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_MIX", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = descriptive_counts_from_history_filtered(
+            "mechanical-cooling-v1",
+            None,
+            "test",
+            Some("BUILDING_MIX"),
+            Some(chiller_like_equipment_sql()),
+        )
+        .await
+        .unwrap()
+        .expect("filtered descriptive counts");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        let ids: Vec<_> = env
+            .rows
+            .iter()
+            .filter_map(|r| r.get("equipment_id").and_then(|v| v.as_str()))
+            .collect();
+        assert!(ids.iter().any(|id| id.contains("CHILLER")));
+        assert!(!ids.iter().any(|id| id.contains("VAV")));
     }
 
     #[tokio::test]

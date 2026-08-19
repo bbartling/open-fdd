@@ -438,6 +438,8 @@
 .widget-table td {
   padding: var(--space-sm) var(--space-md);
   text-align: left;
+  user-select: text;
+  cursor: text;
   border-bottom: 1px solid var(--color-slate-200);
 }
 

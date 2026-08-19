@@ -51,7 +51,6 @@ export function HomePage() {
   const [equipment, setEquipment] = useState<FddEquipmentItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [galleryOpen, setGalleryOpen] = useState(false);
   const [devOpen, setDevOpen] = useState(false);
   const [unitSystem, setUnitSystem] = useState(readUnits);
 
@@ -226,18 +225,6 @@ export function HomePage() {
           </Expander>
         )}
 
-        <Expander
-          id="widget-gallery"
-          label="Widget gallery (UI primitives)"
-          expanded={galleryOpen}
-          onChange={setGalleryOpen}
-          testId="widget-gallery"
-        >
-          <p>
-            Controlled parity widgets for shell regression; primary Overview
-            matches product hero + Sites sidebar.
-          </p>
-        </Expander>
       </div>
     </AppShell>
   );

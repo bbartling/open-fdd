@@ -37,6 +37,10 @@ body {
   background: var(--color-bg);
 }
 
+.app-shell--sidebar-right {
+  flex-direction: row-reverse;
+}
+
 /* Sidebar light gray panel (Sites / controls) */
 .app-sidebar {
   width: var(--sidebar-width);
@@ -45,9 +49,15 @@ body {
   color: var(--color-text);
   display: flex;
   flex-direction: column;
+  position: relative;
   border-right: 1px solid var(--color-border);
   transition: width var(--transition-fast);
   overflow: hidden;
+}
+
+.app-shell--sidebar-right .app-sidebar {
+  border-right: none;
+  border-left: 1px solid var(--color-border);
 }
 
 .app-sidebar__scroll {
@@ -59,6 +69,54 @@ body {
 
 .app-shell--sidebar-collapsed .app-sidebar {
   width: var(--sidebar-width-collapsed);
+}
+
+.app-shell--sidebar-resizing .app-sidebar {
+  transition: none;
+}
+
+.app-sidebar__resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: col-resize;
+  z-index: 20;
+  touch-action: none;
+}
+
+.app-sidebar__resizer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: var(--color-border);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.app-sidebar__resizer:hover::before {
+  opacity: 1;
+}
+
+.app-shell--sidebar-right .app-sidebar__resizer {
+  right: auto;
+  left: 0;
+}
+
+.app-shell--sidebar-right .app-sidebar__resizer::before {
+  left: auto;
+  right: 2px;
+}
+
+.app-shell--sidebar-collapsed .app-sidebar__resizer {
+  display: none;
 }
 
 .app-sidebar__brand-row {

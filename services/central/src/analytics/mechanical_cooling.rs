@@ -176,37 +176,58 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 /// Async handler: prefer historian OAT bins, else descriptive counts, else
 /// inline evidence-hierarchy gate.
 pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
+    let building_id = req.query.building_id.as_deref();
+    let mut diag_warnings = Vec::new();
     if req.series.is_none() {
         let max_gap = req.max_gap_seconds.unwrap_or(900.0);
         match historian::mech_oat_bins_from_history(
             req.query.equipment_ids.as_deref(),
             max_gap,
-            req.query.building_id.as_deref(),
+            building_id,
         )
         .await
         {
-            Ok(Some(env)) => return finalize_historian(req, env, QV_MECHANICAL_COOLING),
-            Ok(None) => {}
+            Ok(Some(mut env)) => {
+                if !diag_warnings.is_empty() {
+                    env.warnings.extend(diag_warnings.clone());
+                }
+                return finalize_historian(req, env, QV_MECHANICAL_COOLING);
+            }
+            Ok(None) => {
+                if let Ok(w) = historian::mech_cooling_evidence_warnings(building_id).await {
+                    diag_warnings.extend(w);
+                }
+            }
             Err(e) => {
                 tracing::warn!(error = %e, "historian mechanical_cooling OAT bins failed");
+                diag_warnings.push(format!("mechanical_cooling OAT bins query failed: {e}"));
             }
         }
-        match historian::descriptive_counts_from_history(
+        match historian::descriptive_counts_from_history_filtered(
             QV_MECHANICAL_COOLING,
             req.query.equipment_ids.as_deref(),
-            "mechanical_cooling: compressor/chiller evidence gate requires inline series",
-            req.query.building_id.as_deref(),
+            "mechanical_cooling: OAT bins unavailable — chiller/DX descriptive counts only (VAV excluded)",
+            building_id,
+            Some(historian::chiller_like_equipment_sql()),
         )
         .await
         {
-            Ok(Some(env)) => return finalize_historian(req, env, QV_MECHANICAL_COOLING),
+            Ok(Some(mut env)) => {
+                env.warnings.extend(diag_warnings);
+                return finalize_historian(req, env, QV_MECHANICAL_COOLING);
+            }
             Ok(None) => {}
             Err(e) => {
                 tracing::warn!(error = %e, "historian mechanical_cooling path failed; using inline/empty fallback");
+                diag_warnings.push(format!("mechanical_cooling descriptive counts failed: {e}"));
             }
         }
     }
-    handle(req)
+    let mut env = handle(req);
+    if !diag_warnings.is_empty() {
+        env.warnings.extend(diag_warnings);
+    }
+    env
 }
 
 fn parse_evidence(req: &AnalyticsRequest) -> Option<Vec<EvidenceRow>> {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router";
 import { SectionTabs } from "./SectionTabs";
 import { OracleSidebar } from "./OracleSidebar";
@@ -39,12 +39,109 @@ export function AppShell({
   hideSectionTabs = false,
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [sidebarWidthPx, setSidebarWidthPx] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem("openfdd.ui.sidebar_width_px");
+      const n = raw ? Number(raw) : NaN;
+      if (!Number.isFinite(n) || n <= 0) return 300;
+      return Math.min(720, Math.max(180, Math.round(n)));
+    } catch {
+      return 300;
+    }
+  });
+  const [sidebarResizing, setSidebarResizing] = useState(false);
+  const [sidebarRight, setSidebarRight] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem("openfdd.ui.sidebar_right");
+      return v === "1" || v === "true";
+    } catch {
+      return false;
+    }
+  });
   const [revision, setRevision] = useState<{
     full: string;
     display: string;
     collapsed: string;
   } | null>(null);
   const location = useLocation();
+
+  const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const pendingWidthRef = useRef<number | null>(null);
+  const resizeRafRef = useRef<number | null>(null);
+
+  const onSidebarResizeStart = (e: React.MouseEvent<HTMLElement>) => {
+    if (collapsed) return;
+    // Starting width is captured once, then direction is decided by sidebarLeft vs sidebarRight.
+    resizeStateRef.current = { startX: e.clientX, startWidth: sidebarWidthPx };
+    pendingWidthRef.current = null;
+    setSidebarResizing(true);
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    if (!sidebarResizing) return;
+    const st = resizeStateRef.current;
+    if (!st) return;
+
+    const { startX, startWidth } = st;
+    const minW = 180;
+    const maxW = 720;
+
+    const onMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - startX;
+      const raw = sidebarRight ? startWidth - delta : startWidth + delta;
+      const next = Math.round(Math.min(maxW, Math.max(minW, raw)));
+      pendingWidthRef.current = next;
+
+      if (resizeRafRef.current != null) return;
+      resizeRafRef.current = window.requestAnimationFrame(() => {
+        resizeRafRef.current = null;
+        const w = pendingWidthRef.current;
+        if (w != null) setSidebarWidthPx(w);
+      });
+    };
+
+    const onUp = () => {
+      setSidebarResizing(false);
+      const w = pendingWidthRef.current ?? sidebarWidthPx;
+      try {
+        localStorage.setItem("openfdd.ui.sidebar_width_px", String(w));
+      } catch {
+        /* ignore */
+      }
+      resizeStateRef.current = null;
+      pendingWidthRef.current = null;
+    };
+
+    const prevCursor = document.body.style.cursor;
+    const prevUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevUserSelect;
+      if (resizeRafRef.current != null) {
+        window.cancelAnimationFrame(resizeRafRef.current);
+        resizeRafRef.current = null;
+      }
+    };
+  }, [sidebarResizing, sidebarRight, sidebarWidthPx]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "openfdd.ui.sidebar_right",
+        sidebarRight ? "1" : "0",
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [sidebarRight]);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,9 +175,14 @@ export function AppShell({
 
   return (
     <div
-      className={`app-shell${collapsed ? " app-shell--sidebar-collapsed" : ""}`}
+      className={`app-shell${
+        collapsed ? " app-shell--sidebar-collapsed" : ""
+      }${sidebarRight ? " app-shell--sidebar-right" : ""}${
+        sidebarResizing ? " app-shell--sidebar-resizing" : ""
+      }`}
       data-testid="app-shell"
       data-sidebar-collapsed={collapsed ? "true" : "false"}
+      style={{ ["--sidebar-width" as any]: `${sidebarWidthPx}px` }}
     >
       <aside className="app-sidebar" aria-label="Sites and controls">
         <div className="app-sidebar__brand-row">
@@ -107,7 +209,25 @@ export function AppShell({
           >
             {collapsed ? "»" : "«"}
           </button>
+          <button
+            type="button"
+            className="app-sidebar__collapse"
+            aria-pressed={sidebarRight}
+            onClick={() => setSidebarRight((v) => !v)}
+            title={sidebarRight ? "Move sidebar to the left" : "Move sidebar to the right"}
+            data-testid="sidebar-side-toggle"
+          >
+            {sidebarRight ? "◀" : "▶"}
+          </button>
         </div>
+
+        <button
+          type="button"
+          className="app-sidebar__resizer"
+          aria-label="Resize sidebar"
+          data-testid="sidebar-resizer"
+          onMouseDown={onSidebarResizeStart}
+        />
 
         <div id="app-sidebar-oracle" className="app-sidebar__scroll">
           <OracleSidebar collapsed={collapsed} />

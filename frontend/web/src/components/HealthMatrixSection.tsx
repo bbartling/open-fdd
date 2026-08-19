@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button, DataTable, Expander, InlineAlert, Metric, Select } from "./widgets";
+import { DataTable, InlineAlert } from "./widgets";
 import type { AnalyticsEnvelope } from "../api/analyticsApi";
-import { downloadRowsCsv } from "../api/csvDownload";
+import { healthColumnHeader } from "../lib/cookbookRuleCatalog";
 import { naturalCompare } from "../lib/naturalSort";
-
-export type HealthScore = "3/3" | "2/3" | "1/3" | "0/3" | "?/3" | "all";
 
 export function tri(v: unknown): string {
   if (v === true) return "true";
@@ -12,6 +10,21 @@ export function tri(v: unknown): string {
   return "unknown";
 }
 
+function fmtHours(v: unknown): string {
+  if (v == null || v === "") return "—";
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return "—";
+  return n.toFixed(1);
+}
+
+function healthRowClassBroken3Only(score: unknown): string | undefined {
+  return String(score ?? "") === "3/3" ? "health-row--broken-3" : undefined;
+}
+
+/** @internal test export */
+export { healthRowClassBroken3Only };
+
+/** @deprecated use healthRowClassBroken3Only — kept for unit tests */
 export function healthRowClass(score: unknown): string | undefined {
   switch (String(score ?? "")) {
     case "1/3":
@@ -27,7 +40,10 @@ export function healthRowClass(score: unknown): string | undefined {
 
 export interface HealthFlagColumn {
   key: string;
-  header: string;
+  ruleId: string;
+  haystackTags?: string[];
+  /** Row field for fault hours (defaults to `{key}_fault_h`). */
+  faultHoursKey?: string;
 }
 
 export interface HealthMatrixSectionProps {
@@ -38,11 +54,6 @@ export interface HealthMatrixSectionProps {
   refreshToken: number;
   fetchHealth: (buildingId: string) => Promise<AnalyticsEnvelope>;
   flagColumns: HealthFlagColumn[];
-  extraFilterKey?: string;
-  extraFilterLabel?: string;
-  schemaFallback: string;
-  queryFallback: string;
-  csvName: string;
 }
 
 export function HealthMatrixSection({
@@ -53,19 +64,10 @@ export function HealthMatrixSection({
   refreshToken,
   fetchHealth,
   flagColumns,
-  extraFilterKey,
-  extraFilterLabel,
-  schemaFallback,
-  queryFallback,
-  csvName,
 }: HealthMatrixSectionProps) {
   const [env, setEnv] = useState<AnalyticsEnvelope | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [score, setScore] = useState<HealthScore>("all");
-  const [extra, setExtra] = useState("all");
-  const [conf, setConf] = useState("all");
-  const [metaOpen, setMetaOpen] = useState(false);
 
   const test = (suffix: string) => `${family}-health-${suffix}`;
   const sectionId = `overview-${family}-health`;
@@ -93,45 +95,44 @@ export function HealthMatrixSection({
     };
   }, [buildingId, refreshToken, fetchHealth]);
 
-  const rows = env?.rows ?? [];
-  const extras = useMemo(() => {
-    if (!extraFilterKey) return [] as string[];
-    const s = new Set<string>();
-    for (const r of rows) {
-      const p = String(r[extraFilterKey] ?? "").trim();
-      if (p) s.add(p);
-    }
-    return [...s].sort(naturalCompare);
-  }, [rows, extraFilterKey]);
-
-  const filtered = useMemo(() => {
-    return rows.filter((r) => {
-      if (score !== "all" && String(r.score_label) !== score) return false;
-      if (
-        extraFilterKey &&
-        extra !== "all" &&
-        String(r[extraFilterKey] ?? "") !== extra
-      ) {
-        return false;
-      }
-      if (conf !== "all" && String(r.confidence ?? "") !== conf) return false;
-      return true;
-    });
-  }, [rows, score, extra, conf, extraFilterKey]);
-
-  const groups = (env?.coverage as { groups?: Record<string, number> } | null)
-    ?.groups;
+  const rows = useMemo(
+    () =>
+      [...(env?.rows ?? [])].sort((a, b) =>
+        naturalCompare(String(a.equipment_id ?? ""), String(b.equipment_id ?? "")),
+      ),
+    [env?.rows],
+  );
 
   const stale = !loading && !err && rows.length === 0;
 
-  const tableRows = filtered.slice(0, 400).map((r) => {
+  const tableColumns = useMemo(() => {
+    const cols: Array<{ key: string; header: string }> = [
+      { key: "equipment_id", header: "equip" },
+    ];
+    for (const col of flagColumns) {
+      cols.push({
+        key: col.key,
+        header: healthColumnHeader(col.ruleId, col.haystackTags),
+      });
+      cols.push({
+        key: `${col.key}_fault_h`,
+        header: `${col.ruleId} fault_h`,
+      });
+    }
+    cols.push({ key: "total_fault_h", header: "total fault_h" });
+    return cols;
+  }, [flagColumns]);
+
+  const matrixRows = rows.slice(0, 400).map((r) => {
     const out: Record<string, unknown> = {
       score_label: String(r.score_label ?? ""),
       equipment_id: String(r.equipment_id ?? ""),
-      confidence: String(r.confidence ?? ""),
+      total_fault_h: fmtHours(r.total_fault_h),
     };
     for (const col of flagColumns) {
       out[col.key] = tri(r[col.key]);
+      const fhKey = col.faultHoursKey ?? `${col.key}_fault_h`;
+      out[`${col.key}_fault_h`] = fmtHours(r[fhKey]);
     }
     return out;
   });
@@ -156,102 +157,23 @@ export function HealthMatrixSection({
       ) : null}
       {stale ? (
         <InlineAlert id={`${family}-health-stale`} variant="warning" testId={test("stale")}>
-          No {family.toUpperCase()} health rows. Use <strong>Update analytics</strong> /{" "}
-          <strong>Run all rules</strong> — zeros are not fabricated. Missing evidence is
-          unknown, not PASS.
+          No {family.toUpperCase()} equipment in this data model. Section hidden when the
+          package has no matching equip refs — run <strong>Update analytics</strong> /{" "}
+          <strong>Run all rules</strong> after mapping.
         </InlineAlert>
       ) : null}
-      <div className="overview-metrics" data-testid={test("cards")}>
-        {(["3/3", "2/3", "1/3", "0/3", "?/3"] as const).map((g) => (
-          <Metric
-            key={g}
-            id={`${family}-health-card-${g.replace("/", "-").replace("?", "q")}`}
-            label={g === "?/3" ? "insufficient" : g}
-            value={String(groups?.[g] ?? rows.filter((r) => r.score_label === g).length)}
-            testId={`${family}-health-card-${g.replace("/", "-").replace("?", "q")}`}
-          />
-        ))}
-      </div>
-      <div className="overview-toolbar">
-        <Select
-          id={`${family}-health-score`}
-          label="Score"
-          value={score}
-          onChange={(v) => setScore(v as HealthScore)}
-          options={["all", "3/3", "2/3", "1/3", "0/3", "?/3"].map((x) => ({
-            value: x,
-            label: x,
-          }))}
-          testId={test("filter-score")}
-        />
-        {extraFilterKey && extraFilterLabel ? (
-          <Select
-            id={`${family}-health-extra`}
-            label={extraFilterLabel}
-            value={extra}
-            onChange={setExtra}
-            options={[
-              { value: "all", label: "all" },
-              ...extras.map((a) => ({ value: a, label: a })),
-            ]}
-            testId={test("filter-extra")}
-          />
-        ) : null}
-        <Select
-          id={`${family}-health-conf`}
-          label="Confidence"
-          value={conf}
-          onChange={setConf}
-          options={["all", "high", "medium", "low", "insufficient"].map((x) => ({
-            value: x,
-            label: x,
-          }))}
-          testId={test("filter-confidence")}
-        />
-        <Button
-          id={`${family}-health-csv`}
-          label="Download CSV"
-          onClick={() =>
-            downloadRowsCsv(csvName, rows as Array<Record<string, unknown>>)
-          }
-          testId={test("download")}
-        />
-      </div>
-      {filtered.length ? (
+      {matrixRows.length ? (
         <DataTable
           id={`${family}-health-table`}
           label={`${family.toUpperCase()} health matrix`}
-          columns={[
-            { key: "score_label", header: "Score" },
-            { key: "equipment_id", header: "Equipment" },
-            ...flagColumns.map((c) => ({ key: c.key, header: c.header })),
-            { key: "confidence", header: "Confidence" },
-          ]}
-          rows={tableRows}
-          rowClassName={(row) => healthRowClass(row.score_label)}
+          columns={tableColumns}
+          rows={matrixRows}
+          rowClassName={(row) =>
+            healthRowClassBroken3Only((row as { score_label?: unknown }).score_label)
+          }
           testId={test("table")}
         />
       ) : null}
-      <Expander
-        id={`${family}-health-meta`}
-        label="Thresholds, engine, schema"
-        expanded={metaOpen}
-        onChange={setMetaOpen}
-        testId={test("expander")}
-      >
-        <p className="oracle-sidebar__caption">
-          engine={env?.engine ?? "—"} schema={String(
-            (env?.coverage as { schema_version?: string } | null)?.schema_version ??
-              schemaFallback,
-          )}{" "}
-          query={env?.query_version ?? queryFallback}
-        </p>
-        <p className="oracle-sidebar__caption" role="note">
-          Red tint is flags true / 3. <code>?/3</code> is unknown (no red). Empty
-          charts or empty matrices mean missing roles or no FDD run — not a broken
-          engine.
-        </p>
-      </Expander>
     </section>
   );
 }

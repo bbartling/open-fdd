@@ -1,19 +1,24 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { HealthMatrixSection } from "./HealthMatrixSection";
 import {
   postAhuHealth,
-  postBoilerHealth,
   postChillerHealth,
   postHpHealth,
 } from "../api/analyticsApi";
+import type { FddEquipmentItem } from "../api/analyticsApi";
+import { plantEquipmentFamilies } from "../lib/plantEquipment";
 
 export function PlantHealthSections({
   buildingId,
   refreshToken,
+  equipment,
 }: {
   buildingId: string;
   refreshToken: number;
+  equipment: FddEquipmentItem[];
 }) {
+  const families = useMemo(() => plantEquipmentFamilies(equipment), [equipment]);
+
   const fetchAhu = useCallback(
     (id: string) => postAhuHealth({ building_id: id }),
     [],
@@ -22,80 +27,94 @@ export function PlantHealthSections({
     (id: string) => postChillerHealth({ building_id: id }),
     [],
   );
-  const fetchBoiler = useCallback(
-    (id: string) => postBoilerHealth({ building_id: id }),
-    [],
-  );
   const fetchHp = useCallback(
     (id: string) => postHpHealth({ building_id: id }),
     [],
   );
+
   return (
     <>
-      <HealthMatrixSection
-        family="ahu"
-        title="AHU health — SAT, duct static, economizer."
-        caption="AHU-SATDEV / AHU-DUCTHI / ECON-1 (ECON-2 if ECON-1 is not applicable). Missing evidence is unknown, not PASS."
-        buildingId={buildingId}
-        refreshToken={refreshToken}
-        fetchHealth={fetchAhu}
-        flagColumns={[
-          { key: "sat_dev", header: "SAT" },
-          { key: "duct_high", header: "Duct" },
-          { key: "economizer", header: "Econ" },
-        ]}
-        schemaFallback="ahu_health_matrix_v1"
-        queryFallback="ahu-health-v1"
-        csvName="ahu_health_matrix.csv"
-      />
-      <HealthMatrixSection
-        family="chiller"
-        title="Chiller health — CHW-1 / CHW-2 / CHW-3."
-        caption="Compressor-plant flags only. Heat pumps (HP_*) are in the heat-pump matrix. Missing evidence is unknown, not PASS."
-        buildingId={buildingId}
-        refreshToken={refreshToken}
-        fetchHealth={fetchChiller}
-        flagColumns={[
-          { key: "chw_1", header: "CHW-1" },
-          { key: "chw_2", header: "CHW-2" },
-          { key: "chw_3", header: "CHW-3" },
-        ]}
-        schemaFallback="chiller_health_matrix_v1"
-        queryFallback="chiller-health-v1"
-        csvName="chiller_health_matrix.csv"
-      />
-      <HealthMatrixSection
-        family="boiler"
-        title="Boiler health — FC5 / FC6 / FC8."
-        caption="Heating cookbook flags until HW-* SQL exists. Units with zero applicable flags score ?/3 (no red)."
-        buildingId={buildingId}
-        refreshToken={refreshToken}
-        fetchHealth={fetchBoiler}
-        flagColumns={[
-          { key: "fc5", header: "FC5" },
-          { key: "fc6", header: "FC6" },
-          { key: "fc8", header: "FC8" },
-        ]}
-        schemaFallback="boiler_health_matrix_v1"
-        queryFallback="boiler-health-v1"
-        csvName="boiler_health_matrix.csv"
-      />
-      <HealthMatrixSection
-        family="hp"
-        title="Heat-pump health — HP-1, SAT, economizer."
-        caption="HP-1 plus AHU-SATDEV / ECON-1 for HP_* equipment. Missing evidence is unknown, not PASS."
-        buildingId={buildingId}
-        refreshToken={refreshToken}
-        fetchHealth={fetchHp}
-        flagColumns={[
-          { key: "hp_1", header: "HP-1" },
-          { key: "sat_dev", header: "SAT" },
-          { key: "economizer", header: "Econ" },
-        ]}
-        schemaFallback="hp_health_matrix_v1"
-        queryFallback="hp-health-v1"
-        csvName="hp_health_matrix.csv"
-      />
+      {families.hasAhu ? (
+        <HealthMatrixSection
+          family="ahu"
+          title="AHU health"
+          caption="Data-model scoped to AHU equip refs. Red = all cookbook flags faulted (3/3)."
+          buildingId={buildingId}
+          refreshToken={refreshToken}
+          fetchHealth={fetchAhu}
+          flagColumns={[
+            {
+              key: "sat_dev",
+              ruleId: "AHU-SATDEV",
+              haystackTags: ["dischargeAir", "dischargeAirSp"],
+            },
+            {
+              key: "duct_high",
+              ruleId: "AHU-DUCTHI",
+              haystackTags: ["ductStatic", "ductStaticSp", "fan"],
+            },
+            {
+              key: "economizer",
+              ruleId: "ECON-1",
+              haystackTags: ["outsideAir", "outsideAirDamper", "fan"],
+            },
+          ]}
+        />
+      ) : null}
+      {families.hasChiller ? (
+        <HealthMatrixSection
+          family="chiller"
+          title="Chiller plant health"
+          caption="Compressor-plant flags only. Heat pumps (HP_*) use the heat-pump matrix."
+          buildingId={buildingId}
+          refreshToken={refreshToken}
+          fetchHealth={fetchChiller}
+          flagColumns={[
+            {
+              key: "chw_1",
+              ruleId: "CHW-1",
+              haystackTags: ["chilledWaterSupply", "chilledWaterReturn"],
+            },
+            {
+              key: "chw_2",
+              ruleId: "CHW-2",
+              haystackTags: ["chilledWaterDiffPressure", "chilledWaterDiffPressureSp"],
+            },
+            {
+              key: "chw_3",
+              ruleId: "CHW-3",
+              haystackTags: ["condenserWaterSupply", "condenserWaterReturn"],
+            },
+          ]}
+        />
+      ) : null}
+      {families.hasHeatPump ? (
+        <HealthMatrixSection
+          family="hp"
+          title="Heat-pump health"
+          caption="HP_* equip refs only."
+          buildingId={buildingId}
+          refreshToken={refreshToken}
+          fetchHealth={fetchHp}
+          flagColumns={[
+            {
+              key: "hp_1",
+              ruleId: "HP-1",
+              haystackTags: ["dischargeAir", "zoneAir", "fan"],
+            },
+            {
+              key: "sat_dev",
+              ruleId: "AHU-SATDEV",
+              haystackTags: ["dischargeAir", "dischargeAirSp"],
+            },
+            {
+              key: "economizer",
+              ruleId: "ECON-1",
+              haystackTags: ["outsideAir", "outsideAirDamper", "fan"],
+            },
+          ]}
+        />
+      ) : null}
     </>
   );
 }

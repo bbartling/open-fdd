@@ -183,6 +183,18 @@ vi.mock("../api/analyticsApi", () => ({
     skipped: [],
     coverage: { groups: {} },
   })),
+  postBasVsWebOat: vi.fn(async () => ({
+    schema_version: "analytics-envelope-v1",
+    query_version: "bas-vs-web-oat-v2",
+    generated_at: "",
+    engine: "datafusion",
+    warnings: [],
+    rows: [],
+    equipment: [],
+    points: [],
+    skipped: [],
+    coverage: {},
+  })),
 }));
 
 vi.mock("../api/csvDownload", () => ({ downloadRowsCsv: vi.fn() }));
@@ -223,9 +235,8 @@ describe("OverviewPopulated metric isolation", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("overview-idle-hint")).toBeTruthy();
+      expect(screen.getByTestId("overview-rule-count").textContent).toContain("59");
     });
-    expect(fetchCentralOverview).not.toHaveBeenCalled();
-    expect(screen.getByTestId("overview-rule-count").textContent).toContain("59");
     expect(screen.getByTestId("overview-rule-caption").textContent).toMatch(
       /\+4 SQL rollups/,
     );
@@ -274,10 +285,13 @@ describe("OverviewPopulated metric isolation", () => {
       expect(screen.queryByTestId(id)).toBeNull();
     }
     expect(screen.getByTestId("overview-ahu-health")).toBeTruthy();
-    expect(screen.getByTestId("overview-chiller-health")).toBeTruthy();
-    expect(screen.getByTestId("overview-boiler-health")).toBeTruthy();
-    expect(screen.getByTestId("overview-hp-health")).toBeTruthy();
-    expect(screen.getByTestId("overview-vav-health")).toBeTruthy();
+    expect(screen.queryByTestId("overview-chiller-health")).toBeNull();
+    expect(screen.queryByTestId("overview-boiler-health")).toBeNull();
+    expect(screen.queryByTestId("overview-hp-health")).toBeNull();
+    expect(screen.queryByTestId("overview-vav-health")).toBeNull();
+    expect(screen.queryByTestId("overview-motor-runtime")).toBeNull();
+    expect(screen.queryByTestId("overview-mech-cooling")).toBeNull();
+    expect(screen.getByTestId("overview-devices-by-type")).toBeTruthy();
   });
 
   it("does not render an Overview equipment picker", async () => {
