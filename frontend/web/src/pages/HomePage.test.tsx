@@ -173,7 +173,7 @@ describe("HomePage overview", () => {
     await waitFor(() => {
       expect(screen.getByTestId("overview-populated")).toBeTruthy();
       expect(screen.getByTestId("overview-eq-count").textContent).toContain("2");
-      expect(screen.getByTestId("overview-motor-runtime")).toBeTruthy();
+      expect(screen.getByTestId("overview-devices-by-type")).toBeTruthy();
       expect(screen.getByTestId("overview-schedule")).toBeTruthy();
     });
     expect(screen.getByTestId("oracle-hero-logo")).toBeTruthy();

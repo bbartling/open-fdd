@@ -31,6 +31,7 @@ import {
   isOverviewRcxPreset,
   loadOverviewRcxPreset,
 } from "../api/rcxOverviewPresets";
+import type { RcxPresetTable } from "../api/rcxPresetTables";
 import {
   familyPickerOptions,
   REQUIRED_RCX_PRESET_IDS,
@@ -104,6 +105,7 @@ export function RcxPage() {
   );
   const [donutFigure, setDonutFigure] = useState<PlotlyFigure | null>(null);
   const [companionNote, setCompanionNote] = useState<string | null>(null);
+  const [presetTables, setPresetTables] = useState<RcxPresetTable[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showCoverage, setShowCoverage] = useState(false);
@@ -246,12 +248,14 @@ export function RcxPage() {
     setCompanionFigure(null);
     setDonutFigure(null);
     setCompanionNote(null);
+    setPresetTables([]);
     try {
       if (isOverviewRcxPreset(presetId)) {
         const loaded = await loadOverviewRcxPreset(buildingId, presetId);
         setEnv(loaded.env);
         setFigure(loaded.figure);
         setCompanionFigure(loaded.companion);
+        setPresetTables(loaded.tables);
         if (loaded.error && !loaded.figure) setError(loaded.error);
         return;
       }
@@ -379,6 +383,7 @@ export function RcxPage() {
             setPresetId(next?.id ?? "");
             setFigure(null);
             setEnv(null);
+            setPresetTables([]);
           }}
           testId="rcx-family"
         />
@@ -484,7 +489,20 @@ export function RcxPage() {
             testId={`rcx-fan-${t.title.replace(/\s+/g, "-")}`}
           />
         ))}
-        {env?.rows?.length ? (
+        {presetTables.map((t) => (
+          <DataTable
+            key={t.id}
+            id={`rcx-preset-${t.id}`}
+            label={t.label}
+            columns={Object.keys(t.rows[0] ?? {}).map((k) => ({
+              key: k,
+              header: k,
+            }))}
+            rows={t.rows.slice(0, 200) as Array<Record<string, string | number>>}
+            testId={`rcx-preset-table-${t.id}`}
+          />
+        ))}
+        {!presetTables.length && env?.rows?.length ? (
           <DataTable
             id="rcx-rows"
             label="RCx stats"
@@ -497,7 +515,7 @@ export function RcxPage() {
             }
             testId="rcx-rows-table"
           />
-        ) : env?.points?.length ? (
+        ) : !presetTables.length && env?.points?.length ? (
           <DataTable
             id="rcx-points"
             label="RCx points (sample)"

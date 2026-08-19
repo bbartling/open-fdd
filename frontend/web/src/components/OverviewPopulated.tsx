@@ -21,12 +21,13 @@ import {
   putSessionConfig,
   type SessionConfig,
 } from "../api/mappingApi";
-import { downloadRowsCsv } from "../api/csvDownload";
 import type { OverviewVibe19Response } from "../api/overviewTypes";
 import { fetchCentralOverview } from "../api/centralOverview";
 import type { FddEquipmentItem } from "../api/analyticsApi";
 import { VavHealthSection } from "./VavHealthSection";
 import { PlantHealthSections } from "./PlantHealthSections";
+import { WeatherHealthSection } from "./WeatherHealthSection";
+import { mergeRuleCatalogFromApi } from "../lib/cookbookRuleCatalog";
 import { RULES_UPDATED_EVENT } from "./RuleTuningPanel";
 import { naturalCompare } from "../lib/naturalSort";
 import {
@@ -161,11 +162,6 @@ export function OverviewPopulated({
   const [week, setWeek] = useState(() => loadStoredSchedule().week);
   const [tz, setTz] = useState(() => loadStoredSchedule().tz);
   const [schedOpen, setSchedOpen] = useState(true);
-  const [motorTableOpen, setMotorTableOpen] = useState(true);
-  const [mechBinsOpen, setMechBinsOpen] = useState(true);
-  const [mechCoverageOpen, setMechCoverageOpen] = useState(true);
-  const [econMetricsOpen, setEconMetricsOpen] = useState(true);
-  const [econSkippedOpen, setEconSkippedOpen] = useState(true);
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [scheduleNote, setScheduleNote] = useState<string | null>(null);
   const [rulesBusy, setRulesBusy] = useState(false);
@@ -220,6 +216,7 @@ export function OverviewPopulated({
         listFddRules().catch(() => []),
       ]);
       setRuleCount(cookbookRuleCount(rules, status?.rule_count));
+      mergeRuleCatalogFromApi(rules);
       if (!buildingId) return;
       const map = await getPackageMapping(buildingId).catch(() => null);
       const frames = map?.equipment ?? [];
@@ -449,17 +446,7 @@ export function OverviewPopulated({
     return () => window.clearInterval(id);
   }, [busy]);
 
-  const tableCount = (() => {
-    if (!overview) return 0;
-    let n = 0;
-    if (overview.motor_weekly.table?.length) n += 1;
-    if (overview.mech_cooling.bins?.length) n += 1;
-    if (overview.economizer_weather.table?.length) n += 1;
-    if (overview.economizer_free_cooling.metrics?.length) n += 1;
-    if (overview.bas_vs_web_oat.hist_table?.length) n += 1;
-    if (overview.devices_by_type?.length) n += 1;
-    return n;
-  })();
+  const tableCount = overview?.devices_by_type?.length ? 1 : 0;
 
   return (
     <div
@@ -468,8 +455,9 @@ export function OverviewPopulated({
       aria-busy={busy || undefined}
     >
       <p className="oracle-sidebar__caption">
-        Overview analytics from central DataFusion. Tables and health matrices
-        live here; Plotly charts moved to RCx Plots. CSV overlay is under Inspect.
+        Overview health matrices and device inventory. Motor, mechanical cooling,
+        economizer, and OAT bin tables live on <strong>RCx Plots</strong> under
+        each preset.
       </p>
 
       {busy ? (
@@ -506,8 +494,8 @@ export function OverviewPopulated({
         >
           Tables ready: <strong>{tableCount}</strong> tabulated section
           {tableCount === 1 ? "" : "s"} for <code>{buildingId}</code> (
-          {overview.elapsed_s}s · {overview.source}). Motor / economizer / OAT
-          figures are on <strong>RCx Plots</strong>.
+          {overview.elapsed_s}s · {overview.source}). Bin/hour tables are on{" "}
+          <strong>RCx Plots</strong>.
         </InlineAlert>
       ) : null}
 
@@ -744,315 +732,21 @@ export function OverviewPopulated({
         </Expander>
       </section>
 
-      <PlantHealthSections buildingId={buildingId} refreshToken={vavHealthToken} />
-      <VavHealthSection buildingId={buildingId} refreshToken={vavHealthToken} />
-
-      <section className="overview-section" data-testid="overview-motor-runtime">
-        <h3>Motor / equipment run hours</h3>
-        <p className="oracle-sidebar__caption">
-          {overview?.motor_weekly.caption ??
-            "Weekly plant motors (AHU fans, boilers, chillers). VAV terminals are excluded. Figures live on RCx Plots."}
-        </p>
-        {(overview?.motor_weekly.plants ?? []).map((plant) => (
-          <div key={plant.plant_group} data-testid={`overview-motor-${plant.plant_group}`}>
-            <h4>{plant.title}</h4>
-            {plant.empty ? (
-              <p className="oracle-sidebar__caption">
-                No series for {plant.title.split("—")[0]?.trim().toLowerCase()}.
-              </p>
-            ) : (
-              <p className="oracle-sidebar__caption">
-                Plot moved to RCx family preset (
-                {plant.plant_group === "air"
-                  ? "ahu_motor_weekly"
-                  : plant.plant_group === "boiler"
-                    ? "boiler_motor_weekly"
-                    : "chiller_motor_weekly"}
-                ).
-              </p>
-            )}
-          </div>
-        ))}
-        {!overview && !loadingOverview ? (
-          <p className="oracle-sidebar__caption">No motor table yet.</p>
-        ) : null}
-        <Expander
-          id="weekly-motor-table"
-          label="Weekly motor hours table"
-          expanded={motorTableOpen}
-          onChange={setMotorTableOpen}
-          testId="overview-motor-table-exp"
-        >
-          {overview?.motor_weekly.table?.length ? (
-            <DataTable
-              id="motor-weekly-table"
-              label="Weekly motor hours"
-              columns={Object.keys(overview.motor_weekly.table[0] ?? {}).map((k) => ({
-                key: k,
-                header: k,
-              }))}
-              rows={
-                overview.motor_weekly.table.slice(0, 200) as Array<
-                  Record<string, string | number>
-                >
-              }
-              testId="overview-motor-table"
-            />
-          ) : (
-            <p className="oracle-sidebar__caption">No runtime rows.</p>
-          )}
-        </Expander>
-      </section>
-
-      <section className="overview-section" data-testid="overview-mech-cooling">
-        <h3>Mechanical cooling hours by OAT bin</h3>
-        <p className="oracle-sidebar__caption">
-          {overview?.mech_cooling.caption ??
-            "Chillers / DX / VRF compressor-proof; never CHW valves. Figure on RCx Plots (mech_cooling_oat_bins)."}
-        </p>
-        {overview?.mech_cooling.callout ? (
-          <p
-            className="oracle-sidebar__caption"
-            data-testid="overview-mech-callout"
-            style={{
-              background: "rgba(59, 130, 246, 0.12)",
-              borderRadius: 8,
-              padding: "10px 12px",
-            }}
-          >
-            {overview.mech_cooling.callout}
-          </p>
-        ) : null}
-        {overview && !overview.mech_cooling.bins?.length && !loadingOverview ? (
-          <p className="oracle-sidebar__caption" data-testid="overview-mech-empty">
-            {overview.mech_cooling.caption}
-          </p>
-        ) : null}
-        {overview?.mech_cooling.bins?.length ? (
-          <Expander
-            id="mech-bins-exp"
-            label="Mech cooling OAT bins table"
-            expanded={mechBinsOpen}
-            onChange={setMechBinsOpen}
-            testId="overview-mech-bins-exp"
-          >
-            <DataTable
-              id="mech-bins"
-              label="Mech cooling OAT bins"
-              columns={Object.keys(overview.mech_cooling.bins[0] ?? {}).map((k) => ({
-                key: k,
-                header: k,
-              }))}
-              rows={
-                overview.mech_cooling.bins.slice(0, 80) as Array<
-                  Record<string, string | number>
-                >
-              }
-              testId="overview-mech-bins"
-            />
-            <Button
-              id="dl-mech-bins"
-              label="Download mech cooling OAT bins CSV"
-              variant="secondary"
-              onClick={() =>
-                downloadRowsCsv(
-                  "mech_cooling_oat_bins.csv",
-                  overview.mech_cooling.bins,
-                )
-              }
-              testId="overview-dl-mech-bins"
-            />
-          </Expander>
-        ) : null}
-        {overview?.mech_cooling.coverage?.length ? (
-          <Expander
-            id="mech-coverage-exp"
-            label={`Mechanical cooling devices${
-              overview.mech_cooling.n_included != null
-                ? ` — ${overview.mech_cooling.n_included} included, ${overview.mech_cooling.n_excluded ?? 0} excluded`
-                : ""
-            }`}
-            expanded={mechCoverageOpen}
-            onChange={setMechCoverageOpen}
-            testId="overview-mech-coverage-exp"
-          >
-            <DataTable
-              id="mech-coverage"
-              label="Cooling coverage"
-              columns={Object.keys(overview.mech_cooling.coverage[0] ?? {}).map(
-                (k) => ({ key: k, header: k }),
-              )}
-              rows={
-                overview.mech_cooling.coverage.slice(0, 80) as Array<
-                  Record<string, string | number>
-                >
-              }
-              testId="overview-mech-coverage"
-            />
-            <Button
-              id="dl-mech-cov"
-              label="Download cooling coverage CSV"
-              variant="secondary"
-              onClick={() =>
-                downloadRowsCsv(
-                  "mech_cooling_coverage.csv",
-                  overview.mech_cooling.coverage,
-                )
-              }
-              testId="overview-dl-mech-cov"
-            />
-          </Expander>
-        ) : null}
-      </section>
-
-      <section className="overview-section" data-testid="overview-economizer">
-        <h3>Economizer weather opportunity / compliance</h3>
-        <p className="oracle-sidebar__caption">
-          {overview?.economizer_weather.caption ??
-            "Strict web dry-bulb + dewpoint opportunity hours."}
-        </p>
-        {overview?.economizer_weather.table?.length ? (
-          <>
-            <DataTable
-              id="econ-table"
-              label="Economizer weather summary"
-              columns={Object.keys(overview.economizer_weather.table[0] ?? {}).map(
-                (k) => ({ key: k, header: k }),
-              )}
-              rows={
-                overview.economizer_weather.table as Array<
-                  Record<string, string | number>
-                >
-              }
-              testId="overview-econ-table"
-            />
-            <Button
-              id="dl-econ-weather"
-              label="Download economizer weather CSV"
-              variant="secondary"
-              onClick={() =>
-                downloadRowsCsv(
-                  "economizer_weather.csv",
-                  overview.economizer_weather.table,
-                )
-              }
-              testId="overview-dl-econ-weather"
-            />
-          </>
-        ) : (
-          <p className="oracle-sidebar__caption">
-            {loadingOverview
-              ? "Loading economizer…"
-              : "No AHU/chiller/heat-pump rows with web weather or applicable signals."}
-          </p>
-        )}
-      </section>
-
-      <section className="overview-section" data-testid="overview-econ-free-cooling">
-        <h3>Economizer free-cooling diagnostics (fan on)</h3>
-        <p className="oracle-sidebar__caption">
-          {overview?.economizer_free_cooling.caption ??
-            "G36 mixing plots while supply fan is running."}
-        </p>
-        {overview?.economizer_free_cooling.metrics?.length ? (
-          <Expander
-            id="econ-metrics-exp"
-            label="Economizer free-cooling diagnostics table"
-            expanded={econMetricsOpen}
-            onChange={setEconMetricsOpen}
-            testId="overview-econ-metrics-exp"
-          >
-            <DataTable
-              id="econ-metrics"
-              label="Economizer diagnostic metrics"
-              columns={Object.keys(
-                overview.economizer_free_cooling.metrics[0] ?? {},
-              ).map((k) => ({ key: k, header: k }))}
-              rows={
-                overview.economizer_free_cooling.metrics as Array<
-                  Record<string, string | number>
-                >
-              }
-              testId="overview-econ-metrics"
-            />
-            <Button
-              id="dl-econ-metrics"
-              label="Download economizer diagnostic metrics CSV"
-              variant="secondary"
-              onClick={() =>
-                downloadRowsCsv(
-                  "economizer_free_cooling_metrics.csv",
-                  overview.economizer_free_cooling.metrics,
-                )
-              }
-              testId="overview-dl-econ-metrics"
-            />
-          </Expander>
-        ) : null}
-        <p className="oracle-sidebar__caption">
-          Economizer Plotly (delta, MAT residual, temps overlay) moved to RCx
-          presets <code>economizer_delta</code>, <code>economizer_mat_resid</code>,{" "}
-          <code>economizer_temps_overlay</code>.
-        </p>
-        {(overview?.economizer_free_cooling.skipped?.length ?? 0) > 0 ? (
-          <Expander
-            id="econ-skipped"
-            label={`Skipped units (${overview!.economizer_free_cooling.skipped.length})`}
-            expanded={econSkippedOpen}
-            onChange={setEconSkippedOpen}
-            testId="overview-econ-skipped-exp"
-          >
-            <DataTable
-              id="econ-skipped"
-              label="Skipped units"
-              columns={[
-                { key: "equipment_id", header: "equipment_id" },
-                { key: "reason", header: "reason" },
-              ]}
-              rows={
-                overview!.economizer_free_cooling.skipped as Array<
-                  Record<string, string | number>
-                >
-              }
-              testId="overview-econ-skipped"
-            />
-          </Expander>
-        ) : null}
-      </section>
-
-      <section className="overview-section" data-testid="overview-bas-web-oat">
-        <h3>BAS vs web outdoor-air temperature</h3>
-        <p className="oracle-sidebar__caption">
-          {overview?.bas_vs_web_oat.caption ??
-            "Overlay of BAS OAT and web dry-bulb. Figure on RCx Weather preset bas_vs_web_oat."}
-        </p>
-        {overview?.bas_vs_web_oat.hist_table?.length ? (
-          <DataTable
-            id="bas-web-hist-table"
-            label="BAS − web OAT deviation histogram"
-            columns={Object.keys(overview.bas_vs_web_oat.hist_table[0] ?? {}).map(
-              (k) => ({ key: k, header: k }),
-            )}
-            rows={
-              overview.bas_vs_web_oat.hist_table.slice(0, 80) as Array<
-                Record<string, string | number>
-              >
-            }
-            testId="overview-bas-hist-table"
-          />
-        ) : (
-          <InlineAlert id="bas-web-need" variant="info">
-            Need both BAS outdoor-air temp and web weather OAT for the histogram
-            table. Overlay plot is on RCx Plots.
-          </InlineAlert>
-        )}
-      </section>
-
-      <p className="oracle-sidebar__caption">
-        Tune thresholds in the left sidebar → <strong>Update this rule</strong>{" "}
-        / Overview <strong>Run all rules</strong> → browse FDD Plots by device
-        type.
-      </p>
+      <PlantHealthSections
+        buildingId={buildingId}
+        refreshToken={vavHealthToken}
+        equipment={equipment}
+      />
+      <VavHealthSection
+        buildingId={buildingId}
+        refreshToken={vavHealthToken}
+        equipment={equipment}
+      />
+      <WeatherHealthSection
+        buildingId={buildingId}
+        refreshToken={vavHealthToken}
+        equipment={equipment}
+      />
 
       <section className="overview-section" data-testid="overview-devices-by-type">
         <h3>Devices by type</h3>

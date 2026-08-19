@@ -245,29 +245,42 @@ fn lookup_flag(
     primary: &str,
     fallback: Option<&str>,
 ) -> Flag {
+    lookup_flag_with_hours(has_fdd, index, eq, primary, fallback).0
+}
+
+fn lookup_flag_with_hours(
+    has_fdd: bool,
+    index: &FddIndex,
+    eq: &str,
+    primary: &str,
+    fallback: Option<&str>,
+) -> (Flag, f64) {
     if !has_fdd {
-        return Flag::Unknown;
+        return (Flag::Unknown, 0.0);
     }
     let Some(rules) = index.get(eq) else {
-        return Flag::Unknown;
+        return (Flag::Unknown, 0.0);
     };
     if let Some((st, hours)) = rules.get(primary) {
         if st.eq_ignore_ascii_case("NOT_APPLICABLE_EQUIPMENT_TYPE") {
             if let Some(fb) = fallback {
                 if let Some((fst, fh)) = rules.get(fb) {
-                    return interpret_status(fst, *fh);
+                    let flag = interpret_status(fst, *fh);
+                    return (flag, if flag == Flag::Unknown { 0.0 } else { *fh });
                 }
             }
-            return Flag::Unknown;
+            return (Flag::Unknown, 0.0);
         }
-        return interpret_status(st, *hours);
+        let flag = interpret_status(st, *hours);
+        return (flag, if flag == Flag::Unknown { 0.0 } else { *hours });
     }
     if let Some(fb) = fallback {
         if let Some((fst, fh)) = rules.get(fb) {
-            return interpret_status(fst, *fh);
+            let flag = interpret_status(fst, *fh);
+            return (flag, if flag == Flag::Unknown { 0.0 } else { *fh });
         }
     }
-    Flag::Unknown
+    (Flag::Unknown, 0.0)
 }
 
 fn score_label(
@@ -373,11 +386,14 @@ async fn plant_health_from_history(
             continue;
         }
         seen += 1;
-        let flags = [
-            lookup_flag(has_fdd, &index, eq, spec.flags[0].2, spec.flags[0].3),
-            lookup_flag(has_fdd, &index, eq, spec.flags[1].2, spec.flags[1].3),
-            lookup_flag(has_fdd, &index, eq, spec.flags[2].2, spec.flags[2].3),
-        ];
+        let (f0, h0) =
+            lookup_flag_with_hours(has_fdd, &index, eq, spec.flags[0].2, spec.flags[0].3);
+        let (f1, h1) =
+            lookup_flag_with_hours(has_fdd, &index, eq, spec.flags[1].2, spec.flags[1].3);
+        let (f2, h2) =
+            lookup_flag_with_hours(has_fdd, &index, eq, spec.flags[2].2, spec.flags[2].3);
+        let flags = [f0, f1, f2];
+        let hours = [h0, h1, h2];
         let (label, hit, evaluable) =
             score_label(flags, &mut n3, &mut n2, &mut n1, &mut n0, &mut nq);
         let mut broken_ids: Vec<String> = Vec::new();
@@ -399,6 +415,37 @@ async fn plant_health_from_history(
         obj.insert(spec.flags[0].0.to_string(), flags[0].to_json());
         obj.insert(spec.flags[1].0.to_string(), flags[1].to_json());
         obj.insert(spec.flags[2].0.to_string(), flags[2].to_json());
+        obj.insert(
+            format!("{}_fault_h", spec.flags[0].0),
+            json!(if flags[0] == Flag::Unknown {
+                Value::Null
+            } else {
+                json!(hours[0])
+            }),
+        );
+        obj.insert(
+            format!("{}_fault_h", spec.flags[1].0),
+            json!(if flags[1] == Flag::Unknown {
+                Value::Null
+            } else {
+                json!(hours[1])
+            }),
+        );
+        obj.insert(
+            format!("{}_fault_h", spec.flags[2].0),
+            json!(if flags[2] == Flag::Unknown {
+                Value::Null
+            } else {
+                json!(hours[2])
+            }),
+        );
+        let total_fault_h: f64 = flags
+            .iter()
+            .zip(hours.iter())
+            .filter(|(f, _)| **f == Flag::True)
+            .map(|(_, h)| *h)
+            .sum();
+        obj.insert("total_fault_h".into(), json!(total_fault_h));
         obj.insert("flag_a_rule".into(), json!(spec.flags[0].2));
         obj.insert("flag_b_rule".into(), json!(spec.flags[1].2));
         obj.insert("flag_c_rule".into(), json!(spec.flags[2].2));

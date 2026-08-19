@@ -15,6 +15,7 @@ import {
   weeklyPlantFigures,
 } from "./centralOverview";
 import type { PlotlyFigure } from "./plotDataset";
+import { rcxPresetTables, type RcxPresetTable } from "./rcxPresetTables";
 
 export const OVERVIEW_RCX_PRESET_IDS = [
   "ahu_motor_weekly",
@@ -45,6 +46,7 @@ export async function loadOverviewRcxPreset(
   figure: PlotlyFigure | null;
   companion: PlotlyFigure | null;
   env: AnalyticsEnvelope;
+  tables: RcxPresetTable[];
   error?: string;
 }> {
   const body = { building_id: buildingId, max_points: 4000, dt_min_f: 10 };
@@ -56,6 +58,7 @@ export async function loadOverviewRcxPreset(
       figure: plant?.figure ?? null,
       companion: null,
       env,
+      tables: rcxPresetTables(presetId, env),
       error: plant?.figure
         ? undefined
         : env.warnings?.[0] ?? "No motor weekly series for this plant.",
@@ -68,6 +71,7 @@ export async function loadOverviewRcxPreset(
       figure,
       companion: null,
       env,
+      tables: rcxPresetTables(presetId, env),
       error: figure ? undefined : env.warnings?.[0],
     };
   }
@@ -84,6 +88,7 @@ export async function loadOverviewRcxPreset(
         figure,
         companion: null,
         env,
+        tables: rcxPresetTables(presetId, env),
         error: figure ? undefined : env.warnings?.[0],
       };
     }
@@ -93,6 +98,7 @@ export async function loadOverviewRcxPreset(
         figure,
         companion: null,
         env,
+        tables: rcxPresetTables(presetId, env),
         error: figure ? undefined : env.warnings?.[0],
       };
     }
@@ -101,6 +107,7 @@ export async function loadOverviewRcxPreset(
       figure: overlay.figure,
       companion: null,
       env,
+      tables: rcxPresetTables(presetId, env),
       error: overlay.figure ? undefined : env.warnings?.[0],
     };
   }
@@ -112,6 +119,7 @@ export async function loadOverviewRcxPreset(
       figure: overlay,
       companion: hist,
       env,
+      tables: rcxPresetTables(presetId, env),
       error: overlay ? undefined : env.warnings?.[0],
     };
   }

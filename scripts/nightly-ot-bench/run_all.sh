@@ -120,4 +120,12 @@ run_phase 15_product_truth_honesty.sh "15 product-truth honesty (P1)" || OVERALL
 # P1-M3 real-stack Playwright — requires live SPA (hard fail if up-but-broken).
 run_phase 16_playwright_web.sh "16 Playwright product workflows" || OVERALL=1
 
+# Synthetic-59 health matrix fault_h (optional; needs fixture + prior FDD run).
+if [[ "${RUN_SYNTH59_HEALTH_MATRIX:-0}" == "1" ]]; then
+  run_phase 17_synthetic_health_matrix_fault_hours.sh "17 synthetic health matrix fault_h" || OVERALL=1
+else
+  echo "- **17 synthetic health matrix:** SKIPPED (set RUN_SYNTH59_HEALTH_MATRIX=1 after synthetic_59_target_pair_soak)" >>"$REPORT"
+  skip "synthetic health matrix skipped (RUN_SYNTH59_HEALTH_MATRIX=1)"
+fi
+
 finish_report
