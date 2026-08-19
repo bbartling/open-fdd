@@ -1169,7 +1169,6 @@
       "datafusion_sql_implementation": "fc7_sat_low_heating.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc7",
       "test_coverage": [
-        "scripts/materialize_vav_oracle_fixtures.py",
         "tests/analytics/test_wattlab_engine.py",
         "tests/rules/test_golden_parity.py",
         "tests/rules/test_parity_inventory.py",
@@ -3023,9 +3022,7 @@
       "pandas_implementation": "vav4",
       "datafusion_sql_implementation": "vav4_damper_full_open.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-4",
-      "test_coverage": [
-        "scripts/materialize_vav_oracle_fixtures.py"
-      ],
+      "test_coverage": [],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -3334,7 +3331,6 @@
       "datafusion_sql_implementation": "vav7_min_airflow.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-7",
       "test_coverage": [
-        "scripts/materialize_vav_oracle_fixtures.py",
         "tests/analytics/test_vav_health.py"
       ],
       "parity_status": "sql_screening",
@@ -7242,7 +7238,6 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc7",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc7",
       "test_coverage": [
-        "scripts/materialize_vav_oracle_fixtures.py",
         "tests/analytics/test_wattlab_engine.py",
         "tests/rules/test_golden_parity.py",
         "tests/rules/test_parity_inventory.py",
@@ -11949,9 +11944,7 @@
       "sql_file": "vav4_damper_full_open.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-4",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-4",
-      "test_coverage": [
-        "scripts/materialize_vav_oracle_fixtures.py"
-      ],
+      "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -12870,7 +12863,6 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-7",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-7",
       "test_coverage": [
-        "scripts/materialize_vav_oracle_fixtures.py",
         "tests/analytics/test_vav_health.py"
       ],
       "parity_status": "sql_screening",
