@@ -47,6 +47,8 @@ Open-FDD maps Haystack-style JSON point roles to live or historical OT/CSV data 
 
 **Ready today — local, behind the firewall:** `./scripts/openfdd_stack_up.sh react` for CSV/zip FDD on your LAN or VPN. Not intended for the public internet.
 
+**Experimental cloud lab:** Railway can run the minimal `openfdd-central` + `openfdd-web` CSV/package stack from GHCR. See [Railway deployment](docs/operations/RAILWAY_DEPLOYMENT.md). This is a lab/demo path, not a production-hardening claim.
+
 **Coming soon:** OT edge (`react-ot` — BACnet, Modbus, Haystack, MQTTS) and managed **cloud hosting**. Internet-facing deployment with production security hardening targets **Fall 2026**.
 
 ---
