@@ -97,12 +97,16 @@ pub async fn register_parquet_tree(ctx: &SessionContext, parquet_root: &Path) ->
 }
 
 async fn register_canonical_history(ctx: &SessionContext, history_root: &Path) -> Result<()> {
+    // Keep all Hive partition columns as strings. In DataFusion 43, zero-padded
+    // path values such as `month=08` are represented reliably as Utf8 and prune
+    // correctly when compared to their canonical path literals. This also keeps
+    // the logical partition contract identical across local and object stores.
     let options = ParquetReadOptions::new()
         .table_partition_cols(vec![
             ("building_id".to_string(), DataType::Utf8),
             ("equipment_id".to_string(), DataType::Utf8),
-            ("year".to_string(), DataType::Int32),
-            ("month".to_string(), DataType::Int32),
+            ("year".to_string(), DataType::Utf8),
+            ("month".to_string(), DataType::Utf8),
         ])
         .parquet_pruning(true);
     let root = history_root.to_string_lossy().to_string();
@@ -248,7 +252,7 @@ mod tests {
                 "SELECT COUNT(*) AS n FROM history \
                  WHERE building_id = 'BUILDING_100' \
                    AND equipment_id = 'AHU_1' \
-                   AND year = 2026 AND month = 8",
+                   AND year = '2026' AND month = '08'",
             )
             .await
             .unwrap()
