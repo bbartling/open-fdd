@@ -1,0 +1,65 @@
+name: Clean merged PR branches
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete stale same-repo merged PR branches
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const repository = await github.rest.repos.get({ owner, repo });
+            const defaultBranch = repository.data.default_branch;
+
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: 'closed',
+              per_page: 100,
+              sort: 'updated',
+              direction: 'desc',
+            });
+
+            // Safety rule: only delete a branch if its current SHA is exactly the
+            // head SHA of a merged PR from this same repository. If a branch name
+            // was reused after merge, its SHA differs and it is left untouched.
+            const mergedHeads = new Map();
+            for (const pr of pulls) {
+              if (!pr.merged_at) continue;
+              if (pr.head?.repo?.full_name !== `${owner}/${repo}`) continue;
+              if (!pr.head?.ref || !pr.head?.sha) continue;
+              const shas = mergedHeads.get(pr.head.ref) ?? new Set();
+              shas.add(pr.head.sha);
+              mergedHeads.set(pr.head.ref, shas);
+            }
+
+            const branches = await github.paginate(github.rest.repos.listBranches, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+
+            for (const branch of branches) {
+              if (branch.name === defaultBranch) continue;
+              const mergedShas = mergedHeads.get(branch.name);
+              if (!mergedShas || !mergedShas.has(branch.commit.sha)) continue;
+
+              core.info(`Deleting merged branch ${branch.name} @ ${branch.commit.sha}`);
+              await github.rest.git.deleteRef({
+                owner,
+                repo,
+                ref: `heads/${branch.name}`,
+              });
+            }
