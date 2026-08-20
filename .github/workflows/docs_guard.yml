@@ -27,8 +27,9 @@ jobs:
       - name: Apply scoped equipment-type contract patch
         shell: bash
         run: |
+          python3 scripts/pr2_patch_fix.py
           python3 scripts/pr2_equipment_type_patch.py
-          rm -f scripts/pr2_equipment_type_patch.py
+          rm -f scripts/pr2_patch_fix.py scripts/pr2_equipment_type_patch.py
           rm -f .github/workflows/pr2-agent-patch.yml .github/workflows/pr2-agent-trigger.yml
           git fetch origin master
           git checkout origin/master -- .github/workflows/docs_guard.yml
