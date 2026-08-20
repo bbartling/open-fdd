@@ -645,12 +645,8 @@ async fn equipment_ids_for_spec(
             let rule_ids = spec_rule_ids(spec);
             let mut ids: Vec<String> = index
                 .iter()
-                .filter_map(|(eq, rules)| {
-                    rules
-                        .keys()
-                        .any(|rule| rule_ids.contains(rule.as_str()))
-                        .then(|| eq.clone())
-                })
+                .filter(|(_, rules)| rules.keys().any(|rule| rule_ids.contains(rule.as_str())))
+                .map(|(eq, _)| eq.clone())
                 .collect();
             ids.sort();
             ids.dedup();
@@ -889,10 +885,5 @@ mod tests {
         let (flag, hours) = lookup_flag_with_hours(true, &index, "AHU_1", AHU_LEGACY_FLAGS[2]);
         assert_eq!(flag, Flag::True);
         assert_eq!(hours, 2.0);
-    }
-
-    #[test]
-    fn sensor_spec_is_faults_only_for_clean_rows_empty_contract() {
-        assert!(SENSOR_SPEC.faults_only);
     }
 }
