@@ -31,6 +31,21 @@ jobs:
           python3 scripts/pr2_patch_fix2.py
           python3 scripts/pr2_patch_fix3.py
           python3 scripts/pr2_equipment_type_patch.py
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in [
+              'AGENTS.md',
+              'docs/agent/PACKAGE_AUTHORING.md',
+              'docs/mcp-agents/roles/package-mapping.md',
+              'mcp/INSTRUCTIONS.md',
+              'mcp/README.md',
+              'openfdd_agent_spec/AGENTS.md',
+              'openfdd_agent_spec/DATA_CONTRACT.md',
+              'openfdd_agent_spec/skills/openfdd-package-mapping/SKILL.md',
+          ]:
+              p = Path(name)
+              p.write_text(p.read_text().rstrip() + '\n')
+          PY
           rm -f scripts/pr2_patch_fix.py scripts/pr2_patch_fix2.py scripts/pr2_patch_fix3.py scripts/pr2_equipment_type_patch.py
           rm -f .github/workflows/pr2-agent-patch.yml .github/workflows/pr2-agent-trigger.yml
           git fetch origin master
