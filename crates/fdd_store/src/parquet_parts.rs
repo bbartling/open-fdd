@@ -83,7 +83,9 @@ impl ParquetPartWriter {
         validate_identity_column(batch, "equipment_id", equipment_id)?;
         for reserved in ["year", "month"] {
             if batch.schema().index_of(reserved).is_ok() {
-                bail!("canonical historian input cannot contain reserved partition column {reserved}");
+                bail!(
+                    "canonical historian input cannot contain reserved partition column {reserved}"
+                );
             }
         }
 
@@ -395,7 +397,11 @@ mod tests {
         assert!(writer
             .write_history_batch("BUILDING_100", "AHU_1", &wrong)
             .is_err());
-        assert!(writer.storage().list_recursive(Path::new("history")).unwrap().is_empty());
+        assert!(writer
+            .storage()
+            .list_recursive(Path::new("history"))
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
