@@ -62,8 +62,8 @@ H2 merged only after the changed-head FDD engine, Rust stack, AppSec, docs, and 
 - [~] register canonical local `history/` dataset root instead of making `**/*.parquet` the long-term contract
 - [~] expose Hive partition columns (`building_id`, `equipment_id`, `year`, `month`); canonical partition values remain UTF-8 path literals (for example `year='2026'`, `month='08'`) so zero-padded month pruning is stable across DataFusion/local/object-store backends
 - [~] preserve legacy sidecar fallback during migration
-- [~] partition/date filter coverage; physical-plan pruning assertion still required
-- [ ] schema evolution tests
+- [~] partition/date filter coverage plus physical-plan file pruning assertions; changed-head CI pending
+- [~] schema evolution coverage across mixed Parquet role columns; changed-head CI pending
 - [ ] generic interactive query row safeguard / streaming contract
 - [~] DataFusion memory/spill configuration wiring via H1 historian config; runtime caller adoption still required
 
