@@ -17,7 +17,7 @@ Haystack names in sidecar `points` translate via `haystack_point_to_role` (`disc
 | Mixing / economizer | `fan-status` (on) + `outside-air-temp` + `return-air-temp` + `mixed-air-temp` plus enough `\|OAT−RAT\|≥10°F` samples | Copy **site-global** BAS OA onto every AHU as `outside-air-temp`. Missing any role → skip, don’t crash. |
 | VAV / zone | `zone-air-temp`, `zone-airflow`, `damper`, `reheat-valve` | `zone-airflow` = **actual CFM**, never the airflow setpoint. Stamp `equipType: vav`. |
 | BAS vs web OAT | BAS `outside-air-temp` **and** `{building}/weather/history_wide.csv` → `web-outside-air-temp` (`web_oa_t`) | Fetch weather at **this job’s** lat/lon; interpolate onto the HVAC UTC grid. `prefer_web_oat: true`. Weather folder is **not** equipment. |
-| Equipment typing | `equipType` + `equipment_type` | `rtu`→AHU; unit vent / FCU with fans → `ahu`; chiller plant → `chwPlant`; `heatPump`→`HP`. Id-substring fallback is last resort. |
+| Equipment typing | `equipType` (preferred; `equipment_type` accepted) | `rtu`→AHU; unit vent / FCU with fans → `ahu`; chiller plant → `chwPlant`; `heatPump`→`HP`. Id-substring fallback is last resort. |
 
 Setpoints (`*-sp`, airflow SP) must never steal process-variable roles.
 
