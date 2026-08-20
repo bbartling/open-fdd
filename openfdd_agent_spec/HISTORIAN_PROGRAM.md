@@ -47,8 +47,10 @@ H1 merged only after its changed-head FDD, Rust stack, AppSec, docs, and securit
 - [~] explicit Snappy compression + page statistics + bounded row groups
 - [~] local crash-safe publish
 - [~] append/month-boundary/round-trip/strict timestamp tests
-- [ ] micro-batch accumulator for live ingest
-- [ ] clean shutdown flush
+- [~] bounded micro-batch accumulator with per-equipment schema consistency
+- [~] row-threshold OR elapsed-time flush policy
+- [~] failed-write buffering retained for explicit retry
+- [~] clean shutdown drain through the same immutable writer
 
 ### H3 — Logical DataFusion dataset registration + query safety
 
@@ -104,8 +106,8 @@ Current Railway Storage Buckets are private S3-compatible buckets; current Railw
 
 - [ ] trace trustworthy equipment/role identity from fieldbus/MQTT metadata before mapping live points
 - [ ] no arbitrary parsing of point IDs as canonical equipment roles
-- [ ] accumulate live rows into bounded Arrow micro-batches
-- [ ] flush on row threshold OR time threshold OR shutdown
+- [ ] connect normalized live Arrow batches to the H2 micro-batch primitive
+- [ ] call elapsed-time flush from the owning runtime loop and shutdown drain on graceful exit
 - [ ] latest successfully persisted telemetry timestamp
 - [ ] stop durability-critical dependence on JSONL/Arrow-IPC snapshot rewrite
 - [ ] Feather remains optional compatibility/interchange only
