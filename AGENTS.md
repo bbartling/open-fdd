@@ -14,7 +14,7 @@ OpenClaw, Claude Desktop, or any MCP host — connect via **JWT REST** and optio
 | **mqtt** | Mosquitto MQTTS broker |
 | **mcp** | Optional read-first stdio tools → central (`OPENFDD_API_BASE`) |
 
-**Docs:** [Build recipes](docs/operations/build-recipes.md) · [External agents](docs/examples/external-agents.md) · [MCP README](mcp/README.md) · [ECM engineering (PyPI)](docs/ecm/README.md) · [Package authoring](docs/agent/PACKAGE_AUTHORING.md)
+**Docs:** [Build recipes](docs/operations/build-recipes.md) · [External agents](docs/examples/external-agents.md) · [MCP README](mcp/README.md) · [ECM engineering (PyPI)](docs/ecm/README.md) · [Package authoring](docs/agent/PACKAGE_AUTHORING.md) · [Security](SECURITY.md)
 
 **Software-engineering agent OS:** [`openfdd_agent_spec/`](openfdd_agent_spec/) — architecture locks, skills, Milestone A.
 
@@ -59,6 +59,14 @@ Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:808
 4. Read-first; writes need `OPENFDD_MCP_ALLOW_WRITES=1` and `confirm:true`.
 5. Never print secrets. BACnet writes need explicit human approval.
 
+## Security reports
+
+Do **not** open a public GitHub issue, discussion, or chat thread for a suspected vulnerability. Direct reporters to GitHub Private Vulnerability Reporting:
+
+`https://github.com/bbartling/open-fdd/security/advisories/new`
+
+Ask for the affected component/version, complete reproduction steps, proof of impact, redacted screenshots/logs, and a suggested correction when available. Never copy credentials, tokens, private hostnames, OT details, or exploit evidence into public tickets or agent transcripts. Canonical policy: [`SECURITY.md`](SECURITY.md).
+
 ## Package authoring (any BAS job)
 
 Open-FDD is a **generic** DataFusion consumer. Charts / FDD / RCx / motors / mixing / OAT-METEO read **SQL roles** after `POST /api/csv/import/package`. They do **not** know a vendor or campus. Empty Overview tables, RCx plots, Inspect traces, or `?/3` health scores mean the **package map is incomplete** — map in the zip. Gold shape: `AHU_1`, `VAV_1`, `CHW_1`, `weather/`. Never hard-code a site, vendor suffix table, or city in product code.
@@ -96,12 +104,14 @@ Railway is an **experimental CSV/package lab/demo path**, not a replacement for 
 - Minimal cloud stack: `openfdd-central` + `openfdd-web`.
 - Real optional images: `openfdd-fieldbus`, `openfdd-mqtt`, `openfdd-mcp`.
 - Do **not** invent `openfdd-commission`, `openfdd-mcp-rag`, or a Python/Streamlit commissioning runtime.
-- Both central and web currently listen on container port `8080`; local Compose maps web host port `3000` to container `8080`.
+- Both central and web listen on container port `8080`; local Compose maps web host port `3000` to container `8080`.
 - Central health is `GET /api/health`, not `/health`.
-- Cloud pulls require public GHCR package visibility or explicit registry pull credentials.
+- Web proxies same-origin `/api` and `/twins` to `OPENFDD_CENTRAL_UPSTREAM` (default `central:8080`). For Railway services named `openfdd-central` and `openfdd-web`, set web `OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080`.
+- Cloud pulls require public GHCR package visibility or Railway registry pull credentials. Railway private-registry credentials are plan-dependent; public GHCR is the simplest open-source path.
 - `OPENFDD_JWT_SECRET` and `OPENFDD_ADMIN_PASSWORD` must be deployment-unique secrets and must never be committed.
+- Attach persistent storage at central `/workspace` before relying on imported packages across redeploys.
 - BACnet/fieldbus generally requires deliberate OT-LAN/VPN/router access; generic Railway networking does not provide BACnet broadcast discovery automatically.
-- Prefer `:nightly` for the latest green `master` channel or `:sha-<7>` for reproducibility.
+- Prefer `:nightly` for the latest green `master` channel or `:sha-<7>` for reproducibility. A `master` merge triggers the GHCR stack and MCP publishers; do not claim the new nightly until those publish jobs are green and the target digest resolves.
 
 Full guide: [`docs/operations/RAILWAY_DEPLOYMENT.md`](docs/operations/RAILWAY_DEPLOYMENT.md). Image/tag contract: [`docs/operations/ghcr-images.md`](docs/operations/ghcr-images.md). Local stack entry point remains `./scripts/openfdd_stack_up.sh`.
 
@@ -120,6 +130,7 @@ A Railway one-click template should represent the tested minimal `central + web`
 - run `docker volume prune`
 - print secrets or tokens
 - expose API on public internet
+- report vulnerabilities in public GitHub issues/discussions
 - write BACnet without explicit human approval
 - embed vendor chat relays or model API keys in the stack
 - add Python to the product central/web request path
