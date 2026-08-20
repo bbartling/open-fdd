@@ -17,7 +17,7 @@ Haystack names in sidecar `points` translate via `haystack_point_to_role` (`disc
 | Mixing / economizer | `fan-status` (on) + `outside-air-temp` + `return-air-temp` + `mixed-air-temp` plus enough `\|OAT−RAT\|≥10°F` samples | Copy **site-global** BAS OA onto every AHU as `outside-air-temp`. Missing any role → skip, don’t crash. |
 | VAV / zone | `zone-air-temp`, `zone-airflow`, `damper`, `reheat-valve` | `zone-airflow` = **actual CFM**, never the airflow setpoint. Stamp `equipType: vav`. |
 | BAS vs web OAT | BAS `outside-air-temp` **and** `{building}/weather/history_wide.csv` → `web-outside-air-temp` (`web_oa_t`) | Fetch weather at **this job’s** lat/lon; interpolate onto the HVAC UTC grid. `prefer_web_oat: true`. Weather folder is **not** equipment. |
-| Equipment typing | `equipType` + `equipment_type` | `rtu`→AHU; unit vent / FCU with fans → `ahu`; chiller plant → `chwPlant`; `heatPump`→`HP`. Id-substring fallback is last resort. |
+| Equipment typing | `equipType` (preferred; `equipment_type` accepted) | `rtu`→AHU; unit vent / FCU with fans → `ahu`; chiller plant → `chwPlant`; `heatPump`→`HP`. Id-substring fallback is last resort. |
 
 Setpoints (`*-sp`, airflow SP) must never steal process-variable roles.
 
@@ -91,3 +91,7 @@ No `if building == …`, no vendor suffix table, no default weather city, no gly
 Use existing tools: `openfdd_csv_import_*`, `openfdd_csv_package_append`, `openfdd_ingest_contract`. SCAFFOLD `package_preflight` / `mapping_suggest` are **not** in the `mcp/` crate this cycle.
 
 TADCO / Niagara long-format grids are a **preprocess example** (pivot before ingest), not product hardcoding.
+
+## Equipment type precedence
+
+Stamp each equipment block with `equipType` (preferred) or `equipment_type`. Open-FDD persists that stamp during package ingest and uses it before generic folder/id heuristics for inventory and analytics. The persisted building-scoped type metadata is part of the ingest contract, not a transient mapping hint. Example: a folder named `AC_1` with `equipType: ahu` is treated as an AHU. If the stamp is absent or unrecognized, vendor-neutral id heuristics remain the fallback. Vendor/site-specific aliases belong in the preprocess package generator, never in product Rust.

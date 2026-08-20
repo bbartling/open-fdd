@@ -375,13 +375,12 @@ pub fn equipment_response(building_id: Option<&str>) -> Value {
     }
     ids.sort();
     ids.dedup();
+    let stamped_types = crate::equipment_types::load_type_map(&parquet_root(), building_id);
     let equipment: Vec<Value> = ids
         .iter()
         .map(|id| {
-            json!({
-                "equipment_id": id,
-                "equipment_type": infer_equipment_type(id),
-            })
+            let stamped = stamped_types.get(id).map(String::as_str);
+            crate::equipment_types::type_report(id, stamped)
         })
         .collect();
     json!({"ok": true, "count": equipment.len(), "equipment": equipment})
@@ -393,6 +392,7 @@ pub fn equipment_response(building_id: Option<&str>) -> Value {
 /// do not clobber one another.
 pub fn results_response(building_id: Option<&str>) -> Value {
     let dir = results_dir(building_id);
+    let stamped_types = crate::equipment_types::load_type_map(&parquet_root(), building_id);
     let reg = load_reg().ok();
     let mut metadata = HashMap::new();
     let mut kinds_by_rule: HashMap<String, Vec<String>> = HashMap::new();
@@ -441,7 +441,8 @@ pub fn results_response(building_id: Option<&str>) -> Value {
                     .unwrap_or(0.0);
                 // Emit status directly from the row when present (skip markers),
                 // otherwise derive FAULT/PASS from fault_hours (OFDD-066).
-                let kind = infer_equipment_kind(equipment_id);
+                let stamped = stamped_types.get(equipment_id).map(String::as_str);
+                let kind = crate::equipment_types::kind_for(equipment_id, stamped);
                 let applies = kinds_by_rule
                     .get(rule_id)
                     .map(|k| rule_applies_to_kind(k, kind))
@@ -465,7 +466,9 @@ pub fn results_response(building_id: Option<&str>) -> Value {
                     "rule_id": rule_id,
                     "title": metadata.get(rule_id).cloned().unwrap_or_default(),
                     "equipment_id": equipment_id,
-                    "equipment_type": infer_equipment_type(equipment_id),
+                    "equipment_type": crate::equipment_types::api_equipment_type_for(equipment_id, stamped),
+                    "equipment_type_raw": stamped,
+                    "equipment_type_source": if stamped.and_then(crate::equipment_types::canonical_kind).is_some() { "package" } else { "id" },
                     "status": status,
                     "fault_hours": fault_hours,
                     "fault_pct": row.get("fault_pct").and_then(Value::as_f64),

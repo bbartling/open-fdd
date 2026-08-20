@@ -8,7 +8,7 @@ use datafusion::prelude::SessionContext;
 use fdd_sql::run_sql;
 use serde_json::{json, Value};
 
-use super::historian::{plant_group_for, try_register_history_scoped};
+use super::historian::try_register_history_scoped;
 use super::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest, DF_ENGINE};
 
 pub const QV_AHU_HEALTH: &str = "ahu-health-v1";
@@ -151,15 +151,32 @@ pub fn is_heat_pump_id(equipment_id: &str) -> bool {
     u.starts_with("HP_") || u.contains("/HP_") || u.contains("HEAT_PUMP") || u.contains("HEATPUMP")
 }
 
-pub fn matches_family(family: PlantFamily, equipment_id: &str) -> bool {
+pub fn matches_family_typed(
+    family: PlantFamily,
+    equipment_id: &str,
+    stamped_type: Option<&str>,
+) -> bool {
+    let stamped_kind =
+        stamped_type.and_then(open_fdd_edge_prototype::equipment_types::canonical_kind);
     match family {
-        PlantFamily::Ahu => plant_group_for(equipment_id) == Some("air"),
-        PlantFamily::Chiller => {
-            plant_group_for(equipment_id) == Some("chiller") && !is_heat_pump_id(equipment_id)
+        PlantFamily::Ahu => {
+            super::historian::plant_group_for_typed(equipment_id, stamped_type) == Some("air")
         }
-        PlantFamily::Boiler => plant_group_for(equipment_id) == Some("boiler"),
-        PlantFamily::HeatPump => is_heat_pump_id(equipment_id),
+        PlantFamily::Chiller => {
+            super::historian::plant_group_for_typed(equipment_id, stamped_type) == Some("chiller")
+                && stamped_kind != Some("heatpump")
+                && !is_heat_pump_id(equipment_id)
+        }
+        PlantFamily::Boiler => {
+            super::historian::plant_group_for_typed(equipment_id, stamped_type) == Some("boiler")
+        }
+        PlantFamily::HeatPump => stamped_kind == Some("heatpump") || is_heat_pump_id(equipment_id),
     }
+}
+
+#[cfg(test)]
+pub fn matches_family(family: PlantFamily, equipment_id: &str) -> bool {
+    matches_family_typed(family, equipment_id, None)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -366,13 +383,18 @@ async fn plant_health_from_history(
     let mut n0 = 0u32;
     let mut nq = 0u32;
     let (has_fdd, index) = fdd_index(bid);
+    let stamped_types = open_fdd_edge_prototype::equipment_types::load_type_map(
+        &super::historian::parquet_root(),
+        Some(bid),
+    );
     let mut seen = 0u32;
     for row in result.rows {
         let eq = row
             .get("equipment_id")
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        if eq.is_empty() || !matches_family(spec.family, eq) {
+        let stamped_type = stamped_types.get(eq).map(String::as_str);
+        if eq.is_empty() || !matches_family_typed(spec.family, eq, stamped_type) {
             continue;
         }
         seen += 1;
@@ -392,12 +414,8 @@ async fn plant_health_from_history(
                 broken_ids.push(spec.flags[i].2.to_string());
             }
         }
-        let eq_type = match spec.family {
-            PlantFamily::Ahu => "AHU",
-            PlantFamily::Chiller => "CHILLER",
-            PlantFamily::Boiler => "BOILER",
-            PlantFamily::HeatPump => "HEAT_PUMP",
-        };
+        let eq_type =
+            open_fdd_edge_prototype::equipment_types::api_equipment_type_for(eq, stamped_type);
         let mut obj = serde_json::Map::new();
         obj.insert("building_id".into(), json!(bid));
         obj.insert("equipment_id".into(), json!(eq));
@@ -519,6 +537,8 @@ mod tests {
         assert!(matches_family(PlantFamily::Chiller, "CHLR_1"));
         assert!(matches_family(PlantFamily::Ahu, "AHU_1"));
         assert!(matches_family(PlantFamily::Ahu, "RTU_2"));
+        assert!(matches_family_typed(PlantFamily::Ahu, "AC_1", Some("ahu")));
+        assert!(!matches_family_typed(PlantFamily::Ahu, "AC_1", Some("vav")));
         assert!(!matches_family(PlantFamily::Ahu, "VAV_12"));
         assert!(matches_family(PlantFamily::Boiler, "BOILER_1"));
     }

@@ -152,3 +152,7 @@ docker build -f Dockerfile.mcp -t openfdd-mcp:local .
 | `OPENFDD_BENCH_TOPOLOGY_FILE` | — | Gitignored JSON with bench IPs |
 
 Obtain token: `scripts/openfdd_auth_lib.sh` → `openfdd_auth_login_token`.
+
+### Package equipment types
+
+For portable package mapping, stamp `equipType` (or `equipment_type`) on equipment blocks. Open-FDD persists the stamp and uses it before generic id heuristics, so opaque BAS ids such as `AC_1` can still classify correctly as `ahu`.

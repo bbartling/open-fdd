@@ -34,3 +34,7 @@ and [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](../../../docs/migration/vib
 - Patching SQL because a plot is empty
 - Porting vibe19 Streamlit Data Model into the SPA
 - Duplicating this skill into `~/.cursor/skills/`
+
+## Stamped equipment types
+
+Prefer stamping `equipType` (or `equipment_type`) in each equipment map. Open-FDD persists and prefers the stamp over folder-id inference. If an Overview family is empty for an opaque id such as `AC_1`, stamp the correct generic type instead of adding a vendor/site heuristic to Rust.
