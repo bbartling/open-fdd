@@ -4,8 +4,8 @@ pub mod historian;
 pub mod session;
 
 pub use historian::{
-    new_historian_session, register_historian_dataset, register_parquet_tree,
-    HistorianDatasetKind, HistorianRegistration,
+    new_historian_session, register_historian_dataset, register_parquet_tree, HistorianDatasetKind,
+    HistorianRegistration,
 };
 pub use session::{register_weather_if_present, run_sql, run_sql_file, QueryResult};
 
