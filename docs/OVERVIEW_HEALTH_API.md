@@ -12,7 +12,7 @@ Backend Overview health matrices are building-scoped `POST /api/analytics/*` end
 - `/api/analytics/pid-hunting`
 - `/api/analytics/sensor-faults`
 
-Existing `/api/analytics/ahu-health`, VAV, heat-pump, boiler, and weather-facing contracts remain available for compatibility.
+Existing `/api/analytics/ahu-health`, VAV, heat-pump, boiler, and weather-facing contracts remain available for compatibility while Overview adopts the split matrices.
 
 ## Matrix row contract
 
