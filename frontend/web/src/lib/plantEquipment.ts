@@ -16,6 +16,29 @@ export function isHeatPumpId(equipmentId: string): boolean {
   );
 }
 
+function normalizedType(equipment: FddEquipmentItem): string {
+  const raw = String(
+    equipment.equipment_type_raw ??
+      equipment.equipType ??
+      equipment.equipment_type ??
+      "",
+  );
+  return raw.trim().toUpperCase().replace(/[\s-]+/g, "_");
+}
+
+export function isCoolingTowerEquipment(equipment: FddEquipmentItem): boolean {
+  const kind = normalizedType(equipment);
+  if (
+    kind === "COOLING_TOWER" ||
+    kind === "COOLINGTOWER" ||
+    kind === "TOWER"
+  ) {
+    return true;
+  }
+  const id = String(equipment.equipment_id ?? "").trim().toUpperCase();
+  return id.includes("TOWER") || id.startsWith("CT_") || id.includes("/CT_");
+}
+
 /** Rough plant group from equipment id (historian `plant_group_for`). */
 export function plantGroupFor(equipmentId: string): "air" | "chiller" | "boiler" | null {
   const u = equipmentId.trim().toUpperCase().replace(/\\/g, "/");
@@ -47,6 +70,7 @@ function isZoneTerminalId(id: string): boolean {
 export interface PlantEquipmentFamilies {
   hasAhu: boolean;
   hasChiller: boolean;
+  hasCoolingTower: boolean;
   hasBoiler: boolean;
   hasHeatPump: boolean;
   hasVav: boolean;
@@ -60,6 +84,7 @@ export function plantEquipmentFamilies(
   const items = equipment.filter((e) => !isWeatherEquipment(e));
   let hasAhu = false;
   let hasChiller = false;
+  let hasCoolingTower = false;
   let hasBoiler = false;
   let hasHeatPump = false;
   let hasVav = false;
@@ -68,16 +93,26 @@ export function plantEquipmentFamilies(
   for (const e of items) {
     const id = String(e.equipment_id ?? "");
     const kind = String(e.equipment_type ?? "").trim().toUpperCase();
+    const tower = isCoolingTowerEquipment(e);
     if (kind === "VAV" || isZoneTerminalEquipment(e)) hasVav = true;
     if (kind === "AHU" || plantGroupFor(id) === "air") hasAhu = true;
+    if (tower) hasCoolingTower = true;
     if (kind === "PLANT" && plantGroupFor(id) === "boiler") hasBoiler = true;
-    if (kind === "PLANT" && plantGroupFor(id) === "chiller") hasChiller = true;
+    if (kind === "PLANT" && plantGroupFor(id) === "chiller" && !tower) hasChiller = true;
     if (isHeatPumpId(id) || kind === "HEAT_PUMP" || kind === "HEATPUMP") {
       hasHeatPump = true;
     }
-    if (plantGroupFor(id) === "chiller" && !isHeatPumpId(id)) hasChiller = true;
+    if (plantGroupFor(id) === "chiller" && !isHeatPumpId(id) && !tower) hasChiller = true;
     if (plantGroupFor(id) === "boiler") hasBoiler = true;
   }
 
-  return { hasAhu, hasChiller, hasBoiler, hasHeatPump, hasVav, hasWeather };
+  return {
+    hasAhu,
+    hasChiller,
+    hasCoolingTower,
+    hasBoiler,
+    hasHeatPump,
+    hasVav,
+    hasWeather,
+  };
 }
