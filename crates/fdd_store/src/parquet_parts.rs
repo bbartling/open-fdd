@@ -242,7 +242,7 @@ fn timestamp_at(col: &ArrayRef, row: usize) -> Result<DateTime<Utc>> {
                 .as_any()
                 .downcast_ref::<$array_ty>()
                 .ok_or_else(|| anyhow!("timestamp array downcast failed"))?;
-            timestamp_from_units(a.value(row), $scale)?
+            timestamp_from_units(a.value(row), $scale)
         }};
     }
 
