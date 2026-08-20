@@ -29,19 +29,19 @@ The retained historian may grow toward ~1 TB, while ordinary AFDD cycles query o
 
 ### H1 — Storage contract + architecture audit
 
-- [~] PR #756 — `feat/parquet-object-historian-foundation`
-- [~] generic `OPENFDD_STORAGE_URL` (`file://`, plain local path, `s3://`)
-- [~] canonical monthly Hive partition paths
-- [~] crash-safe local backend and path-traversal guards
-- [~] historian architecture audit/documentation
-- [~] `.env.example` configuration seed
-- [~] agent architecture lock
+- [x] PR #756 — `feat/parquet-object-historian-foundation`, merged to `master` as `6d75b50e`
+- [x] generic `OPENFDD_STORAGE_URL` (`file://`, plain local path, `s3://`)
+- [x] canonical monthly Hive partition paths
+- [x] crash-safe local backend and path-traversal guards
+- [x] historian architecture audit/documentation
+- [x] `.env.example` configuration seed
+- [x] agent architecture lock
 
-Do not claim H1 complete until #756 is merged to `master` with all CI green.
+H1 merged only after its changed-head FDD, Rust stack, AppSec, docs, and security CI were green.
 
 ### H2 — Immutable partitioned Parquet writer
 
-- [~] PR #757 — `feat/partitioned-parquet-writer` (stacked on #756)
+- [~] PR #757 — `feat/partitioned-parquet-writer`, cleanly based on merged H1 / current `master`
 - [~] immutable collision-safe part names
 - [~] UTC month split for RecordBatches
 - [~] explicit Snappy compression + page statistics + bounded row groups
