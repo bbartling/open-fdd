@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Context, Result};
-use arrow::array::{Array, ArrayRef, UInt32Array};
+use arrow::array::{Array, ArrayRef, LargeStringArray, StringArray, UInt32Array};
 use arrow::compute::take;
 use arrow::datatypes::{DataType, TimeUnit};
 use arrow::record_batch::RecordBatch;
@@ -64,8 +64,12 @@ impl ParquetPartWriter {
     ///
     /// The batch must have a non-null Arrow timestamp column named
     /// `timestamp_utc`. Rows are grouped by UTC year/month even when input is
-    /// unsorted. A complete Parquet byte buffer is built before publication so
-    /// the storage backend never exposes a partially written Parquet file.
+    /// unsorted. If `building_id` or `equipment_id` columns are present, every
+    /// row must agree with the trusted partition identity supplied by the caller.
+    /// Those identity columns are omitted from the physical Parquet payload so
+    /// DataFusion can expose them exactly once as Hive partition columns.
+    /// A complete Parquet byte buffer is built before publication so the storage
+    /// backend never exposes a partially written Parquet file.
     pub fn write_history_batch(
         &self,
         building_id: &str,
@@ -75,6 +79,14 @@ impl ParquetPartWriter {
         if batch.num_rows() == 0 {
             return Ok(Vec::new());
         }
+        validate_identity_column(batch, "building_id", building_id)?;
+        validate_identity_column(batch, "equipment_id", equipment_id)?;
+        for reserved in ["year", "month"] {
+            if batch.schema().index_of(reserved).is_ok() {
+                bail!("canonical historian input cannot contain reserved partition column {reserved}");
+            }
+        }
+
         let ts_idx = batch
             .schema()
             .index_of("timestamp_utc")
@@ -97,6 +109,7 @@ impl ParquetPartWriter {
         let mut out = Vec::with_capacity(groups.len());
         for ((year, month), indices) in groups {
             let subset = take_batch(batch, &indices)?;
+            let payload = partition_payload_batch(&subset)?;
             let first = indices
                 .iter()
                 .map(|i| timestamp_at(ts_col, *i as usize))
@@ -117,7 +130,7 @@ impl ParquetPartWriter {
             debug_assert_eq!(month, first.month());
             let file_name = part_name(first);
             let relative = partition.join(file_name);
-            let bytes = encode_parquet(&subset, self.row_group_rows)?;
+            let bytes = encode_parquet(&payload, self.row_group_rows)?;
             self.storage.write_atomic(&relative, &bytes)?;
             out.push(ParquetPart {
                 relative_path: slash_path(&relative),
@@ -131,6 +144,52 @@ impl ParquetPartWriter {
         }
         Ok(out)
     }
+}
+
+fn validate_identity_column(batch: &RecordBatch, name: &str, expected: &str) -> Result<()> {
+    let Ok(index) = batch.schema().index_of(name) else {
+        return Ok(());
+    };
+    let column = batch.column(index);
+    match column.data_type() {
+        DataType::Utf8 => {
+            let values = column
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or_else(|| anyhow!("{name} string array downcast failed"))?;
+            for row in 0..values.len() {
+                if values.is_null(row) || values.value(row) != expected {
+                    bail!("{name} does not match canonical partition identity {expected}");
+                }
+            }
+        }
+        DataType::LargeUtf8 => {
+            let values = column
+                .as_any()
+                .downcast_ref::<LargeStringArray>()
+                .ok_or_else(|| anyhow!("{name} large string array downcast failed"))?;
+            for row in 0..values.len() {
+                if values.is_null(row) || values.value(row) != expected {
+                    bail!("{name} does not match canonical partition identity {expected}");
+                }
+            }
+        }
+        other => bail!("{name} must be Utf8 identity metadata when present, got {other:?}"),
+    }
+    Ok(())
+}
+
+fn partition_payload_batch(batch: &RecordBatch) -> Result<RecordBatch> {
+    let schema = batch.schema();
+    let keep: Vec<usize> = schema
+        .fields()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, field)| {
+            (!matches!(field.name().as_str(), "building_id" | "equipment_id")).then_some(index)
+        })
+        .collect();
+    Ok(batch.project(&keep)?)
 }
 
 fn part_name(first: DateTime<Utc>) -> String {
@@ -225,6 +284,10 @@ mod tests {
     use tempfile::TempDir;
 
     fn batch(times: &[&str]) -> RecordBatch {
+        batch_for_equipment(times, "AHU_1")
+    }
+
+    fn batch_for_equipment(times: &[&str], equipment_id: &str) -> RecordBatch {
         let ts: Vec<i64> = times
             .iter()
             .map(|raw| {
@@ -253,7 +316,7 @@ mod tests {
                         .map(|i| Some(50.0 + i as f64))
                         .collect::<Vec<_>>(),
                 )),
-                Arc::new(StringArray::from(vec!["AHU_1"; times.len()])),
+                Arc::new(StringArray::from(vec![equipment_id; times.len()])),
             ],
         )
         .unwrap()
@@ -298,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    fn written_part_roundtrips_timestamp_and_roles() {
+    fn written_part_roundtrips_timestamp_and_roles_without_partition_identity_columns() {
         let tmp = TempDir::new().unwrap();
         let writer = ParquetPartWriter::new(LocalStorage::new(tmp.path()));
         let parts = writer
@@ -309,15 +372,30 @@ mod tests {
             )
             .unwrap();
         let file = std::fs::File::open(tmp.path().join(&parts[0].relative_path)).unwrap();
-        let reader = ParquetRecordBatchReaderBuilder::try_new(file)
+        let mut reader = ParquetRecordBatchReaderBuilder::try_new(file)
             .unwrap()
             .build()
             .unwrap();
-        let rows: usize = reader.map(|b| b.unwrap().num_rows()).sum();
-        assert_eq!(rows, 2);
+        let persisted = reader.next().unwrap().unwrap();
+        assert_eq!(persisted.num_rows(), 2);
+        assert!(persisted.schema().index_of("timestamp_utc").is_ok());
+        assert!(persisted.schema().index_of("sat").is_ok());
+        assert!(persisted.schema().index_of("equipment_id").is_err());
+        assert!(persisted.schema().index_of("building_id").is_err());
         assert!(parts[0].bytes > 0);
         assert_eq!(parts[0].first_timestamp_utc, "2026-08-20T12:00:00+00:00");
         assert_eq!(parts[0].last_timestamp_utc, "2026-08-20T12:05:00+00:00");
+    }
+
+    #[test]
+    fn mismatched_identity_is_rejected_before_publish() {
+        let tmp = TempDir::new().unwrap();
+        let writer = ParquetPartWriter::new(LocalStorage::new(tmp.path()));
+        let wrong = batch_for_equipment(&["2026-08-20T12:00:00Z"], "AHU_2");
+        assert!(writer
+            .write_history_batch("BUILDING_100", "AHU_1", &wrong)
+            .is_err());
+        assert!(writer.storage().list_recursive(Path::new("history")).unwrap().is_empty());
     }
 
     #[test]
