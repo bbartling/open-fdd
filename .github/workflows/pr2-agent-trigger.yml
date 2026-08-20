@@ -1,0 +1,42 @@
+name: PR2 equipment-type trigger
+
+on:
+  pull_request:
+    types: [opened, reopened]
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'feat/equipment-type-contract'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/equipment-type-contract
+          fetch-depth: 0
+      - name: Run scoped patch payload
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src = Path('.github/workflows/pr2-agent-patch.yml').read_text()
+          start = src.index("          python3 <<'PY'\n") + len("          python3 <<'PY'\n")
+          end = src.index("\n          PY\n", start)
+          lines = src[start:end].splitlines()
+          payload = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines)
+          Path('/tmp/pr2_patch.py').write_text(payload + '\n')
+          PY
+          python3 /tmp/pr2_patch.py
+          rm -f .github/workflows/pr2-agent-trigger.yml
+          cargo fmt --all
+          git diff --check
+          git status --short
+          git config user.name "open-fdd automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Persist and prefer stamped equipment types"
+          git push origin HEAD:feat/equipment-type-contract
+          git push origin --delete feat/railway-deployment-foundation || true
