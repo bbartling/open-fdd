@@ -110,10 +110,7 @@ impl HistorianConfig {
             (StorageUrl::parse(&raw)?, None)
         } else if let Ok(raw) = env::var("OPENFDD_PARQUET_ROOT") {
             let path = PathBuf::from(raw);
-            (
-                StorageUrl::File { root: path.clone() },
-                Some(path),
-            )
+            (StorageUrl::File { root: path.clone() }, Some(path))
         } else {
             let workspace = env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
             let root = PathBuf::from(workspace).join("data/openfdd");
@@ -276,9 +273,8 @@ impl LocalStorage {
             file.write_all(bytes)?;
             file.sync_all()?;
         }
-        fs::rename(&tmp, &final_path).with_context(|| {
-            format!("publish {} -> {}", tmp.display(), final_path.display())
-        })?;
+        fs::rename(&tmp, &final_path)
+            .with_context(|| format!("publish {} -> {}", tmp.display(), final_path.display()))?;
         Ok(())
     }
 
@@ -333,7 +329,10 @@ impl LocalStorage {
         }
         for component in relative.components() {
             use std::path::Component;
-            if matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_)) {
+            if matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            ) {
                 bail!("storage path traversal rejected");
             }
         }
@@ -418,6 +417,8 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let storage = LocalStorage::new(tmp.path());
         assert!(storage.read(Path::new("../escape")).is_err());
-        assert!(storage.write_atomic(Path::new("/tmp/escape"), b"x").is_err());
+        assert!(storage
+            .write_atomic(Path::new("/tmp/escape"), b"x")
+            .is_err());
     }
 }
