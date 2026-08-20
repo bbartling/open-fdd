@@ -44,6 +44,19 @@ const emptyOverview = {
   error: null,
 };
 
+const emptyAnalytics = {
+  schema_version: "analytics-envelope-v1",
+  query_version: "test-v1",
+  generated_at: "",
+  engine: "datafusion",
+  warnings: [],
+  rows: [],
+  equipment: [],
+  points: [],
+  skipped: [],
+  coverage: {},
+};
+
 const { fetchCentralOverview } = vi.hoisted(() => ({
   fetchCentralOverview: vi.fn(async () => emptyOverview),
 }));
@@ -108,17 +121,15 @@ vi.mock("../api/centralOverview", () => ({
 }));
 
 vi.mock("../api/analyticsApi", () => ({
+  postAnalytics: vi.fn(async () => emptyAnalytics),
   postInspect: vi.fn(async () => ({
     coverage: {},
     points: [],
     warnings: [],
   })),
   postVavHealth: vi.fn(async () => ({
-    schema_version: "analytics-envelope-v1",
+    ...emptyAnalytics,
     query_version: "vav-health-v1",
-    generated_at: "",
-    engine: "datafusion",
-    warnings: [],
     rows: [
       {
         equipment_id: "VAV_1",
@@ -130,70 +141,21 @@ vi.mock("../api/analyticsApi", () => ({
         parent_ahu: "AHU_1",
       },
     ],
-    equipment: [],
-    points: [],
-    skipped: [],
     coverage: { groups: { "3/3": 0, "2/3": 0, "1/3": 0, "0/3": 1, "?/3": 0 } },
   })),
-  postAhuHealth: vi.fn(async () => ({
-    schema_version: "analytics-envelope-v1",
-    query_version: "ahu-health-v1",
-    generated_at: "",
-    engine: "datafusion",
-    warnings: [],
-    rows: [],
-    equipment: [],
-    points: [],
-    skipped: [],
-    coverage: { groups: {} },
-  })),
+  postAhuHealth: vi.fn(async () => ({ ...emptyAnalytics, query_version: "ahu-health-v1" })),
   postChillerHealth: vi.fn(async () => ({
-    schema_version: "analytics-envelope-v1",
-    query_version: "chiller-health-v1",
-    generated_at: "",
-    engine: "datafusion",
-    warnings: [],
-    rows: [],
-    equipment: [],
-    points: [],
-    skipped: [],
-    coverage: { groups: {} },
+    ...emptyAnalytics,
+    query_version: "chiller-health-v2",
   })),
   postBoilerHealth: vi.fn(async () => ({
-    schema_version: "analytics-envelope-v1",
+    ...emptyAnalytics,
     query_version: "boiler-health-v1",
-    generated_at: "",
-    engine: "datafusion",
-    warnings: [],
-    rows: [],
-    equipment: [],
-    points: [],
-    skipped: [],
-    coverage: { groups: {} },
   })),
-  postHpHealth: vi.fn(async () => ({
-    schema_version: "analytics-envelope-v1",
-    query_version: "hp-health-v1",
-    generated_at: "",
-    engine: "datafusion",
-    warnings: [],
-    rows: [],
-    equipment: [],
-    points: [],
-    skipped: [],
-    coverage: { groups: {} },
-  })),
+  postHpHealth: vi.fn(async () => ({ ...emptyAnalytics, query_version: "hp-health-v1" })),
   postBasVsWebOat: vi.fn(async () => ({
-    schema_version: "analytics-envelope-v1",
+    ...emptyAnalytics,
     query_version: "bas-vs-web-oat-v2",
-    generated_at: "",
-    engine: "datafusion",
-    warnings: [],
-    rows: [],
-    equipment: [],
-    points: [],
-    skipped: [],
-    coverage: {},
   })),
 }));
 
@@ -284,8 +246,13 @@ describe("OverviewPopulated metric isolation", () => {
     ]) {
       expect(screen.queryByTestId(id)).toBeNull();
     }
-    expect(screen.getByTestId("overview-ahu-health")).toBeTruthy();
+    expect(screen.getByTestId("overview-ahu-temperature-health")).toBeTruthy();
+    expect(screen.getByTestId("overview-ahu-pressure-health")).toBeTruthy();
+    expect(screen.getByTestId("overview-ahu-economizer-health")).toBeTruthy();
+    expect(screen.getByTestId("overview-pid-health")).toBeTruthy();
+    expect(screen.getByTestId("overview-sensor-health")).toBeTruthy();
     expect(screen.queryByTestId("overview-chiller-health")).toBeNull();
+    expect(screen.queryByTestId("overview-cooling-tower-health")).toBeNull();
     expect(screen.queryByTestId("overview-boiler-health")).toBeNull();
     expect(screen.queryByTestId("overview-hp-health")).toBeNull();
     expect(screen.queryByTestId("overview-vav-health")).toBeNull();
