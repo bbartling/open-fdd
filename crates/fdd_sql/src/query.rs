@@ -59,12 +59,14 @@ mod tests {
     use super::*;
 
     fn register_three_rows(ctx: &SessionContext) {
-        let schema = Arc::new(Schema::new(vec![Field::new("value", DataType::Int64, false)]));
-        let batch = RecordBatch::try_new(
-            schema,
-            vec![Arc::new(Int64Array::from(vec![1_i64, 2, 3]))],
-        )
-        .unwrap();
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "value",
+            DataType::Int64,
+            false,
+        )]));
+        let batch =
+            RecordBatch::try_new(schema, vec![Arc::new(Int64Array::from(vec![1_i64, 2, 3]))])
+                .unwrap();
         ctx.register_batch("samples", batch).unwrap();
     }
 
@@ -77,15 +79,15 @@ mod tests {
             .await
             .unwrap_err()
             .to_string();
-        assert!(error.contains("row limit of 2"), "unexpected error: {error}");
+        assert!(
+            error.contains("row limit of 2"),
+            "unexpected error: {error}"
+        );
 
         let batches = collect_sql_bounded(&ctx, "SELECT * FROM samples", 3)
             .await
             .unwrap();
-        assert_eq!(
-            batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
-            3
-        );
+        assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 3);
     }
 
     #[tokio::test]

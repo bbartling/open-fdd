@@ -8,9 +8,7 @@ pub use historian::{
     new_historian_session, register_historian_dataset, register_parquet_tree, HistorianDatasetKind,
     HistorianRegistration,
 };
-pub use query::{
-    collect_sql_bounded, stream_sql, DEFAULT_INTERACTIVE_MAX_ROWS,
-};
+pub use query::{collect_sql_bounded, stream_sql, DEFAULT_INTERACTIVE_MAX_ROWS};
 pub use session::{register_weather_if_present, run_sql, run_sql_file, QueryResult};
 
 #[cfg(test)]
