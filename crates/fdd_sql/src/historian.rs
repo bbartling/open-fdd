@@ -129,7 +129,7 @@ fn contains_parquet(root: &Path) -> bool {
     WalkDir::new(root)
         .follow_links(false)
         .into_iter()
-        .filter_map(Result::ok)
+        .filter_map(|entry| entry.ok())
         .any(|entry| {
             entry.file_type().is_file()
                 && entry
@@ -144,10 +144,12 @@ fn contains_parquet(root: &Path) -> bool {
 mod tests {
     use std::sync::Arc;
 
-    use arrow::array::{Float64Array, StringArray, TimestampNanosecondArray};
-    use arrow::datatypes::{DataType as ArrowDataType, Field, Schema, TimeUnit};
-    use arrow::record_batch::RecordBatch;
     use chrono::{DateTime, Utc};
+    use datafusion::arrow::array::{
+        Float64Array, Int64Array, StringArray, TimestampNanosecondArray,
+    };
+    use datafusion::arrow::datatypes::{DataType as ArrowDataType, Field, Schema, TimeUnit};
+    use datafusion::arrow::record_batch::RecordBatch;
     use fdd_store::{LocalStorage, ParquetPartWriter, StorageUrl};
     use tempfile::TempDir;
 
@@ -214,7 +216,8 @@ mod tests {
             .unwrap();
         assert_eq!(batches.iter().map(|batch| batch.num_rows()).sum::<usize>(), 2);
 
-        let schema = ctx.table("history").await.unwrap().schema().clone();
+        let history = ctx.table("history").await.unwrap();
+        let schema = history.schema();
         assert!(schema.field_with_unqualified_name("building_id").is_ok());
         assert!(schema.field_with_unqualified_name("equipment_id").is_ok());
         assert!(schema.field_with_unqualified_name("year").is_ok());
@@ -252,7 +255,7 @@ mod tests {
         let n = result[0]
             .column(0)
             .as_any()
-            .downcast_ref::<arrow::array::Int64Array>()
+            .downcast_ref::<Int64Array>()
             .unwrap()
             .value(0);
         assert_eq!(n, 1);
@@ -290,7 +293,7 @@ mod tests {
         let n = rows[0]
             .column(0)
             .as_any()
-            .downcast_ref::<arrow::array::Int64Array>()
+            .downcast_ref::<Int64Array>()
             .unwrap()
             .value(0);
         assert_eq!(n, 1);
