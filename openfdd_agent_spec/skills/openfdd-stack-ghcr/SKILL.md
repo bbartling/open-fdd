@@ -29,8 +29,14 @@ images before pull; wait for GH Actions publish; then pull +
 
 Nightly publish (`ghcr-openfdd-stack.yml`) stamps `OPENFDD_GIT_SHA` into central
 and writes web `version.json` `{ version, git, image_tag, service: openfdd-web }`.
-Optional extra image tag `:3.3.1-n<run_number>` sits **beside** `:nightly` /
+Optional extra image tag `:3.3.2-n<run_number>` sits **beside** `:nightly` /
 `:sha-*`. UI revision comes from central `/api/health` first.
+
+For Railway, use the same GHCR `openfdd-web` image and set
+`OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080` (assuming the
+recommended Railway service name). Local Compose keeps the default
+`central:8080`. Do not claim a Railway-ready nightly until stack + MCP GHCR
+publish jobs are green and the target `sha-*` digest resolves.
 
 Hourly CSV append is API `POST /api/csv/import/package/append` on central (GHA image), not a local compile.
 

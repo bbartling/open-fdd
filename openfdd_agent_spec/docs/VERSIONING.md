@@ -4,15 +4,15 @@ Distinguish these axes — do not collapse them into one “Open-FDD version” 
 
 | Axis | Where it lives today | Notes |
 | --- | --- | --- |
-| Platform / Rust workspace | Root `Cargo.toml` `version` | Stack image semver tags — **3.3.1** |
+| Platform / Rust workspace | Root `Cargo.toml` `version` | Stack image semver tags — **3.3.2** |
 | Python package | `open_fdd/__init__.py` / `pyproject.toml` | PyPI `open-fdd` **4.4.2** — `open_fdd.version.manifest()` |
-| Displayed UI revision | `GET /api/health` → `{CARGO_PKG_VERSION}+sha` | SPA sidebar `3.3.1+shortsha` (7-char). Fallback: web `version.json` `{ version, git, image_tag }` |
+| Displayed UI revision | `GET /api/health` → `{CARGO_PKG_VERSION}+sha` | SPA sidebar `3.3.2+shortsha` (7-char). Fallback: web `version.json` `{ version, git, image_tag }` |
 | SQL rule registry | `sql_rules/registry.yaml` (+ file tree) | Prefer content hash in future manifest |
 | Pandas cookbook / oracle | Docs + `open_fdd.rules` | Tied to package version when shipped |
 | WattLab dump schema | vibe19 package / export code | v2/v3 compatibility matrix |
 | Capability ledger | `docs/migration/react-rust/capabilities.yaml` | Vibe 21 recovery P1-M0 evidence SoT |
 | Shared contracts schema | **Not shipped** | Phase 2 `open_fdd.contracts` |
-| Container git SHA | GHCR `sha-<7>` + `:nightly` on master | Immutable verify uses `sha-*`. Extra `:3.3.1-n<run_number>` is a run pointer, not a pin. |
+| Container git SHA | GHCR `sha-<7>` + `:nightly` on master | Immutable verify uses `sha-*`. Extra `:3.3.2-n<run_number>` is a run pointer, not a pin. |
 | EnergyPlus version | vibe20 image / runtime | When applicable |
 | Unity WebGL artifact | Phase 4 (not shipped) | External ZIP + manifest; never Unity Editor in prod |
 
@@ -20,11 +20,11 @@ Distinguish these axes — do not collapse them into one “Open-FDD version” 
 
 | What you see | Meaning |
 | --- | --- |
-| Sidebar / `/api/health` `3.3.1+abc1234` | Running **central** Cargo version + git SHA (`OPENFDD_GIT_SHA`) |
+| Sidebar / `/api/health` `3.3.2+abc1234` | Running **central** Cargo version + git SHA (`OPENFDD_GIT_SHA`) |
 | `:nightly` | Floating master pointer (retargeted every publish) |
 | `:sha-<7>` | Immutable image for that commit — pin this on benches |
-| `:3.3.1` | Workspace semver alias (often same digest as nightly; not a signed-off stable) |
-| `:3.3.1-n42` | Extra publish-run tag from `github.run_number` |
+| `:3.3.2` | Workspace semver alias (often same digest as nightly; not a signed-off stable) |
+| `:3.3.2-n42` | Extra publish-run tag from `github.run_number` |
 
 UI prefers health so the pin matches the **running central container**, not a stale web `version.json`.
 

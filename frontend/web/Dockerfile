@@ -17,12 +17,24 @@ RUN npm run build \
   && printf '{"ok":true,"service":"openfdd-web","git_sha":"%s","git":"%s","version":"%s","image_tag":"%s"}\n' \
        "$OPENFDD_GIT_SHA" "$short" "$OPENFDD_WEB_VERSION" "$image_tag" > /app/dist/version.json
 
-# Non-root nginx (listens on 8080).
+# Non-root nginx (listens on 8080). The nginx image entrypoint renders
+# /etc/nginx/templates/*.template with envsubst before starting nginx.
+# Keep Compose-compatible central:8080 as the default while allowing cloud
+# runtimes such as Railway to point the same GHCR image at private service DNS.
 FROM nginxinc/nginx-unprivileged:1.27-alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+ENV OPENFDD_CENTRAL_UPSTREAM=central:8080
+ENV NGINX_ENVSUBST_FILTER=OPENFDD_CENTRAL_UPSTREAM
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
-# Read-only rootfs friendly: html owned by nginx user (UID 101).
+# Read-only rootfs friendly: html owned by nginx user (UID 101). Also validate
+# the base image's template entrypoint and a Railway-style upstream at build time.
 USER root
-RUN chown -R 101:0 /usr/share/nginx/html
+RUN chown -R 101:0 /usr/share/nginx/html \
+  && test -x /docker-entrypoint.d/20-envsubst-on-templates.sh \
+  && OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080 \
+     NGINX_ENVSUBST_FILTER=OPENFDD_CENTRAL_UPSTREAM \
+     /docker-entrypoint.d/20-envsubst-on-templates.sh \
+  && grep -q 'openfdd-central.railway.internal:8080' /etc/nginx/conf.d/default.conf \
+  && rm -f /etc/nginx/conf.d/default.conf
 USER 101
 EXPOSE 8080

@@ -61,6 +61,14 @@ docker run -i --rm --network host \
 
 Interactive MCP clients should use `docker run -i` (or the release binary below), not a detached `up -d`.
 
+## Security reporting
+
+If an MCP/agent session discovers a suspected Open-FDD vulnerability, **do not create a public issue or paste exploit evidence into a public chat**. Use GitHub Private Vulnerability Reporting:
+
+https://github.com/bbartling/open-fdd/security/advisories/new
+
+Include the affected component/version, reproduction steps, proof of impact, and redacted logs/screenshots. Never include JWTs, BAS credentials, registry tokens, private hostnames, or OT details in a public report. Canonical policy: [`SECURITY.md`](../SECURITY.md).
+
 ## Package mapping
 
 Empty Overview / RCx / Inspect after import means **missing roles** in the zip. Stamp `equipType`; Haystack `points` → SQL via `haystack_point_to_role`. Use existing `openfdd_csv_import_*` + `openfdd_csv_package_append` — do not wait on SCAFFOLD `mapping_suggest`. See [`docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md) and [`INSTRUCTIONS.md`](INSTRUCTIONS.md).

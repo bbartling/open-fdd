@@ -131,6 +131,8 @@ Use `openfdd_model_sparql_catalog` then `openfdd_model_sparql` with a SELECT que
 
 Never log tokens or Haystack passwords. Do not delete `workspace/data` without operator approval.
 
+If a suspected vulnerability is discovered, do **not** create a public GitHub issue/discussion or paste exploit evidence into public chat. Use GitHub Private Vulnerability Reporting at `https://github.com/bbartling/open-fdd/security/advisories/new`. Include affected component/version, reproduction steps, proof of impact, and redacted evidence. Never disclose JWTs, BAS credentials, registry tokens, private hostnames, or OT details. See [`SECURITY.md`](../SECURITY.md).
+
 ## Equipment typing
 
 During package cleaning/modeling, stamp generic `equipType` / `equipment_type` metadata. The product persists and prefers that stamp; folder/id inference is fallback. Empty Overview families on opaque ids are a package-modeling signal, not a reason to add site-specific Rust heuristics.
