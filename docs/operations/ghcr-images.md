@@ -16,6 +16,8 @@ ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_IMAGE_TAG:-nightly}
 ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
 ```
 
+Cloud platforms such as Railway need pull access to every selected image. For the simplest open-source deployment, make the GHCR packages public; otherwise configure the platform with explicit registry credentials. A `401 Unauthorized` from an unauthenticated manifest request usually means the package is still private. New GHCR packages can default to private, so re-check visibility when adding an image. See [Railway deployment](RAILWAY_DEPLOYMENT.md).
+
 Which images a deployment pulls depends on the recipe — see
 [Build recipes](build-recipes.html). Channel policy:
 [Release channels](release-channels.html).
