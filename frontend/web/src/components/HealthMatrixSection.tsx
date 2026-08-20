@@ -17,14 +17,18 @@ function fmtHours(v: unknown): string {
   return n.toFixed(1);
 }
 
-function healthRowClassBroken3Only(score: unknown): string | undefined {
-  return String(score ?? "") === "3/3" ? "health-row--broken-3" : undefined;
+export function healthRowClassFullyBroken(score: unknown): string | undefined {
+  const match = String(score ?? "").match(/^(\d+)\/(\d+)$/);
+  if (!match) return undefined;
+  const hit = Number(match[1]);
+  const total = Number(match[2]);
+  return total > 0 && hit === total ? "health-row--broken-3" : undefined;
 }
 
-/** @internal test export */
-export { healthRowClassBroken3Only };
+/** @internal compatibility export for existing tests/callers. */
+export const healthRowClassBroken3Only = healthRowClassFullyBroken;
 
-/** @deprecated use healthRowClassBroken3Only — kept for unit tests */
+/** @deprecated retained for legacy 3-dimension table tests. */
 export function healthRowClass(score: unknown): string | undefined {
   switch (String(score ?? "")) {
     case "1/3":
@@ -54,6 +58,10 @@ export interface HealthMatrixSectionProps {
   refreshToken: number;
   fetchHealth: (buildingId: string) => Promise<AnalyticsEnvelope>;
   flagColumns: HealthFlagColumn[];
+  /** Custom clean/empty state copy. */
+  emptyMessage?: string;
+  /** Keep the table headers visible when rows are empty. */
+  renderEmptyTable?: boolean;
 }
 
 export function HealthMatrixSection({
@@ -64,6 +72,8 @@ export function HealthMatrixSection({
   refreshToken,
   fetchHealth,
   flagColumns,
+  emptyMessage,
+  renderEmptyTable = false,
 }: HealthMatrixSectionProps) {
   const [env, setEnv] = useState<AnalyticsEnvelope | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -103,7 +113,7 @@ export function HealthMatrixSection({
     [env?.rows],
   );
 
-  const stale = !loading && !err && rows.length === 0;
+  const empty = !loading && !err && env !== null && rows.length === 0;
 
   const tableColumns = useMemo(() => {
     const cols: Array<{ key: string; header: string }> = [
@@ -137,6 +147,8 @@ export function HealthMatrixSection({
     return out;
   });
 
+  const showTable = matrixRows.length > 0 || (empty && renderEmptyTable);
+
   return (
     <section
       className={`overview-${family}-health`}
@@ -147,7 +159,7 @@ export function HealthMatrixSection({
       <p className="oracle-sidebar__caption">{caption}</p>
       {loading ? (
         <InlineAlert id={`${family}-health-loading`} variant="info" testId={test("loading")}>
-          Loading {family.toUpperCase()} health…
+          Loading {title}…
         </InlineAlert>
       ) : null}
       {err ? (
@@ -155,21 +167,24 @@ export function HealthMatrixSection({
           {err}
         </InlineAlert>
       ) : null}
-      {stale ? (
-        <InlineAlert id={`${family}-health-stale`} variant="warning" testId={test("stale")}>
-          No {family.toUpperCase()} equipment in this data model. Section hidden when the
-          package has no matching equip refs — run <strong>Update analytics</strong> /{" "}
-          <strong>Run all rules</strong> after mapping.
+      {empty ? (
+        <InlineAlert id={`${family}-health-empty`} variant="info" testId={test("empty")}>
+          {emptyMessage ?? (
+            <>
+              No {family.toUpperCase()} equipment in this data model. Run{" "}
+              <strong>Update analytics</strong> / <strong>Run all rules</strong> after mapping.
+            </>
+          )}
         </InlineAlert>
       ) : null}
-      {matrixRows.length ? (
+      {showTable ? (
         <DataTable
           id={`${family}-health-table`}
-          label={`${family.toUpperCase()} health matrix`}
+          label={`${title} matrix`}
           columns={tableColumns}
           rows={matrixRows}
           rowClassName={(row) =>
-            healthRowClassBroken3Only((row as { score_label?: unknown }).score_label)
+            healthRowClassFullyBroken((row as { score_label?: unknown }).score_label)
           }
           testId={test("table")}
         />
