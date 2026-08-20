@@ -27,17 +27,9 @@ jobs:
       - name: Apply scoped equipment-type contract patch
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          src = Path('.github/workflows/pr2-agent-patch.yml').read_text()
-          start = src.index("          python3 <<'PY'\n") + len("          python3 <<'PY'\n")
-          end = src.index("\n          PY\n", start)
-          lines = src[start:end].splitlines()
-          payload = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines)
-          Path('/tmp/pr2_patch.py').write_text(payload + '\n')
-          PY
-          python3 /tmp/pr2_patch.py
-          rm -f .github/workflows/pr2-agent-trigger.yml
+          python3 scripts/pr2_equipment_type_patch.py
+          rm -f scripts/pr2_equipment_type_patch.py
+          rm -f .github/workflows/pr2-agent-patch.yml .github/workflows/pr2-agent-trigger.yml
           git fetch origin master
           git checkout origin/master -- .github/workflows/docs_guard.yml
           cargo fmt --all
