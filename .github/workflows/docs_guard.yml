@@ -4,7 +4,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   guard:
@@ -15,25 +15,3 @@ jobs:
           fetch-depth: 0
       - name: Guard protected docs
         run: bash scripts/guard_docs.sh
-
-  pr3-overview-health-routes:
-    if: github.head_ref == 'feat/backend-overview-health-apis'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: feat/backend-overview-health-apis
-          fetch-depth: 0
-      - name: Apply backend Overview route patch
-        run: |
-          python3 scripts/pr3_routes_patch.py
-          rm scripts/pr3_routes_patch.py
-          git fetch origin master
-          git checkout origin/master -- .github/workflows/docs_guard.yml
-          cargo fmt --all
-          git diff --check
-          git config user.name "openfdd-pr-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add services/central/src/analytics/plant_health.rs services/central/src/routes.rs .github/workflows/docs_guard.yml scripts/pr3_routes_patch.py
-          git commit -m "Add Overview health API routes"
-          git push origin HEAD:feat/backend-overview-health-apis
