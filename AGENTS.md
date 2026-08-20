@@ -87,6 +87,26 @@ Aliases: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](docs/migration/vibe19/
 - **Overview layout:** full width beside sidebar (Streamlit-like); named Plotly PNG stems via `downloadFilename` on RCx / Inspect / FDD Plots; Lab rule menu A–Z; FDD series = required∪optional roles.
 - **Mech OAT bins:** status/cmd before amps; prefer web/weather OAT. Analytics envelopes: `scripts/synthetic_59_overview_analytics_soak.py`.
 
+## Deployment
+
+### Railway cloud lab
+
+Railway is an **experimental CSV/package lab/demo path**, not a replacement for the LAN/VPN/OT deployment contract or a claim of production public-internet hardening.
+
+- Minimal cloud stack: `openfdd-central` + `openfdd-web`.
+- Real optional images: `openfdd-fieldbus`, `openfdd-mqtt`, `openfdd-mcp`.
+- Do **not** invent `openfdd-commission`, `openfdd-mcp-rag`, or a Python/Streamlit commissioning runtime.
+- Both central and web currently listen on container port `8080`; local Compose maps web host port `3000` to container `8080`.
+- Central health is `GET /api/health`, not `/health`.
+- Cloud pulls require public GHCR package visibility or explicit registry pull credentials.
+- `OPENFDD_JWT_SECRET` and `OPENFDD_ADMIN_PASSWORD` must be deployment-unique secrets and must never be committed.
+- BACnet/fieldbus generally requires deliberate OT-LAN/VPN/router access; generic Railway networking does not provide BACnet broadcast discovery automatically.
+- Prefer `:nightly` for the latest green `master` channel or `:sha-<7>` for reproducibility.
+
+Full guide: [`docs/operations/RAILWAY_DEPLOYMENT.md`](docs/operations/RAILWAY_DEPLOYMENT.md). Image/tag contract: [`docs/operations/ghcr-images.md`](docs/operations/ghcr-images.md). Local stack entry point remains `./scripts/openfdd_stack_up.sh`.
+
+A Railway one-click template should represent the tested minimal `central + web` cloud-lab topology. Do not add a README deployment button until the real template exists and has been verified.
+
 ## Low-RAM hosts (bensbench)
 
 - **Never** local `docker build` / heavy Rust compile for stack images. Ship via PR → GH Actions → GHCR `nightly` / `sha-*`.
