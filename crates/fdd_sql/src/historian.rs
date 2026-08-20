@@ -214,7 +214,10 @@ mod tests {
             .collect()
             .await
             .unwrap();
-        assert_eq!(batches.iter().map(|batch| batch.num_rows()).sum::<usize>(), 2);
+        assert_eq!(
+            batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+            2
+        );
 
         let history = ctx.table("history").await.unwrap();
         let schema = history.schema();
