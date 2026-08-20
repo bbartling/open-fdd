@@ -154,6 +154,7 @@ mod tests {
     };
     use datafusion::arrow::datatypes::{DataType as ArrowDataType, Field, Schema, TimeUnit};
     use datafusion::arrow::record_batch::RecordBatch;
+    use datafusion::physical_plan::displayable;
     use fdd_store::{LocalStorage, ParquetPartWriter, StorageUrl};
     use tempfile::TempDir;
 
@@ -179,6 +180,39 @@ mod tests {
             vec![
                 Arc::new(TimestampNanosecondArray::from(vec![ts])),
                 Arc::new(Float64Array::from(vec![sat])),
+                Arc::new(StringArray::from(vec![equipment_id])),
+            ],
+        )
+        .unwrap()
+    }
+
+    fn canonical_batch_with_zone(
+        equipment_id: &str,
+        timestamp: &str,
+        sat: f64,
+        zone_t: f64,
+    ) -> RecordBatch {
+        let ts = DateTime::parse_from_rfc3339(timestamp)
+            .unwrap()
+            .with_timezone(&Utc)
+            .timestamp_nanos_opt()
+            .unwrap();
+        let schema = Arc::new(Schema::new(vec![
+            Field::new(
+                "timestamp_utc",
+                ArrowDataType::Timestamp(TimeUnit::Nanosecond, None),
+                false,
+            ),
+            Field::new("sat", ArrowDataType::Float64, true),
+            Field::new("zone_t", ArrowDataType::Float64, true),
+            Field::new("equipment_id", ArrowDataType::Utf8, false),
+        ]));
+        RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(TimestampNanosecondArray::from(vec![ts])),
+                Arc::new(Float64Array::from(vec![sat])),
+                Arc::new(Float64Array::from(vec![zone_t])),
                 Arc::new(StringArray::from(vec![equipment_id])),
             ],
         )
@@ -247,7 +281,7 @@ mod tests {
 
         let ctx = SessionContext::new();
         register_historian_dataset(&ctx, tmp.path()).await.unwrap();
-        let result = ctx
+        let df = ctx
             .sql(
                 "SELECT COUNT(*) AS n FROM history \
                  WHERE building_id = 'BUILDING_100' \
@@ -255,10 +289,32 @@ mod tests {
                    AND year = '2026' AND month = '08'",
             )
             .await
-            .unwrap()
-            .collect()
+            .unwrap();
+
+        let physical = ctx
+            .state()
+            .create_physical_plan(df.logical_plan())
             .await
             .unwrap();
+        let plan = displayable(physical.as_ref()).indent(false).to_string();
+        assert!(
+            plan.contains("building_id=BUILDING_100"),
+            "expected matching building partition in physical plan: {plan}"
+        );
+        assert!(
+            plan.contains("equipment_id=AHU_1"),
+            "expected matching equipment partition in physical plan: {plan}"
+        );
+        assert!(
+            plan.contains("month=08"),
+            "expected matching month partition in physical plan: {plan}"
+        );
+        assert!(
+            !plan.contains("BUILDING_200") && !plan.contains("month=09"),
+            "partition pruning kept unrelated files in physical plan: {plan}"
+        );
+
+        let result = df.collect().await.unwrap();
         let n = result[0]
             .column(0)
             .as_any()
@@ -266,6 +322,59 @@ mod tests {
             .unwrap()
             .value(0);
         assert_eq!(n, 1);
+    }
+
+    #[tokio::test]
+    async fn canonical_registration_merges_evolved_parquet_schemas() {
+        let tmp = TempDir::new().unwrap();
+        let writer = ParquetPartWriter::new(LocalStorage::new(tmp.path()));
+        writer
+            .write_history_batch(
+                "BUILDING_100",
+                "AHU_1",
+                &canonical_batch("AHU_1", "2026-08-20T12:00:00Z", 55.0),
+            )
+            .unwrap();
+        writer
+            .write_history_batch(
+                "BUILDING_100",
+                "AHU_2",
+                &canonical_batch_with_zone("AHU_2", "2026-08-20T12:05:00Z", 57.0, 72.0),
+            )
+            .unwrap();
+
+        let ctx = SessionContext::new();
+        register_historian_dataset(&ctx, tmp.path()).await.unwrap();
+        let history = ctx.table("history").await.unwrap();
+        assert!(
+            history
+                .schema()
+                .field_with_unqualified_name("zone_t")
+                .is_ok(),
+            "merged canonical schema should expose newly added role columns"
+        );
+
+        let rows = ctx
+            .sql("SELECT COUNT(*) AS n, COUNT(zone_t) AS with_zone FROM history")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+        let total = rows[0]
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap()
+            .value(0);
+        let with_zone = rows[0]
+            .column(1)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap()
+            .value(0);
+        assert_eq!(total, 2);
+        assert_eq!(with_zone, 1);
     }
 
     #[tokio::test]
