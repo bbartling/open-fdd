@@ -47,7 +47,7 @@ Open-FDD maps Haystack-style JSON point roles to live or historical OT/CSV data 
 
 **Ready today — local, behind the firewall:** `./scripts/openfdd_stack_up.sh react` for CSV/zip FDD on your LAN or VPN. Not intended for the public internet.
 
-**Experimental cloud lab:** Railway can run the minimal `openfdd-central` + `openfdd-web` CSV/package stack from GHCR. See [Railway deployment](docs/operations/RAILWAY_DEPLOYMENT.md). This is a lab/demo path, not a production-hardening claim.
+**Experimental cloud lab:** Railway can run the minimal `openfdd-central` + `openfdd-web` CSV/package stack directly from GHCR. The web image supports a runtime central upstream for Railway private DNS. See [Railway deployment](docs/operations/RAILWAY_DEPLOYMENT.md). This is a lab/demo path, not a production-hardening claim.
 
 **Coming soon:** OT edge (`react-ot` — BACnet, Modbus, Haystack, MQTTS) and managed **cloud hosting**. Internet-facing deployment with production security hardening targets **Fall 2026**.
 
@@ -136,8 +136,12 @@ GHCR images build on every `master` merge. Set **`OPENFDD_IMAGE_TAG=nightly`** (
 
 Intended for **LAN / VPN / OT networks**, not public internet hosting.
 
+## Security
+
+Do **not** report vulnerabilities through public GitHub issues or discussions. Use [GitHub Private Vulnerability Reporting](https://github.com/bbartling/open-fdd/security/advisories/new). See [SECURITY.md](SECURITY.md) for what to include and how to redact sensitive OT/deployment evidence.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
 
-Version **3.3.1** on `master` · PyPI **4.4.2**
+Version **3.3.2** on `master` · PyPI **4.4.2**
