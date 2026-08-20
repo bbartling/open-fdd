@@ -1,7 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { DataTable } from "./widgets/DataTable";
-import { healthRowClass, healthRowClassBroken3Only, tri } from "./HealthMatrixSection";
+import {
+  HealthMatrixSection,
+  healthRowClass,
+  healthRowClassBroken3Only,
+  healthRowClassFullyBroken,
+  tri,
+} from "./HealthMatrixSection";
+import type { AnalyticsEnvelope } from "../api/analyticsApi";
+
+function emptyEnvelope(): AnalyticsEnvelope {
+  return {
+    schema_version: "sensor_fault_matrix_v1",
+    query_version: "sensor-faults-v1",
+    generated_at: "2026-08-20T00:00:00Z",
+    engine: "datafusion",
+    warnings: [],
+    rows: [],
+    equipment: [],
+    points: [],
+    skipped: [],
+  };
+}
 
 describe("health matrix tint", () => {
   it("maps score to broken-N classes and skips unknown", () => {
@@ -14,11 +35,13 @@ describe("health matrix tint", () => {
     expect(tri(true)).toBe("true");
   });
 
-  it("overview matrix tints only fully broken 3/3 rows", () => {
+  it("overview matrix highlights fully faulted arbitrary-width rows", () => {
+    expect(healthRowClassFullyBroken("3/3")).toBe("health-row--broken-3");
+    expect(healthRowClassFullyBroken("5/5")).toBe("health-row--broken-3");
+    expect(healthRowClassFullyBroken("7/7")).toBe("health-row--broken-3");
+    expect(healthRowClassFullyBroken("4/5")).toBeUndefined();
+    expect(healthRowClassFullyBroken("?/7")).toBeUndefined();
     expect(healthRowClassBroken3Only("3/3")).toBe("health-row--broken-3");
-    expect(healthRowClassBroken3Only("2/3")).toBeUndefined();
-    expect(healthRowClassBroken3Only("1/3")).toBeUndefined();
-    expect(healthRowClassBroken3Only("0/3")).toBeUndefined();
     render(
       <DataTable
         id="h3"
@@ -29,10 +52,10 @@ describe("health matrix tint", () => {
           { key: "sat_dev", header: "flag" },
         ]}
         rows={[
-          { score_label: "2/3", equipment_id: "AHU_2", sat_dev: "true" },
-          { score_label: "3/3", equipment_id: "AHU_3", sat_dev: "true" },
+          { score_label: "4/5", equipment_id: "AHU_2", sat_dev: "true" },
+          { score_label: "5/5", equipment_id: "AHU_3", sat_dev: "true" },
         ]}
-        rowClassName={(row) => healthRowClassBroken3Only(row.score_label)}
+        rowClassName={(row) => healthRowClassFullyBroken(row.score_label)}
       />,
     );
     const rows = screen.getByTestId("health-table-3only").querySelectorAll("tbody tr");
@@ -67,5 +90,25 @@ describe("health matrix tint", () => {
     expect(rows[1].className).toContain("health-row--broken-1");
     expect(rows[2].getAttribute("data-broken")).toBe("3");
     expect(rows[3].getAttribute("data-broken")).toBeNull();
+  });
+
+  it("keeps the clean sensor table shell visible", async () => {
+    render(
+      <HealthMatrixSection
+        family="sensor"
+        title="Sensor faults"
+        caption="Sensor validation faults."
+        buildingId="B1"
+        refreshToken={0}
+        fetchHealth={async () => emptyEnvelope()}
+        flagColumns={[{ key: "flatline", ruleId: "SV-FLATLINE" }]}
+        emptyMessage="No sensor faults in window"
+        renderEmptyTable
+      />,
+    );
+
+    expect(await screen.findByText("No sensor faults in window")).toBeTruthy();
+    expect(screen.getByTestId("sensor-health-table")).toBeTruthy();
+    expect(screen.getByText("SV-FLATLINE fault_h")).toBeTruthy();
   });
 });

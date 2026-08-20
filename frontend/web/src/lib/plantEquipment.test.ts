@@ -11,10 +11,31 @@ describe("plantEquipmentFamilies", () => {
     ]);
     expect(f.hasAhu).toBe(true);
     expect(f.hasChiller).toBe(true);
+    expect(f.hasCoolingTower).toBe(false);
     expect(f.hasVav).toBe(true);
     expect(f.hasWeather).toBe(true);
     expect(f.hasHeatPump).toBe(false);
     expect(f.hasBoiler).toBe(false);
+  });
+
+  it("separates cooling towers from chillers", () => {
+    const f = plantEquipmentFamilies([
+      {
+        equipment_id: "CT_opaque",
+        equipment_type: "PLANT",
+        equipment_type_raw: "cooling_tower",
+      },
+    ]);
+    expect(f.hasCoolingTower).toBe(true);
+    expect(f.hasChiller).toBe(false);
+  });
+
+  it("recognizes generic tower ids without making them chillers", () => {
+    const f = plantEquipmentFamilies([
+      { equipment_id: "TOWER_1", equipment_type: "PLANT" },
+    ]);
+    expect(f.hasCoolingTower).toBe(true);
+    expect(f.hasChiller).toBe(false);
   });
 
   it("hides heat pump matrix when no HP refs", () => {
