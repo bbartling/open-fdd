@@ -17,9 +17,14 @@ RUN npm run build \
   && printf '{"ok":true,"service":"openfdd-web","git_sha":"%s","git":"%s","version":"%s","image_tag":"%s"}\n' \
        "$OPENFDD_GIT_SHA" "$short" "$OPENFDD_WEB_VERSION" "$image_tag" > /app/dist/version.json
 
-# Non-root nginx (listens on 8080).
+# Non-root nginx (listens on 8080). The nginx image entrypoint renders
+# /etc/nginx/templates/*.template with envsubst before starting nginx.
+# Keep Compose-compatible central:8080 as the default while allowing cloud
+# runtimes such as Railway to point the same GHCR image at private service DNS.
 FROM nginxinc/nginx-unprivileged:1.27-alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+ENV OPENFDD_CENTRAL_UPSTREAM=central:8080
+ENV NGINX_ENVSUBST_FILTER=OPENFDD_CENTRAL_UPSTREAM
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 # Read-only rootfs friendly: html owned by nginx user (UID 101).
 USER root
