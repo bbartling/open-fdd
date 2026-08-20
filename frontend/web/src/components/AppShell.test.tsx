@@ -7,7 +7,7 @@ import { MAIN_SECTIONS } from "../nav/sections";
 vi.mock("../api/client", () => ({
   apiFetch: vi.fn(async (path: string) => {
     if (path === "/api/health") {
-      return { ok: true, version: "3.3.1+abcdef123456", service: "openfdd-central" };
+      return { ok: true, version: "3.3.2+abcdef123456", service: "openfdd-central" };
     }
     return {};
   }),
@@ -70,7 +70,7 @@ describe("AppShell layout parity", () => {
 
     expect(screen.getByText("Open-FDD")).toBeTruthy();
     expect(await screen.findByTestId("app-revision")).toBeTruthy();
-    expect(screen.getByTestId("app-revision").textContent).toBe("3.3.1+abcdef1");
+    expect(screen.getByTestId("app-revision").textContent).toBe("3.3.2+abcdef1");
     expect(screen.getByTestId("sidebar-sites")).toBeTruthy();
     expect(screen.queryByTestId("nav-sites")).toBeNull();
     expect(screen.getAllByText("Sites").length).toBeGreaterThanOrEqual(1);
