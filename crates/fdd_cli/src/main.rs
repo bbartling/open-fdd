@@ -7,8 +7,8 @@ use clap::{Parser, Subcommand};
 use fdd_bench::{compare_results, run_benchmark, write_compare_markdown};
 use fdd_core::validate_building;
 use fdd_rules::{load_registry, run_all_rules_with_overrides};
-use fdd_sql::{register_parquet_tree, run_sql_file};
-use fdd_store::ingest_building;
+use fdd_sql::{new_historian_session, register_parquet_tree, run_sql_file};
+use fdd_store::{ingest_building, HistorianConfig};
 use inventory::write_inventory;
 
 #[derive(Parser)]
@@ -124,7 +124,8 @@ async fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
         Commands::Query { parquet, sql_file } => {
-            let ctx = datafusion::prelude::SessionContext::new();
+            let historian = HistorianConfig::from_env()?;
+            let ctx = new_historian_session(&historian)?;
             register_parquet_tree(&ctx, &parquet).await?;
             let result = run_sql_file(&ctx, &sql_file).await?;
             println!("{}", serde_json::to_string_pretty(&result)?);
