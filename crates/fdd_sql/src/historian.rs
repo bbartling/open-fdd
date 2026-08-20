@@ -315,10 +315,7 @@ mod tests {
         );
 
         let result = df.collect().await.unwrap();
-        assert_eq!(
-            result.iter().map(RecordBatch::num_rows).sum::<usize>(),
-            1
-        );
+        assert_eq!(result.iter().map(RecordBatch::num_rows).sum::<usize>(), 1);
         let sat = result[0]
             .column(0)
             .as_any()
