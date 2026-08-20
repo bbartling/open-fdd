@@ -8,6 +8,7 @@ pub mod csv_ingest;
 pub mod dashboard;
 pub mod data_management;
 pub mod drivers;
+pub mod equipment_types;
 pub mod export;
 pub mod faults;
 pub mod fdd;

@@ -128,3 +128,7 @@ A Railway one-click template should represent the tested minimal `central + web`
 See [docs/agent/index.md](docs/agent/index.md) for external-agent architecture.
 
 For library/migration/PR missions (Milestone A), start at [openfdd_agent_spec/AGENTS.md](openfdd_agent_spec/AGENTS.md).
+
+### Stamped equipment type precedence
+
+Package ingest persists `equipType` / `equipment_type`; recognized stamps win over folder/id heuristics in inventory and plant-health grouping. Opaque BAS ids are supported (`AC_1` + `equipType: ahu` → AHU). Vendor/campus aliases remain preprocess concerns and must not be hard-coded into product Rust.

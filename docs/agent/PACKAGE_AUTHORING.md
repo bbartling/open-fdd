@@ -91,3 +91,7 @@ No `if building == …`, no vendor suffix table, no default weather city, no gly
 Use existing tools: `openfdd_csv_import_*`, `openfdd_csv_package_append`, `openfdd_ingest_contract`. SCAFFOLD `package_preflight` / `mapping_suggest` are **not** in the `mcp/` crate this cycle.
 
 TADCO / Niagara long-format grids are a **preprocess example** (pivot before ingest), not product hardcoding.
+
+## Equipment type precedence
+
+Stamp each equipment block with `equipType` (preferred) or `equipment_type`. Open-FDD persists that stamp during package ingest and uses it before generic folder/id heuristics for inventory and analytics. Example: a folder named `AC_1` with `equipType: ahu` is treated as an AHU. If the stamp is absent or unrecognized, vendor-neutral id heuristics remain the fallback. Vendor/site-specific aliases belong in the preprocess package generator, never in product Rust.

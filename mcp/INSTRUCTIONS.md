@@ -130,3 +130,7 @@ Use `openfdd_model_sparql_catalog` then `openfdd_model_sparql` with a SELECT que
 ## Safety
 
 Never log tokens or Haystack passwords. Do not delete `workspace/data` without operator approval.
+
+## Equipment typing
+
+During package cleaning/modeling, stamp generic `equipType` / `equipment_type` metadata. The product persists and prefers that stamp; folder/id inference is fallback. Empty Overview families on opaque ids are a package-modeling signal, not a reason to add site-specific Rust heuristics.

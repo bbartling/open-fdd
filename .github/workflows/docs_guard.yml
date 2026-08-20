@@ -4,7 +4,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   guard:
@@ -15,47 +15,3 @@ jobs:
           fetch-depth: 0
       - name: Guard protected docs
         run: bash scripts/guard_docs.sh
-
-  pr2-equipment-type-patch:
-    if: github.head_ref == 'feat/equipment-type-contract'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: feat/equipment-type-contract
-          fetch-depth: 0
-      - name: Apply scoped equipment-type contract patch
-        shell: bash
-        run: |
-          python3 scripts/pr2_patch_fix.py
-          python3 scripts/pr2_patch_fix2.py
-          python3 scripts/pr2_patch_fix3.py
-          python3 scripts/pr2_equipment_type_patch.py
-          python3 - <<'PY'
-          from pathlib import Path
-          for name in [
-              'AGENTS.md',
-              'docs/agent/PACKAGE_AUTHORING.md',
-              'docs/mcp-agents/roles/package-mapping.md',
-              'mcp/INSTRUCTIONS.md',
-              'mcp/README.md',
-              'openfdd_agent_spec/AGENTS.md',
-              'openfdd_agent_spec/DATA_CONTRACT.md',
-              'openfdd_agent_spec/skills/openfdd-package-mapping/SKILL.md',
-          ]:
-              p = Path(name)
-              p.write_text(p.read_text().rstrip() + '\n')
-          PY
-          rm -f scripts/pr2_patch_fix.py scripts/pr2_patch_fix2.py scripts/pr2_patch_fix3.py scripts/pr2_equipment_type_patch.py
-          rm -f .github/workflows/pr2-agent-patch.yml .github/workflows/pr2-agent-trigger.yml
-          git fetch origin master
-          git checkout origin/master -- .github/workflows/docs_guard.yml
-          cargo fmt --all
-          git diff --check
-          git status --short
-          git config user.name "open-fdd automation"
-          git config user.email "actions@users.noreply.github.com"
-          git add -A
-          git commit -m "Persist and prefer stamped equipment types"
-          git push origin HEAD:feat/equipment-type-contract
-          git push origin --delete feat/railway-deployment-foundation || true

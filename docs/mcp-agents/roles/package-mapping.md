@@ -121,3 +121,7 @@ All entries also live in [`tool-catalog.v1.json`](tool-catalog.v1.json).
 - [ ] `mappings/{revision}.json` exists and revision ID reported to the user.
 - [ ] PROVISIONAL/PROVEN status reported per role after post-import checks.
 - [ ] Zero BACnet interactions in the session trace.
+
+## Equipment type hygiene
+
+Stamp a generic `equipType` / `equipment_type` whenever the source folder id is opaque. The stamp is persisted by package ingest and wins over id heuristics (`AC_1` + `equipType: ahu` → AHU). Keep vendor/campus remaps in the preprocess repository.

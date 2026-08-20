@@ -23,9 +23,7 @@ fn normalized_token(raw: &str) -> String {
 /// not in Open-FDD product code.
 pub fn canonical_kind(raw: &str) -> Option<&'static str> {
     match normalized_token(raw).as_str() {
-        "ahu" | "airhandler" | "airhandlingunit" | "rtu" | "mau" | "doas" | "fcu" => {
-            Some("ahu")
-        }
+        "ahu" | "airhandler" | "airhandlingunit" | "rtu" | "mau" | "doas" | "fcu" => Some("ahu"),
         "vav" | "zoneterminal" => Some("vav"),
         "chiller" | "chwplant" | "chilledwaterplant" => Some("chiller"),
         "coolingtower" | "tower" => Some("cooling_tower"),
@@ -42,7 +40,8 @@ pub fn infer_kind_from_id(equipment_id: &str) -> &'static str {
         "weather"
     } else if id.contains("VAV") || id.contains("ZONE") {
         "vav"
-    } else if id.contains("AHU") || id.contains("RTU") || id.contains("MAU") || id.contains("DOAS") {
+    } else if id.contains("AHU") || id.contains("RTU") || id.contains("MAU") || id.contains("DOAS")
+    {
         "ahu"
     } else if id.contains("CHILL") || id.contains("CHLR") || id.starts_with("CHW") {
         "chiller"
@@ -156,7 +155,13 @@ mod tests {
     fn nested_map_reads_both_stamp_spellings() {
         let camel = json!({"equip": {"AC_1": {"equipType": "ahu", "points": {}}}});
         let snake = json!({"equipment": {"AC_2": {"equipment_type": "heatPump", "points": {}}}});
-        assert_eq!(stamped_type_from_map_json(&camel, "AC_1").as_deref(), Some("ahu"));
-        assert_eq!(stamped_type_from_map_json(&snake, "AC_2").as_deref(), Some("heatPump"));
+        assert_eq!(
+            stamped_type_from_map_json(&camel, "AC_1").as_deref(),
+            Some("ahu")
+        );
+        assert_eq!(
+            stamped_type_from_map_json(&snake, "AC_2").as_deref(),
+            Some("heatPump")
+        );
     }
 }

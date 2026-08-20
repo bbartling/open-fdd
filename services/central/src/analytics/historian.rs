@@ -339,6 +339,24 @@ fn round2(x: f64) -> f64 {
 
 /// Map equipment_id → Overview plant chart group (air / boiler / chiller).
 /// Zone terminals (VAV / ZONE) and unknown meters return `None`.
+pub fn plant_group_for_typed(
+    equipment_id: &str,
+    stamped_type: Option<&str>,
+) -> Option<&'static str> {
+    if let Some(kind) =
+        stamped_type.and_then(open_fdd_edge_prototype::equipment_types::canonical_kind)
+    {
+        return match kind {
+            "ahu" => Some("air"),
+            "chiller" | "cooling_tower" | "heatpump" => Some("chiller"),
+            "boiler" => Some("boiler"),
+            "vav" | "weather" => None,
+            _ => None,
+        };
+    }
+    plant_group_for(equipment_id)
+}
+
 pub fn plant_group_for(equipment_id: &str) -> Option<&'static str> {
     let eq = equipment_id.to_ascii_uppercase().replace('\\', "/");
     if is_zone_terminal_id(&eq) {
@@ -515,6 +533,8 @@ pub async fn runtime_from_history(
     let query = AnalyticsQuery::default();
     let max_gap = max_gap_seconds.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
+    let stamped_types =
+        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
 
     if cols.contains("equipment_id") {
         // Fan for air handlers; chiller/boiler/pump status for plant motors.
@@ -613,8 +633,9 @@ ORDER BY i.equipment_id
                             "coverage_pct": round2(coverage_pct),
                             "samples": samples,
                             "on_samples": on_samples,
-                            "plant_group": plant_group_for(
-                                row.get("equipment_id").and_then(|v| v.as_str()).unwrap_or("")
+                            "plant_group": plant_group_for_typed(
+                                &eq,
+                                stamped_types.get(&eq).map(String::as_str),
                             ),
                         }));
                     }
@@ -626,6 +647,7 @@ ORDER BY i.equipment_id
                         max_gap,
                         &eq_filter,
                         plant_signal_label(&cols),
+                        &stamped_types,
                     )
                     .await
                     .unwrap_or_else(|e| {
@@ -692,6 +714,7 @@ async fn runtime_weekly_plant_rows(
     max_gap: f64,
     eq_filter: &str,
     signal_label: &str,
+    stamped_types: &BTreeMap<String, String>,
 ) -> Result<Vec<Value>> {
     let oat_by_ts_cte = match oat {
         Some(c) => format!(
@@ -775,7 +798,8 @@ ORDER BY week_start, equipment_id
             .get("equipment_id")
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        let Some(plant) = plant_group_for(eq) else {
+        let Some(plant) = plant_group_for_typed(eq, stamped_types.get(eq).map(String::as_str))
+        else {
             continue;
         };
         let week = row

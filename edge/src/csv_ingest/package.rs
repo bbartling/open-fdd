@@ -320,6 +320,7 @@ struct EquipmentPlan {
     headers: Vec<String>,
     roles: BTreeMap<String, String>,
     map_source: String,
+    equipment_type: Option<String>,
 }
 
 fn csv_headers(bytes: &[u8]) -> Result<Vec<String>, String> {
@@ -388,6 +389,20 @@ fn parquet_out_dir() -> PathBuf {
         return PathBuf::from(p);
     }
     workspace_dir().join(".cache/parquet")
+}
+
+fn sync_equipment_types_cache(
+    building_root: &Path,
+    out_dir: &Path,
+    building_id: &str,
+) -> Result<(), String> {
+    let path = building_root.join(crate::equipment_types::EQUIPMENT_TYPES_FILE);
+    let Ok(body) = std::fs::read_to_string(path) else {
+        return Ok(());
+    };
+    let types: BTreeMap<String, String> =
+        serde_json::from_str(&body).map_err(|e| format!("equipment type registry parse: {e}"))?;
+    crate::equipment_types::write_type_map(out_dir, building_id, &types)
 }
 
 /// Load `openfdd_package_v1` zip bytes: validate, materialize under
@@ -510,6 +525,7 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         // Sibling map (first match wins), then root column_map.json supplement.
         let mut map_source = String::new();
         let mut points: Option<BTreeMap<String, String>> = None;
+        let mut equipment_type: Option<String> = None;
         for name in [
             "history_wide.json",
             "history_wide.column_map.json",
@@ -518,6 +534,10 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
             if let Some(bytes) = in_building.get(&dir.join(name)) {
                 match serde_json::from_slice::<Value>(bytes) {
                     Ok(v) => {
+                        if equipment_type.is_none() {
+                            equipment_type =
+                                crate::equipment_types::stamped_type_from_map_json(&v, &equip_id);
+                        }
                         points = points_from_map_json(&v, &equip_id);
                         if points.is_some() {
                             map_source = format!("{}/{name}", dir.display());
@@ -527,6 +547,12 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
                     }
                     Err(e) => warnings.push(format!("{equip_id}: {name}: {e}")),
                 }
+            }
+        }
+        if equipment_type.is_none() {
+            if let Some(root) = &root_map {
+                equipment_type =
+                    crate::equipment_types::stamped_type_from_map_json(root, &equip_id);
             }
         }
         if points.is_none() {
@@ -552,6 +578,7 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
             headers,
             roles,
             map_source,
+            equipment_type,
         });
     }
 
@@ -618,6 +645,28 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         }
     }
 
+    let stamped_types: BTreeMap<String, String> = plans
+        .iter()
+        .filter_map(|plan| {
+            plan.equipment_type
+                .as_ref()
+                .map(|t| (plan.equipment_id.clone(), t.clone()))
+        })
+        .collect();
+    if !stamped_types.is_empty() {
+        match serde_json::to_string_pretty(&stamped_types) {
+            Ok(body) => {
+                if let Err(e) = std::fs::write(
+                    building_root.join(crate::equipment_types::EQUIPMENT_TYPES_FILE),
+                    body,
+                ) {
+                    warnings.push(format!("equipment type registry not materialized: {e}"));
+                }
+            }
+            Err(e) => warnings.push(format!("equipment type registry serialize: {e}")),
+        }
+    }
+
     let mut equipment_report = Vec::new();
     for plan in &plans {
         let eq_dir = building_root.join(plan.dir.file_name().unwrap_or_default());
@@ -633,6 +682,17 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         if let Err(e) = write_columns_csv(&eq_dir.join("columns.csv"), &plan.headers, &plan.roles) {
             return json!({"ok": false, "error": e});
         }
+        if let Some(raw_type) = plan.equipment_type.as_deref() {
+            let meta = json!({
+                "equipment_id": plan.equipment_id,
+                "equipType": raw_type,
+                "canonical_kind": crate::equipment_types::canonical_kind(raw_type),
+            });
+            let _ = std::fs::write(
+                eq_dir.join("equipment.json"),
+                serde_json::to_string_pretty(&meta).unwrap_or_default(),
+            );
+        }
         let unmapped: Vec<&String> = plan
             .headers
             .iter()
@@ -644,6 +704,7 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
             "roles": plan.roles,
             "unmapped_columns": unmapped,
             "map_source": plan.map_source,
+            "equipment_type": plan.equipment_type,
         }));
     }
 
@@ -670,6 +731,9 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
     ) {
         Ok(report) => {
             warnings.extend(feather_warnings);
+            if let Err(e) = sync_equipment_types_cache(&building_root, &out_dir, &building_id) {
+                warnings.push(e);
+            }
             if let Err(e) = crate::csv_ingest::dataset::register_package_dataset(
                 &building_id,
                 report.total_rows,

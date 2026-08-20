@@ -150,3 +150,7 @@ Seed lane: `POST /api/csv/import/package`. Layout (generic `AHU_1` / `VAV_1` / `
 Role aliases and equipment types: `open_fdd.analytics` / site model helpers and
 docs under `docs/rules/cookbook/` + migration [`ROLE_MAPPING_PARITY.md`](../docs/migration/vibe19/ROLE_MAPPING_PARITY.md).
 Phase 2 consolidates into shared contracts.
+
+## Equipment type precedence
+
+`equipType` / `equipment_type` is durable package metadata. When present and recognized, it is authoritative for Open-FDD equipment classification; generic equipment-id heuristics are fallback only. `AC_1 + equipType: ahu` must classify as AHU. Keep vendor/campus naming remaps in preprocessors rather than product code.
