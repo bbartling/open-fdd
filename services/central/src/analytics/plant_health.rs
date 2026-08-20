@@ -8,7 +8,7 @@ use datafusion::prelude::SessionContext;
 use fdd_sql::run_sql;
 use serde_json::{json, Value};
 
-use super::historian::{plant_group_for, try_register_history_scoped};
+use super::historian::try_register_history_scoped;
 use super::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest, DF_ENGINE};
 
 pub const QV_AHU_HEALTH: &str = "ahu-health-v1";
@@ -174,6 +174,7 @@ pub fn matches_family_typed(
     }
 }
 
+#[cfg(test)]
 pub fn matches_family(family: PlantFamily, equipment_id: &str) -> bool {
     matches_family_typed(family, equipment_id, None)
 }

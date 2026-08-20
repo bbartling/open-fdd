@@ -646,8 +646,7 @@ ORDER BY i.equipment_id
                         weekly_oat_col(&cols),
                         max_gap,
                         &eq_filter,
-                        plant_signal_label(&cols),
-                        &stamped_types,
+                        (plant_signal_label(&cols), &stamped_types),
                     )
                     .await
                     .unwrap_or_else(|e| {
@@ -713,9 +712,9 @@ async fn runtime_weekly_plant_rows(
     oat: Option<&str>,
     max_gap: f64,
     eq_filter: &str,
-    signal_label: &str,
-    stamped_types: &BTreeMap<String, String>,
+    metadata: (&str, &BTreeMap<String, String>),
 ) -> Result<Vec<Value>> {
+    let (signal_label, stamped_types) = metadata;
     let oat_by_ts_cte = match oat {
         Some(c) => format!(
             r#"
