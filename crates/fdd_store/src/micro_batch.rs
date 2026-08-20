@@ -139,11 +139,14 @@ impl MicroBatchHistorian {
         }
 
         let rows = batch.num_rows();
-        let pending = self.pending.entry(key.clone()).or_insert_with(|| PendingBatch {
-            batches: Vec::new(),
-            rows: 0,
-            first_buffered_at: now,
-        });
+        let pending = self
+            .pending
+            .entry(key.clone())
+            .or_insert_with(|| PendingBatch {
+                batches: Vec::new(),
+                rows: 0,
+                first_buffered_at: now,
+            });
         pending.rows += rows;
         pending.batches.push(batch);
 
@@ -209,11 +212,9 @@ impl MicroBatchHistorian {
             }
         };
 
-        let parts = self.writer.write_history_batch(
-            &key.building_id,
-            &key.equipment_id,
-            &combined,
-        )?;
+        let parts =
+            self.writer
+                .write_history_batch(&key.building_id, &key.equipment_id, &combined)?;
 
         // Remove only after every immutable part was successfully published.
         self.pending.remove(key);
@@ -335,18 +336,10 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mut historian = historian(&tmp, 100, Duration::from_secs(60));
         historian
-            .push(
-                "BUILDING_100",
-                "AHU_1",
-                batch(&["2026-08-20T12:00:00Z"]),
-            )
+            .push("BUILDING_100", "AHU_1", batch(&["2026-08-20T12:00:00Z"]))
             .unwrap();
         historian
-            .push(
-                "BUILDING_100",
-                "AHU_2",
-                batch(&["2026-08-20T12:00:00Z"]),
-            )
+            .push("BUILDING_100", "AHU_2", batch(&["2026-08-20T12:00:00Z"]))
             .unwrap();
         let flushed = historian.shutdown_flush().unwrap();
         assert_eq!(flushed.len(), 2);
@@ -361,11 +354,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mut historian = historian(&tmp, 100, Duration::from_secs(60));
         historian
-            .push(
-                "BUILDING_100",
-                "AHU_1",
-                batch(&["2026-08-20T12:00:00Z"]),
-            )
+            .push("BUILDING_100", "AHU_1", batch(&["2026-08-20T12:00:00Z"]))
             .unwrap();
 
         let schema = Arc::new(Schema::new(vec![
@@ -384,9 +373,7 @@ mod tests {
             ],
         )
         .unwrap();
-        assert!(historian
-            .push("BUILDING_100", "AHU_1", changed)
-            .is_err());
+        assert!(historian.push("BUILDING_100", "AHU_1", changed).is_err());
         assert_eq!(historian.pending_rows(), 1);
     }
 
