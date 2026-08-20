@@ -45,6 +45,8 @@ H1 merged only after its changed-head FDD, Rust stack, AppSec, docs, and securit
 - [~] immutable collision-safe part names
 - [~] UTC month split for RecordBatches
 - [~] explicit Snappy compression + page statistics + bounded row groups
+- [~] validate optional `building_id` / `equipment_id` batch identity against the trusted partition path
+- [~] omit identity columns from physical Parquet so H3 can expose them exactly once as Hive partition columns
 - [~] local crash-safe publish
 - [~] append/month-boundary/round-trip/strict timestamp tests
 - [~] bounded micro-batch accumulator with per-equipment schema consistency
