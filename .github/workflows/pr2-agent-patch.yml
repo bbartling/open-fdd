@@ -1,0 +1,544 @@
+name: PR2 equipment-type patch
+
+on:
+  push:
+    branches: [feat/equipment-type-contract]
+    paths:
+      - .github/workflows/pr2-agent-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/equipment-type-contract
+          fetch-depth: 0
+      - name: Apply scoped PR2 patch
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected snippet not found in {path}: {old[:120]!r}")
+              text2 = text.replace(old, new, count)
+              p.write_text(text2)
+
+          # Export the generic type registry from the edge crate.
+          replace("edge/src/lib.rs", "pub mod csv_ingest;\n", "pub mod csv_ingest;\npub mod equipment_types;\n")
+
+          # Package ingest: capture equipType/equipment_type, materialize it, and persist
+          # a building-scoped registry beside both source CSV and Parquet caches.
+          replace("edge/src/csv_ingest/package.rs", '''struct EquipmentPlan {
+              equipment_id: String,
+              dir: PathBuf,
+              headers: Vec<String>,
+              roles: BTreeMap<String, String>,
+              map_source: String,
+          }
+          ''', '''struct EquipmentPlan {
+              equipment_id: String,
+              dir: PathBuf,
+              headers: Vec<String>,
+              roles: BTreeMap<String, String>,
+              map_source: String,
+              equipment_type: Option<String>,
+          }
+          ''')
+          replace("edge/src/csv_ingest/package.rs", '''        let mut map_source = String::new();
+                  let mut points: Option<BTreeMap<String, String>> = None;
+          ''', '''        let mut map_source = String::new();
+                  let mut points: Option<BTreeMap<String, String>> = None;
+                  let mut equipment_type: Option<String> = None;
+          ''')
+          replace("edge/src/csv_ingest/package.rs", '''                    Ok(v) => {
+                                      points = points_from_map_json(&v, &equip_id);
+          ''', '''                    Ok(v) => {
+                                      if equipment_type.is_none() {
+                                          equipment_type = crate::equipment_types::stamped_type_from_map_json(&v, &equip_id);
+                                      }
+                                      points = points_from_map_json(&v, &equip_id);
+          ''')
+          replace("edge/src/csv_ingest/package.rs", '''        if points.is_none() {
+                      if let Some(root) = &root_map {
+                          points = points_from_map_json(root, &equip_id);
+                          if points.is_some() {
+                              map_source = "column_map.json (package root)".into();
+                          }
+                      }
+                  }
+          ''', '''        if let Some(root) = &root_map {
+                      if equipment_type.is_none() {
+                          equipment_type = crate::equipment_types::stamped_type_from_map_json(root, &equip_id);
+                      }
+                      if points.is_none() {
+                          points = points_from_map_json(root, &equip_id);
+                          if points.is_some() {
+                              map_source = "column_map.json (package root)".into();
+                          }
+                      }
+                  }
+          ''')
+          replace("edge/src/csv_ingest/package.rs", '''            roles,
+                      map_source,
+                  });
+          ''', '''            roles,
+                      map_source,
+                      equipment_type,
+                  });
+          ''')
+          replace("edge/src/csv_ingest/package.rs", '''    let mut equipment_report = Vec::new();
+              for plan in &plans {
+          ''', '''    let stamped_types: BTreeMap<String, String> = plans
+                  .iter()
+                  .filter_map(|p| p.equipment_type.as_ref().map(|t| (p.equipment_id.clone(), t.clone())))
+                  .collect();
+              if !stamped_types.is_empty() {
+                  if let Ok(body) = serde_json::to_string_pretty(&stamped_types) {
+                      if let Err(e) = std::fs::write(
+                          building_root.join(crate::equipment_types::EQUIPMENT_TYPES_FILE),
+                          body,
+                      ) {
+                          warnings.push(format!("equipment type registry not materialized: {e}"));
+                      }
+                  }
+              }
+
+              let mut equipment_report = Vec::new();
+              for plan in &plans {
+          ''')
+          replace("edge/src/csv_ingest/package.rs", '''        if let Err(e) = write_columns_csv(&eq_dir.join("columns.csv"), &plan.headers, &plan.roles) {
+                      return json!({"ok": false, "error": e});
+                  }
+                  let unmapped: Vec<&String> = plan
+          ''', '''        if let Err(e) = write_columns_csv(&eq_dir.join("columns.csv"), &plan.headers, &plan.roles) {
+                      return json!({"ok": false, "error": e});
+                  }
+                  if let Some(raw_type) = plan.equipment_type.as_deref() {
+                      let meta = json!({
+                          "equipment_id": plan.equipment_id,
+                          "equipType": raw_type,
+                          "canonical_kind": crate::equipment_types::canonical_kind(raw_type),
+                      });
+                      let _ = std::fs::write(
+                          eq_dir.join("equipment.json"),
+                          serde_json::to_string_pretty(&meta).unwrap_or_default(),
+                      );
+                  }
+                  let unmapped: Vec<&String> = plan
+          ''')
+          replace("edge/src/csv_ingest/package.rs", '''            "map_source": plan.map_source,
+                  }));
+          ''', '''            "map_source": plan.map_source,
+                      "equipment_type": plan.equipment_type,
+                  }));
+          ''')
+          replace("edge/src/csv_ingest/package.rs", '''        Ok(report) => {
+                      warnings.extend(feather_warnings);
+          ''', '''        Ok(report) => {
+                      warnings.extend(feather_warnings);
+                      if let Err(e) = crate::equipment_types::write_type_map(
+                          &out_dir,
+                          &building_id,
+                          &stamped_types,
+                      ) {
+                          warnings.push(e);
+                      }
+          ''')
+          # Keep the stamp registry after append/re-ingest and mapping edits.
+          replace("edge/src/csv_ingest/package.rs", '''    match fdd_store::ingest_building(&data_root, &building_id, &out_dir) {
+                  Ok(report) => json!({
+          ''', '''    match fdd_store::ingest_building(&data_root, &building_id, &out_dir) {
+                  Ok(report) => {
+                      let types = std::fs::read_to_string(
+                          building_root.join(crate::equipment_types::EQUIPMENT_TYPES_FILE),
+                      )
+                      .ok()
+                      .and_then(|s| serde_json::from_str::<BTreeMap<String, String>>(&s).ok())
+                      .unwrap_or_default();
+                      let _ = crate::equipment_types::write_type_map(&out_dir, &building_id, &types);
+                      json!({
+          ''')
+          replace("edge/src/csv_ingest/package.rs", '''            "total_ms": report.total_ms,
+                  }),
+                  Err(e) => json!({"ok": false, "error": format!("parquet ingest: {e:#}")}),
+              }
+          }
+          ''', '''            "total_ms": report.total_ms,
+                      })
+                  },
+                  Err(e) => json!({"ok": false, "error": format!("parquet ingest: {e:#}")}),
+              }
+          }
+          ''')
+          replace("edge/src/csv_ingest/package.rs", '''        Ok(report) => json!({
+                      "ok": true,
+                      "building_id": building_id,
+                      "equipment_id": equipment_id,
+                      "roles": roles,
+                      "ignored_columns": ignored,
+                      "equipment_written": report.equipment_written,
+                      "total_rows": report.total_rows,
+                  }),
+          ''', '''        Ok(report) => {
+                      let types = std::fs::read_to_string(
+                          building_root.join(crate::equipment_types::EQUIPMENT_TYPES_FILE),
+                      )
+                      .ok()
+                      .and_then(|s| serde_json::from_str::<BTreeMap<String, String>>(&s).ok())
+                      .unwrap_or_default();
+                      let _ = crate::equipment_types::write_type_map(&out_dir, &building_id, &types);
+                      json!({
+                          "ok": true,
+                          "building_id": building_id,
+                          "equipment_id": equipment_id,
+                          "roles": roles,
+                          "ignored_columns": ignored,
+                          "equipment_written": report.equipment_written,
+                          "total_rows": report.total_rows,
+                      })
+                  },
+          ''')
+
+          # FDD inventory/results: stamped type is authoritative when recognized.
+          replace("edge/src/fdd/registry_api.rs", '''fn infer_equipment_type(equipment_id: &str) -> &'static str {
+              match infer_equipment_kind(equipment_id) {
+                  "vav" => "VAV",
+                  "ahu" => "AHU",
+                  "chiller" | "boiler" | "cooling_tower" => "PLANT",
+                  "heatpump" => "HEAT_PUMP",
+                  "weather" => "WEATHER",
+                  _ => "GENERAL",
+              }
+          }
+
+          fn infer_equipment_kind(equipment_id: &str) -> &'static str {
+              let id = equipment_id.to_ascii_uppercase();
+              if id.contains("WEATHER") {
+                  "weather"
+              } else if id.contains("VAV") || id.contains("ZONE") {
+                  "vav"
+              } else if id.contains("AHU") || id.contains("RTU") || id.contains("MAU") {
+                  "ahu"
+              } else if id.contains("CHILL") {
+                  "chiller"
+              } else if id.contains("BOILER") {
+                  "boiler"
+              } else if id.contains("TOWER") {
+                  "cooling_tower"
+              } else if id.contains("HP") || id.contains("HEAT_PUMP") || id.contains("HEATPUMP") {
+                  "heatpump"
+              } else {
+                  "unknown"
+              }
+          }
+          ''', '''fn infer_equipment_type(equipment_id: &str) -> &'static str {
+              crate::equipment_types::api_equipment_type_for(equipment_id, None)
+          }
+
+          fn infer_equipment_kind(equipment_id: &str) -> &'static str {
+              crate::equipment_types::infer_kind_from_id(equipment_id)
+          }
+          ''')
+          replace("edge/src/fdd/registry_api.rs", '''    ids.sort();
+              ids.dedup();
+              let equipment: Vec<Value> = ids
+                  .iter()
+                  .map(|id| {
+                      json!({
+                          "equipment_id": id,
+                          "equipment_type": infer_equipment_type(id),
+                      })
+                  })
+                  .collect();
+          ''', '''    ids.sort();
+              ids.dedup();
+              let stamped_types = crate::equipment_types::load_type_map(&parquet_root(), building_id);
+              let equipment: Vec<Value> = ids
+                  .iter()
+                  .map(|id| {
+                      let stamped = stamped_types.get(id).map(String::as_str);
+                      crate::equipment_types::type_report(id, stamped)
+                  })
+                  .collect();
+          ''')
+          replace("edge/src/fdd/registry_api.rs", '''pub fn results_response(building_id: Option<&str>) -> Value {
+              let dir = results_dir(building_id);
+              let reg = load_reg().ok();
+          ''', '''pub fn results_response(building_id: Option<&str>) -> Value {
+              let dir = results_dir(building_id);
+              let stamped_types = crate::equipment_types::load_type_map(&parquet_root(), building_id);
+              let reg = load_reg().ok();
+          ''')
+          replace("edge/src/fdd/registry_api.rs", '''                let kind = infer_equipment_kind(equipment_id);
+          ''', '''                let stamped = stamped_types.get(equipment_id).map(String::as_str);
+                          let kind = crate::equipment_types::kind_for(equipment_id, stamped);
+          ''')
+          replace("edge/src/fdd/registry_api.rs", '''                    "equipment_type": infer_equipment_type(equipment_id),
+                      "status": status,
+          ''', '''                    "equipment_type": crate::equipment_types::api_equipment_type_for(equipment_id, stamped),
+                      "equipment_type_raw": stamped,
+                      "equipment_type_source": if stamped.and_then(crate::equipment_types::canonical_kind).is_some() { "package" } else { "id" },
+                      "status": status,
+          ''')
+
+          # Central runtime grouping: typed classification first, same id fallback second.
+          old_group = '''/// Map equipment_id → Overview plant chart group (air / boiler / chiller).
+          /// Zone terminals (VAV / ZONE) and unknown meters return `None`.
+          pub fn plant_group_for(equipment_id: &str) -> Option<&'static str> {
+              let eq = equipment_id.to_ascii_uppercase().replace('\\\\', "/");
+              if is_zone_terminal_id(&eq) {
+                  return None;
+              }
+              if eq.starts_with("AHU")
+                  || eq.contains("/AHU")
+                  || eq.contains("RTU")
+                  || eq.contains("MAU")
+                  || eq.contains("DOAS")
+              {
+                  return Some("air");
+              }
+              if eq.contains("TOWER")
+                  || eq.starts_with("CT_")
+                  || eq.contains("/CT")
+                  || (eq.starts_with("CT") && eq.chars().nth(2).is_some_and(|c| c.is_ascii_digit()))
+                  || eq.contains("CHILLER")
+                  || eq.contains("CHLR")
+                  || is_short_chiller_id(&eq)
+                  || eq.starts_with("CHW")
+                  || eq.contains("CWP")
+                  || eq.contains("_DX")
+                  || eq.starts_with("DX")
+                  || eq.starts_with("HP_")
+                  || (eq.contains("PUMP") && (eq.contains("CHW") || eq.contains("CW")))
+              {
+                  return Some("chiller");
+              }
+              if eq.contains("BOILER")
+                  || eq.contains("HWP")
+                  || (eq.contains("PUMP") && eq.contains("HW") && !eq.contains("CHW"))
+                  || eq.contains("BOILERS")
+              {
+                  return Some("boiler");
+              }
+              // Do not catch bare FAN/SUPPLY — too broad (exhaust/return/etc.).
+              None
+          }
+          '''
+          new_group = '''/// Map equipment_id → Overview plant chart group (air / boiler / chiller).
+          /// Prefer a package `equipType` / `equipment_type` stamp when recognized;
+          /// fall back to generic id heuristics. Zone terminals and unknown meters are omitted.
+          pub fn plant_group_for_typed(
+              equipment_id: &str,
+              stamped_type: Option<&str>,
+          ) -> Option<&'static str> {
+              if let Some(kind) = stamped_type.and_then(open_fdd_edge_prototype::equipment_types::canonical_kind) {
+                  return match kind {
+                      "ahu" => Some("air"),
+                      "chiller" | "cooling_tower" | "heatpump" => Some("chiller"),
+                      "boiler" => Some("boiler"),
+                      "vav" | "weather" => None,
+                      _ => None,
+                  };
+              }
+              let eq = equipment_id.to_ascii_uppercase().replace('\\\\', "/");
+              if is_zone_terminal_id(&eq) {
+                  return None;
+              }
+              if eq.starts_with("AHU")
+                  || eq.contains("/AHU")
+                  || eq.contains("RTU")
+                  || eq.contains("MAU")
+                  || eq.contains("DOAS")
+              {
+                  return Some("air");
+              }
+              if eq.contains("TOWER")
+                  || eq.starts_with("CT_")
+                  || eq.contains("/CT")
+                  || (eq.starts_with("CT") && eq.chars().nth(2).is_some_and(|c| c.is_ascii_digit()))
+                  || eq.contains("CHILLER")
+                  || eq.contains("CHLR")
+                  || is_short_chiller_id(&eq)
+                  || eq.starts_with("CHW")
+                  || eq.contains("CWP")
+                  || eq.contains("_DX")
+                  || eq.starts_with("DX")
+                  || eq.starts_with("HP_")
+                  || (eq.contains("PUMP") && (eq.contains("CHW") || eq.contains("CW")))
+              {
+                  return Some("chiller");
+              }
+              if eq.contains("BOILER")
+                  || eq.contains("HWP")
+                  || (eq.contains("PUMP") && eq.contains("HW") && !eq.contains("CHW"))
+                  || eq.contains("BOILERS")
+              {
+                  return Some("boiler");
+              }
+              None
+          }
+
+          pub fn plant_group_for(equipment_id: &str) -> Option<&'static str> {
+              plant_group_for_typed(equipment_id, None)
+          }
+          '''
+          replace("services/central/src/analytics/historian.rs", old_group, new_group)
+          replace("services/central/src/analytics/historian.rs", '''    let max_gap = max_gap_seconds.max(0.0);
+              let eq_filter = equipment_filter_sql(equipment_filter);
+
+              if cols.contains("equipment_id") {
+          ''', '''    let max_gap = max_gap_seconds.max(0.0);
+              let eq_filter = equipment_filter_sql(equipment_filter);
+              let stamped_types = open_fdd_edge_prototype::equipment_types::load_type_map(
+                  &parquet_root(),
+                  building_id,
+              );
+
+              if cols.contains("equipment_id") {
+          ''')
+          replace("services/central/src/analytics/historian.rs", '''                            "plant_group": plant_group_for(
+                                          row.get("equipment_id").and_then(|v| v.as_str()).unwrap_or("")
+                                      ),
+          ''', '''                            "plant_group": plant_group_for_typed(
+                                          &eq,
+                                          stamped_types.get(&eq).map(String::as_str),
+                                      ),
+          ''')
+          replace("services/central/src/analytics/historian.rs", '''                        plant_signal_label(&cols),
+                                  )
+          ''', '''                        plant_signal_label(&cols),
+                                      &stamped_types,
+                                  )
+          ''')
+          replace("services/central/src/analytics/historian.rs", '''    signal_label: &str,
+          ) -> Result<Vec<Value>> {
+          ''', '''    signal_label: &str,
+              stamped_types: &BTreeMap<String, String>,
+          ) -> Result<Vec<Value>> {
+          ''')
+          replace("services/central/src/analytics/historian.rs", '''        let Some(plant) = plant_group_for(eq) else {
+                      continue;
+                  };
+          ''', '''        let Some(plant) = plant_group_for_typed(
+                      eq,
+                      stamped_types.get(eq).map(String::as_str),
+                  ) else {
+                      continue;
+                  };
+          ''')
+
+          # Plant-health family matching uses the same type precedence.
+          old_match = '''pub fn matches_family(family: PlantFamily, equipment_id: &str) -> bool {
+              match family {
+                  PlantFamily::Ahu => plant_group_for(equipment_id) == Some("air"),
+                  PlantFamily::Chiller => {
+                      plant_group_for(equipment_id) == Some("chiller") && !is_heat_pump_id(equipment_id)
+                  }
+                  PlantFamily::Boiler => plant_group_for(equipment_id) == Some("boiler"),
+                  PlantFamily::HeatPump => is_heat_pump_id(equipment_id),
+              }
+          }
+          '''
+          new_match = '''pub fn matches_family_typed(
+              family: PlantFamily,
+              equipment_id: &str,
+              stamped_type: Option<&str>,
+          ) -> bool {
+              let stamped_kind = stamped_type.and_then(open_fdd_edge_prototype::equipment_types::canonical_kind);
+              match family {
+                  PlantFamily::Ahu => super::historian::plant_group_for_typed(equipment_id, stamped_type) == Some("air"),
+                  PlantFamily::Chiller => {
+                      super::historian::plant_group_for_typed(equipment_id, stamped_type) == Some("chiller")
+                          && stamped_kind != Some("heatpump")
+                          && !is_heat_pump_id(equipment_id)
+                  }
+                  PlantFamily::Boiler => super::historian::plant_group_for_typed(equipment_id, stamped_type) == Some("boiler"),
+                  PlantFamily::HeatPump => stamped_kind == Some("heatpump") || is_heat_pump_id(equipment_id),
+              }
+          }
+
+          pub fn matches_family(family: PlantFamily, equipment_id: &str) -> bool {
+              matches_family_typed(family, equipment_id, None)
+          }
+          '''
+          replace("services/central/src/analytics/plant_health.rs", old_match, new_match)
+          replace("services/central/src/analytics/plant_health.rs", '''    let (has_fdd, index) = fdd_index(bid);
+              let mut seen = 0u32;
+              for row in result.rows {
+          ''', '''    let (has_fdd, index) = fdd_index(bid);
+              let stamped_types = open_fdd_edge_prototype::equipment_types::load_type_map(
+                  &super::historian::parquet_root(),
+                  Some(bid),
+              );
+              let mut seen = 0u32;
+              for row in result.rows {
+          ''')
+          replace("services/central/src/analytics/plant_health.rs", '''        if eq.is_empty() || !matches_family(spec.family, eq) {
+                      continue;
+                  }
+          ''', '''        let stamped_type = stamped_types.get(eq).map(String::as_str);
+                  if eq.is_empty() || !matches_family_typed(spec.family, eq, stamped_type) {
+                      continue;
+                  }
+          ''')
+          replace("services/central/src/analytics/plant_health.rs", '''        let eq_type = match spec.family {
+                      PlantFamily::Ahu => "AHU",
+                      PlantFamily::Chiller => "CHILLER",
+                      PlantFamily::Boiler => "BOILER",
+                      PlantFamily::HeatPump => "HEAT_PUMP",
+                  };
+          ''', '''        let eq_type = open_fdd_edge_prototype::equipment_types::api_equipment_type_for(
+                      eq,
+                      stamped_type,
+                  );
+          ''')
+          replace("services/central/src/analytics/plant_health.rs", '''        assert!(matches_family(PlantFamily::Ahu, "RTU_2"));
+                  assert!(!matches_family(PlantFamily::Ahu, "VAV_12"));
+          ''', '''        assert!(matches_family(PlantFamily::Ahu, "RTU_2"));
+                  assert!(matches_family_typed(PlantFamily::Ahu, "AC_1", Some("ahu")));
+                  assert!(!matches_family_typed(PlantFamily::Ahu, "AC_1", Some("vav")));
+                  assert!(!matches_family(PlantFamily::Ahu, "VAV_12"));
+          ''')
+
+          # Documentation contract: one concise, identical precedence statement in each agent surface.
+          docs = {
+              "docs/agent/PACKAGE_AUTHORING.md": """\n\n## Equipment type precedence\n\nStamp each equipment block with `equipType` (preferred) or `equipment_type`. Open-FDD persists that stamp during package ingest and uses it before generic folder/id heuristics for inventory and analytics. Example: a folder named `AC_1` with `equipType: ahu` is treated as an AHU. If the stamp is absent or unrecognized, vendor-neutral id heuristics remain the fallback. Vendor/site-specific aliases belong in the preprocess package generator, never in product Rust.\n""",
+              "openfdd_agent_spec/DATA_CONTRACT.md": """\n\n## Equipment type precedence\n\n`equipType` / `equipment_type` is durable package metadata. When present and recognized, it is authoritative for Open-FDD equipment classification; generic equipment-id heuristics are fallback only. `AC_1 + equipType: ahu` must classify as AHU. Keep vendor/campus naming remaps in preprocessors rather than product code.\n""",
+              "openfdd_agent_spec/skills/openfdd-package-mapping/SKILL.md": """\n\n## Stamped equipment types\n\nPrefer stamping `equipType` (or `equipment_type`) in each equipment map. Open-FDD persists and prefers the stamp over folder-id inference. If an Overview family is empty for an opaque id such as `AC_1`, stamp the correct generic type instead of adding a vendor/site heuristic to Rust.\n""",
+              "openfdd_agent_spec/AGENTS.md": """\n\n### Equipment typing contract\n\nPackage `equipType` / `equipment_type` stamps are persisted and preferred over id heuristics. Opaque ids are valid (`AC_1` + `equipType: ahu`). Never solve a site-specific naming problem by hard-coding a vendor, campus, or building into product code.\n""",
+              "mcp/INSTRUCTIONS.md": """\n\n## Equipment typing\n\nDuring package cleaning/modeling, stamp generic `equipType` / `equipment_type` metadata. The product persists and prefers that stamp; folder/id inference is fallback. Empty Overview families on opaque ids are a package-modeling signal, not a reason to add site-specific Rust heuristics.\n""",
+              "mcp/README.md": """\n\n### Package equipment types\n\nFor portable package mapping, stamp `equipType` (or `equipment_type`) on equipment blocks. Open-FDD persists the stamp and uses it before generic id heuristics, so opaque BAS ids such as `AC_1` can still classify correctly as `ahu`.\n""",
+              "docs/mcp-agents/roles/package-mapping.md": """\n\n## Equipment type hygiene\n\nStamp a generic `equipType` / `equipment_type` whenever the source folder id is opaque. The stamp is persisted by package ingest and wins over id heuristics (`AC_1` + `equipType: ahu` → AHU). Keep vendor/campus remaps in the preprocess repository.\n""",
+              "AGENTS.md": """\n\n### Stamped equipment type precedence\n\nPackage ingest persists `equipType` / `equipment_type`; recognized stamps win over folder/id heuristics in inventory and plant-health grouping. Opaque BAS ids are supported (`AC_1` + `equipType: ahu` → AHU). Vendor/campus aliases remain preprocess concerns and must not be hard-coded into product Rust.\n""",
+          }
+          for path, addition in docs.items():
+              p = Path(path)
+              text = p.read_text()
+              heading = addition.strip().splitlines()[0]
+              if heading not in text:
+                  p.write_text(text.rstrip() + addition + "\n")
+
+          # The temporary workflow must not remain in the PR diff.
+          Path(".github/workflows/pr2-agent-patch.yml").unlink()
+          PY
+
+          cargo fmt --all
+          git diff --check
+          git status --short
+
+          git config user.name "open-fdd automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add -- edge/src/lib.rs edge/src/equipment_types.rs edge/src/csv_ingest/package.rs edge/src/fdd/registry_api.rs services/central/src/analytics/historian.rs services/central/src/analytics/plant_health.rs AGENTS.md docs/agent/PACKAGE_AUTHORING.md openfdd_agent_spec/DATA_CONTRACT.md openfdd_agent_spec/skills/openfdd-package-mapping/SKILL.md openfdd_agent_spec/AGENTS.md mcp/INSTRUCTIONS.md mcp/README.md docs/mcp-agents/roles/package-mapping.md .github/workflows/pr2-agent-patch.yml
+          git commit -m "Persist and prefer stamped equipment types"
+          git push origin HEAD:feat/equipment-type-contract
+
+          # Close PR1 branch hygiene now that #749 is merged.
+          git push origin --delete feat/railway-deployment-foundation || true
