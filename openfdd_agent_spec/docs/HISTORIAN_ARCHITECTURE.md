@@ -81,23 +81,33 @@ Compact partition-by-partition with bounded memory. Publish/validate replacement
 
 ## DataFusion/query contract
 
-The long-term `history` table is the logical dataset root, with Hive columns exposed to SQL:
+The canonical local `history` table is registered from `<storage_root>/history/`, not from a recursive glob. DataFusion exposes these Hive columns to SQL:
 
 ```text
 building_id, equipment_id, year, month
 ```
 
-Do not make recursive local filesystem globbing the permanent historian abstraction. FDD SQL should not know physical filenames.
+Canonical Hive partition values are UTF-8 path literals. Use zero-padded string predicates such as `year = '2026'` and `month = '08'`; this keeps local and future object-store pruning semantics aligned. H3 physical-plan tests must prove unrelated building/equipment/month files are absent from the selected scan.
 
-A large historian must not be collected into RAM. Generic/interactive result paths need row limits/streaming/pagination. Target config:
+When no canonical `history/` dataset exists, the compatibility layer may fall back to the legacy recursive Parquet sidecar tree until H6 migration is complete. Do not make that fallback the new abstraction. FDD SQL should never know physical part filenames.
+
+Parquet schema inference must tolerate safe nullable-role evolution across immutable parts. Adding an optional role is allowed; old parts surface null for the new column. Incompatible role datatypes must fail rather than be silently reinterpreted.
+
+A large historian must not be collected into RAM. H3 provides two generic execution contracts:
+
+- `collect_sql_bounded(ctx, sql, max_rows)` materializes at most `max_rows` and rejects larger interactive results;
+- `stream_sql(ctx, sql)` returns Arrow record batches without materializing the full result in Open-FDD.
+
+`DEFAULT_INTERACTIVE_MAX_ROWS` is 10,000. Deployment/API layers may wire their own explicit limit, but generic interactive callers must not use unbounded `DataFrame::collect()` by default. Existing rule/batch compatibility paths may retain bounded result behavior where FDD parity requires it.
+
+DataFusion query runtime configuration is sourced from the historian config:
 
 ```text
 OPENFDD_QUERY_MEMORY_MB=512
 OPENFDD_DATAFUSION_SPILL_DIR=...
-OPENFDD_QUERY_MAX_ROWS=10000
 ```
 
-Rule execution can retain bounded result behavior as long as FDD parity remains intact.
+`new_historian_session` applies the memory pool and optional spill directory. At least the CLI query runtime uses this configured session in H3; new historian query callers should do the same rather than constructing an unconstrained `SessionContext` casually.
 
 ## Operating modes
 
