@@ -64,8 +64,9 @@ H2 merged only after the changed-head FDD engine, Rust stack, AppSec, docs, and 
 - [~] preserve legacy sidecar fallback during migration
 - [~] partition/date filter coverage plus physical-plan file pruning assertions; changed-head CI pending
 - [~] schema evolution coverage across mixed Parquet role columns; changed-head CI pending
-- [ ] generic interactive query row safeguard / streaming contract
-- [~] DataFusion memory/spill configuration wiring via H1 historian config; runtime caller adoption still required
+- [~] bounded interactive query collection plus Arrow streaming contract (`collect_sql_bounded`, `stream_sql`); changed-head CI pending
+- [~] DataFusion memory/spill configuration wiring via H1 historian config; CLI query runtime now uses the configured session, changed-head CI pending
+- [~] agent/build architecture docs updated for the H3 contract
 
 ### H4 — Compaction
 
