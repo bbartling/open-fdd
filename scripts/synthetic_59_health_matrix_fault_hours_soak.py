@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Health-matrix fault-hour parity vs synthetic golden `expected_faults.csv`.
+"""Synthetic-59 Overview health-matrix and fault-hour closeout soak.
 
-Run after `synthetic_59_target_pair_soak.py --side ofdd` (FDD registry populated).
+Run after ``synthetic_59_target_pair_soak.py --side ofdd`` so the fixture and
+FDD registry results are populated.
 
-  OPENFDD_ADMIN_PASSWORD=... python3 scripts/synthetic_59_health_matrix_fault_hours_soak.py
-  OPENFDD_ADMIN_PASSWORD=... python3 scripts/synthetic_59_health_matrix_fault_hours_soak.py \\
-      --building-id OPENFDD_SYNTHETIC_59_RULE_WEEK_V1
+The soak exercises every Overview health endpoint introduced for the split
+matrices, validates arbitrary ``n/m`` scoring, requires every matrix flag to
+carry its ``{flag}_fault_h`` field, and compares known synthetic FAULT rows to
+``expected_faults.csv``.
 """
 from __future__ import annotations
 
@@ -21,31 +23,66 @@ from pathlib import Path
 
 from eplus_paths import synthetic_artifacts_dir, synthetic_fixture_dir
 
-ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = synthetic_fixture_dir()
 ARTIFACTS = synthetic_artifacts_dir()
 EXPECTED = FIXTURE / "expected_faults.csv"
 BUILDING_ID = "OPENFDD_SYNTHETIC_59_RULE_WEEK_V1"
 HOURS_TOL = 0.05
 
-# Broken-box rules aggregated into `broken_fault_hours` on VAV health rows.
+# endpoint -> rule_id -> matrix flag key
+MATRIX_RULES: dict[str, dict[str, str]] = {
+    "/api/analytics/ahu-temperature-health": {
+        "AHU-SATDEV": "sat_dev",
+        "FC2": "mat_low",
+        "FC3": "mat_high",
+        "FC7": "sat_low_heating",
+        "FC13-SAT-HIGH": "sat_high_cooling",
+    },
+    "/api/analytics/ahu-pressure-health": {
+        "AHU-DUCTHI": "duct_high",
+        "FC1": "duct_low",
+        "CMD-1": "fan_mismatch",
+        "TRIM-1": "static_trim",
+    },
+    "/api/analytics/ahu-economizer-health": {
+        "ECON-1": "stuck_closed",
+        "ECON-2": "unfavorable",
+        "ECON-3": "mech_without_econ",
+        "ECON-4": "low_oa_fraction",
+        "ECON-5": "preheat_over",
+        "ECON-6": "freeze_risk",
+        "ECON-7": "not_economizing",
+    },
+    "/api/analytics/chiller-health": {
+        "CHW-1": "low_delta_t",
+        "CHW-2": "dp_low",
+        "CHW-3": "supply_band",
+        "CHW-4": "flow_high",
+        "CHW-NOLOAD-1": "no_load",
+        "TRIM-4": "chw_reset",
+    },
+    "/api/analytics/cooling-tower-health": {
+        "CW-APR-1": "approach_high",
+        "CW-FAN-1": "fan_energy",
+        "CW-OPT-1": "cw_optimization",
+    },
+    "/api/analytics/pid-hunting": {
+        "FC4": "operating_state_hunt",
+        "PID-HUNT-1": "control_output_hunt",
+    },
+    "/api/analytics/sensor-faults": {
+        "SV-FLATLINE": "flatline",
+        "SV-RANGE": "range",
+        "SV-RATE": "rate",
+        "SV-SPIKE": "spike",
+        "SV-STALE": "stale",
+    },
+}
+
 VAV_BROKEN_RULES = frozenset(
     {"VAV-3", "VAV-4", "VAV-5", "VAV-7", "VAV-REHEAT", "VAV-AHU-LEAVE"}
 )
-
-# Plant / VAV matrix: rule_id → (endpoint path, flag bool key, fault_h key)
-PLANT_RULE_FIELDS: dict[str, tuple[str, str, str]] = {
-    "AHU-SATDEV": ("/api/analytics/ahu-health", "sat_dev", "sat_dev_fault_h"),
-    "AHU-DUCTHI": ("/api/analytics/ahu-health", "duct_high", "duct_high_fault_h"),
-    "ECON-1": ("/api/analytics/ahu-health", "economizer", "economizer_fault_h"),
-    "CHW-1": ("/api/analytics/chiller-health", "chw_1", "chw_1_fault_h"),
-    "CHW-2": ("/api/analytics/chiller-health", "chw_2", "chw_2_fault_h"),
-    "CHW-3": ("/api/analytics/chiller-health", "chw_3", "chw_3_fault_h"),
-}
-
-VAV_RULE_FIELDS: dict[str, tuple[str, str]] = {
-    "VAV-1": ("poor_zone_performance", "comfort_fault_h"),
-}
+VAV_RULE_FIELDS = {"VAV-1": ("poor_zone_performance", "comfort_fault_h")}
 
 
 def utc_now() -> str:
@@ -70,12 +107,12 @@ def http_json(
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
             return json.loads(raw) if raw else {}
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
         try:
             return json.loads(detail)
         except json.JSONDecodeError:
-            return {"ok": False, "error": f"HTTP {e.code}: {detail[:500]}"}
+            return {"ok": False, "error": f"HTTP {exc.code}: {detail[:500]}"}
 
 
 def login(base: str, user: str, password: str) -> str:
@@ -93,64 +130,38 @@ def login(base: str, user: str, password: str) -> str:
 
 
 def unwrap_analytics(body: dict) -> dict:
-    if isinstance(body.get("analytics"), dict):
-        return body["analytics"]
-    return body
+    nested = body.get("analytics") if isinstance(body, dict) else None
+    return nested if isinstance(nested, dict) else body
 
 
-def load_expected(path: Path) -> list[dict]:
-    return list(csv.DictReader(path.open()))
+def as_float(value: object) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if out == out else None
 
 
-def hours_match(observed: float | None, expected: float) -> bool:
-    if observed is None:
-        return False
-    return abs(float(observed) - float(expected)) <= HOURS_TOL
-
-
-def tri_true(v: object) -> bool | None:
-    if v is True:
-        return True
-    if v is False:
-        return False
-    if isinstance(v, str):
-        s = v.strip().lower()
-        if s == "true":
+def tri(value: object) -> bool | None:
+    if value is True or value is False:
+        return bool(value)
+    if isinstance(value, str):
+        value = value.strip().lower()
+        if value == "true":
             return True
-        if s == "false":
+        if value == "false":
             return False
     return None
 
 
-def as_float(v: object) -> float | None:
-    if v is None or v == "":
-        return None
-    try:
-        n = float(v)
-    except (TypeError, ValueError):
-        return None
-    if not (n == n):  # NaN
-        return None
-    return n
-
-
-def check(
-    name: str,
-    ok: bool,
-    detail: str,
-    checks: list[dict],
-) -> None:
+def check(name: str, ok: bool, detail: str, checks: list[dict]) -> None:
     checks.append({"name": name, "ok": bool(ok), "detail": detail})
-    mark = "PASS" if ok else "FAIL"
-    print(f"  [{mark}] {name}: {detail}")
+    print(f"  [{'PASS' if ok else 'FAIL'}] {name}: {detail}")
 
 
-def fetch_matrix(
-    base: str,
-    token: str,
-    path: str,
-    building: str,
-) -> dict[str, dict]:
+def fetch_matrix(base: str, token: str, path: str, building: str) -> dict:
     body = http_json(
         "POST",
         f"{base}{path}",
@@ -158,16 +169,134 @@ def fetch_matrix(
         body=json.dumps({"building_id": building}).encode(),
         content_type="application/json",
     )
-    env = unwrap_analytics(body)
-    rows = env.get("rows") or []
+    return unwrap_analytics(body)
+
+
+def rows_by_equipment(env: dict) -> dict[str, dict]:
     out: dict[str, dict] = {}
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        eid = str(row.get("equipment_id") or "").strip()
-        if eid:
-            out[eid] = row
+    for row in env.get("rows") or []:
+        if isinstance(row, dict):
+            eid = str(row.get("equipment_id") or "").strip()
+            if eid:
+                out[eid] = row
     return out
+
+
+def load_expected() -> list[dict]:
+    return list(csv.DictReader(EXPECTED.open()))
+
+
+def expected_faults(rows: list[dict]) -> dict[tuple[str, str], float]:
+    out: dict[tuple[str, str], float] = {}
+    for row in rows:
+        if row.get("expected_status") != "FAULT":
+            continue
+        try:
+            out[(row["rule_id"], row["equipment_id"])] = float(row["expected_fault_hours"])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def assert_score_contract(path: str, row: dict, flags: list[str], checks: list[dict]) -> None:
+    label = str(row.get("score_label") or "")
+    true_count = sum(tri(row.get(flag)) is True for flag in flags)
+    expected_label = f"{true_count}/{len(flags)}"
+    check(
+        f"{path}_score_{row.get('equipment_id')}",
+        label == expected_label,
+        f"score_label={label!r} expected={expected_label!r}",
+        checks,
+    )
+    for flag in flags:
+        key = f"{flag}_fault_h"
+        check(
+            f"{path}_{row.get('equipment_id')}_{key}_present",
+            key in row,
+            f"field_present={key in row} value={row.get(key)!r}",
+            checks,
+        )
+        if tri(row.get(flag)) is True:
+            check(
+                f"{path}_{row.get('equipment_id')}_{key}_for_fault",
+                as_float(row.get(key)) is not None,
+                f"flag=true {key}={row.get(key)!r}",
+                checks,
+            )
+
+
+def assert_new_matrices(
+    base: str,
+    token: str,
+    building: str,
+    expected_rows: list[dict],
+    checks: list[dict],
+) -> None:
+    faults = expected_faults(expected_rows)
+    all_expected_rules = {rule for rules in MATRIX_RULES.values() for rule in rules}
+    expected_by_endpoint: dict[str, list[tuple[str, str, float]]] = {}
+    for path, rules in MATRIX_RULES.items():
+        expected_by_endpoint[path] = [
+            (rule, eid, hours)
+            for (rule, eid), hours in faults.items()
+            if rule in rules
+        ]
+
+    for path, rule_map in MATRIX_RULES.items():
+        print(f">> {path}")
+        env = fetch_matrix(base, token, path, building)
+        rows = list(env.get("rows") or [])
+        qv = str(env.get("query_version") or "")
+        check(
+            f"endpoint_{path}",
+            bool(env) and qv != "",
+            f"query_version={qv!r} rows={len(rows)}",
+            checks,
+        )
+        if path == "/api/analytics/sensor-faults" and not expected_by_endpoint[path]:
+            check(
+                "sensor_clean_rows_empty",
+                rows == [],
+                f"rows={len(rows)} (clean contract requires rows: [])",
+                checks,
+            )
+        for row in rows:
+            if isinstance(row, dict):
+                assert_score_contract(path, row, list(rule_map.values()), checks)
+
+        by_eid = rows_by_equipment(env)
+        for rule_id, eid, want_h in expected_by_endpoint[path]:
+            flag = rule_map[rule_id]
+            row = by_eid.get(eid)
+            check(
+                f"{rule_id}_{eid}_row",
+                row is not None,
+                f"endpoint={path}",
+                checks,
+            )
+            if row is None:
+                continue
+            observed = as_float(row.get(f"{flag}_fault_h"))
+            check(
+                f"{rule_id}_{eid}_flag",
+                tri(row.get(flag)) is True,
+                f"{flag}={row.get(flag)!r}",
+                checks,
+            )
+            check(
+                f"{rule_id}_{eid}_fault_h",
+                observed is not None and abs(observed - want_h) <= HOURS_TOL,
+                f"{flag}_fault_h={observed} expected≈{want_h}",
+                checks,
+            )
+
+    covered = {rule for rules in MATRIX_RULES.values() for rule in rules}
+    check(
+        "matrix_rule_map_nonempty",
+        bool(covered & all_expected_rules),
+        f"mapped_rules={len(covered)}",
+        checks,
+    )
 
 
 def fetch_fdd_results(base: str, token: str, building: str) -> dict[tuple[str, str], dict]:
@@ -179,228 +308,71 @@ def fetch_fdd_results(base: str, token: str, building: str) -> dict[tuple[str, s
     )
     out: dict[tuple[str, str], dict] = {}
     for row in body.get("results") or []:
-        if not isinstance(row, dict):
-            continue
-        rid = str(row.get("rule_id") or "").strip()
-        eid = str(row.get("equipment_id") or "").strip()
-        if rid and eid:
-            out[(rid, eid)] = row
+        if isinstance(row, dict):
+            rid = str(row.get("rule_id") or "").strip()
+            eid = str(row.get("equipment_id") or "").strip()
+            if rid and eid:
+                out[(rid, eid)] = row
     return out
 
 
-def fdd_fault_hours(fdd: dict[tuple[str, str], dict], rule_id: str, eid: str) -> float | None:
-    row = fdd.get((rule_id, eid))
-    if not row:
-        return None
-    return as_float(row.get("fault_hours"))
-
-
-def assert_plant_matrix_checks(
+def assert_vav_and_weather(
     base: str,
     token: str,
     building: str,
     expected_rows: list[dict],
-    fdd: dict[tuple[str, str], dict],
     checks: list[dict],
 ) -> None:
-    cache: dict[str, dict[str, dict]] = {}
-    for exp in expected_rows:
-        rule_id = exp["rule_id"]
-        if rule_id not in PLANT_RULE_FIELDS:
-            continue
-        if exp.get("expected_status") != "FAULT":
-            continue
-        path, flag_key, fh_key = PLANT_RULE_FIELDS[rule_id]
-        eid = exp["equipment_id"]
-        want_h = float(exp["expected_fault_hours"])
-
-        if path not in cache:
-            cache[path] = fetch_matrix(base, token, path, building)
-        row = cache[path].get(eid)
-        if not row:
-            check(
-                f"plant_{rule_id}_{eid}_row",
-                False,
-                f"missing equipment row on {path}",
-                checks,
-            )
-            continue
-
-        flag = tri_true(row.get(flag_key))
-        obs_h = as_float(row.get(fh_key))
-        fdd_h = fdd_fault_hours(fdd, rule_id, eid)
-        hours_src = obs_h if obs_h is not None else fdd_h
-        hours_note = fh_key if obs_h is not None else "fdd.fault_hours"
-        check(
-            f"plant_{rule_id}_{eid}_flag",
-            flag is True,
-            f"{flag_key}={flag!r}",
-            checks,
-        )
-        check(
-            f"plant_{rule_id}_{eid}_fault_h",
-            hours_match(hours_src, want_h),
-            f"{hours_note}={hours_src} expected≈{want_h}"
-            + (f" (matrix {fh_key} missing — redeploy central nightly)" if obs_h is None else ""),
-            checks,
-        )
-        if obs_h is None and flag is True:
-            check(
-                f"plant_{rule_id}_{eid}_matrix_field_present",
-                False,
-                f"matrix {fh_key} is null but flag true — UI will show em-dash until central nightly redeploy",
-                checks,
-            )
-        total = as_float(row.get("total_fault_h"))
-        if total is not None and obs_h is not None:
-            check(
-                f"plant_{rule_id}_{eid}_total_ge_flag",
-                total + 1e-9 >= (obs_h or 0.0),
-                f"total_fault_h={total} flag_h={obs_h}",
-                checks,
-            )
-
-
-def assert_vav_matrix_checks(
-    base: str,
-    token: str,
-    building: str,
-    expected_rows: list[dict],
-    fdd: dict[tuple[str, str], dict],
-    checks: list[dict],
-) -> None:
-    vav_rows = fetch_matrix(base, token, "/api/analytics/vav-health", building)
-
+    env = fetch_matrix(base, token, "/api/analytics/vav-health", building)
+    vav = rows_by_equipment(env)
+    fdd = fetch_fdd_results(base, token, building)
     for exp in expected_rows:
         if exp.get("expected_status") != "FAULT":
             continue
-        rule_id = exp["rule_id"]
-        eid = exp["equipment_id"]
-        want_h = float(exp["expected_fault_hours"])
-        row = vav_rows.get(eid)
-        fdd_h = fdd_fault_hours(fdd, rule_id, eid)
-
+        rule_id = exp.get("rule_id", "")
+        eid = exp.get("equipment_id", "")
+        want_h = float(exp.get("expected_fault_hours") or 0)
         if rule_id in VAV_BROKEN_RULES:
-            if not row:
-                check(f"vav_{rule_id}_{eid}_row", False, "missing VAV health row", checks)
-                continue
-            broken_flag = tri_true(row.get("broken_box"))
-            ids = str(row.get("broken_rule_ids") or "")
-            check(
-                f"vav_{rule_id}_{eid}_broken_flag",
-                broken_flag is True and rule_id in ids.split(";"),
-                f"broken_box={broken_flag!r} broken_rule_ids={ids!r}",
-                checks,
-            )
-            check(
-                f"vav_{rule_id}_{eid}_fault_h",
-                hours_match(fdd_h, want_h),
-                f"fdd.fault_hours={fdd_h} expected≈{want_h} (broken_box aggregate may include correlated rules)",
-                checks,
-            )
-            matrix_h = as_float(row.get("broken_fault_hours"))
-            if matrix_h is not None and fdd_h is not None:
+            row = vav.get(eid)
+            check(f"vav_{rule_id}_{eid}_row", row is not None, "VAV health row", checks)
+            if row:
+                ids = str(row.get("broken_rule_ids") or "").split(";")
                 check(
-                    f"vav_{rule_id}_{eid}_matrix_broken_h_ge_rule",
-                    matrix_h + 1e-9 >= fdd_h,
-                    f"broken_fault_hours={matrix_h} rule_h={fdd_h}",
+                    f"vav_{rule_id}_{eid}_flag",
+                    tri(row.get("broken_box")) is True and rule_id in ids,
+                    f"broken_rule_ids={ids}",
                     checks,
                 )
-            continue
-
-        if rule_id not in VAV_RULE_FIELDS:
-            continue
-        flag_key, fh_key = VAV_RULE_FIELDS[rule_id]
-        if not row:
-            check(f"vav_{rule_id}_{eid}_row", False, "missing VAV health row", checks)
-            continue
-        flag = tri_true(row.get(flag_key))
-        obs_h = as_float(row.get(fh_key))
-        hours_src = obs_h if obs_h is not None else fdd_h
-        hours_note = fh_key if obs_h is not None else "fdd.fault_hours"
-        check(
-            f"vav_{rule_id}_{eid}_flag",
-            flag is True,
-            f"{flag_key}={flag!r}",
-            checks,
-        )
-        check(
-            f"vav_{rule_id}_{eid}_fault_h",
-            hours_match(hours_src, want_h),
-            f"{hours_note}={hours_src} expected≈{want_h}"
-            + (f" (matrix {fh_key} missing — redeploy central nightly)" if obs_h is None else ""),
-            checks,
-        )
-
-
-def assert_weather_oat_meteo(
-    base: str,
-    token: str,
-    building: str,
-    expected_rows: list[dict],
-    checks: list[dict],
-) -> None:
-    meteo = [
-        e
-        for e in expected_rows
-        if e.get("rule_id") == "OAT-METEO" and e.get("expected_status") == "FAULT"
-    ]
-    if not meteo:
-        return
-    body = http_json(
-        "GET",
-        f"{base}/api/fdd/results?building_id={building}",
-        token=token,
-        timeout=60.0,
-    )
-    results = body.get("results") or []
-    for exp in meteo:
-        eid = exp["equipment_id"]
-        want_h = float(exp["expected_fault_hours"])
-        hit = next(
-            (
-                r
-                for r in results
-                if str(r.get("rule_id") or "") == "OAT-METEO"
-                and str(r.get("equipment_id") or "") == eid
-            ),
-            None,
-        )
-        if not hit:
+        elif rule_id in VAV_RULE_FIELDS:
+            row = vav.get(eid)
+            flag, hours_key = VAV_RULE_FIELDS[rule_id]
+            check(f"vav_{rule_id}_{eid}_row", row is not None, "VAV health row", checks)
+            if row:
+                observed = as_float(row.get(hours_key))
+                check(f"vav_{rule_id}_{eid}_flag", tri(row.get(flag)) is True, f"{flag}={row.get(flag)!r}", checks)
+                check(
+                    f"vav_{rule_id}_{eid}_fault_h",
+                    observed is not None and abs(observed - want_h) <= HOURS_TOL,
+                    f"{hours_key}={observed} expected≈{want_h}",
+                    checks,
+                )
+        if rule_id == "OAT-METEO":
+            row = fdd.get((rule_id, eid))
+            observed = as_float(row.get("fault_hours")) if row else None
+            check(f"weather_{eid}_row", row is not None, "FDD weather result", checks)
             check(
-                f"weather_OAT-METEO_{eid}",
-                False,
-                "missing FDD result row",
+                f"weather_{eid}_fault_h",
+                observed is not None and abs(observed - want_h) <= HOURS_TOL,
+                f"fault_hours={observed} expected≈{want_h}",
                 checks,
             )
-            continue
-        st = str(hit.get("status") or "")
-        obs_h = as_float(hit.get("fault_hours"))
-        check(
-            f"weather_OAT-METEO_{eid}_status",
-            st == "FAULT",
-            f"status={st!r}",
-            checks,
-        )
-        check(
-            f"weather_OAT-METEO_{eid}_fault_h",
-            hours_match(obs_h, want_h),
-            f"fault_hours={obs_h} expected≈{want_h}",
-            checks,
-        )
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument(
-        "--base",
-        default=os.environ.get("OPENFDD_API_BASE", "http://127.0.0.1:8080"),
-    )
+    ap.add_argument("--base", default=os.environ.get("OPENFDD_API_BASE", "http://127.0.0.1:8080"))
     ap.add_argument("--user", default=os.environ.get("OPENFDD_ADMIN_USER", "admin"))
-    ap.add_argument(
-        "--password",
-        default=os.environ.get("OPENFDD_ADMIN_PASSWORD", "bensbench-local-admin"),
-    )
+    ap.add_argument("--password", default=os.environ.get("OPENFDD_ADMIN_PASSWORD", "bensbench-local-admin"))
     ap.add_argument("--building-id", default=BUILDING_ID)
     args = ap.parse_args()
 
@@ -408,32 +380,23 @@ def main() -> int:
         raise SystemExit(f"missing fixture: {EXPECTED}")
 
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
-    expected_rows = load_expected(EXPECTED)
+    expected_rows = load_expected()
     token = login(args.base, args.user, args.password)
-    fdd = fetch_fdd_results(args.base, token, args.building_id)
     checks: list[dict] = []
 
-    print(f">> plant health matrix fault hours ({args.building_id})")
-    assert_plant_matrix_checks(
-        args.base, token, args.building_id, expected_rows, fdd, checks
-    )
-    print(f">> VAV health matrix fault hours ({args.building_id})")
-    assert_vav_matrix_checks(
-        args.base, token, args.building_id, expected_rows, fdd, checks
-    )
-    print(f">> weather OAT-METEO fault hours ({args.building_id})")
-    assert_weather_oat_meteo(
-        args.base, token, args.building_id, expected_rows, checks
-    )
+    assert_new_matrices(args.base, token, args.building_id, expected_rows, checks)
+    print(">> VAV/weather compatibility")
+    assert_vav_and_weather(args.base, token, args.building_id, expected_rows, checks)
 
-    failed = [c for c in checks if not c["ok"]]
+    failed = [item for item in checks if not item["ok"]]
     summary = {
         "ok": not failed,
         "generated_at": utc_now(),
         "building_id": args.building_id,
         "checks": checks,
-        "failed": [c["name"] for c in failed],
+        "failed": [item["name"] for item in failed],
         "hours_tol": HOURS_TOL,
+        "endpoints": list(MATRIX_RULES),
     }
     out = ARTIFACTS / "ofdd_health_matrix_fault_hours_checks.json"
     out.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
