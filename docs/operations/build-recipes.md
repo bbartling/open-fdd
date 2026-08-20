@@ -4,32 +4,41 @@ parent: Operations
 nav_order: 2
 ---
 
-# Compose build recipes
+# Build recipes
 
-Open-FDD ships as a small container stack. Every deployment is one of four
-compose recipes under `docker/`, brought up with `scripts/openfdd_stack_up.sh`.
-The stack images are:
+Open-FDD uses the same GHCR images for both cloud-lab and self-hosted deployments. For most users there are two recommended deployment paths:
+
+| Deployment | Best for | Services | Guide |
+| --- | --- | --- | --- |
+| **Railway cloud lab** | demos, CSV/package evaluation, temporary cloud access | `openfdd-central` + `openfdd-web` | [Railway deployment](RAILWAY_DEPLOYMENT.md) |
+| **Behind-firewall VM** | IT-managed dashboard on LAN/VPN | `openfdd-central` + `openfdd-web` via Compose `csv` | [VM deployment](VM_DEPLOYMENT.md) |
+
+Both paths consume the same container artifacts. `nightly` is the floating green-master channel; `sha-<7>` is the preferred reproducible deployment pin.
+
+For OT/BACnet deployments, use the additional fieldbus/MQTT recipes only when the host/network topology deliberately provides OT access.
+
+## Images
 
 | Image | Role |
 |-------|------|
 | `ghcr.io/bbartling/openfdd-central` | API + FDD engine (DataFusion rule registry) |
-| `ghcr.io/bbartling/openfdd-web` | React engineering UI (`frontend/web`, port 3000 → 8080) |
+| `ghcr.io/bbartling/openfdd-web` | React engineering UI (container port `8080`; local Compose maps host `3000`) |
 | `ghcr.io/bbartling/openfdd-fieldbus` | BACnet/IP poller, publishes over MQTTS |
 | `ghcr.io/bbartling/openfdd-mqtt` | Mosquitto broker (MQTTS on 8883) |
 | `ghcr.io/bbartling/openfdd-mcp` | Slim Rust MCP server (talks to central) |
 
-All images use the same channel tags (`nightly`, `beta`, `latest`, pinned
-semver, `sha-*`) — see [Release channels](release-channels.html) and
-[GHCR images](ghcr-images.html).
+All release images are intended to be publicly pullable from GHCR so an IT department, Railway, or a local Docker host does not need a repository credential just to run Open-FDD. Package visibility is a GitHub Package setting and should be checked whenever a new GHCR package name is introduced.
 
-## Recipes at a glance
+See [Release channels](release-channels.html) and [GHCR images](ghcr-images.html).
 
-| Recipe | Compose file | Services | Pulls |
-|--------|--------------|----------|-------|
-| `standalone` | `docker/compose.standalone.yml` | mqtt + central + ui + fieldbus | central, ui, fieldbus, mqtt |
-| `central` | `docker/compose.central.yml` | mqtt + central + ui | central, ui, mqtt |
-| `edge` | `docker/compose.edge.yml` | fieldbus only | fieldbus |
-| `csv` | `docker/compose.csv.yml` | central + ui (`OPENFDD_MQTT_ENABLED=0`) | central, ui |
+## Local Compose recipes at a glance
+
+| Recipe | Compose file | Services | Use |
+|--------|--------------|----------|-----|
+| `csv` | `docker/compose.csv.yml` | central + web (`OPENFDD_MQTT_ENABLED=0`) | **Recommended IT dashboard / CSV-package deployment** |
+| `standalone` | `docker/compose.standalone.yml` | mqtt + central + web + fieldbus | single OT-connected host |
+| `central` | `docker/compose.central.yml` | mqtt + central + web | hub for remote fieldbus edges |
+| `edge` | `docker/compose.edge.yml` | fieldbus only | remote OT edge |
 
 ## Bring a recipe up
 
@@ -38,31 +47,49 @@ semver, `sha-*`) — see [Release channels](release-channels.html) and
 `GET /api/health` (except the `edge` recipe):
 
 ```bash
-./scripts/openfdd_stack_up.sh standalone     # pull nightly + up
-./scripts/openfdd_stack_up.sh central
+# Recommended behind-firewall dashboard
+export OPENFDD_IMAGE_TAG=nightly
+export OPENFDD_JWT_SECRET='replace-with-a-long-random-secret'
+export OPENFDD_ADMIN_PASSWORD='replace-with-a-strong-password'
 ./scripts/openfdd_stack_up.sh csv
+
+# OT-connected alternatives
+./scripts/openfdd_stack_up.sh standalone
+./scripts/openfdd_stack_up.sh central
 OPENFDD_MQTT_HOST=hub.example.com \
 OPENFDD_SITE_ID=site-a \
 OPENFDD_EDGE_KIT_DIR=./deploy/mqtt/kits/site-a__fieldbus-1 \
   ./scripts/openfdd_stack_up.sh edge
 
-# Build locally from source instead of pulling GHCR:
-./scripts/openfdd_stack_up.sh standalone --build
+# Developer-only local source build instead of pulling GHCR:
+./scripts/openfdd_stack_up.sh csv --build
 ```
 
 Pull without starting:
 
 ```bash
-./scripts/openfdd_stack_pull.sh standalone   # or central|edge|csv|mcp|all
+./scripts/openfdd_stack_pull.sh csv   # or standalone|central|edge|mcp|all
 ```
 
-After boot: UI on `http://<host>:3000`, API on `http://<host>:8080/api/health`.
+After `csv` boot: UI on `http://<host>:3000`, API health on `http://<host>:8080/api/health`.
 
 ## Recipes in detail
 
-### standalone — everything on one host
+### csv — recommended dashboard / CSV-package deployment
 
-`mqtt + central + ui + fieldbus`. The all-on-edge box: BACnet polling,
+`central + web` with `OPENFDD_MQTT_ENABLED=0`. No broker or fieldbus images are required. This is the cleanest recipe for an IT department hosting Open-FDD as a dashboard VM behind its firewall, and it is also the local equivalent of the Railway minimal cloud-lab topology.
+
+```bash
+./scripts/openfdd_stack_up.sh csv
+```
+
+The Compose recipe persists central state in the repository `workspace/` directory. For an IT-managed VM, back up that directory and prefer an immutable `sha-*` image tag after qualification.
+
+Full VM guide: [VM deployment](VM_DEPLOYMENT.md).
+
+### standalone — everything on one OT-connected host
+
+`mqtt + central + web + fieldbus`. The all-on-edge box: BACnet polling,
 broker, engine, and UI on a single machine. `fieldbus` runs on the host
 network for BACnet/IP.
 
@@ -72,8 +99,7 @@ network for BACnet/IP.
 
 ### central — hub for remote edges
 
-`mqtt + central + ui`. Run the hub in the cloud or on a local server; remote
-fieldbus edges attach over MQTTS with the `edge` recipe.
+`mqtt + central + web`. Run the hub on a local server or private infrastructure; remote fieldbus edges attach over MQTTS with the `edge` recipe.
 
 ```bash
 ./scripts/openfdd_stack_up.sh central
@@ -92,16 +118,6 @@ OPENFDD_EDGE_KIT_DIR=./deploy/mqtt/kits/site-a__fieldbus-1 \
   ./scripts/openfdd_stack_up.sh edge
 ```
 
-### csv — CSV-only, no live OT
-
-`central + ui` with `OPENFDD_MQTT_ENABLED=0` — no broker or fieldbus images
-pulled. Start FDD jobs from bulk CSV upload in the UI when there are no live
-BACnet drivers.
-
-```bash
-./scripts/openfdd_stack_up.sh csv
-```
-
 ## Environment reference
 
 | Variable | Default | Notes |
@@ -115,10 +131,12 @@ BACnet drivers.
 | `OPENFDD_EDGE_KIT_DIR` | — | Provisioning kit path (required for `edge`) |
 | `OPENFDD_JWT_SECRET` | — | Enable UI login; pair with `OPENFDD_ADMIN_PASSWORD` |
 | `OPENFDD_ADMIN_PASSWORD` | — | admin/operator/viewer password when JWT is set |
-| `OPENFDD_UI_BIND` | `0.0.0.0` | UI bind address (LAN access) |
+| `OPENFDD_CENTRAL_BIND` | `0.0.0.0` | Central host bind; use `127.0.0.1` on a dashboard VM unless direct API access is needed |
+| `OPENFDD_WEB_BIND` | `0.0.0.0` | React web host bind (LAN/VPN access) |
+| `OPENFDD_CENTRAL_UPSTREAM` | `central:8080` | Runtime web proxy target; Railway uses private service DNS |
 
 Pin a build by SHA across a recipe:
 
 ```bash
-OPENFDD_IMAGE_TAG=sha-abc1234 ./scripts/openfdd_stack_up.sh standalone
+OPENFDD_IMAGE_TAG=sha-abc1234 ./scripts/openfdd_stack_up.sh csv
 ```
