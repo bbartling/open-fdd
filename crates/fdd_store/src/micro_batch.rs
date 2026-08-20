@@ -242,6 +242,10 @@ mod tests {
     use crate::historian::LocalStorage;
 
     fn batch(times: &[&str]) -> RecordBatch {
+        batch_for_equipment(times, "AHU_1")
+    }
+
+    fn batch_for_equipment(times: &[&str], equipment_id: &str) -> RecordBatch {
         let timestamps: Vec<i64> = times
             .iter()
             .map(|raw| {
@@ -266,7 +270,7 @@ mod tests {
             vec![
                 Arc::new(TimestampNanosecondArray::from(timestamps)),
                 Arc::new(Float64Array::from(vec![Some(55.0); times.len()])),
-                Arc::new(StringArray::from(vec!["AHU_1"; times.len()])),
+                Arc::new(StringArray::from(vec![equipment_id; times.len()])),
             ],
         )
         .unwrap()
@@ -339,7 +343,11 @@ mod tests {
             .push("BUILDING_100", "AHU_1", batch(&["2026-08-20T12:00:00Z"]))
             .unwrap();
         historian
-            .push("BUILDING_100", "AHU_2", batch(&["2026-08-20T12:00:00Z"]))
+            .push(
+                "BUILDING_100",
+                "AHU_2",
+                batch_for_equipment(&["2026-08-20T12:00:00Z"], "AHU_2"),
+            )
             .unwrap();
         let flushed = historian.shutdown_flush().unwrap();
         assert_eq!(flushed.len(), 2);
