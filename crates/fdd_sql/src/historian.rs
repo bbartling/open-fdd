@@ -283,7 +283,7 @@ mod tests {
         register_historian_dataset(&ctx, tmp.path()).await.unwrap();
         let df = ctx
             .sql(
-                "SELECT COUNT(*) AS n FROM history \
+                "SELECT sat FROM history \
                  WHERE building_id = 'BUILDING_100' \
                    AND equipment_id = 'AHU_1' \
                    AND year = '2026' AND month = '08'",
@@ -315,13 +315,17 @@ mod tests {
         );
 
         let result = df.collect().await.unwrap();
-        let n = result[0]
+        assert_eq!(
+            result.iter().map(RecordBatch::num_rows).sum::<usize>(),
+            1
+        );
+        let sat = result[0]
             .column(0)
             .as_any()
-            .downcast_ref::<Int64Array>()
+            .downcast_ref::<Float64Array>()
             .unwrap()
             .value(0);
-        assert_eq!(n, 1);
+        assert!((sat - 55.0).abs() < f64::EPSILON);
     }
 
     #[tokio::test]
