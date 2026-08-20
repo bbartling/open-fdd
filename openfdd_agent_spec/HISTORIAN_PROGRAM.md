@@ -60,7 +60,7 @@ H2 merged only after the changed-head FDD engine, Rust stack, AppSec, docs, and 
 
 - [~] PR #758 — `feat/datafusion-historian-registration`, based on merged H2 / current `master`
 - [~] register canonical local `history/` dataset root instead of making `**/*.parquet` the long-term contract
-- [~] expose Hive partition columns (`building_id`, `equipment_id`, `year`, `month`)
+- [~] expose Hive partition columns (`building_id`, `equipment_id`, `year`, `month`); canonical partition values remain UTF-8 path literals (for example `year='2026'`, `month='08'`) so zero-padded month pruning is stable across DataFusion/local/object-store backends
 - [~] preserve legacy sidecar fallback during migration
 - [~] partition/date filter coverage; physical-plan pruning assertion still required
 - [ ] schema evolution tests
