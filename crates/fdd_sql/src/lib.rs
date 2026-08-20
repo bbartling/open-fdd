@@ -1,10 +1,13 @@
-//! DataFusion SQL execution over Parquet sidecars.
+//! DataFusion SQL execution over Parquet historian datasets.
 
+pub mod historian;
 pub mod session;
 
-pub use session::{
-    register_parquet_tree, register_weather_if_present, run_sql, run_sql_file, QueryResult,
+pub use historian::{
+    new_historian_session, register_historian_dataset, register_parquet_tree,
+    HistorianDatasetKind, HistorianRegistration,
 };
+pub use session::{register_weather_if_present, run_sql, run_sql_file, QueryResult};
 
 #[cfg(test)]
 mod smoke {
