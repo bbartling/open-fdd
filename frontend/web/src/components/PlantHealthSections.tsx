@@ -1,11 +1,15 @@
 import { useCallback, useMemo } from "react";
 import { HealthMatrixSection } from "./HealthMatrixSection";
-import {
-  postAhuHealth,
-  postChillerHealth,
-  postHpHealth,
-} from "../api/analyticsApi";
+import { postChillerHealth, postHpHealth } from "../api/analyticsApi";
 import type { FddEquipmentItem } from "../api/analyticsApi";
+import {
+  postAhuEconomizerHealth,
+  postAhuPressureHealth,
+  postAhuTemperatureHealth,
+  postCoolingTowerHealth,
+  postPidHunting,
+  postSensorFaults,
+} from "../api/overviewHealthApi";
 import { plantEquipmentFamilies } from "../lib/plantEquipment";
 
 export function PlantHealthSections({
@@ -19,80 +23,212 @@ export function PlantHealthSections({
 }) {
   const families = useMemo(() => plantEquipmentFamilies(equipment), [equipment]);
 
-  const fetchAhu = useCallback(
-    (id: string) => postAhuHealth({ building_id: id }),
+  const fetchAhuTemperature = useCallback(
+    (id: string) => postAhuTemperatureHealth({ building_id: id }),
+    [],
+  );
+  const fetchAhuPressure = useCallback(
+    (id: string) => postAhuPressureHealth({ building_id: id }),
+    [],
+  );
+  const fetchAhuEconomizer = useCallback(
+    (id: string) => postAhuEconomizerHealth({ building_id: id }),
     [],
   );
   const fetchChiller = useCallback(
     (id: string) => postChillerHealth({ building_id: id }),
     [],
   );
+  const fetchCoolingTower = useCallback(
+    (id: string) => postCoolingTowerHealth({ building_id: id }),
+    [],
+  );
   const fetchHp = useCallback(
     (id: string) => postHpHealth({ building_id: id }),
+    [],
+  );
+  const fetchPid = useCallback(
+    (id: string) => postPidHunting({ building_id: id }),
+    [],
+  );
+  const fetchSensors = useCallback(
+    (id: string) => postSensorFaults({ building_id: id }),
     [],
   );
 
   return (
     <>
       {families.hasAhu ? (
-        <HealthMatrixSection
-          family="ahu"
-          title="AHU health"
-          caption="Data-model scoped to AHU equip refs. Red = all cookbook flags faulted (3/3)."
-          buildingId={buildingId}
-          refreshToken={refreshToken}
-          fetchHealth={fetchAhu}
-          flagColumns={[
-            {
-              key: "sat_dev",
-              ruleId: "AHU-SATDEV",
-              haystackTags: ["dischargeAir", "dischargeAirSp"],
-            },
-            {
-              key: "duct_high",
-              ruleId: "AHU-DUCTHI",
-              haystackTags: ["ductStatic", "ductStaticSp", "fan"],
-            },
-            {
-              key: "economizer",
-              ruleId: "ECON-1",
-              haystackTags: ["outsideAir", "outsideAirDamper", "fan"],
-            },
-          ]}
-        />
+        <>
+          <HealthMatrixSection
+            family="ahu-temperature"
+            title="AHU temperature health"
+            caption="Supply and mixed-air temperature diagnostics. Fully faulted rows are highlighted regardless of matrix width."
+            buildingId={buildingId}
+            refreshToken={refreshToken}
+            fetchHealth={fetchAhuTemperature}
+            flagColumns={[
+              {
+                key: "sat_dev",
+                ruleId: "AHU-SATDEV",
+                haystackTags: ["dischargeAir", "dischargeAirSp"],
+              },
+              { key: "mat_low", ruleId: "FC2", haystackTags: ["mixedAir"] },
+              { key: "mat_high", ruleId: "FC3", haystackTags: ["mixedAir"] },
+              {
+                key: "sat_low_heating",
+                ruleId: "FC7",
+                haystackTags: ["dischargeAir", "heating"],
+              },
+              {
+                key: "sat_high_cooling",
+                ruleId: "FC13-SAT-HIGH",
+                haystackTags: ["dischargeAir", "cooling"],
+              },
+            ]}
+          />
+          <HealthMatrixSection
+            family="ahu-pressure"
+            title="AHU pressure / fan health"
+            caption="Duct static, fan command, and static-pressure reset diagnostics."
+            buildingId={buildingId}
+            refreshToken={refreshToken}
+            fetchHealth={fetchAhuPressure}
+            flagColumns={[
+              {
+                key: "duct_high",
+                ruleId: "AHU-DUCTHI",
+                haystackTags: ["ductStatic", "ductStaticSp", "fan"],
+              },
+              {
+                key: "duct_low",
+                ruleId: "FC1",
+                haystackTags: ["ductStatic", "ductStaticSp"],
+              },
+              {
+                key: "fan_mismatch",
+                ruleId: "CMD-1",
+                haystackTags: ["fan", "cmd"],
+              },
+              {
+                key: "static_trim",
+                ruleId: "TRIM-1",
+                haystackTags: ["ductStatic", "ductStaticSp"],
+              },
+            ]}
+          />
+          <HealthMatrixSection
+            family="ahu-economizer"
+            title="AHU economizer health"
+            caption="Economizer sequence diagnostics from the canonical ECON rule family."
+            buildingId={buildingId}
+            refreshToken={refreshToken}
+            fetchHealth={fetchAhuEconomizer}
+            flagColumns={[
+              {
+                key: "stuck_closed",
+                ruleId: "ECON-1",
+                haystackTags: ["outsideAir", "outsideAirDamper", "fan"],
+              },
+              {
+                key: "unfavorable",
+                ruleId: "ECON-2",
+                haystackTags: ["outsideAir", "returnAir"],
+              },
+              {
+                key: "mech_without_econ",
+                ruleId: "ECON-3",
+                haystackTags: ["outsideAir", "cooling"],
+              },
+              {
+                key: "low_oa_fraction",
+                ruleId: "ECON-4",
+                haystackTags: ["outsideAir", "mixedAir"],
+              },
+              {
+                key: "preheat_over",
+                ruleId: "ECON-5",
+                haystackTags: ["preheat", "outsideAir"],
+              },
+              {
+                key: "freeze_risk",
+                ruleId: "ECON-6",
+                haystackTags: ["outsideAir", "mixedAir"],
+              },
+              {
+                key: "not_economizing",
+                ruleId: "ECON-7",
+                haystackTags: ["outsideAir", "outsideAirDamper"],
+              },
+            ]}
+          />
+        </>
       ) : null}
+
       {families.hasChiller ? (
         <HealthMatrixSection
           family="chiller"
           title="Chiller plant health"
-          caption="Compressor-plant flags only. Heat pumps (HP_*) use the heat-pump matrix."
+          caption="Expanded chilled-water plant diagnostics. Heat pumps and cooling towers use separate matrices."
           buildingId={buildingId}
           refreshToken={refreshToken}
           fetchHealth={fetchChiller}
           flagColumns={[
             {
-              key: "chw_1",
+              key: "low_delta_t",
               ruleId: "CHW-1",
               haystackTags: ["chilledWaterSupply", "chilledWaterReturn"],
             },
             {
-              key: "chw_2",
+              key: "dp_low",
               ruleId: "CHW-2",
               haystackTags: ["chilledWaterDiffPressure", "chilledWaterDiffPressureSp"],
             },
             {
-              key: "chw_3",
+              key: "supply_band",
               ruleId: "CHW-3",
-              haystackTags: ["condenserWaterSupply", "condenserWaterReturn"],
+              haystackTags: ["chilledWaterSupply", "chilledWaterSupplySp"],
+            },
+            { key: "flow_high", ruleId: "CHW-4", haystackTags: ["chilledWater", "flow"] },
+            { key: "no_load", ruleId: "CHW-NOLOAD-1", haystackTags: ["chilledWater", "load"] },
+            {
+              key: "chw_reset",
+              ruleId: "TRIM-4",
+              haystackTags: ["chilledWaterSupply", "chilledWaterSupplySp"],
             },
           ]}
         />
       ) : null}
+
+      {families.hasCoolingTower ? (
+        <HealthMatrixSection
+          family="cooling-tower"
+          title="Cooling-tower health"
+          caption="Condenser-water approach, fan, and optimization diagnostics."
+          buildingId={buildingId}
+          refreshToken={refreshToken}
+          fetchHealth={fetchCoolingTower}
+          flagColumns={[
+            {
+              key: "approach_high",
+              ruleId: "CW-APR-1",
+              haystackTags: ["condenserWater", "outsideAirWetBulb"],
+            },
+            { key: "fan_energy", ruleId: "CW-FAN-1", haystackTags: ["fan", "condenserWater"] },
+            {
+              key: "cw_optimization",
+              ruleId: "CW-OPT-1",
+              haystackTags: ["condenserWater", "setpoint"],
+            },
+          ]}
+        />
+      ) : null}
+
       {families.hasHeatPump ? (
         <HealthMatrixSection
           family="hp"
           title="Heat-pump health"
-          caption="HP_* equip refs only."
+          caption="Heat-pump equipment only."
           buildingId={buildingId}
           refreshToken={refreshToken}
           fetchHealth={fetchHp}
@@ -115,6 +251,37 @@ export function PlantHealthSections({
           ]}
         />
       ) : null}
+
+      <HealthMatrixSection
+        family="pid"
+        title="PID Hunting"
+        caption="Operating-state and control-output hunting evidence across applicable equipment."
+        buildingId={buildingId}
+        refreshToken={refreshToken}
+        fetchHealth={fetchPid}
+        flagColumns={[
+          { key: "operating_state_hunt", ruleId: "FC4" },
+          { key: "control_output_hunt", ruleId: "PID-HUNT-1" },
+        ]}
+      />
+
+      <HealthMatrixSection
+        family="sensor"
+        title="Sensor faults"
+        caption="Sensor validation faults across the current Overview window."
+        buildingId={buildingId}
+        refreshToken={refreshToken}
+        fetchHealth={fetchSensors}
+        flagColumns={[
+          { key: "flatline", ruleId: "SV-FLATLINE" },
+          { key: "range", ruleId: "SV-RANGE" },
+          { key: "rate", ruleId: "SV-RATE" },
+          { key: "spike", ruleId: "SV-SPIKE" },
+          { key: "stale", ruleId: "SV-STALE" },
+        ]}
+        emptyMessage="No sensor faults in window"
+        renderEmptyTable
+      />
     </>
   );
 }
