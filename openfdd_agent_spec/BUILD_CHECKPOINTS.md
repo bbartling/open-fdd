@@ -225,4 +225,6 @@ Product voice = React + DataFusion only. Track deletion / GHCR / agent_spec hone
 
 - [x] P1-M7-00 — H1/H2 merged; H3 DataFusion historian registration/query-safety merged via #758 (`c5974abd`)
 - [x] P1-M7-01 — H4 bounded offline local historian compaction merged via #760 (`32eabc68`) after exact-head CI + review passed
-- [ ] P1-M7-02 — H5 generic S3/object-store + central runtime/Railway/MinIO cutover
+- [x] P1-M7-02 — H5 generic S3/object-store + DataFusion tuning + central scoped runtime/Railway/loopback-MinIO merged via #762 (`9239574a`); canonical S3 bucket remains private and container disk is scratch/spill
+- [~] P1-M7-03 — H6 migration/operator tooling active via #764: trusted Parquet/JSONL/Arrow discovery + bounded restart-safe conversion, preservation receipts/reports, footer-only canonical stats, operator CLI, fail-closed S3 compatibility scope
+- [ ] P1-M7-04 — H7 live-ingest micro-batch cutover: trustworthy equipment/role identity, H2 accumulator wiring, elapsed/shutdown flush, persisted latest timestamp, retire durability-critical JSONL/IPC rewrite

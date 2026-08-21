@@ -88,19 +88,21 @@ The older stacked PR #759 remains closed historical context only. H4 merged only
 
 ### H5 — S3-compatible backend + Railway
 
-- [ ] direct generic `object_store` integration (same ecosystem used by DataFusion/Parquet)
-- [ ] AWS S3 / MinIO / Railway-compatible endpoint, region and credentials
-- [ ] virtual-hosted/path-style configuration for compatible providers
-- [ ] never log credentials
-- [ ] DataFusion object-store registration
-- [ ] central analytics/runtime cutover from local-only Parquet discovery to configured canonical storage
-- [ ] fail-closed building scoping on canonical object-store history
-- [ ] optional local MinIO Compose recipe
-- [ ] Railway Storage Bucket mapping docs
-- [ ] Railway central uses bucket as canonical historian; container disk is scratch
-- [ ] Railway web remains the only public service in the minimal dashboard recipe
+- [x] PR #762 — `feat/s3-historian-backend`, merged to `master` as `9239574a`
+- [x] direct generic `object_store` integration (same ecosystem used by DataFusion/Parquet)
+- [x] AWS S3 / MinIO / Railway-compatible endpoint, region and credentials
+- [x] virtual-hosted/path-style configuration for compatible providers
+- [x] credential/session-token validation and redacted debug output; secrets are never logged
+- [x] DataFusion object-store registration and canonical Hive partition exposure
+- [x] building-scoped object discovery before DataFusion scans unrelated objects
+- [x] central S3 scope-index refresh with fail-closed building presence checks
+- [x] DataFusion historian tuning contract for Parquet filter pushdown/reordering, metadata hints, memory/spill, partition and batch controls
+- [x] optional loopback-only local MinIO Compose recipe
+- [x] Railway Storage Bucket mapping docs without Railway-specific engine branching
+- [x] Railway central uses the bucket as canonical historian; container disk is scratch/spill only
+- [x] deployment language is LAN/VPN/private-ingress only; H5 does not introduce a public historian or public central API
 
-Railway mapping target (deployment config, never Rust provider branching):
+Railway mapping is deployment configuration, never Rust provider branching:
 
 ```text
 OPENFDD_STORAGE_URL=s3://${{bucket.BUCKET}}
@@ -108,17 +110,29 @@ OPENFDD_S3_ENDPOINT=${{bucket.ENDPOINT}}
 OPENFDD_S3_REGION=${{bucket.REGION}}
 OPENFDD_S3_ACCESS_KEY_ID=${{bucket.ACCESS_KEY_ID}}
 OPENFDD_S3_SECRET_ACCESS_KEY=${{bucket.SECRET_ACCESS_KEY}}
+OPENFDD_S3_URL_STYLE=virtual
+OPENFDD_S3_ALLOW_HTTP=false
 ```
 
-Current Railway Storage Buckets are private S3-compatible buckets; current Railway docs use `BUCKET`, `ENDPOINT`, `REGION`, `ACCESS_KEY_ID`, and `SECRET_ACCESS_KEY`. New buckets use virtual-hosted-style URLs by default; support remains generic because older/other S3-compatible endpoints may use path style.
+Compatible providers may use path style instead. `OPENFDD_S3_ALLOW_HTTP=true` is limited to explicit local/test endpoints such as loopback MinIO. H5 merged only after its exact head passed FDD engine, Rust stack, AppSec, docs, security, and review gates.
 
 ### H6 — Migration + operator historian tooling
 
-- [ ] migrate legacy `building=<id>/equipment=<id>/history.parquet`
-- [ ] classify/migrate eligible legacy JSONL/Feather data without inventing identity
-- [ ] dry-run and restart-safe behavior
-- [ ] row/timestamp/equipment preservation report
-- [ ] historian stats JSON/operator command/API
+- [~] PR #764 — `feat/historian-migration-tooling`, active until exact-head CI/review gates are clean
+- [x] recursively discover and classify legacy Parquet, JSONL/NDJSON, and Feather/Arrow IPC historian artifacts
+- [x] require trusted `building=<id>/equipment=<id>` path identity; never invent identity from point IDs or defaults
+- [x] reject unsafe/conflicting identity and non-canonical/ambiguous migration inputs
+- [x] bounded streamed migration of eligible legacy `history.parquet` into canonical monthly parts
+- [x] bounded JSONL scalar-schema conversion with strict timestamp parsing and mixed/nested type rejection
+- [x] bounded Arrow IPC/Feather conversion with `timestamp` → `timestamp_utc` normalization and timestamp-type validation
+- [x] use the same staging + atomic receipt + part hash verification protocol for every migrated format
+- [x] restart-safe/idempotent reruns resume the exact publish plan; changed sources fail closed
+- [x] row-count preservation plus first/last timestamp and equipment identity reports
+- [x] footer-only local canonical historian stats: files, bytes, rows, partitions, buildings, equipment, month range, invalid layout, and H4-aligned small-file health
+- [x] public serializable `HistorianStats` / migration report API plus operator CLI commands `historian-dry-run`, `historian-migrate`, and `historian-stats`
+- [x] S3 compatibility registration carry-forward is fail-closed when a building scope is absent; explicit global/operator registration remains separate
+
+H6 remains offline/operator migration. It does not delete legacy data and does not make migration concurrent with live ingest. The phase is not complete until PR #764's final changed head has clean FDD, Rust stack, AppSec, docs/security workflows and clean review threads.
 
 ### H7 — Live ingest micro-batch cutover
 
@@ -185,4 +199,5 @@ OPENFDD_AFDD_LOOKBACK_UNIT=hours
 - Do not make bulk CSV import start recurring AFDD.
 - Do not rescan retained history for every continuous AFDD cycle.
 - Do not weaken auth/security or log S3 secrets.
+- Keep historian/central ingress LAN/VPN/private-only; do not describe these services as public.
 - Do not merge a phase until its changed-head CI and review threads are clean.
