@@ -10,8 +10,10 @@ chrono.workspace = true
 datafusion.workspace = true
 fdd_core = { path = "../fdd_core" }
 fdd_store = { path = "../fdd_store" }
+object_store.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+url.workspace = true
 walkdir.workspace = true
 
 [dev-dependencies]
