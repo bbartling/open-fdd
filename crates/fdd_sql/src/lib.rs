@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use datafusion::prelude::SessionContext;
 use fdd_store::{HistorianConfig, StorageUrl};
 
@@ -31,13 +31,21 @@ pub use tuning::{historian_session_config_from_env, DataFusionTuning};
 /// Existing local callers remain path-driven. When `OPENFDD_STORAGE_URL`
 /// explicitly selects S3, an existing `building=<id>` compatibility marker is
 /// translated into a canonical object-store prefix before DataFusion discovers
-/// files, avoiding unrelated-building object listings.
+/// files, avoiding unrelated-building object listings. Compatibility callers may
+/// not fall back to unscoped whole-bucket history; explicit global/operator S3
+/// queries must use `register_configured_historian` directly.
 pub async fn register_parquet_tree(ctx: &SessionContext, parquet_root: &Path) -> Result<usize> {
     if let Ok(raw) = std::env::var("OPENFDD_STORAGE_URL") {
         if matches!(StorageUrl::parse(&raw)?, StorageUrl::S3 { .. }) {
             let config = HistorianConfig::from_env()?;
-            let building_id = object_store::building_scope_from_compat_path(parquet_root);
-            object_store::register_configured_historian_scoped(ctx, &config, building_id).await?;
+            let building_id = object_store::building_scope_from_compat_path(parquet_root)
+                .ok_or_else(|| anyhow!("S3 historian compatibility registration requires a building scope"))?;
+            object_store::register_configured_historian_scoped(
+                ctx,
+                &config,
+                Some(building_id),
+            )
+            .await?;
             return Ok(1);
         }
     }
