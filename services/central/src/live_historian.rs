@@ -27,6 +27,10 @@ const TAG_BUILDING_ID: &str = "building_id";
 const TAG_EQUIPMENT_ID: &str = "equipment_id";
 const TAG_ROLE: &str = "role";
 
+type EquipmentKey = (String, String);
+type EquipmentRoles = BTreeMap<String, RoleValue>;
+type NormalizedBatches = (BTreeMap<EquipmentKey, RecordBatch>, usize, usize);
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LiveHistorianIngest {
     pub eligible_points: usize,
@@ -94,6 +98,9 @@ impl LiveHistorian {
         Ok(report)
     }
 
+    // H7 will call this from the owning runtime's graceful-shutdown path. Keep
+    // the primitive available while that wiring remains an explicit H7 task.
+    #[allow(dead_code)]
     pub fn shutdown_flush(&mut self) -> Result<LiveHistorianIngest> {
         let flushes = self.batches.shutdown_flush()?;
         let mut report = LiveHistorianIngest::default();
@@ -144,10 +151,8 @@ enum RoleValue {
     Utf8(Option<String>),
 }
 
-fn normalized_batches(
-    env: &TelemetryEnvelope,
-) -> Result<(BTreeMap<(String, String), RecordBatch>, usize, usize)> {
-    let mut grouped: BTreeMap<(String, String), BTreeMap<String, RoleValue>> = BTreeMap::new();
+fn normalized_batches(env: &TelemetryEnvelope) -> Result<NormalizedBatches> {
+    let mut grouped: BTreeMap<EquipmentKey, EquipmentRoles> = BTreeMap::new();
     let mut eligible = 0usize;
     let mut skipped = 0usize;
 
