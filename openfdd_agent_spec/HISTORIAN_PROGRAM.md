@@ -72,17 +72,19 @@ H3 merged only after its exact changed head passed FDD engine, Rust stack, AppSe
 
 ### H4 — Compaction
 
-- [~] PR #759 — `feat/historian-compaction`, rebuilt cleanly on merged H3 / current `master`
-- [~] identify small files partition-by-partition without crossing building/equipment/year/month boundaries
-- [~] bounded-memory replacement writer streams Parquet batches instead of materializing a partition
-- [~] nullable schema evolution is unioned safely; incompatible type changes fail closed
-- [~] validate replacement row count/schema before retiring source files
-- [~] retire source `.parquet` files out of the query surface before publishing the validated replacement
-- [~] roll source retirement back if publish fails; report hidden cleanup-pending files if post-publish deletion fails
-- [~] lightweight serializable compaction plan/result/summary metrics
-- [~] unit coverage for partition-local planning, row preservation, nullable schema evolution, and failure safety
+- [x] PR #760 — `feat/historian-compaction`, merged to `master` as `32eabc68`
+- [x] identify small files partition-by-partition without crossing building/equipment/year/month boundaries
+- [x] bounded-memory replacement writer streams Parquet batches instead of materializing a partition
+- [x] nullable schema evolution is unioned safely; incompatible type changes fail closed
+- [x] validate replacement row count/schema before changing the query surface
+- [x] reject duplicate plan inputs and unsafe/non-canonical partition paths
+- [x] retire source `.parquet` files to hidden tombstones, publish the validated replacement, fsync the partition directory, then delete retired sources
+- [x] surface rollback failures and report cleanup-pending tombstones
+- [x] lightweight serializable plan/result/summary metrics with distinct partition accounting
+- [x] unit coverage for partition-local planning, row preservation, nullable schema evolution, duplicate inputs, summary accounting, and failure safety
+- [x] local H4 compaction is offline-only; it is not scheduled from the product runtime and must not overlap DataFusion scans of the same local historian
 
-H4 implementation is on a clean post-H3 branch; changed-head CI and review are the remaining merge gates.
+The older stacked PR #759 remains closed historical context only. H4 merged only after exact-head FDD engine, Rust stack, AppSec, docs/security, and review gates were green.
 
 ### H5 — S3-compatible backend + Railway
 
@@ -91,6 +93,8 @@ H4 implementation is on a clean post-H3 branch; changed-head CI and review are t
 - [ ] virtual-hosted/path-style configuration for compatible providers
 - [ ] never log credentials
 - [ ] DataFusion object-store registration
+- [ ] central analytics/runtime cutover from local-only Parquet discovery to configured canonical storage
+- [ ] fail-closed building scoping on canonical object-store history
 - [ ] optional local MinIO Compose recipe
 - [ ] Railway Storage Bucket mapping docs
 - [ ] Railway central uses bucket as canonical historian; container disk is scratch
@@ -106,7 +110,7 @@ OPENFDD_S3_ACCESS_KEY_ID=${{bucket.ACCESS_KEY_ID}}
 OPENFDD_S3_SECRET_ACCESS_KEY=${{bucket.SECRET_ACCESS_KEY}}
 ```
 
-Current Railway Storage Buckets are private S3-compatible buckets; current Railway docs use `BUCKET`, `ENDPOINT`, `REGION`, `ACCESS_KEY_ID`, and `SECRET_ACCESS_KEY`. New buckets use virtual-hosted-style URLs by default; support should remain generic because older/other S3-compatible endpoints may use path style.
+Current Railway Storage Buckets are private S3-compatible buckets; current Railway docs use `BUCKET`, `ENDPOINT`, `REGION`, `ACCESS_KEY_ID`, and `SECRET_ACCESS_KEY`. New buckets use virtual-hosted-style URLs by default; support remains generic because older/other S3-compatible endpoints may use path style.
 
 ### H6 — Migration + operator historian tooling
 
