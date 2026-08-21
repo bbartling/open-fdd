@@ -7,7 +7,7 @@
 //! and pass the same partition-value validation used by the canonical writer.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use serde::Serialize;
