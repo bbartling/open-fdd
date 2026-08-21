@@ -1,18 +1,48 @@
 //! DataFusion SQL execution over Parquet historian datasets.
 
+use std::path::Path;
+
+use anyhow::Result;
+use datafusion::prelude::SessionContext;
+use fdd_store::{HistorianConfig, StorageUrl};
+
 pub mod historian;
+pub mod object_store;
 pub mod query;
 pub mod session;
+pub mod tuning;
 
 pub use historian::{
-    new_historian_session, register_historian_dataset, register_parquet_tree, HistorianDatasetKind,
-    HistorianRegistration,
+    new_historian_session, register_historian_dataset, HistorianDatasetKind, HistorianRegistration,
+};
+pub use object_store::{
+    refresh_s3_scope_index_from_env, register_configured_historian,
+    register_configured_historian_scoped, s3_scope_index_root, S3ObjectStoreConfig, S3UrlStyle,
 };
 pub use query::{collect_sql_bounded, stream_sql, DEFAULT_INTERACTIVE_MAX_ROWS};
 pub use session::{
     register_weather_if_present, run_sql, run_sql_bounded, run_sql_file, run_sql_file_bounded,
     QueryResult,
 };
+pub use tuning::{historian_session_config_from_env, DataFusionTuning};
+
+/// Compatibility registration entry point used by central/edge callers.
+///
+/// Existing local callers remain path-driven. When `OPENFDD_STORAGE_URL`
+/// explicitly selects S3, an existing `building=<id>` compatibility marker is
+/// translated into a canonical object-store prefix before DataFusion discovers
+/// files, avoiding unrelated-building object listings.
+pub async fn register_parquet_tree(ctx: &SessionContext, parquet_root: &Path) -> Result<usize> {
+    if let Ok(raw) = std::env::var("OPENFDD_STORAGE_URL") {
+        if matches!(StorageUrl::parse(&raw)?, StorageUrl::S3 { .. }) {
+            let config = HistorianConfig::from_env()?;
+            let building_id = object_store::building_scope_from_compat_path(parquet_root);
+            object_store::register_configured_historian_scoped(ctx, &config, building_id).await?;
+            return Ok(1);
+        }
+    }
+    historian::register_parquet_tree(ctx, parquet_root).await
+}
 
 #[cfg(test)]
 mod smoke {

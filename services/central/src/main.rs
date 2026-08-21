@@ -18,6 +18,7 @@ mod wattlab_dump;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::middleware;
 use axum::Router;
@@ -34,6 +35,8 @@ async fn main() -> anyhow::Result<()> {
                 .unwrap_or_else(|_| EnvFilter::new("info,openfdd_central=info")),
         )
         .init();
+
+    initialize_s3_scope_index().await?;
 
     let state = Arc::new(AppState::new());
     match jobs::recover_interrupted_runs() {
@@ -70,5 +73,39 @@ async fn main() -> anyhow::Result<()> {
     );
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
+    Ok(())
+}
+
+async fn initialize_s3_scope_index() -> anyhow::Result<()> {
+    let Some(buildings) = fdd_sql::refresh_s3_scope_index_from_env().await? else {
+        return Ok(());
+    };
+    info!(
+        buildings,
+        "refreshed S3 historian building scope index (scratch metadata only)"
+    );
+
+    let refresh_seconds = std::env::var("OPENFDD_S3_SCOPE_REFRESH_SECONDS")
+        .ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+        .filter(|seconds| *seconds > 0)
+        .unwrap_or(60);
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(refresh_seconds));
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            match fdd_sql::refresh_s3_scope_index_from_env().await {
+                Ok(Some(buildings)) => {
+                    tracing::debug!(buildings, "refreshed S3 historian building scope index")
+                }
+                Ok(None) => break,
+                Err(error) => tracing::warn!(
+                    %error,
+                    "S3 historian building scope refresh failed; retaining last index"
+                ),
+            }
+        }
+    });
     Ok(())
 }
