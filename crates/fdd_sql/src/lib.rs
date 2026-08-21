@@ -1,20 +1,47 @@
 //! DataFusion SQL execution over Parquet historian datasets.
 
+use std::path::Path;
+
+use anyhow::Result;
+use datafusion::prelude::SessionContext;
+use fdd_store::{HistorianConfig, StorageUrl};
+
 pub mod historian;
 pub mod object_store;
 pub mod query;
 pub mod session;
 
 pub use historian::{
-    new_historian_session, register_historian_dataset, register_parquet_tree, HistorianDatasetKind,
+    new_historian_session, register_historian_dataset, HistorianDatasetKind,
     HistorianRegistration,
 };
-pub use object_store::{register_configured_historian, S3ObjectStoreConfig, S3UrlStyle};
+pub use object_store::{
+    refresh_s3_scope_index_from_env, register_configured_historian, s3_scope_index_root,
+    S3ObjectStoreConfig, S3UrlStyle,
+};
 pub use query::{collect_sql_bounded, stream_sql, DEFAULT_INTERACTIVE_MAX_ROWS};
 pub use session::{
     register_weather_if_present, run_sql, run_sql_bounded, run_sql_file, run_sql_file_bounded,
     QueryResult,
 };
+
+/// Compatibility registration entry point used by central/edge callers.
+///
+/// File-backed configurations preserve the H3 behavior. When the canonical
+/// storage URL is S3, the local path is treated only as central's scratch scope
+/// marker: the real dataset is registered from object storage and an existing
+/// `building=<id>` marker becomes a `building_id` DataFusion view predicate.
+pub async fn register_parquet_tree(ctx: &SessionContext, parquet_root: &Path) -> Result<usize> {
+    let config = HistorianConfig::from_env()?;
+    if matches!(config.storage_url, StorageUrl::S3 { .. }) {
+        object_store::register_configured_historian(ctx, &config).await?;
+        if let Some(building_id) = object_store::building_scope_from_compat_path(parquet_root) {
+            object_store::scope_history_to_building(ctx, building_id).await?;
+        }
+        return Ok(1);
+    }
+    historian::register_parquet_tree(ctx, parquet_root).await
+}
 
 #[cfg(test)]
 mod smoke {
