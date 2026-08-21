@@ -41,28 +41,32 @@ H1 merged only after its changed-head FDD, Rust stack, AppSec, docs, and securit
 
 ### H2 — Immutable partitioned Parquet writer
 
-- [~] PR #757 — `feat/partitioned-parquet-writer`, cleanly based on merged H1 / current `master`
-- [~] immutable collision-safe part names
-- [~] UTC month split for RecordBatches
-- [~] explicit Snappy compression + page statistics + bounded row groups
-- [~] validate optional `building_id` / `equipment_id` batch identity against the trusted partition path
-- [~] omit identity columns from physical Parquet so H3 can expose them exactly once as Hive partition columns
-- [~] local crash-safe publish
-- [~] append/month-boundary/round-trip/strict timestamp tests
-- [~] bounded micro-batch accumulator with per-equipment schema consistency
-- [~] row-threshold OR elapsed-time flush policy
-- [~] failed-write buffering retained for explicit retry
-- [~] clean shutdown drain through the same immutable writer
+- [x] PR #757 — `feat/partitioned-parquet-writer`, merged to `master` as `11df6089`
+- [x] immutable collision-safe part names
+- [x] UTC month split for RecordBatches
+- [x] explicit Snappy compression + page statistics + bounded row groups
+- [x] validate optional `building_id` / `equipment_id` batch identity against the trusted partition path
+- [x] omit identity columns from physical Parquet so DataFusion can expose them exactly once as Hive partition columns
+- [x] local crash-safe publish
+- [x] append/month-boundary/round-trip/strict timestamp tests
+- [x] bounded micro-batch accumulator with per-equipment schema consistency
+- [x] row-threshold OR elapsed-time flush policy
+- [x] failed-write buffering retained for explicit retry
+- [x] clean shutdown drain through the same immutable writer
+
+H2 merged only after the changed-head FDD engine, Rust stack, AppSec, docs, and security workflows were green.
 
 ### H3 — Logical DataFusion dataset registration + query safety
 
-- [ ] register canonical dataset root instead of making `**/*.parquet` the long-term contract
-- [ ] expose Hive partition columns (`building_id`, `equipment_id`, `year`, `month`)
-- [ ] preserve legacy sidecar fallback during migration
-- [ ] partition/date pruning tests
-- [ ] schema evolution tests
-- [ ] generic interactive query row safeguard / streaming contract
-- [ ] DataFusion memory/spill configuration wiring
+- [~] PR #758 — `feat/datafusion-historian-registration`, based on merged H2 / current `master`
+- [~] register canonical local `history/` dataset root instead of making `**/*.parquet` the long-term contract
+- [~] expose Hive partition columns (`building_id`, `equipment_id`, `year`, `month`); canonical partition values remain UTF-8 path literals (for example `year='2026'`, `month='08'`) so zero-padded month pruning is stable across DataFusion/local/object-store backends
+- [~] preserve legacy sidecar fallback during migration
+- [~] partition/date filter coverage plus physical-plan file pruning assertions; changed-head CI pending
+- [~] schema evolution coverage across mixed Parquet role columns; changed-head CI pending
+- [~] bounded interactive query collection plus Arrow streaming contract (`collect_sql_bounded`, `stream_sql`); changed-head CI pending
+- [~] DataFusion memory/spill configuration wiring via H1 historian config; CLI query runtime now uses the configured session, changed-head CI pending
+- [~] agent/build architecture docs updated for the H3 contract
 
 ### H4 — Compaction
 

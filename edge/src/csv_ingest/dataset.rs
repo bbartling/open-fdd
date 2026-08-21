@@ -558,6 +558,7 @@ mod tests {
 
     #[test]
     fn delete_dataset_purges_rule_results_building_partition() {
+        let _guard = crate::test_support::workspace_env_lock();
         let tmp = TempDir::new().unwrap();
         // isolate workspace + CWD-relative rule_results roots used by delete_dataset
         let prev_ws = std::env::var("OPENFDD_WORKSPACE").ok();
@@ -606,6 +607,7 @@ mod tests {
 
     #[test]
     fn delete_dataset_purges_mqtt_and_modbus_feathers() {
+        let _guard = crate::test_support::workspace_env_lock();
         let tmp = TempDir::new().unwrap();
         let prev_ws = std::env::var("OPENFDD_WORKSPACE").ok();
         std::env::set_var("OPENFDD_WORKSPACE", tmp.path());
