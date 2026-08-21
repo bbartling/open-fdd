@@ -7,8 +7,15 @@
 //! replacement is published atomically, and retired files are deleted last.
 //! This keeps write/validation failures non-destructive and avoids materializing
 //! an entire partition in memory.
+//!
+//! H4 exposes compaction as an offline maintenance primitive only; it is not
+//! scheduled from the product runtime. Callers must not overlap compaction with
+//! DataFusion scans of the same local historian. Publishing the replacement
+//! first would create a duplicate-row window, while retiring inputs first creates
+//! a short read gap; a future runtime coordinator must serialize those operations
+//! before continuous compaction is enabled.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
@@ -87,6 +94,9 @@ impl ParquetCompactor {
     }
 
     pub fn from_config(config: &HistorianConfig) -> Result<Self> {
+        if !config.compaction_enabled {
+            bail!("compaction is disabled by configuration");
+        }
         let StorageUrl::File { root } = &config.storage_url else {
             bail!("H4 local compaction requires file:// storage; object-store compaction arrives in H5");
         };
@@ -244,20 +254,49 @@ impl ParquetCompactor {
             let original = PathBuf::from(input);
             let tombstone = retired_path(&original, &op_id)?;
             if let Err(error) = rename_storage_path(&self.storage, &original, &tombstone) {
-                rollback_retired(&self.storage, &retired);
+                let stranded = rollback_retired(&self.storage, &retired);
                 let _ = self.storage.delete(&candidate);
-                return Err(error.context("retire compaction inputs before publish"));
+                let error = error.context("retire compaction inputs before publish");
+                if stranded.is_empty() {
+                    return Err(error);
+                }
+                return Err(error.context(format!(
+                    "rollback incomplete; stranded retired files: {}",
+                    stranded.join(", ")
+                )));
             }
             retired.push((original, tombstone));
         }
 
         if let Err(error) = rename_storage_path(&self.storage, &candidate, &final_path) {
-            rollback_retired(&self.storage, &retired);
+            let stranded = rollback_retired(&self.storage, &retired);
             let _ = self.storage.delete(&candidate);
-            return Err(error.context("publish compacted replacement"));
+            let error = error.context("publish compacted replacement");
+            if stranded.is_empty() {
+                return Err(error);
+            }
+            return Err(error.context(format!(
+                "rollback incomplete; stranded retired files: {}",
+                stranded.join(", ")
+            )));
         }
 
-        let output_bytes = fs::metadata(resolve_storage_path(&self.storage, &final_path)?)?.len();
+        let published = resolve_storage_path(&self.storage, &final_path)?;
+        if let Some(parent) = published.parent() {
+            if let Err(error) = fs::File::open(parent).and_then(|dir| dir.sync_all()) {
+                let tombstones = retired
+                    .iter()
+                    .map(|(_, tombstone)| slash_path(tombstone))
+                    .collect::<Vec<_>>();
+                return Err(anyhow!(error).context(format!(
+                    "fsync published compaction directory {}; replacement remains visible and source tombstones are retained for recovery: {}",
+                    parent.display(),
+                    tombstones.join(", ")
+                )));
+            }
+        }
+
+        let output_bytes = fs::metadata(&published)?.len();
         let mut cleanup_pending = Vec::new();
         for (_, tombstone) in &retired {
             if self.storage.delete(tombstone).is_err() {
@@ -280,10 +319,11 @@ impl ParquetCompactor {
         let plans = self.plan_history()?;
         let mut results = Vec::with_capacity(plans.len());
         let mut summary = CompactionSummary::default();
+        let mut touched_partitions = BTreeSet::new();
 
         for plan in plans {
             let result = self.compact_plan(&plan)?;
-            summary.partitions += 1;
+            touched_partitions.insert(result.partition_path.clone());
             summary.input_files += result.input_files;
             summary.input_bytes = summary
                 .input_bytes
@@ -301,6 +341,7 @@ impl ParquetCompactor {
             summary.cleanup_pending_files += result.cleanup_pending.len();
             results.push(result);
         }
+        summary.partitions = touched_partitions.len();
 
         Ok((results, summary))
     }
@@ -312,6 +353,12 @@ fn validate_plan(plan: &CompactionPlan) -> Result<()> {
     }
     if plan.input_paths.is_empty() {
         bail!("compaction plan has no source files");
+    }
+    let mut seen = BTreeSet::new();
+    for input in &plan.input_paths {
+        if !seen.insert(input.as_str()) {
+            bail!("duplicate compaction input {input}");
+        }
     }
     Ok(())
 }
@@ -334,13 +381,16 @@ fn ensure_input_in_partition(input: &Path, partition: &Path) -> Result<()> {
 }
 
 fn is_canonical_history_partition(path: &Path) -> bool {
-    let parts: Vec<String> = path
-        .components()
-        .filter_map(|component| match component {
-            Component::Normal(value) => value.to_str().map(str::to_owned),
-            _ => None,
-        })
-        .collect();
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => match value.to_str() {
+                Some(value) => parts.push(value.to_owned()),
+                None => return false,
+            },
+            _ => return false,
+        }
+    }
     parts.len() == 5
         && parts[0] == "history"
         && parts[1].starts_with("building_id=")
@@ -507,10 +557,15 @@ fn rename_storage_path(storage: &LocalStorage, from: &Path, to: &Path) -> Result
     Ok(())
 }
 
-fn rollback_retired(storage: &LocalStorage, retired: &[(PathBuf, PathBuf)]) {
+#[must_use]
+fn rollback_retired(storage: &LocalStorage, retired: &[(PathBuf, PathBuf)]) -> Vec<String> {
+    let mut stranded = Vec::new();
     for (original, tombstone) in retired.iter().rev() {
-        let _ = rename_storage_path(storage, tombstone, original);
+        if rename_storage_path(storage, tombstone, original).is_err() {
+            stranded.push(slash_path(tombstone));
+        }
     }
+    stranded
 }
 
 fn resolve_storage_path(storage: &LocalStorage, relative: &Path) -> Result<PathBuf> {
@@ -626,6 +681,51 @@ mod tests {
         assert_eq!(plans.len(), 1);
         assert_eq!(plans[0].input_paths.len(), 3);
         assert!(plans[0].partition_path.ends_with("year=2026/month=08"));
+    }
+
+    #[test]
+    fn duplicate_plan_input_is_rejected_before_write() {
+        let tmp = TempDir::new().unwrap();
+        let storage = LocalStorage::new(tmp.path());
+        let writer = ParquetPartWriter::new(storage.clone());
+        let input = write_part(&writer, "2026-08-20T12:00:00Z");
+        let partition = Path::new(&input).parent().unwrap().to_string_lossy().to_string();
+        let plan = CompactionPlan {
+            partition_path: partition,
+            input_paths: vec![input.clone(), input.clone()],
+            input_bytes: 0,
+        };
+        let compactor = ParquetCompactor::new(storage, 2, 128).unwrap();
+        let error = compactor.compact_plan(&plan).unwrap_err();
+        assert!(error.to_string().contains("duplicate compaction input"));
+    }
+
+    #[test]
+    fn summary_counts_distinct_partitions_not_plans() {
+        let tmp = TempDir::new().unwrap();
+        let storage = LocalStorage::new(tmp.path());
+        let writer = ParquetPartWriter::new(storage.clone());
+        for time in [
+            "2026-08-20T12:00:00Z",
+            "2026-08-20T12:05:00Z",
+            "2026-08-20T12:10:00Z",
+            "2026-08-20T12:15:00Z",
+        ] {
+            write_part(&writer, time);
+        }
+        let mut compactor = ParquetCompactor::new(storage, 2, 128).unwrap();
+        compactor.target_file_bytes = 1;
+        let (results, summary) = compactor.compact_history().unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(summary.partitions, 1);
+        assert_eq!(summary.output_files, 2);
+    }
+
+    #[test]
+    fn canonical_partition_rejects_non_normal_components() {
+        assert!(!is_canonical_history_partition(Path::new(
+            "history/building_id=B1/equipment_id=AHU_1/../year=2026/month=08"
+        )));
     }
 
     #[test]
