@@ -689,7 +689,11 @@ mod tests {
         let storage = LocalStorage::new(tmp.path());
         let writer = ParquetPartWriter::new(storage.clone());
         let input = write_part(&writer, "2026-08-20T12:00:00Z");
-        let partition = Path::new(&input).parent().unwrap().to_string_lossy().to_string();
+        let partition = Path::new(&input)
+            .parent()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
         let plan = CompactionPlan {
             partition_path: partition,
             input_paths: vec![input.clone(), input.clone()],
