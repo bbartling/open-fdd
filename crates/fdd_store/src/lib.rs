@@ -6,6 +6,7 @@ pub mod historian;
 pub mod ingest;
 pub mod meta;
 pub mod micro_batch;
+pub mod migration;
 pub mod parquet_parts;
 
 pub use append::{merge_history_wide_csv, merge_history_wide_text, MergeReport};
@@ -17,4 +18,8 @@ pub use historian::{
 pub use ingest::{ingest_building, ingest_building_with_batch_hook, IngestReport, IngestTiming};
 pub use meta::SidecarMeta;
 pub use micro_batch::{FlushReason, HistorianBatchKey, MicroBatchFlush, MicroBatchHistorian};
+pub use migration::{
+    discover_legacy_historian, LegacyHistorianCandidate, LegacyHistorianFormat, MigrationDryRunReport,
+    MigrationInventory,
+};
 pub use parquet_parts::{ParquetPart, ParquetPartWriter, DEFAULT_ROW_GROUP_ROWS};
