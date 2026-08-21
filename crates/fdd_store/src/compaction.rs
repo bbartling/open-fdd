@@ -709,16 +709,22 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let storage = LocalStorage::new(tmp.path());
         let writer = ParquetPartWriter::new(storage.clone());
-        for time in [
+        let inputs = [
             "2026-08-20T12:00:00Z",
             "2026-08-20T12:05:00Z",
             "2026-08-20T12:10:00Z",
             "2026-08-20T12:15:00Z",
-        ] {
-            write_part(&writer, time);
-        }
+        ]
+        .into_iter()
+        .map(|time| write_part(&writer, time))
+        .collect::<Vec<_>>();
+        let max_input_bytes = inputs
+            .iter()
+            .map(|input| fs::metadata(tmp.path().join(input)).unwrap().len())
+            .max()
+            .unwrap();
         let mut compactor = ParquetCompactor::new(storage, 2, 128).unwrap();
-        compactor.target_file_bytes = 1;
+        compactor.target_file_bytes = max_input_bytes + 1;
         let (results, summary) = compactor.compact_history().unwrap();
         assert_eq!(results.len(), 2);
         assert_eq!(summary.partitions, 1);
