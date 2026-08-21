@@ -224,4 +224,5 @@ Product voice = React + DataFusion only. Track deletion / GHCR / agent_spec hone
 # Historian / Railway program checkpoint (2026-08-21)
 
 - [x] P1-M7-00 — H1/H2 merged; H3 DataFusion historian registration/query-safety merged via #758 (`c5974abd`)
-- [~] P1-M7-01 — H4 bounded local historian compaction active in #760; exact-head CI + review required before merge
+- [x] P1-M7-01 — H4 bounded offline local historian compaction merged via #760 (`32eabc68`) after exact-head CI + review passed
+- [ ] P1-M7-02 — H5 generic S3/object-store + central runtime/Railway/MinIO cutover

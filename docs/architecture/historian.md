@@ -6,7 +6,7 @@ nav_order: 6
 
 # Open-FDD historian architecture
 
-> Status: implementation plan and storage contract. The canonical layout and configuration described here are being introduced incrementally; legacy local Parquet/Feather/JSONL paths remain readable until migration tooling and runtime cutover are complete.
+> Status: H1–H4 are merged. The canonical local Parquet contract, immutable micro-batch writer, DataFusion registration/query safeguards, and offline local compactor are implemented. H5 adds the S3-compatible backend and cloud runtime wiring; legacy Parquet/Feather/JSONL paths remain readable until H6/H7 migration and live-ingest cutover are complete.
 
 ## Architectural contract
 
@@ -18,7 +18,7 @@ nav_order: 6
 
 **Feather / Arrow IPC is optional cache, export, or interoperability storage only and is non-canonical.**
 
-Open-FDD must run the same logical historian on a small local Docker host and on object storage:
+Open-FDD uses the same logical historian on a small local Docker/VM host and on object storage:
 
 ```text
 BACnet / Modbus / MQTT / CSV / API
@@ -48,91 +48,79 @@ Docker/VM disk      S3-compatible
 
 Railway is a deployment target for the generic S3-compatible backend; it is not a storage-engine special case.
 
-## Existing implementation audit
+## Current implementation
 
-The repository already contains most of the right building blocks, but they currently form two different historian paths.
+### Canonical local storage
 
-### Bulk CSV/package path
-
-`fdd_store::ingest_building` validates a building package, parses each equipment CSV directly into an Arrow `RecordBatch`, writes Parquet, then records sidecar metadata. The current physical layout is:
-
-```text
-<OPENFDD_PARQUET_ROOT>/
-  building=<building_id>/
-    equipment=<equipment_id>/
-      history.parquet
-```
-
-Weather is also materialized as Parquet where available. Timestamp parsing is strict: malformed timestamps are skipped rather than replaced with the current time or epoch zero. Categorical schedule/mode roles remain Arrow UTF-8 while the normal FDD role columns are numeric.
-
-The CSV import bridge under `edge/src/csv_ingest/parquet_bridge.rs` writes an intermediate building package under `workspace/data/csv_buildings/` and then invokes `fdd_store` to populate the Parquet sidecar root.
-
-### Live MQTT/driver path
-
-Central MQTT ingest currently calls the edge historian facade. For each telemetry envelope it:
-
-1. writes a one-row Feather shard under `workspace/data/feather_store/...`;
-2. appends a wide JSON row to `workspace/data/historian/<subdir>/telemetry_pivot.jsonl`;
-3. rewrites an Arrow IPC snapshot from the full JSONL history.
-
-That is useful bench/interoperability behavior, but it is not a scalable canonical historian. In particular, the Feather path can produce one file per poll/envelope, and the JSONL→IPC snapshot path repeatedly rereads the full history.
-
-### DataFusion query path
-
-`fdd_sql::register_parquet_tree` currently registers `**/*.parquet` as a `history` table. Central analytics optionally narrows registration to one `building=<id>` directory. This works for the local sidecar layout but makes recursive local filesystem globbing the storage contract.
-
-`fdd_sql::run_sql` currently calls `DataFrame::collect()` and converts every result row into an in-memory JSON vector. That is acceptable for bounded FDD/analytics queries but is unsafe as the generic interactive-query contract for a historian that may eventually approach 1 TB.
-
-### Feather classification
-
-Current Feather/IPC usage falls into these categories:
-
-| Usage | Classification | Direction |
-| --- | --- | --- |
-| `edge/src/historian/feather_store.rs` one-row live shards | legacy/interoperability path | stop treating as durability-critical; canonical live persistence moves to Parquet micro-batches |
-| equipment `history.feather` writes | optional cache/interchange | retain where APIs/tests still need it |
-| `telemetry_pivot.arrow` snapshot | bench/cache artifact | non-canonical; no durability guarantee |
-| CSV ingest batch hook used for Feather dual-write | optional interoperability | keep until consumers are audited/migrated |
-
-No long-term durability guarantee should rely on Feather alone.
-
-## Canonical storage URL
-
-Open-FDD uses one provider-neutral setting:
+`OPENFDD_STORAGE_URL` is the provider-neutral historian setting. H1 supports local storage:
 
 ```text
 OPENFDD_STORAGE_URL=file:///data/openfdd
 ```
 
-or:
+The `s3://` form is the H5 target and is not available until the H5 object-store backend and runtime cutover land.
+
+A plain filesystem path is accepted for local backwards compatibility. If the canonical setting is absent, `OPENFDD_PARQUET_ROOT` is recognized as a legacy compatibility path; legacy physical layout is never silently relabeled as canonical layout.
+
+H1 also provides safe partition-value validation, local atomic publication, and historian resource settings.
+
+### Immutable Parquet write path
+
+H2 writes complete immutable Parquet parts under canonical UTC monthly Hive partitions. A batch may cross a calendar month; rows are split before publication. Optional `building_id` and `equipment_id` columns must match the trusted partition identity and are omitted from the physical payload so DataFusion exposes each identity exactly once from Hive partition metadata.
+
+The normal micro-batch flush policy is rows **or** elapsed time **or** clean shutdown. Failed writes retain their buffered rows for explicit retry. Parts use collision-safe names, Snappy compression, statistics, and bounded row groups.
+
+### DataFusion query path
+
+H3 registers the canonical local `history/` dataset root rather than making recursive `**/*.parquet` globbing the long-term contract. DataFusion exposes Hive partition columns:
 
 ```text
-OPENFDD_STORAGE_URL=s3://openfdd-history
+building_id
+equipment_id
+year
+month
 ```
 
-A plain filesystem path remains accepted for local backwards compatibility.
+Partition values remain UTF-8 path literals; use zero-padded filters such as `year = '2026'` and `month = '08'`. H3 tests assert physical-plan pruning so unrelated building/equipment/month files are absent from selected scans.
 
-When `OPENFDD_STORAGE_URL` is not set, the compatibility layer recognizes the legacy `OPENFDD_PARQUET_ROOT`. Legacy layout is not silently reinterpreted as canonical layout; the migration tool will make that transition explicit.
+Legacy recursive Parquet remains a fallback only while H6 migration is incomplete.
 
-### S3-compatible configuration
+H3 also provides:
 
-The generic application configuration is:
+- `collect_sql_bounded(ctx, sql, max_rows)` for bounded interactive materialization;
+- `stream_sql(ctx, sql)` for Arrow record-batch streaming;
+- DataFusion memory-pool and optional spill-directory configuration;
+- schema-evolution coverage for nullable role additions and fail-closed incompatible datatypes.
+
+### Local compaction
+
+H4 (`#760`, merged as `32eabc68`) compacts small files within one canonical building/equipment/year/month partition using bounded memory. It validates replacement row count and logical schema before changing the query surface, rejects duplicate/unsafe inputs, surfaces rollback failures, and reports cleanup-pending tombstones.
+
+The local cutover sequence is:
 
 ```text
-OPENFDD_STORAGE_URL=s3://openfdd-history
-OPENFDD_S3_ENDPOINT=https://...
-OPENFDD_S3_REGION=...
-OPENFDD_S3_ACCESS_KEY_ID=...
-OPENFDD_S3_SECRET_ACCESS_KEY=...
+list small source parts
+        |
+read bounded batches
+        |
+write hidden replacement candidate
+        |
+validate schema + row count
+        |
+retire source .parquet files to hidden tombstones
+        |
+publish validated replacement
+        |
+fsync partition directory
+        |
+delete retired tombstones
 ```
 
-Provider-specific variable names belong in deployment configuration, where they are mapped into these variables.
-
-Secrets must never be returned by config/status APIs or written to logs.
+**H4 compaction is offline-only.** It must not overlap DataFusion scans of the same local historian. Local filesystems do not provide an atomic transaction that exchanges an arbitrary set of source files for one replacement: publishing first creates a duplicate-row window, while retiring first creates a short read gap. A later runtime coordinator must serialize compaction with reads before continuous/runtime compaction is enabled. H4 itself has no product scheduler or runtime compaction entry point.
 
 ## Canonical dataset layout
 
-The initial layout is Hive-style monthly partitioning:
+The canonical layout is Hive-style monthly partitioning:
 
 ```text
 history/
@@ -156,29 +144,33 @@ history: building_id + equipment_id + year + month
 weather: building_id + year + month
 ```
 
-Day partitioning is deliberately not the default. It can be benchmarked later without changing FDD SQL semantics.
+Daily partitioning is deliberately not the default. It can be benchmarked later without changing FDD SQL semantics.
 
-Partition values are validated and cannot contain path traversal, separators, NULs, or `=`.
-
-Building/equipment/year/month are physical partition columns and should be exposed by DataFusion without forcing FDD rules to know filenames.
+Partition values reject traversal, separators, NULs, or `=`. `timestamp_utc` remains a real Arrow timestamp; malformed input is rejected/skipped according to existing strict contracts rather than inventing a timestamp.
 
 ## Logical row schema
 
-A history row retains:
+A logical history row retains:
 
 ```text
 timestamp_utc
-equipment_id (logical/partition identity)
+equipment_id (partition identity)
 canonical FDD role columns...
 ```
 
-`timestamp_utc` remains a real Arrow timestamp. Malformed input is rejected/skipped according to the existing strict contracts; Open-FDD never invents a timestamp.
+`building_id`, `equipment_id`, `year`, and `month` are partition identity where applicable and should not be redundantly stored in every Parquet row unless a measured compatibility requirement proves it necessary.
 
-Partition columns should not be duplicated into every Parquet row unless a measured compatibility requirement justifies it.
+Safe schema evolution rules are:
 
-## Append lifecycle
+- adding a nullable role is allowed;
+- missing optional roles remain null;
+- categorical roles remain UTF-8;
+- incompatible datatype changes fail clearly;
+- no silent reinterpretation of a canonical role datatype.
 
-Parquet is immutable-oriented. The normal continuous write path is:
+## Append and small-file policy
+
+Parquet is immutable-oriented. The normal write lifecycle is:
 
 ```text
 incoming telemetry
@@ -189,10 +181,10 @@ validated Arrow rows
        v
 in-memory micro-batch
        |
-  row threshold OR time threshold OR shutdown
+row threshold OR time threshold OR shutdown
        |
        v
-complete Parquet part
+complete immutable Parquet part
        |
        v
 crash-safe publish
@@ -204,158 +196,78 @@ Configuration:
 OPENFDD_PARQUET_FLUSH_ROWS=5000
 OPENFDD_PARQUET_FLUSH_SECONDS=60
 OPENFDD_PARQUET_TARGET_FILE_MB=128
-```
-
-The first implementation defaults are intentionally conservative for BAS polling. They are operator settings, not rule constants.
-
-Local publication writes a temporary sibling file, flushes/closes it, and atomically renames it into the final partition where the filesystem supports normal atomic rename semantics.
-
-Object storage builds a complete Parquet object and performs one upload. No code appends in-place to an existing Parquet object.
-
-## Parquet writer policy
-
-Writer configuration must be explicit. The initial direction is:
-
-- Snappy compression for low CPU overhead on edge/VM hosts;
-- Parquet statistics enabled;
-- bounded row groups;
-- immutable collision-safe part names.
-
-Compression and row-group sizing should be benchmarked before more aggressive tuning. The goal is DataFusion pruning and predictable CPU rather than maximum compression ratio.
-
-## Compaction lifecycle
-
-Continuous telemetry must not create millions of tiny files.
-
-Compaction operates one logical partition at a time:
-
-```text
-list small parts
-     |
-read bounded batches
-     |
-write replacement part
-     |
-validate schema + row count
-     |
-publish replacement
-     |
-only then delete obsolete parts
-```
-
-Configuration begins with:
-
-```text
-OPENFDD_PARQUET_TARGET_FILE_MB=128
 OPENFDD_COMPACTION_MIN_FILES=8
 OPENFDD_COMPACTION_ENABLED=true
 ```
 
-Compaction may run concurrently with ingestion/FDD, but immutable input parts remain visible until the replacement is safely published. A running query must never depend on a partially written replacement.
+Never append in place to one giant Parquet file and never emit one Parquet file per telemetry packet/sample.
 
-## DataFusion integration
-
-The long-term `history` registration target is the dataset root, not a recursive local glob.
-
-DataFusion should expose Hive partition columns:
-
-```text
-building_id
-equipment_id
-year
-month
-```
-
-Normal continuous FDD should issue explicit building/equipment/time predicates so partition pruning, column pruning, row-group statistics, and timestamp predicate pushdown restrict reads to a tiny fraction of retained history.
-
-FDD SQL continues to refer to logical tables and role columns, not physical part files.
+Local publication writes a temporary sibling file, syncs the complete file, and atomically renames it into the final partition where normal filesystem rename semantics apply. Object storage in H5 must upload only complete objects; no code appends in place to an existing Parquet object.
 
 ## Query safety and memory
 
-A 1 TB historian does not imply 1 TB of RAM.
-
-Configuration direction:
+A historian approaching 1 TB does not imply 1 TB of RAM.
 
 ```text
 OPENFDD_QUERY_MEMORY_MB=512
 OPENFDD_DATAFUSION_SPILL_DIR=/workspace/.cache/datafusion-spill
-OPENFDD_QUERY_MAX_ROWS=10000
 ```
 
-Rule execution may retain its existing bounded result contracts. Generic/interactive SQL paths must not blindly materialize unlimited results into one JSON vector. Streaming, pagination, or a hard maximum response-row contract should be used depending on API semantics.
+Normal AFDD queries should include explicit building/equipment/time predicates so Hive pruning, Parquet statistics, timestamp predicate pushdown, and column pruning restrict reads to a small fraction of retained history. Generic interactive paths must be bounded or streamed rather than blindly materializing unlimited results into JSON.
 
-## Schema evolution
+## Legacy data classification
 
-Safe evolution rules:
+The repository still has pre-canonical paths that H6/H7 must migrate or demote safely:
 
-- adding a nullable role is allowed;
-- missing optional roles remain nullable/NA;
-- categorical roles remain UTF-8;
-- an incompatible datatype for an existing canonical role fails clearly;
-- no silent reinterpretation of a role datatype.
+| Usage | Classification | Direction |
+| --- | --- | --- |
+| `building=<id>/equipment=<id>/history.parquet` | legacy local Parquet sidecar | migrate explicitly to canonical monthly parts in H6 |
+| one-row live Feather shards | legacy/interoperability | stop using as durability-critical in H7 |
+| `telemetry_pivot.jsonl` | legacy live history | classify/migrate where identity is trustworthy; stop durability reliance in H7 |
+| `telemetry_pivot.arrow` snapshot | bench/cache artifact | non-canonical |
+| equipment `history.feather` | optional cache/interchange | retain only while consumers require it |
 
-Old monthly partitions must remain queryable after nullable columns are added.
+No legacy data is deleted before its consumers and preservation/migration requirements are audited.
 
-## Weather
+## H5: S3-compatible storage and Railway
 
-Weather follows the same Parquet/storage philosophy under `weather/`. Existing fallback behavior that derives weather from weather-like `history` equipment remains supported so ECON/OAT rules do not regress during migration.
-
-## Bulk analysis vs continuous AFDD
-
-The historian architecture supports two explicit operating modes.
-
-### Bulk analysis
+The generic application configuration target is:
 
 ```text
-CSV/package -> Parquet -> requested analysis window -> DataFusion/FDD -> done
+OPENFDD_STORAGE_URL=s3://openfdd-history
+OPENFDD_S3_ENDPOINT=https://...
+OPENFDD_S3_REGION=...
+OPENFDD_S3_ACCESS_KEY_ID=...
+OPENFDD_S3_SECRET_ACCESS_KEY=...
 ```
 
-Importing historical data does **not** implicitly start a scheduler.
+H5 must add direct generic `object_store` integration, DataFusion object-store registration, complete-object writes, virtual-hosted/path-style compatibility, credential redaction, central runtime cutover, and optional MinIO qualification. Provider-specific variable names belong in deployment configuration, not engine branches.
 
-### Continuous AFDD
+Railway mapping remains deployment-only:
 
 ```text
-live append -> Parquet micro-batches -> scheduler -> rolling window -> DataFusion/FDD
+OPENFDD_STORAGE_URL=s3://${{bucket.BUCKET}}
+OPENFDD_S3_ENDPOINT=${{bucket.ENDPOINT}}
+OPENFDD_S3_REGION=${{bucket.REGION}}
+OPENFDD_S3_ACCESS_KEY_ID=${{bucket.ACCESS_KEY_ID}}
+OPENFDD_S3_SECRET_ACCESS_KEY=${{bucket.SECRET_ACCESS_KEY}}
 ```
 
-The scheduler interval and analysis lookback are independent. Initial configuration target:
+The intended cloud topology is:
 
 ```text
-OPENFDD_AFDD_MODE=bulk|continuous
-OPENFDD_AFDD_INTERVAL_MINUTES=60
-OPENFDD_AFDD_LOOKBACK_VALUE=24
-OPENFDD_AFDD_LOOKBACK_UNIT=hours
-```
-
-A continuous run determines its window end from the latest successfully persisted telemetry timestamp, not blindly from wall clock. Rolling windows intentionally overlap so late-arriving BAS data can be evaluated on a subsequent cycle.
-
-The scheduler is decoupled from ingest: a successful Parquet flush does not synchronously run every FDD rule.
-
-## Continuous finding/state principles
-
-Rolling windows require stable finding continuity rather than duplicate findings every cycle. Existing finding contracts will be preserved while adding episode identity/continuation metadata where necessary (`first_seen`, `last_seen`, occurrence/run metadata, status).
-
-Scheduler checkpoint state is small durable metadata separate from Parquet history. Restarts perform at most one due rolling-window catch-up rather than replaying every missed wall-clock tick. Duplicate concurrent cycles for the same scope are prevented.
-
-## Railway deployment model
-
-Railway's role is deployment wiring around the generic storage contract:
-
-```text
-openfdd-web (public domain)
+openfdd-web (LAN/VPN only)
       |
-Railway private DNS
+private Railway ingress / private DNS
       |
 openfdd-central (private)
       |
 OPENFDD_STORAGE_URL=s3://<bucket>
       |
-Railway Storage Bucket (private, S3-compatible)
+private S3-compatible bucket
 ```
 
-Railway bucket credential variables are mapped to the generic `OPENFDD_S3_*` names. Application code must not inspect `RAILWAY_*` variables to decide historian behavior.
-
-Small mutable application/session state may still use a Railway volume when appropriate, but the canonical BAS historian should be object storage once S3 mode is enabled. Container ephemeral disk is never the canonical cloud historian.
+The central container filesystem is cloud scratch, not the canonical historian. Secrets must never be returned by config/status APIs or written to logs.
 
 ## Local Docker / VM model
 
@@ -365,53 +277,41 @@ A normal local install needs no object-storage service:
 OPENFDD_STORAGE_URL=file:///data/openfdd
 ```
 
-with a Docker volume or host directory mounted at `/data/openfdd`.
+with a persistent Docker volume or host directory mounted at `/data/openfdd`. MinIO is optional test/advanced infrastructure for exercising the H5 S3 path, not a basic local dependency.
 
-An optional MinIO Compose recipe can exercise the same S3 code path locally; MinIO is test/advanced infrastructure, not a requirement for basic Open-FDD.
+## Bulk analysis vs continuous AFDD
 
-## Migration model
-
-Legacy storage is migrated explicitly rather than silently rewritten.
-
-The migration command will:
-
-- discover legacy `building=<id>/equipment=<id>/history.parquet` and eligible Feather/CSV sources;
-- preserve timestamps, equipment identity, and row counts;
-- write canonical monthly immutable parts;
-- report rows/files/bytes/errors;
-- support dry-run;
-- avoid overwriting already published canonical part names.
-
-## Historian inspection
-
-The operator stats command/API will report lightweight metadata such as:
+The historian supports two explicit operating modes:
 
 ```text
-buildings
-equipment
-partitions
-Parquet file count
-total bytes
-small-file count
-median/largest file
-oldest/newest timestamp
-estimated rows
-storage backend
+bulk        = import/history + operator-requested analysis; no scheduler
+continuous  = live/incremental append + rolling scheduled AFDD
 ```
 
-Expensive full-dataset scans are not performed on every UI page load.
+Importing historical data does **not** implicitly start a scheduler. H8 owns continuous scheduling, checkpoints, catch-up, run-now/backfill, and finding continuity.
 
-## Observability
+Target configuration:
 
-Historian/AFDD logs and metrics should reuse the existing tracing/observability stack. Target counters/timers include ingest rows/bytes, flush count/duration, Parquet file count, compaction work, query duration/rows/bytes, AFDD cycle state, and data freshness.
+```text
+OPENFDD_AFDD_MODE=bulk|continuous
+OPENFDD_AFDD_INTERVAL_MINUTES=60
+OPENFDD_AFDD_LOOKBACK_VALUE=24
+OPENFDD_AFDD_LOOKBACK_UNIT=hours
+```
 
-Never log S3 secret credentials.
+A continuous run ends at the latest successfully persisted eligible telemetry timestamp, not blindly at wall clock. Rolling windows intentionally overlap so late-arriving BAS data can be evaluated on a subsequent cycle. Ingest durability and AFDD scheduling remain decoupled.
 
-## Backup and restore
+## Migration and operator tooling
 
-Local deployments back up the configured storage root plus the small mutable application/session state needed by the deployment.
+H6 migration is explicit rather than a silent rewrite. It must discover legacy data, preserve timestamps/equipment identity/row counts, support dry-run and restart-safe behavior, avoid overwriting canonical parts, and emit a preservation report.
 
-Object-storage deployments use bucket durability/versioning/backup policy appropriate to the provider. A Railway environment has an isolated bucket instance; production backup policy must not assume a preview/staging bucket is the same object namespace.
+Operator historian stats should remain lightweight and include buildings, equipment, partitions, Parquet file count, bytes, small-file count, file-size distribution, oldest/newest timestamp, estimated rows, and storage backend without performing an expensive full scan on every UI load.
+
+## Observability, backup, and restore
+
+Historian/AFDD telemetry should reuse the existing tracing/observability stack. Useful counters/timers include ingest rows/bytes, flush count/duration, file count, compaction work, query duration/rows/bytes, AFDD cycle state, and data freshness. Never log S3 secrets.
+
+Local deployments back up the configured storage root plus required small mutable application/session state. Object-storage deployments use the provider's durability/versioning/backup policy; production must not assume preview/staging and production share one object namespace.
 
 ## Scalability target
 
@@ -437,13 +337,15 @@ The key continuous-mode benchmark is not “how fast can Open-FDD scan 1 TB?” 
 
 ## Implementation phases
 
-1. **Storage contract and audit** — generic storage URL/config, safe canonical paths, crash-safe local backend, this document.
-2. **Partitioned Parquet writer** — immutable parts, micro-batches, explicit writer options, bulk/local migration path.
-3. **DataFusion dataset registration** — logical dataset root, Hive partition pruning, query safeguards.
-4. **Compaction** — bounded partition compactor and stats.
-5. **S3-compatible backend** — generic object store, MinIO tests, Railway bucket mapping.
-6. **Operator tooling** — migrate historian, stats/health API/CLI.
-7. **Continuous AFDD** — scheduler/checkpoint, rolling windows, run-now/backfill, finding continuity, UI status/history.
-8. **Scale benchmarks** — deterministic generators and measured reports.
+1. **H1 Storage contract and audit** — merged.
+2. **H2 Partitioned Parquet writer/micro-batches** — merged.
+3. **H3 DataFusion dataset registration/query safeguards** — merged.
+4. **H4 Offline local compaction** — merged.
+5. **H5 S3-compatible backend + central/Railway/MinIO wiring** — next.
+6. **H6 Migration + historian operator tooling** — not landed.
+7. **H7 Live ingest durability cutover** — not landed.
+8. **H8 Continuous AFDD scheduler/findings/API** — not landed.
+9. **H9 React historian/AFDD operations UX** — not landed.
+10. **H10 Scale and release qualification** — not landed.
 
-Each phase must preserve existing FDD/weather behavior and pass the repository's normal CI/security/docs gates before the next runtime cutover.
+Every phase must preserve existing FDD/weather behavior and pass the repository's changed-head CI/security/docs/review gates before merge.

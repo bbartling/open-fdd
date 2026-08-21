@@ -77,7 +77,9 @@ OPENFDD_COMPACTION_MIN_FILES=8
 OPENFDD_PARQUET_TARGET_FILE_MB=128
 ```
 
-Compact partition-by-partition with bounded memory. Publish/validate replacement before deleting input parts. AFDD queries and ingestion must remain safe during compaction.
+H4 local compaction is an **offline maintenance primitive**. It compacts one canonical building/equipment/year/month partition at a time with bounded memory, validates the replacement before changing the query surface, retires source `.parquet` files to hidden tombstones, publishes the validated replacement, fsyncs the partition directory, and only then deletes retired sources. Rollback and cleanup failures must be surfaced to the operator.
+
+Do **not** overlap H4 local compaction with DataFusion scans of the same historian. A local filesystem cannot atomically exchange an arbitrary set of source files for one replacement: publish-first creates a duplicate-row window, while retire-first creates a short read gap. Continuous/runtime compaction therefore requires a later coordinator that serializes compaction with reads before it is enabled from the product runtime. H4 itself has no runtime scheduler/entry point.
 
 ## DataFusion/query contract
 
@@ -87,7 +89,7 @@ The canonical local `history` table is registered from `<storage_root>/history/`
 building_id, equipment_id, year, month
 ```
 
-Canonical Hive partition values are UTF-8 path literals. Use zero-padded string predicates such as `year = '2026'` and `month = '08'`; this keeps local and future object-store pruning semantics aligned. H3 physical-plan tests must prove unrelated building/equipment/month files are absent from the selected scan.
+Canonical Hive partition values are UTF-8 path literals. Use zero-padded string predicates such as `year = '2026'` and `month = '08'`; this keeps local and future object-store pruning semantics aligned. H3 physical-plan tests prove unrelated building/equipment/month files are absent from selected scans.
 
 When no canonical `history/` dataset exists, the compatibility layer may fall back to the legacy recursive Parquet sidecar tree until H6 migration is complete. Do not make that fallback the new abstraction. FDD SQL should never know physical part filenames.
 
@@ -129,7 +131,7 @@ OPENFDD_AFDD_LOOKBACK_UNIT=hours|days|minutes
 
 Interval and lookback are independent.
 
-Continuous AFDD uses a defined window ending at the latest successfully persisted eligible telemetry timestamp. Rolling windows intentionally overlap for late-arriving data. Do not optimize to only `timestamp > last_run` unless a specific rule proves that safe.
+Continuous AFDD uses a defined window ending at the latest successfully persisted eligible telemetry timestamp. Rolling windows intentionally overlap for late arrivals. Do not optimize to only `timestamp > last_run` unless a specific rule proves that safe.
 
 Ingest durability and FDD scheduling are decoupled: a Parquet flush does not synchronously run all FDD.
 
@@ -168,5 +170,7 @@ IT-hosted VM/dashboard deployments use the same images and `file://` storage, wi
 ## Validation
 
 Every implementation PR touching this architecture must preserve FDD/weather behavior and run the relevant repo gates. Never weaken tests to get green.
+
+H1 through H4 are merged. H4 merged only after its exact head passed FDD engine, Rust stack, AppSec, docs/security, and review gates. H5 owns the S3-compatible backend and deployment wiring; H6+ own migration, live/runtime cutover, scheduling, UX, and scale qualification.
 
 Scale target: hundreds of GB to ~1 TB retained history while normal continuous AFDD scans only the configured building/equipment/time window through partition/statistics/column pruning.

@@ -23,7 +23,7 @@ jobs:
             const repository = await github.rest.repos.get({ owner, repo });
             const defaultBranch = repository.data.default_branch;
 
-            const pulls = await github.paginate(github.rest.pulls.list, {
+            const closedPulls = await github.paginate(github.rest.pulls.list, {
               owner,
               repo,
               state: 'closed',
@@ -31,12 +31,18 @@ jobs:
               sort: 'updated',
               direction: 'desc',
             });
+            const openPulls = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
+            });
 
-            // Safety rule: only delete a branch if its current SHA is exactly the
-            // head SHA of a merged PR from this same repository. If a branch name
-            // was reused after merge, its SHA differs and it is left untouched.
+            // Safety rule for normal cleanup: only delete a branch if its current
+            // SHA is exactly the head SHA of a merged PR from this repository. If
+            // a branch name was reused after merge, its SHA differs and it stays.
             const mergedHeads = new Map();
-            for (const pr of pulls) {
+            for (const pr of closedPulls) {
               if (!pr.merged_at) continue;
               if (pr.head?.repo?.full_name !== `${owner}/${repo}`) continue;
               if (!pr.head?.ref || !pr.head?.sha) continue;
@@ -44,6 +50,21 @@ jobs:
               shas.add(pr.head.sha);
               mergedHeads.set(pr.head.ref, shas);
             }
+
+            const openHeads = new Set(
+              openPulls
+                .filter((pr) => pr.head?.repo?.full_name === `${owner}/${repo}`)
+                .map((pr) => pr.head.ref),
+            );
+
+            // One-time historian cleanup. These aliases were verified to contain
+            // no unique work after #760 replaced the abandoned stacked H4 line.
+            // Never delete one if somebody has opened a PR from it in the meantime.
+            const supersededBranches = new Set([
+              'feat/historian-compaction-ci',
+              'feat/historian-compaction-next',
+              'feat/historian-compaction-pr',
+            ]);
 
             const branches = await github.paginate(github.rest.repos.listBranches, {
               owner,
@@ -53,10 +74,14 @@ jobs:
 
             for (const branch of branches) {
               if (branch.name === defaultBranch) continue;
-              const mergedShas = mergedHeads.get(branch.name);
-              if (!mergedShas || !mergedShas.has(branch.commit.sha)) continue;
 
-              core.info(`Deleting merged branch ${branch.name} @ ${branch.commit.sha}`);
+              const mergedShas = mergedHeads.get(branch.name);
+              const exactMergedHead = mergedShas?.has(branch.commit.sha) ?? false;
+              const verifiedSuperseded =
+                supersededBranches.has(branch.name) && !openHeads.has(branch.name);
+              if (!exactMergedHead && !verifiedSuperseded) continue;
+
+              core.info(`Deleting stale branch ${branch.name} @ ${branch.commit.sha}`);
               await github.rest.git.deleteRef({
                 owner,
                 repo,
