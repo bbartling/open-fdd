@@ -11,6 +11,7 @@ This file is the software-engineering agent summary for the canonical Open-FDD h
 - No PostgreSQL, TimescaleDB, InfluxDB, ClickHouse, DuckDB, or SQLite as the canonical historian.
 - Do not add Railway-specific historian engine code.
 - Normal local installs must work without MinIO.
+- Historian, central, and dashboard ingress remain LAN/VPN/private-only. Do not describe product services as public.
 
 ## Generic storage contract
 
@@ -28,9 +29,11 @@ OPENFDD_S3_ENDPOINT=https://...
 OPENFDD_S3_REGION=...
 OPENFDD_S3_ACCESS_KEY_ID=...
 OPENFDD_S3_SECRET_ACCESS_KEY=...
+OPENFDD_S3_URL_STYLE=path|virtual
+OPENFDD_S3_ALLOW_HTTP=false
 ```
 
-Never log or return access/secret keys.
+Never log or return access/secret keys or session tokens. `OPENFDD_S3_ALLOW_HTTP=true` is for explicit local/test endpoints such as loopback MinIO only.
 
 Legacy `OPENFDD_PARQUET_ROOT` may be recognized for migration/backwards compatibility, but do not silently pretend the legacy physical layout is the canonical layout.
 
@@ -83,33 +86,50 @@ Do **not** overlap H4 local compaction with DataFusion scans of the same histori
 
 ## DataFusion/query contract
 
-The canonical local `history` table is registered from `<storage_root>/history/`, not from a recursive glob. DataFusion exposes these Hive columns to SQL:
+Canonical `history` registration is rooted at the configured `history/` dataset, never physical part filenames. Local registration uses `<storage_root>/history/`; S3 registration uses the configured `s3://<bucket>/<prefix>/history/` object-store root. DataFusion exposes these Hive columns to SQL:
 
 ```text
 building_id, equipment_id, year, month
 ```
 
-Canonical Hive partition values are UTF-8 path literals. Use zero-padded string predicates such as `year = '2026'` and `month = '08'`; this keeps local and future object-store pruning semantics aligned. H3 physical-plan tests prove unrelated building/equipment/month files are absent from selected scans.
+Canonical Hive partition values are UTF-8 path literals. Use zero-padded string predicates such as `year = '2026'` and `month = '08'`; this keeps local and object-store pruning semantics aligned. Building-scoped S3 callers narrow object discovery to `building_id=<id>/` before DataFusion file discovery rather than registering the whole bucket and filtering afterward.
 
-When no canonical `history/` dataset exists, the compatibility layer may fall back to the legacy recursive Parquet sidecar tree until H6 migration is complete. Do not make that fallback the new abstraction. FDD SQL should never know physical part filenames.
+When no canonical local `history/` dataset exists, the compatibility layer may fall back to the legacy recursive Parquet sidecar tree during migration. S3 compatibility registration is different: it fails closed without a trusted building scope. Explicit whole-dataset S3 registration is reserved for operator/global callers. Do not make compatibility paths the new abstraction. FDD SQL should never know physical part filenames.
 
 Parquet schema inference must tolerate safe nullable-role evolution across immutable parts. Adding an optional role is allowed; old parts surface null for the new column. Incompatible role datatypes must fail rather than be silently reinterpreted.
 
-A large historian must not be collected into RAM. H3 provides two generic execution contracts:
+A large historian must not be collected into RAM. The generic execution contracts are:
 
 - `collect_sql_bounded(ctx, sql, max_rows)` materializes at most `max_rows` and rejects larger interactive results;
 - `stream_sql(ctx, sql)` returns Arrow record batches without materializing the full result in Open-FDD.
 
 `DEFAULT_INTERACTIVE_MAX_ROWS` is 10,000. Deployment/API layers may wire their own explicit limit, but generic interactive callers must not use unbounded `DataFrame::collect()` by default. Existing rule/batch compatibility paths may retain bounded result behavior where FDD parity requires it.
 
-DataFusion query runtime configuration is sourced from the historian config:
+DataFusion historian sessions use bounded memory/spill plus tuning from the generic configuration. Important controls include:
 
 ```text
 OPENFDD_QUERY_MEMORY_MB=512
 OPENFDD_DATAFUSION_SPILL_DIR=...
+OPENFDD_DATAFUSION_PUSHDOWN_FILTERS=true
+OPENFDD_DATAFUSION_REORDER_FILTERS=true
+OPENFDD_DATAFUSION_PARQUET_METADATA_HINT_KB=512
+OPENFDD_DATAFUSION_TARGET_PARTITIONS=...
+OPENFDD_DATAFUSION_BATCH_ROWS=...
+OPENFDD_DATAFUSION_META_FETCH_CONCURRENCY=...
+OPENFDD_DATAFUSION_REPARTITION_FILE_MIN_MB=...
 ```
 
-`new_historian_session` applies the memory pool and optional spill directory. At least the CLI query runtime uses this configured session in H3; new historian query callers should do the same rather than constructing an unconstrained `SessionContext` casually.
+Do not turn every DataFusion option on mechanically. Keep row-group pruning/page index behavior enabled, use late Parquet filter pushdown/reordering where beneficial, keep full statistics collection off by default for large object stores, and benchmark expensive options before changing defaults.
+
+## H6 migration contract
+
+Legacy migration is explicit operator/offline work. Discovery may classify Parquet, JSONL/NDJSON, and Feather/Arrow IPC, but a source is eligible only when trusted `building=<id>/equipment=<id>` path identity is present and safe. Never invent identity from point IDs, active-profile defaults, or filename guesses.
+
+Eligible sources are converted through bounded Arrow batches into the same canonical H2 writer. JSONL requires scalar fields with consistent types and a parseable timestamp; nested/mixed values fail closed. Arrow IPC/Feather requires a real Arrow timestamp; legacy `timestamp` may be normalized to `timestamp_utc`, while ambiguous timestamp columns fail closed.
+
+Every format uses one restart-safe protocol: write invisible staging parts, verify row preservation and part hashes, persist an atomic receipt containing the exact publish plan, then publish the recorded parts. Reruns resume that plan; changed source content fails closed. H6 does not delete legacy source data.
+
+Historian stats are footer/metadata oriented, not a full telemetry scan. Local canonical stats report files, bytes, rows, partitions, buildings, equipment, month range, invalid layout, and H4-aligned small-file health. The serializable Rust API and CLI are operator surfaces; do not enumerate an entire S3 historian on every request merely to display a dashboard counter.
 
 ## Operating modes
 
@@ -154,23 +174,23 @@ Overlapping AFDD windows must continue one fault episode instead of inserting a 
 Railway is deployment configuration only:
 
 ```text
-openfdd-web (public)
+private dashboard / VPN ingress
   -> openfdd-central.railway.internal:8080 (private)
   -> Railway Storage Bucket (private S3-compatible)
 ```
 
 Map Railway bucket variables (`BUCKET`, `ENDPOINT`, `REGION`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`) into Open-FDD's generic `OPENFDD_*` variables. Do not read `RAILWAY_*` in historian engine code.
 
-The central container filesystem is ephemeral cloud scratch, not the canonical historian. A volume may still hold small mutable application/session state where needed.
+The central container filesystem is ephemeral cloud scratch/spill, not the canonical historian. A volume may still hold small mutable application/session state where needed.
 
 ## Local VM mapping
 
-IT-hosted VM/dashboard deployments use the same images and `file://` storage, with persistent Docker volume/host disk and central bound privately. MinIO is optional only for testing the S3 path.
+IT-hosted VM/dashboard deployments use the same images and `file://` storage, with persistent Docker volume/host disk and central bound privately. MinIO is optional only for testing the S3 path and binds to loopback in the provided recipe.
 
 ## Validation
 
 Every implementation PR touching this architecture must preserve FDD/weather behavior and run the relevant repo gates. Never weaken tests to get green.
 
-H1 through H4 are merged. H4 merged only after its exact head passed FDD engine, Rust stack, AppSec, docs/security, and review gates. H5 owns the S3-compatible backend and deployment wiring; H6+ own migration, live/runtime cutover, scheduling, UX, and scale qualification.
+H1 through H5 are merged. H5 added provider-neutral S3/object-store registration, fail-closed building scoping, DataFusion tuning, MinIO qualification wiring, and private Railway bucket deployment mapping. H6 owns restart-safe legacy migration and operator stats. H7 owns live micro-batch cutover; H8+ own continuous scheduling, UX, and scale qualification.
 
 Scale target: hundreds of GB to ~1 TB retained history while normal continuous AFDD scans only the configured building/equipment/time window through partition/statistics/column pruning.
