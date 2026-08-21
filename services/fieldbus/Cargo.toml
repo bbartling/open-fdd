@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 openfdd_contracts = { path = "../../crates/openfdd_contracts" }
 openfdd_mqtt = { path = "../../crates/openfdd_mqtt" }
+fdd_core = { path = "../../crates/fdd_core" }
 
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
