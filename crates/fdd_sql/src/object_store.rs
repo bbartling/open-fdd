@@ -4,6 +4,7 @@
 //! and other S3-compatible services all map deployment settings into the same
 //! `OPENFDD_S3_*` contract. Credentials are never serialized or logged.
 
+use std::collections::BTreeSet;
 use std::env;
 use std::fmt;
 use std::fs;
@@ -19,7 +20,11 @@ use object_store::path::Path as ObjectPath;
 use object_store::ObjectStore;
 use url::Url;
 
-use crate::historian::{register_historian_dataset, HistorianRegistration};
+use crate::historian::{
+    register_historian_dataset, HistorianDatasetKind, HistorianRegistration,
+};
+
+const SCOPED_SOURCE_TABLE: &str = "__openfdd_history_scoped_source";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum S3UrlStyle {
@@ -67,12 +72,18 @@ impl fmt::Debug for S3ObjectStoreConfig {
         f.debug_struct("S3ObjectStoreConfig")
             .field("endpoint", &self.endpoint)
             .field("region", &self.region)
-            .field("access_key_id", &self.access_key_id.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "access_key_id",
+                &self.access_key_id.as_ref().map(|_| "[REDACTED]"),
+            )
             .field(
                 "secret_access_key",
                 &self.secret_access_key.as_ref().map(|_| "[REDACTED]"),
             )
-            .field("session_token", &self.session_token.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "session_token",
+                &self.session_token.as_ref().map(|_| "[REDACTED]"),
+            )
             .field("url_style", &self.url_style)
             .field("allow_http", &self.allow_http)
             .finish()
@@ -102,10 +113,13 @@ impl S3ObjectStoreConfig {
                 "OPENFDD_S3_SESSION_TOKEN requires explicit OPENFDD_S3_ACCESS_KEY_ID and OPENFDD_S3_SECRET_ACCESS_KEY"
             );
         }
+        if session_token.is_some() && allow_http {
+            bail!("OPENFDD_S3_SESSION_TOKEN cannot be combined with OPENFDD_S3_ALLOW_HTTP=true");
+        }
 
         if let Some(endpoint) = &endpoint {
             let parsed = Url::parse(endpoint).context("parse OPENFDD_S3_ENDPOINT")?;
-            if parsed.username() != "" || parsed.password().is_some() {
+            if !parsed.username().is_empty() || parsed.password().is_some() {
                 bail!("OPENFDD_S3_ENDPOINT must not embed credentials");
             }
             match parsed.scheme() {
@@ -142,7 +156,11 @@ impl S3ObjectStoreConfig {
             builder = builder.with_region(region);
         }
         if let Some(endpoint) = &self.endpoint {
-            builder = builder.with_endpoint(endpoint);
+            builder = builder.with_endpoint(endpoint_for_style(
+                endpoint,
+                bucket,
+                self.url_style.virtual_hosted(),
+            )?);
         }
         if let (Some(key), Some(secret)) = (&self.access_key_id, &self.secret_access_key) {
             builder = builder
@@ -158,28 +176,34 @@ impl S3ObjectStoreConfig {
 }
 
 /// Register the configured historian backend as logical table `history`.
-///
-/// Local and legacy file-backed configurations use the H3 registration path.
-/// S3 configurations register the provider-neutral object store with DataFusion
-/// and then expose the same canonical Hive partition columns as local storage.
 pub async fn register_configured_historian(
     ctx: &SessionContext,
     config: &HistorianConfig,
+) -> Result<HistorianRegistration> {
+    register_configured_historian_scoped(ctx, config, None).await
+}
+
+/// Register the configured historian, optionally narrowing S3 discovery to one
+/// canonical building partition before DataFusion plans a scan.
+pub async fn register_configured_historian_scoped(
+    ctx: &SessionContext,
+    config: &HistorianConfig,
+    building_id: Option<&str>,
 ) -> Result<HistorianRegistration> {
     match &config.storage_url {
         StorageUrl::File { root } => register_historian_dataset(ctx, root).await,
         StorageUrl::S3 { bucket, prefix } => {
             let s3 = S3ObjectStoreConfig::from_env()?;
-            register_s3_historian(ctx, bucket, prefix, &s3).await
+            register_s3_historian(ctx, bucket, prefix, building_id, &s3).await
         }
     }
 }
 
 /// Restrict an already-registered canonical `history` table to one building.
 ///
-/// This creates a DataFusion view instead of constructing a filename glob, so
-/// the canonical `building_id` Hive predicate remains available for partition
-/// pruning on both local and object-store backends.
+/// Kept for callers that already hold a registered table. New S3 callers should
+/// prefer [`register_configured_historian_scoped`] so object discovery itself is
+/// narrowed to the building prefix.
 pub async fn scope_history_to_building(ctx: &SessionContext, building_id: &str) -> Result<()> {
     let building_id = safe_partition_value(building_id, "building_id")?;
     let scoped = ctx
@@ -192,29 +216,20 @@ pub async fn scope_history_to_building(ctx: &SessionContext, building_id: &str) 
     Ok(())
 }
 
-/// Scratch directory used only to preserve the existing central fail-closed
+/// Scratch directory used only to preserve central's fail-closed
 /// `building=<id>` presence check while canonical S3 data lives remotely.
-///
-/// This directory is metadata/cache, never historian durability. It deliberately
-/// follows central's existing local-root precedence so no application code needs
-/// Railway-specific branches.
 pub fn s3_scope_index_root() -> PathBuf {
-    if let Ok(root) = env::var("OPENFDD_PARQUET_ROOT") {
+    if let Some(root) = nonempty_env("OPENFDD_S3_SCOPE_INDEX_DIR") {
         return PathBuf::from(root);
     }
-    if let Ok(workspace) = env::var("OPENFDD_WORKSPACE") {
-        return PathBuf::from(workspace).join(".cache/parquet");
-    }
-    PathBuf::from(".cache/parquet")
+    let workspace = nonempty_env("OPENFDD_WORKSPACE").unwrap_or_else(|| "workspace".into());
+    PathBuf::from(workspace).join("data/openfdd-s3-scope-index")
 }
 
 /// Refresh the S3 building-scope scratch index from canonical Hive prefixes.
 ///
-/// A successful refresh creates empty `building=<id>` marker directories for
-/// buildings that actually exist under `history/building_id=<id>/`. Unknown
-/// building requests therefore continue to fail closed in the existing central
-/// analytics bridge, while `register_parquet_tree` below routes the real scan to
-/// S3 and applies the matching DataFusion building predicate.
+/// This uses delimiter listing at the `history/` prefix, so the refresh cost is
+/// proportional to building prefixes rather than historian object count.
 pub async fn refresh_s3_scope_index_from_env() -> Result<Option<usize>> {
     let config = HistorianConfig::from_env()?;
     let StorageUrl::S3 { bucket, prefix } = &config.storage_url else {
@@ -222,11 +237,7 @@ pub async fn refresh_s3_scope_index_from_env() -> Result<Option<usize>> {
     };
     let s3 = S3ObjectStoreConfig::from_env()?;
     let store = s3.build(bucket)?;
-    let history_prefix = if prefix.is_empty() {
-        "history".to_string()
-    } else {
-        format!("{}/history", prefix.trim_matches('/'))
-    };
+    let history_prefix = object_history_prefix(prefix);
     let listing = store
         .list_with_delimiter(Some(&ObjectPath::from(history_prefix)))
         .await
@@ -235,36 +246,62 @@ pub async fn refresh_s3_scope_index_from_env() -> Result<Option<usize>> {
     let root = s3_scope_index_root();
     fs::create_dir_all(&root)
         .with_context(|| format!("create S3 scope scratch index {}", root.display()))?;
-    let mut buildings = 0usize;
+
+    let mut expected = BTreeSet::new();
     for common_prefix in listing.common_prefixes {
-        let Some(segment) = common_prefix.as_ref().rsplit('/').next() else {
+        let raw = common_prefix.to_string();
+        let Some(segment) = raw
+            .split('/')
+            .find(|segment| segment.starts_with("building_id="))
+        else {
             continue;
         };
         let Some(building) = segment.strip_prefix("building_id=") else {
             continue;
         };
         let building = safe_partition_value(building, "building_id")?;
-        fs::create_dir_all(root.join(format!("building={building}")))?;
-        buildings += 1;
+        expected.insert(format!("building={building}"));
+    }
+
+    for entry in fs::read_dir(&root)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with("building=") && !expected.contains(&name) {
+            fs::remove_dir_all(entry.path())?;
+        }
+    }
+    for marker in &expected {
+        fs::create_dir_all(root.join(marker))?;
     }
     fs::write(
         root.join(".openfdd-s3-scope-index"),
         b"scratch metadata only; canonical historian is object storage\n",
     )?;
-    Ok(Some(buildings))
+
+    // Central's existing scope guard reads this compatibility variable. The
+    // canonical storage URL remains authoritative for the actual historian.
+    env::set_var("OPENFDD_PARQUET_ROOT", &root);
+    Ok(Some(expected.len()))
 }
 
 /// Extract the existing central `building=<id>` scope marker from a local path.
 pub fn building_scope_from_compat_path(path: &Path) -> Option<&str> {
     path.file_name()
         .and_then(|name| name.to_str())
-        .and_then(|name| name.strip_prefix("building="))
+        .and_then(|name| {
+            name.strip_prefix("building=")
+                .or_else(|| name.strip_prefix("building_id="))
+        })
 }
 
 async fn register_s3_historian(
     ctx: &SessionContext,
     bucket: &str,
     prefix: &str,
+    building_id: Option<&str>,
     config: &S3ObjectStoreConfig,
 ) -> Result<HistorianRegistration> {
     let store = config.build(bucket)?;
@@ -272,27 +309,89 @@ async fn register_s3_historian(
     ctx.runtime_env()
         .register_object_store(&store_url, Arc::new(store));
 
-    let history_root = if prefix.is_empty() {
-        format!("s3://{bucket}/history/")
-    } else {
-        format!("s3://{bucket}/{}/history/", prefix.trim_matches('/'))
+    let history_root = canonical_history_url(bucket, prefix);
+    let Some(building_id) = building_id else {
+        let options = ParquetReadOptions::new()
+            .table_partition_cols(canonical_partition_columns())
+            .parquet_pruning(true);
+        ctx.register_parquet("history", history_root.as_str(), options)
+            .await
+            .with_context(|| format!("register canonical S3 history from {history_root}"))?;
+        return Ok(HistorianRegistration {
+            kind: HistorianDatasetKind::CanonicalHive,
+            root: history_root,
+        });
     };
+
+    let building = safe_partition_value(building_id, "building_id")?;
+    let scoped_root = format!("{history_root}building_id={building}/");
     let options = ParquetReadOptions::new()
         .table_partition_cols(vec![
-            ("building_id".to_string(), DataType::Utf8),
             ("equipment_id".to_string(), DataType::Utf8),
             ("year".to_string(), DataType::Utf8),
             ("month".to_string(), DataType::Utf8),
         ])
         .parquet_pruning(true);
-    ctx.register_parquet("history", history_root.as_str(), options)
+    ctx.register_parquet(SCOPED_SOURCE_TABLE, scoped_root.as_str(), options)
         .await
-        .with_context(|| format!("register canonical S3 history from {history_root}"))?;
+        .with_context(|| format!("register building-scoped S3 history from {scoped_root}"))?;
+
+    let escaped = building.replace('\'', "''");
+    let scoped = ctx
+        .sql(&format!(
+            "SELECT *, '{escaped}' AS building_id FROM {SCOPED_SOURCE_TABLE}"
+        ))
+        .await
+        .context("build building-scoped S3 history view")?;
+    ctx.register_table("history", scoped.into_view())?;
 
     Ok(HistorianRegistration {
-        kind: crate::historian::HistorianDatasetKind::CanonicalHive,
-        root: history_root,
+        kind: HistorianDatasetKind::CanonicalHive,
+        root: scoped_root,
     })
+}
+
+fn canonical_partition_columns() -> Vec<(String, DataType)> {
+    vec![
+        ("building_id".to_string(), DataType::Utf8),
+        ("equipment_id".to_string(), DataType::Utf8),
+        ("year".to_string(), DataType::Utf8),
+        ("month".to_string(), DataType::Utf8),
+    ]
+}
+
+fn canonical_history_url(bucket: &str, prefix: &str) -> String {
+    let prefix = prefix.trim_matches('/');
+    if prefix.is_empty() {
+        format!("s3://{bucket}/history/")
+    } else {
+        format!("s3://{bucket}/{prefix}/history/")
+    }
+}
+
+fn object_history_prefix(prefix: &str) -> String {
+    let prefix = prefix.trim_matches('/');
+    if prefix.is_empty() {
+        "history".to_string()
+    } else {
+        format!("{prefix}/history")
+    }
+}
+
+fn endpoint_for_style(endpoint: &str, bucket: &str, virtual_hosted: bool) -> Result<String> {
+    let endpoint = endpoint.trim().trim_end_matches('/');
+    let mut parsed = Url::parse(endpoint).context("parse OPENFDD_S3_ENDPOINT")?;
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| anyhow!("OPENFDD_S3_ENDPOINT requires a host"))?;
+    if !virtual_hosted || host == bucket || host.starts_with(&format!("{bucket}.")) {
+        return Ok(endpoint.to_string());
+    }
+    let bucket_host = format!("{bucket}.{host}");
+    parsed
+        .set_host(Some(&bucket_host))
+        .map_err(|_| anyhow!("cannot apply virtual-hosted S3 bucket to endpoint"))?;
+    Ok(parsed.as_str().trim_end_matches('/').to_string())
 }
 
 fn nonempty_env(name: &str) -> Option<String> {
@@ -327,6 +426,7 @@ mod tests {
             "OPENFDD_S3_URL_STYLE",
             "OPENFDD_S3_VIRTUAL_HOSTED_STYLE",
             "OPENFDD_S3_ALLOW_HTTP",
+            "OPENFDD_S3_SCOPE_INDEX_DIR",
         ] {
             env::remove_var(key);
         }
@@ -371,9 +471,15 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         clear_s3_env();
         env::set_var("OPENFDD_S3_URL_STYLE", "virtual");
-        assert_eq!(S3ObjectStoreConfig::from_env().unwrap().url_style, S3UrlStyle::Virtual);
+        assert_eq!(
+            S3ObjectStoreConfig::from_env().unwrap().url_style,
+            S3UrlStyle::Virtual
+        );
         env::set_var("OPENFDD_S3_URL_STYLE", "path");
-        assert_eq!(S3ObjectStoreConfig::from_env().unwrap().url_style, S3UrlStyle::Path);
+        assert_eq!(
+            S3ObjectStoreConfig::from_env().unwrap().url_style,
+            S3UrlStyle::Path
+        );
         clear_s3_env();
     }
 
@@ -395,6 +501,35 @@ mod tests {
             building_scope_from_compat_path(Path::new("/tmp/index/building=BUILDING_100")),
             Some("BUILDING_100")
         );
+        assert_eq!(
+            building_scope_from_compat_path(Path::new("/tmp/index/building_id=BUILDING_200")),
+            Some("BUILDING_200")
+        );
         assert_eq!(building_scope_from_compat_path(Path::new("/tmp/index")), None);
+    }
+
+    #[test]
+    fn virtual_hosted_endpoint_adds_bucket_once() {
+        assert_eq!(
+            endpoint_for_style("https://storage.example.com", "history-123", true).unwrap(),
+            "https://history-123.storage.example.com"
+        );
+        assert_eq!(
+            endpoint_for_style(
+                "https://history-123.storage.example.com/",
+                "history-123",
+                true
+            )
+            .unwrap(),
+            "https://history-123.storage.example.com"
+        );
+    }
+
+    #[test]
+    fn path_style_endpoint_keeps_base_host() {
+        assert_eq!(
+            endpoint_for_style("http://minio:9000/", "history", false).unwrap(),
+            "http://minio:9000"
+        );
     }
 }
