@@ -553,7 +553,9 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use arrow::array::{Float64Array, StringArray, TimestampMillisecondArray, TimestampNanosecondArray};
+    use arrow::array::{
+        Float64Array, StringArray, TimestampMillisecondArray, TimestampNanosecondArray,
+    };
     use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
     use arrow::ipc::writer::FileWriter;
     use arrow::record_batch::RecordBatch;
@@ -696,10 +698,7 @@ mod tests {
         let storage = LocalStorage::new(destination.path());
         migrate_legacy_parquet(source.path(), &storage).unwrap();
 
-        write_legacy_parquet(
-            &history,
-            &["2026-08-20T12:00:00Z", "2026-08-20T12:05:00Z"],
-        );
+        write_legacy_parquet(&history, &["2026-08-20T12:00:00Z", "2026-08-20T12:05:00Z"]);
         let error = migrate_legacy_parquet(source.path(), &storage).unwrap_err();
         assert!(error
             .to_string()

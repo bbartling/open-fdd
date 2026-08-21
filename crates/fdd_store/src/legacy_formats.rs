@@ -12,9 +12,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
-use arrow::array::{
-    ArrayRef, BooleanArray, Float64Array, StringArray, TimestampNanosecondArray,
-};
+use arrow::array::{ArrayRef, BooleanArray, Float64Array, StringArray, TimestampNanosecondArray};
 use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use arrow::ipc::reader::FileReader;
 use arrow::record_batch::RecordBatch;
@@ -83,9 +81,9 @@ fn normalize_ipc_timestamp(batch: RecordBatch) -> Result<RecordBatch> {
     let timestamp_utc = schema.index_of("timestamp_utc").ok();
     let timestamp = schema.index_of("timestamp").ok();
     match (timestamp_utc, timestamp) {
-        (Some(_), Some(_)) => bail!(
-            "legacy Arrow IPC cannot contain both timestamp and timestamp_utc"
-        ),
+        (Some(_), Some(_)) => {
+            bail!("legacy Arrow IPC cannot contain both timestamp and timestamp_utc")
+        }
         (Some(index), None) => {
             ensure_arrow_timestamp(batch.column(index).data_type())?;
             Ok(batch)
@@ -262,7 +260,8 @@ fn parse_timestamp_nanos(raw: &str) -> Option<i64> {
         "%Y-%m-%dT%H:%M:%S",
     ] {
         if let Ok(timestamp) = NaiveDateTime::parse_from_str(raw, format) {
-            return DateTime::<Utc>::from_naive_utc_and_offset(timestamp, Utc).timestamp_nanos_opt();
+            return DateTime::<Utc>::from_naive_utc_and_offset(timestamp, Utc)
+                .timestamp_nanos_opt();
         }
     }
     None
@@ -390,8 +389,8 @@ mod tests {
             ),
         )
         .unwrap();
-        let error = for_each_legacy_batch(&path, LegacyHistorianFormat::Jsonl, |_| Ok(()))
-            .unwrap_err();
+        let error =
+            for_each_legacy_batch(&path, LegacyHistorianFormat::Jsonl, |_| Ok(())).unwrap_err();
         assert!(error.to_string().contains("changes scalar type"));
     }
 
