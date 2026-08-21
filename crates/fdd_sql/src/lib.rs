@@ -16,8 +16,8 @@ pub use historian::{
     HistorianRegistration,
 };
 pub use object_store::{
-    refresh_s3_scope_index_from_env, register_configured_historian, s3_scope_index_root,
-    S3ObjectStoreConfig, S3UrlStyle,
+    refresh_s3_scope_index_from_env, register_configured_historian,
+    register_configured_historian_scoped, s3_scope_index_root, S3ObjectStoreConfig, S3UrlStyle,
 };
 pub use query::{collect_sql_bounded, stream_sql, DEFAULT_INTERACTIVE_MAX_ROWS};
 pub use session::{
@@ -27,18 +27,18 @@ pub use session::{
 
 /// Compatibility registration entry point used by central/edge callers.
 ///
-/// File-backed configurations preserve the H3 behavior. When the canonical
-/// storage URL is S3, the local path is treated only as central's scratch scope
-/// marker: the real dataset is registered from object storage and an existing
-/// `building=<id>` marker becomes a `building_id` DataFusion view predicate.
+/// Existing local callers remain path-driven. When `OPENFDD_STORAGE_URL`
+/// explicitly selects S3, an existing `building=<id>` compatibility marker is
+/// translated into a canonical object-store prefix before DataFusion discovers
+/// files, avoiding unrelated-building object listings.
 pub async fn register_parquet_tree(ctx: &SessionContext, parquet_root: &Path) -> Result<usize> {
-    let config = HistorianConfig::from_env()?;
-    if matches!(config.storage_url, StorageUrl::S3 { .. }) {
-        object_store::register_configured_historian(ctx, &config).await?;
-        if let Some(building_id) = object_store::building_scope_from_compat_path(parquet_root) {
-            object_store::scope_history_to_building(ctx, building_id).await?;
+    if let Ok(raw) = std::env::var("OPENFDD_STORAGE_URL") {
+        if matches!(StorageUrl::parse(&raw)?, StorageUrl::S3 { .. }) {
+            let config = HistorianConfig::from_env()?;
+            let building_id = object_store::building_scope_from_compat_path(parquet_root);
+            object_store::register_configured_historian_scoped(ctx, &config, building_id).await?;
+            return Ok(1);
         }
-        return Ok(1);
     }
     historian::register_parquet_tree(ctx, parquet_root).await
 }
