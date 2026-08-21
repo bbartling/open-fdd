@@ -1,8 +1,8 @@
 //! Restart-safe execution for H6 legacy historian migration.
 //!
-//! Eligible legacy Parquet sources are read in bounded Arrow batches and written
-//! into a staging tree that is not query-visible. An atomic receipt records the
-//! exact canonical publish plan before any staged part is renamed into `history/`.
+//! Eligible legacy sources are read in bounded Arrow batches and written into a
+//! staging tree that is not query-visible. An atomic receipt records the exact
+//! canonical publish plan before any staged part is renamed into `history/`.
 //! If migration stops mid-publish, rerunning resumes that exact plan instead of
 //! producing duplicate canonical parts.
 
@@ -12,15 +12,15 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, bail, Context, Result};
-use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::historian::LocalStorage;
+use crate::legacy_formats::for_each_legacy_batch;
 use crate::migration::{
     discover_legacy_historian, LegacyHistorianCandidate, LegacyHistorianFormat,
 };
-use crate::parquet_parts::{ParquetPart, ParquetPartWriter, DEFAULT_ROW_GROUP_ROWS};
+use crate::parquet_parts::{ParquetPart, ParquetPartWriter};
 
 const RECEIPT_VERSION: u32 = 1;
 const METADATA_DIR: &str = ".openfdd-migration";
@@ -68,7 +68,10 @@ pub struct MigrationSourceReport {
 pub struct MigrationRunReport {
     pub source_root: String,
     pub destination_root: String,
+    pub eligible_sources: usize,
     pub eligible_parquet_sources: usize,
+    pub eligible_jsonl_sources: usize,
+    pub eligible_feather_sources: usize,
     pub migrated_sources: usize,
     pub resumed_sources: usize,
     pub already_migrated_sources: usize,
@@ -108,33 +111,58 @@ struct SourceFingerprint {
     sha256: String,
 }
 
-/// Migrate every eligible legacy `building=<id>/equipment=<id>/history.parquet`
-/// source under `source_root` into canonical monthly Parquet parts.
+/// Migrate every eligible legacy historian source under `source_root`.
 ///
-/// The destination must be local canonical storage. This command is intended for
-/// explicit operator/offline migration, not concurrent live ingest.
+/// Parquet, JSONL/NDJSON, and Arrow IPC/Feather candidates all use the same
+/// trusted path identity and restart-safe publish protocol. The destination must
+/// be local canonical storage. This is an explicit offline/operator operation,
+/// not a concurrent live-ingest path.
+pub fn migrate_legacy_historian(
+    source_root: &Path,
+    destination: &LocalStorage,
+) -> Result<MigrationRunReport> {
+    let inventory = discover_legacy_historian(source_root)?;
+    let candidates = inventory
+        .candidates
+        .into_iter()
+        .filter(|candidate| candidate.eligible)
+        .collect::<Vec<_>>();
+    migrate_candidates(source_root, destination, &candidates)
+}
+
+/// Compatibility helper for callers that intentionally want only legacy Parquet.
 pub fn migrate_legacy_parquet(
     source_root: &Path,
     destination: &LocalStorage,
 ) -> Result<MigrationRunReport> {
     let inventory = discover_legacy_historian(source_root)?;
-    let candidates: Vec<_> = inventory
+    let candidates = inventory
         .candidates
         .into_iter()
         .filter(|candidate| {
             candidate.eligible && candidate.format == LegacyHistorianFormat::Parquet
         })
-        .collect();
+        .collect::<Vec<_>>();
+    migrate_candidates(source_root, destination, &candidates)
+}
 
+fn migrate_candidates(
+    source_root: &Path,
+    destination: &LocalStorage,
+    candidates: &[LegacyHistorianCandidate],
+) -> Result<MigrationRunReport> {
     let mut sources = Vec::with_capacity(candidates.len());
-    for candidate in &candidates {
+    for candidate in candidates {
         sources.push(migrate_candidate(source_root, destination, candidate)?);
     }
 
     Ok(MigrationRunReport {
         source_root: source_root.display().to_string(),
         destination_root: destination.root().display().to_string(),
-        eligible_parquet_sources: candidates.len(),
+        eligible_sources: candidates.len(),
+        eligible_parquet_sources: count_format(candidates, LegacyHistorianFormat::Parquet),
+        eligible_jsonl_sources: count_format(candidates, LegacyHistorianFormat::Jsonl),
+        eligible_feather_sources: count_format(candidates, LegacyHistorianFormat::Feather),
         migrated_sources: count_status(&sources, MigrationSourceStatus::Migrated),
         resumed_sources: count_status(&sources, MigrationSourceStatus::Resumed),
         already_migrated_sources: count_status(&sources, MigrationSourceStatus::AlreadyMigrated),
@@ -143,6 +171,13 @@ pub fn migrate_legacy_parquet(
         parts_verified: sources.iter().map(|source| source.parts.len()).sum(),
         sources,
     })
+}
+
+fn count_format(candidates: &[LegacyHistorianCandidate], format: LegacyHistorianFormat) -> usize {
+    candidates
+        .iter()
+        .filter(|candidate| candidate.format == format)
+        .count()
 }
 
 fn count_status(sources: &[MigrationSourceReport], status: MigrationSourceStatus) -> usize {
@@ -217,24 +252,17 @@ fn migrate_candidate(
     fs::create_dir_all(&staging_root)?;
 
     let writer = ParquetPartWriter::new(LocalStorage::new(&staging_root));
-    let source_file = fs::File::open(&source_path)
-        .with_context(|| format!("open legacy Parquet {}", source_path.display()))?;
-    let reader = ParquetRecordBatchReaderBuilder::try_new(source_file)
-        .context("read legacy Parquet metadata")?
-        .with_batch_size(DEFAULT_ROW_GROUP_ROWS)
-        .build()
-        .context("build legacy Parquet batch reader")?;
-
-    let mut source_rows = 0u64;
     let mut canonical_rows = 0u64;
     let mut parts = Vec::new();
-    for batch in reader {
-        let batch = batch.context("read legacy Parquet batch")?;
-        source_rows += batch.num_rows() as u64;
+    let source_rows = for_each_legacy_batch(&source_path, candidate.format, |batch| {
         let written = writer
             .write_history_batch(building_id, equipment_id, &batch)
             .with_context(|| format!("migrate legacy batch from {}", source_path.display()))?;
-        let batch_rows = written.iter().map(|part| part.rows as u64).sum::<u64>();
+        let batch_rows = written.iter().try_fold(0u64, |total, part| {
+            total
+                .checked_add(u64::try_from(part.rows).context("canonical part row overflow")?)
+                .ok_or_else(|| anyhow!("canonical migration row count overflow"))
+        })?;
         if batch_rows != batch.num_rows() as u64 {
             bail!(
                 "legacy migration row mismatch for {}: source batch {} != canonical {}",
@@ -243,11 +271,14 @@ fn migrate_candidate(
                 batch_rows
             );
         }
-        canonical_rows += batch_rows;
+        canonical_rows = canonical_rows
+            .checked_add(batch_rows)
+            .ok_or_else(|| anyhow!("canonical migration row count overflow"))?;
         for part in written {
             parts.push(migration_part(&staging_root, part)?);
         }
-    }
+        Ok(())
+    })?;
 
     if source_rows != canonical_rows {
         bail!(
@@ -522,8 +553,9 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use arrow::array::{Float64Array, TimestampNanosecondArray};
+    use arrow::array::{Float64Array, StringArray, TimestampMillisecondArray, TimestampNanosecondArray};
     use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
+    use arrow::ipc::writer::FileWriter;
     use arrow::record_batch::RecordBatch;
     use chrono::{DateTime, Utc};
     use parquet::arrow::ArrowWriter;
@@ -567,7 +599,41 @@ mod tests {
         writer.close().unwrap();
     }
 
-    fn legacy_path(root: &Path) -> PathBuf {
+    fn write_legacy_ipc(path: &Path) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let schema = Arc::new(Schema::new(vec![
+            Field::new(
+                "timestamp",
+                DataType::Timestamp(TimeUnit::Millisecond, None),
+                false,
+            ),
+            Field::new("equipment_id", DataType::Utf8, false),
+            Field::new("sat", DataType::Float64, true),
+        ]));
+        let times = [
+            DateTime::parse_from_rfc3339("2026-08-20T12:00:00Z")
+                .unwrap()
+                .timestamp_millis(),
+            DateTime::parse_from_rfc3339("2026-08-20T12:05:00Z")
+                .unwrap()
+                .timestamp_millis(),
+        ];
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(TimestampMillisecondArray::from(times.to_vec())),
+                Arc::new(StringArray::from(vec!["AHU_1", "AHU_1"])),
+                Arc::new(Float64Array::from(vec![Some(55.0), Some(56.0)])),
+            ],
+        )
+        .unwrap();
+        let file = fs::File::create(path).unwrap();
+        let mut writer = FileWriter::try_new(file, &schema).unwrap();
+        writer.write(&batch).unwrap();
+        writer.finish().unwrap();
+    }
+
+    fn legacy_parquet_path(root: &Path) -> PathBuf {
         root.join("building=BLDG_1/equipment=AHU_1/history.parquet")
     }
 
@@ -576,7 +642,7 @@ mod tests {
         let source = TempDir::new().unwrap();
         let destination = TempDir::new().unwrap();
         write_legacy_parquet(
-            &legacy_path(source.path()),
+            &legacy_parquet_path(source.path()),
             &[
                 "2026-08-31T23:55:00Z",
                 "2026-09-01T00:00:00Z",
@@ -605,7 +671,7 @@ mod tests {
         let source = TempDir::new().unwrap();
         let destination = TempDir::new().unwrap();
         write_legacy_parquet(
-            &legacy_path(source.path()),
+            &legacy_parquet_path(source.path()),
             &["2026-08-20T12:00:00Z", "2026-08-20T12:05:00Z"],
         );
         let storage = LocalStorage::new(destination.path());
@@ -625,15 +691,58 @@ mod tests {
     fn changed_source_after_receipt_fails_closed() {
         let source = TempDir::new().unwrap();
         let destination = TempDir::new().unwrap();
-        let history = legacy_path(source.path());
+        let history = legacy_parquet_path(source.path());
         write_legacy_parquet(&history, &["2026-08-20T12:00:00Z"]);
         let storage = LocalStorage::new(destination.path());
         migrate_legacy_parquet(source.path(), &storage).unwrap();
 
-        write_legacy_parquet(&history, &["2026-08-20T12:00:00Z", "2026-08-20T12:05:00Z"]);
+        write_legacy_parquet(
+            &history,
+            &["2026-08-20T12:00:00Z", "2026-08-20T12:05:00Z"],
+        );
         let error = migrate_legacy_parquet(source.path(), &storage).unwrap_err();
         assert!(error
             .to_string()
             .contains("changed since migration receipt"));
+    }
+
+    #[test]
+    fn generic_migration_converts_trusted_jsonl() {
+        let source = TempDir::new().unwrap();
+        let destination = TempDir::new().unwrap();
+        let history = source
+            .path()
+            .join("building=BLDG_1/equipment=AHU_1/history.jsonl");
+        fs::create_dir_all(history.parent().unwrap()).unwrap();
+        fs::write(
+            &history,
+            concat!(
+                "{\"timestamp\":\"2026-08-20T12:00:00Z\",\"equipment_id\":\"AHU_1\",\"sat\":55.0}\n",
+                "{\"timestamp\":\"2026-08-20T12:05:00Z\",\"equipment_id\":\"AHU_1\",\"sat\":56.0}\n"
+            ),
+        )
+        .unwrap();
+        let storage = LocalStorage::new(destination.path());
+        let report = migrate_legacy_historian(source.path(), &storage).unwrap();
+        assert_eq!(report.eligible_jsonl_sources, 1);
+        assert_eq!(report.source_rows_verified, 2);
+        assert_eq!(report.canonical_rows_verified, 2);
+        assert_eq!(report.migrated_sources, 1);
+    }
+
+    #[test]
+    fn generic_migration_converts_trusted_arrow_ipc() {
+        let source = TempDir::new().unwrap();
+        let destination = TempDir::new().unwrap();
+        let history = source
+            .path()
+            .join("building=BLDG_1/equipment=AHU_1/history.arrow");
+        write_legacy_ipc(&history);
+        let storage = LocalStorage::new(destination.path());
+        let report = migrate_legacy_historian(source.path(), &storage).unwrap();
+        assert_eq!(report.eligible_feather_sources, 1);
+        assert_eq!(report.source_rows_verified, 2);
+        assert_eq!(report.canonical_rows_verified, 2);
+        assert_eq!(report.migrated_sources, 1);
     }
 }

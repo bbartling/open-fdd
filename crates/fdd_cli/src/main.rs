@@ -12,7 +12,7 @@ use fdd_sql::{
     DEFAULT_INTERACTIVE_MAX_ROWS,
 };
 use fdd_store::{
-    discover_legacy_historian, ingest_building, local_historian_stats, migrate_legacy_parquet,
+    discover_legacy_historian, ingest_building, local_historian_stats, migrate_legacy_historian,
     HistorianConfig, LocalStorage,
 };
 use inventory::write_inventory;
@@ -57,7 +57,7 @@ enum Commands {
         #[arg(long)]
         legacy_root: PathBuf,
     },
-    /// Migrate eligible legacy history.parquet files into canonical monthly parts
+    /// Migrate eligible legacy Parquet/JSONL/Arrow files into canonical monthly parts
     HistorianMigrate {
         #[arg(long)]
         legacy_root: PathBuf,
@@ -158,7 +158,7 @@ async fn main() -> Result<()> {
             canonical_root,
         } => {
             let storage = LocalStorage::new(canonical_root);
-            let report = migrate_legacy_parquet(&legacy_root, &storage)?;
+            let report = migrate_legacy_historian(&legacy_root, &storage)?;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
         Commands::HistorianStats {

@@ -4,6 +4,7 @@ pub mod append;
 pub mod compaction;
 pub mod historian;
 pub mod ingest;
+pub(crate) mod legacy_formats;
 pub mod meta;
 pub mod micro_batch;
 pub mod migration;
@@ -25,8 +26,8 @@ pub use migration::{
     MigrationDryRunReport, MigrationInventory,
 };
 pub use migration_exec::{
-    migrate_legacy_parquet, MigrationPart, MigrationRunReport, MigrationSourceReport,
-    MigrationSourceStatus,
+    migrate_legacy_historian, migrate_legacy_parquet, MigrationPart, MigrationRunReport,
+    MigrationSourceReport, MigrationSourceStatus,
 };
 pub use parquet_parts::{ParquetPart, ParquetPartWriter, DEFAULT_ROW_GROUP_ROWS};
 pub use stats::{local_historian_stats, local_historian_stats_from_config, HistorianStats};
