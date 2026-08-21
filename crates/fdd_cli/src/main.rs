@@ -185,18 +185,46 @@ async fn main() -> Result<()> {
             rule_out,
             report,
         } => {
-            let bench = run_benchmark(
-                &data_root,
-                &building,
-                &parquet_out,
-                &rules_dir,
-                &rule_out,
-                &report,
-            )
-            .await?;
+            let bench =
+                run_benchmark(&data_root, &building, &parquet_out, &rules_dir, &rule_out).await?;
+            let md = format_benchmark_md(&bench);
+            if let Some(parent) = report.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&report, &md)?;
             println!("{}", serde_json::to_string_pretty(&bench)?);
             println!("report: {}", report.display());
         }
     }
     Ok(())
+}
+
+fn format_benchmark_md(b: &fdd_bench::BenchmarkReport) -> String {
+    format!(
+        "# Rust + DataFusion parity benchmark\n\n\
+         - building: {}\n\
+         - data_available: {}\n\
+         - validate_ms: {}\n\
+         - equipment_count: {}\n\
+         - csv_scan_ms: {}\n\
+         - ingest_ms: {} (rows: {})\n\
+         - rules_ms: {} (rules: {}, ok: {}, failed: {})\n\n\
+         ## Notes\n{}\n",
+        b.building_id,
+        b.data_available,
+        b.validate_ms,
+        b.equipment_count,
+        b.csv_scan_ms,
+        b.ingest_ms,
+        b.ingest_rows,
+        b.rules_ms,
+        b.rules_run,
+        b.rules_succeeded,
+        b.rules_failed,
+        b.notes
+            .iter()
+            .map(|n| format!("- {n}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    )
 }
