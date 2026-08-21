@@ -10,6 +10,7 @@ pub mod historian;
 pub mod object_store;
 pub mod query;
 pub mod session;
+pub mod tuning;
 
 pub use historian::{
     new_historian_session, register_historian_dataset, HistorianDatasetKind, HistorianRegistration,
@@ -23,6 +24,7 @@ pub use session::{
     register_weather_if_present, run_sql, run_sql_bounded, run_sql_file, run_sql_file_bounded,
     QueryResult,
 };
+pub use tuning::{historian_session_config_from_env, DataFusionTuning};
 
 /// Compatibility registration entry point used by central/edge callers.
 ///
