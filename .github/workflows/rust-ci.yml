@@ -33,7 +33,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Edge lib and MCP tests
-        run: cargo test --all-targets -p open_fdd_edge_prototype -p openfdd-mcp
+        run: cargo test --all-targets -p open_fdd_edge_prototype -p openfdd-mcp -- --test-threads=1
 
       - name: Central / fieldbus / MQTT contract tests
         run: |
