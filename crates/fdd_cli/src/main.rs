@@ -11,13 +11,16 @@ use fdd_sql::{
     new_historian_session, register_parquet_tree, run_sql_file_bounded,
     DEFAULT_INTERACTIVE_MAX_ROWS,
 };
-use fdd_store::{ingest_building, HistorianConfig};
+use fdd_store::{
+    discover_legacy_historian, ingest_building, local_historian_stats, migrate_legacy_parquet,
+    HistorianConfig, LocalStorage,
+};
 use inventory::write_inventory;
 
 #[derive(Parser)]
 #[command(
     name = "fdd_cli",
-    about = "Open-FDD CLI — validate, ingest, query, run-rules, compare, benchmark"
+    about = "Open-FDD CLI — validate, ingest, query, historian ops, run-rules, compare, benchmark"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -48,6 +51,26 @@ enum Commands {
         building: String,
         #[arg(long, default_value = ".cache/parquet")]
         out: PathBuf,
+    },
+    /// Inventory legacy historian files without writing canonical data
+    HistorianDryRun {
+        #[arg(long)]
+        legacy_root: PathBuf,
+    },
+    /// Migrate eligible legacy history.parquet files into canonical monthly parts
+    HistorianMigrate {
+        #[arg(long)]
+        legacy_root: PathBuf,
+        #[arg(long)]
+        canonical_root: PathBuf,
+    },
+    /// Report lightweight local canonical historian health/statistics as JSON
+    HistorianStats {
+        #[arg(long)]
+        canonical_root: PathBuf,
+        /// Small-file threshold in MiB; defaults to OPENFDD_PARQUET_TARGET_FILE_MB's default.
+        #[arg(long)]
+        target_file_mb: Option<u64>,
     },
     /// Run a DataFusion SQL file against Parquet
     Query {
@@ -124,6 +147,28 @@ async fn main() -> Result<()> {
             out,
         } => {
             let report = ingest_building(&data_root, &building, &out)?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+        Commands::HistorianDryRun { legacy_root } => {
+            let report = discover_legacy_historian(&legacy_root)?.dry_run_report();
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+        Commands::HistorianMigrate {
+            legacy_root,
+            canonical_root,
+        } => {
+            let storage = LocalStorage::new(canonical_root);
+            let report = migrate_legacy_parquet(&legacy_root, &storage)?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+        Commands::HistorianStats {
+            canonical_root,
+            target_file_mb,
+        } => {
+            let storage = LocalStorage::new(canonical_root);
+            let target_file_mb =
+                target_file_mb.unwrap_or(fdd_store::historian::DEFAULT_TARGET_FILE_MB);
+            let report = local_historian_stats(&storage, target_file_mb)?;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
         Commands::Query { parquet, sql_file } => {
