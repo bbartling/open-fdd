@@ -6,13 +6,17 @@
 
 use std::env;
 use std::fmt;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
 use datafusion::arrow::datatypes::DataType;
-use datafusion::prelude::{ParquetReadOptions, SessionContext};
-use fdd_store::{HistorianConfig, StorageUrl};
+use datafusion::prelude::{col, lit, ParquetReadOptions, SessionContext};
+use fdd_store::{safe_partition_value, HistorianConfig, StorageUrl};
 use object_store::aws::{AmazonS3, AmazonS3Builder};
+use object_store::path::Path as ObjectPath;
+use object_store::ObjectStore;
 use url::Url;
 
 use crate::historian::{register_historian_dataset, HistorianRegistration};
@@ -171,6 +175,92 @@ pub async fn register_configured_historian(
     }
 }
 
+/// Restrict an already-registered canonical `history` table to one building.
+///
+/// This creates a DataFusion view instead of constructing a filename glob, so
+/// the canonical `building_id` Hive predicate remains available for partition
+/// pruning on both local and object-store backends.
+pub async fn scope_history_to_building(ctx: &SessionContext, building_id: &str) -> Result<()> {
+    let building_id = safe_partition_value(building_id, "building_id")?;
+    let scoped = ctx
+        .table("history")
+        .await
+        .context("open registered history for building scope")?
+        .filter(col("building_id").eq(lit(building_id)))?;
+    ctx.deregister_table("history")?;
+    ctx.register_table("history", scoped.into_view())?;
+    Ok(())
+}
+
+/// Scratch directory used only to preserve the existing central fail-closed
+/// `building=<id>` presence check while canonical S3 data lives remotely.
+///
+/// This directory is metadata/cache, never historian durability. It deliberately
+/// follows central's existing local-root precedence so no application code needs
+/// Railway-specific branches.
+pub fn s3_scope_index_root() -> PathBuf {
+    if let Ok(root) = env::var("OPENFDD_PARQUET_ROOT") {
+        return PathBuf::from(root);
+    }
+    if let Ok(workspace) = env::var("OPENFDD_WORKSPACE") {
+        return PathBuf::from(workspace).join(".cache/parquet");
+    }
+    PathBuf::from(".cache/parquet")
+}
+
+/// Refresh the S3 building-scope scratch index from canonical Hive prefixes.
+///
+/// A successful refresh creates empty `building=<id>` marker directories for
+/// buildings that actually exist under `history/building_id=<id>/`. Unknown
+/// building requests therefore continue to fail closed in the existing central
+/// analytics bridge, while `register_parquet_tree` below routes the real scan to
+/// S3 and applies the matching DataFusion building predicate.
+pub async fn refresh_s3_scope_index_from_env() -> Result<Option<usize>> {
+    let config = HistorianConfig::from_env()?;
+    let StorageUrl::S3 { bucket, prefix } = &config.storage_url else {
+        return Ok(None);
+    };
+    let s3 = S3ObjectStoreConfig::from_env()?;
+    let store = s3.build(bucket)?;
+    let history_prefix = if prefix.is_empty() {
+        "history".to_string()
+    } else {
+        format!("{}/history", prefix.trim_matches('/'))
+    };
+    let listing = store
+        .list_with_delimiter(Some(&ObjectPath::from(history_prefix)))
+        .await
+        .context("list S3 historian building prefixes")?;
+
+    let root = s3_scope_index_root();
+    fs::create_dir_all(&root)
+        .with_context(|| format!("create S3 scope scratch index {}", root.display()))?;
+    let mut buildings = 0usize;
+    for common_prefix in listing.common_prefixes {
+        let Some(segment) = common_prefix.as_ref().rsplit('/').next() else {
+            continue;
+        };
+        let Some(building) = segment.strip_prefix("building_id=") else {
+            continue;
+        };
+        let building = safe_partition_value(building, "building_id")?;
+        fs::create_dir_all(root.join(format!("building={building}")))?;
+        buildings += 1;
+    }
+    fs::write(
+        root.join(".openfdd-s3-scope-index"),
+        b"scratch metadata only; canonical historian is object storage\n",
+    )?;
+    Ok(Some(buildings))
+}
+
+/// Extract the existing central `building=<id>` scope marker from a local path.
+pub fn building_scope_from_compat_path(path: &Path) -> Option<&str> {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| name.strip_prefix("building="))
+}
+
 async fn register_s3_historian(
     ctx: &SessionContext,
     bucket: &str,
@@ -297,5 +387,14 @@ mod tests {
         );
         assert!(S3ObjectStoreConfig::from_env().is_err());
         clear_s3_env();
+    }
+
+    #[test]
+    fn compatibility_path_extracts_building_scope() {
+        assert_eq!(
+            building_scope_from_compat_path(Path::new("/tmp/index/building=BUILDING_100")),
+            Some("BUILDING_100")
+        );
+        assert_eq!(building_scope_from_compat_path(Path::new("/tmp/index")), None);
     }
 }
