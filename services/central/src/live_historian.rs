@@ -326,7 +326,7 @@ mod tests {
 
     #[test]
     fn metadata_tags_define_identity_without_parsing_point_id() {
-        let env = envelope(vec![point("discharge-air-temp", json!(55.0))]);
+        let env = envelope(vec![point("sat", json!(55.0))]);
         let (groups, eligible, skipped) = normalized_batches(&env).unwrap();
         assert_eq!(eligible, 1);
         assert_eq!(skipped, 0);
