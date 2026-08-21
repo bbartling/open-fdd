@@ -9,6 +9,7 @@ mod eplus_runner;
 mod fuel;
 mod ingest;
 mod jobs;
+mod live_historian;
 mod models;
 mod openapi;
 mod routes;
