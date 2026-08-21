@@ -85,13 +85,51 @@ async fn register_weather_view_from_history(ctx: &SessionContext) -> Result<bool
     }
 }
 
+/// Execute SQL and materialize the complete result for compatibility callers.
+/// Interactive callers should prefer [`run_sql_bounded`] or the Arrow streaming
+/// helpers in `crate::query`.
 pub async fn run_sql(ctx: &SessionContext, sql: &str) -> Result<QueryResult> {
     let started = std::time::Instant::now();
     let df = ctx.sql(sql).await?;
     let batches = df.collect().await?;
+    Ok(query_result_from_batches(&batches, started))
+}
+
+/// Execute SQL with a hard materialized-row limit for interactive callers.
+pub async fn run_sql_bounded(
+    ctx: &SessionContext,
+    sql: &str,
+    max_rows: usize,
+) -> Result<QueryResult> {
+    let started = std::time::Instant::now();
+    let batches = crate::query::collect_sql_bounded(ctx, sql, max_rows).await?;
+    Ok(query_result_from_batches(&batches, started))
+}
+
+/// Read a SQL file and execute it through the compatibility unbounded path.
+pub async fn run_sql_file(ctx: &SessionContext, path: &Path) -> Result<QueryResult> {
+    let sql = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    run_sql(ctx, &sql).await
+}
+
+/// Read a SQL file and execute it with a hard materialized-row limit.
+pub async fn run_sql_file_bounded(
+    ctx: &SessionContext,
+    path: &Path,
+    max_rows: usize,
+) -> Result<QueryResult> {
+    let sql = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    run_sql_bounded(ctx, &sql, max_rows).await
+}
+
+/// Convert collected Arrow batches into the stable JSON-facing query result.
+fn query_result_from_batches(
+    batches: &[datafusion::arrow::record_batch::RecordBatch],
+    started: std::time::Instant,
+) -> QueryResult {
     let mut rows = Vec::new();
     let mut columns = Vec::new();
-    for batch in &batches {
+    for batch in batches {
         let schema = batch.schema();
         if columns.is_empty() {
             columns = schema.fields().iter().map(|f| f.name().clone()).collect();
@@ -106,17 +144,12 @@ pub async fn run_sql(ctx: &SessionContext, sql: &str) -> Result<QueryResult> {
             rows.push(serde_json::Value::Object(obj));
         }
     }
-    Ok(QueryResult {
+    QueryResult {
         row_count: rows.len(),
         columns,
         rows,
         elapsed_ms: started.elapsed().as_millis(),
-    })
-}
-
-pub async fn run_sql_file(ctx: &SessionContext, path: &Path) -> Result<QueryResult> {
-    let sql = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-    run_sql(ctx, &sql).await
+    }
 }
 
 fn format_cell(col: &datafusion::arrow::array::ArrayRef, idx: usize) -> serde_json::Value {
