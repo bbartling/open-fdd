@@ -178,9 +178,8 @@ fn normalized_batches(
             DataType::Timestamp(TimeUnit::Nanosecond, None),
             false,
         )];
-        let mut arrays: Vec<ArrayRef> = vec![Arc::new(TimestampNanosecondArray::from(vec![
-            timestamp,
-        ]))];
+        let mut arrays: Vec<ArrayRef> =
+            vec![Arc::new(TimestampNanosecondArray::from(vec![timestamp]))];
         for (role, value) in roles {
             match value {
                 RoleValue::Number(value) => {
@@ -221,7 +220,11 @@ fn point_identity(point: &TelemetryPoint) -> Result<Option<(String, String, Stri
 }
 
 fn string_tag<'a>(point: &'a TelemetryPoint, name: &str) -> Option<&'a str> {
-    point.tags.get(name)?.as_str().filter(|value| !value.is_empty())
+    point
+        .tags
+        .get(name)?
+        .as_str()
+        .filter(|value| !value.is_empty())
 }
 
 fn validate_role(role: &str) -> Result<()> {
@@ -326,7 +329,10 @@ mod tests {
             .get(&("BUILDING_100".into(), "AHU_1".into()))
             .unwrap();
         assert!(batch.schema().index_of("sat").is_ok());
-        assert!(batch.schema().index_of("bacnet:5007:analog-input:1").is_err());
+        assert!(batch
+            .schema()
+            .index_of("bacnet:5007:analog-input:1")
+            .is_err());
     }
 
     #[test]
