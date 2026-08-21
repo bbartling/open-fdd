@@ -1,6 +1,6 @@
 # Historian / Railway implementation program
 
-Last updated: 2026-08-20
+Last updated: 2026-08-21
 
 Canonical architecture: [`docs/HISTORIAN_ARCHITECTURE.md`](docs/HISTORIAN_ARCHITECTURE.md)  
 Full audit/design: [`../docs/architecture/historian.md`](../docs/architecture/historian.md)
@@ -58,23 +58,31 @@ H2 merged only after the changed-head FDD engine, Rust stack, AppSec, docs, and 
 
 ### H3 — Logical DataFusion dataset registration + query safety
 
-- [~] PR #758 — `feat/datafusion-historian-registration`, based on merged H2 / current `master`
-- [~] register canonical local `history/` dataset root instead of making `**/*.parquet` the long-term contract
-- [~] expose Hive partition columns (`building_id`, `equipment_id`, `year`, `month`); canonical partition values remain UTF-8 path literals (for example `year='2026'`, `month='08'`) so zero-padded month pruning is stable across DataFusion/local/object-store backends
-- [~] preserve legacy sidecar fallback during migration
-- [~] partition/date filter coverage plus physical-plan file pruning assertions; changed-head CI pending
-- [~] schema evolution coverage across mixed Parquet role columns; changed-head CI pending
-- [~] bounded interactive query collection plus Arrow streaming contract (`collect_sql_bounded`, `stream_sql`); changed-head CI pending
-- [~] DataFusion memory/spill configuration wiring via H1 historian config; CLI query runtime now uses the configured session, changed-head CI pending
-- [~] agent/build architecture docs updated for the H3 contract
+- [x] PR #758 — `feat/datafusion-historian-registration`, merged to `master` as `c5974abd`
+- [x] register canonical local `history/` dataset root instead of making `**/*.parquet` the long-term contract
+- [x] expose Hive partition columns (`building_id`, `equipment_id`, `year`, `month`); canonical partition values remain UTF-8 path literals (for example `year='2026'`, `month='08'`) so zero-padded month pruning is stable across DataFusion/local/object-store backends
+- [x] preserve legacy sidecar fallback during migration
+- [x] partition/date filter coverage plus physical-plan file pruning assertions
+- [x] schema evolution coverage across mixed Parquet role columns
+- [x] bounded interactive query collection plus Arrow streaming contract (`collect_sql_bounded`, `stream_sql`)
+- [x] DataFusion memory/spill configuration wiring via H1 historian config; CLI query runtime uses the configured session
+- [x] agent/build architecture docs updated for the H3 contract
+
+H3 merged only after its exact changed head passed FDD engine, Rust stack, AppSec, docs, security, and review gates.
 
 ### H4 — Compaction
 
-- [ ] identify small files partition-by-partition
-- [ ] bounded-memory replacement writer
-- [ ] publish/validate replacement before deleting inputs
-- [ ] no row loss / schema preservation / failure-safety tests
-- [ ] lightweight compaction metrics/stats
+- [~] PR #759 — `feat/historian-compaction`, rebuilt cleanly on merged H3 / current `master`
+- [~] identify small files partition-by-partition without crossing building/equipment/year/month boundaries
+- [~] bounded-memory replacement writer streams Parquet batches instead of materializing a partition
+- [~] nullable schema evolution is unioned safely; incompatible type changes fail closed
+- [~] validate replacement row count/schema before retiring source files
+- [~] retire source `.parquet` files out of the query surface before publishing the validated replacement
+- [~] roll source retirement back if publish fails; report hidden cleanup-pending files if post-publish deletion fails
+- [~] lightweight serializable compaction plan/result/summary metrics
+- [~] unit coverage for partition-local planning, row preservation, nullable schema evolution, and failure safety
+
+H4 implementation is on a clean post-H3 branch; changed-head CI and review are the remaining merge gates.
 
 ### H5 — S3-compatible backend + Railway
 
