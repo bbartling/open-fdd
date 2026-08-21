@@ -600,8 +600,14 @@ mod tests {
         assert_eq!(points[0].id, "rest:chiller-api:CHW-ST");
         assert_eq!(points[0].quality, Quality::Good);
         assert_eq!(points[0].unit.as_deref(), Some("°F"));
-        assert_eq!(points[0].tags["building_id"], serde_json::json!("BUILDING_100"));
-        assert_eq!(points[0].tags["equipment_id"], serde_json::json!("chiller-api"));
+        assert_eq!(
+            points[0].tags["building_id"],
+            serde_json::json!("BUILDING_100")
+        );
+        assert_eq!(
+            points[0].tags["equipment_id"],
+            serde_json::json!("chiller-api")
+        );
         assert_eq!(points[0].tags["role"], serde_json::json!("chw_supply_t"));
         assert_eq!(points[1].quality, Quality::Bad);
         assert_eq!(points[1].unit, None);
