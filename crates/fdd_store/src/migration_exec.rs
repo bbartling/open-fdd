@@ -17,7 +17,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::historian::LocalStorage;
-use crate::migration::{discover_legacy_historian, LegacyHistorianCandidate, LegacyHistorianFormat};
+use crate::migration::{
+    discover_legacy_historian, LegacyHistorianCandidate, LegacyHistorianFormat,
+};
 use crate::parquet_parts::{ParquetPart, ParquetPartWriter, DEFAULT_ROW_GROUP_ROWS};
 
 const RECEIPT_VERSION: u32 = 1;
@@ -135,10 +137,7 @@ pub fn migrate_legacy_parquet(
         eligible_parquet_sources: candidates.len(),
         migrated_sources: count_status(&sources, MigrationSourceStatus::Migrated),
         resumed_sources: count_status(&sources, MigrationSourceStatus::Resumed),
-        already_migrated_sources: count_status(
-            &sources,
-            MigrationSourceStatus::AlreadyMigrated,
-        ),
+        already_migrated_sources: count_status(&sources, MigrationSourceStatus::AlreadyMigrated),
         source_rows_verified: sources.iter().map(|source| source.source_rows).sum(),
         canonical_rows_verified: sources.iter().map(|source| source.canonical_rows).sum(),
         parts_verified: sources.iter().map(|source| source.parts.len()).sum(),
@@ -147,7 +146,10 @@ pub fn migrate_legacy_parquet(
 }
 
 fn count_status(sources: &[MigrationSourceReport], status: MigrationSourceStatus) -> usize {
-    sources.iter().filter(|source| source.status == status).count()
+    sources
+        .iter()
+        .filter(|source| source.status == status)
+        .count()
 }
 
 fn migrate_candidate(
@@ -290,7 +292,10 @@ fn fingerprint_source(path: &Path) -> Result<SourceFingerprint> {
     let sha256 = file_sha256(path)?;
     let after = fs::metadata(path).with_context(|| format!("restat {}", path.display()))?;
     if before.len() != after.len() || modified != after.modified()? {
-        bail!("legacy source changed while fingerprinting {}", path.display());
+        bail!(
+            "legacy source changed while fingerprinting {}",
+            path.display()
+        );
     }
     Ok(SourceFingerprint {
         size_bytes: before.len(),
@@ -398,7 +403,10 @@ fn publish_staged_parts(
             continue;
         }
         if !staged.is_file() {
-            bail!("migration publish plan lost staged part {}", part.relative_path);
+            bail!(
+                "migration publish plan lost staged part {}",
+                part.relative_path
+            );
         }
         verify_file(&staged, part)?;
         let parent = canonical
@@ -457,7 +465,8 @@ fn validated_part_path(root: &Path, relative_path: &str) -> Result<PathBuf> {
 }
 
 fn file_sha256(path: &Path) -> Result<String> {
-    let file = fs::File::open(path).with_context(|| format!("open {} for hashing", path.display()))?;
+    let file =
+        fs::File::open(path).with_context(|| format!("open {} for hashing", path.display()))?;
     let mut reader = BufReader::with_capacity(HASH_BUFFER_BYTES, file);
     let mut buffer = vec![0u8; HASH_BUFFER_BYTES];
     let mut hash = Sha256::new();
@@ -621,11 +630,10 @@ mod tests {
         let storage = LocalStorage::new(destination.path());
         migrate_legacy_parquet(source.path(), &storage).unwrap();
 
-        write_legacy_parquet(
-            &history,
-            &["2026-08-20T12:00:00Z", "2026-08-20T12:05:00Z"],
-        );
+        write_legacy_parquet(&history, &["2026-08-20T12:00:00Z", "2026-08-20T12:05:00Z"]);
         let error = migrate_legacy_parquet(source.path(), &storage).unwrap_err();
-        assert!(error.to_string().contains("changed since migration receipt"));
+        assert!(error
+            .to_string()
+            .contains("changed since migration receipt"));
     }
 }
