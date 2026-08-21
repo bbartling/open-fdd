@@ -78,7 +78,8 @@ pub fn spawn_mqtt_ingest(state: Arc<AppState>) {
                     .unwrap_or_else(|_| "/mqtt/central.cert.pem".into()),
             ),
             key_pem: PathBuf::from(
-                std::env::var("OPENFDD_MQTT_KEY_PEM").unwrap_or_else(|_| "/mqtt/central.key.pem".into()),
+                std::env::var("OPENFDD_MQTT_KEY_PEM")
+                    .unwrap_or_else(|_| "/mqtt/central.key.pem".into()),
             ),
             keep_alive_secs: 30,
         };
