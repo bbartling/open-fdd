@@ -9,7 +9,10 @@ pub use historian::{
     HistorianRegistration,
 };
 pub use query::{collect_sql_bounded, stream_sql, DEFAULT_INTERACTIVE_MAX_ROWS};
-pub use session::{register_weather_if_present, run_sql, run_sql_file, QueryResult};
+pub use session::{
+    register_weather_if_present, run_sql, run_sql_bounded, run_sql_file, run_sql_file_bounded,
+    QueryResult,
+};
 
 #[cfg(test)]
 mod smoke {
