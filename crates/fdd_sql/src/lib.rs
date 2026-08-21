@@ -39,13 +39,11 @@ pub async fn register_parquet_tree(ctx: &SessionContext, parquet_root: &Path) ->
         if matches!(StorageUrl::parse(&raw)?, StorageUrl::S3 { .. }) {
             let config = HistorianConfig::from_env()?;
             let building_id = object_store::building_scope_from_compat_path(parquet_root)
-                .ok_or_else(|| anyhow!("S3 historian compatibility registration requires a building scope"))?;
-            object_store::register_configured_historian_scoped(
-                ctx,
-                &config,
-                Some(building_id),
-            )
-            .await?;
+                .ok_or_else(|| {
+                    anyhow!("S3 historian compatibility registration requires a building scope")
+                })?;
+            object_store::register_configured_historian_scoped(ctx, &config, Some(building_id))
+                .await?;
             return Ok(1);
         }
     }

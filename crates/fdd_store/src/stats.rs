@@ -35,7 +35,10 @@ pub struct HistorianStats {
     pub invalid_layout_files: usize,
 }
 
-pub fn local_historian_stats(storage: &LocalStorage, target_file_mb: u64) -> Result<HistorianStats> {
+pub fn local_historian_stats(
+    storage: &LocalStorage,
+    target_file_mb: u64,
+) -> Result<HistorianStats> {
     if target_file_mb == 0 {
         bail!("historian stats target file size must be greater than zero");
     }
@@ -75,7 +78,10 @@ pub fn local_historian_stats(storage: &LocalStorage, target_file_mb: u64) -> Res
             continue;
         };
         buildings.insert(identity.building.to_string());
-        equipment.insert((identity.building.to_string(), identity.equipment.to_string()));
+        equipment.insert((
+            identity.building.to_string(),
+            identity.equipment.to_string(),
+        ));
         partitions.insert((
             identity.building.to_string(),
             identity.equipment.to_string(),
@@ -128,7 +134,11 @@ struct CanonicalHistoryIdentity<'a> {
 
 fn canonical_history_identity(path: &Path) -> Option<CanonicalHistoryIdentity<'_>> {
     let components = path.components().collect::<Vec<_>>();
-    if components.len() != 6 || components.iter().any(|c| !matches!(c, Component::Normal(_))) {
+    if components.len() != 6
+        || components
+            .iter()
+            .any(|c| !matches!(c, Component::Normal(_)))
+    {
         return None;
     }
     let text = components
@@ -226,11 +236,7 @@ mod tests {
             )
             .unwrap();
         writer
-            .write_history_batch(
-                "BLDG_1",
-                "VAV_1",
-                &batch(&["2026-09-01T00:05:00Z"]),
-            )
+            .write_history_batch("BLDG_1", "VAV_1", &batch(&["2026-09-01T00:05:00Z"]))
             .unwrap();
 
         let stats = local_historian_stats(&storage, 128).unwrap();
