@@ -118,7 +118,7 @@ Compatible providers may use path style instead. `OPENFDD_S3_ALLOW_HTTP=true` is
 
 ### H6 — Migration + operator historian tooling
 
-- [~] PR #764 — `feat/historian-migration-tooling`, active until exact-head CI/review gates are clean
+- [x] PR #764 — `feat/historian-migration-tooling`, merged to `master` as `d9705273`
 - [x] recursively discover and classify legacy Parquet, JSONL/NDJSON, and Feather/Arrow IPC historian artifacts
 - [x] require trusted `building=<id>/equipment=<id>` path identity; never invent identity from point IDs or defaults
 - [x] reject unsafe/conflicting identity and non-canonical/ambiguous migration inputs
@@ -132,17 +132,21 @@ Compatible providers may use path style instead. `OPENFDD_S3_ALLOW_HTTP=true` is
 - [x] public serializable `HistorianStats` / migration report API plus operator CLI commands `historian-dry-run`, `historian-migrate`, and `historian-stats`
 - [x] S3 compatibility registration carry-forward is fail-closed when a building scope is absent; explicit global/operator registration remains separate
 
-H6 remains offline/operator migration. It does not delete legacy data and does not make migration concurrent with live ingest. The phase is not complete until PR #764's final changed head has clean FDD, Rust stack, AppSec, docs/security workflows and clean review threads.
+H6 remains offline/operator migration. It does not delete legacy data and does not make migration concurrent with live ingest. H6 merged only after PR #764's exact final head passed FDD, Rust stack, AppSec, docs/security workflows and had no review threads.
 
 ### H7 — Live ingest micro-batch cutover
 
-- [ ] trace trustworthy equipment/role identity from fieldbus/MQTT metadata before mapping live points
-- [ ] no arbitrary parsing of point IDs as canonical equipment roles
-- [ ] connect normalized live Arrow batches to the H2 micro-batch primitive
-- [ ] call elapsed-time flush from the owning runtime loop and shutdown drain on graceful exit
-- [ ] latest successfully persisted telemetry timestamp
-- [ ] stop durability-critical dependence on JSONL/Arrow-IPC snapshot rewrite
-- [ ] Feather remains optional compatibility/interchange only
+- [~] PR #765 — `feat/live-historian-ingest-cutover`, active on merged H6/master
+- [x] trace trustworthy building/equipment/role identity from fieldbus/MQTT metadata before mapping live points
+- [x] no arbitrary parsing of BACnet/REST point IDs as canonical equipment roles
+- [x] connect normalized local live Arrow batches to the H2 `MicroBatchHistorian`
+- [~] call elapsed-time flush from the owning central MQTT loop; graceful shutdown drain is still pending
+- [~] track latest successfully persisted telemetry timestamp from immutable part publication; H8-facing persistence/API is still pending
+- [ ] complete-object S3 live writer using the H5 object-store contract; never fall back to ephemeral container disk
+- [ ] stop durability-critical dependence on JSONL/Arrow-IPC snapshot rewrite after local + S3 cutover qualification
+- [~] Feather/JSONL remains a temporary compatibility mirror during H7 rollout only
+
+H7 uses explicit `OPENFDD_BUILDING_ID` plus configured device/point metadata at the fieldbus publisher. Missing building identity fails closed for canonical persistence; central does not infer building/equipment/role identity from transport IDs or topic strings.
 
 ### H8 — Continuous AFDD scheduler / findings / API
 
