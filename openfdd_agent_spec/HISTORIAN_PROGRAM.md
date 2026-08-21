@@ -62,19 +62,24 @@ H2 merged only after the changed-head FDD engine, Rust stack, AppSec, docs, and 
 - [~] register canonical local `history/` dataset root instead of making `**/*.parquet` the long-term contract
 - [~] expose Hive partition columns (`building_id`, `equipment_id`, `year`, `month`); canonical partition values remain UTF-8 path literals (for example `year='2026'`, `month='08'`) so zero-padded month pruning is stable across DataFusion/local/object-store backends
 - [~] preserve legacy sidecar fallback during migration
-- [~] partition/date filter coverage plus physical-plan file pruning assertions; changed-head CI pending
-- [~] schema evolution coverage across mixed Parquet role columns; changed-head CI pending
-- [~] bounded interactive query collection plus Arrow streaming contract (`collect_sql_bounded`, `stream_sql`); changed-head CI pending
-- [~] DataFusion memory/spill configuration wiring via H1 historian config; CLI query runtime now uses the configured session, changed-head CI pending
-- [~] agent/build architecture docs updated for the H3 contract
+- [~] partition/date filter coverage plus physical-plan file pruning assertions
+- [~] schema evolution coverage across mixed Parquet role columns
+- [~] bounded interactive query collection plus Arrow streaming contract (`collect_sql_bounded`, `stream_sql`)
+- [~] DataFusion memory/spill configuration wiring via H1 historian config; CLI query runtime uses the configured session
+- [~] interactive CLI query materialization is capped at `DEFAULT_INTERACTIVE_MAX_ROWS`
+- [~] changed-head CI/review gate remains the merge prerequisite
 
 ### H4 — Compaction
 
-- [ ] identify small files partition-by-partition
-- [ ] bounded-memory replacement writer
-- [ ] publish/validate replacement before deleting inputs
-- [ ] no row loss / schema preservation / failure-safety tests
-- [ ] lightweight compaction metrics/stats
+- [~] PR #759 — `feat/historian-compaction`, stacked directly on the current H3 head while #758 finishes its merge gate
+- [~] identify small files partition-by-partition without crossing building/equipment/year/month boundaries
+- [~] bounded-memory replacement writer streams Parquet batches instead of materializing a partition
+- [~] nullable schema evolution is unioned safely; incompatible type changes fail closed
+- [~] replacement row count/schema are validated before source retirement
+- [~] source files are renamed out of the `.parquet` query surface before the validated replacement becomes visible
+- [~] failed retirement/publish rolls sources back; post-publish cleanup failures are reported as hidden cleanup-pending files
+- [~] lightweight serializable plan/result/summary compaction metrics
+- [~] unit coverage for planning, row preservation, nullable schema evolution, and fail-closed schema conflicts
 
 ### H5 — S3-compatible backend + Railway
 
