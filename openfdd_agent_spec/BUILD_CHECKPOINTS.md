@@ -218,3 +218,10 @@ Product voice = React + DataFusion only. Track deletion / GHCR / agent_spec hone
 - [x] #671 DF Overview/RCx color+OAT parity; Rust-only central; present-tense docs (+ #672 rustfmt)
 - [x] bensbench tip `sha-130b1f0` pull + react-ot smoke (BUILDING_100 economizer + RCx OAT scatters; no Python in central)- [x] #674 vibe20 Fuel Phase A (Rust campus/bills analytics + React FuelDashboard) merged `cc63574`
 - [x] vibe19/vibe20 Plotly/UX parity: FDD stacked axes + timestamps, Actions log, Data Model role Select, RCx coverage, Metering Plotly, theme soften, Fuel chart 1:1 gaps
+
+---
+
+# Historian / Railway program checkpoint (2026-08-21)
+
+- [x] P1-M7-00 — H1/H2 merged; H3 DataFusion historian registration/query-safety merged via #758 (`c5974abd`)
+- [~] P1-M7-01 — H4 bounded local historian compaction active in #760; exact-head CI + review required before merge
