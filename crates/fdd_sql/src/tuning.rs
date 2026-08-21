@@ -33,8 +33,8 @@ impl DataFusionTuning {
         let s3 = env::var("OPENFDD_STORAGE_URL")
             .ok()
             .is_some_and(|raw| raw.trim().starts_with("s3://"));
-        let metadata_hint_kb = env_optional_usize("OPENFDD_DATAFUSION_METADATA_SIZE_HINT_KB")?
-            .or(if s3 {
+        let metadata_hint_kb =
+            env_optional_usize("OPENFDD_DATAFUSION_METADATA_SIZE_HINT_KB")?.or(if s3 {
                 Some(DEFAULT_S3_METADATA_SIZE_HINT_KB)
             } else {
                 None
@@ -47,10 +47,7 @@ impl DataFusionTuning {
                 "OPENFDD_DATAFUSION_PARQUET_PUSHDOWN_FILTERS",
                 true,
             )?,
-            parquet_reorder_filters: env_bool(
-                "OPENFDD_DATAFUSION_PARQUET_REORDER_FILTERS",
-                true,
-            )?,
+            parquet_reorder_filters: env_bool("OPENFDD_DATAFUSION_PARQUET_REORDER_FILTERS", true)?,
             parquet_bloom_filter_pruning: env_bool(
                 "OPENFDD_DATAFUSION_BLOOM_FILTER_PRUNING",
                 false,
