@@ -52,12 +52,13 @@ Railway is a deployment target for the generic S3-compatible backend; it is not 
 
 ### Canonical local storage
 
-`OPENFDD_STORAGE_URL` is the provider-neutral historian setting. H1 supports:
+`OPENFDD_STORAGE_URL` is the provider-neutral historian setting. H1 supports local storage:
 
 ```text
 OPENFDD_STORAGE_URL=file:///data/openfdd
-OPENFDD_STORAGE_URL=s3://openfdd-history
 ```
+
+The `s3://` form is the H5 target and is not available until the H5 object-store backend and runtime cutover land.
 
 A plain filesystem path is accepted for local backwards compatibility. If the canonical setting is absent, `OPENFDD_PARQUET_ROOT` is recognized as a legacy compatibility path; legacy physical layout is never silently relabeled as canonical layout.
 
@@ -255,9 +256,9 @@ OPENFDD_S3_SECRET_ACCESS_KEY=${{bucket.SECRET_ACCESS_KEY}}
 The intended cloud topology is:
 
 ```text
-openfdd-web (public)
+openfdd-web (LAN/VPN only)
       |
-Railway private DNS
+private Railway ingress / private DNS
       |
 openfdd-central (private)
       |
