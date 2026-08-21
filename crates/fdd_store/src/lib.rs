@@ -19,7 +19,7 @@ pub use ingest::{ingest_building, ingest_building_with_batch_hook, IngestReport,
 pub use meta::SidecarMeta;
 pub use micro_batch::{FlushReason, HistorianBatchKey, MicroBatchFlush, MicroBatchHistorian};
 pub use migration::{
-    discover_legacy_historian, LegacyHistorianCandidate, LegacyHistorianFormat, MigrationDryRunReport,
-    MigrationInventory,
+    discover_legacy_historian, LegacyHistorianCandidate, LegacyHistorianFormat,
+    MigrationDryRunReport, MigrationInventory,
 };
 pub use parquet_parts::{ParquetPart, ParquetPartWriter, DEFAULT_ROW_GROUP_ROWS};

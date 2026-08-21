@@ -160,7 +160,10 @@ fn legacy_identity(path: &Path) -> (Option<String>, Option<String>, Option<Strin
         if let Some(value) = segment.strip_prefix("building=") {
             match safe_partition_value(value, "building_id") {
                 Ok(value) => {
-                    if building.as_deref().is_some_and(|existing| existing != value) {
+                    if building
+                        .as_deref()
+                        .is_some_and(|existing| existing != value)
+                    {
                         return (
                             None,
                             None,
@@ -181,7 +184,10 @@ fn legacy_identity(path: &Path) -> (Option<String>, Option<String>, Option<Strin
         if let Some(value) = segment.strip_prefix("equipment=") {
             match safe_partition_value(value, "equipment_id") {
                 Ok(value) => {
-                    if equipment.as_deref().is_some_and(|existing| existing != value) {
+                    if equipment
+                        .as_deref()
+                        .is_some_and(|existing| existing != value)
+                    {
                         return (
                             None,
                             None,
@@ -241,7 +247,10 @@ mod tests {
     #[test]
     fn jsonl_and_feather_are_classified_only_with_path_identity() {
         let tmp = TempDir::new().unwrap();
-        touch(&tmp.path().join("building=BLDG_1/equipment=AHU_1/history.jsonl"));
+        touch(
+            &tmp.path()
+                .join("building=BLDG_1/equipment=AHU_1/history.jsonl"),
+        );
         touch(&tmp.path().join("orphan/history.feather"));
 
         let report = discover_legacy_historian(tmp.path())
@@ -271,7 +280,10 @@ mod tests {
 
         let inventory = discover_legacy_historian(tmp.path()).unwrap();
         assert_eq!(inventory.candidates.len(), 2);
-        assert!(inventory.candidates.iter().all(|candidate| !candidate.eligible));
+        assert!(inventory
+            .candidates
+            .iter()
+            .all(|candidate| !candidate.eligible));
     }
 
     #[test]
