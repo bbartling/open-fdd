@@ -96,10 +96,9 @@ async fn initialize_s3_scope_index() -> anyhow::Result<()> {
         loop {
             interval.tick().await;
             match fdd_sql::refresh_s3_scope_index_from_env().await {
-                Ok(Some(buildings)) => tracing::debug!(
-                    buildings,
-                    "refreshed S3 historian building scope index"
-                ),
+                Ok(Some(buildings)) => {
+                    tracing::debug!(buildings, "refreshed S3 historian building scope index")
+                }
                 Ok(None) => break,
                 Err(error) => tracing::warn!(
                     %error,

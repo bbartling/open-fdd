@@ -20,9 +20,7 @@ use object_store::path::Path as ObjectPath;
 use object_store::ObjectStore;
 use url::Url;
 
-use crate::historian::{
-    register_historian_dataset, HistorianDatasetKind, HistorianRegistration,
-};
+use crate::historian::{register_historian_dataset, HistorianDatasetKind, HistorianRegistration};
 
 const SCOPED_SOURCE_TABLE: &str = "__openfdd_history_scoped_source";
 
@@ -125,9 +123,9 @@ impl S3ObjectStoreConfig {
             match parsed.scheme() {
                 "https" => {}
                 "http" if allow_http => {}
-                "http" => bail!(
-                    "HTTP S3 endpoint requires OPENFDD_S3_ALLOW_HTTP=true (local/test only)"
-                ),
+                "http" => {
+                    bail!("HTTP S3 endpoint requires OPENFDD_S3_ALLOW_HTTP=true (local/test only)")
+                }
                 _ => bail!("OPENFDD_S3_ENDPOINT must use http:// or https://"),
             }
             if parsed.host_str().is_none() {
@@ -437,7 +435,10 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         clear_s3_env();
         env::set_var("OPENFDD_S3_ACCESS_KEY_ID", "visible-key-must-not-leak");
-        env::set_var("OPENFDD_S3_SECRET_ACCESS_KEY", "visible-secret-must-not-leak");
+        env::set_var(
+            "OPENFDD_S3_SECRET_ACCESS_KEY",
+            "visible-secret-must-not-leak",
+        );
         let cfg = S3ObjectStoreConfig::from_env().unwrap();
         let rendered = format!("{cfg:?}");
         assert!(!rendered.contains("visible-key-must-not-leak"));
@@ -505,7 +506,10 @@ mod tests {
             building_scope_from_compat_path(Path::new("/tmp/index/building_id=BUILDING_200")),
             Some("BUILDING_200")
         );
-        assert_eq!(building_scope_from_compat_path(Path::new("/tmp/index")), None);
+        assert_eq!(
+            building_scope_from_compat_path(Path::new("/tmp/index")),
+            None
+        );
     }
 
     #[test]
