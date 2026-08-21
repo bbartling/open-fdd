@@ -9,6 +9,7 @@ pub mod micro_batch;
 pub mod migration;
 pub mod migration_exec;
 pub mod parquet_parts;
+pub mod stats;
 
 pub use append::{merge_history_wide_csv, merge_history_wide_text, MergeReport};
 pub use compaction::{CompactionPlan, CompactionResult, CompactionSummary, ParquetCompactor};
@@ -28,3 +29,4 @@ pub use migration_exec::{
     MigrationSourceStatus,
 };
 pub use parquet_parts::{ParquetPart, ParquetPartWriter, DEFAULT_ROW_GROUP_ROWS};
+pub use stats::{local_historian_stats, local_historian_stats_from_config, HistorianStats};
