@@ -56,7 +56,8 @@ impl CanonicalStateStore {
                     Ok(result) => result,
                     Err(error) if is_not_found(&error) => return Ok(None),
                     Err(error) => {
-                        return Err(error).with_context(|| format!("read S3 state object {location}"));
+                        return Err(error)
+                            .with_context(|| format!("read S3 state object {location}"));
                     }
                 };
                 let bytes = run_object_store(result.bytes())
@@ -84,7 +85,10 @@ fn validate_relative(path: &Path) -> Result<()> {
     if path.is_absolute() {
         bail!("canonical state path must be relative");
     }
-    if path.components().any(|component| matches!(component, std::path::Component::ParentDir)) {
+    if path
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
         bail!("canonical state path traversal rejected");
     }
     Ok(())
@@ -174,8 +178,12 @@ fn build_s3_store(bucket: &str) -> Result<Arc<dyn ObjectStore>> {
         }
         let host = parsed
             .host_str()
-            .ok_or_else(|| anyhow!("OPENFDD_S3_ENDPOINT requires a host"))?;
-        let endpoint = if virtual_hosted && host != bucket && !host.starts_with(&format!("{bucket}.")) {
+            .ok_or_else(|| anyhow!("OPENFDD_S3_ENDPOINT requires a host"))?
+            .to_string();
+        let endpoint = if virtual_hosted
+            && host != bucket
+            && !host.starts_with(&format!("{bucket}."))
+        {
             let mut rewritten = parsed;
             rewritten
                 .set_host(Some(&format!("{bucket}.{host}")))
@@ -187,12 +195,16 @@ fn build_s3_store(bucket: &str) -> Result<Arc<dyn ObjectStore>> {
         builder = builder.with_endpoint(endpoint);
     }
     if let (Some(key), Some(secret)) = (access_key_id, secret_access_key) {
-        builder = builder.with_access_key_id(key).with_secret_access_key(secret);
+        builder = builder
+            .with_access_key_id(key)
+            .with_secret_access_key(secret);
     }
     if let Some(token) = session_token {
         builder = builder.with_token(token);
     }
-    Ok(Arc::new(builder.build().context("build canonical S3 state store")?))
+    Ok(Arc::new(
+        builder.build().context("build canonical S3 state store")?,
+    ))
 }
 
 fn run_object_store<F, T>(future: F) -> Result<T>
