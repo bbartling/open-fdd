@@ -1,0 +1,62 @@
+name: H10 Historian scale qualification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [master, main]
+    paths:
+      - "scripts/historian_scale_generate.py"
+      - "scripts/historian_scale_check.py"
+      - "scripts/historian_scale_workloads.sql"
+      - "crates/fdd_store/**"
+      - "crates/fdd_sql/**"
+      - "crates/fdd_rules/**"
+      - "crates/fdd_bench/**"
+      - "services/central/**"
+      - "frontend/web/**"
+      - "docker/compose.csv.yml"
+      - "scripts/release/smoke_csv_central_boot.sh"
+      - ".github/workflows/historian-scale-qualification.yml"
+
+concurrency:
+  group: h10-historian-scale-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Deterministic generator + incremental workload contract
+        run: python3 scripts/historian_scale_check.py
+
+  rust-historian:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Historian / DataFusion / FDD benchmark tests
+        run: cargo test -p fdd_store -p fdd_sql -p fdd_rules -p fdd_bench
+
+  local-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - name: Local central + React CSV container smoke
+        env:
+          OPENFDD_SMOKE_TIMEOUT_SECS: "300"
+        run: |
+          chmod +x scripts/release/smoke_csv_central_boot.sh
+          ./scripts/release/smoke_csv_central_boot.sh
