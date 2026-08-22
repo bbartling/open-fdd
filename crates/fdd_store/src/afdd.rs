@@ -179,11 +179,16 @@ mod tests {
 
     #[test]
     fn zero_values_fail_closed() {
-        let mut config = AfddConfig::default();
-        config.interval_minutes = 0;
-        assert!(config.validate().is_err());
-        config.interval_minutes = 60;
-        config.lookback_value = 0;
-        assert!(config.validate().is_err());
+        let zero_interval = AfddConfig {
+            interval_minutes: 0,
+            ..AfddConfig::default()
+        };
+        assert!(zero_interval.validate().is_err());
+
+        let zero_lookback = AfddConfig {
+            lookback_value: 0,
+            ..AfddConfig::default()
+        };
+        assert!(zero_lookback.validate().is_err());
     }
 }
