@@ -32,10 +32,6 @@ struct ParsedTopic {
     protocol: Option<String>,
 }
 
-pub fn spawn_mqtt_ingest(state: Arc<AppState>) {
-    let _ = spawn_mqtt_ingest_inner(state, None);
-}
-
 pub fn spawn_mqtt_ingest_with_shutdown(
     state: Arc<AppState>,
     shutdown: watch::Receiver<bool>,
