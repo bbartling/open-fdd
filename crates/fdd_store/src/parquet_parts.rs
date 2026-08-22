@@ -5,7 +5,9 @@
 //! under the canonical monthly Hive partition. No existing part is rewritten.
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
 use arrow::array::{Array, ArrayRef, LargeStringArray, StringArray, UInt32Array};
@@ -34,16 +36,54 @@ pub struct ParquetPart {
     pub last_timestamp_utc: String,
 }
 
-#[derive(Debug, Clone)]
+/// Backend-neutral publication hook for immutable complete Parquet objects.
+///
+/// The encoder always builds the full Parquet payload in memory before invoking
+/// this hook. Implementations must publish the supplied bytes at the canonical
+/// relative path without exposing a partially-written object.
+pub trait CompletePartPublisher: fmt::Debug + Send + Sync {
+    fn publish_complete(&self, relative_path: &Path, bytes: &[u8]) -> Result<()>;
+}
+
+impl CompletePartPublisher for LocalStorage {
+    fn publish_complete(&self, relative_path: &Path, bytes: &[u8]) -> Result<()> {
+        self.write_atomic(relative_path, bytes)
+    }
+}
+
+#[derive(Clone)]
 pub struct ParquetPartWriter {
-    storage: LocalStorage,
+    publisher: Arc<dyn CompletePartPublisher>,
+    local_storage: Option<LocalStorage>,
     row_group_rows: usize,
+}
+
+impl fmt::Debug for ParquetPartWriter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ParquetPartWriter")
+            .field("publisher", &self.publisher)
+            .field("local_storage", &self.local_storage)
+            .field("row_group_rows", &self.row_group_rows)
+            .finish()
+    }
 }
 
 impl ParquetPartWriter {
     pub fn new(storage: LocalStorage) -> Self {
         Self {
-            storage,
+            publisher: Arc::new(storage.clone()),
+            local_storage: Some(storage),
+            row_group_rows: DEFAULT_ROW_GROUP_ROWS,
+        }
+    }
+
+    /// Build a canonical writer on a backend that can publish complete immutable
+    /// objects. This is used by live S3 ingest while preserving the same H2
+    /// partitioning, validation, encoding, and micro-batch primitive.
+    pub fn with_publisher(publisher: Arc<dyn CompletePartPublisher>) -> Self {
+        Self {
+            publisher,
+            local_storage: None,
             row_group_rows: DEFAULT_ROW_GROUP_ROWS,
         }
     }
@@ -56,8 +96,14 @@ impl ParquetPartWriter {
         Ok(self)
     }
 
+    /// Return the local storage backend for local writers.
+    ///
+    /// Existing H2 callers/tests are local-only. Backend-neutral callers should
+    /// not depend on this accessor.
     pub fn storage(&self) -> &LocalStorage {
-        &self.storage
+        self.local_storage
+            .as_ref()
+            .expect("ParquetPartWriter::storage is only available for local writers")
     }
 
     /// Write one or more immutable canonical Parquet parts.
@@ -69,7 +115,7 @@ impl ParquetPartWriter {
     /// Those identity columns are omitted from the physical Parquet payload so
     /// DataFusion can expose them exactly once as Hive partition columns.
     /// A complete Parquet byte buffer is built before publication so the storage
-    /// backend never exposes a partially written Parquet file.
+    /// backend never exposes a partially written Parquet file/object.
     pub fn write_history_batch(
         &self,
         building_id: &str,
@@ -133,7 +179,7 @@ impl ParquetPartWriter {
             let file_name = part_name(first);
             let relative = partition.join(file_name);
             let bytes = encode_parquet(&payload, self.row_group_rows)?;
-            self.storage.write_atomic(&relative, &bytes)?;
+            self.publisher.publish_complete(&relative, &bytes)?;
             out.push(ParquetPart {
                 relative_path: slash_path(&relative),
                 rows: subset.num_rows(),

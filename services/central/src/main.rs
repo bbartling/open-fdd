@@ -9,6 +9,7 @@ mod eplus_runner;
 mod fuel;
 mod ingest;
 mod jobs;
+mod live_historian;
 mod models;
 mod openapi;
 mod routes;
@@ -23,8 +24,9 @@ use std::time::Duration;
 use axum::middleware;
 use axum::Router;
 use state::AppState;
+use tokio::sync::watch;
 use tower_http::trace::TraceLayer;
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -44,7 +46,9 @@ async fn main() -> anyhow::Result<()> {
         Ok(_) => {}
         Err(e) => tracing::warn!(?e, "job restart recovery failed"),
     }
-    ingest::spawn_mqtt_ingest(Arc::clone(&state));
+
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    let ingest_task = ingest::spawn_mqtt_ingest_with_shutdown(Arc::clone(&state), shutdown_rx);
 
     let app = Router::new()
         .merge(routes::router(Arc::clone(&state)))
@@ -72,7 +76,20 @@ async fn main() -> anyhow::Result<()> {
         "openfdd-central listening (secrets not logged)"
     );
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    let signal_tx = shutdown_tx.clone();
+    let server = axum::serve(listener, app).with_graceful_shutdown(async move {
+        if let Err(error) = tokio::signal::ctrl_c().await {
+            warn!(%error, "failed to install graceful shutdown signal handler");
+        }
+        let _ = signal_tx.send(true);
+    });
+
+    let server_result = server.await;
+    let _ = shutdown_tx.send(true);
+    if let Err(error) = ingest_task.await {
+        warn!(%error, "MQTT ingest task ended unexpectedly during shutdown");
+    }
+    server_result?;
     Ok(())
 }
 

@@ -3,7 +3,7 @@ name = "openfdd-central"
 version = "3.3.2"
 edition = "2021"
 license = "MIT"
-description = "Open-FDD Central — MQTTS ingest, Feather historian, FDD, JWT REST + OpenAPI"
+description = "Open-FDD Central — MQTTS ingest, canonical Parquet historian, FDD, JWT REST + OpenAPI"
 
 [[bin]]
 name = "openfdd-central"
@@ -16,7 +16,10 @@ open_fdd_edge_prototype = { path = "../../edge" }
 fdd_core = { path = "../../crates/fdd_core" }
 fdd_rules = { path = "../../crates/fdd_rules" }
 fdd_sql = { path = "../../crates/fdd_sql" }
+fdd_store = { path = "../../crates/fdd_store" }
 datafusion.workspace = true
+object_store.workspace = true
+url.workspace = true
 
 axum = { version = "0.8", features = ["macros"] }
 bytes = "1"
@@ -45,7 +48,6 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 
 [dev-dependencies]
 base64 = "0.22"
-fdd_store = { path = "../../crates/fdd_store" }
 jsonwebtoken = { version = "10", default-features = false, features = ["aws_lc_rs"] }
 serde_json = "1"
 tempfile = "3"

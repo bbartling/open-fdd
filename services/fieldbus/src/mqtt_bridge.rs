@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
+use fdd_core::columns::haystack_point_to_role;
 use openfdd_contracts::{
     CommandAck, CommandEnvelope, CommandStatus, Protocol, Quality, TelemetryEnvelope,
     TelemetryPoint, TopicBuilder, TopicKind, ValueKind,
@@ -228,6 +229,29 @@ fn telemetry_point_value(row: &serde_json::Value) -> serde_json::Value {
         .unwrap_or(serde_json::Value::Null)
 }
 
+fn historian_tags(
+    mut tags: serde_json::Map<String, serde_json::Value>,
+    building_id: Option<&str>,
+    equipment_id: &str,
+    point_name: &str,
+) -> serde_json::Map<String, serde_json::Value> {
+    tags.insert(
+        "equipment_id".into(),
+        serde_json::Value::String(equipment_id.to_string()),
+    );
+    tags.insert(
+        "role".into(),
+        serde_json::Value::String(haystack_point_to_role(point_name)),
+    );
+    if let Some(building_id) = building_id {
+        tags.insert(
+            "building_id".into(),
+            serde_json::Value::String(building_id.to_string()),
+        );
+    }
+    tags
+}
+
 async fn execute_bacnet_command(
     bacnet: &BacnetClientService,
     cmd: &CommandEnvelope,
@@ -324,11 +348,21 @@ async fn connect_mqtt_session(
 }
 
 /// Map REST poll rows into telemetry points (`rest:<device>:<point>` ids).
-fn rest_telemetry_points(rows: &[serde_json::Value]) -> Vec<TelemetryPoint> {
+fn rest_telemetry_points(
+    rows: &[serde_json::Value],
+    building_id: Option<&str>,
+) -> Vec<TelemetryPoint> {
     rows.iter()
         .filter_map(|v| {
             let device = v.get("device")?.as_str()?;
             let point = v.get("point")?.as_str()?;
+            if device.trim().is_empty() || point.trim().is_empty() {
+                return None;
+            }
+            let tags = serde_json::json!({"rest": true, "device": device})
+                .as_object()
+                .cloned()
+                .unwrap_or_default();
             Some(TelemetryPoint {
                 id: format!("rest:{device}:{point}"),
                 display_name: Some(point.to_string()),
@@ -344,10 +378,7 @@ fn rest_telemetry_points(rows: &[serde_json::Value]) -> Vec<TelemetryPoint> {
                 } else {
                     Quality::Bad
                 },
-                tags: serde_json::json!({"rest": true, "device": device})
-                    .as_object()
-                    .cloned()
-                    .unwrap_or_default(),
+                tags: historian_tags(tags, building_id, device, point),
             })
         })
         .collect()
@@ -366,6 +397,15 @@ pub async fn spawn_if_configured(
 
     let site_id = std::env::var("OPENFDD_SITE_ID").unwrap_or_else(|_| "local".into());
     let edge_id = std::env::var("OPENFDD_EDGE_ID").unwrap_or_else(|_| "fieldbus-1".into());
+    let building_id = std::env::var("OPENFDD_BUILDING_ID")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if building_id.is_none() {
+        warn!(
+            "OPENFDD_BUILDING_ID is unset; MQTT telemetry will omit canonical building identity and H7 persistence will fail closed"
+        );
+    }
     let port: u16 = std::env::var("OPENFDD_MQTT_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -409,17 +449,23 @@ pub async fn spawn_if_configured(
                 .into_iter()
                 .filter_map(|v| {
                     let device = v.get("device_instance")?.as_u64()? as u32;
+                    let equipment_id = v.get("device_name")?.as_str()?.trim();
+                    let point_name = v.get("point_name")?.as_str()?.trim();
+                    if equipment_id.is_empty() || point_name.is_empty() {
+                        return None;
+                    }
                     let object_type = v.get("object_type")?.as_str()?.replace('_', "-");
                     let object_instance = v.get("object_instance")?.as_u64()? as u32;
                     let id = format!("bacnet:{device}:{object_type}:{object_instance}");
                     // Poll status emits `value`; tolerate legacy `present_value`.
                     let value = telemetry_point_value(&v);
+                    let tags = serde_json::json!({"bacnet": true, "device_instance": device})
+                        .as_object()
+                        .cloned()
+                        .unwrap_or_default();
                     Some(TelemetryPoint {
                         id,
-                        display_name: v
-                            .get("point_name")
-                            .and_then(|x| x.as_str())
-                            .map(str::to_string),
+                        display_name: Some(point_name.to_string()),
                         kind: Some(ValueKind::Number),
                         value,
                         unit: v.get("units").and_then(|x| x.as_str()).map(str::to_string),
@@ -428,15 +474,17 @@ pub async fn spawn_if_configured(
                         } else {
                             Quality::Bad
                         },
-                        tags: serde_json::json!({"bacnet": true, "device_instance": device})
-                            .as_object()
-                            .cloned()
-                            .unwrap_or_default(),
+                        tags: historian_tags(
+                            tags,
+                            building_id.as_deref(),
+                            equipment_id,
+                            point_name,
+                        ),
                     })
                 })
                 .collect();
             let rest_rows = rest.last_values().await;
-            let rest_points = rest_telemetry_points(&rest_rows);
+            let rest_points = rest_telemetry_points(&rest_rows, building_id.as_deref());
             if points.is_empty() && rest_points.is_empty() {
                 continue;
             }
@@ -523,6 +571,19 @@ mod tests {
     }
 
     #[test]
+    fn historian_tags_use_config_metadata_not_transport_id() {
+        let tags = historian_tags(
+            serde_json::Map::new(),
+            Some("BUILDING_100"),
+            "AHU_1",
+            "discharge-air-temp",
+        );
+        assert_eq!(tags["building_id"], serde_json::json!("BUILDING_100"));
+        assert_eq!(tags["equipment_id"], serde_json::json!("AHU_1"));
+        assert_eq!(tags["role"], serde_json::json!("sat"));
+    }
+
+    #[test]
     fn rest_rows_map_to_rest_telemetry_points() {
         let rows = vec![
             serde_json::json!({
@@ -534,11 +595,20 @@ mod tests {
                 "value": null, "units": "", "error": "circuit open"
             }),
         ];
-        let points = rest_telemetry_points(&rows);
+        let points = rest_telemetry_points(&rows, Some("BUILDING_100"));
         assert_eq!(points.len(), 2);
         assert_eq!(points[0].id, "rest:chiller-api:CHW-ST");
         assert_eq!(points[0].quality, Quality::Good);
         assert_eq!(points[0].unit.as_deref(), Some("°F"));
+        assert_eq!(
+            points[0].tags["building_id"],
+            serde_json::json!("BUILDING_100")
+        );
+        assert_eq!(
+            points[0].tags["equipment_id"],
+            serde_json::json!("chiller-api")
+        );
+        assert_eq!(points[0].tags["role"], serde_json::json!("chw_supply_t"));
         assert_eq!(points[1].quality, Quality::Bad);
         assert_eq!(points[1].unit, None);
     }
