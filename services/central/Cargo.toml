@@ -18,6 +18,8 @@ fdd_rules = { path = "../../crates/fdd_rules" }
 fdd_sql = { path = "../../crates/fdd_sql" }
 fdd_store = { path = "../../crates/fdd_store" }
 datafusion.workspace = true
+object_store.workspace = true
+url.workspace = true
 
 axum = { version = "0.8", features = ["macros"] }
 bytes = "1"
