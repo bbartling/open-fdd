@@ -1,6 +1,10 @@
 # Publish Open-FDD stack images to GHCR (central, web, fieldbus, mqtt).
 # Product UI is openfdd-web (React SPA).
-# Nightly on master; semver + sha tags on every push to master or version tags.
+# Tag contract:
+# - every publish: immutable sha-<7>
+# - master: moving nightly + immutable run tag
+# - v* release tag: semver + immutable run tag
+# - manual non-master build: candidate-<7> + immutable sha only
 name: Publish Open-FDD stack to GHCR
 
 on:
@@ -115,16 +119,60 @@ jobs:
         id: vars
         shell: bash
         run: |
+          set -euo pipefail
           short_sha="${GITHUB_SHA::7}"
           version="$(grep -E '^version = ' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')"
-          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "run_tag=${version}-n${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          suffixes=("sha-${short_sha}")
+          nightly=false
+          release=false
+          candidate=false
+
           if [[ "${GITHUB_REF}" == "refs/heads/master" ]]; then
-            echo "nightly=true" >> "$GITHUB_OUTPUT"
+            nightly=true
+            suffixes+=("${version}-n${GITHUB_RUN_NUMBER}")
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            release=true
+            ref_version="${GITHUB_REF_NAME#v}"
+            if [[ "${ref_version}" != "${version}" ]]; then
+              echo "release tag v${ref_version} does not match Cargo.toml version ${version}" >&2
+              exit 1
+            fi
+            suffixes+=("${version}" "${version}-n${GITHUB_RUN_NUMBER}")
           else
-            echo "nightly=false" >> "$GITHUB_OUTPUT"
+            candidate=true
+            suffixes+=("candidate-${short_sha}")
           fi
+
+          echo "short_sha=${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "nightly=${nightly}" >> "$GITHUB_OUTPUT"
+          echo "release=${release}" >> "$GITHUB_OUTPUT"
+          echo "candidate=${candidate}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "tag_suffixes<<EOF"
+            printf '%s\n' "${suffixes[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          write_tags() {
+            local key="$1"
+            local image="$2"
+            {
+              echo "${key}<<EOF"
+              for suffix in "${suffixes[@]}"; do
+                echo "${image}:${suffix}"
+              done
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          }
+
+          write_tags central_tags "$CENTRAL_IMAGE"
+          write_tags web_tags "$WEB_IMAGE"
+          write_tags fieldbus_tags "$FIELDBUS_IMAGE"
+          write_tags mqtt_tags "$MQTT_IMAGE"
+
+          echo "GHCR tag suffixes: ${suffixes[*]}"
 
       - name: Build and push openfdd-central
         uses: docker/build-push-action@v6
@@ -135,10 +183,7 @@ jobs:
           file: services/central/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: |
-            ${{ env.CENTRAL_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
-            ${{ env.CENTRAL_IMAGE }}:${{ steps.vars.outputs.version }}
-            ${{ env.CENTRAL_IMAGE }}:${{ steps.vars.outputs.run_tag }}
+          tags: ${{ steps.vars.outputs.central_tags }}
           build-args: |
             OPENFDD_GIT_SHA=${{ github.sha }}
           labels: |
@@ -161,10 +206,7 @@ jobs:
           file: frontend/web/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: |
-            ${{ env.WEB_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
-            ${{ env.WEB_IMAGE }}:${{ steps.vars.outputs.version }}
-            ${{ env.WEB_IMAGE }}:${{ steps.vars.outputs.run_tag }}
+          tags: ${{ steps.vars.outputs.web_tags }}
           build-args: |
             OPENFDD_GIT_SHA=${{ github.sha }}
             OPENFDD_WEB_VERSION=${{ steps.vars.outputs.version }}
@@ -190,10 +232,7 @@ jobs:
           file: services/fieldbus/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: |
-            ${{ env.FIELDBUS_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
-            ${{ env.FIELDBUS_IMAGE }}:${{ steps.vars.outputs.version }}
-            ${{ env.FIELDBUS_IMAGE }}:${{ steps.vars.outputs.run_tag }}
+          tags: ${{ steps.vars.outputs.fieldbus_tags }}
           labels: |
             org.opencontainers.image.title=Open-FDD Fieldbus
             org.opencontainers.image.source=https://github.com/bbartling/open-fdd
@@ -214,10 +253,7 @@ jobs:
           file: services/mqtt/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: |
-            ${{ env.MQTT_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
-            ${{ env.MQTT_IMAGE }}:${{ steps.vars.outputs.version }}
-            ${{ env.MQTT_IMAGE }}:${{ steps.vars.outputs.run_tag }}
+          tags: ${{ steps.vars.outputs.mqtt_tags }}
           labels: |
             org.opencontainers.image.title=Open-FDD MQTT Broker
             org.opencontainers.image.source=https://github.com/bbartling/open-fdd
@@ -231,6 +267,8 @@ jobs:
         run: docker buildx imagetools create -t "${{ env.MQTT_IMAGE }}:nightly" "${{ env.MQTT_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
 
       - name: Published tags
+        env:
+          TAG_SUFFIXES: ${{ steps.vars.outputs.tag_suffixes }}
         run: |
           set -euo pipefail
           for img in central web fieldbus mqtt; do
@@ -240,9 +278,10 @@ jobs:
               fieldbus) ref="${{ env.FIELDBUS_IMAGE }}" ;;
               mqtt) ref="${{ env.MQTT_IMAGE }}" ;;
             esac
-            docker buildx imagetools inspect "${ref}:sha-${{ steps.vars.outputs.short_sha }}"
-            docker buildx imagetools inspect "${ref}:${{ steps.vars.outputs.version }}"
-            docker buildx imagetools inspect "${ref}:${{ steps.vars.outputs.run_tag }}"
+            while IFS= read -r suffix; do
+              [[ -n "$suffix" ]] || continue
+              docker buildx imagetools inspect "${ref}:${suffix}"
+            done <<< "$TAG_SUFFIXES"
             if [[ "${{ steps.vars.outputs.nightly }}" == "true" ]]; then
               docker buildx imagetools inspect "${ref}:nightly"
             fi
