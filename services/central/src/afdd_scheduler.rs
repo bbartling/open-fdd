@@ -134,12 +134,13 @@ impl AfddSchedulerRuntime {
         let now = Utc::now();
         let checkpoint = self.checkpoint()?;
         let latest = self.latest_telemetry()?;
-        let Some(window) =
-            plan_continuous_cycle(checkpoint.as_ref(), now, latest, &self.config)?
+        let Some(window) = plan_continuous_cycle(checkpoint.as_ref(), now, latest, &self.config)?
         else {
             return Ok(None);
         };
-        self.execute_cycle(scope, "scheduled", window).await.map(Some)
+        self.execute_cycle(scope, "scheduled", window)
+            .await
+            .map(Some)
     }
 
     async fn run_now(&self, scope: &str) -> Result<AfddCycleRecord> {
@@ -185,9 +186,9 @@ impl AfddSchedulerRuntime {
             open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
         })
         .await
-        .unwrap_or_else(|error| {
-            json!({"ok": false, "error": format!("AFDD registry task failed: {error}")})
-        });
+        .unwrap_or_else(
+            |error| json!({"ok": false, "error": format!("AFDD registry task failed: {error}")}),
+        );
 
         let ok = result.get("ok").and_then(Value::as_bool).unwrap_or(false);
         let error = result
@@ -267,9 +268,7 @@ pub fn router(state: Arc<AppState>, runtime: Arc<AfddSchedulerRuntime>) -> Route
         .with_state(state)
 }
 
-async fn scheduler_status(
-    Extension(runtime): Extension<Arc<AfddSchedulerRuntime>>,
-) -> Json<Value> {
+async fn scheduler_status(Extension(runtime): Extension<Arc<AfddSchedulerRuntime>>) -> Json<Value> {
     match runtime.status_json() {
         Ok(value) => Json(value),
         Err(error) => Json(json!({"ok": false, "error": error.to_string()})),
