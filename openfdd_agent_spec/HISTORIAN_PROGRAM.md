@@ -151,17 +151,17 @@ H7 uses explicit `OPENFDD_BUILDING_ID` plus configured device/point metadata at 
 
 ### H8 — Continuous AFDD scheduler / findings / API
 
-- [~] explicit `bulk` vs `continuous` modes
-- [~] interval independent from rolling lookback
-- [ ] rolling end time = latest successfully persisted eligible telemetry
-- [ ] overlapping windows for late arrivals
-- [ ] persisted scheduler checkpoint
-- [ ] no overlapping cycle for same scope
-- [ ] one restart catch-up when due, no missed-tick storm
-- [ ] run-now uses same engine
-- [ ] explicit chunked historical backfill
-- [ ] finding continuity/dedup preserves existing contracts
-- [ ] building/rule failure isolation where safe
+- [x] explicit `bulk` vs `continuous` modes
+- [x] interval independent from rolling lookback
+- [x] rolling end time = latest successfully persisted eligible telemetry
+- [x] overlapping rolling windows support late arrivals when lookback exceeds cadence
+- [x] persisted scheduler checkpoint on the canonical local/S3 backend
+- [x] no overlapping cycle for same scope
+- [x] one restart catch-up when due, no missed-tick storm
+- [x] run-now uses the same execution engine as scheduled cycles
+- [x] explicit bounded historical backfill chunk planner
+- [~] finding continuity/dedup preserves existing contracts; H8 does not fabricate first/last-seen fields when the current findings contract does not expose them
+- [x] building/rule failure isolation remains in the registry engine and cycle status exposes succeeded/failed/skipped counts
 
 Target configuration:
 
@@ -172,39 +172,43 @@ OPENFDD_AFDD_LOOKBACK_VALUE=24
 OPENFDD_AFDD_LOOKBACK_UNIT=hours
 ```
 
+H8 Central owns the continuous timer, reads the H7 persisted telemetry watermark, persists `state/afdd/scheduler-checkpoint.json`, serializes same-scope runs, and exposes authenticated scheduler status and run-now APIs.
+
 ### H9 — AFDD / historian / MQTT React operations UX
 
 The operations page gains two additional radio-selectable configuration surfaces alongside the existing views: **AFDD Config** and **MQTT Config**. These are operator tools, not a public cloud console.
 
 #### AFDD Config / Scheduler
 
-- [ ] radio/navigation entry for `AFDD Config`
-- [ ] scheduler widget with operating mode (`bulk` / `continuous`)
-- [ ] frequency and rolling lookback shown as separate concepts and controls when deployment permits mutation
-- [ ] last run / analyzed-through / latest historian sample / next run
-- [ ] persisted scheduler checkpoint and catch-up state
-- [ ] historian backend/size/files/small-files/compaction health
-- [ ] run AFDD now through the same H8 execution engine used by scheduled cycles
-- [ ] recent AFDD cycles with success/partial/failure state
-- [ ] stale BAS data health independent of scheduler health
-- [ ] finding first/last seen and continuity fields
-- [ ] deployment-backed values render read-only when runtime configuration cannot safely be changed from the UI; never show fake controls
+- [x] radio/navigation entry for `AFDD Config`
+- [x] scheduler widget with operating mode (`bulk` / `continuous`)
+- [x] frequency and rolling lookback shown as separate concepts; deployment-owned values remain read-only when runtime mutation is not supported
+- [x] last run / analyzed-through / latest historian sample / next run
+- [x] persisted scheduler checkpoint and catch-up state
+- [x] historian backend/size/files/small-files/compaction health surface reads Central data-management health and reports unavailable fields honestly rather than synthesizing values
+- [x] run AFDD now through the same H8 execution engine used by scheduled cycles
+- [x] recent AFDD cycles with success/partial/failure state
+- [x] stale BAS data health independent of scheduler health using persisted telemetry freshness
+- [x] finding first/last-seen and continuity fields are rendered when exposed by the current findings response; unavailable contract fields are explicitly identified rather than fabricated
+- [x] deployment-backed values render read-only when runtime configuration cannot safely be changed from the UI; never show fake controls
 
 #### MQTT Config / Test Monitor
 
-- [ ] radio/navigation entry for `MQTT Config`
-- [ ] AWS IoT Core test-client-style monitor layout without copying AWS branding or cloud assumptions
-- [ ] show broker connection state, client/runtime identity, subscriptions, and message counters without exposing credentials
-- [ ] topic-filter input supporting normal MQTT topic filters (`+` and `#`) with validation
-- [ ] bounded live/recent message list with receive timestamp, topic, payload size, QoS/retain metadata when available
-- [ ] expandable payload viewer with pretty JSON when valid and safe text/hex fallback for non-JSON payloads
-- [ ] pause/resume display and clear-local-view actions that do not interrupt broker ingestion
-- [ ] bounded in-memory/server-side observation buffer; monitoring must not become a second historian
-- [ ] reconnect/error events visible separately from telemetry messages
-- [ ] test publish UI only when an explicit backend capability/config flag allows it; otherwise monitor remains read-only
-- [ ] any allowed test publish requires authenticated operator access, topic validation, payload size limits, audit/event logging, and a clear non-production/testing label
-- [ ] browser never receives MQTT passwords, private keys, S3 secrets, or raw deployment credentials
-- [ ] MQTT monitor traffic is exposed through authenticated Central API/SSE/WebSocket plumbing rather than opening the broker directly to the browser
+- [x] radio/navigation entry for `MQTT Config`
+- [x] AWS IoT Core test-client-style conceptual monitor layout without copying AWS branding or cloud assumptions
+- [x] show broker connection state, client/runtime identity, subscriptions, and message counters without exposing credentials
+- [x] topic-filter input supporting normal MQTT topic filters (`+` and `#`) with validation and local buffered-message matching
+- [x] bounded live/recent message list with receive timestamp, topic, payload size, QoS/retain metadata
+- [x] expandable payload viewer with pretty JSON when valid and safe text/hex fallback for non-JSON payloads
+- [x] pause/resume display and clear-local-view actions that do not interrupt broker ingestion
+- [x] bounded in-memory/server-side observation buffer; monitoring is not a second historian
+- [x] reconnect/error events visible separately from telemetry messages
+- [x] test publish remains disabled/read-only unless a future explicit backend capability/config flag enables it
+- [x] because test publish is disabled in H9, no browser publish path bypasses authenticated operator controls, topic validation, payload limits, or audit requirements
+- [x] browser never receives MQTT passwords, private keys, S3 secrets, or raw deployment credentials
+- [x] MQTT monitor traffic is exposed through authenticated Central API plumbing rather than opening the broker directly to the browser
+
+H9 is gated on the exact final PR head passing frontend/Rust/security/docs workflows with zero unresolved review threads before merge.
 
 ### H10 — Scale benchmarks and release qualification
 
