@@ -160,7 +160,13 @@ mod tests {
             analyzed_through_utc: ts(8),
         };
         assert_eq!(
-            plan_continuous_cycle(Some(&checkpoint), ts(8) + Duration::minutes(30), Some(ts(9)), &config()).unwrap(),
+            plan_continuous_cycle(
+                Some(&checkpoint),
+                ts(8) + Duration::minutes(30),
+                Some(ts(9)),
+                &config(),
+            )
+            .unwrap(),
             None
         );
     }
