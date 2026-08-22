@@ -150,25 +150,24 @@ impl AppState {
         monitor.received_messages = monitor.received_messages.saturating_add(1);
         let preview_len = payload.len().min(MQTT_PREVIEW_BYTES);
         let preview_bytes = &payload[..preview_len];
-        let (payload_encoding, payload_preview) = match serde_json::from_slice::<serde_json::Value>(
-            preview_bytes,
-        ) {
-            Ok(value) if payload.len() <= MQTT_PREVIEW_BYTES => (
-                "json".to_string(),
-                serde_json::to_string_pretty(&value).unwrap_or_default(),
-            ),
-            _ => match std::str::from_utf8(preview_bytes) {
-                Ok(text) => ("text".to_string(), text.to_string()),
-                Err(_) => (
-                    "hex".to_string(),
-                    preview_bytes
-                        .iter()
-                        .map(|byte| format!("{byte:02x}"))
-                        .collect::<Vec<_>>()
-                        .join(" "),
+        let (payload_encoding, payload_preview) =
+            match serde_json::from_slice::<serde_json::Value>(preview_bytes) {
+                Ok(value) if payload.len() <= MQTT_PREVIEW_BYTES => (
+                    "json".to_string(),
+                    serde_json::to_string_pretty(&value).unwrap_or_default(),
                 ),
-            },
-        };
+                _ => match std::str::from_utf8(preview_bytes) {
+                    Ok(text) => ("text".to_string(), text.to_string()),
+                    Err(_) => (
+                        "hex".to_string(),
+                        preview_bytes
+                            .iter()
+                            .map(|byte| format!("{byte:02x}"))
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                    ),
+                },
+            };
         monitor.recent_messages.push_front(MqttObservedMessage {
             received_at_utc: Utc::now(),
             topic: topic.to_string(),
