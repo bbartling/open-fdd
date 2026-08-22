@@ -29,5 +29,7 @@ pub use migration_exec::{
     migrate_legacy_historian, migrate_legacy_parquet, MigrationPart, MigrationRunReport,
     MigrationSourceReport, MigrationSourceStatus,
 };
-pub use parquet_parts::{ParquetPart, ParquetPartWriter, DEFAULT_ROW_GROUP_ROWS};
+pub use parquet_parts::{
+    CompletePartPublisher, ParquetPart, ParquetPartWriter, DEFAULT_ROW_GROUP_ROWS,
+};
 pub use stats::{local_historian_stats, local_historian_stats_from_config, HistorianStats};
