@@ -136,17 +136,18 @@ H6 remains offline/operator migration. It does not delete legacy data and does n
 
 ### H7 — Live ingest micro-batch cutover
 
-- [~] PR #765 — `feat/live-historian-ingest-cutover`, active on merged H6/master
+- [~] PR #765 — `feat/live-historian-ingest-cutover`, implementation complete; exact-head CI/review gate pending
 - [x] trace trustworthy building/equipment/role identity from fieldbus/MQTT metadata before mapping live points
 - [x] no arbitrary parsing of BACnet/REST point IDs as canonical equipment roles
-- [x] connect normalized local live Arrow batches to the H2 `MicroBatchHistorian`
-- [~] call elapsed-time flush from the owning central MQTT loop; graceful shutdown drain is still pending
-- [~] track latest successfully persisted telemetry timestamp from immutable part publication; H8-facing persistence/API is still pending
-- [ ] complete-object S3 live writer using the H5 object-store contract; never fall back to ephemeral container disk
-- [ ] stop durability-critical dependence on JSONL/Arrow-IPC snapshot rewrite after local + S3 cutover qualification
-- [~] Feather/JSONL remains a temporary compatibility mirror during H7 rollout only
+- [x] connect normalized live Arrow batches to the H2 `MicroBatchHistorian`
+- [x] call elapsed-time flush from the owning central MQTT loop and drain the same micro-batcher on graceful Central shutdown
+- [x] persist latest successfully persisted eligible telemetry timestamp at `state/live-historian/latest-telemetry.json` on the configured canonical backend for H8 restart/scheduler use
+- [x] complete-object S3 live writer through the generic H5-compatible object-store contract; never fall back to ephemeral container disk
+- [x] stop durability-critical dependence on JSONL/Arrow-IPC snapshot rewrite
+- [x] Feather/JSONL MQTT mirror is compatibility-only, disabled by default, and requires explicit `OPENFDD_LEGACY_INGEST_MIRROR=1`
+- [x] preserve bad/stale scalar point roles as nullable values without changing an equipment schema mid-batch
 
-H7 uses explicit `OPENFDD_BUILDING_ID` plus configured device/point metadata at the fieldbus publisher. Missing building identity fails closed for canonical persistence; central does not infer building/equipment/role identity from transport IDs or topic strings.
+H7 uses explicit `OPENFDD_BUILDING_ID` plus configured device/point metadata at the fieldbus publisher. Missing building identity fails closed for canonical persistence; central does not infer building/equipment/role identity from transport IDs or topic strings. H7 is not complete until PR #765's exact final head passes FDD, Rust stack, AppSec, docs/security workflows and has no unresolved review threads.
 
 ### H8 — Continuous AFDD scheduler / findings / API
 
