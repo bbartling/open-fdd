@@ -180,18 +180,16 @@ fn build_s3_store(bucket: &str) -> Result<Arc<dyn ObjectStore>> {
             .host_str()
             .ok_or_else(|| anyhow!("OPENFDD_S3_ENDPOINT requires a host"))?
             .to_string();
-        let endpoint = if virtual_hosted
-            && host != bucket
-            && !host.starts_with(&format!("{bucket}."))
-        {
-            let mut rewritten = parsed;
-            rewritten
-                .set_host(Some(&format!("{bucket}.{host}")))
-                .map_err(|_| anyhow!("cannot apply virtual-hosted S3 bucket to endpoint"))?;
-            rewritten.as_str().trim_end_matches('/').to_string()
-        } else {
-            endpoint.trim_end_matches('/').to_string()
-        };
+        let endpoint =
+            if virtual_hosted && host != bucket && !host.starts_with(&format!("{bucket}.")) {
+                let mut rewritten = parsed;
+                rewritten
+                    .set_host(Some(&format!("{bucket}.{host}")))
+                    .map_err(|_| anyhow!("cannot apply virtual-hosted S3 bucket to endpoint"))?;
+                rewritten.as_str().trim_end_matches('/').to_string()
+            } else {
+                endpoint.trim_end_matches('/').to_string()
+            };
         builder = builder.with_endpoint(endpoint);
     }
     if let (Some(key), Some(secret)) = (access_key_id, secret_access_key) {
