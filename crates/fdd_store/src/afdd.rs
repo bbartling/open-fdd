@@ -89,10 +89,8 @@ impl AfddConfig {
             "OPENFDD_AFDD_INTERVAL_MINUTES",
             DEFAULT_AFDD_INTERVAL_MINUTES,
         )?;
-        let lookback_value = env_positive_u64(
-            "OPENFDD_AFDD_LOOKBACK_VALUE",
-            DEFAULT_AFDD_LOOKBACK_VALUE,
-        )?;
+        let lookback_value =
+            env_positive_u64("OPENFDD_AFDD_LOOKBACK_VALUE", DEFAULT_AFDD_LOOKBACK_VALUE)?;
         let lookback_unit = env::var("OPENFDD_AFDD_LOOKBACK_UNIT")
             .map(|raw| AfddLookbackUnit::parse(&raw))
             .unwrap_or(Ok(DEFAULT_AFDD_LOOKBACK_UNIT))?;
@@ -151,10 +149,7 @@ mod tests {
     #[test]
     fn mode_parser_is_strict() {
         assert_eq!(AfddMode::parse("bulk").unwrap(), AfddMode::Bulk);
-        assert_eq!(
-            AfddMode::parse("CONTINUOUS").unwrap(),
-            AfddMode::Continuous
-        );
+        assert_eq!(AfddMode::parse("CONTINUOUS").unwrap(), AfddMode::Continuous);
         assert!(AfddMode::parse("scheduled").is_err());
     }
 
