@@ -1,4 +1,4 @@
-name: Optional PyPI pandas ↔ SQL cross-check
+name: Optional published pandas + current SQL oracle checks
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pypi-sql-cross-check
+  group: published-pandas-current-sql-oracle-checks
   cancel-in-progress: true
 
 jobs:
@@ -73,7 +73,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   contract-note:
-    name: cross-check contract
+    name: independent-check contract
     needs:
       - published-pandas-oracle
       - current-sql-datafusion
@@ -82,9 +82,9 @@ jobs:
       - name: Record interpretation
         run: |
           {
-            echo "## Cross-check interpretation"
+            echo "## Independent oracle-check interpretation"
             echo
-            echo "Both independently maintained oracle paths passed."
-            echo "This workflow intentionally does not claim full 59/59 direct DataFusion↔pandas result equality."
-            echo "A direct engine-to-engine comparison requires both sides to emit the same canonical result set and is reserved for the synthetic/live qualification path."
+            echo "Both independently maintained oracle paths passed their own committed contracts."
+            echo "This workflow does not compare pandas and DataFusion result artifacts and therefore does not claim direct engine-to-engine equality."
+            echo "Direct equality remains part of the synthetic/live qualification path, where both engines can emit the same canonical result set."
           } >> "$GITHUB_STEP_SUMMARY"
