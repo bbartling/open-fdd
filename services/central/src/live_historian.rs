@@ -6,10 +6,15 @@
 //! parses BACnet/REST point IDs to invent historian identity.
 
 use std::collections::BTreeMap;
+use std::env;
+use std::fmt;
+use std::future::Future;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
+use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use datafusion::arrow::array::{
     ArrayRef, BooleanArray, Float64Array, StringArray, TimestampNanosecondArray,
@@ -18,14 +23,21 @@ use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use datafusion::arrow::record_batch::RecordBatch;
 use fdd_core::columns::normalize_role;
 use fdd_store::{
-    safe_partition_value, HistorianConfig, LocalStorage, MicroBatchFlush, MicroBatchHistorian,
-    ParquetPartWriter, StorageUrl,
+    safe_partition_value, CompletePartPublisher, HistorianConfig, LocalStorage, MicroBatchFlush,
+    MicroBatchHistorian, ParquetPartWriter, StorageUrl,
 };
+use object_store::aws::AmazonS3Builder;
+use object_store::path::Path as ObjectPath;
+use object_store::ObjectStore;
 use openfdd_contracts::{Quality, TelemetryEnvelope, TelemetryPoint, ValueKind};
+use serde::{Deserialize, Serialize};
+use tracing::warn;
+use url::Url;
 
 const TAG_BUILDING_ID: &str = "building_id";
 const TAG_EQUIPMENT_ID: &str = "equipment_id";
 const TAG_ROLE: &str = "role";
+const LATEST_TELEMETRY_WATERMARK: &str = "state/live-historian/latest-telemetry.json";
 
 type EquipmentKey = (String, String);
 type EquipmentRoles = BTreeMap<String, RoleValue>;
@@ -40,37 +52,295 @@ pub struct LiveHistorianIngest {
     pub latest_persisted_timestamp_utc: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LatestTelemetryWatermark {
+    latest_persisted_timestamp_utc: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+enum WatermarkStore {
+    Local(LocalStorage),
+    S3(S3PartPublisher),
+}
+
+impl WatermarkStore {
+    fn read(&self) -> Result<Option<DateTime<Utc>>> {
+        let bytes = match self {
+            Self::Local(storage) => {
+                let path = Path::new(LATEST_TELEMETRY_WATERMARK);
+                if !storage.exists(path)? {
+                    return Ok(None);
+                }
+                storage.read(path)?
+            }
+            Self::S3(storage) => match storage.get_optional(Path::new(LATEST_TELEMETRY_WATERMARK))? {
+                Some(bytes) => bytes,
+                None => return Ok(None),
+            },
+        };
+        let watermark: LatestTelemetryWatermark =
+            serde_json::from_slice(&bytes).context("decode live historian telemetry watermark")?;
+        Ok(Some(watermark.latest_persisted_timestamp_utc))
+    }
+
+    fn write(&self, timestamp: DateTime<Utc>) -> Result<()> {
+        let bytes = serde_json::to_vec_pretty(&LatestTelemetryWatermark {
+            latest_persisted_timestamp_utc: timestamp,
+        })?;
+        match self {
+            Self::Local(storage) => {
+                storage.write_atomic(Path::new(LATEST_TELEMETRY_WATERMARK), &bytes)
+            }
+            Self::S3(storage) => {
+                storage.put_bytes(Path::new(LATEST_TELEMETRY_WATERMARK), &bytes)
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+struct S3PartPublisher {
+    store: Arc<dyn ObjectStore>,
+    prefix: String,
+}
+
+impl fmt::Debug for S3PartPublisher {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("S3PartPublisher")
+            .field("prefix", &self.prefix)
+            .field("store", &"[object-store]")
+            .finish()
+    }
+}
+
+impl S3PartPublisher {
+    fn from_env(bucket: &str, prefix: &str) -> Result<Self> {
+        Ok(Self {
+            store: build_s3_store(bucket)?,
+            prefix: prefix.trim_matches('/').to_string(),
+        })
+    }
+
+    fn put_bytes(&self, relative_path: &Path, bytes: &[u8]) -> Result<()> {
+        let location = object_path(&self.prefix, relative_path)?;
+        let payload = Bytes::copy_from_slice(bytes).into();
+        run_object_store(self.store.put(&location, payload))
+            .with_context(|| format!("publish complete S3 historian object {location}"))?;
+        Ok(())
+    }
+
+    fn get_optional(&self, relative_path: &Path) -> Result<Option<Vec<u8>>> {
+        let location = object_path(&self.prefix, relative_path)?;
+        let result = match run_object_store(self.store.get(&location)) {
+            Ok(result) => result,
+            Err(error) if is_object_not_found(&error) => return Ok(None),
+            Err(error) => return Err(error).with_context(|| format!("read S3 object {location}")),
+        };
+        let bytes = run_object_store(result.bytes())
+            .with_context(|| format!("read S3 object body {location}"))?;
+        Ok(Some(bytes.to_vec()))
+    }
+}
+
+impl CompletePartPublisher for S3PartPublisher {
+    fn publish_complete(&self, relative_path: &Path, bytes: &[u8]) -> Result<()> {
+        self.put_bytes(relative_path, bytes)
+    }
+}
+
+fn is_object_not_found(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<object_store::Error>()
+        .is_some_and(|error| matches!(error, object_store::Error::NotFound { .. }))
+}
+
+fn run_object_store<F, T>(future: F) -> Result<T>
+where
+    F: Future<Output = object_store::Result<T>>,
+{
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        match handle.runtime_flavor() {
+            tokio::runtime::RuntimeFlavor::MultiThread => {
+                return tokio::task::block_in_place(|| handle.block_on(future)).map_err(Into::into);
+            }
+            tokio::runtime::RuntimeFlavor::CurrentThread => {
+                bail!("S3 live historian requires a multi-thread Tokio runtime");
+            }
+            _ => bail!("unsupported Tokio runtime flavor for S3 live historian"),
+        }
+    }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("build object-store runtime")?;
+    runtime.block_on(future).map_err(Into::into)
+}
+
+fn build_s3_store(bucket: &str) -> Result<Arc<dyn ObjectStore>> {
+    let endpoint = nonempty_env("OPENFDD_S3_ENDPOINT");
+    let region = nonempty_env("OPENFDD_S3_REGION");
+    let access_key_id = nonempty_env("OPENFDD_S3_ACCESS_KEY_ID");
+    let secret_access_key = nonempty_env("OPENFDD_S3_SECRET_ACCESS_KEY");
+    let session_token = nonempty_env("OPENFDD_S3_SESSION_TOKEN");
+    let allow_http = match env::var("OPENFDD_S3_ALLOW_HTTP") {
+        Ok(raw) => parse_bool("OPENFDD_S3_ALLOW_HTTP", &raw)?,
+        Err(_) => false,
+    };
+    let virtual_hosted = match env::var("OPENFDD_S3_URL_STYLE") {
+        Ok(raw) => match raw.trim().to_ascii_lowercase().as_str() {
+            "path" | "path_style" | "path-style" => false,
+            "virtual" | "virtual_hosted" | "virtual-hosted" => true,
+            _ => bail!("OPENFDD_S3_URL_STYLE must be 'path' or 'virtual'"),
+        },
+        Err(_) => match env::var("OPENFDD_S3_VIRTUAL_HOSTED_STYLE") {
+            Ok(raw) => parse_bool("OPENFDD_S3_VIRTUAL_HOSTED_STYLE", &raw)?,
+            Err(_) => false,
+        },
+    };
+
+    match (&access_key_id, &secret_access_key) {
+        (Some(_), None) | (None, Some(_)) => bail!(
+            "OPENFDD_S3_ACCESS_KEY_ID and OPENFDD_S3_SECRET_ACCESS_KEY must be configured together"
+        ),
+        _ => {}
+    }
+    if session_token.is_some() && access_key_id.is_none() {
+        bail!(
+            "OPENFDD_S3_SESSION_TOKEN requires explicit OPENFDD_S3_ACCESS_KEY_ID and OPENFDD_S3_SECRET_ACCESS_KEY"
+        );
+    }
+    if session_token.is_some() && allow_http {
+        bail!("OPENFDD_S3_SESSION_TOKEN cannot be combined with OPENFDD_S3_ALLOW_HTTP=true");
+    }
+
+    let mut builder = AmazonS3Builder::from_env()
+        .with_bucket_name(bucket)
+        .with_virtual_hosted_style_request(virtual_hosted)
+        .with_allow_http(allow_http);
+    if let Some(region) = region {
+        builder = builder.with_region(region);
+    }
+    if let Some(endpoint) = endpoint {
+        let parsed = Url::parse(&endpoint).context("parse OPENFDD_S3_ENDPOINT")?;
+        if !parsed.username().is_empty() || parsed.password().is_some() {
+            bail!("OPENFDD_S3_ENDPOINT must not embed credentials");
+        }
+        match parsed.scheme() {
+            "https" => {}
+            "http" if allow_http => {}
+            "http" => {
+                bail!("HTTP S3 endpoint requires OPENFDD_S3_ALLOW_HTTP=true (local/test only)")
+            }
+            _ => bail!("OPENFDD_S3_ENDPOINT must use http:// or https://"),
+        }
+        if parsed.host_str().is_none() {
+            bail!("OPENFDD_S3_ENDPOINT requires a host");
+        }
+        builder = builder.with_endpoint(endpoint_for_style(&endpoint, bucket, virtual_hosted)?);
+    }
+    if let (Some(key), Some(secret)) = (access_key_id, secret_access_key) {
+        builder = builder.with_access_key_id(key).with_secret_access_key(secret);
+    }
+    if let Some(token) = session_token {
+        builder = builder.with_token(token);
+    }
+    Ok(Arc::new(
+        builder.build().context("build S3-compatible live historian store")?,
+    ))
+}
+
+fn endpoint_for_style(endpoint: &str, bucket: &str, virtual_hosted: bool) -> Result<String> {
+    let endpoint = endpoint.trim().trim_end_matches('/');
+    let mut parsed = Url::parse(endpoint).context("parse OPENFDD_S3_ENDPOINT")?;
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| anyhow!("OPENFDD_S3_ENDPOINT requires a host"))?;
+    if !virtual_hosted || host == bucket || host.starts_with(&format!("{bucket}.")) {
+        return Ok(endpoint.to_string());
+    }
+    let bucket_host = format!("{bucket}.{host}");
+    parsed
+        .set_host(Some(&bucket_host))
+        .map_err(|_| anyhow!("cannot apply virtual-hosted S3 bucket to endpoint"))?;
+    Ok(parsed.as_str().trim_end_matches('/').to_string())
+}
+
+fn object_path(prefix: &str, relative_path: &Path) -> Result<ObjectPath> {
+    if relative_path.is_absolute() {
+        bail!("S3 historian object path must be relative");
+    }
+    let relative = relative_path.to_string_lossy().replace('\\', "/");
+    if relative.split('/').any(|segment| segment == "..") {
+        bail!("S3 historian object path traversal rejected");
+    }
+    let prefix = prefix.trim_matches('/');
+    let key = if prefix.is_empty() {
+        relative
+    } else {
+        format!("{prefix}/{relative}")
+    };
+    Ok(ObjectPath::from(key))
+}
+
+fn nonempty_env(name: &str) -> Option<String> {
+    env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn parse_bool(name: &str, raw: &str) -> Result<bool> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Ok(true),
+        "0" | "false" | "no" | "off" => Ok(false),
+        _ => bail!("{name} must be a boolean"),
+    }
+}
+
 #[derive(Debug)]
 pub struct LiveHistorian {
     batches: MicroBatchHistorian,
+    watermark_store: WatermarkStore,
     latest_persisted_timestamp_utc: Option<DateTime<Utc>>,
 }
 
 impl LiveHistorian {
     /// Build the H7 live writer from the canonical historian config.
     ///
-    /// H7 starts with the existing H2 local writer. S3 live writes are not
-    /// silently redirected to container disk: object-store cutover must use a
-    /// complete-object writer before this constructor accepts an S3 backend.
+    /// Local storage publishes with crash-safe rename. S3-compatible storage
+    /// publishes complete Parquet payloads directly through object_store; S3
+    /// never falls back to ephemeral container disk as canonical history.
     pub fn from_env() -> Result<Self> {
         Self::from_config(&HistorianConfig::from_env()?)
     }
 
     pub fn from_config(config: &HistorianConfig) -> Result<Self> {
-        let StorageUrl::File { root } = &config.storage_url else {
-            bail!(
-                "live canonical historian S3 writes are not enabled yet; refusing ephemeral-disk fallback"
-            );
+        let (writer, watermark_store) = match &config.storage_url {
+            StorageUrl::File { root } => {
+                let storage = LocalStorage::new(root);
+                (
+                    ParquetPartWriter::new(storage.clone()),
+                    WatermarkStore::Local(storage),
+                )
+            }
+            StorageUrl::S3 { bucket, prefix } => {
+                let publisher = S3PartPublisher::from_env(bucket, prefix)?;
+                (
+                    ParquetPartWriter::with_publisher(Arc::new(publisher.clone())),
+                    WatermarkStore::S3(publisher),
+                )
+            }
         };
-        let writer = ParquetPartWriter::new(LocalStorage::new(root));
         let batches = MicroBatchHistorian::new(
             writer,
             config.flush_rows,
             Duration::from_secs(config.flush_seconds),
         )?;
+        let latest_persisted_timestamp_utc = watermark_store.read()?;
         Ok(Self {
             batches,
-            latest_persisted_timestamp_utc: None,
+            watermark_store,
+            latest_persisted_timestamp_utc,
         })
     }
 
@@ -98,13 +368,15 @@ impl LiveHistorian {
         Ok(report)
     }
 
-    // H7 will call this from the owning runtime's graceful-shutdown path. Keep
-    // the primitive available while that wiring remains an explicit H7 task.
-    #[allow(dead_code)]
     pub fn shutdown_flush(&mut self) -> Result<LiveHistorianIngest> {
         let flushes = self.batches.shutdown_flush()?;
         let mut report = LiveHistorianIngest::default();
         self.apply_flushes(&flushes, &mut report)?;
+        if let Some(timestamp) = self.latest_persisted_timestamp_utc {
+            self.watermark_store
+                .write(timestamp)
+                .context("persist live historian telemetry watermark during shutdown")?;
+        }
         Ok(report)
     }
 
@@ -137,6 +409,17 @@ impl LiveHistorian {
                     self.latest_persisted_timestamp_utc
                         .map_or(timestamp, |current| current.max(timestamp)),
                 );
+            }
+        }
+        if !flushes.is_empty() {
+            if let Some(timestamp) = self.latest_persisted_timestamp_utc {
+                // The immutable Parquet objects are canonical. A watermark write
+                // failure must never make successfully persisted telemetry look
+                // unpersisted or trigger duplicate re-ingest. Keep the in-memory
+                // max and retry the watermark on the next flush/shutdown.
+                if let Err(error) = self.watermark_store.write(timestamp) {
+                    warn!(%error, %timestamp, "live historian telemetry watermark update failed; canonical Parquet remains persisted");
+                }
             }
         }
         report.latest_persisted_timestamp_utc = self.latest_persisted_timestamp_utc;
@@ -361,7 +644,7 @@ mod tests {
     }
 
     #[test]
-    fn local_live_writer_flushes_to_canonical_partition() {
+    fn local_live_writer_flushes_and_persists_watermark() {
         let tmp = TempDir::new().unwrap();
         let config = HistorianConfig {
             storage_url: StorageUrl::File {
@@ -390,24 +673,27 @@ mod tests {
             .path()
             .join("history/building_id=BUILDING_100/equipment_id=AHU_1/year=2026/month=08");
         assert_eq!(std::fs::read_dir(partition).unwrap().count(), 1);
+        assert!(tmp.path().join(LATEST_TELEMETRY_WATERMARK).is_file());
+
+        let restarted = LiveHistorian::from_config(&config).unwrap();
+        assert_eq!(
+            restarted.latest_persisted_timestamp_utc().unwrap().to_rfc3339(),
+            "2026-08-21T12:00:00+00:00"
+        );
     }
 
     #[test]
-    fn s3_does_not_fall_back_to_ephemeral_local_disk() {
-        let config = HistorianConfig {
-            storage_url: StorageUrl::S3 {
-                bucket: "history".into(),
-                prefix: String::new(),
-            },
-            flush_rows: 1,
-            flush_seconds: 60,
-            target_file_mb: 128,
-            compaction_min_files: 8,
-            compaction_enabled: true,
-            query_memory_mb: 512,
-            spill_directory: None,
-            legacy_parquet_root: None,
-        };
-        assert!(LiveHistorian::from_config(&config).is_err());
+    fn s3_object_key_keeps_configured_prefix_and_canonical_path() {
+        let key = object_path(
+            "tenant-a",
+            Path::new(
+                "history/building_id=BUILDING_100/equipment_id=AHU_1/year=2026/month=08/part-x.parquet",
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            key.as_ref(),
+            "tenant-a/history/building_id=BUILDING_100/equipment_id=AHU_1/year=2026/month=08/part-x.parquet"
+        );
     }
 }
