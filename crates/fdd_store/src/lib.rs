@@ -1,6 +1,7 @@
 //! Parquet historian and sidecar storage helpers.
 
 pub mod afdd;
+pub mod afdd_scheduler;
 pub mod append;
 pub mod compaction;
 pub mod historian;
@@ -16,6 +17,10 @@ pub mod stats;
 pub use afdd::{
     AfddConfig, AfddLookbackUnit, AfddMode, DEFAULT_AFDD_INTERVAL_MINUTES,
     DEFAULT_AFDD_LOOKBACK_UNIT, DEFAULT_AFDD_LOOKBACK_VALUE,
+};
+pub use afdd_scheduler::{
+    next_due_at, plan_backfill_chunks, plan_continuous_cycle, AfddBackfillChunk, AfddCycleWindow,
+    AfddSchedulerCheckpoint, AFDD_SCHEDULER_CHECKPOINT_PATH,
 };
 pub use append::{merge_history_wide_csv, merge_history_wide_text, MergeReport};
 pub use compaction::{CompactionPlan, CompactionResult, CompactionSummary, ParquetCompactor};
