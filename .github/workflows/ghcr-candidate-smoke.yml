@@ -1,0 +1,84 @@
+name: GHCR candidate CSV smoke
+
+on:
+  workflow_run:
+    workflows:
+      - Publish Open-FDD stack to GHCR
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Exact GHCR tag to smoke (for example sha-abcdef0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  smoke:
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Resolve candidate revision
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.image_tag }}"
+            if [[ "$tag" != sha-* ]]; then
+              echo "image_tag must be an immutable sha-* tag" >&2
+              exit 1
+            fi
+            ref="master"
+          else
+            sha="${{ github.event.workflow_run.head_sha }}"
+            tag="sha-${sha::7}"
+            ref="$sha"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "Candidate tag: $tag"
+
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.candidate.outputs.ref }}
+
+      - name: Pull exact published images
+        env:
+          TAG: ${{ steps.candidate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          docker pull "ghcr.io/bbartling/openfdd-central:${TAG}"
+          docker pull "ghcr.io/bbartling/openfdd-web:${TAG}"
+
+      - name: Smoke published central + web
+        env:
+          TAG: ${{ steps.candidate.outputs.tag }}
+          OPENFDD_SMOKE_SKIP_BUILD: "1"
+          OPENFDD_CENTRAL_IMAGE: ghcr.io/bbartling/openfdd-central:${{ steps.candidate.outputs.tag }}
+          OPENFDD_WEB_IMAGE: ghcr.io/bbartling/openfdd-web:${{ steps.candidate.outputs.tag }}
+          OPENFDD_SMOKE_TIMEOUT_SECS: "180"
+        run: |
+          chmod +x scripts/release/smoke_csv_central_boot.sh
+          ./scripts/release/smoke_csv_central_boot.sh
+
+      - name: Record candidate proof
+        if: always()
+        run: |
+          {
+            echo "## GHCR candidate CSV smoke"
+            echo
+            echo "- Tag: \`${{ steps.candidate.outputs.tag }}\`"
+            echo "- Central: \`ghcr.io/bbartling/openfdd-central:${{ steps.candidate.outputs.tag }}\`"
+            echo "- Web: \`ghcr.io/bbartling/openfdd-web:${{ steps.candidate.outputs.tag }}\`"
+            echo "- Mode: pull prebuilt images, compose up with \`--no-build\`"
+          } >> "$GITHUB_STEP_SUMMARY"
