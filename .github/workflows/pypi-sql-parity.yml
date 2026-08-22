@@ -1,4 +1,4 @@
-name: Optional PyPI pandas ↔ SQL parity
+name: Optional PyPI pandas ↔ SQL cross-check
 
 on:
   workflow_dispatch:
@@ -9,12 +9,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: pypi-sql-parity
+  group: pypi-sql-cross-check
   cancel-in-progress: true
 
 jobs:
   published-pandas-oracle:
-    name: latest PyPI pandas oracle
+    name: latest PyPI pandas oracle seeds
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -39,6 +39,7 @@ jobs:
             echo
             echo "- PyPI package: \`open-fdd ${version}\`"
             echo "- Source: isolated virtualenv site-packages"
+            echo "- Contract: committed oracle seed expectations"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run committed oracle seeds against PyPI package
@@ -46,7 +47,7 @@ jobs:
           .venv-pypi/bin/python scripts/sql_pandas_oracle_check.py --require-external-oracle
 
   current-sql-datafusion:
-    name: current SQL/DataFusion oracle parity
+    name: current SQL/DataFusion oracle suite
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -58,7 +59,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Run FDD SQL/DataFusion parity suite
+      - name: Run FDD SQL/DataFusion oracle suite
         run: cargo test -p fdd_rules
 
       - name: Record checkout revision
@@ -68,4 +69,22 @@ jobs:
             echo
             echo "- Git revision: \`${GITHUB_SHA}\`"
             echo "- Test: \`cargo test -p fdd_rules\`"
+            echo "- Contract: SQL mask/duration oracle tests"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  contract-note:
+    name: cross-check contract
+    needs:
+      - published-pandas-oracle
+      - current-sql-datafusion
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record interpretation
+        run: |
+          {
+            echo "## Cross-check interpretation"
+            echo
+            echo "Both independently maintained oracle paths passed."
+            echo "This workflow intentionally does not claim full 59/59 direct DataFusion↔pandas result equality."
+            echo "A direct engine-to-engine comparison requires both sides to emit the same canonical result set and is reserved for the synthetic/live qualification path."
           } >> "$GITHUB_STEP_SUMMARY"
