@@ -50,6 +50,22 @@ interface AfddRunNowResponse {
   error?: string;
 }
 
+interface FddContinuityRow {
+  rule_id?: string;
+  equipment_id?: string;
+  first_seen_utc?: string;
+  first_seen?: string;
+  last_seen_utc?: string;
+  last_seen?: string;
+  continuity_count?: number;
+  occurrences?: number;
+}
+
+interface FddResultsResponse {
+  ok?: boolean;
+  results?: FddContinuityRow[];
+}
+
 interface MqttObservedMessage {
   received_at_utc: string;
   topic: string;
@@ -95,8 +111,42 @@ function metric(label: string, value: string) {
   );
 }
 
+function findScalar(root: unknown, names: string[]): string | null {
+  const wanted = new Set(names.map((name) => name.toLowerCase()));
+  const visit = (value: unknown, depth: number): string | null => {
+    if (depth > 4 || value == null || typeof value !== "object") return null;
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (wanted.has(key.toLowerCase()) && ["string", "number", "boolean"].includes(typeof child)) {
+        return String(child);
+      }
+    }
+    for (const child of Object.values(value as Record<string, unknown>)) {
+      const found = visit(child, depth + 1);
+      if (found != null) return found;
+    }
+    return null;
+  };
+  return visit(root, 0);
+}
+
+function basFreshness(value?: string | null): string {
+  if (!value) return "No persisted sample";
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return "Unknown";
+  const ageMinutes = Math.max(0, Math.round((Date.now() - parsed) / 60000));
+  return ageMinutes > 15 ? `Stale · ${ageMinutes} min old` : `Fresh · ${ageMinutes} min old`;
+}
+
+function cycleState(cycle: AfddCycleRecord): string {
+  if (!cycle.ok) return cycle.error ?? "Failed";
+  if ((cycle.rules_failed ?? 0) > 0) return "Partial";
+  return "Success";
+}
+
 function AfddPanel() {
   const [status, setStatus] = useState<AfddSchedulerStatus | null>(null);
+  const [historian, setHistorian] = useState<Record<string, unknown> | null>(null);
+  const [continuity, setContinuity] = useState<FddContinuityRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,8 +154,14 @@ function AfddPanel() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const next = await apiFetch<AfddSchedulerStatus>("/api/afdd/scheduler/status");
+      const [next, historianSummary, results] = await Promise.all([
+        apiFetch<AfddSchedulerStatus>("/api/afdd/scheduler/status"),
+        apiFetch<Record<string, unknown>>("/api/data-management/summary").catch(() => null),
+        apiFetch<FddResultsResponse>("/api/fdd/results").catch(() => null),
+      ]);
       setStatus(next);
+      setHistorian(historianSummary);
+      setContinuity(results?.results ?? []);
       setError(next.ok ? null : next.error ?? "AFDD scheduler status unavailable");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -141,6 +197,12 @@ function AfddPanel() {
   const recent = status?.recent_cycles ?? [];
   const latestCycle = recent[0];
   const config = status?.config;
+  const historianBackend = findScalar(historian, ["backend", "storage_backend", "storage", "scheme"]);
+  const historianFiles = findScalar(historian, ["file_count", "files", "part_count", "parts"]);
+  const historianBytes = findScalar(historian, ["total_bytes", "bytes", "size_bytes"]);
+  const smallFiles = findScalar(historian, ["small_file_count", "small_files"]);
+  const compaction = findScalar(historian, ["compaction_status", "compaction", "compaction_health"]);
+  const continuityRows = continuity.filter((row) => row.first_seen_utc || row.first_seen || row.last_seen_utc || row.last_seen);
 
   return (
     <section aria-labelledby="afdd-config-heading" data-testid="afdd-config-panel">
@@ -158,18 +220,31 @@ function AfddPanel() {
       </div>
 
       {error ? <div className="inline-alert inline-alert--error" role="alert">{error}</div> : null}
+      {status?.last_error ? <div className="inline-alert inline-alert--error" role="status">Last scheduler error: {status.last_error}</div> : null}
 
       <div className="summary-grid">
         {metric("Mode", config?.mode ?? "—")}
         {metric("Frequency", config ? `${config.interval_minutes} min` : "—")}
         {metric("Rolling lookback", config ? `${config.lookback_value} ${config.lookback_unit}` : "—")}
         {metric("Latest historian sample", formatTime(status?.latest_persisted_telemetry_utc))}
+        {metric("BAS freshness", basFreshness(status?.latest_persisted_telemetry_utc))}
         {metric("Analyzed through", formatTime(status?.checkpoint?.analyzed_through_utc))}
         {metric("Last completed", formatTime(status?.checkpoint?.last_completed_at_utc))}
         {metric("Next due", config?.mode === "continuous" ? formatTime(status?.next_due_at_utc) : "Bulk mode")}
         {metric("Catch-up", latestCycle?.catch_up ? "Yes" : "No")}
       </div>
 
+      <h3>Historian health</h3>
+      <p className="muted">Read-only values from Central data-management health. Missing values are reported as unavailable rather than synthesized.</p>
+      <div className="summary-grid">
+        {metric("Backend", historianBackend ?? "Not reported")}
+        {metric("Files / parts", historianFiles ?? "Not reported")}
+        {metric("Bytes", historianBytes ?? "Not reported")}
+        {metric("Small files", smallFiles ?? "Not reported")}
+        {metric("Compaction", compaction ?? "Not reported")}
+      </div>
+
+      <h3>Recent AFDD cycles</h3>
       <div className="table-wrap">
         <table className="data-table">
           <thead>
@@ -185,7 +260,28 @@ function AfddPanel() {
                 <td>{cycle.trigger}{cycle.catch_up ? " · catch-up" : ""}</td>
                 <td>{formatTime(cycle.start_utc)} → {formatTime(cycle.end_utc)}</td>
                 <td>{cycle.rules_succeeded ?? 0}✓ / {cycle.rules_failed ?? 0}✗ / {cycle.rules_skipped ?? 0} skipped</td>
-                <td>{cycle.ok ? "Success" : cycle.error ?? "Failed"}</td>
+                <td>{cycleState(cycle)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Finding continuity</h3>
+      <p className="muted">First/last-seen values are shown only when the current findings contract exposes them; the UI never invents continuity timestamps.</p>
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead><tr><th>Rule</th><th>Equipment</th><th>First seen</th><th>Last seen</th><th>Occurrences</th></tr></thead>
+          <tbody>
+            {continuityRows.length === 0 ? (
+              <tr><td colSpan={5}>Current findings do not expose first/last-seen continuity fields.</td></tr>
+            ) : continuityRows.map((row, index) => (
+              <tr key={`${row.rule_id ?? "rule"}-${row.equipment_id ?? "equipment"}-${index}`}>
+                <td>{row.rule_id ?? "—"}</td>
+                <td>{row.equipment_id ?? "—"}</td>
+                <td>{formatTime(row.first_seen_utc ?? row.first_seen)}</td>
+                <td>{formatTime(row.last_seen_utc ?? row.last_seen)}</td>
+                <td>{row.continuity_count ?? row.occurrences ?? "—"}</td>
               </tr>
             ))}
           </tbody>
