@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration as StdDuration;
 
 use anyhow::{Context, Result};
-use axum::extract::{Extension, State};
+use axum::extract::Extension;
 use axum::middleware;
 use axum::routing::{get, post};
 use axum::{Json, Router};
