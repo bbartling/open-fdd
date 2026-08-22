@@ -1,6 +1,6 @@
 # Historian / Railway implementation program
 
-Last updated: 2026-08-21
+Last updated: 2026-08-22
 
 Canonical architecture: [`docs/HISTORIAN_ARCHITECTURE.md`](docs/HISTORIAN_ARCHITECTURE.md)  
 Full audit/design: [`../docs/architecture/historian.md`](../docs/architecture/historian.md)
@@ -136,7 +136,7 @@ H6 remains offline/operator migration. It does not delete legacy data and does n
 
 ### H7 — Live ingest micro-batch cutover
 
-- [~] PR #765 — `feat/live-historian-ingest-cutover`, implementation complete; exact-head CI/review gate pending
+- [x] PR #765 — `feat/live-historian-ingest-cutover`, merged to `master` as `07f59e98`
 - [x] trace trustworthy building/equipment/role identity from fieldbus/MQTT metadata before mapping live points
 - [x] no arbitrary parsing of BACnet/REST point IDs as canonical equipment roles
 - [x] connect normalized live Arrow batches to the H2 `MicroBatchHistorian`
@@ -147,12 +147,12 @@ H6 remains offline/operator migration. It does not delete legacy data and does n
 - [x] Feather/JSONL MQTT mirror is compatibility-only, disabled by default, and requires explicit `OPENFDD_LEGACY_INGEST_MIRROR=1`
 - [x] preserve bad/stale scalar point roles as nullable values without changing an equipment schema mid-batch
 
-H7 uses explicit `OPENFDD_BUILDING_ID` plus configured device/point metadata at the fieldbus publisher. Missing building identity fails closed for canonical persistence; central does not infer building/equipment/role identity from transport IDs or topic strings. H7 is not complete until PR #765's exact final head passes FDD, Rust stack, AppSec, docs/security workflows and has no unresolved review threads.
+H7 uses explicit `OPENFDD_BUILDING_ID` plus configured device/point metadata at the fieldbus publisher. Missing building identity fails closed for canonical persistence; central does not infer building/equipment/role identity from transport IDs or topic strings. H7 merged only after PR #765's exact final head passed FDD, Rust stack, AppSec, docs/security workflows and had no unresolved review threads.
 
 ### H8 — Continuous AFDD scheduler / findings / API
 
-- [ ] explicit `bulk` vs `continuous` modes
-- [ ] interval independent from rolling lookback
+- [~] explicit `bulk` vs `continuous` modes
+- [~] interval independent from rolling lookback
 - [ ] rolling end time = latest successfully persisted eligible telemetry
 - [ ] overlapping windows for late arrivals
 - [ ] persisted scheduler checkpoint
@@ -172,17 +172,39 @@ OPENFDD_AFDD_LOOKBACK_VALUE=24
 OPENFDD_AFDD_LOOKBACK_UNIT=hours
 ```
 
-### H9 — AFDD / historian React operations UX
+### H9 — AFDD / historian / MQTT React operations UX
 
-- [ ] operating-mode status
-- [ ] frequency vs lookback visibly distinct
+The operations page gains two additional radio-selectable configuration surfaces alongside the existing views: **AFDD Config** and **MQTT Config**. These are operator tools, not a public cloud console.
+
+#### AFDD Config / Scheduler
+
+- [ ] radio/navigation entry for `AFDD Config`
+- [ ] scheduler widget with operating mode (`bulk` / `continuous`)
+- [ ] frequency and rolling lookback shown as separate concepts and controls when deployment permits mutation
 - [ ] last run / analyzed-through / latest historian sample / next run
+- [ ] persisted scheduler checkpoint and catch-up state
 - [ ] historian backend/size/files/small-files/compaction health
-- [ ] run AFDD now
-- [ ] recent AFDD cycles
+- [ ] run AFDD now through the same H8 execution engine used by scheduled cycles
+- [ ] recent AFDD cycles with success/partial/failure state
 - [ ] stale BAS data health independent of scheduler health
 - [ ] finding first/last seen and continuity fields
-- [ ] no fake runtime controls when deployment configuration is read-only
+- [ ] deployment-backed values render read-only when runtime configuration cannot safely be changed from the UI; never show fake controls
+
+#### MQTT Config / Test Monitor
+
+- [ ] radio/navigation entry for `MQTT Config`
+- [ ] AWS IoT Core test-client-style monitor layout without copying AWS branding or cloud assumptions
+- [ ] show broker connection state, client/runtime identity, subscriptions, and message counters without exposing credentials
+- [ ] topic-filter input supporting normal MQTT topic filters (`+` and `#`) with validation
+- [ ] bounded live/recent message list with receive timestamp, topic, payload size, QoS/retain metadata when available
+- [ ] expandable payload viewer with pretty JSON when valid and safe text/hex fallback for non-JSON payloads
+- [ ] pause/resume display and clear-local-view actions that do not interrupt broker ingestion
+- [ ] bounded in-memory/server-side observation buffer; monitoring must not become a second historian
+- [ ] reconnect/error events visible separately from telemetry messages
+- [ ] test publish UI only when an explicit backend capability/config flag allows it; otherwise monitor remains read-only
+- [ ] any allowed test publish requires authenticated operator access, topic validation, payload size limits, audit/event logging, and a clear non-production/testing label
+- [ ] browser never receives MQTT passwords, private keys, S3 secrets, or raw deployment credentials
+- [ ] MQTT monitor traffic is exposed through authenticated Central API/SSE/WebSocket plumbing rather than opening the broker directly to the browser
 
 ### H10 — Scale benchmarks and release qualification
 
@@ -194,6 +216,8 @@ OPENFDD_AFDD_LOOKBACK_UNIT=hours
 - [ ] local Docker qualification
 - [ ] optional MinIO qualification
 - [ ] Railway `:nightly` qualification
+- [ ] AFDD scheduler operations UX qualification
+- [ ] MQTT monitor soak with bounded message buffer and payload rendering under sustained telemetry
 
 ## Non-negotiable gates
 
@@ -203,6 +227,7 @@ OPENFDD_AFDD_LOOKBACK_UNIT=hours
 - Do not delete legacy Feather/JSONL paths before their consumers and migration needs are audited.
 - Do not make bulk CSV import start recurring AFDD.
 - Do not rescan retained history for every continuous AFDD cycle.
-- Do not weaken auth/security or log S3 secrets.
-- Keep historian/central ingress LAN/VPN/private-only; do not describe these services as public.
+- Do not weaken auth/security or log S3/MQTT secrets.
+- Do not expose MQTT broker credentials or private keys to the React client.
+- Keep historian/central/MQTT ingress LAN/VPN/private-only; do not describe these services as public.
 - Do not merge a phase until its changed-head CI and review threads are clean.

@@ -1,8 +1,10 @@
 //! Open-FDD Central — MQTTS ingest + REST/OpenAPI control plane.
 
 mod actions;
+mod afdd_scheduler;
 mod analytics;
 mod auth;
+mod canonical_state;
 mod contract;
 mod cutover;
 mod eplus_runner;
@@ -41,6 +43,8 @@ async fn main() -> anyhow::Result<()> {
     initialize_s3_scope_index().await?;
 
     let state = Arc::new(AppState::new());
+    let afdd_runtime = afdd_scheduler::AfddSchedulerRuntime::from_env()?;
+    let afdd_task = afdd_scheduler::spawn(Arc::clone(&afdd_runtime));
     match jobs::recover_interrupted_runs() {
         Ok(n) if n > 0 => info!(recovered = n, "marked interrupted RUNNING jobs as FAILED"),
         Ok(_) => {}
@@ -52,6 +56,10 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .merge(routes::router(Arc::clone(&state)))
+        .merge(afdd_scheduler::router(
+            Arc::clone(&state),
+            Arc::clone(&afdd_runtime),
+        ))
         .merge(cutover::router())
         .merge(vibe21::router())
         .merge(openapi::router())
@@ -86,6 +94,9 @@ async fn main() -> anyhow::Result<()> {
 
     let server_result = server.await;
     let _ = shutdown_tx.send(true);
+    if let Some(task) = afdd_task {
+        task.abort();
+    }
     if let Err(error) = ingest_task.await {
         warn!(%error, "MQTT ingest task ended unexpectedly during shutdown");
     }
