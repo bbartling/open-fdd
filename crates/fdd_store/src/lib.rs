@@ -1,5 +1,6 @@
 //! Parquet historian and sidecar storage helpers.
 
+pub mod afdd;
 pub mod append;
 pub mod compaction;
 pub mod historian;
@@ -12,6 +13,10 @@ pub mod migration_exec;
 pub mod parquet_parts;
 pub mod stats;
 
+pub use afdd::{
+    AfddConfig, AfddLookbackUnit, AfddMode, DEFAULT_AFDD_INTERVAL_MINUTES,
+    DEFAULT_AFDD_LOOKBACK_UNIT, DEFAULT_AFDD_LOOKBACK_VALUE,
+};
 pub use append::{merge_history_wide_csv, merge_history_wide_text, MergeReport};
 pub use compaction::{CompactionPlan, CompactionResult, CompactionSummary, ParquetCompactor};
 pub use historian::{
