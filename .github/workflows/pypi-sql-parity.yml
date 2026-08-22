@@ -1,0 +1,90 @@
+name: Optional published pandas + current SQL oracle checks
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 8 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: published-pandas-current-sql-oracle-checks
+  cancel-in-progress: true
+
+jobs:
+  published-pandas-oracle:
+    name: latest PyPI pandas oracle seeds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Create isolated PyPI environment
+        run: |
+          python -m venv .venv-pypi
+          .venv-pypi/bin/python -m pip install --upgrade pip
+          .venv-pypi/bin/python -m pip install "open-fdd[oracle]" pyyaml
+
+      - name: Record published oracle version
+        run: |
+          version="$(.venv-pypi/bin/python -c 'import importlib.metadata as m; print(m.version("open-fdd"))')"
+          echo "Installed PyPI open-fdd: ${version}"
+          {
+            echo "## Published pandas oracle"
+            echo
+            echo "- PyPI package: \`open-fdd ${version}\`"
+            echo "- Source: isolated virtualenv site-packages"
+            echo "- Contract: committed oracle seed expectations"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run committed oracle seeds against PyPI package
+        run: |
+          .venv-pypi/bin/python scripts/sql_pandas_oracle_check.py --require-external-oracle
+
+  current-sql-datafusion:
+    name: current SQL/DataFusion oracle suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run FDD SQL/DataFusion oracle suite
+        run: cargo test -p fdd_rules
+
+      - name: Record checkout revision
+        run: |
+          {
+            echo "## Current SQL/DataFusion side"
+            echo
+            echo "- Git revision: \`${GITHUB_SHA}\`"
+            echo "- Test: \`cargo test -p fdd_rules\`"
+            echo "- Contract: SQL mask/duration oracle tests"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  contract-note:
+    name: independent-check contract
+    needs:
+      - published-pandas-oracle
+      - current-sql-datafusion
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record interpretation
+        run: |
+          {
+            echo "## Independent oracle-check interpretation"
+            echo
+            echo "Both independently maintained oracle paths passed their own committed contracts."
+            echo "This workflow does not compare pandas and DataFusion result artifacts and therefore does not claim direct engine-to-engine equality."
+            echo "Direct equality remains part of the synthetic/live qualification path, where both engines can emit the same canonical result set."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -11,6 +11,7 @@ the oracle package or required seed fixtures are missing.
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import json
 import sys
 from pathlib import Path
@@ -34,8 +35,34 @@ def load_inventory():
     return yaml.safe_load(INVENTORY.read_text(encoding="utf-8"))
 
 
-def import_oracle():
+def _remove_checkout_import_paths() -> None:
+    """Prevent the checkout from shadowing an externally installed oracle."""
+    for raw in list(sys.path):
+        try:
+            resolved = Path(raw or ".").resolve()
+        except OSError:
+            continue
+        if resolved in {ROOT, ROOT / "scripts"}:
+            sys.path.remove(raw)
+
+
+def _assert_external_module(module_path: Path) -> None:
     try:
+        module_path.relative_to(ROOT)
+    except ValueError:
+        pass
+    else:
+        fail(f"external oracle resolved inside checkout: {module_path}")
+
+    if not any(part in {"site-packages", "dist-packages"} for part in module_path.parts):
+        fail(f"external oracle is not installed from site/dist-packages: {module_path}")
+
+
+def import_oracle(require_external: bool = False):
+    if require_external:
+        _remove_checkout_import_paths()
+    try:
+        import open_fdd.rules as rules_module  # type: ignore
         from open_fdd.rules import RULES_BY_ID, run_rule  # type: ignore
         from open_fdd.rules.cookbook_catalog import RULES  # type: ignore
     except ImportError as e:
@@ -43,6 +70,21 @@ def import_oracle():
             "open_fdd.rules oracle not importable — CI must pip install "
             f"open-fdd[oracle] (or editable .[oracle]). Import error: {e}"
         )
+
+    module_file = getattr(rules_module, "__file__", None)
+    if not module_file:
+        fail("open_fdd.rules has no importable module file")
+    module_path = Path(module_file).resolve()
+    try:
+        package_version = importlib.metadata.version("open-fdd")
+    except importlib.metadata.PackageNotFoundError:
+        package_version = "unknown"
+
+    if require_external:
+        _assert_external_module(module_path)
+
+    print(f"oracle package version={package_version} module={module_path}")
+
     if len(RULES) < 62:
         fail(f"canonical RULES shrunk: {len(RULES)} < 59")
     if "SV-SLEW" not in RULES_BY_ID:
@@ -165,11 +207,16 @@ def main() -> int:
         default=True,
         help="fail if open_fdd.rules cannot be imported (default)",
     )
+    ap.add_argument(
+        "--require-external-oracle",
+        action="store_true",
+        help="require open_fdd.rules to come from an installed site/dist-packages path outside this checkout",
+    )
     args = ap.parse_args()
-    _ = args
+    _ = args.require_package
 
     inv = load_inventory()
-    _, run_rule = import_oracle()
+    _, run_rule = import_oracle(require_external=args.require_external_oracle)
     n = run_seeds(run_rule, inv)
     print(f"OK: sql_pandas_oracle_check ({n} seed fixtures)")
     return 0
