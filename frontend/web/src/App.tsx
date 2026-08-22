@@ -14,6 +14,7 @@ import { AuthPage } from "./pages/AuthPage";
 import { TwinPage } from "./pages/TwinPage";
 import { SitesPage } from "./pages/SitesPage";
 import { RcxPage } from "./pages/RcxPage";
+import { OperationsPage } from "./pages/OperationsPage";
 
 function gated(element: React.ReactNode) {
   return <AuthGate>{element}</AuthGate>;
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/metering" element={gated(<MeteringPage />)} />
         <Route path="/wattlab" element={gated(<WattLabPage />)} />
         <Route path="/twin" element={gated(<TwinPage />)} />
+        <Route path="/operations" element={gated(<OperationsPage />)} />
       </Routes>
     </BrowserRouter>
   );

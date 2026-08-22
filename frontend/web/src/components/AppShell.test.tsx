@@ -100,6 +100,7 @@ describe("AppShell layout parity", () => {
       "Metering",
       "WattLab",
       "Sites",
+      "Operations",
     ]);
   });
 

@@ -10,6 +10,7 @@ export const MAIN_SECTIONS = [
   { id: "metering", label: "Metering", path: "/metering" },
   { id: "wattlab", label: "WattLab", path: "/wattlab" },
   { id: "sites", label: "Sites", path: "/sites" },
+  { id: "operations", label: "Operations", path: "/operations" },
 ] as const;
 
 /** Secondary App pages (collapsed sidebar details). */
@@ -25,4 +26,5 @@ export const SIDEBAR_NAV = [
   { to: "/metering", label: "Metering", short: "E", testId: "nav-metering" },
   { to: "/wattlab", label: "WattLab", short: "W", testId: "nav-wattlab" },
   { to: "/twin", label: "Twin", short: "T", testId: "nav-twin" },
+  { to: "/operations", label: "Operations", short: "O", testId: "nav-operations" },
 ] as const;

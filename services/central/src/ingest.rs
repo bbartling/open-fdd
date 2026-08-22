@@ -61,9 +61,8 @@ fn spawn_mqtt_ingest_inner(
                 Some(historian)
             }
             Err(err) => {
-                // Canonical history is now the durability path. Do not keep
-                // accepting MQTT solely into the legacy Feather/JSONL mirror.
                 warn!(%err, "canonical live historian unavailable; refusing durability downgrade");
+                state.mqtt_record_error("canonical live historian unavailable");
                 return;
             }
         };
@@ -98,6 +97,7 @@ fn spawn_mqtt_ingest_inner(
         loop {
             let connection = tokio::select! {
                 _ = wait_for_shutdown(&mut shutdown) => {
+                    state.mqtt_mark_disconnected("Central shutting down");
                     drain_live_historian(&mut live_historian);
                     return;
                 }
@@ -116,9 +116,11 @@ fn spawn_mqtt_ingest_inner(
                     for topic in &topics {
                         if let Err(err) = handle.subscribe(topic).await {
                             warn!(%err, topic, "subscribe failed");
+                            state.mqtt_record_error(format!("subscription failed for {topic}"));
                         }
                     }
 
+                    state.mqtt_mark_connected(cfg.client_id.clone(), topics.to_vec());
                     let (publisher, mut events) = handle.split();
                     state.set_mqtt_publisher(publisher);
                     info!("central MQTT ingest connected; publisher ready for commands");
@@ -127,6 +129,7 @@ fn spawn_mqtt_ingest_inner(
                         tokio::select! {
                             _ = wait_for_shutdown(&mut shutdown) => {
                                 *state.mqtt_publisher.lock().unwrap() = None;
+                                state.mqtt_mark_disconnected("Central shutting down");
                                 drain_live_historian(&mut live_historian);
                                 return;
                             }
@@ -136,6 +139,12 @@ fn spawn_mqtt_ingest_inner(
                                 };
                                 if let Incoming::Publish(p) = ev {
                                     let topic = p.topic.clone();
+                                    state.mqtt_observe(
+                                        &topic,
+                                        &p.payload,
+                                        format!("{:?}", p.qos),
+                                        p.retain,
+                                    );
                                     handle_payload(
                                         &state,
                                         live_historian.as_mut(),
@@ -164,11 +173,14 @@ fn spawn_mqtt_ingest_inner(
                     }
                     warn!("central mqtt event stream ended; reconnecting");
                     *state.mqtt_publisher.lock().unwrap() = None;
+                    state.mqtt_mark_disconnected("MQTT event stream ended; reconnecting");
                 }
                 Err(err) => {
                     warn!(%err, "central mqtt connect failed; retrying");
+                    state.mqtt_record_error("MQTT connect failed; retrying");
                     tokio::select! {
                         _ = wait_for_shutdown(&mut shutdown) => {
+                            state.mqtt_mark_disconnected("Central shutting down");
                             drain_live_historian(&mut live_historian);
                             return;
                         }
@@ -362,9 +374,6 @@ fn handle_telemetry(
                 }
             }
 
-            // The compatibility mirror is no longer durability-critical. It is
-            // available only for audited migration/interchange consumers that
-            // explicitly opt in during the H7 cutover period.
             if legacy_compatibility_mirror_enabled() {
                 persist_legacy_compatibility(&env);
             }

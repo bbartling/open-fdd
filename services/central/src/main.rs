@@ -13,6 +13,7 @@ mod ingest;
 mod jobs;
 mod live_historian;
 mod models;
+mod mqtt_monitor;
 mod openapi;
 mod routes;
 mod state;
@@ -60,6 +61,7 @@ async fn main() -> anyhow::Result<()> {
             Arc::clone(&state),
             Arc::clone(&afdd_runtime),
         ))
+        .merge(mqtt_monitor::router(Arc::clone(&state)))
         .merge(cutover::router())
         .merge(vibe21::router())
         .merge(openapi::router())

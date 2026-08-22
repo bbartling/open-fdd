@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MAIN_SECTIONS } from "./sections";
 
-/** Product main sections — Sites after WattLab; Run Rules removed (Overview + left rail). */
+/** Product main sections — H9 adds Operations after Sites; Run Rules remains on Overview + left rail. */
 const ORACLE_MAIN_SECTIONS = [
   "Overview",
   "Inspect",
@@ -13,6 +13,7 @@ const ORACLE_MAIN_SECTIONS = [
   "Metering",
   "WattLab",
   "Sites",
+  "Operations",
 ] as const;
 
 describe("MAIN_SECTIONS navigation contract", () => {
