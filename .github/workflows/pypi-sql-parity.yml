@@ -1,0 +1,71 @@
+name: Optional PyPI pandas ↔ SQL parity
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 8 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-sql-parity
+  cancel-in-progress: true
+
+jobs:
+  published-pandas-oracle:
+    name: latest PyPI pandas oracle
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Create isolated PyPI environment
+        run: |
+          python -m venv .venv-pypi
+          .venv-pypi/bin/python -m pip install --upgrade pip
+          .venv-pypi/bin/python -m pip install "open-fdd[oracle]" pyyaml
+
+      - name: Record published oracle version
+        run: |
+          version="$(.venv-pypi/bin/python -c 'import importlib.metadata as m; print(m.version("open-fdd"))')"
+          echo "Installed PyPI open-fdd: ${version}"
+          {
+            echo "## Published pandas oracle"
+            echo
+            echo "- PyPI package: \`open-fdd ${version}\`"
+            echo "- Source: isolated virtualenv site-packages"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run committed oracle seeds against PyPI package
+        run: |
+          .venv-pypi/bin/python scripts/sql_pandas_oracle_check.py --require-external-oracle
+
+  current-sql-datafusion:
+    name: current SQL/DataFusion oracle parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run FDD SQL/DataFusion parity suite
+        run: cargo test -p fdd_rules
+
+      - name: Record checkout revision
+        run: |
+          {
+            echo "## Current SQL/DataFusion side"
+            echo
+            echo "- Git revision: \`${GITHUB_SHA}\`"
+            echo "- Test: \`cargo test -p fdd_rules\`"
+          } >> "$GITHUB_STEP_SUMMARY"
