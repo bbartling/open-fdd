@@ -72,6 +72,32 @@ Flush on rows OR time OR clean shutdown. Local publication is temporary-file + f
 
 Initial Parquet compression direction is Snappy for low edge/VM CPU while retaining statistics/predicate pruning. Change only with measured evidence.
 
+## H7 live-ingest durability contract
+
+Live MQTT telemetry enters canonical history only when trusted publisher metadata supplies `building_id`, `equipment_id`, and `role`. The fieldbus publisher derives these from operator/configured building/device/point metadata; Central must never parse BACnet object IDs, REST point IDs, or MQTT topic strings to invent historian identity.
+
+H7 keeps the H2 `MicroBatchHistorian` as the buffering/flush primitive. The H2 writer now delegates only the final publication step through a backend-neutral complete-object publisher, so local and S3 paths retain the exact same validation, UTC month splitting, schema behavior, compression, statistics, and immutable part naming.
+
+For `file://`, publication remains crash-safe local atomic write/rename. For `s3://`, Central publishes the already-complete Parquet payload directly through the generic S3-compatible `object_store` contract. Container disk is not a canonical S3 fallback.
+
+The latest successfully persisted eligible telemetry timestamp is maintained independently of wall clock and persisted at:
+
+```text
+state/live-historian/latest-telemetry.json
+```
+
+under the configured canonical storage backend. H8 uses this watermark as the rolling AFDD end-time input after restart. The watermark may safely lag if its small state write fails after an immutable Parquet object succeeds; it must never advance ahead of successfully persisted Parquet. A later successful flush/shutdown rewrites the max watermark.
+
+The owning Central runtime calls elapsed-time flushes and a clean shutdown drain. If canonical live historian initialization fails, Central refuses to downgrade MQTT durability to the old Feather/JSONL mirror.
+
+The old MQTT Feather/JSONL mirror is compatibility-only and disabled by default:
+
+```text
+OPENFDD_LEGACY_INGEST_MIRROR=0
+```
+
+Enable it only for an audited compatibility/interchange consumer. It is never the canonical or only durable copy.
+
 ## Compaction contract
 
 ```text
@@ -191,6 +217,6 @@ IT-hosted VM/dashboard deployments use the same images and `file://` storage, wi
 
 Every implementation PR touching this architecture must preserve FDD/weather behavior and run the relevant repo gates. Never weaken tests to get green.
 
-H1 through H5 are merged. H5 added provider-neutral S3/object-store registration, fail-closed building scoping, DataFusion tuning, MinIO qualification wiring, and private Railway bucket deployment mapping. H6 owns restart-safe legacy migration and operator stats. H7 owns live micro-batch cutover; H8+ own continuous scheduling, UX, and scale qualification.
+H1 through H6 are merged. H5 added provider-neutral S3/object-store registration, fail-closed building scoping, DataFusion tuning, MinIO qualification wiring, and private Railway bucket deployment mapping. H6 added restart-safe legacy migration and operator stats. H7 adds trusted-metadata live micro-batches, local/S3 complete-object durability, persisted latest-telemetry watermarking, graceful shutdown drain, and opt-in-only legacy mirroring. H8+ own continuous scheduling, UX, and scale qualification.
 
 Scale target: hundreds of GB to ~1 TB retained history while normal continuous AFDD scans only the configured building/equipment/time window through partition/statistics/column pruning.
