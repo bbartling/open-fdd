@@ -2,8 +2,8 @@
 # Product UI is openfdd-web (React SPA).
 # Tag contract:
 # - every publish: immutable sha-<7>
-# - master: moving nightly + immutable run tag
-# - v* release tag: semver + immutable run tag
+# - master: moving nightly + rerun-unique immutable run tag
+# - v* release tag: stable semver + rerun-unique immutable run tag
 # - manual non-master build: candidate-<7> + immutable sha only
 name: Publish Open-FDD stack to GHCR
 
@@ -129,7 +129,7 @@ jobs:
 
           if [[ "${GITHUB_REF}" == "refs/heads/master" ]]; then
             nightly=true
-            suffixes+=("${version}-n${GITHUB_RUN_NUMBER}")
+            suffixes+=("${version}-n${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT}")
           elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             release=true
             ref_version="${GITHUB_REF_NAME#v}"
@@ -137,7 +137,7 @@ jobs:
               echo "release tag v${ref_version} does not match Cargo.toml version ${version}" >&2
               exit 1
             fi
-            suffixes+=("${version}" "${version}-n${GITHUB_RUN_NUMBER}")
+            suffixes+=("${version}" "${version}-n${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT}")
           else
             candidate=true
             suffixes+=("candidate-${short_sha}")
