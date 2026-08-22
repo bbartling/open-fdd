@@ -73,10 +73,12 @@ impl WatermarkStore {
                 }
                 storage.read(path)?
             }
-            Self::S3(storage) => match storage.get_optional(Path::new(LATEST_TELEMETRY_WATERMARK))? {
-                Some(bytes) => bytes,
-                None => return Ok(None),
-            },
+            Self::S3(storage) => {
+                match storage.get_optional(Path::new(LATEST_TELEMETRY_WATERMARK))? {
+                    Some(bytes) => bytes,
+                    None => return Ok(None),
+                }
+            }
         };
         let watermark: LatestTelemetryWatermark =
             serde_json::from_slice(&bytes).context("decode live historian telemetry watermark")?;
@@ -91,9 +93,7 @@ impl WatermarkStore {
             Self::Local(storage) => {
                 storage.write_atomic(Path::new(LATEST_TELEMETRY_WATERMARK), &bytes)
             }
-            Self::S3(storage) => {
-                storage.put_bytes(Path::new(LATEST_TELEMETRY_WATERMARK), &bytes)
-            }
+            Self::S3(storage) => storage.put_bytes(Path::new(LATEST_TELEMETRY_WATERMARK), &bytes),
         }
     }
 }
@@ -239,13 +239,17 @@ fn build_s3_store(bucket: &str) -> Result<Arc<dyn ObjectStore>> {
         builder = builder.with_endpoint(endpoint_for_style(&endpoint, bucket, virtual_hosted)?);
     }
     if let (Some(key), Some(secret)) = (access_key_id, secret_access_key) {
-        builder = builder.with_access_key_id(key).with_secret_access_key(secret);
+        builder = builder
+            .with_access_key_id(key)
+            .with_secret_access_key(secret);
     }
     if let Some(token) = session_token {
         builder = builder.with_token(token);
     }
     Ok(Arc::new(
-        builder.build().context("build S3-compatible live historian store")?,
+        builder
+            .build()
+            .context("build S3-compatible live historian store")?,
     ))
 }
 
@@ -677,7 +681,10 @@ mod tests {
 
         let restarted = LiveHistorian::from_config(&config).unwrap();
         assert_eq!(
-            restarted.latest_persisted_timestamp_utc().unwrap().to_rfc3339(),
+            restarted
+                .latest_persisted_timestamp_utc()
+                .unwrap()
+                .to_rfc3339(),
             "2026-08-21T12:00:00+00:00"
         );
     }
