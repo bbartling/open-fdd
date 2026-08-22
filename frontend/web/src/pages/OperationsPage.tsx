@@ -4,7 +4,6 @@ import { AppShell } from "../components/AppShell";
 import { Button } from "../components/widgets";
 
 type OperationsView = "afdd" | "mqtt";
-
 type AfddMode = "bulk" | "continuous";
 
 interface AfddConfig {
@@ -49,6 +48,36 @@ interface AfddRunNowResponse {
   ok: boolean;
   cycle?: AfddCycleRecord;
   error?: string;
+}
+
+interface MqttObservedMessage {
+  received_at_utc: string;
+  topic: string;
+  qos: string;
+  retain: boolean;
+  payload_bytes: number;
+  payload_encoding: "json" | "text" | "hex" | string;
+  payload_preview: string;
+  truncated: boolean;
+}
+
+interface MqttMonitorEvent {
+  at_utc: string;
+  kind: string;
+  message: string;
+}
+
+interface MqttMonitorSnapshot {
+  connected: boolean;
+  client_id?: string | null;
+  subscriptions: string[];
+  received_messages: number;
+  reconnects: number;
+  errors: number;
+  buffer_capacity: number;
+  recent_messages: MqttObservedMessage[];
+  recent_events: MqttMonitorEvent[];
+  test_publish_enabled: boolean;
 }
 
 function formatTime(value?: string | null): string {
@@ -144,14 +173,7 @@ function AfddPanel() {
       <div className="table-wrap">
         <table className="data-table">
           <thead>
-            <tr>
-              <th>Finished</th>
-              <th>Scope</th>
-              <th>Trigger</th>
-              <th>Window</th>
-              <th>Rules</th>
-              <th>Status</th>
-            </tr>
+            <tr><th>Finished</th><th>Scope</th><th>Trigger</th><th>Window</th><th>Rules</th><th>Status</th></tr>
           </thead>
           <tbody>
             {recent.length === 0 ? (
@@ -183,22 +205,79 @@ function validTopicFilter(value: string): boolean {
   });
 }
 
+function topicMatchesFilter(topic: string, filter: string): boolean {
+  if (!validTopicFilter(filter)) return false;
+  const topicLevels = topic.split("/");
+  const filterLevels = filter.split("/");
+  for (let index = 0; index < filterLevels.length; index += 1) {
+    const expected = filterLevels[index];
+    if (expected === "#") return true;
+    if (index >= topicLevels.length) return false;
+    if (expected !== "+" && expected !== topicLevels[index]) return false;
+  }
+  return topicLevels.length === filterLevels.length;
+}
+
 function MqttPanel() {
-  const [topicFilter, setTopicFilter] = useState("openfdd/+/+/telemetry/#");
+  const [topicFilter, setTopicFilter] = useState("openfdd/#");
+  const [snapshot, setSnapshot] = useState<MqttMonitorSnapshot | null>(null);
+  const [paused, setPaused] = useState(false);
+  const [clearedAt, setClearedAt] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const filterOk = useMemo(() => validTopicFilter(topicFilter), [topicFilter]);
+
+  const refresh = useCallback(async () => {
+    try {
+      const next = await apiFetch<MqttMonitorSnapshot>("/api/mqtt/monitor");
+      setSnapshot(next);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (paused) return undefined;
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 2000);
+    return () => window.clearInterval(timer);
+  }, [paused, refresh]);
+
+  const messages = useMemo(() => {
+    const cutoff = clearedAt ?? Number.NEGATIVE_INFINITY;
+    return (snapshot?.recent_messages ?? []).filter((message) => {
+      const received = Date.parse(message.received_at_utc);
+      return received > cutoff && filterOk && topicMatchesFilter(message.topic, topicFilter);
+    });
+  }, [clearedAt, filterOk, snapshot?.recent_messages, topicFilter]);
 
   return (
     <section aria-labelledby="mqtt-config-heading" data-testid="mqtt-config-panel">
-      <h2 id="mqtt-config-heading">MQTT Test Monitor</h2>
-      <p className="muted">
-        Read-only operator monitor by default. The browser never receives broker passwords, private keys, or raw deployment credentials and never connects directly to the broker.
-      </p>
+      <div className="section-heading-row">
+        <div>
+          <h2 id="mqtt-config-heading">MQTT Test Monitor</h2>
+          <p className="muted">
+            Read-only operator monitor. The browser receives only bounded observation data from authenticated Central API calls; broker credentials and private keys never leave Central.
+          </p>
+        </div>
+        <div className="button-row">
+          <Button id="mqtt-pause" label={paused ? "Resume display" : "Pause display"} variant="secondary" onClick={() => setPaused((value) => !value)} />
+          <Button id="mqtt-clear" label="Clear local view" variant="secondary" onClick={() => setClearedAt(Date.now())} />
+          <Button id="mqtt-refresh" label="Refresh" variant="secondary" onClick={() => void refresh()} />
+        </div>
+      </div>
+
+      {error ? <div className="inline-alert inline-alert--error" role="alert">{error}</div> : null}
 
       <div className="summary-grid">
-        {metric("Broker state", "Central monitor backend pending")}
-        {metric("Publish capability", "Disabled by default")}
-        {metric("Observation buffer", "Bounded")}
-        {metric("Transport", "Authenticated Central API")}
+        {metric("Broker state", snapshot?.connected ? "Connected" : "Disconnected")}
+        {metric("Client identity", snapshot?.client_id ?? "—")}
+        {metric("Messages observed", String(snapshot?.received_messages ?? 0))}
+        {metric("Reconnects", String(snapshot?.reconnects ?? 0))}
+        {metric("Errors", String(snapshot?.errors ?? 0))}
+        {metric("Observation buffer", snapshot ? `${snapshot.recent_messages.length}/${snapshot.buffer_capacity}` : "—")}
+        {metric("Subscriptions", String(snapshot?.subscriptions.length ?? 0))}
+        {metric("Publish capability", snapshot?.test_publish_enabled ? "Enabled" : "Disabled")}
       </div>
 
       <div className="form-row">
@@ -208,10 +287,17 @@ function MqttPanel() {
           value={topicFilter}
           onChange={(event) => setTopicFilter(event.target.value)}
           aria-invalid={!filterOk}
-          placeholder="openfdd/+/+/telemetry/#"
+          placeholder="openfdd/#"
         />
-        <span>{filterOk ? "Valid MQTT topic filter" : "Use + for one level and # only as the final level"}</span>
+        <span>{filterOk ? `${messages.length} buffered messages match` : "Use + for one level and # only as the final level"}</span>
       </div>
+
+      <details>
+        <summary>Central subscriptions</summary>
+        <ul>
+          {(snapshot?.subscriptions ?? []).map((subscription) => <li key={subscription}><code>{subscription}</code></li>)}
+        </ul>
+      </details>
 
       <div className="table-wrap">
         <table className="data-table">
@@ -219,7 +305,39 @@ function MqttPanel() {
             <tr><th>Received</th><th>Topic</th><th>QoS</th><th>Retain</th><th>Bytes</th><th>Payload</th></tr>
           </thead>
           <tbody>
-            <tr><td colSpan={6}>Live bounded message observation wiring is the next H9 backend slice.</td></tr>
+            {messages.length === 0 ? (
+              <tr><td colSpan={6}>{paused ? "Display paused." : "No buffered messages match the current filter."}</td></tr>
+            ) : messages.map((message) => (
+              <tr key={`${message.received_at_utc}-${message.topic}-${message.payload_bytes}`}>
+                <td>{formatTime(message.received_at_utc)}</td>
+                <td><code>{message.topic}</code></td>
+                <td>{message.qos}</td>
+                <td>{message.retain ? "Yes" : "No"}</td>
+                <td>{message.payload_bytes}</td>
+                <td>
+                  <details>
+                    <summary>{message.payload_encoding}{message.truncated ? " · truncated" : ""}</summary>
+                    <pre>{message.payload_preview}</pre>
+                  </details>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Connection and error events</h3>
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead><tr><th>Time</th><th>Kind</th><th>Event</th></tr></thead>
+          <tbody>
+            {(snapshot?.recent_events ?? []).length === 0 ? (
+              <tr><td colSpan={3}>No connection events recorded yet.</td></tr>
+            ) : snapshot?.recent_events.map((event) => (
+              <tr key={`${event.at_utc}-${event.kind}-${event.message}`}>
+                <td>{formatTime(event.at_utc)}</td><td>{event.kind}</td><td>{event.message}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -231,11 +349,7 @@ export function OperationsPage() {
   const [view, setView] = useState<OperationsView>("afdd");
 
   return (
-    <AppShell
-      title="Operations"
-      caption="AFDD scheduler and MQTT operator tooling"
-      activeSectionId="operations"
-    >
+    <AppShell title="Operations" caption="AFDD scheduler and MQTT operator tooling" activeSectionId="operations">
       <fieldset className="section-tabs" aria-label="Operations configuration">
         <legend className="sr-only">Operations configuration</legend>
         <label>
