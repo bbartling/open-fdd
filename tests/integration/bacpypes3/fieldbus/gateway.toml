@@ -1,0 +1,16 @@
+[bacnet_client]
+interface = "0.0.0.0"
+broadcast = "172.30.0.255"
+whois_bind_port = 0
+read_bind_port = 0
+apdu_timeout_ms = 3000
+whois_timeout_secs = 2.0
+
+[poll]
+enabled = true
+interval_secs = 5.0
+startup_delay_secs = 1.0
+max_samples = 100
+
+[weather]
+interval_secs = 3600
