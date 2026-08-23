@@ -31,6 +31,7 @@ jobs:
         id: candidate
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
           PUBLISH_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
@@ -41,19 +42,28 @@ jobs:
               echo "image_tag must match immutable sha-<7 lowercase hex>" >&2
               exit 1
             fi
-            ref="master"
-          else
-            sha="$PUBLISH_HEAD_SHA"
-            if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "publisher head SHA is invalid: $sha" >&2
+            short_sha="${tag#sha-}"
+            ref="$(curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${short_sha}" | jq -r '.sha')"
+            if [[ ! "$ref" =~ ^[0-9a-f]{40}$ || "${ref::7}" != "$short_sha" ]]; then
+              echo "failed to resolve ${tag} to an exact repository commit" >&2
               exit 1
             fi
-            tag="sha-${sha::7}"
-            ref="$sha"
+          else
+            ref="$PUBLISH_HEAD_SHA"
+            if [[ ! "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "publisher head SHA is invalid: $ref" >&2
+              exit 1
+            fi
+            tag="sha-${ref::7}"
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "Candidate tag: $tag"
+          echo "Candidate source commit: $ref"
 
       - uses: actions/checkout@v5
         with:
@@ -85,6 +95,7 @@ jobs:
             echo "## GHCR candidate CSV smoke"
             echo
             echo "- Tag: \`${{ steps.candidate.outputs.tag }}\`"
+            echo "- Source commit: \`${{ steps.candidate.outputs.ref }}\`"
             echo "- Central: \`ghcr.io/bbartling/openfdd-central:${{ steps.candidate.outputs.tag }}\`"
             echo "- Web: \`ghcr.io/bbartling/openfdd-web:${{ steps.candidate.outputs.tag }}\`"
             echo "- Mode: pull prebuilt images, compose up with \`--no-build\`"
