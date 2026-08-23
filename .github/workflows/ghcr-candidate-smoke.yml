@@ -30,17 +30,24 @@ jobs:
       - name: Resolve candidate revision
         id: candidate
         shell: bash
+        env:
+          INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
+          PUBLISH_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            tag="${{ inputs.image_tag }}"
-            if [[ "$tag" != sha-* ]]; then
-              echo "image_tag must be an immutable sha-* tag" >&2
+            tag="$INPUT_IMAGE_TAG"
+            if [[ ! "$tag" =~ ^sha-[0-9a-f]{7}$ ]]; then
+              echo "image_tag must match immutable sha-<7 lowercase hex>" >&2
               exit 1
             fi
             ref="master"
           else
-            sha="${{ github.event.workflow_run.head_sha }}"
+            sha="$PUBLISH_HEAD_SHA"
+            if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "publisher head SHA is invalid: $sha" >&2
+              exit 1
+            fi
             tag="sha-${sha::7}"
             ref="$sha"
           fi
