@@ -1,0 +1,2 @@
+Name,PointType,Units,Commandable,Default,Instance,Description
+ci-status,BV,,N,inactive,9901,Minimal hosted object required by fieldbus CI
