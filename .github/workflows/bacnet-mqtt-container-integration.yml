@@ -1,0 +1,108 @@
+name: Optional BACnet to MQTT container integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Immutable Open-FDD GHCR tag (sha-xxxxxxx)
+        required: true
+        type: string
+  workflow_run:
+    workflows:
+      - Publish Open-FDD stack to GHCR
+    types:
+      - completed
+  pull_request:
+    paths:
+      - .github/workflows/bacnet-mqtt-container-integration.yml
+      - docker/compose.bacnet-mqtt-ci.yml
+      - scripts/integration/bacnet_mqtt_container_smoke.sh
+      - tests/integration/bacpypes3/**
+  schedule:
+    - cron: "17 8 * * 1"
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  bacnet-mqtt-e2e:
+    if: >-
+      ${{
+        github.event_name != 'workflow_run' ||
+        (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out integration harness
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || 'master' }}
+
+      - name: Resolve immutable product image tag
+        id: image
+        shell: bash
+        env:
+          DISPATCH_TAG: ${{ inputs.image_tag }}
+          PUBLISH_SHA: ${{ github.event.workflow_run.head_sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          case "$GITHUB_EVENT_NAME" in
+            workflow_dispatch)
+              tag="$DISPATCH_TAG"
+              ;;
+            workflow_run)
+              [[ "$PUBLISH_SHA" =~ ^[0-9a-f]{40}$ ]]
+              tag="sha-${PUBLISH_SHA:0:7}"
+              ;;
+            pull_request)
+              [[ "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+              # PR runs validate changes to this harness against the already-published base/master generation.
+              tag="sha-${PR_BASE_SHA:0:7}"
+              ;;
+            schedule)
+              data="$(python3 scripts/ghcr_newest_by_created.py --json openfdd-central openfdd-mqtt openfdd-fieldbus)"
+              tag="$(jq -r '
+                [.[0].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $a |
+                [.[1].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $b |
+                [.[2].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $c |
+                [$a[] as $t | select(($b | index($t)) != null and ($c | index($t)) != null) | $t][0] // empty
+              ' <<<"$data")"
+              if [[ -z "$tag" ]]; then
+                echo "no common published sha-* tag found across central/mqtt/fieldbus newest-by-created windows" >&2
+                exit 1
+              fi
+              ;;
+            *)
+              echo "unsupported event: $GITHUB_EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+          if [[ ! "$tag" =~ ^sha-[0-9a-f]{7}$ ]]; then
+            echo "image tag must match sha-<7 lowercase hex>, got: $tag" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Testing Open-FDD images: $tag"
+
+      - name: Run BACpypes3 BACnet to Open-FDD MQTTS integration
+        env:
+          OPENFDD_IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          chmod +x scripts/integration/bacnet_mqtt_container_smoke.sh
+          ./scripts/integration/bacnet_mqtt_container_smoke.sh
+
+      - name: Record qualification summary
+        if: always()
+        run: |
+          {
+            echo "## BACnet → MQTTS container integration"
+            echo
+            echo "- Open-FDD image tag: \`${{ steps.image.outputs.tag }}\`"
+            echo "- BACnet simulator: BACpypes3 0.0.106 mini-device"
+            echo "- Product path: BACnet/IP read/poll → openfdd-fieldbus → mTLS MQTT → openfdd-central parsed ingest + canonical historian"
+            echo "- Product images are pulled from GHCR; only the lightweight Python simulator is built in this job."
+          } >> "$GITHUB_STEP_SUMMARY"

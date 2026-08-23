@@ -1,0 +1,89 @@
+name: openfdd-bacnet-mqtt-ci
+
+services:
+  bacnet-sim:
+    build:
+      context: ../tests/integration/bacpypes3
+      dockerfile: Dockerfile
+    networks:
+      ci_net:
+        ipv4_address: 172.30.0.10
+
+  mqtt:
+    image: ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG to sha-xxxxxxx}
+    volumes:
+      - ${OPENFDD_BACNET_MQTT_CERT_DIR:?set OPENFDD_BACNET_MQTT_CERT_DIR}/broker:/mosquitto/certs:ro
+      - ${OPENFDD_BACNET_MQTT_CERT_DIR}/acl:/mosquitto/config/acl:ro
+      - mqtt-data:/mosquitto/data
+    networks:
+      ci_net:
+        ipv4_address: 172.30.0.30
+
+  central:
+    image: ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG}
+    environment:
+      OPENFDD_MQTT_ENABLED: "1"
+      OPENFDD_MQTT_HOST: mqtt
+      OPENFDD_MQTT_PORT: "8883"
+      OPENFDD_SITE_ID: ci
+      OPENFDD_EDGE_ID: "+"
+      OPENFDD_MQTT_CA_PEM: /mqtt/ca.pem
+      OPENFDD_MQTT_CERT_PEM: /mqtt/central.cert.pem
+      OPENFDD_MQTT_KEY_PEM: /mqtt/central.key.pem
+      OPENFDD_WORKSPACE: /workspace
+      OPENFDD_PARQUET_ROOT: /workspace/.cache/parquet
+      # Keep the CI durability assertion fast and deterministic; product default remains 60s.
+      OPENFDD_PARQUET_FLUSH_SECONDS: "5"
+      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-bacnet-mqtt-ci-jwt-secret-change-me}
+      OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-bacnet-mqtt-ci-admin}
+      OPENFDD_REACT_UI: "1"
+    volumes:
+      - ${OPENFDD_BACNET_MQTT_CERT_DIR}/central:/mqtt:ro
+      - central-workspace:/workspace
+    ports:
+      - "127.0.0.1:18080:8080"
+    depends_on:
+      - mqtt
+    networks:
+      ci_net:
+        ipv4_address: 172.30.0.40
+
+  fieldbus:
+    image: ghcr.io/bbartling/openfdd-fieldbus:${OPENFDD_IMAGE_TAG}
+    environment:
+      OPENFDD_FIELDBUS_CONFIG_DIR: /app/config
+      OPENFDD_FIELDBUS_HTTP_HOST: 0.0.0.0
+      OPENFDD_FIELDBUS_HTTP_PORT: "8081"
+      OPENFDD_MQTT_ENABLED: "1"
+      OPENFDD_MQTT_HOST: mqtt
+      OPENFDD_MQTT_PORT: "8883"
+      OPENFDD_SITE_ID: ci
+      OPENFDD_EDGE_ID: fieldbus-1
+      OPENFDD_BUILDING_ID: BUILDING_CI
+      OPENFDD_MQTT_CA_PEM: /mqtt/ca.pem
+      OPENFDD_MQTT_CERT_PEM: /mqtt/edge.cert.pem
+      OPENFDD_MQTT_KEY_PEM: /mqtt/edge.key.pem
+      OPENFDD_MQTT_SPOOL_DIR: /spool
+    volumes:
+      - ../tests/integration/bacpypes3/fieldbus:/app/config:ro
+      - ${OPENFDD_BACNET_MQTT_CERT_DIR}/edge:/mqtt:ro
+      - fieldbus-spool:/spool
+    ports:
+      - "127.0.0.1:18081:8081"
+    depends_on:
+      - bacnet-sim
+      - mqtt
+    networks:
+      ci_net:
+        ipv4_address: 172.30.0.20
+
+networks:
+  ci_net:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  mqtt-data:
+  central-workspace:
+  fieldbus-spool:

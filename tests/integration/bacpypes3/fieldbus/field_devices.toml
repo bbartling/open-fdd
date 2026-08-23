@@ -1,0 +1,30 @@
+[[devices]]
+name = "AHU_SIM"
+enabled = true
+device_instance = 3456
+host = "172.30.0.10"
+port = 47808
+
+[[devices.points]]
+object_type = "analog-value"
+object_instance = 1
+point_name = "discharge-air-temp"
+units = "degreesFahrenheit"
+
+[[devices.points]]
+object_type = "binary-value"
+object_instance = 1
+point_name = "fan-status"
+units = ""
+
+[[devices.points]]
+object_type = "analog-value"
+object_instance = 2
+point_name = "zone-temp-setpoint"
+units = "degreesFahrenheit"
+
+[[devices.points]]
+object_type = "binary-value"
+object_instance = 2
+point_name = "enable-command"
+units = ""
