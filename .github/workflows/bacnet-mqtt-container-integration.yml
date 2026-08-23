@@ -64,8 +64,17 @@ jobs:
               tag="sha-${PR_BASE_SHA:0:7}"
               ;;
             schedule)
-              sha="$(git rev-parse HEAD)"
-              tag="sha-${sha:0:7}"
+              data="$(python3 scripts/ghcr_newest_by_created.py --json openfdd-central openfdd-mqtt openfdd-fieldbus)"
+              tag="$(jq -r '
+                [.[0].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $a |
+                [.[1].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $b |
+                [.[2].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $c |
+                [$a[] as $t | select(($b | index($t)) != null and ($c | index($t)) != null) | $t][0] // empty
+              ' <<<"$data")"
+              if [[ -z "$tag" ]]; then
+                echo "no common published sha-* tag found across central/mqtt/fieldbus newest-by-created windows" >&2
+                exit 1
+              fi
               ;;
             *)
               echo "unsupported event: $GITHUB_EVENT_NAME" >&2
@@ -94,6 +103,6 @@ jobs:
             echo
             echo "- Open-FDD image tag: \`${{ steps.image.outputs.tag }}\`"
             echo "- BACnet simulator: BACpypes3 0.0.106 mini-device"
-            echo "- Product path: BACnet/IP read/poll → openfdd-fieldbus → mTLS MQTT → openfdd-central monitor/ingest"
+            echo "- Product path: BACnet/IP read/poll → openfdd-fieldbus → mTLS MQTT → openfdd-central parsed ingest + canonical historian"
             echo "- Product images are pulled from GHCR; only the lightweight Python simulator is built in this job."
           } >> "$GITHUB_STEP_SUMMARY"
