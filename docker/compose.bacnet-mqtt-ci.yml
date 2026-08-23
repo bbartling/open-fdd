@@ -32,6 +32,8 @@ services:
       OPENFDD_MQTT_KEY_PEM: /mqtt/central.key.pem
       OPENFDD_WORKSPACE: /workspace
       OPENFDD_PARQUET_ROOT: /workspace/.cache/parquet
+      # Keep the CI durability assertion fast and deterministic; product default remains 60s.
+      OPENFDD_PARQUET_FLUSH_SECONDS: "5"
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-bacnet-mqtt-ci-jwt-secret-change-me}
       OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-bacnet-mqtt-ci-admin}
       OPENFDD_REACT_UI: "1"
