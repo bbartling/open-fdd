@@ -32,6 +32,30 @@ struct ParsedTopic {
     protocol: Option<String>,
 }
 
+fn redact_payload(payload: &[u8]) -> String {
+    match std::str::from_utf8(payload) {
+        Ok(text) => {
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                return "<empty>".into();
+            }
+            let len = trimmed.len();
+            let show = trimmed.chars().take(32).collect::<String>();
+            format!("<redacted {len} bytes: {show}...>")
+        }
+        Err(_) => {
+            let len = payload.len();
+            let show = payload
+                .iter()
+                .take(16)
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("<redacted {len} bytes: {show}...>")
+        }
+    }
+}
+
 pub fn spawn_mqtt_ingest_with_shutdown(
     state: Arc<AppState>,
     shutdown: watch::Receiver<bool>,
@@ -410,7 +434,7 @@ fn record_reject(state: &AppState, payload: &[u8], error: &str) {
     *state.ingest_reject.lock().unwrap() += 1;
     state.dead_letters.lock().unwrap().push(serde_json::json!({
         "error": error,
-        "raw": String::from_utf8_lossy(payload),
+        "raw": redact_payload(payload),
     }));
 }
 
@@ -480,5 +504,27 @@ mod tests {
     fn parse_status_topic() {
         let p = parse_topic("openfdd/v1/sites/lab/edges/pi-1/status").unwrap();
         assert_eq!(p.kind, TopicKind::Status);
+    }
+
+    #[test]
+    fn redacts_utf8_payload() {
+        let payload = br#"{"username":"admin","password":"secret"}"#;
+        let redacted = redact_payload(payload);
+        assert!(!redacted.contains("secret"));
+        assert!(redacted.contains("redacted"));
+    }
+
+    #[test]
+    fn redacts_binary_payload() {
+        let payload = [0x01, 0x02, 0x03, 0x04];
+        let redacted = redact_payload(&payload);
+        assert!(!redacted.contains("01020304"));
+        assert!(redacted.contains("redacted"));
+    }
+
+    #[test]
+    fn redacts_empty_payload() {
+        let redacted = redact_payload(b"");
+        assert_eq!(redacted, "<empty>");
     }
 }
