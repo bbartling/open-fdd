@@ -10,6 +10,7 @@ COMPOSE=(docker compose -p "$PROJECT" -f docker/compose.csv.yml)
 TIMEOUT_SECS="${OPENFDD_SMOKE_TIMEOUT_SECS:-300}"
 CENTRAL_IMAGE="${OPENFDD_CENTRAL_IMAGE:-openfdd-central:ci}"
 WEB_IMAGE="${OPENFDD_WEB_IMAGE:-openfdd-web:ci}"
+SKIP_BUILD="${OPENFDD_SMOKE_SKIP_BUILD:-0}"
 
 cleanup() {
   "${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
@@ -23,13 +24,19 @@ export OPENFDD_WEB_IMAGE="$WEB_IMAGE"
 export OPENFDD_MQTT_ENABLED=0
 export OPENFDD_ALLOW_OPEN_BIND="${OPENFDD_ALLOW_OPEN_BIND:-1}"
 
-docker build -f services/central/Dockerfile -t "$CENTRAL_IMAGE" . >/dev/null
-docker build \
-  --build-arg OPENFDD_GIT_SHA=ci-smoke \
-  --build-arg OPENFDD_WEB_VERSION=0.0.0-ci \
-  -f frontend/web/Dockerfile \
-  -t "$WEB_IMAGE" \
-  frontend/web >/dev/null
+if [[ "$SKIP_BUILD" == "1" ]]; then
+  echo "Using prebuilt images: central=$CENTRAL_IMAGE web=$WEB_IMAGE"
+  docker image inspect "$CENTRAL_IMAGE" >/dev/null
+  docker image inspect "$WEB_IMAGE" >/dev/null
+else
+  docker build -f services/central/Dockerfile -t "$CENTRAL_IMAGE" . >/dev/null
+  docker build \
+    --build-arg OPENFDD_GIT_SHA=ci-smoke \
+    --build-arg OPENFDD_WEB_VERSION=0.0.0-ci \
+    -f frontend/web/Dockerfile \
+    -t "$WEB_IMAGE" \
+    frontend/web >/dev/null
+fi
 
 "${COMPOSE[@]}" up -d --no-build central web
 

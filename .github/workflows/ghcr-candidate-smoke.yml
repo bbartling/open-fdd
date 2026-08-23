@@ -1,0 +1,102 @@
+name: GHCR candidate CSV smoke
+
+on:
+  workflow_run:
+    workflows:
+      - Publish Open-FDD stack to GHCR
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Exact GHCR tag to smoke (for example sha-abcdef0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  smoke:
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Resolve candidate revision
+        id: candidate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
+          PUBLISH_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="$INPUT_IMAGE_TAG"
+            if [[ ! "$tag" =~ ^sha-[0-9a-f]{7}$ ]]; then
+              echo "image_tag must match immutable sha-<7 lowercase hex>" >&2
+              exit 1
+            fi
+            short_sha="${tag#sha-}"
+            ref="$(curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${short_sha}" | jq -r '.sha')"
+            if [[ ! "$ref" =~ ^[0-9a-f]{40}$ || "${ref::7}" != "$short_sha" ]]; then
+              echo "failed to resolve ${tag} to an exact repository commit" >&2
+              exit 1
+            fi
+          else
+            ref="$PUBLISH_HEAD_SHA"
+            if [[ ! "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "publisher head SHA is invalid: $ref" >&2
+              exit 1
+            fi
+            tag="sha-${ref::7}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "Candidate tag: $tag"
+          echo "Candidate source commit: $ref"
+
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.candidate.outputs.ref }}
+
+      - name: Pull exact published images
+        env:
+          TAG: ${{ steps.candidate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          docker pull "ghcr.io/bbartling/openfdd-central:${TAG}"
+          docker pull "ghcr.io/bbartling/openfdd-web:${TAG}"
+
+      - name: Smoke published central + web
+        env:
+          TAG: ${{ steps.candidate.outputs.tag }}
+          OPENFDD_SMOKE_SKIP_BUILD: "1"
+          OPENFDD_CENTRAL_IMAGE: ghcr.io/bbartling/openfdd-central:${{ steps.candidate.outputs.tag }}
+          OPENFDD_WEB_IMAGE: ghcr.io/bbartling/openfdd-web:${{ steps.candidate.outputs.tag }}
+          OPENFDD_SMOKE_TIMEOUT_SECS: "180"
+        run: |
+          chmod +x scripts/release/smoke_csv_central_boot.sh
+          ./scripts/release/smoke_csv_central_boot.sh
+
+      - name: Record candidate proof
+        if: always()
+        run: |
+          {
+            echo "## GHCR candidate CSV smoke"
+            echo
+            echo "- Tag: \`${{ steps.candidate.outputs.tag }}\`"
+            echo "- Source commit: \`${{ steps.candidate.outputs.ref }}\`"
+            echo "- Central: \`ghcr.io/bbartling/openfdd-central:${{ steps.candidate.outputs.tag }}\`"
+            echo "- Web: \`ghcr.io/bbartling/openfdd-web:${{ steps.candidate.outputs.tag }}\`"
+            echo "- Mode: pull prebuilt images, compose up with \`--no-build\`"
+          } >> "$GITHUB_STEP_SUMMARY"
