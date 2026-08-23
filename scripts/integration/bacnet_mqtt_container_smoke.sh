@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Containerized BACpypes3 -> Open-FDD fieldbus -> MQTTS -> central monitor smoke.
+# Containerized BACpypes3 -> Open-FDD fieldbus -> MQTTS -> central ingest + historian smoke.
 # Open-FDD product images are pulled from GHCR; only the tiny BACpypes3 simulator is built locally.
 set -euo pipefail
 
@@ -26,7 +26,7 @@ export OPENFDD_JWT_SECRET="bacnet-mqtt-ci-jwt-${PROJECT}"
 export OPENFDD_ADMIN_PASSWORD="bacnet-mqtt-ci-admin"
 
 cleanup() {
-  "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
+  "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
   rm -rf "$TMP"
 }
 trap cleanup EXIT
@@ -131,12 +131,20 @@ if [[ -z "$TOKEN" ]]; then
   exit 1
 fi
 
-# Wait until central has observed the fieldbus BACnet telemetry envelope.
+# Wait until central observes, parses, and accepts the fieldbus BACnet telemetry envelope.
 deadline=$((SECONDS + 90))
 while true; do
   MONITOR="$(curl -fsS http://127.0.0.1:18080/api/mqtt/monitor \
     -H "Authorization: Bearer $TOKEN")"
-  if echo "$MONITOR" | jq -e '
+  EDGE="$(curl -fsS http://127.0.0.1:18080/api/edges/fieldbus-1 \
+    -H "Authorization: Bearer $TOKEN")"
+  STATS="$(curl -fsS http://127.0.0.1:18080/api/ingest/stats \
+    -H "Authorization: Bearer $TOKEN")"
+
+  monitor_ok=0
+  edge_ok=0
+  stats_ok=0
+  echo "$MONITOR" | jq -e '
       .connected == true and
       (.received_messages >= 1) and
       (.recent_messages | any(
@@ -144,18 +152,55 @@ while true; do
         (.payload_preview | contains("bacnet:3456:analog-value:1")) and
         (.payload_preview | contains("BUILDING_CI"))
       ))
-    ' >/dev/null; then
+    ' >/dev/null && monitor_ok=1 || true
+  echo "$EDGE" | jq -e '
+      .ok == true and
+      .edge_id == "fieldbus-1" and
+      .last_telemetry != null and
+      .last_telemetry.site_id == "ci" and
+      .last_telemetry.edge_id == "fieldbus-1" and
+      (.last_telemetry.points | any(
+        .id == "bacnet:3456:analog-value:1" and
+        .tags.building_id == "BUILDING_CI"
+      ))
+    ' >/dev/null && edge_ok=1 || true
+  echo "$STATS" | jq -e '
+      .ok == true and
+      (.ingest_ok >= 1) and
+      .ingest_reject == 0 and
+      .dead_letters == 0
+    ' >/dev/null && stats_ok=1 || true
+
+  if (( monitor_ok == 1 && edge_ok == 1 && stats_ok == 1 )); then
     break
   fi
   if (( SECONDS >= deadline )); then
-    echo "FAIL: central never observed expected BACnet telemetry" >&2
-    echo "$MONITOR" | jq . >&2 || true
+    echo "FAIL: central never completed expected parsed BACnet ingestion" >&2
+    echo "--- monitor ---" >&2; echo "$MONITOR" | jq . >&2 || true
+    echo "--- edge ---" >&2; echo "$EDGE" | jq . >&2 || true
+    echo "--- ingest stats ---" >&2; echo "$STATS" | jq . >&2 || true
     "${COMPOSE[@]}" logs --tail=250 fieldbus central mqtt bacnet-sim >&2 || true
     exit 1
   fi
   sleep 3
 done
 
-echo "OK central observed canonical BACnet telemetry over MQTTS"
+echo "OK central parsed and accepted canonical BACnet telemetry over MQTTS"
+
+# Durability proof: the live historian writes a canonical watermark only after persistence.
+WATERMARK=/workspace/.cache/parquet/state/live-historian/latest-telemetry.json
+deadline=$((SECONDS + 45))
+until "${COMPOSE[@]}" exec -T central sh -c "test -s '$WATERMARK'"; do
+  if (( SECONDS >= deadline )); then
+    echo "FAIL: canonical live historian watermark was not persisted" >&2
+    "${COMPOSE[@]}" exec -T central sh -c 'find /workspace/.cache/parquet -maxdepth 5 -type f -print 2>/dev/null | sort' >&2 || true
+    "${COMPOSE[@]}" logs --tail=250 central >&2 || true
+    exit 1
+  fi
+  sleep 2
+done
+
+echo "OK canonical live historian persisted telemetry watermark"
 echo "$MONITOR" | jq '{connected, received_messages, errors, recent_messages: [.recent_messages[] | {topic, payload_bytes, payload_encoding}]}'
-echo "PASS: BACpypes3 -> Open-FDD BACnet fieldbus -> MQTTS -> central integration"
+echo "$STATS" | jq '{ingest_ok, ingest_dup, ingest_reject, dead_letters}'
+echo "PASS: BACpypes3 -> Open-FDD BACnet fieldbus -> MQTTS -> central ingest -> historian integration"
