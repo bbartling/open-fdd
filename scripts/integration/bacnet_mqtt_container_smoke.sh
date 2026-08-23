@@ -32,7 +32,19 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$TMP/mqtt"/{broker,central,edge}
-printf 'topic readwrite #\n' > "$TMP/mqtt/acl"
+cat > "$TMP/mqtt/acl" <<'ACL'
+user edge:ci:fieldbus-1
+topic write openfdd/v1/sites/ci/edges/fieldbus-1/telemetry/#
+topic write openfdd/v1/sites/ci/edges/fieldbus-1/metadata/#
+topic write openfdd/v1/sites/ci/edges/fieldbus-1/discovery/#
+topic write openfdd/v1/sites/ci/edges/fieldbus-1/status
+topic write openfdd/v1/sites/ci/edges/fieldbus-1/acks/#
+topic read openfdd/v1/sites/ci/edges/fieldbus-1/commands/#
+
+user central:ci
+topic write openfdd/v1/sites/ci/edges/+/commands/#
+topic read openfdd/v1/sites/ci/#
+ACL
 
 # Ephemeral CA for this isolated integration network.
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
@@ -55,8 +67,9 @@ issue_cert() {
 }
 
 issue_cert server mqtt serverAuth 'DNS:mqtt,IP:172.30.0.30'
-issue_cert central central clientAuth
-issue_cert edge edge-ci-fieldbus-1 clientAuth
+# Match the production openfdd-provision certificate identity contract exactly.
+issue_cert central 'central:ci' clientAuth
+issue_cert edge 'edge:ci:fieldbus-1' clientAuth
 
 cp "$TMP/ca.pem" "$TMP/mqtt/broker/ca.pem"
 cp "$TMP/server.cert.pem" "$TMP/mqtt/broker/server.cert.pem"
@@ -117,9 +130,20 @@ echo "$READ_RESPONSE" | jq -e '
 ' >/dev/null
 echo "OK BACnet analog-value:1 present-value=$(echo "$READ_RESPONSE" | jq -r '.value')"
 
-# Force a poll immediately; the MQTT bridge publishes poll snapshots on its interval.
-curl -fsS -X POST http://127.0.0.1:18081/bacnet/poll/once | jq -e '.ok == true' >/dev/null
-echo "OK fieldbus poll once"
+# Force a poll immediately and prove the configured BACnet rows reached poll state before MQTT.
+POLL_RESPONSE="$(curl -fsS -X POST http://127.0.0.1:18081/bacnet/poll/once)"
+echo "$POLL_RESPONSE" | jq -e '.ok == true and (.points_polled >= 1)' >/dev/null
+POLL_STATUS="$(curl -fsS http://127.0.0.1:18081/bacnet/poll/status)"
+echo "$POLL_STATUS" | jq -e '
+  .ok == true and
+  (.last_values | any(
+    .device_instance == 3456 and
+    .object_type == "analog-value" and
+    .object_instance == 1 and
+    .point_name == "discharge-air-temp"
+  ))
+' >/dev/null
+echo "OK fieldbus poll state contains BACpypes3 point"
 
 TOKEN="$(curl -fsS -X POST http://127.0.0.1:18080/api/auth/login \
   -H 'Content-Type: application/json' \
@@ -176,10 +200,13 @@ while true; do
   fi
   if (( SECONDS >= deadline )); then
     echo "FAIL: central never completed expected parsed BACnet ingestion" >&2
+    echo "--- poll status ---" >&2; echo "$POLL_STATUS" | jq . >&2 || true
+    echo "--- fieldbus spool ---" >&2
+    "${COMPOSE[@]}" exec -T fieldbus sh -c 'find /spool -maxdepth 2 -type f -print -exec cat {} \;' >&2 || true
     echo "--- monitor ---" >&2; echo "$MONITOR" | jq . >&2 || true
     echo "--- edge ---" >&2; echo "$EDGE" | jq . >&2 || true
     echo "--- ingest stats ---" >&2; echo "$STATS" | jq . >&2 || true
-    "${COMPOSE[@]}" logs --tail=250 fieldbus central mqtt bacnet-sim >&2 || true
+    "${COMPOSE[@]}" logs --tail=300 fieldbus central mqtt bacnet-sim >&2 || true
     exit 1
   fi
   sleep 3
