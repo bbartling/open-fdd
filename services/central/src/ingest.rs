@@ -1,4 +1,4 @@
-//! MQTTS subscriber → canonical historian writer + optional compatibility mirror + edge shadow.
+//! MQTTS subscriber -> canonical historian writer + optional compatibility mirror + edge shadow.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -33,26 +33,13 @@ struct ParsedTopic {
 }
 
 fn redact_payload(payload: &[u8]) -> String {
+    if payload.is_empty() {
+        return "<redacted empty utf8 payload: 0 bytes>".into();
+    }
+
     match std::str::from_utf8(payload) {
-        Ok(text) => {
-            let trimmed = text.trim();
-            if trimmed.is_empty() {
-                return "<empty>".into();
-            }
-            let len = trimmed.len();
-            let show = trimmed.chars().take(32).collect::<String>();
-            format!("<redacted {len} bytes: {show}...>")
-        }
-        Err(_) => {
-            let len = payload.len();
-            let show = payload
-                .iter()
-                .take(16)
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<Vec<_>>()
-                .join(" ");
-            format!("<redacted {len} bytes: {show}...>")
-        }
+        Ok(_) => format!("<redacted utf8 payload: {} bytes>", payload.len()),
+        Err(_) => format!("<redacted binary payload: {} bytes>", payload.len()),
     }
 }
 
@@ -510,21 +497,19 @@ mod tests {
     fn redacts_utf8_payload() {
         let payload = br#"{"username":"admin","password":"secret"}"#;
         let redacted = redact_payload(payload);
-        assert!(!redacted.contains("secret"));
-        assert!(redacted.contains("redacted"));
+        assert_eq!(redacted, "<redacted utf8 payload: 40 bytes>");
     }
 
     #[test]
     fn redacts_binary_payload() {
         let payload = [0x01, 0x02, 0x03, 0x04];
         let redacted = redact_payload(&payload);
-        assert!(!redacted.contains("01020304"));
-        assert!(redacted.contains("redacted"));
+        assert_eq!(redacted, "<redacted binary payload: 4 bytes>");
     }
 
     #[test]
     fn redacts_empty_payload() {
         let redacted = redact_payload(b"");
-        assert_eq!(redacted, "<empty>");
+        assert_eq!(redacted, "<redacted empty utf8 payload: 0 bytes>");
     }
 }
