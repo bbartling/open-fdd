@@ -502,7 +502,7 @@ mod tests {
 
     #[test]
     fn redacts_binary_payload() {
-        let payload = [0x01, 0x02, 0x03, 0x04];
+        let payload = [0xff, 0xfe, 0xfd, 0xfc];
         let redacted = redact_payload(&payload);
         assert_eq!(redacted, "<redacted binary payload: 4 bytes>");
     }
