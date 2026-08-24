@@ -113,7 +113,7 @@ The gate validates document claims, repository security-policy evidence, and req
 | --- | --- |
 | `openfdd-central` uses immutable newest-by-created GHCR `sha-*` image | **Conditional** — exact resolved tag must be recorded before recreation |
 | `openfdd-web` uses local Overview bundle rather than GHCR | **Pass** |
-| Web exposure is LAN/VPN-only and not public-internet | **Pass** — matches repository security posture |
+| Web exposure is LAN/VPN-only and not public-internet | **Conditional** — policy requires LAN/VPN-only; dated Railway network evidence not attached |
 | LAN/VPN web edge uses HTTPS | **Conditional** — permitted exposure documented; dated Railway evidence not attached |
 | Services recover successfully after restart or redeployment | **Not verified** — requires dated Railway logs / command output |
 | BACnet data reaches Open-FDD through MQTTS | **Not verified** — requires dated Railway MQTT/fieldbus evidence |

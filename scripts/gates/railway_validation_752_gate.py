@@ -52,6 +52,7 @@ if os.path.isfile(validation_path):
         "lan/vpn-only" in lower and "no public-internet exposure" in lower and "| public https |" not in lower and "**public:**" not in lower,
     )
     check("public-internet stack exposure explicitly rejected", "never expose the stack directly to the public internet" in lower)
+    check("LAN/VPN exposure remains conditional without runtime evidence", "web exposure is lan/vpn-only and not public-internet | **conditional**" in lower)
     check("restart marked not verified", "services recover successfully after restart or redeployment | **not verified**" in lower)
     check("bacnet mqtt marked not verified", "bacnet data reaches open-fdd through mqtts | **not verified**" in lower)
     check("mqtt acl marked not verified", "mqtt authentication and topic permissions are verified | **not verified**" in lower)
