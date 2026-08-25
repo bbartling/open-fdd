@@ -9,6 +9,7 @@ pub use params::{poll_params, read_poll_from_cache, rule_params, substitute_sql}
 pub use registry::{load_registry, RuleParameterDef, RuleRegistry, RuleSpec};
 pub use runner::{
     run_all_rules, run_all_rules_with_overrides, scope_history_to_time_window, RuleRunReport,
+    RunOptions,
 };
 pub use tuning::{effective_param_strings, load_tuning_profiles};
 

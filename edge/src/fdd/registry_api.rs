@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use fdd_rules::{
     effective_param_strings, load_registry, load_tuning_profiles, read_poll_from_cache,
-    rule_params, run_all_rules_with_overrides, substitute_sql, RuleRegistry, RuleSpec,
+    rule_params, run_all_rules_with_overrides, substitute_sql, RuleRegistry, RuleSpec, RunOptions,
 };
 use fdd_sql::{register_parquet_tree, register_weather_if_present, run_sql};
 use serde_json::{json, Value};
@@ -1232,10 +1232,12 @@ pub fn run_registry(payload: &Value) -> Value {
         &effective,
         &out,
         &session_overrides,
-        payload.get("equipment_id").and_then(Value::as_str),
-        Some(weather_root.as_path()),
-        Some(unit_system),
-        time_window,
+        RunOptions {
+            equipment_filter: payload.get("equipment_id").and_then(Value::as_str),
+            weather_root: Some(weather_root.as_path()),
+            unit_system: Some(unit_system),
+            time_window,
+        },
     )) {
         Ok(report) => {
             let normalized = results_response(building_id);
