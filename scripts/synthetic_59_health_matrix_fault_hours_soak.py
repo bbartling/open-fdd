@@ -5,9 +5,9 @@ Run after ``synthetic_59_target_pair_soak.py --side ofdd`` so the fixture and
 FDD registry results are populated.
 
 The soak exercises every Overview health endpoint introduced for the split
-matrices, validates arbitrary ``n/m`` scoring, requires every matrix flag to
-carry its ``{flag}_fault_h`` field, and compares known synthetic FAULT rows to
-``expected_faults.csv``.
+matrices, validates ``n/m`` scoring (and ``?/m`` when any flag is Unknown),
+requires every matrix flag to carry its ``{flag}_fault_h`` field, and compares
+known synthetic FAULT rows to ``expected_faults.csv``.
 """
 from __future__ import annotations
 
@@ -198,10 +198,19 @@ def expected_faults(rows: list[dict]) -> dict[tuple[str, str], float]:
     return out
 
 
+def expected_score_label(row: dict, flags: list[str]) -> str:
+    """Match plant_health score_label: ?/n when any flag is Unknown (null)."""
+    total = len(flags)
+    values = [tri(row.get(flag)) for flag in flags]
+    if any(v is None for v in values):
+        return f"?/{total}"
+    hit = sum(v is True for v in values)
+    return f"{hit}/{total}"
+
+
 def assert_score_contract(path: str, row: dict, flags: list[str], checks: list[dict]) -> None:
     label = str(row.get("score_label") or "")
-    true_count = sum(tri(row.get(flag)) is True for flag in flags)
-    expected_label = f"{true_count}/{len(flags)}"
+    expected_label = expected_score_label(row, flags)
     check(
         f"{path}_score_{row.get('equipment_id')}",
         label == expected_label,

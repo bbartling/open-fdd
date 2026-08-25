@@ -557,7 +557,7 @@ Rules later consume these exact point names. Return ONLY valid JSON matching thi
   "notes": "<short note>",
   "equip": {
     "<equip id>": {
-      "equipType": "ahu|vav|chwPlant|boiler|heatPump|weather|meter|unknown",
+      "equipType": "ahu|vav|chwPlant|coolingTower|boiler|heatPump|weather|meter|unknown",
       "device": "<same as equip id unless a clearer device name exists>",
       "points": {
         "<haystack-point-name>": "<exact_csv_column_name>"
