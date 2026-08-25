@@ -15,6 +15,8 @@ Production edge operations: backup, GHCR updates, security, and troubleshooting.
 | [Release channels](release-channels.html) | Nightly, beta, stable policy |
 | [Backup, update, restore](backup-update-restore.html) | Site lifecycle scripts |
 | [GHCR images](ghcr-images.html) | Tags, platforms, retention |
+| [Railway deployment](RAILWAY_DEPLOYMENT.html) | Experimental cloud CSV lab |
+| [Railway validation #752](RAILWAY_VALIDATION_752.html) | Validation record, security findings, and go/no-go assessment |
 | [Security](security.html) | Auth, TLS, secrets, BACnet |
 | [Troubleshooting](troubleshooting.html) | Common issues |
 | [Documentation site](github-pages.html) | GitHub Pages build & local preview |

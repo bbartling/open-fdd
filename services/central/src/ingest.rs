@@ -1,4 +1,4 @@
-//! MQTTS subscriber → canonical historian writer + optional compatibility mirror + edge shadow.
+//! MQTTS subscriber -> canonical historian writer + optional compatibility mirror + edge shadow.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -30,6 +30,17 @@ struct ParsedTopic {
     edge_id: String,
     kind: TopicKind,
     protocol: Option<String>,
+}
+
+fn redact_payload(payload: &[u8]) -> String {
+    if payload.is_empty() {
+        return "<redacted empty utf8 payload: 0 bytes>".into();
+    }
+
+    match std::str::from_utf8(payload) {
+        Ok(_) => format!("<redacted utf8 payload: {} bytes>", payload.len()),
+        Err(_) => format!("<redacted binary payload: {} bytes>", payload.len()),
+    }
 }
 
 pub fn spawn_mqtt_ingest_with_shutdown(
@@ -410,7 +421,7 @@ fn record_reject(state: &AppState, payload: &[u8], error: &str) {
     *state.ingest_reject.lock().unwrap() += 1;
     state.dead_letters.lock().unwrap().push(serde_json::json!({
         "error": error,
-        "raw": String::from_utf8_lossy(payload),
+        "raw": redact_payload(payload),
     }));
 }
 
@@ -480,5 +491,25 @@ mod tests {
     fn parse_status_topic() {
         let p = parse_topic("openfdd/v1/sites/lab/edges/pi-1/status").unwrap();
         assert_eq!(p.kind, TopicKind::Status);
+    }
+
+    #[test]
+    fn redacts_utf8_payload() {
+        let payload = br#"{"username":"admin","password":"secret"}"#;
+        let redacted = redact_payload(payload);
+        assert_eq!(redacted, "<redacted utf8 payload: 40 bytes>");
+    }
+
+    #[test]
+    fn redacts_binary_payload() {
+        let payload = [0xff, 0xfe, 0xfd, 0xfc];
+        let redacted = redact_payload(&payload);
+        assert_eq!(redacted, "<redacted binary payload: 4 bytes>");
+    }
+
+    #[test]
+    fn redacts_empty_payload() {
+        let redacted = redact_payload(b"");
+        assert_eq!(redacted, "<redacted empty utf8 payload: 0 bytes>");
     }
 }
