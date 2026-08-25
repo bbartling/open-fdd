@@ -24,17 +24,40 @@ use services::{
 use state::AppState;
 use tower_http::trace::TraceLayer;
 use tracing::info;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+fn init_tracing() {
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,openfdd_fieldbus=info,security_audit=info"));
+    let json = matches!(
+        std::env::var("OPENFDD_LOG_FORMAT")
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str(),
+        "json" | "jsonl" | "structured"
+    );
+    if json {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(
+                fmt::layer()
+                    .json()
+                    .with_current_span(true)
+                    .with_span_list(false),
+            )
+            .init();
+    } else {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(fmt::layer())
+            .init();
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenvy::dotenv().ok();
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info,openfdd_fieldbus=info")),
-        )
-        .init();
+    init_tracing();
 
     let settings = Arc::new(load_settings());
     run(settings).await

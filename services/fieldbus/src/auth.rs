@@ -55,10 +55,22 @@ pub async fn auth_middleware(
         .unwrap_or("");
 
     if !auth.starts_with("Bearer ") {
+        tracing::warn!(
+            target: "security_audit",
+            event = "fieldbus_auth_missing",
+            path = %path,
+            "security_audit"
+        );
         return unauthorized("Missing or invalid Authorization header");
     }
     let token = auth[7..].trim();
     if token.as_bytes().ct_eq(key.as_bytes()).unwrap_u8() != 1 {
+        tracing::warn!(
+            target: "security_audit",
+            event = "fieldbus_auth_invalid_key",
+            path = %path,
+            "security_audit"
+        );
         return forbidden("Invalid API key");
     }
     next.run(request).await

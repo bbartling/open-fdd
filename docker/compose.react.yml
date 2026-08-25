@@ -6,6 +6,12 @@
 
 name: openfdd-react
 
+x-openfdd-logging: &openfdd-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   mqtt:
     image: ${OPENFDD_MQTT_IMAGE:-ghcr.io/bbartling/openfdd-mqtt:nightly}
@@ -17,6 +23,7 @@ services:
       - ../deploy/mqtt/certs:/mosquitto/certs:ro
       - ../deploy/mqtt/acl:/mosquitto/config/acl:ro
       - mqtt-data:/mosquitto/data
+    logging: *openfdd-logging
     restart: unless-stopped
 
   central:
@@ -42,6 +49,8 @@ services:
       OPENFDD_REACT_UI: "1"
       # P2-M4: React is the production default UI generation.
       OPENFDD_UI_GENERATION_DEFAULT: react
+      # Structured JSON logs for Railway / AWS / pen-test scrapers (override with text locally).
+      OPENFDD_LOG_FORMAT: ${OPENFDD_LOG_FORMAT:-json}
     ports:
       # Loopback by default; set OPENFDD_CENTRAL_BIND=0.0.0.0 only for intentional LAN/VPN.
       - "${OPENFDD_CENTRAL_BIND:-127.0.0.1}:8080:8080"
@@ -50,6 +59,7 @@ services:
       - ../deploy/mqtt/kits/${OPENFDD_SITE_ID:-local}__central:/mqtt:ro
     depends_on:
       - mqtt
+    logging: *openfdd-logging
     restart: unless-stopped
 
   web:
@@ -65,6 +75,7 @@ services:
       - "${OPENFDD_WEB_BIND:-0.0.0.0}:3000:8080"
     depends_on:
       - central
+    logging: *openfdd-logging
     restart: unless-stopped
 
   mcp:
@@ -80,6 +91,7 @@ services:
       - central
     stdin_open: true
     tty: true
+    logging: *openfdd-logging
     restart: unless-stopped
 
 volumes:

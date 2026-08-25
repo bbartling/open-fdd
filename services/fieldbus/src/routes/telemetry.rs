@@ -29,7 +29,15 @@ async fn suspend(
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| "fieldbus-api".into());
     match state.telemetry.suspend(&by).await {
-        Ok(status) => Json(status),
+        Ok(status) => {
+            tracing::info!(
+                target: "security_audit",
+                event = "telemetry_suspend",
+                approved_by = %by,
+                "security_audit"
+            );
+            Json(status)
+        }
         Err(err) => Json(json!({ "ok": false, "error": err })),
     }
 }
@@ -43,7 +51,15 @@ async fn resume(
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| "fieldbus-api".into());
     match state.telemetry.resume(&by).await {
-        Ok(status) => Json(status),
+        Ok(status) => {
+            tracing::info!(
+                target: "security_audit",
+                event = "telemetry_resume",
+                approved_by = %by,
+                "security_audit"
+            );
+            Json(status)
+        }
         Err(err) => Json(json!({ "ok": false, "error": err })),
     }
 }

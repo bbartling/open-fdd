@@ -402,6 +402,7 @@ pub async fn auth_login(
     headers: axum::http::HeaderMap,
     Json(body): Json<AuthLoginRequest>,
 ) -> Result<Json<AuthLoginResponse>, (axum::http::StatusCode, Json<Value>)> {
+    let request_id = crate::contract::ensure_request_id(&headers);
     let ip = headers
         .get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
@@ -410,14 +411,31 @@ pub async fn auth_login(
         .next()
         .unwrap_or("unknown")
         .trim();
-    let throttle_key = format!("{ip}:{}", body.username.trim().to_lowercase());
+    let username = body.username.trim().to_string();
+    let throttle_key = format!("{ip}:{}", username.to_lowercase());
     if state.login_is_throttled(&throttle_key) {
+        open_fdd_edge_prototype::auth::audit::log_event(
+            "login_rate_limited",
+            json!({
+                "username": username,
+                "ip": ip,
+                "request_id": request_id,
+            }),
+        );
         return Err((
             axum::http::StatusCode::TOO_MANY_REQUESTS,
             Json(json!({"ok": false, "error": "invalid credentials"})),
         ));
     }
     if !state.auth.required() {
+        open_fdd_edge_prototype::auth::audit::log_event(
+            "login_open_mode",
+            json!({
+                "username": username,
+                "ip": ip,
+                "request_id": request_id,
+            }),
+        );
         // Dev open mode — mint a placeholder so the UI can store a session token.
         return Ok(Json(AuthLoginResponse {
             ok: true,
@@ -436,6 +454,14 @@ pub async fn auth_login(
         Ok(v) => v,
         Err(_) => {
             state.login_record_failure(&throttle_key);
+            open_fdd_edge_prototype::auth::audit::log_event(
+                "login_failure",
+                json!({
+                    "username": username,
+                    "ip": ip,
+                    "request_id": request_id,
+                }),
+            );
             return Err((
                 axum::http::StatusCode::UNAUTHORIZED,
                 Json(json!({"ok": false, "error": "invalid credentials"})),
@@ -449,6 +475,15 @@ pub async fn auth_login(
             Json(json!({"ok": false, "error": "login failed"})),
         )
     })?;
+    open_fdd_edge_prototype::auth::audit::log_event(
+        "login_success",
+        json!({
+            "username": sub,
+            "role": role.as_str(),
+            "ip": ip,
+            "request_id": request_id,
+        }),
+    );
     Ok(Json(AuthLoginResponse {
         ok: true,
         token: token.clone(),
@@ -627,9 +662,18 @@ pub async fn issue_command(
     headers: axum::http::HeaderMap,
     Json(body): Json<IssueCommandRequest>,
 ) -> Json<IssueCommandResponse> {
+    let request_id = crate::contract::ensure_request_id(&headers);
     let user = match state.auth.user_from_headers(&headers) {
         Ok(u) => u,
         Err(detail) => {
+            open_fdd_edge_prototype::auth::audit::log_event(
+                "command_auth_failure",
+                json!({
+                    "target_id": body.target_id,
+                    "request_id": request_id,
+                    "reason": detail,
+                }),
+            );
             return Json(IssueCommandResponse {
                 ok: false,
                 command: None,
@@ -642,6 +686,15 @@ pub async fn issue_command(
         }
     };
     if state.auth.required() && !user.role.can_issue_commands() {
+        open_fdd_edge_prototype::auth::audit::log_event(
+            "command_forbidden",
+            json!({
+                "subject": user.sub,
+                "role": user.role.as_str(),
+                "target_id": body.target_id,
+                "request_id": request_id,
+            }),
+        );
         return Json(IssueCommandResponse {
             ok: false,
             command: None,
@@ -734,6 +787,20 @@ pub async fn issue_command(
     } else {
         hint = Some("Set OPENFDD_MQTT_ENABLED=1 for live publish from the control plane".into());
     }
+
+    open_fdd_edge_prototype::auth::audit::log_event(
+        "command_issued",
+        json!({
+            "subject": approved_by,
+            "role": user.role.as_str(),
+            "site_id": body.site_id,
+            "edge_id": body.edge_id,
+            "target_id": body.target_id,
+            "command_id": cmd.command_id,
+            "published": published,
+            "request_id": request_id,
+        }),
+    );
 
     Json(IssueCommandResponse {
         ok: true,

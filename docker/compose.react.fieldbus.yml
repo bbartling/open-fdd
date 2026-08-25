@@ -27,10 +27,16 @@ services:
       OPENFDD_MQTT_KEY_PEM: /mqtt/edge.key.pem
       OPENFDD_MQTT_SPOOL_DIR: /spool
       OPENFDD_FIELDBUS_API_KEY: ${OPENFDD_FIELDBUS_API_KEY:-}
+      OPENFDD_LOG_FORMAT: ${OPENFDD_LOG_FORMAT:-json}
     volumes:
       - ../config/fieldbus:/app/config:ro
       - ../deploy/mqtt/kits/${OPENFDD_SITE_ID:-local}__${OPENFDD_EDGE_ID:-fieldbus-1}:/mqtt:ro
       - fieldbus-spool:/spool
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     restart: unless-stopped
 
 volumes:
