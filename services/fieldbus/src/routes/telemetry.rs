@@ -20,7 +20,10 @@ async fn get_status(State(state): State<AppState>) -> Json<Value> {
     Json(state.telemetry.status().await)
 }
 
-async fn suspend(State(state): State<AppState>, Json(body): Json<TelemetryActionBody>) -> Json<Value> {
+async fn suspend(
+    State(state): State<AppState>,
+    Json(body): Json<TelemetryActionBody>,
+) -> Json<Value> {
     let by = body
         .approved_by
         .filter(|s| !s.trim().is_empty())
@@ -31,7 +34,10 @@ async fn suspend(State(state): State<AppState>, Json(body): Json<TelemetryAction
     }
 }
 
-async fn resume(State(state): State<AppState>, Json(body): Json<TelemetryActionBody>) -> Json<Value> {
+async fn resume(
+    State(state): State<AppState>,
+    Json(body): Json<TelemetryActionBody>,
+) -> Json<Value> {
     let by = body
         .approved_by
         .filter(|s| !s.trim().is_empty())

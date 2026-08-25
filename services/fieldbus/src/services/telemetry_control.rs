@@ -168,10 +168,7 @@ impl TelemetryControl {
 }
 
 /// Parse MQTT / REST command payload for edge telemetry control.
-pub fn parse_telemetry_command(
-    target_id: &str,
-    value: &Value,
-) -> Result<TelemetryAction, String> {
+pub fn parse_telemetry_command(target_id: &str, value: &Value) -> Result<TelemetryAction, String> {
     if target_id != "edge:telemetry" && !target_id.starts_with("edge:telemetry:") {
         return Err(format!(
             "telemetry target_id must be edge:telemetry (got {target_id})"
