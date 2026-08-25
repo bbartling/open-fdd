@@ -58,6 +58,12 @@ echo "==> BACnet OT (02)"
 echo "==> MQTT persist (03)"
 ./scripts/nightly-ot-bench/03_mqtt_feather_persist.sh 2>&1 | tee "$ART/03_mqtt.log"
 
+echo "==> Modbus OT (04) — Pi sim @ MODBUS_SIM_HOST"
+./scripts/nightly-ot-bench/04_modbus_ot.sh 2>&1 | tee "$ART/04_modbus.log"
+
+echo "==> Haystack (05) — live if HAYSTACK_EXPECT_LIVE=1"
+./scripts/nightly-ot-bench/05_haystack.sh 2>&1 | tee "$ART/05_haystack.log"
+
 echo "==> Suspend telemetry (fieldbus REST)"
 STATUS="$(fb "$FIELDBUS_BASE/telemetry/status")"
 echo "$STATUS" | tee "$ART/telemetry_before.json"
