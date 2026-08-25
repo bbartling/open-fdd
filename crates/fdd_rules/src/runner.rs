@@ -130,8 +130,46 @@ pub async fn run_all_rules(
         None,
         None,
         None,
+        None,
     )
     .await
+}
+
+/// Escape a timestamp literal for DataFusion SQL (single quotes only).
+fn sql_literal(value: &str) -> String {
+    value.replace('\'', "''")
+}
+
+/// Restrict registered `history` (and `weather` when present) to `[start, end)`.
+///
+/// Used by continuous AFDD lookback so DataFusion scans only the rolling window.
+pub async fn scope_history_to_time_window(
+    ctx: &SessionContext,
+    start_utc: &str,
+    end_utc: &str,
+) -> Result<()> {
+    let start = sql_literal(start_utc.trim());
+    let end = sql_literal(end_utc.trim());
+    if start.is_empty() || end.is_empty() {
+        anyhow::bail!("AFDD time window requires non-empty start_utc and end_utc");
+    }
+    let scoped = ctx
+        .sql(&format!(
+            "SELECT * FROM history WHERE timestamp_utc >= '{start}' AND timestamp_utc < '{end}'"
+        ))
+        .await?;
+    ctx.deregister_table("history")?;
+    ctx.register_table("history", scoped.into_view())?;
+    if ctx.table("weather").await.is_ok() {
+        let wx = ctx
+            .sql(&format!(
+                "SELECT * FROM weather WHERE timestamp_utc >= '{start}' AND timestamp_utc < '{end}'"
+            ))
+            .await?;
+        ctx.deregister_table("weather")?;
+        ctx.register_table("weather", wx.into_view())?;
+    }
+    Ok(())
 }
 
 /// Run registry rules with request/session parameter overrides.
@@ -141,6 +179,9 @@ pub async fn run_all_rules(
 ///
 /// ``weather_root`` defaults to ``parquet_root``. When history is scoped to
 /// ``building={id}/``, pass the parent parquet cache so ``weather/`` still registers.
+///
+/// ``time_window`` is `(start_utc, end_utc)` inclusive/exclusive bounds for continuous
+/// AFDD lookback. Bulk / manual runs pass ``None`` and keep full building history.
 pub async fn run_all_rules_with_overrides(
     parquet_root: &Path,
     registry: &RuleRegistry,
@@ -149,6 +190,7 @@ pub async fn run_all_rules_with_overrides(
     equipment_filter: Option<&str>,
     weather_root: Option<&Path>,
     unit_system: Option<&str>,
+    time_window: Option<(&str, &str)>,
 ) -> Result<RuleRunReport> {
     let started = std::time::Instant::now();
     std::fs::create_dir_all(out_dir)?;
@@ -162,6 +204,9 @@ pub async fn run_all_rules_with_overrides(
     register_parquet_tree(&ctx, parquet_root).await?;
     let wx_root = weather_root.unwrap_or(parquet_root);
     register_weather_if_present(&ctx, wx_root).await?;
+    if let Some((start_utc, end_utc)) = time_window {
+        scope_history_to_time_window(&ctx, start_utc, end_utc).await?;
+    }
 
     // History columns for preflighting required_roles (case-insensitive). When
     // history cannot be described we fall back to per-rule SQL error classifying.
@@ -360,4 +405,61 @@ pub async fn run_all_rules_with_overrides(
         timings,
         total_ms: started.elapsed().as_millis(),
     })
+}
+
+#[cfg(test)]
+mod time_window_tests {
+    use super::scope_history_to_time_window;
+    use datafusion::arrow::array::{Float64Array, StringArray};
+    use datafusion::arrow::datatypes::{DataType, Field, Schema};
+    use datafusion::arrow::record_batch::RecordBatch;
+    use datafusion::prelude::*;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn time_window_prunes_history_rows() {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("timestamp_utc", DataType::Utf8, false),
+            Field::new("equipment_id", DataType::Utf8, false),
+            Field::new("sat", DataType::Float64, true),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(StringArray::from(vec![
+                    "2026-01-07T10:00:00+00:00",
+                    "2026-01-07T11:00:00+00:00",
+                    "2026-01-07T12:00:00+00:00",
+                    "2026-01-07T13:00:00+00:00",
+                ])),
+                Arc::new(StringArray::from(vec!["AHU_1"; 4])),
+                Arc::new(Float64Array::from(vec![55.0, 56.0, 57.0, 58.0])),
+            ],
+        )
+        .unwrap();
+        let ctx = SessionContext::new();
+        ctx.register_batch("history", batch).unwrap();
+        scope_history_to_time_window(
+            &ctx,
+            "2026-01-07T11:00:00+00:00",
+            "2026-01-07T13:00:00+00:00",
+        )
+        .await
+        .unwrap();
+        let n = ctx
+            .sql("SELECT COUNT(*) AS c FROM history")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+        let c = n[0]
+            .column(0)
+            .as_any()
+            .downcast_ref::<datafusion::arrow::array::Int64Array>()
+            .unwrap()
+            .value(0);
+        // [11:00, 13:00) → 11:00 and 12:00
+        assert_eq!(c, 2);
+    }
 }

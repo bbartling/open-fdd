@@ -18,7 +18,7 @@ All container images in the MQTT / CSV stack share a **coordinated release** tie
 |-----|------|---------|
 | `sha-<7-char-git-sha>` | Every publish | Immutable rollback unit |
 | `<workspace.version>` | Every publish | Semver from `Cargo.toml` |
-| `<workspace.version>-n<run>` | Every publish | Extra nightly run pointer (e.g. `3.3.2-n42`) |
+| `<workspace.version>-n<run>` | Every publish | Extra nightly run pointer (e.g. `3.3.3-n42`) |
 | `nightly` | `master` branch only | Floating integration channel |
 
 Stack publish builds **linux/amd64**. MCP also publishes multi-arch. Re-enable stack multi-arch when a native arm64 runner is available.
@@ -51,7 +51,7 @@ OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080
 
 Bump all three together when cutting a coordinated stack release.
 
-Workspace Cargo version is **3.3.2**. Displayed UI revision is `{semver}+{shortsha}` from central `/api/health`.
+Workspace Cargo version is **3.3.3**. Displayed UI revision is `{semver}+{shortsha}` from central `/api/health`.
 
 ## Resolve the latest verified nightly
 

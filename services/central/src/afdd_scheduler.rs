@@ -173,13 +173,11 @@ impl AfddSchedulerRuntime {
         let payload = json!({
             "mode": "registry",
             "building_id": if scope == "all" { Value::Null } else { json!(scope) },
-            "params": {
-                "mode": "registry",
-                "start_utc": window.start_utc.to_rfc3339(),
-                "end_utc": window.end_utc.to_rfc3339(),
-                "afdd_trigger": trigger,
-                "afdd_catch_up": window.catch_up,
-            }
+            "start_utc": window.start_utc.to_rfc3339(),
+            "end_utc": window.end_utc.to_rfc3339(),
+            "afdd_trigger": trigger,
+            "afdd_catch_up": window.catch_up,
+            "params": {}
         });
 
         let result = tokio::task::spawn_blocking(move || {

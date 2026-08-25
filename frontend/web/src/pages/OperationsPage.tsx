@@ -317,7 +317,10 @@ function topicMatchesFilter(topic: string, filter: string): boolean {
 function MqttPanel() {
   const [topicFilter, setTopicFilter] = useState("openfdd/#");
   const [snapshot, setSnapshot] = useState<MqttMonitorSnapshot | null>(null);
+  /** Off by default — cell-modem / bandwidth: no polling until Start listening. */
+  const [listening, setListening] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [pollMs, setPollMs] = useState(5000);
   const [clearedAt, setClearedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const filterOk = useMemo(() => validTopicFilter(topicFilter), [topicFilter]);
@@ -333,11 +336,11 @@ function MqttPanel() {
   }, []);
 
   useEffect(() => {
-    if (paused) return undefined;
+    if (!listening || paused) return undefined;
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 2000);
+    const timer = window.setInterval(() => void refresh(), pollMs);
     return () => window.clearInterval(timer);
-  }, [paused, refresh]);
+  }, [listening, paused, pollMs, refresh]);
 
   const messages = useMemo(() => {
     const cutoff = clearedAt ?? Number.NEGATIVE_INFINITY;
@@ -351,19 +354,52 @@ function MqttPanel() {
     <section aria-labelledby="mqtt-config-heading" data-testid="mqtt-config-panel">
       <div className="section-heading-row">
         <div>
-          <h2 id="mqtt-config-heading">MQTT Test Monitor</h2>
+          <h2 id="mqtt-config-heading">MQTT Test Client</h2>
           <p className="muted">
-            Read-only operator monitor. The browser receives only bounded observation data from authenticated Central API calls; broker credentials and private keys never leave Central.
+            AWS IoT–style operator monitor: subscribe filter, live truncated payload feed, connection events.
+            Browser uses authenticated Central API snapshots (not broker credentials). Listening is off by
+            default and throttled for cell-modem sites. Full WSS-to-broker is optional later; production path
+            remains fieldbus → MQTTS → central ingest.
           </p>
         </div>
         <div className="button-row">
-          <Button id="mqtt-pause" label={paused ? "Resume display" : "Pause display"} variant="secondary" onClick={() => setPaused((value) => !value)} />
+          <Button
+            id="mqtt-listen"
+            label={listening ? "Stop listening" : "Start listening"}
+            variant={listening ? "secondary" : "primary"}
+            onClick={() => {
+              setListening((value) => !value);
+              if (!listening) setPaused(false);
+            }}
+          />
+          <Button
+            id="mqtt-pause"
+            label={paused ? "Resume display" : "Pause display"}
+            variant="secondary"
+            onClick={() => setPaused((value) => !value)}
+            disabled={!listening}
+          />
           <Button id="mqtt-clear" label="Clear local view" variant="secondary" onClick={() => setClearedAt(Date.now())} />
-          <Button id="mqtt-refresh" label="Refresh" variant="secondary" onClick={() => void refresh()} />
+          <Button id="mqtt-refresh" label="Refresh once" variant="secondary" onClick={() => void refresh()} />
         </div>
       </div>
 
       {error ? <div className="inline-alert inline-alert--error" role="alert">{error}</div> : null}
+
+      <div className="form-row">
+        <label htmlFor="mqtt-poll-ms">Poll interval (cell-aware)</label>
+        <select
+          id="mqtt-poll-ms"
+          value={pollMs}
+          onChange={(event) => setPollMs(Number(event.target.value))}
+        >
+          <option value={2000}>2 s</option>
+          <option value={5000}>5 s (default)</option>
+          <option value={10000}>10 s</option>
+          <option value={30000}>30 s</option>
+        </select>
+        <span>{listening ? (paused ? "Display paused" : `Polling every ${pollMs / 1000}s`) : "Not listening — no background traffic"}</span>
+      </div>
 
       <div className="summary-grid">
         {metric("Broker state", snapshot?.connected ? "Connected" : "Disconnected")}
@@ -383,7 +419,7 @@ function MqttPanel() {
           value={topicFilter}
           onChange={(event) => setTopicFilter(event.target.value)}
           aria-invalid={!filterOk}
-          placeholder="openfdd/#"
+          placeholder="openfdd/v1/sites/<site>/#"
         />
         <span>{filterOk ? `${messages.length} buffered messages match` : "Use + for one level and # only as the final level"}</span>
       </div>
@@ -402,7 +438,15 @@ function MqttPanel() {
           </thead>
           <tbody>
             {messages.length === 0 ? (
-              <tr><td colSpan={6}>{paused ? "Display paused." : "No buffered messages match the current filter."}</td></tr>
+              <tr>
+                <td colSpan={6}>
+                  {!listening
+                    ? "Start listening to pull bounded observation snapshots."
+                    : paused
+                      ? "Display paused."
+                      : "No buffered messages match the current filter."}
+                </td>
+              </tr>
             ) : messages.map((message) => (
               <tr key={`${message.received_at_utc}-${message.topic}-${message.payload_bytes}`}>
                 <td>{formatTime(message.received_at_utc)}</td>
@@ -454,7 +498,7 @@ export function OperationsPage() {
         </label>
         <label>
           <input type="radio" name="operations-view" value="mqtt" checked={view === "mqtt"} onChange={() => setView("mqtt")} />
-          MQTT Config
+          MQTT Test Client
         </label>
       </fieldset>
       {view === "afdd" ? <AfddPanel /> : <MqttPanel />}

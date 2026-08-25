@@ -1194,6 +1194,39 @@ pub fn run_registry(payload: &Value) -> Value {
         .get("unit_system")
         .and_then(Value::as_str)
         .unwrap_or(session_units.as_str());
+    // Continuous AFDD lookback (top-level or nested under params for older callers).
+    let start_utc = payload
+        .get("start_utc")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            payload
+                .get("params")
+                .and_then(|p| p.get("start_utc"))
+                .and_then(Value::as_str)
+        })
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let end_utc = payload
+        .get("end_utc")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            payload
+                .get("params")
+                .and_then(|p| p.get("end_utc"))
+                .and_then(Value::as_str)
+        })
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let time_window = match (start_utc, end_utc) {
+        (Some(start), Some(end)) => Some((start, end)),
+        (None, None) => None,
+        _ => {
+            return json!({
+                "ok": false,
+                "error": "AFDD time window requires both start_utc and end_utc",
+            });
+        }
+    };
     match rt.block_on(run_all_rules_with_overrides(
         &history_root,
         &effective,
@@ -1202,6 +1235,7 @@ pub fn run_registry(payload: &Value) -> Value {
         payload.get("equipment_id").and_then(Value::as_str),
         Some(weather_root.as_path()),
         Some(unit_system),
+        time_window,
     )) {
         Ok(report) => {
             let normalized = results_response(building_id);
@@ -1211,6 +1245,8 @@ pub fn run_registry(payload: &Value) -> Value {
                 "mode": "registry",
                 "building_id": building_id,
                 "history_root": history_root.display().to_string(),
+                "start_utc": time_window.map(|(s, _)| s),
+                "end_utc": time_window.map(|(_, e)| e),
                 "rules_run": report.rules_run,
                 "rules_succeeded": report.rules_succeeded,
                 "rules_failed": report.rules_failed,
