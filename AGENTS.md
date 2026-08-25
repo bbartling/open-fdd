@@ -121,7 +121,16 @@ A Railway one-click template should represent the tested minimal `central + web`
 
 - **Never** local `docker build` / heavy Rust compile for stack images. Ship via PR → GH Actions → GHCR `nightly` / `sha-*`.
 - Before pulling new images: prune unused/old digests first, then `./scripts/openfdd_stack_pull.sh …` and `./scripts/openfdd_stack_up.sh … --no-pull`.
+- DataFusion: `OPENFDD_QUERY_MEMORY_MB=256` (or 512) + `OPENFDD_DATAFUSION_SPILL_DIR` — see [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md).
 - Details: [`openfdd_agent_spec/CONTAINER_AGENT.md`](openfdd_agent_spec/CONTAINER_AGENT.md).
+
+## AFDD vs bulk FDD
+
+Same DataFusion registry. Bulk = CSV/package / manual run; continuous AFDD = opt-in timer + lookback on live MQTT. Multi-site isolation is by `building_id`. Full contract: [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md). Combined OT+synth gate: `./scripts/gates/combined_ot_synth_validate.sh`.
+
+## Platform revision (sidebar)
+
+SPA shows `GET /api/health` → `{semver}+shortsha`. On each turnkey platform patch cycle, bump the workspace **patch** version (`VERSION` + Cargo workspace) so operators see a new semver after pulling nightly — not only a new SHA.
 
 ## Never
 

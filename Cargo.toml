@@ -20,7 +20,7 @@ members = [
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/bbartling/open-fdd"
-version = "3.3.2"
+version = "3.3.3"
 rust-version = "1.80"
 
 [workspace.dependencies]
@@ -41,7 +41,8 @@ thiserror = "2"
 url = "2"
 walkdir = "2"
 
-# Patch crates.io bacnet-client 0.9 with add_routed_device (MS/TP seed). Drop when
-# upstream publishes the helper; keep version aligned with services/fieldbus.
+# Patch crates.io bacnet-client 0.9 with add_routed_device (MS/TP seed). Keep on 0.9:
+# crates.io bacnet-client 0.10.1 still lacks add_routed_device. Drop the path patch when
+# upstream ships that helper on a publishable release.
 [patch.crates-io]
 bacnet-client = { path = "vendor/bacnet-client" }

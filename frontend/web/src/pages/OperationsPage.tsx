@@ -317,7 +317,10 @@ function topicMatchesFilter(topic: string, filter: string): boolean {
 function MqttPanel() {
   const [topicFilter, setTopicFilter] = useState("openfdd/#");
   const [snapshot, setSnapshot] = useState<MqttMonitorSnapshot | null>(null);
+  /** Off by default — cell-modem / bandwidth: no polling until Start listening. */
+  const [listening, setListening] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [pollMs, setPollMs] = useState(5000);
   const [clearedAt, setClearedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const filterOk = useMemo(() => validTopicFilter(topicFilter), [topicFilter]);
@@ -333,11 +336,11 @@ function MqttPanel() {
   }, []);
 
   useEffect(() => {
-    if (paused) return undefined;
+    if (!listening || paused) return undefined;
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 2000);
+    const timer = window.setInterval(() => void refresh(), pollMs);
     return () => window.clearInterval(timer);
-  }, [paused, refresh]);
+  }, [listening, paused, pollMs, refresh]);
 
   const messages = useMemo(() => {
     const cutoff = clearedAt ?? Number.NEGATIVE_INFINITY;
@@ -351,19 +354,52 @@ function MqttPanel() {
     <section aria-labelledby="mqtt-config-heading" data-testid="mqtt-config-panel">
       <div className="section-heading-row">
         <div>
-          <h2 id="mqtt-config-heading">MQTT Test Monitor</h2>
+          <h2 id="mqtt-config-heading">MQTT Test Client</h2>
           <p className="muted">
-            Read-only operator monitor. The browser receives only bounded observation data from authenticated Central API calls; broker credentials and private keys never leave Central.
+            AWS IoT–style operator monitor: subscribe filter, live truncated payload feed, connection events.
+            Browser uses authenticated Central API snapshots (not broker credentials). Listening is off by
+            default and throttled for cell-modem sites. Full WSS-to-broker is optional later; production path
+            remains fieldbus → MQTTS → central ingest.
           </p>
         </div>
         <div className="button-row">
-          <Button id="mqtt-pause" label={paused ? "Resume display" : "Pause display"} variant="secondary" onClick={() => setPaused((value) => !value)} />
+          <Button
+            id="mqtt-listen"
+            label={listening ? "Stop listening" : "Start listening"}
+            variant={listening ? "secondary" : "primary"}
+            onClick={() => {
+              setListening((value) => !value);
+              if (!listening) setPaused(false);
+            }}
+          />
+          <Button
+            id="mqtt-pause"
+            label={paused ? "Resume display" : "Pause display"}
+            variant="secondary"
+            onClick={() => setPaused((value) => !value)}
+            disabled={!listening}
+          />
           <Button id="mqtt-clear" label="Clear local view" variant="secondary" onClick={() => setClearedAt(Date.now())} />
-          <Button id="mqtt-refresh" label="Refresh" variant="secondary" onClick={() => void refresh()} />
+          <Button id="mqtt-refresh" label="Refresh once" variant="secondary" onClick={() => void refresh()} />
         </div>
       </div>
 
       {error ? <div className="inline-alert inline-alert--error" role="alert">{error}</div> : null}
+
+      <div className="form-row">
+        <label htmlFor="mqtt-poll-ms">Poll interval (cell-aware)</label>
+        <select
+          id="mqtt-poll-ms"
+          value={pollMs}
+          onChange={(event) => setPollMs(Number(event.target.value))}
+        >
+          <option value={2000}>2 s</option>
+          <option value={5000}>5 s (default)</option>
+          <option value={10000}>10 s</option>
+          <option value={30000}>30 s</option>
+        </select>
+        <span>{listening ? (paused ? "Display paused" : `Polling every ${pollMs / 1000}s`) : "Not listening — no background traffic"}</span>
+      </div>
 
       <div className="summary-grid">
         {metric("Broker state", snapshot?.connected ? "Connected" : "Disconnected")}
@@ -383,7 +419,7 @@ function MqttPanel() {
           value={topicFilter}
           onChange={(event) => setTopicFilter(event.target.value)}
           aria-invalid={!filterOk}
-          placeholder="openfdd/#"
+          placeholder="openfdd/v1/sites/<site>/#"
         />
         <span>{filterOk ? `${messages.length} buffered messages match` : "Use + for one level and # only as the final level"}</span>
       </div>
@@ -402,7 +438,15 @@ function MqttPanel() {
           </thead>
           <tbody>
             {messages.length === 0 ? (
-              <tr><td colSpan={6}>{paused ? "Display paused." : "No buffered messages match the current filter."}</td></tr>
+              <tr>
+                <td colSpan={6}>
+                  {!listening
+                    ? "Start listening to pull bounded observation snapshots."
+                    : paused
+                      ? "Display paused."
+                      : "No buffered messages match the current filter."}
+                </td>
+              </tr>
             ) : messages.map((message) => (
               <tr key={`${message.received_at_utc}-${message.topic}-${message.payload_bytes}`}>
                 <td>{formatTime(message.received_at_utc)}</td>
@@ -441,6 +485,118 @@ function MqttPanel() {
   );
 }
 
+function TelemetrySuspendPanel() {
+  const [siteId, setSiteId] = useState("local");
+  const [edgeId, setEdgeId] = useState("fieldbus-1");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const issue = useCallback(
+    async (action: "suspend" | "resume") => {
+      if (
+        action === "suspend" &&
+        !window.confirm(
+          `Suspend telemetry for site=${siteId} edge=${edgeId}?\n\nStops BACnet poll, weather fetch, and MQTT publish. Hosted BACnet server stays up.`,
+        )
+      ) {
+        return;
+      }
+      setBusy(true);
+      setError(null);
+      setMessage(null);
+      try {
+        const body = await apiFetch<{
+          ok: boolean;
+          published?: boolean;
+          command?: { command_id: string };
+          hint?: string;
+          error?: string;
+        }>("/api/commands", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            site_id: siteId,
+            edge_id: edgeId,
+            target_id: "edge:telemetry",
+            approved_by: "operations-ui",
+            value: { action },
+            ttl_secs: 120,
+          }),
+        });
+        if (!body.ok) {
+          throw new Error(body.error ?? "command rejected");
+        }
+        const commandId = body.command?.command_id;
+        let ackDetail = body.published ? "published" : body.hint ?? "stored pending";
+        if (commandId) {
+          for (let i = 0; i < 8; i += 1) {
+            await new Promise((r) => window.setTimeout(r, 750));
+            try {
+              const ack = await apiFetch<{
+                ok: boolean;
+                ack?: { status?: string; detail?: string };
+              }>(`/api/commands/${commandId}/ack`);
+              if (ack.ack?.status) {
+                ackDetail = `${ack.ack.status}${ack.ack.detail ? ` · ${ack.ack.detail}` : ""}`;
+                if (["executed", "failed", "rejected", "expired"].includes(ack.ack.status)) {
+                  break;
+                }
+              }
+            } catch {
+              /* keep waiting */
+            }
+          }
+        }
+        setMessage(`${action} → ${ackDetail}`);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [edgeId, siteId],
+  );
+
+  return (
+    <section aria-labelledby="telemetry-suspend-heading" data-testid="telemetry-suspend-panel">
+      <div className="section-heading-row">
+        <div>
+          <h2 id="telemetry-suspend-heading">Suspend telemetry</h2>
+          <p className="muted">
+            Per site/edge: stop BACnet client poll, weather fetch, and MQTT publish. Hosted BACnet server
+            stays up so the edge remains discoverable. Resume restores poll + weather + publish.
+          </p>
+        </div>
+        <div className="button-row">
+          <Button
+            id="telemetry-suspend"
+            label="Suspend telemetry"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => void issue("suspend")}
+          />
+          <Button
+            id="telemetry-resume"
+            label="Resume telemetry"
+            variant="primary"
+            disabled={busy}
+            onClick={() => void issue("resume")}
+          />
+        </div>
+      </div>
+      {error ? <div className="inline-alert inline-alert--error" role="alert">{error}</div> : null}
+      {message ? <div className="inline-alert" role="status">{message}</div> : null}
+      <div className="form-row">
+        <label htmlFor="telemetry-site-id">Site id</label>
+        <input id="telemetry-site-id" value={siteId} onChange={(e) => setSiteId(e.target.value)} />
+        <label htmlFor="telemetry-edge-id">Edge id</label>
+        <input id="telemetry-edge-id" value={edgeId} onChange={(e) => setEdgeId(e.target.value)} />
+      </div>
+    </section>
+  );
+}
+
 export function OperationsPage() {
   const [view, setView] = useState<OperationsView>("afdd");
 
@@ -454,10 +610,15 @@ export function OperationsPage() {
         </label>
         <label>
           <input type="radio" name="operations-view" value="mqtt" checked={view === "mqtt"} onChange={() => setView("mqtt")} />
-          MQTT Config
+          MQTT Test Client
         </label>
       </fieldset>
-      {view === "afdd" ? <AfddPanel /> : <MqttPanel />}
+      {view === "afdd" ? <AfddPanel /> : (
+        <>
+          <TelemetrySuspendPanel />
+          <MqttPanel />
+        </>
+      )}
     </AppShell>
   );
 }

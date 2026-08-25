@@ -18,22 +18,46 @@ use axum::middleware;
 use config::load_settings;
 use services::{
     bacnet_client::BacnetClientService, bacnet_server::BacnetServerManager,
-    haystack::HaystackService, poll::PollEngine, rest::RestClientService, weather::WeatherService,
+    haystack::HaystackService, poll::PollEngine, rest::RestClientService,
+    telemetry_control::TelemetryControl, weather::WeatherService,
 };
 use state::AppState;
 use tower_http::trace::TraceLayer;
 use tracing::info;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+fn init_tracing() {
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,openfdd_fieldbus=info,security_audit=info"));
+    let json = matches!(
+        std::env::var("OPENFDD_LOG_FORMAT")
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str(),
+        "json" | "jsonl" | "structured"
+    );
+    if json {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(
+                fmt::layer()
+                    .json()
+                    .with_current_span(true)
+                    .with_span_list(false),
+            )
+            .init();
+    } else {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(fmt::layer())
+            .init();
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenvy::dotenv().ok();
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info,openfdd_fieldbus=info")),
-        )
-        .init();
+    init_tracing();
 
     let settings = Arc::new(load_settings());
     run(settings).await
@@ -71,11 +95,19 @@ async fn run(
     );
     rest.start().await;
 
+    let telemetry = Arc::new(TelemetryControl::new(
+        Arc::clone(&poll_engine),
+        Arc::clone(&weather),
+        Arc::clone(&rest),
+    ));
+    telemetry.apply_persisted_on_boot().await;
+
     mqtt_bridge::spawn_if_configured(
         Arc::clone(&settings),
         Arc::clone(&poll_engine),
         Arc::clone(&bacnet_client),
         Arc::clone(&rest),
+        Arc::clone(&telemetry),
     )
     .await;
 
@@ -96,6 +128,7 @@ async fn run(
         weather,
         haystack,
         rest,
+        telemetry,
     };
 
     info!(
@@ -178,6 +211,11 @@ mod tests {
         let rest_devices = config::load_rest_devices(None, &settings.rest).unwrap();
         let rest =
             Arc::new(RestClientService::from_config(settings.rest.clone(), rest_devices).unwrap());
+        let telemetry = Arc::new(TelemetryControl::new(
+            Arc::clone(&poll_engine),
+            Arc::clone(&weather),
+            Arc::clone(&rest),
+        ));
         AppState {
             settings,
             api_key: None,
@@ -187,6 +225,7 @@ mod tests {
             weather,
             haystack,
             rest,
+            telemetry,
         }
     }
 

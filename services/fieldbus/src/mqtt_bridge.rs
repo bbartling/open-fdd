@@ -23,6 +23,7 @@ use crate::config::Settings;
 use crate::services::bacnet_client::BacnetClientService;
 use crate::services::poll::PollEngine;
 use crate::services::rest::RestClientService;
+use crate::services::telemetry_control::{parse_telemetry_command, TelemetryControl};
 
 const MAX_SEEN_COMMANDS: usize = 10_000;
 
@@ -87,6 +88,7 @@ struct CommandContext {
     site_id: String,
     edge_id: String,
     bacnet_client: Arc<BacnetClientService>,
+    telemetry: Arc<TelemetryControl>,
     deduper: Mutex<CommandDeduper>,
 }
 
@@ -183,7 +185,13 @@ async fn handle_command_publish(client: &AsyncClient, ctx: &CommandContext, publ
     )
     .await;
 
-    match execute_bacnet_command(&ctx.bacnet_client, &cmd).await {
+    let result = if cmd.target_id.starts_with("edge:telemetry") {
+        execute_telemetry_command(&ctx.telemetry, &cmd).await
+    } else {
+        execute_bacnet_command(&ctx.bacnet_client, &cmd).await
+    };
+
+    match result {
         Ok(detail) => {
             publish_ack(
                 client,
@@ -252,11 +260,33 @@ fn historian_tags(
     tags
 }
 
+async fn execute_telemetry_command(
+    telemetry: &TelemetryControl,
+    cmd: &CommandEnvelope,
+) -> Result<String, String> {
+    let action = parse_telemetry_command(&cmd.target_id, &cmd.value)?;
+    let label = match action {
+        crate::services::telemetry_control::TelemetryAction::Suspend => "suspend",
+        crate::services::telemetry_control::TelemetryAction::Resume => "resume",
+    };
+    let status = telemetry.apply_action(action, &cmd.approved_by).await?;
+    Ok(format!(
+        "telemetry {label} applied (approved by {}); status={status}",
+        cmd.approved_by
+    ))
+}
+
 async fn execute_bacnet_command(
     bacnet: &BacnetClientService,
     cmd: &CommandEnvelope,
 ) -> Result<String, String> {
-    if cmd.protocol != Protocol::Bacnet {
+    if cmd.target_id.starts_with("edge:") {
+        return Err(format!(
+            "unsupported edge command target_id {}",
+            cmd.target_id
+        ));
+    }
+    if cmd.protocol != Protocol::Bacnet && cmd.protocol != Protocol::Mixed {
         return Ok("queued for fieldbus write (non-bacnet protocol)".into());
     }
 
@@ -389,6 +419,7 @@ pub async fn spawn_if_configured(
     poll: Arc<PollEngine>,
     bacnet_client: Arc<BacnetClientService>,
     rest: Arc<RestClientService>,
+    telemetry: Arc<TelemetryControl>,
 ) {
     if !mqtt_enabled() {
         info!("MQTT bridge disabled (set OPENFDD_MQTT_ENABLED=1 to enable)");
@@ -421,6 +452,7 @@ pub async fn spawn_if_configured(
         site_id: site_id.clone(),
         edge_id: edge_id.clone(),
         bacnet_client,
+        telemetry: Arc::clone(&telemetry),
         deduper: Mutex::new(CommandDeduper::new()),
     });
 
@@ -439,6 +471,21 @@ pub async fn spawn_if_configured(
         loop {
             tokio::time::sleep(Duration::from_secs_f64(interval)).await;
             seq += 1;
+
+            // Keep MQTT command subscription alive even while suspended.
+            if mqtt.is_none() {
+                mqtt = connect_mqtt_session(
+                    mqtt_config(&site_id, &edge_id, port),
+                    &topics,
+                    Arc::clone(&command_ctx),
+                )
+                .await;
+            }
+
+            if telemetry.is_suspended() {
+                continue;
+            }
+
             let status = poll.status().await;
             let last_values = status
                 .get("last_values")
@@ -503,15 +550,6 @@ pub async fn spawn_if_configured(
                 if let Err(err) = spool.enqueue(&topic, env).await {
                     warn!(%err, "rest spool enqueue failed");
                 }
-            }
-
-            if mqtt.is_none() {
-                mqtt = connect_mqtt_session(
-                    mqtt_config(&site_id, &edge_id, port),
-                    &topics,
-                    Arc::clone(&command_ctx),
-                )
-                .await;
             }
 
             if let Some(ref session) = mqtt {

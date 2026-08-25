@@ -201,9 +201,12 @@ async fn main() -> Result<()> {
                 &registry,
                 &out,
                 &overrides,
-                None,
-                None,
-                Some(unit_system.as_str()),
+                fdd_rules::RunOptions {
+                    equipment_filter: None,
+                    weather_root: None,
+                    unit_system: Some(unit_system.as_str()),
+                    time_window: None,
+                },
             )
             .await?;
             println!("{}", serde_json::to_string_pretty(&report)?);

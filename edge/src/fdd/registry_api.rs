@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use fdd_rules::{
     effective_param_strings, load_registry, load_tuning_profiles, read_poll_from_cache,
-    rule_params, run_all_rules_with_overrides, substitute_sql, RuleRegistry, RuleSpec,
+    rule_params, run_all_rules_with_overrides, substitute_sql, RuleRegistry, RuleSpec, RunOptions,
 };
 use fdd_sql::{register_parquet_tree, register_weather_if_present, run_sql};
 use serde_json::{json, Value};
@@ -1194,14 +1194,50 @@ pub fn run_registry(payload: &Value) -> Value {
         .get("unit_system")
         .and_then(Value::as_str)
         .unwrap_or(session_units.as_str());
+    // Continuous AFDD lookback (top-level or nested under params for older callers).
+    let start_utc = payload
+        .get("start_utc")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            payload
+                .get("params")
+                .and_then(|p| p.get("start_utc"))
+                .and_then(Value::as_str)
+        })
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let end_utc = payload
+        .get("end_utc")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            payload
+                .get("params")
+                .and_then(|p| p.get("end_utc"))
+                .and_then(Value::as_str)
+        })
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let time_window = match (start_utc, end_utc) {
+        (Some(start), Some(end)) => Some((start, end)),
+        (None, None) => None,
+        _ => {
+            return json!({
+                "ok": false,
+                "error": "AFDD time window requires both start_utc and end_utc",
+            });
+        }
+    };
     match rt.block_on(run_all_rules_with_overrides(
         &history_root,
         &effective,
         &out,
         &session_overrides,
-        payload.get("equipment_id").and_then(Value::as_str),
-        Some(weather_root.as_path()),
-        Some(unit_system),
+        RunOptions {
+            equipment_filter: payload.get("equipment_id").and_then(Value::as_str),
+            weather_root: Some(weather_root.as_path()),
+            unit_system: Some(unit_system),
+            time_window,
+        },
     )) {
         Ok(report) => {
             let normalized = results_response(building_id);
@@ -1211,6 +1247,8 @@ pub fn run_registry(payload: &Value) -> Value {
                 "mode": "registry",
                 "building_id": building_id,
                 "history_root": history_root.display().to_string(),
+                "start_utc": time_window.map(|(s, _)| s),
+                "end_utc": time_window.map(|(_, e)| e),
                 "rules_run": report.rules_run,
                 "rules_succeeded": report.rules_succeeded,
                 "rules_failed": report.rules_failed,

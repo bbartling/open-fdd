@@ -65,6 +65,39 @@ the per-site provisioning kits.
 - Never log or commit tokens, passwords, or `auth.env.local`
 - MCP agents receive JWT via environment — not embedded in docs
 
+## Audit and application logging (pen-test ready)
+
+Industry-typical dual sink — enough for auditors / pen testers, not a SIEM product:
+
+| Channel | What | Where |
+|---------|------|--------|
+| **Security audit** | Login success/fail/throttle, command authz, command issue, telemetry suspend/resume, fieldbus API-key rejects | JSONL file + stdout target `security_audit` |
+| **App / error logs** | `tracing` at info/warn/error with `request_id` | stdout (Railway / AWS / `docker logs`) |
+
+**File audit (local + volume mounts):**
+
+```text
+$OPENFDD_WORKSPACE/logs/security_audit.jsonl
+# also mirrored to auth_audit.jsonl for older tooling
+```
+
+Rotation (defaults): `OPENFDD_AUDIT_LOG_MAX_BYTES=10485760` (10 MiB), `OPENFDD_AUDIT_LOG_KEEP=5`.
+Override path with `OPENFDD_AUDIT_LOG_PATH`. Secrets / passwords / tokens / API keys are redacted.
+
+**Container stdout rotation (GHCR compose / local Docker):**
+
+```yaml
+logging:
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+```
+
+**Hosted (Railway / AWS):** set `OPENFDD_LOG_FORMAT=json` (compose default). Platform log retention is the volume cap; app JSON lines stay queryable (`event`, `request_id`, `channel=security_audit`).
+
+For pen tests, ask operators for: `docker logs` (or Railway/AWS log export) filtered on `security_audit`, plus `workspace/logs/security_audit.jsonl*`.
+
 ## BACnet write safety
 
 - `POST /api/bacnet/write-dry-run` before live writes

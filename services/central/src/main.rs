@@ -12,6 +12,7 @@ mod fuel;
 mod ingest;
 mod jobs;
 mod live_historian;
+mod logging;
 mod models;
 mod mqtt_monitor;
 mod openapi;
@@ -30,16 +31,10 @@ use state::AppState;
 use tokio::sync::watch;
 use tower_http::trace::TraceLayer;
 use tracing::{info, warn};
-use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info,openfdd_central=info")),
-        )
-        .init();
+    logging::init_tracing("info,openfdd_central=info,security_audit=info");
 
     initialize_s3_scope_index().await?;
 
