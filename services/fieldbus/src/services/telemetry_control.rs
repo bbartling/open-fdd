@@ -65,10 +65,6 @@ impl TelemetryControl {
         self.suspended.load(Ordering::SeqCst)
     }
 
-    pub fn state_path(&self) -> &std::path::Path {
-        &self.path
-    }
-
     /// Load persisted desire and apply before MQTT bridge / long-lived loops rely on the gate.
     pub async fn apply_persisted_on_boot(self: &Arc<Self>) {
         let Some(state) = self.load() else {
