@@ -485,6 +485,118 @@ function MqttPanel() {
   );
 }
 
+function TelemetrySuspendPanel() {
+  const [siteId, setSiteId] = useState("local");
+  const [edgeId, setEdgeId] = useState("fieldbus-1");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const issue = useCallback(
+    async (action: "suspend" | "resume") => {
+      if (
+        action === "suspend" &&
+        !window.confirm(
+          `Suspend telemetry for site=${siteId} edge=${edgeId}?\n\nStops BACnet poll, weather fetch, and MQTT publish. Hosted BACnet server stays up.`,
+        )
+      ) {
+        return;
+      }
+      setBusy(true);
+      setError(null);
+      setMessage(null);
+      try {
+        const body = await apiFetch<{
+          ok: boolean;
+          published?: boolean;
+          command?: { command_id: string };
+          hint?: string;
+          error?: string;
+        }>("/api/commands", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            site_id: siteId,
+            edge_id: edgeId,
+            target_id: "edge:telemetry",
+            approved_by: "operations-ui",
+            value: { action },
+            ttl_secs: 120,
+          }),
+        });
+        if (!body.ok) {
+          throw new Error(body.error ?? "command rejected");
+        }
+        const commandId = body.command?.command_id;
+        let ackDetail = body.published ? "published" : body.hint ?? "stored pending";
+        if (commandId) {
+          for (let i = 0; i < 8; i += 1) {
+            await new Promise((r) => window.setTimeout(r, 750));
+            try {
+              const ack = await apiFetch<{
+                ok: boolean;
+                ack?: { status?: string; detail?: string };
+              }>(`/api/commands/${commandId}/ack`);
+              if (ack.ack?.status) {
+                ackDetail = `${ack.ack.status}${ack.ack.detail ? ` · ${ack.ack.detail}` : ""}`;
+                if (["executed", "failed", "rejected", "expired"].includes(ack.ack.status)) {
+                  break;
+                }
+              }
+            } catch {
+              /* keep waiting */
+            }
+          }
+        }
+        setMessage(`${action} → ${ackDetail}`);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [edgeId, siteId],
+  );
+
+  return (
+    <section aria-labelledby="telemetry-suspend-heading" data-testid="telemetry-suspend-panel">
+      <div className="section-heading-row">
+        <div>
+          <h2 id="telemetry-suspend-heading">Suspend telemetry</h2>
+          <p className="muted">
+            Per site/edge: stop BACnet client poll, weather fetch, and MQTT publish. Hosted BACnet server
+            stays up so the edge remains discoverable. Resume restores poll + weather + publish.
+          </p>
+        </div>
+        <div className="button-row">
+          <Button
+            id="telemetry-suspend"
+            label="Suspend telemetry"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => void issue("suspend")}
+          />
+          <Button
+            id="telemetry-resume"
+            label="Resume telemetry"
+            variant="primary"
+            disabled={busy}
+            onClick={() => void issue("resume")}
+          />
+        </div>
+      </div>
+      {error ? <div className="inline-alert inline-alert--error" role="alert">{error}</div> : null}
+      {message ? <div className="inline-alert" role="status">{message}</div> : null}
+      <div className="form-row">
+        <label htmlFor="telemetry-site-id">Site id</label>
+        <input id="telemetry-site-id" value={siteId} onChange={(e) => setSiteId(e.target.value)} />
+        <label htmlFor="telemetry-edge-id">Edge id</label>
+        <input id="telemetry-edge-id" value={edgeId} onChange={(e) => setEdgeId(e.target.value)} />
+      </div>
+    </section>
+  );
+}
+
 export function OperationsPage() {
   const [view, setView] = useState<OperationsView>("afdd");
 
@@ -501,7 +613,12 @@ export function OperationsPage() {
           MQTT Test Client
         </label>
       </fieldset>
-      {view === "afdd" ? <AfddPanel /> : <MqttPanel />}
+      {view === "afdd" ? <AfddPanel /> : (
+        <>
+          <TelemetrySuspendPanel />
+          <MqttPanel />
+        </>
+      )}
     </AppShell>
   );
 }

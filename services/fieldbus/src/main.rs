@@ -18,7 +18,8 @@ use axum::middleware;
 use config::load_settings;
 use services::{
     bacnet_client::BacnetClientService, bacnet_server::BacnetServerManager,
-    haystack::HaystackService, poll::PollEngine, rest::RestClientService, weather::WeatherService,
+    haystack::HaystackService, poll::PollEngine, rest::RestClientService,
+    telemetry_control::TelemetryControl, weather::WeatherService,
 };
 use state::AppState;
 use tower_http::trace::TraceLayer;
@@ -71,11 +72,19 @@ async fn run(
     );
     rest.start().await;
 
+    let telemetry = Arc::new(TelemetryControl::new(
+        Arc::clone(&poll_engine),
+        Arc::clone(&weather),
+        Arc::clone(&rest),
+    ));
+    telemetry.apply_persisted_on_boot().await;
+
     mqtt_bridge::spawn_if_configured(
         Arc::clone(&settings),
         Arc::clone(&poll_engine),
         Arc::clone(&bacnet_client),
         Arc::clone(&rest),
+        Arc::clone(&telemetry),
     )
     .await;
 
@@ -96,6 +105,7 @@ async fn run(
         weather,
         haystack,
         rest,
+        telemetry,
     };
 
     info!(
@@ -178,6 +188,11 @@ mod tests {
         let rest_devices = config::load_rest_devices(None, &settings.rest).unwrap();
         let rest =
             Arc::new(RestClientService::from_config(settings.rest.clone(), rest_devices).unwrap());
+        let telemetry = Arc::new(TelemetryControl::new(
+            Arc::clone(&poll_engine),
+            Arc::clone(&weather),
+            Arc::clone(&rest),
+        ));
         AppState {
             settings,
             api_key: None,
@@ -187,6 +202,7 @@ mod tests {
             weather,
             haystack,
             rest,
+            telemetry,
         }
     }
 

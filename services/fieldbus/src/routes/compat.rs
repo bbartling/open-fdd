@@ -18,6 +18,7 @@ async fn api_health(State(state): State<AppState>) -> Json<Value> {
         "version": env!("CARGO_PKG_VERSION"),
         "git_sha": git_sha(),
         "poll_running": poll["running"].as_bool().unwrap_or(false),
+        "telemetry_suspended": state.telemetry.is_suspended(),
         "bacnet_server_instance": state.settings.bacnet_server.device_instance,
     }))
 }

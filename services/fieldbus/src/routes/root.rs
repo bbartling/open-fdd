@@ -15,6 +15,7 @@ pub async fn root() -> Json<Value> {
         "bacnet_server": "/bacnet/server/objects",
         "poll_status": "/bacnet/poll/status",
         "weather": "/weather",
+        "telemetry_status": "/telemetry/status",
     }))
 }
 

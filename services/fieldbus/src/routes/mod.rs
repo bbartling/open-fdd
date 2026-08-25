@@ -4,6 +4,7 @@ pub mod haystack;
 pub mod modbus;
 pub mod rest;
 pub mod root;
+pub mod telemetry;
 pub mod weather;
 
 use axum::Router;
@@ -16,6 +17,7 @@ pub fn api_routes(state: AppState) -> Router {
         .merge(root::router())
         .merge(bacnet::router())
         .merge(weather::router())
+        .merge(telemetry::router())
         .merge(modbus::router())
         .merge(haystack::router())
         .merge(rest::router())
@@ -24,6 +26,7 @@ pub fn api_routes(state: AppState) -> Router {
             Router::new()
                 .merge(bacnet::router())
                 .merge(weather::router())
+                .merge(telemetry::router())
                 .merge(modbus::router())
                 .merge(haystack::router())
                 .merge(rest::router())

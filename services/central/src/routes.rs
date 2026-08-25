@@ -671,11 +671,16 @@ pub async fn issue_command(
     };
 
     let topics = TopicBuilder::new(&body.site_id, &body.edge_id);
-    let response_topic = topics.topic(TopicKind::Acks, Some(Protocol::Bacnet));
+    let protocol = if body.target_id.starts_with("edge:") {
+        Protocol::Mixed
+    } else {
+        Protocol::Bacnet
+    };
+    let response_topic = topics.topic(TopicKind::Acks, Some(protocol));
     let cmd = CommandEnvelope::new(
         &body.site_id,
         &body.edge_id,
-        Protocol::Bacnet,
+        protocol,
         &body.target_id,
         body.value.clone(),
         &approved_by,
@@ -694,7 +699,7 @@ pub async fn issue_command(
         });
     }
 
-    let publish_topic = topics.topic(TopicKind::Commands, Some(Protocol::Bacnet));
+    let publish_topic = topics.topic(TopicKind::Commands, Some(protocol));
     let mut published = false;
     let mut hint = None;
 

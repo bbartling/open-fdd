@@ -3958,8 +3958,8 @@ dependencies = [
 
 [[package]]
 name = "rusty-modbus-client"
-version = "0.1.0"
-source = "git+https://github.com/jscott3201/rusty-modbus#b2703b1cbef8d3c4a86caa56f987a17d39d85c27"
+version = "0.1.1"
+source = "git+https://github.com/jscott3201/rusty-modbus?rev=57135620af03f291f85d71eca76f4c8fbe83b2c1#57135620af03f291f85d71eca76f4c8fbe83b2c1"
 dependencies = [
  "bytes",
  "parking_lot",
@@ -3974,16 +3974,16 @@ dependencies = [
 
 [[package]]
 name = "rusty-modbus-codec"
-version = "0.1.0"
-source = "git+https://github.com/jscott3201/rusty-modbus#b2703b1cbef8d3c4a86caa56f987a17d39d85c27"
+version = "0.1.1"
+source = "git+https://github.com/jscott3201/rusty-modbus?rev=57135620af03f291f85d71eca76f4c8fbe83b2c1#57135620af03f291f85d71eca76f4c8fbe83b2c1"
 dependencies = [
  "rusty-modbus-types",
 ]
 
 [[package]]
 name = "rusty-modbus-frame"
-version = "0.1.0"
-source = "git+https://github.com/jscott3201/rusty-modbus#b2703b1cbef8d3c4a86caa56f987a17d39d85c27"
+version = "0.1.1"
+source = "git+https://github.com/jscott3201/rusty-modbus?rev=57135620af03f291f85d71eca76f4c8fbe83b2c1#57135620af03f291f85d71eca76f4c8fbe83b2c1"
 dependencies = [
  "bytes",
  "rusty-modbus-codec",
@@ -3995,8 +3995,8 @@ dependencies = [
 
 [[package]]
 name = "rusty-modbus-tcp"
-version = "0.1.0"
-source = "git+https://github.com/jscott3201/rusty-modbus#b2703b1cbef8d3c4a86caa56f987a17d39d85c27"
+version = "0.1.1"
+source = "git+https://github.com/jscott3201/rusty-modbus?rev=57135620af03f291f85d71eca76f4c8fbe83b2c1#57135620af03f291f85d71eca76f4c8fbe83b2c1"
 dependencies = [
  "bytes",
  "futures-util",
@@ -4012,8 +4012,8 @@ dependencies = [
 
 [[package]]
 name = "rusty-modbus-types"
-version = "0.1.0"
-source = "git+https://github.com/jscott3201/rusty-modbus#b2703b1cbef8d3c4a86caa56f987a17d39d85c27"
+version = "0.1.1"
+source = "git+https://github.com/jscott3201/rusty-modbus?rev=57135620af03f291f85d71eca76f4c8fbe83b2c1#57135620af03f291f85d71eca76f4c8fbe83b2c1"
 dependencies = [
  "zerocopy",
 ]

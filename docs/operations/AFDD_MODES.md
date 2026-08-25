@@ -44,6 +44,21 @@ Prefer lookback-bounded continuous cycles over full-history scans on small hosts
 
 Optional legacy dual-write / interchange only. **Not** the FDD or AFDD source of truth. Do not add a Feather hot tier for lookback. Freeze dual-write until an explicit consumer audit.
 
+## Suspend telemetry (per site/edge)
+
+Operator-facing pause for non-paying / maintenance sites:
+
+| Keep | Stop |
+|------|------|
+| Hosted BACnet server | BACnet client poll |
+| Fieldbus process | Weather fetch |
+| Ability to resume | MQTT telemetry publish (spool flush gated) |
+
+- Fieldbus REST: `GET /telemetry/status`, `POST /telemetry/suspend`, `POST /telemetry/resume`
+- MQTT command: `target_id=edge:telemetry` with `value.action` = `suspend`|`resume` (protocol `mixed` via Central `POST /api/commands`)
+- Desired state persists on the edge (`OPENFDD_TELEMETRY_STATE_PATH`)
+- Combined nightly gate exercises suspend → server still up → resume before synth bulk
+
 ## UI revision
 
 SPA sidebar shows `GET /api/health` → `{CARGO_PKG_VERSION}+shortsha`. Each turnkey platform patch should bump the workspace patch version (tiny rev) so operators see a new semver as well as a new SHA after pulling nightly.
