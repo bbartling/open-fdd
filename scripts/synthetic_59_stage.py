@@ -173,6 +173,70 @@ def build_role_map_normalized(pkg_dir: Path) -> Path:
     return dest
 
 
+CW_TOWER_RULES = frozenset({"CW-OPT-1", "CW-APR-1", "CW-FAN-1"})
+
+
+def stamp_cooling_tower_equip_types(pkg_dir: Path, fixture_root: Path) -> int:
+    """CW cases must use coolingTower so Overview tower matrix membership works."""
+    changed = 0
+    for cm_path in pkg_dir.rglob("column_map.json"):
+        if "test_contract" in cm_path.parts:
+            continue
+        data = json.loads(cm_path.read_text(encoding="utf-8"))
+        rule = str(data.get("test_target_rule_id") or "")
+        if rule not in CW_TOWER_RULES:
+            continue
+        if data.get("equipType") == "coolingTower" and data.get("equipment_type") == "COOLING_TOWER":
+            continue
+        data["equipType"] = "coolingTower"
+        data["equipment_type"] = "COOLING_TOWER"
+        cm_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        changed += 1
+
+    legend = fixture_root / "equipment_legend.csv"
+    if legend.is_file():
+        rows = list(csv.DictReader(legend.open(encoding="utf-8")))
+        fields = list(rows[0].keys()) if rows else []
+        legend_changed = False
+        for row in rows:
+            if str(row.get("target_rule_id") or "") in CW_TOWER_RULES:
+                if row.get("equipment_type") != "COOLING_TOWER" or row.get("runner_kind") != "cooling_tower":
+                    row["equipment_type"] = "COOLING_TOWER"
+                    row["runner_kind"] = "cooling_tower"
+                    legend_changed = True
+        if legend_changed and fields:
+            with legend.open("w", newline="", encoding="utf-8") as f:
+                w = csv.DictWriter(f, fieldnames=fields)
+                w.writeheader()
+                w.writerows(rows)
+            changed += 1
+
+    for exp in (
+        fixture_root / "expected_faults.csv",
+        pkg_dir / "test_contract" / "expected_faults.csv",
+    ):
+        if not exp.is_file():
+            continue
+        rows = list(csv.DictReader(exp.open(encoding="utf-8")))
+        if not rows:
+            continue
+        fields = list(rows[0].keys())
+        exp_changed = False
+        for row in rows:
+            if str(row.get("rule_id") or "") in CW_TOWER_RULES:
+                if row.get("equipment_type") != "COOLING_TOWER" or row.get("runner_kind") != "cooling_tower":
+                    row["equipment_type"] = "COOLING_TOWER"
+                    row["runner_kind"] = "cooling_tower"
+                    exp_changed = True
+        if exp_changed:
+            with exp.open("w", newline="", encoding="utf-8") as f:
+                w = csv.DictWriter(f, fieldnames=fields)
+                w.writeheader()
+                w.writerows(rows)
+            changed += 1
+    return changed
+
+
 def add_sched1_string_companion(pkg_dir: Path, fixture_root: Path) -> None:
     src_eq = pkg_dir / "AHU_CASE_SCHED_1"
     dst_eq = pkg_dir / "AHU_CASE_SCHED_1_STRING"
@@ -367,6 +431,8 @@ def main() -> int:
     print(f"role_map {rm} mappings={json.loads(rm.read_text())['count']}")
     add_sched1_string_companion(pkg_dir, fixture_root)
     print("added AHU_CASE_SCHED_1_STRING + expected_faults_extra.csv")
+    n_tower = stamp_cooling_tower_equip_types(pkg_dir, fixture_root)
+    print(f"stamped coolingTower equipType on {n_tower} CW fixture artifact(s)")
 
     pkg_zip = rezip_package(pkg_dir, fixture_root)
     print(f"rezipped {pkg_zip} ({pkg_zip.stat().st_size} bytes)")
