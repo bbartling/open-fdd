@@ -22,6 +22,7 @@ services:
       OPENFDD_MQTT_PORT: "8883"
       OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:-local}
       OPENFDD_EDGE_ID: ${OPENFDD_EDGE_ID:-fieldbus-1}
+      OPENFDD_BUILDING_ID: ${OPENFDD_BUILDING_ID:-}
       OPENFDD_MQTT_CA_PEM: /mqtt/ca.pem
       OPENFDD_MQTT_CERT_PEM: /mqtt/edge.cert.pem
       OPENFDD_MQTT_KEY_PEM: /mqtt/edge.key.pem
