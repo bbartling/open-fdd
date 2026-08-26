@@ -3,7 +3,7 @@
 **Date:** 2026-08-26  
 **Platform:** `3.3.4` / `fa14c05` master + `1540225` train (`feat/nightly-b3-mqtt-policy` PR pending)  
 **Host:** low-RAM GHCR-only bench (`OPENFDD_QUERY_MEMORY_MB=256`, `OPENFDD_DATAFUSION_SPILL_DIR=/workspace/.cache/datafusion-spill`)  
-**Remote edge:** bosspi `192.168.204.12` — fieldbus only (dual-MQTT gate 10)
+**Remote edge:** bosspi (`CLOUD_SIM_PI_SSH` in bench env) — fieldbus only (dual-MQTT gate 10)
 
 Private OT LAN addresses and Niagara creds live only in gitignored `.env` / `bench.env.local` / `rusty-haystack/.../.env`.
 
