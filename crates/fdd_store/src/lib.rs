@@ -15,12 +15,13 @@ pub mod parquet_parts;
 pub mod stats;
 
 pub use afdd::{
-    AfddConfig, AfddLookbackUnit, AfddMode, DEFAULT_AFDD_INTERVAL_MINUTES,
-    DEFAULT_AFDD_LOOKBACK_UNIT, DEFAULT_AFDD_LOOKBACK_VALUE,
+    AfddConfig, AfddLookbackUnit, AfddMode, AfddOperatorSchedule, DEFAULT_AFDD_INTERVAL_MINUTES,
+    DEFAULT_AFDD_LOOKBACK_UNIT, DEFAULT_AFDD_LOOKBACK_VALUE, OPERATOR_INTERVAL_MINUTES,
+    OPERATOR_LOOKBACK_DAYS,
 };
 pub use afdd_scheduler::{
     next_due_at, plan_backfill_chunks, plan_continuous_cycle, AfddBackfillChunk, AfddCycleWindow,
-    AfddSchedulerCheckpoint, AFDD_SCHEDULER_CHECKPOINT_PATH,
+    AfddSchedulerCheckpoint, AFDD_SCHEDULER_CHECKPOINT_PATH, AFDD_SCHEDULER_RUNTIME_CONFIG_PATH,
 };
 pub use append::{merge_history_wide_csv, merge_history_wide_text, MergeReport};
 pub use compaction::{CompactionPlan, CompactionResult, CompactionSummary, ParquetCompactor};

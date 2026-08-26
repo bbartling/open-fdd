@@ -41,6 +41,7 @@ interface AfddSchedulerStatus {
   next_due_at_utc?: string | null;
   last_error?: string | null;
   recent_cycles: AfddCycleRecord[];
+  operator_schedule_editable?: boolean;
   error?: string;
 }
 
@@ -48,6 +49,44 @@ interface AfddRunNowResponse {
   ok: boolean;
   cycle?: AfddCycleRecord;
   error?: string;
+}
+
+interface AfddConfigSaveResponse {
+  ok: boolean;
+  config?: AfddConfig;
+  error?: string;
+}
+
+const AFDD_INTERVAL_OPTIONS: Array<{ minutes: number; label: string }> = [
+  { minutes: 60, label: "Every 1 hour" },
+  { minutes: 180, label: "Every 3 hours" },
+  { minutes: 360, label: "Every 6 hours" },
+  { minutes: 720, label: "Every 12 hours" },
+];
+
+const AFDD_LOOKBACK_OPTIONS: Array<{ days: number; label: string }> = [
+  { days: 1, label: "1 day" },
+  { days: 2, label: "2 days" },
+  { days: 3, label: "3 days" },
+];
+
+function lookbackDaysFromConfig(config?: AfddConfig | null): number {
+  if (!config) return 1;
+  if (config.lookback_unit === "days") return config.lookback_value;
+  if (config.lookback_unit === "hours") return Math.max(1, Math.round(config.lookback_value / 24));
+  if (config.lookback_unit === "minutes") {
+    return Math.max(1, Math.round(config.lookback_value / (24 * 60)));
+  }
+  return 1;
+}
+
+function nearestIntervalMinutes(minutes?: number): number {
+  if (minutes == null) return 60;
+  const allowed = AFDD_INTERVAL_OPTIONS.map((option) => option.minutes);
+  if (allowed.includes(minutes)) return minutes;
+  return allowed.reduce((best, value) =>
+    Math.abs(value - minutes) < Math.abs(best - minutes) ? value : best,
+  );
 }
 
 interface FddContinuityRow {
@@ -149,7 +188,11 @@ function AfddPanel() {
   const [continuity, setContinuity] = useState<FddContinuityRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [intervalMinutes, setIntervalMinutes] = useState(60);
+  const [lookbackDays, setLookbackDays] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -162,6 +205,11 @@ function AfddPanel() {
       setStatus(next);
       setHistorian(historianSummary);
       setContinuity(results?.results ?? []);
+      if (next.config) {
+        setIntervalMinutes(nearestIntervalMinutes(next.config.interval_minutes));
+        const days = lookbackDaysFromConfig(next.config);
+        setLookbackDays([1, 2, 3].includes(days) ? days : 1);
+      }
       setError(next.ok ? null : next.error ?? "AFDD scheduler status unavailable");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -177,6 +225,7 @@ function AfddPanel() {
   const runNow = useCallback(async () => {
     setRunning(true);
     setError(null);
+    setNotice(null);
     try {
       const result = await apiFetch<AfddRunNowResponse>("/api/afdd/scheduler/run-now", {
         method: "POST",
@@ -194,9 +243,37 @@ function AfddPanel() {
     }
   }, [refresh]);
 
+  const saveSchedule = useCallback(async () => {
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await apiFetch<AfddConfigSaveResponse>("/api/afdd/scheduler/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          interval_minutes: intervalMinutes,
+          lookback_days: lookbackDays,
+        }),
+      });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Failed to save AFDD schedule");
+      }
+      setNotice(
+        `Saved AFDD schedule: every ${intervalMinutes / 60}h · lookback ${lookbackDays} day${lookbackDays === 1 ? "" : "s"}.`,
+      );
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  }, [intervalMinutes, lookbackDays, refresh]);
+
   const recent = status?.recent_cycles ?? [];
   const latestCycle = recent[0];
   const config = status?.config;
+  const scheduleEditable = status?.operator_schedule_editable === true;
   const historianBackend = findScalar(historian, ["backend", "storage_backend", "storage", "scheme"]);
   const historianFiles = findScalar(historian, ["file_count", "files", "part_count", "parts"]);
   const historianBytes = findScalar(historian, ["total_bytes", "bytes", "size_bytes"]);
@@ -210,7 +287,8 @@ function AfddPanel() {
         <div>
           <h2 id="afdd-config-heading">AFDD Scheduler</h2>
           <p className="muted">
-            Deployment-backed scheduler settings are read-only here. Run Now uses the same H8 execution engine as scheduled cycles.
+            Continuous AFDD frequency and rolling lookback are operator-selectable (hours / days).
+            Mode stays deployment-owned. Run Now uses the same H8 engine as scheduled cycles.
           </p>
         </div>
         <div className="button-row">
@@ -220,12 +298,61 @@ function AfddPanel() {
       </div>
 
       {error ? <div className="inline-alert inline-alert--error" role="alert">{error}</div> : null}
+      {notice ? <div className="inline-alert" role="status">{notice}</div> : null}
       {status?.last_error ? <div className="inline-alert inline-alert--error" role="status">Last scheduler error: {status.last_error}</div> : null}
+
+      <div className="form-row" data-testid="afdd-schedule-controls">
+        <label htmlFor="afdd-frequency">Frequency</label>
+        <select
+          id="afdd-frequency"
+          value={intervalMinutes}
+          disabled={!scheduleEditable || saving}
+          onChange={(event) => setIntervalMinutes(Number(event.target.value))}
+        >
+          {AFDD_INTERVAL_OPTIONS.map((option) => (
+            <option key={option.minutes} value={option.minutes}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <label htmlFor="afdd-lookback">Rolling lookback</label>
+        <select
+          id="afdd-lookback"
+          value={lookbackDays}
+          disabled={!scheduleEditable || saving}
+          onChange={(event) => setLookbackDays(Number(event.target.value))}
+        >
+          {AFDD_LOOKBACK_OPTIONS.map((option) => (
+            <option key={option.days} value={option.days}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <Button
+          id="afdd-save-schedule"
+          label={saving ? "Saving…" : "Save schedule"}
+          loading={saving}
+          disabled={!scheduleEditable}
+          onClick={() => void saveSchedule()}
+        />
+        {!scheduleEditable ? (
+          <span className="muted">
+            Save requires Central with schedule API (after next GHCR central). Showing live values below.
+          </span>
+        ) : null}
+      </div>
 
       <div className="summary-grid">
         {metric("Mode", config?.mode ?? "—")}
-        {metric("Frequency", config ? `${config.interval_minutes} min` : "—")}
-        {metric("Rolling lookback", config ? `${config.lookback_value} ${config.lookback_unit}` : "—")}
+        {metric("Frequency", config ? `every ${config.interval_minutes / 60} h (${config.interval_minutes} min)` : "—")}
+        {metric(
+          "Rolling lookback",
+          config
+            ? config.lookback_unit === "days"
+              ? `${config.lookback_value} day${config.lookback_value === 1 ? "" : "s"}`
+              : `${config.lookback_value} ${config.lookback_unit}`
+            : "—",
+        )}
         {metric("Latest historian sample", formatTime(status?.latest_persisted_telemetry_utc))}
         {metric("BAS freshness", basFreshness(status?.latest_persisted_telemetry_utc))}
         {metric("Analyzed through", formatTime(status?.checkpoint?.analyzed_through_utc))}
