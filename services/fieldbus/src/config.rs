@@ -781,7 +781,6 @@ fn finalize_poll_interval(s: &mut Settings) {
         s.poll.interval_secs = PROD_MIN_POLL_SECS;
     }
 }
-}
 
 pub fn load_objects_csv(path: Option<&Path>) -> Result<Vec<HostedObjectRow>, String> {
     let csv_path = path
