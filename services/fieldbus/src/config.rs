@@ -106,7 +106,7 @@ impl Default for RestSettings {
         Self {
             default_timeout_secs: 10,
             default_tls_verify: true,
-            default_poll_interval_secs: 60,
+            default_poll_interval_secs: 300,
             allow_write: false,
         }
     }
@@ -244,15 +244,18 @@ pub struct PollSettings {
     pub interval_secs: f64,
     pub startup_delay_secs: f64,
     pub max_samples: usize,
+    /// When true, poll only points whose names map to known HVAC health roles (~30% cap).
+    pub health_roles_only: bool,
 }
 
 impl Default for PollSettings {
     fn default() -> Self {
         Self {
             enabled: true,
-            interval_secs: 60.0,
+            interval_secs: 300.0,
             startup_delay_secs: 5.0,
             max_samples: 5000,
+            health_roles_only: false,
         }
     }
 }
@@ -409,6 +412,7 @@ struct PollToml {
     interval_secs: Option<f64>,
     startup_delay_secs: Option<f64>,
     max_samples: Option<usize>,
+    health_roles_only: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -662,6 +666,9 @@ pub fn load_settings() -> Settings {
         if let Some(v) = p.max_samples {
             s.poll.max_samples = v;
         }
+        if let Some(v) = p.health_roles_only {
+            s.poll.health_roles_only = v;
+        }
     }
 
     if let Some(v) = env_first(&["OPENFDD_FIELDBUS_BIND", "RUSTY_GATEWAY_BIND"]) {
@@ -746,7 +753,33 @@ pub fn load_settings() -> Settings {
         "RUSTY_GATEWAY_SWAGGER_SERVERS_URL",
     ]);
 
+    if env_bool(
+        env_first(&["OPENFDD_POLL_HEALTH_ONLY"]).as_deref(),
+        s.poll.health_roles_only,
+    ) {
+        s.poll.health_roles_only = true;
+    }
+
+    finalize_poll_interval(&mut s);
     s
+}
+
+fn dev_fast_poll_enabled() -> bool {
+    env_bool(
+        env_first(&["OPENFDD_FIELDBUS_DEV_FAST_POLL"]).as_deref(),
+        false,
+    )
+}
+
+/// Production floor: never poll faster than 60s unless dev/test escape hatch is set.
+fn finalize_poll_interval(s: &mut Settings) {
+    const PROD_MIN_POLL_SECS: f64 = 60.0;
+    if dev_fast_poll_enabled() {
+        return;
+    }
+    if s.poll.interval_secs < PROD_MIN_POLL_SECS {
+        s.poll.interval_secs = PROD_MIN_POLL_SECS;
+    }
 }
 
 pub fn load_objects_csv(path: Option<&Path>) -> Result<Vec<HostedObjectRow>, String> {
@@ -993,7 +1026,11 @@ mod tests {
         std::env::set_var("OPENFDD_FIELDBUS_POLL_ENABLED", "false");
         assert!(!load_settings().poll.enabled);
         std::env::set_var("OPENFDD_FIELDBUS_POLL_INTERVAL_SECS", "12.5");
+        std::env::set_var("OPENFDD_FIELDBUS_DEV_FAST_POLL", "1");
         assert!((load_settings().poll.interval_secs - 12.5).abs() < f64::EPSILON);
+        std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
+        std::env::set_var("OPENFDD_FIELDBUS_POLL_INTERVAL_SECS", "12.5");
+        assert!((load_settings().poll.interval_secs - 60.0).abs() < f64::EPSILON);
         std::env::remove_var("OPENFDD_FIELDBUS_POLL_ENABLED");
         std::env::remove_var("OPENFDD_FIELDBUS_POLL_INTERVAL_SECS");
     }
@@ -1039,7 +1076,7 @@ mod tests {
         let s = RestSettings::default();
         assert_eq!(s.default_timeout_secs, 10);
         assert!(s.default_tls_verify);
-        assert_eq!(s.default_poll_interval_secs, 60);
+        assert_eq!(s.default_poll_interval_secs, 300);
         assert!(!s.allow_write);
     }
 

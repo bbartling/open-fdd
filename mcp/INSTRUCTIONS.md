@@ -119,6 +119,8 @@ Read tools (preview, plan, preflight, contract, test-sql, fusion, historian quer
 
 Use **commission** API (`OPENFDD_COMMISSION_BASE`, default `http://127.0.0.1:9091`) for OT Who-Is/reads — not bridge host-network.
 
+Production BACnet throttling (agents): **300 s** default poll, **60 s** minimum, ~**30%** HVAC health points on cell sites — [`docs/operations/BACNET_OT_POLICY.md`](../docs/operations/BACNET_OT_POLICY.md). Independent OT debug: [`docs/mcp-agents/companion-rusty-bacnet-mcp.md`](../docs/mcp-agents/companion-rusty-bacnet-mcp.md) (read-only; does not replace fieldbus).
+
 ## Model (Haystack RDF)
 
 Use `openfdd_model_sparql_catalog` then `openfdd_model_sparql` with a SELECT query. Assignments: `openfdd_model_assignments_save` with full points/bindings doc.

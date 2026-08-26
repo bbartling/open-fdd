@@ -65,3 +65,18 @@ Mount the generated kit at `/mqtt` (read-only) and set:
 - `OPENFDD_MQTT_KEY_PEM=/mqtt/edge.key.pem`
 
 Outbound TCP **8883** (MQTTS) is the only required central connectivity from the edge.
+
+## Cell modem bandwidth
+
+Fieldbus MQTT defaults assume **infrequent, small** publishes on metered links:
+
+| Env | Default (prod) | Effect |
+|-----|----------------|--------|
+| `OPENFDD_MQTT_PUBLISH_INTERVAL_SECS` | 300 (min 60) | Decouple publish cadence from BACnet poll |
+| `OPENFDD_MQTT_CELL_MODE=1` | off | Omit `display_name`; slim tags to `building_id`, `equipment_id`, `role` |
+| `OPENFDD_MQTT_DELTA=1` | on when cell mode | Publish only changed point values |
+| `OPENFDD_POLL_HEALTH_ONLY=1` | off | Poll ~30% HVAC health roles (see [`BACNET_OT_POLICY.md`](../docs/operations/BACNET_OT_POLICY.md)) |
+
+Rough sizing: full snapshot ≈ **150–250 B × N points** per message; delta mode ≈ **80–120 B × changed points**. Prefer delta + health subset on LTE.
+
+Dev benches: `OPENFDD_FIELDBUS_DEV_FAST_POLL=1` allows faster poll/publish for OT gates.

@@ -56,6 +56,17 @@ impl DeviceTable {
         if !self.devices.contains_key(&key) && self.devices.len() >= MAX_DEVICE_TABLE_ENTRIES {
             return;
         }
+        let mut device = device;
+        // Preserve MS/TP routing seeded via add_routed_device when a later I-Am
+        // arrives without NPDU source routing (common on ephemeral client ports).
+        if let Some(existing) = self.devices.get(&key) {
+            if device.source_network.is_none() {
+                device.source_network = existing.source_network;
+            }
+            if device.source_address.is_none() {
+                device.source_address = existing.source_address.clone();
+            }
+        }
         self.devices.insert(key, device);
     }
 
@@ -124,6 +135,22 @@ mod tests {
         assert_eq!(table.len(), 1);
         let dev = table.get(1234).unwrap();
         assert_eq!(dev.vendor_id, 42);
+    }
+
+    #[test]
+    fn upsert_preserves_routing_when_iam_lacks_npdu_source() {
+        let mut table = DeviceTable::new();
+        let mut routed = make_device(5007);
+        routed.source_network = Some(2000);
+        routed.source_address = Some(MacAddr::from_slice(&[7]));
+        table.upsert(routed);
+        let mut iam = make_device(5007);
+        iam.vendor_id = 77;
+        table.upsert(iam);
+        let dev = table.get(5007).unwrap();
+        assert_eq!(dev.vendor_id, 77);
+        assert_eq!(dev.source_network, Some(2000));
+        assert_eq!(dev.source_address.as_ref().map(|m| m.as_slice()), Some([7u8].as_slice()));
     }
 
     #[test]
