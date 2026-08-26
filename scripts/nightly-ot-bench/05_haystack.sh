@@ -5,9 +5,9 @@
 # Live (HAYSTACK_EXPECT_LIVE=1): require successful about/read and a changing SomeRandomPoint.
 #
 # Niagara nHaystack needs HTTP Basic + insecure TLS (see rusty-haystack demo/niagara_sample).
-# Fieldbus on rusty-haystack v0.8.1 cannot Basic-auth yet — when live is requested and
-# fieldbus returns the Basic-not-supported error, fall back to direct HTTPS probe using
-# HAYSTACK_USER / HAYSTACK_PASS (same as demo) so the bench still validates the point.
+# Fieldbus tip (≥3.3.4 / #778) speaks Basic via reqwest+zinc on rusty-haystack v0.8.1.
+# When live is requested and fieldbus still fails, fall back to direct HTTPS probe using
+# HAYSTACK_USER / HAYSTACK_PASS so the bench still validates the point.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -82,10 +82,11 @@ else
 fi
 
 extract_cur_val() {
-  # Prefer JSON curVal / number fields; Zinc fallback n:NNN
-  python3 - <<'PY'
-import json, re, sys
-raw = sys.stdin.read()
+  # Prefer JSON curVal / number fields; Zinc fallback n:NNN.
+  # Data must come via argv/env — a <<'PY' heredoc would steal stdin.
+  RAW="${1:-}" python3 - <<'PY'
+import json, os, re
+raw = os.environ.get("RAW", "")
 try:
     d = json.loads(raw)
 except Exception:
@@ -117,11 +118,11 @@ live_somerandom_via_fieldbus() {
   body="$(jq -nc --arg f "$HS_FILTER" '{filter:$f}')"
   r1="$(fb -X POST "$FIELDBUS_BASE/haystack/read" -d "$body" 2>/dev/null || true)"
   echo "$r1" >"$ART/haystack_somerandom_1.json"
-  v1="$(extract_cur_val <<<"$r1")"
+  v1="$(extract_cur_val "$r1")"
   sleep 3
   r2="$(fb -X POST "$FIELDBUS_BASE/haystack/read" -d "$body" 2>/dev/null || true)"
   echo "$r2" >"$ART/haystack_somerandom_2.json"
-  v2="$(extract_cur_val <<<"$r2")"
+  v2="$(extract_cur_val "$r2")"
   echo "${DIM}  fieldbus SomeRandomPoint v1=$v1 v2=$v2${RST}"
   if [[ -n "$v1" && -n "$v2" && "$v1" != "$v2" ]]; then
     ok "SomeRandomPoint changed via fieldbus ($v1 → $v2)"
@@ -138,13 +139,17 @@ live_somerandom_direct() {
   echo "$a1" >"$ART/haystack_direct_about.zinc"
   [[ -n "$a1" ]] || return 1
   ok "direct Niagara /about (Basic + insecure TLS)"
-  local enc
+  local enc z1 z2
   enc="$(F="$HS_FILTER" python3 -c 'import urllib.parse,os; print(urllib.parse.quote(os.environ["F"]))')"
-  v1="$(curl -fsSk --max-time 20 -u "$HS_USER:$HS_PASS" -H 'Accept: text/zinc' \
-    "$u/read?filter=$enc" 2>/dev/null | tee "$ART/haystack_direct_read_1.zinc" | extract_cur_val)"
+  z1="$(curl -fsSk --max-time 20 -u "$HS_USER:$HS_PASS" -H 'Accept: text/zinc' \
+    "$u/read?filter=$enc" 2>/dev/null || true)"
+  echo "$z1" >"$ART/haystack_direct_read_1.zinc"
+  v1="$(extract_cur_val "$z1")"
   sleep 3
-  v2="$(curl -fsSk --max-time 20 -u "$HS_USER:$HS_PASS" -H 'Accept: text/zinc' \
-    "$u/read?filter=$enc" 2>/dev/null | tee "$ART/haystack_direct_read_2.zinc" | extract_cur_val)"
+  z2="$(curl -fsSk --max-time 20 -u "$HS_USER:$HS_PASS" -H 'Accept: text/zinc' \
+    "$u/read?filter=$enc" 2>/dev/null || true)"
+  echo "$z2" >"$ART/haystack_direct_read_2.zinc"
+  v2="$(extract_cur_val "$z2")"
   echo "${DIM}  direct SomeRandomPoint v1=$v1 v2=$v2${RST}"
   if [[ -n "$v1" && -n "$v2" && "$v1" != "$v2" ]]; then
     ok "SomeRandomPoint changed via direct Niagara HTTPS ($v1 → $v2)"
@@ -158,7 +163,7 @@ if [[ "$EXPECT_LIVE" == "1" ]]; then
   if live_somerandom_via_fieldbus; then
     :
   else
-    skip "fieldbus live read did not show changing SomeRandomPoint (Basic auth gap on rusty-haystack 0.8.1?)"
+    skip "fieldbus live read did not show changing SomeRandomPoint (retry / check Niagara Random)"
     rc=0
     live_somerandom_direct || rc=$?
     if [[ "$rc" -eq 2 ]]; then
