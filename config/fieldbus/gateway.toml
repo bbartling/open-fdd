@@ -46,5 +46,10 @@ tls_verify = true
 [rest]
 default_timeout_secs = 10
 default_tls_verify = true
-default_poll_interval_secs = 60
+default_poll_interval_secs = 300
 allow_write = false
+
+# Production BACnet poll cadence (override with OPENFDD_FIELDBUS_DEV_FAST_POLL=1 on benches).
+[poll]
+interval_secs = 300
+# health_roles_only = true   # optional: ~30% HVAC health subset for cell sites

@@ -1,6 +1,6 @@
 //! Optional MQTTS bridge: spool poll snapshots, publish telemetry, and safely execute commands.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -26,6 +26,87 @@ use crate::services::rest::RestClientService;
 use crate::services::telemetry_control::{parse_telemetry_command, TelemetryControl};
 
 const MAX_SEEN_COMMANDS: usize = 10_000;
+
+fn env_flag(name: &str) -> bool {
+    matches!(
+        std::env::var(name)
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
+fn dev_fast_poll_enabled() -> bool {
+    env_flag("OPENFDD_FIELDBUS_DEV_FAST_POLL")
+}
+
+fn mqtt_cell_mode() -> bool {
+    env_flag("OPENFDD_MQTT_CELL_MODE")
+}
+
+fn mqtt_delta_enabled() -> bool {
+    env_flag("OPENFDD_MQTT_DELTA") || mqtt_cell_mode()
+}
+
+fn mqtt_publish_interval_secs(settings: &Settings) -> f64 {
+    const PROD_MIN: f64 = 60.0;
+    let default = settings.poll.interval_secs;
+    let raw = std::env::var("OPENFDD_MQTT_PUBLISH_INTERVAL_SECS")
+        .ok()
+        .and_then(|s| s.parse::<f64>().ok())
+        .unwrap_or(default);
+    if dev_fast_poll_enabled() {
+        raw.max(5.0)
+    } else {
+        raw.max(PROD_MIN)
+    }
+}
+
+fn historian_tags_slim(
+    building_id: Option<&str>,
+    equipment_id: &str,
+    point_name: &str,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut tags = serde_json::Map::new();
+    tags.insert(
+        "equipment_id".into(),
+        serde_json::Value::String(equipment_id.to_string()),
+    );
+    tags.insert(
+        "role".into(),
+        serde_json::Value::String(haystack_point_to_role(point_name)),
+    );
+    if let Some(building_id) = building_id {
+        tags.insert(
+            "building_id".into(),
+            serde_json::Value::String(building_id.to_string()),
+        );
+    }
+    tags
+}
+
+fn telemetry_point_signature(point: &TelemetryPoint) -> String {
+    format!("{}:{:?}", point.value, point.quality)
+}
+
+fn apply_delta_filter(
+    points: Vec<TelemetryPoint>,
+    last: &mut HashMap<String, String>,
+) -> Vec<TelemetryPoint> {
+    points
+        .into_iter()
+        .filter(|p| {
+            let sig = telemetry_point_signature(p);
+            if last.get(&p.id) == Some(&sig) {
+                false
+            } else {
+                last.insert(p.id.clone(), sig);
+                true
+            }
+        })
+        .collect()
+}
 
 pub fn mqtt_enabled() -> bool {
     matches!(
@@ -445,7 +526,15 @@ pub async fn spawn_if_configured(
         std::env::var("OPENFDD_MQTT_SPOOL_DIR")
             .unwrap_or_else(|_| format!("/tmp/openfdd-spool-{edge_id}")),
     );
-    let interval = settings.poll.interval_secs.max(5.0);
+    let interval = mqtt_publish_interval_secs(&settings);
+    let cell_mode = mqtt_cell_mode();
+    let delta_mode = mqtt_delta_enabled();
+    info!(
+        publish_interval_secs = interval,
+        cell_mode,
+        delta_mode,
+        "mqtt bridge publish profile"
+    );
 
     let topics = TopicBuilder::new(site_id.clone(), edge_id.clone());
     let command_ctx = Arc::new(CommandContext {
@@ -466,6 +555,7 @@ pub async fn spawn_if_configured(
         };
 
         let mut mqtt: Option<MqttSession> = None;
+        let mut last_published: HashMap<String, String> = HashMap::new();
 
         let mut seq = 0u64;
         loop {
@@ -504,48 +594,77 @@ pub async fn spawn_if_configured(
                     let object_type = v.get("object_type")?.as_str()?.replace('_', "-");
                     let object_instance = v.get("object_instance")?.as_u64()? as u32;
                     let id = format!("bacnet:{device}:{object_type}:{object_instance}");
-                    // Poll status emits `value`; tolerate legacy `present_value`.
                     let value = telemetry_point_value(&v);
-                    let tags = serde_json::json!({"bacnet": true, "device_instance": device})
-                        .as_object()
-                        .cloned()
-                        .unwrap_or_default();
-                    Some(TelemetryPoint {
-                        id,
-                        display_name: Some(point_name.to_string()),
-                        kind: Some(ValueKind::Number),
-                        value,
-                        unit: v.get("units").and_then(|x| x.as_str()).map(str::to_string),
-                        quality: if v.get("error").map(|e| e.is_null()).unwrap_or(true) {
-                            Quality::Good
-                        } else {
-                            Quality::Bad
-                        },
-                        tags: historian_tags(
-                            tags,
+                    let quality = if v.get("error").map(|e| e.is_null()).unwrap_or(true) {
+                        Quality::Good
+                    } else {
+                        Quality::Bad
+                    };
+                    let tags = if cell_mode {
+                        historian_tags_slim(building_id.as_deref(), equipment_id, point_name)
+                    } else {
+                        let base = serde_json::json!({"bacnet": true, "device_instance": device})
+                            .as_object()
+                            .cloned()
+                            .unwrap_or_default();
+                        historian_tags(
+                            base,
                             building_id.as_deref(),
                             equipment_id,
                             point_name,
-                        ),
+                        )
+                    };
+                    Some(TelemetryPoint {
+                        id,
+                        display_name: if cell_mode {
+                            None
+                        } else {
+                            Some(point_name.to_string())
+                        },
+                        kind: Some(ValueKind::Number),
+                        value,
+                        unit: v.get("units").and_then(|x| x.as_str()).map(str::to_string),
+                        quality,
+                        tags,
                     })
                 })
                 .collect();
             let rest_rows = rest.last_values().await;
             let rest_points = rest_telemetry_points(&rest_rows, building_id.as_deref());
-            if points.is_empty() && rest_points.is_empty() {
+            let mut bacnet_points = if delta_mode {
+                apply_delta_filter(points, &mut last_published)
+            } else {
+                points
+            };
+            let mut rest_out = rest_points;
+            if cell_mode {
+                for p in &mut bacnet_points {
+                    p.display_name = None;
+                }
+                for p in &mut rest_out {
+                    p.display_name = None;
+                }
+            }
+            if bacnet_points.is_empty() && rest_out.is_empty() {
                 continue;
             }
-            if !points.is_empty() {
-                let env = TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Bacnet, seq, points);
+            if !bacnet_points.is_empty() {
+                let env = TelemetryEnvelope::new(
+                    &site_id,
+                    &edge_id,
+                    Protocol::Bacnet,
+                    seq,
+                    bacnet_points,
+                );
                 let topic = topics.topic(TopicKind::Telemetry, Some(Protocol::Bacnet));
                 if let Err(err) = spool.enqueue(&topic, env).await {
                     warn!(%err, "spool enqueue failed");
                     continue;
                 }
             }
-            if !rest_points.is_empty() {
+            if !rest_out.is_empty() {
                 let env =
-                    TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Rest, seq, rest_points);
+                    TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Rest, seq, rest_out);
                 let topic = topics.topic(TopicKind::Telemetry, Some(Protocol::Rest));
                 if let Err(err) = spool.enqueue(&topic, env).await {
                     warn!(%err, "rest spool enqueue failed");
@@ -581,6 +700,15 @@ pub async fn spawn_if_configured(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mqtt_publish_interval_respects_prod_floor() {
+        let mut s = Settings::default();
+        s.poll.interval_secs = 30.0;
+        std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
+        std::env::remove_var("OPENFDD_MQTT_PUBLISH_INTERVAL_SECS");
+        assert!((mqtt_publish_interval_secs(&s) - 60.0).abs() < f64::EPSILON);
+    }
 
     #[test]
     fn parse_bacnet_target_id() {

@@ -95,6 +95,7 @@ run_phase 06_csv_fdd_sql.sh "06 CSV import + SQL FDD (FC1)" || OVERALL=1
 # 07 cloud-sim is opt-in: RUN_CLOUD_SIM=1 ./run_all.sh (needs bosspi reachable)
 if [[ "${RUN_CLOUD_SIM:-0}" == "1" ]]; then
   run_phase 07_cloud_sim.sh "07 cloud-sim (remote Pi edge, instance 600000)" || OVERALL=1
+  run_phase 10_dual_mqtt_signoff.sh "10 dual-MQTT sign-off (lab + bldg2)" || OVERALL=1
 else
   echo "- **07 cloud-sim:** SKIPPED (set RUN_CLOUD_SIM=1)" >>"$REPORT"
   skip "cloud-sim skipped (RUN_CLOUD_SIM=1 to enable)"

@@ -72,6 +72,8 @@ Optional:
 BENCH_ALLOW_WRITES=1 ./scripts/nightly-ot-bench/09_rest_ot.sh   # REST write clamp
 RUN_CLOUD_SIM=1 ./scripts/nightly-ot-bench/run_all.sh
 SKIP_PULL=1 ./scripts/nightly-ot-bench/run_all.sh               # reuse running stack
+# Dual-MQTT only (after 07): ./scripts/nightly-ot-bench/10_dual_mqtt_signoff.sh
+DUAL_MQTT_WAIT_SECS=600 RUN_CLOUD_SIM=1 WEATHER_SOAK_SECS=600 ./scripts/nightly-ot-bench/run_all.sh  # ~10m weather + dual ingest
 ABORT_ON_PULL_FAIL=0 ./scripts/nightly-ot-bench/run_all.sh      # forensic cascade after 00 FAIL
 GHCR_WAIT_SECS=900 GHCR_POLL_SECS=30 ./scripts/nightly-ot-bench/00_pull_ghcr_up.sh
 ```
@@ -96,6 +98,9 @@ GHCR_WAIT_SECS=900 GHCR_POLL_SECS=30 ./scripts/nightly-ot-bench/00_pull_ghcr_up.
 5. Central ingest/Feather shows **new** telemetry when MQTT path is live
 6. React SPA routes + honesty/MCP gates pass
 7. Gates **14–15** PASS (capability ledger validator + product-truth honesty)
+8. Optional dual-MQTT (`RUN_CLOUD_SIM=1`): gate **10** — bosspi fieldbus OCI rev matches bench; both sites telemetry + ingest
+
+Low-RAM bench: set `OPENFDD_QUERY_MEMORY_MB=256` in `.env`. Document GHCR legitimacy for **bensbench + bosspi** in [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).
 
 **FAIL with evidence** if any gate fails — do not weaken asserts. OT LAN
 failures (5007 missing, MQTT silent, weather freeze) remain honest FAILs —

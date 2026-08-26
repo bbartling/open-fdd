@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use fdd_core::columns::{haystack_point_to_role, is_known_cookbook_role};
 use bacnet_client::client::BACnetClient;
 use bacnet_encoding::primitives::{decode_application_value, encode_property_value};
 use bacnet_services::common::PropertyReference;
@@ -14,9 +15,9 @@ use bacnet_types::primitives::{ObjectIdentifier, PropertyValue};
 use bytes::BytesMut;
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
-use tracing::warn;
+use tracing::{info, warn};
 
-use crate::config::{load_field_devices, FieldDevice, Settings};
+use crate::config::{load_field_devices, FieldDevice, FieldPoint, Settings};
 use crate::services::bacnet_server::{property_value_tag, property_value_to_json};
 
 const RPM_CHUNK_SIZE: usize = 25;
@@ -135,6 +136,13 @@ impl BacnetClientService {
                 )
                 .await
                 .map_err(|e| e.to_string())?;
+            info!(
+                device_instance = d.device_instance,
+                router = %d.host,
+                mstp_network = net,
+                mstp_mac = dest_mac,
+                "seeded routed BACnet device (add_routed_device)"
+            );
             // Best-effort: probe the remote MSTP network via the router.
             if let Err(e) = client
                 .who_is_network(net, Some(d.device_instance), Some(d.device_instance))
@@ -459,8 +467,12 @@ impl BacnetClientService {
             if !d.enabled || d.points.is_empty() {
                 continue;
             }
+            let points = select_poll_points(d, self.settings.poll.health_roles_only);
+            if points.is_empty() {
+                continue;
+            }
             let mut specs = Vec::new();
-            for p in &d.points {
+            for p in &points {
                 let Ok(ot) = parse_object_type(&p.object_type) else {
                     continue;
                 };
@@ -480,7 +492,7 @@ impl BacnetClientService {
 
             match self.poll_device(d, &specs).await {
                 Ok(map) => {
-                    for p in &d.points {
+                    for p in &points {
                         let Ok(ot) = parse_object_type(&p.object_type) else {
                             continue;
                         };
@@ -501,7 +513,7 @@ impl BacnetClientService {
                 }
                 Err(e) => {
                     warn!("poll cycle failed for device {}: {e}", d.device_instance);
-                    for p in &d.points {
+                    for p in &points {
                         out.push(json!({
                             "device_instance": d.device_instance,
                             "device_name": d.name,
@@ -581,10 +593,49 @@ impl BacnetClientService {
             // but the client Who-Is socket is ephemeral and often never sees that I-Am.
             // Surface the local hosted device in Who-Is results so self-discovery matches OT.
             self.merge_local_hosted_device(&mut out, low, high);
+            self.merge_configured_routed_devices(&mut out, low, high);
             Ok(out)
         }
         .await;
         Self::finish_client(client, result).await
+    }
+
+    /// Enrich Who-Is results with configured MS/TP routing metadata.
+    fn merge_configured_routed_devices(
+        &self,
+        out: &mut Vec<Value>,
+        low: Option<u32>,
+        high: Option<u32>,
+    ) {
+        for d in &self.field_devices {
+            if !d.enabled || !d.is_routed() {
+                continue;
+            }
+            let inst = d.device_instance;
+            if low.is_some_and(|lo| inst < lo) || high.is_some_and(|hi| inst > hi) {
+                continue;
+            }
+            let net = d.mstp_network.unwrap_or(0);
+            if let Some(row) = out.iter_mut().find(|v| {
+                v.get("device_instance")
+                    .and_then(|x| x.as_u64())
+                    .is_some_and(|n| n as u32 == inst)
+            }) {
+                if row.get("source_network").and_then(|v| v.as_u64()).is_none() {
+                    row["source_network"] = json!(net);
+                }
+                continue;
+            }
+            out.push(json!({
+                "device_instance": inst,
+                "address": d.address(),
+                "vendor_id": null,
+                "source_network": net,
+                "max_apdu": null,
+                "configured_routed": true,
+                "note": "synthesized from field_devices.toml — I-Am lacked source_network",
+            }));
+        }
     }
 
     /// Append configured hosted BACnet server instance when missing from discovery.
@@ -1222,6 +1273,35 @@ fn serialize_rpm(rpm: &bacnet_services::rpm::ReadPropertyMultipleACK) -> Vec<Val
     out
 }
 
+/// Select BACnet points for a poll cycle; optional health-role subset (~30% cap).
+fn select_poll_points(device: &FieldDevice, health_only: bool) -> Vec<FieldPoint> {
+    if !health_only {
+        return device.points.clone();
+    }
+    let total = device.points.len();
+    let mut selected: Vec<FieldPoint> = device
+        .points
+        .iter()
+        .filter(|p| is_known_cookbook_role(&haystack_point_to_role(&p.point_name)))
+        .cloned()
+        .collect();
+    if total == 0 {
+        return selected;
+    }
+    let max_keep = ((total as f64) * 0.30).ceil() as usize;
+    let max_keep = max_keep.max(1);
+    if selected.len() > max_keep {
+        warn!(
+            device = %device.name,
+            total,
+            kept = max_keep,
+            "health-only poll capped to ~30% of configured catalog"
+        );
+        selected.truncate(max_keep);
+    }
+    selected
+}
+
 fn device_summary(d: &bacnet_client::discovery::DiscoveredDevice) -> Value {
     let mac = d.mac_address.as_slice();
     let addr = if mac.len() == 6 {
@@ -1243,6 +1323,40 @@ fn device_summary(d: &bacnet_client::discovery::DiscoveredDevice) -> Value {
         "source_network": d.source_network,
         "max_apdu": d.max_apdu_length,
     })
+}
+
+#[cfg(test)]
+mod poll_select_tests {
+    use super::*;
+    use crate::config::FieldPoint;
+
+    fn dev(name: &str, inst: u32, points: Vec<FieldPoint>) -> FieldDevice {
+        FieldDevice {
+            name: name.into(),
+            enabled: true,
+            device_instance: inst,
+            host: "127.0.0.1".into(),
+            port: 47808,
+            mstp_network: None,
+            mstp_mac: vec![],
+            points,
+        }
+    }
+
+    #[test]
+    fn health_only_caps_to_thirty_percent() {
+        let points: Vec<_> = (0..10)
+            .map(|i| FieldPoint {
+                object_type: "analog-input".into(),
+                object_instance: i,
+                point_name: "fan-status".into(),
+                units: "bool".into(),
+            })
+            .collect();
+        let d = dev("ahu", 1, points);
+        let selected = select_poll_points(&d, true);
+        assert_eq!(selected.len(), 3);
+    }
 }
 
 #[cfg(test)]
