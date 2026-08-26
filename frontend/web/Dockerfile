@@ -33,7 +33,8 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # the base image's template entrypoint and a Railway-style upstream at build time.
 USER root
 RUN chown -R 101:0 /usr/share/nginx/html \
-  && chmod 0644 /docker-entrypoint.d/15-openfdd-resolver.envsh \
+  && chmod 0755 /docker-entrypoint.d/15-openfdd-resolver.envsh \
+  && test -x /docker-entrypoint.d/15-openfdd-resolver.envsh \
   && test -x /docker-entrypoint.d/20-envsubst-on-templates.sh \
   && OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080 \
      OPENFDD_NGINX_RESOLVER=127.0.0.11 \
