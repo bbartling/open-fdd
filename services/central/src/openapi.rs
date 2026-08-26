@@ -285,6 +285,7 @@ mod live_routes {
         crate::routes::auth_status,
         crate::routes::auth_me,
         crate::routes::auth_login,
+        crate::routes::auth_agent_token,
         // OFDD-071: live jobs / analytics / datasets / fdd-results / reports routes.
         live_routes::jobs_list,
         live_routes::jobs_create,
@@ -343,6 +344,7 @@ mod live_routes {
         AuthMeResponse,
         AuthLoginRequest,
         AuthLoginResponse,
+        AuthAgentTokenRequest,
     )),
     modifiers(&SecurityAddon),
     info(
@@ -353,6 +355,8 @@ mod live_routes {
             except liveness, login, and non-sensitive capabilities. Open mode is **loopback-only**. \
             Binding a non-loopback address without a strong JWT secret and admin password **fails closed**. \
             JWT is not multi-building tenancy.\n\n\
+            **Logins:** `admin` + `OPENFDD_ADMIN_PASSWORD` → admin JWT; `agent` + `OPENFDD_AGENT_PASSWORD` → operator JWT \
+            (preferred for Railway MCP / Cursor). Admins may also `POST /api/auth/agent-token` for short-lived operator JWTs.\n\n\
             **Claims:** `sub` (subject), `role` one of `viewer`, `operator`, `admin`. \
             `POST /api/commands` requires `operator` or `admin` when auth is enabled."
     ),

@@ -27,20 +27,22 @@ Index: [`docs/mcp-agents/roles/README.md`](../docs/mcp-agents/roles/README.md). 
 
 ## Login / credentials (agents)
 
-MCP runs on the **host** and resolves passwords locally — never from bcrypt hashes in `auth.env.local`.
+MCP runs on the **host** and needs a **Bearer JWT** in `OPENFDD_MCP_TOKEN`. Prefer a dedicated **agent** identity — never put the admin password into MCP config.
 
 | Source | Path / env |
 |--------|------------|
-| One-time handoff | `workspace/bootstrap_credentials.once.txt` — lines `integrator: …`, `agent: …` |
-| Env override | `OPENFDD_INTEGRATOR_PASSWORD`, `OPENFDD_AGENT_PASSWORD` |
+| Railway / central | `OPENFDD_AGENT_PASSWORD` → `POST /api/auth/login` `{ "username":"agent", "password":"…" }` → operator JWT |
+| Admin mint | Admin JWT → `POST /api/auth/agent-token` `{ "ttl_secs": 3600 }` |
+| LAN bootstrap (legacy) | `workspace/bootstrap_credentials.once.txt` — lines `integrator: …`, `agent: …` |
+| Env override (scripts) | `OPENFDD_INTEGRATOR_PASSWORD`, `OPENFDD_AGENT_PASSWORD` |
 | Shell helper | `scripts/openfdd_auth_lib.sh` → `openfdd_auth_login_token` |
 
 **MCP tools:**
 
 - `openfdd_auth_credentials_hint` — paths and roles (no secrets)
-- `openfdd_auth_login` — `{ "role": "integrator" }` → JWT for `OPENFDD_MCP_TOKEN`
+- `openfdd_auth_login` — `{ "role": "agent" }` → JWT for `OPENFDD_MCP_TOKEN` when bootstrap/env passwords exist
 
-Works with **Cursor, Claude Desktop, Codex CLI, OpenClaw**, or any MCP host. Open-FDD does **not** ship a built-in chatbot — connect external agents through this stdio server or JWT REST.
+Railway: keep MCP on private networking; see [RAILWAY_DEPLOYMENT.md](../docs/operations/RAILWAY_DEPLOYMENT.md). Works with **Cursor, Claude Desktop, Codex CLI, OpenClaw**, or any MCP host. Open-FDD does **not** ship a built-in chatbot — connect external agents through this stdio server or JWT REST.
 
 ## Model + FDD wiresheet
 

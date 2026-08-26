@@ -88,13 +88,62 @@ Railway private DNS: `openfdd-central.railway.internal:8080`.
 ## Central variables
 
 ```text
-OPENFDD_JWT_SECRET=<long deployment-unique random secret>
+OPENFDD_JWT_SECRET=<long deployment-unique random secret, ≥32 chars>
 OPENFDD_ADMIN_PASSWORD=<strong deployment-unique password>
+OPENFDD_AGENT_PASSWORD=<strong password for FDD AI / MCP agents — not the admin password>
 OPENFDD_WORKSPACE=/workspace
 OPENFDD_PARQUET_ROOT=/workspace/.cache/parquet
 OPENFDD_REACT_UI=1
 OPENFDD_UI_GENERATION_DEFAULT=react
 ```
+
+Store these only in Railway **Variables / Secrets**. Never commit them, never paste JWTs into chat transcripts or repo files.
+
+| Identity | Login | JWT role | Use |
+| --- | --- | --- | --- |
+| `admin` | `OPENFDD_ADMIN_PASSWORD` | admin | Browser UI, mint agent tokens, edge kits |
+| `agent` | `OPENFDD_AGENT_PASSWORD` | operator | Cursor / MCP / REST FDD assistance |
+
+Prefer **`agent`** for remote AI assistance. Do not share the admin password with MCP hosts.
+
+### Secure agent auth on Railway (Cursor / MCP)
+
+1. Set `OPENFDD_JWT_SECRET`, `OPENFDD_ADMIN_PASSWORD`, and `OPENFDD_AGENT_PASSWORD` on **central**.
+2. Keep central (and MCP) on Railway **private networking** — only `openfdd-web` gets a public domain.
+3. Mint a short-lived operator JWT (do not log the token):
+
+```bash
+# From a trusted shell that can reach central (Railway shell / VPN), either:
+# A) agent password login
+TOKEN="$(curl -fsS -X POST http://openfdd-central.railway.internal:8080/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d "{\"username\":\"agent\",\"password\":\"$OPENFDD_AGENT_PASSWORD\"}" \
+  | jq -r '.token // .access_token')"
+
+# B) admin mints a short-lived agent token (ttl_secs default 3600, max 86400)
+ADMIN_TOKEN="$(curl -fsS -X POST http://openfdd-central.railway.internal:8080/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d "{\"username\":\"admin\",\"password\":\"$OPENFDD_ADMIN_PASSWORD\"}" \
+  | jq -r '.token // .access_token')"
+TOKEN="$(curl -fsS -X POST http://openfdd-central.railway.internal:8080/api/auth/agent-token \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"ttl_secs":3600}' \
+  | jq -r '.token // .access_token')"
+```
+
+4. Point MCP at private central with that JWT only:
+
+```text
+OPENFDD_API_BASE=http://openfdd-central.railway.internal:8080
+OPENFDD_MCP_TOKEN=<operator JWT from step 3>
+# Writes stay off unless deliberate:
+# OPENFDD_MCP_ALLOW_WRITES=1
+```
+
+5. Rotate: change `OPENFDD_AGENT_PASSWORD` / re-mint JWT; treat stolen JWTs as compromised until expiry.
+
+`GET /api/auth/status` reports `agent_login_configured` when the agent password is set.
 
 For MQTTS hub, also configure Central’s MQTT client settings to the private broker (host/port/certs) per stack env conventions used in Compose — never commit secrets.
 
@@ -123,10 +172,10 @@ Do **not** use bare `/health`; the product route is `/api/health`.
 
 ```text
 OPENFDD_API_BASE=http://openfdd-central.railway.internal:8080
-OPENFDD_MCP_TOKEN=<JWT/token appropriate for the deployment>
+OPENFDD_MCP_TOKEN=<operator JWT from agent login or POST /api/auth/agent-token>
 ```
 
-Keep MCP private unless there is a deliberate authenticated agent gateway.
+Keep MCP **private**. Prefer `OPENFDD_AGENT_PASSWORD` / mint endpoint over putting `OPENFDD_ADMIN_PASSWORD` into any MCP host. Leave `OPENFDD_MCP_ALLOW_WRITES` unset unless an operator explicitly enables mutating tools (`confirm:true` still required).
 
 ## OT / BACnet warning
 
@@ -150,6 +199,8 @@ Treat Railway as an experimental lab/demo unless your own controls, TLS, persist
 Never:
 
 - commit secrets or OT credentials;
+- share `OPENFDD_ADMIN_PASSWORD` with MCP hosts (use `OPENFDD_AGENT_PASSWORD` or `/api/auth/agent-token`);
+- embed long-lived JWTs in Cursor config checked into git;
 - expose BACnet write paths publicly;
 - publish MQTTS `8883` to the open internet without a deliberate ACL/TLS design;
 - assume a public web domain makes the whole stack production-safe.

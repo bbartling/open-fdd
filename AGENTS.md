@@ -34,11 +34,14 @@ URL until `./scripts/openfdd_demo_gate.sh` exits 0. See
 ```bash
 ./scripts/openfdd_stack_up.sh react-ot     # React SPA + mqtt + central + fieldbus
 # or: react (no fieldbus) / csv
+# Admin (UI) — or use username "agent" + OPENFDD_AGENT_PASSWORD for operator JWT (Railway / MCP)
 TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"'"$OPENFDD_ADMIN_PASSWORD"'"}' \
+  -d '{"username":"agent","password":"'"$OPENFDD_AGENT_PASSWORD"'"}' \
   | jq -r '.token // .access_token')"
 ```
+
+On Railway: set `OPENFDD_JWT_SECRET`, `OPENFDD_ADMIN_PASSWORD`, and `OPENFDD_AGENT_PASSWORD` on central; keep MCP private; see [RAILWAY_DEPLOYMENT.md](docs/operations/RAILWAY_DEPLOYMENT.md) § Secure agent auth. Admins can also `POST /api/auth/agent-token` for short-lived operator JWTs.
 
 Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/agent/tools | jq '.tools | length'`
 

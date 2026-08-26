@@ -92,6 +92,9 @@ pub struct AuthConfig {
     pub secret: Option<String>,
     /// Optional plaintext admin password for `POST /api/auth/login` (bench / remote UI).
     pub admin_password: Option<String>,
+    /// Optional agent password for FDD AI assistance (`username=agent` → operator JWT).
+    /// Prefer this on Railway over sharing the admin password with MCP hosts.
+    pub agent_password: Option<String>,
 }
 
 pub fn is_loopback_bind(host: &str) -> bool {
@@ -154,6 +157,9 @@ impl AuthConfig {
         let admin_password = std::env::var("OPENFDD_ADMIN_PASSWORD")
             .ok()
             .filter(|s| !s.trim().is_empty());
+        let agent_password = std::env::var("OPENFDD_AGENT_PASSWORD")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
         if secret.is_none() {
             warn!("auth_enabled=false (OPENFDD_JWT_SECRET unset) — open mode is loopback-only");
         } else {
@@ -166,10 +172,16 @@ impl AuthConfig {
                     "OPENFDD_ADMIN_PASSWORD unset — UI login will fail until password is configured"
                 );
             }
+            if agent_password.is_none() {
+                warn!(
+                    "OPENFDD_AGENT_PASSWORD unset — Railway/MCP agents should use a dedicated agent password (username=agent), not admin"
+                );
+            }
         }
         Self {
             secret,
             admin_password,
+            agent_password,
         }
     }
 
@@ -188,7 +200,7 @@ impl AuthConfig {
         let claims = JwtClaims {
             sub: sub.to_string(),
             role: role.as_str().to_string(),
-            exp: now + ttl_secs,
+            exp: now + ttl_secs.max(60),
             iat: now,
         };
         encode(
@@ -196,28 +208,39 @@ impl AuthConfig {
             &claims,
             &EncodingKey::from_secret(secret.as_bytes()),
         )
-        .map_err(|e| format!("token encode failed: {e}"))
+        .map_err(|e| format!("token mint failed: {e}"))
     }
 
-    /// Validate username/password for UI login.
-    /// Only `admin` is accepted with `OPENFDD_ADMIN_PASSWORD` (do not mint other roles
-    /// from a shared password).
+    /// Validate username/password for UI / agent login.
+    /// - `admin` + `OPENFDD_ADMIN_PASSWORD` → Admin
+    /// - `agent` + `OPENFDD_AGENT_PASSWORD` → Operator (FDD AI assistance / MCP)
     pub fn authenticate_password(
         &self,
         username: &str,
         password: &str,
     ) -> Result<(String, Role), String> {
-        let expected = self
-            .admin_password
-            .as_ref()
-            .ok_or_else(|| "login not configured (set OPENFDD_ADMIN_PASSWORD)".to_string())?;
-        if !constant_time_eq(expected.as_bytes(), password.as_bytes()) {
-            return Err("invalid credentials".into());
+        let user = username.trim();
+        if user.eq_ignore_ascii_case("admin") {
+            let expected = self
+                .admin_password
+                .as_ref()
+                .ok_or_else(|| "login not configured (set OPENFDD_ADMIN_PASSWORD)".to_string())?;
+            if !constant_time_eq(expected.as_bytes(), password.as_bytes()) {
+                return Err("invalid credentials".into());
+            }
+            return Ok(("admin".into(), Role::Admin));
         }
-        if username.trim() != "admin" {
-            return Err("invalid credentials".into());
+        if user.eq_ignore_ascii_case("agent") {
+            let expected = self
+                .agent_password
+                .as_ref()
+                .ok_or_else(|| "agent login not configured (set OPENFDD_AGENT_PASSWORD)".to_string())?;
+            if !constant_time_eq(expected.as_bytes(), password.as_bytes()) {
+                return Err("invalid credentials".into());
+            }
+            return Ok(("agent".into(), Role::Operator));
         }
-        Ok(("admin".into(), Role::Admin))
+        Err("invalid credentials".into())
     }
 
     pub fn verify_bearer(&self, token: &str) -> Result<AuthUser, String> {
@@ -290,6 +313,7 @@ mod tests {
         let cfg = AuthConfig {
             secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
             admin_password: None,
+            agent_password: None,
         };
         let claims = JwtClaims {
             sub: "operator".into(),
@@ -313,6 +337,7 @@ mod tests {
         let cfg = AuthConfig {
             secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
             admin_password: None,
+            agent_password: None,
         };
         let claims = JwtClaims {
             sub: "x".into(),
@@ -362,5 +387,32 @@ mod tests {
     fn allow_open_bind_escape_hatch() {
         // Covered by env in integration; unit: loopback still ok.
         assert!(is_loopback_bind("localhost"));
+    }
+
+    #[test]
+    fn agent_password_mints_operator_not_admin() {
+        let cfg = AuthConfig {
+            secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
+            admin_password: Some("admin-pw".into()),
+            agent_password: Some("agent-pw".into()),
+        };
+        let (sub, role) = cfg.authenticate_password("agent", "agent-pw").unwrap();
+        assert_eq!(sub, "agent");
+        assert_eq!(role, Role::Operator);
+        assert!(cfg.authenticate_password("agent", "admin-pw").is_err());
+        assert!(cfg.authenticate_password("admin", "agent-pw").is_err());
+        let (admin_sub, admin_role) = cfg.authenticate_password("admin", "admin-pw").unwrap();
+        assert_eq!(admin_sub, "admin");
+        assert_eq!(admin_role, Role::Admin);
+    }
+
+    #[test]
+    fn agent_login_requires_configured_password() {
+        let cfg = AuthConfig {
+            secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
+            admin_password: Some("admin-pw".into()),
+            agent_password: None,
+        };
+        assert!(cfg.authenticate_password("agent", "anything").is_err());
     }
 }

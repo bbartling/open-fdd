@@ -128,3 +128,76 @@ export async function apiFetch<T>(
 
   return res.json() as Promise<T>;
 }
+
+/** Authenticated binary download (edge kit ZIP, WattLab dumps, etc.). */
+export async function apiFetchBlob(
+  path: string,
+  init?: RequestInit,
+): Promise<{ blob: Blob; filename: string | null }> {
+  const requestId = newRequestId();
+  let authHeader: Record<string, string> = {};
+  try {
+    const token = sessionStorage.getItem("openfdd.auth.token");
+    if (token) authHeader = { Authorization: `Bearer ${token}` };
+  } catch {
+    // ignore
+  }
+  const res = await fetch(buildUrl(path), {
+    ...init,
+    headers: {
+      Accept: "*/*",
+      [REQUEST_ID_HEADER]: requestId,
+      ...authHeader,
+      ...(init?.headers ?? {}),
+    },
+  });
+
+  const responseRequestId = res.headers.get(REQUEST_ID_HEADER) ?? requestId;
+
+  if (!res.ok) {
+    const text = await res.text();
+    if (
+      res.status === 401 &&
+      typeof window !== "undefined" &&
+      !path.includes("/auth/login")
+    ) {
+      try {
+        sessionStorage.removeItem("openfdd.auth.token");
+      } catch {
+        // ignore
+      }
+      const here = `${window.location.pathname}${window.location.search}`;
+      if (!here.startsWith("/auth") && !here.startsWith("/login")) {
+        window.location.assign(`/auth?from=${encodeURIComponent(here)}`);
+      }
+    }
+    const envelope = parseErrorEnvelope(text);
+    if (envelope) {
+      throw new ApiClientError(envelope.error.message, {
+        code: envelope.error.code,
+        retryable: envelope.error.retryable,
+        requestId: envelope.error.request_id || responseRequestId,
+        status: res.status,
+      });
+    }
+    let message = text || `HTTP ${res.status}`;
+    try {
+      const parsed = JSON.parse(text) as { error?: string };
+      if (parsed.error) message = parsed.error;
+    } catch {
+      // keep text
+    }
+    throw new ApiClientError(message, {
+      code: "http.error",
+      retryable: res.status >= 500,
+      requestId: responseRequestId,
+      status: res.status,
+    });
+  }
+
+  const disposition = res.headers.get("content-disposition") ?? "";
+  const match = /filename=\"([^\"]+)\"/i.exec(disposition);
+  const filename = match?.[1] ?? null;
+  const blob = await res.blob();
+  return { blob, filename };
+}

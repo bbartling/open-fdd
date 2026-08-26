@@ -158,6 +158,48 @@ pub fn provision_edge_kit(req: &ProvisionRequest) -> anyhow::Result<ProvisionRes
     })
 }
 
+/// Filenames included in an AWS-style edge download ZIP (never CA private key).
+pub const EDGE_KIT_ZIP_MEMBERS: &[&str] = &[
+    "ca.pem",
+    "edge.cert.pem",
+    "edge.key.pem",
+    "edge.json",
+    "mosquitto.acl",
+];
+
+/// Members that must never appear in a downloadable edge kit ZIP.
+pub const EDGE_KIT_ZIP_FORBIDDEN: &[&str] = &["ca.key.pem", "central.key.pem"];
+
+/// Build a downloadable ZIP from an already-provisioned kit directory.
+pub fn zip_edge_kit_dir(kit_dir: &Path) -> anyhow::Result<Vec<u8>> {
+    use std::io::Write;
+
+    let mut cursor = std::io::Cursor::new(Vec::new());
+    {
+        let mut zip = zip::ZipWriter::new(&mut cursor);
+        let opts = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        for name in EDGE_KIT_ZIP_MEMBERS {
+            let path = kit_dir.join(name);
+            if !path.is_file() {
+                anyhow::bail!("edge kit missing required member {name}");
+            }
+            zip.start_file(*name, opts)?;
+            zip.write_all(&fs::read(&path)?)?;
+        }
+        zip.finish()?;
+    }
+    Ok(cursor.into_inner())
+}
+
+/// Provision under `out_dir` and return ZIP bytes for the edge download bundle.
+pub fn provision_edge_kit_zip(req: &ProvisionRequest) -> anyhow::Result<(String, Vec<u8>)> {
+    let result = provision_edge_kit(req)?;
+    let bytes = zip_edge_kit_dir(&result.kit_dir)?;
+    let filename = format!("{}__{}.zip", req.site_id, req.edge_id);
+    Ok((filename, bytes))
+}
+
 fn issue_client_cert(
     ca_cert: &rcgen::Certificate,
     ca_key: &KeyPair,
@@ -179,4 +221,50 @@ fn issue_client_cert(
     fs::write(cert_out, cert.pem())?;
     fs::write(key_out, key.serialize_pem())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Read;
+
+    #[test]
+    fn edge_kit_zip_includes_public_pems_excludes_ca_key() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (filename, bytes) = provision_edge_kit_zip(&ProvisionRequest {
+            out_dir: tmp.path().to_path_buf(),
+            site_id: "lab".into(),
+            edge_id: "fieldbus-1".into(),
+            broker_host: "mqtt.example.com".into(),
+            broker_port: 8883,
+            ca_dir: None,
+        })
+        .unwrap();
+        assert_eq!(filename, "lab__fieldbus-1.zip");
+
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let mut names = Vec::new();
+        for i in 0..archive.len() {
+            names.push(archive.by_index(i).unwrap().name().to_string());
+        }
+        for required in EDGE_KIT_ZIP_MEMBERS {
+            assert!(names.iter().any(|n| n == required), "missing {required}");
+        }
+        for forbidden in EDGE_KIT_ZIP_FORBIDDEN {
+            assert!(
+                !names.iter().any(|n| n == forbidden || n.ends_with(forbidden)),
+                "zip must not contain {forbidden}"
+            );
+        }
+        // CA private key lives only under ca/, never in zip members.
+        assert!(tmp.path().join("ca/ca.key.pem").is_file());
+        let mut edge_json = String::new();
+        archive
+            .by_name("edge.json")
+            .unwrap()
+            .read_to_string(&mut edge_json)
+            .unwrap();
+        assert!(edge_json.contains("mqtt.example.com"));
+        assert!(edge_json.contains("fieldbus-1"));
+    }
 }

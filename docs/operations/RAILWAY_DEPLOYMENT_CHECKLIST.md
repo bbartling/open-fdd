@@ -19,7 +19,7 @@ Use with [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md). Prefer GHCR `:sha-<7>` 
 
 - [ ] Image `ghcr.io/bbartling/openfdd-central:nightly` (or sha pin)
 - [ ] Volume on `/workspace` (≥5GB)
-- [ ] Vars: `OPENFDD_JWT_SECRET`, `OPENFDD_ADMIN_PASSWORD`, `OPENFDD_WORKSPACE=/workspace`, `OPENFDD_PARQUET_ROOT=/workspace/.cache/parquet`, `OPENFDD_REACT_UI=1`
+- [ ] Vars: `OPENFDD_JWT_SECRET` (≥32 chars), `OPENFDD_ADMIN_PASSWORD`, **`OPENFDD_AGENT_PASSWORD`** (FDD AI / MCP — distinct from admin), `OPENFDD_WORKSPACE=/workspace`, `OPENFDD_PARQUET_ROOT=/workspace/.cache/parquet`, `OPENFDD_REACT_UI=1`
 - [ ] For MQTTS hub also set MQTT client env expected by Central (see main Railway guide)
 - [ ] Deploy and wait until `GET /api/health` returns 200
 - [ ] From Railway shell: `getent hosts openfdd-central.railway.internal` and `curl -fsS http://openfdd-central.railway.internal:8080/api/health`
@@ -45,10 +45,14 @@ Cloud MQTTS is the point of the hub: on-prem fieldbus publishes into Railway MQT
 ## Step 4 — Verify
 
 - [ ] `curl -fsS https://<public-web>/api/health`
-- [ ] Browser login with admin password
+- [ ] Browser login with **admin** password (not agent)
+- [ ] `GET /api/auth/status` shows `auth_required: true` and `agent_login_configured: true`
+- [ ] Agent JWT: `POST /api/auth/login` as `agent` **or** admin `POST /api/auth/agent-token` → use as `OPENFDD_MCP_TOKEN` only on private MCP
+- [ ] Never commit JWTs / agent password; rotate after demos
 - [ ] Sidebar shows `3.3.N+shortsha`
 - [ ] CSV lab: import `openfdd_package_v1`
 - [ ] MQTTS hub: fieldbus (on-prem) connected to Railway MQTTS; Operations MQTT monitor shows traffic
+- [ ] Optional: Operations → MQTT → **Download edge kit** (operator/admin); mount ZIP at `/mqtt` on-prem (never ships CA private key)
 
 ## Fieldbus stays on-prem
 

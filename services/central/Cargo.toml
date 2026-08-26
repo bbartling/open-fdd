@@ -41,6 +41,7 @@ utoipa-swagger-ui = { version = "9", features = ["axum"] }
 anyhow = "1"
 csv = { workspace = true }
 dashmap = "6"
+tempfile = "3"
 # aws_lc_rs avoids transitive `rsa` (RUSTSEC-2023-0071); we only mint/verify HS256.
 jsonwebtoken = { version = "10", default-features = false, features = ["aws_lc_rs"] }
 rumqttc = { version = "0.24", default-features = false, features = ["use-native-tls"] }
