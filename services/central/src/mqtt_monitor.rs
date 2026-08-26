@@ -112,7 +112,8 @@ async fn create_edge_kit(
         // Keep CA under a stable sibling of kits when present; otherwise provision
         // will create ca/ under out_dir (tmp) and also reuse OPENFDD_MQTT_CA_DIR.
         let out_dir = tmp.path().to_path_buf();
-        let ca_override = if ca_dir.join("ca.key.pem").is_file() || ca_dir.join("ca.pem").is_file() {
+        let ca_override = if ca_dir.join("ca.key.pem").is_file() || ca_dir.join("ca.pem").is_file()
+        {
             Some(ca_dir)
         } else {
             None

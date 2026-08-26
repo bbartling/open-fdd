@@ -252,7 +252,9 @@ mod tests {
         }
         for forbidden in EDGE_KIT_ZIP_FORBIDDEN {
             assert!(
-                !names.iter().any(|n| n == forbidden || n.ends_with(forbidden)),
+                !names
+                    .iter()
+                    .any(|n| n == forbidden || n.ends_with(forbidden)),
                 "zip must not contain {forbidden}"
             );
         }

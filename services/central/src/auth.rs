@@ -231,10 +231,9 @@ impl AuthConfig {
             return Ok(("admin".into(), Role::Admin));
         }
         if user.eq_ignore_ascii_case("agent") {
-            let expected = self
-                .agent_password
-                .as_ref()
-                .ok_or_else(|| "agent login not configured (set OPENFDD_AGENT_PASSWORD)".to_string())?;
+            let expected = self.agent_password.as_ref().ok_or_else(|| {
+                "agent login not configured (set OPENFDD_AGENT_PASSWORD)".to_string()
+            })?;
             if !constant_time_eq(expected.as_bytes(), password.as_bytes()) {
                 return Err("invalid credentials".into());
             }

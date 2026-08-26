@@ -196,7 +196,7 @@ export async function apiFetchBlob(
   }
 
   const disposition = res.headers.get("content-disposition") ?? "";
-  const match = /filename=\"([^\"]+)\"/i.exec(disposition);
+  const match = /filename="([^"]+)"/i.exec(disposition);
   const filename = match?.[1] ?? null;
   const blob = await res.blob();
   return { blob, filename };
