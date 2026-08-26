@@ -35,9 +35,10 @@ description: >-
 10. Do not drop `REQUIRED_RCX_PRESET_IDS`. Health row tint uses existing
     `--health-broken-1/2/3` tokens (`n/3`; `?/3` is not red).
 11. **Operations** (`/operations`) stays its own main tab — not nested under Sites.
-    MQTT live console polls `GET /api/mqtt/monitor` (1s while listening is OK);
-    OT strip may also surface `/api/ingest/stats` + `/api/edges`. Never put broker
-    credentials in the browser.
+    MQTT console watches Central’s ingest buffer (`GET /api/mqtt/monitor`) — no
+    operator-facing scrape/poll-interval knobs (fieldbus owns OT cadence). OT strip
+    may surface `/api/ingest/stats` + `/api/edges`. Never put broker credentials in
+    the browser.
 12. **Sites** (`/sites`) is package/edge **inventory**. CSV / MQTT / Both is an
     operator label only — not a dual-writer historian epic.
 13. Low-RAM benches: prefer `npm run dev` (Vite → `:8080`) and get human approval

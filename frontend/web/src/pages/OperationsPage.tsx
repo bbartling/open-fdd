@@ -394,11 +394,9 @@ function OtStatusStrip() {
 function MqttPanel() {
   const [topicFilter, setTopicFilter] = useState("openfdd/#");
   const [snapshot, setSnapshot] = useState<MqttMonitorSnapshot | null>(null);
-  /** Off by default — cell-modem / bandwidth: no polling until Start listening. */
+  /** Off until Start listening — console only; does not change fieldbus scrape/MQTT publish. */
   const [listening, setListening] = useState(false);
   const [paused, setPaused] = useState(false);
-  /** Live console default 1s while listening; slower options for cell-modem. */
-  const [pollMs, setPollMs] = useState(1000);
   const [clearedAt, setClearedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const filterOk = useMemo(() => validTopicFilter(topicFilter), [topicFilter]);
@@ -416,9 +414,9 @@ function MqttPanel() {
   useEffect(() => {
     if (!listening || paused) return undefined;
     void refresh();
-    const timer = window.setInterval(() => void refresh(), pollMs);
+    const timer = window.setInterval(() => void refresh(), 1000);
     return () => window.clearInterval(timer);
-  }, [listening, paused, pollMs, refresh]);
+  }, [listening, paused, refresh]);
 
   const messages = useMemo(() => {
     const cutoff = clearedAt ?? Number.NEGATIVE_INFINITY;
@@ -434,10 +432,10 @@ function MqttPanel() {
         <div>
           <h2 id="mqtt-config-heading">MQTT Test Client</h2>
           <p className="muted">
-            AWS IoT–style operator monitor: subscribe filter, live truncated payload feed, connection events.
-            Browser uses authenticated Central API snapshots (not broker credentials). Listening is off by
-            default and throttled for cell-modem sites. Full WSS-to-broker is optional later; production path
-            remains fieldbus → MQTTS → central ingest.
+            Operator live feed of what Central is already ingesting over MQTTS (fieldbus scrape →
+            secure publish). Topic filter, payloads, and connection events — no broker passwords and
+            no scrape-interval controls here. Start listening to watch; pause/clear only affect this
+            view.
           </p>
         </div>
         <div className="button-row">
@@ -458,27 +456,18 @@ function MqttPanel() {
             disabled={!listening}
           />
           <Button id="mqtt-clear" label="Clear local view" variant="secondary" onClick={() => setClearedAt(Date.now())} />
-          <Button id="mqtt-refresh" label="Refresh once" variant="secondary" onClick={() => void refresh()} />
         </div>
       </div>
 
       {error ? <div className="inline-alert inline-alert--error" role="alert">{error}</div> : null}
 
-      <div className="form-row">
-        <label htmlFor="mqtt-poll-ms">Poll interval (cell-aware)</label>
-        <select
-          id="mqtt-poll-ms"
-          value={pollMs}
-          onChange={(event) => setPollMs(Number(event.target.value))}
-        >
-          <option value={1000}>1 s (live)</option>
-          <option value={2000}>2 s</option>
-          <option value={5000}>5 s</option>
-          <option value={10000}>10 s</option>
-          <option value={30000}>30 s (cell)</option>
-        </select>
-        <span>{listening ? (paused ? "Display paused" : `Polling every ${pollMs / 1000}s`) : "Not listening — no background traffic"}</span>
-      </div>
+      {!listening ? (
+        <p className="muted" data-testid="mqtt-listen-hint">
+          Not listening — click Start listening to follow the live buffer.
+        </p>
+      ) : paused ? (
+        <p className="muted">Display paused.</p>
+      ) : null}
 
       <div className="summary-grid">
         {metric("Broker state", snapshot?.connected ? "Connected" : "Disconnected")}
