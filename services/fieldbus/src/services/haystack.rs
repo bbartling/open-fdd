@@ -1,10 +1,15 @@
-//! Read-only Haystack client wrapper (mirrors `app/haystack_client.py`).
+//! Read-only Haystack client wrapper.
+//!
+//! - **SCRAM**: rusty-haystack `HaystackClient::connect` (SkySpark / rusty-haystack server).
+//! - **Basic**: reqwest + Zinc decode via haystack_core (Niagara nHaystack). Stays on
+//!   rusty-haystack v0.8.1 so we do not pull tip 0.9 (rustc 1.97 / rand conflict).
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use haystack_client::transport::http::HttpTransport;
 use haystack_client::HaystackClient;
+use haystack_core::codecs::zinc;
 use haystack_core::data::HGrid;
 use haystack_core::kinds::Kind;
 use serde_json::{json, Value};
@@ -27,9 +32,85 @@ impl std::fmt::Display for HaystackNotAllowedError {
 
 impl std::error::Error for HaystackNotAllowedError {}
 
+enum ClientInner {
+    Scram(HaystackClient<HttpTransport>),
+    Basic(BasicHaystackHttp),
+}
+
+/// Niagara-friendly HTTP Basic + Zinc client (no SCRAM handshake).
+struct BasicHaystackHttp {
+    http: reqwest::Client,
+    base_url: String,
+    username: String,
+    password: String,
+}
+
+impl BasicHaystackHttp {
+    fn new(settings: &HaystackSettings) -> Result<Self, String> {
+        let http = reqwest::Client::builder()
+            .danger_accept_invalid_certs(!settings.tls_verify)
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(|e| e.to_string())?;
+        Ok(Self {
+            http,
+            base_url: settings.base_url.trim_end_matches('/').to_string(),
+            username: settings.username.clone(),
+            password: settings.password.clone(),
+        })
+    }
+
+    async fn get_zinc(&self, path: &str, query: &[(&str, String)]) -> Result<HGrid, String> {
+        let url = format!("{}{}", self.base_url, path);
+        let mut req = self
+            .http
+            .get(&url)
+            .basic_auth(&self.username, Some(&self.password))
+            .header("Accept", "text/zinc");
+        if !query.is_empty() {
+            req = req.query(query);
+        }
+        let resp = req.send().await.map_err(|e| e.to_string())?;
+        let status = resp.status();
+        let body = resp.text().await.map_err(|e| e.to_string())?;
+        if !status.is_success() {
+            return Err(format!(
+                "haystack HTTP {status}: {}",
+                body.chars().take(240).collect::<String>()
+            ));
+        }
+        zinc::decode_grid(&body).map_err(|e| e.to_string())
+    }
+
+    async fn about(&self) -> Result<HGrid, String> {
+        self.get_zinc("/about", &[]).await
+    }
+
+    async fn read(&self, filter: &str) -> Result<HGrid, String> {
+        self.get_zinc("/read", &[("filter", filter.to_string())])
+            .await
+    }
+
+    async fn nav(&self, nav_id: Option<&str>) -> Result<HGrid, String> {
+        let q: Vec<(&str, String)> = match nav_id {
+            Some(id) if !id.is_empty() => vec![("navId", id.to_string())],
+            _ => vec![],
+        };
+        self.get_zinc("/nav", &q).await
+    }
+
+    async fn his_read(&self, id: &str, range: &str) -> Result<HGrid, String> {
+        self.get_zinc(
+            "/hisRead",
+            &[("id", id.to_string()), ("range", range.to_string())],
+        )
+        .await
+    }
+}
+
 pub struct HaystackService {
     settings: HaystackSettings,
-    client: Arc<Mutex<Option<HaystackClient<HttpTransport>>>>,
+    client: Arc<Mutex<Option<ClientInner>>>,
 }
 
 impl HaystackService {
@@ -41,7 +122,8 @@ impl HaystackService {
     }
 
     pub async fn close(&self) {
-        if let Some(client) = self.client.lock().await.take() {
+        let mut guard = self.client.lock().await;
+        if let Some(ClientInner::Scram(client)) = guard.take() {
             let _ = client.close().await;
         }
     }
@@ -59,22 +141,21 @@ impl HaystackService {
     async fn ensure_client(&self) -> Result<(), String> {
         let mut guard = self.client.lock().await;
         if guard.is_none() {
-            let client = match self.settings.auth_mode {
+            let inner = match self.settings.auth_mode {
                 HaystackAuthMode::Basic => {
-                    return Err(
-                        "Haystack Basic auth is not supported with the pinned rusty-haystack client (use SCRAM)"
-                            .into(),
-                    );
+                    ClientInner::Basic(BasicHaystackHttp::new(&self.settings)?)
                 }
-                HaystackAuthMode::Scram => HaystackClient::connect(
-                    &self.settings.base_url,
-                    &self.settings.username,
-                    &self.settings.password,
-                )
-                .await
-                .map_err(|e| e.to_string())?,
+                HaystackAuthMode::Scram => ClientInner::Scram(
+                    HaystackClient::connect(
+                        &self.settings.base_url,
+                        &self.settings.username,
+                        &self.settings.password,
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?,
+                ),
             };
-            *guard = Some(client);
+            *guard = Some(inner);
         }
         Ok(())
     }
@@ -83,36 +164,30 @@ impl HaystackService {
         self.check_op("about").map_err(|e| e.to_string())?;
         self.ensure_client().await?;
         let guard = self.client.lock().await;
-        guard
-            .as_ref()
-            .unwrap()
-            .about()
-            .await
-            .map_err(|e| e.to_string())
+        match guard.as_ref().unwrap() {
+            ClientInner::Scram(c) => c.about().await.map_err(|e| e.to_string()),
+            ClientInner::Basic(c) => c.about().await,
+        }
     }
 
     pub async fn read(&self, filter: &str) -> Result<HGrid, String> {
         self.check_op("read").map_err(|e| e.to_string())?;
         self.ensure_client().await?;
         let guard = self.client.lock().await;
-        guard
-            .as_ref()
-            .unwrap()
-            .read(filter, None)
-            .await
-            .map_err(|e| e.to_string())
+        match guard.as_ref().unwrap() {
+            ClientInner::Scram(c) => c.read(filter, None).await.map_err(|e| e.to_string()),
+            ClientInner::Basic(c) => c.read(filter).await,
+        }
     }
 
     pub async fn nav(&self, nav_id: Option<&str>) -> Result<HGrid, String> {
         self.check_op("nav").map_err(|e| e.to_string())?;
         self.ensure_client().await?;
         let guard = self.client.lock().await;
-        guard
-            .as_ref()
-            .unwrap()
-            .nav(nav_id)
-            .await
-            .map_err(|e| e.to_string())
+        match guard.as_ref().unwrap() {
+            ClientInner::Scram(c) => c.nav(nav_id).await.map_err(|e| e.to_string()),
+            ClientInner::Basic(c) => c.nav(nav_id).await,
+        }
     }
 
     pub async fn his_read(
@@ -129,11 +204,20 @@ impl HaystackService {
             _ => "today".into(),
         };
         let guard = self.client.lock().await;
-        let client = guard.as_ref().unwrap();
         let mut out = HashMap::new();
-        for id in ids {
-            let grid = client.his_read(id, &rng).await.map_err(|e| e.to_string())?;
-            out.insert(id.clone(), grid);
+        match guard.as_ref().unwrap() {
+            ClientInner::Scram(client) => {
+                for id in ids {
+                    let grid = client.his_read(id, &rng).await.map_err(|e| e.to_string())?;
+                    out.insert(id.clone(), grid);
+                }
+            }
+            ClientInner::Basic(client) => {
+                for id in ids {
+                    let grid = client.his_read(id, &rng).await?;
+                    out.insert(id.clone(), grid);
+                }
+            }
         }
         Ok(out)
     }

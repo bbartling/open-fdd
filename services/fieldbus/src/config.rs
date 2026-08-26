@@ -718,19 +718,19 @@ pub fn load_settings() -> Settings {
             s.poll.interval_secs = secs;
         }
     }
-    if let Some(v) = env_first(&["HAYSTACK_BASE_URL"]) {
+    if let Some(v) = env_first(&["HAYSTACK_BASE_URL", "OPENFDD_HAYSTACK_BASE_URL"]) {
         s.haystack.base_url = v;
     }
-    if let Some(v) = env_first(&["HAYSTACK_USER"]) {
+    if let Some(v) = env_first(&["HAYSTACK_USER", "OPENFDD_HAYSTACK_USER"]) {
         s.haystack.username = v;
     }
-    if let Some(v) = env_first(&["HAYSTACK_PASS"]) {
+    if let Some(v) = env_first(&["HAYSTACK_PASS", "OPENFDD_HAYSTACK_PASS"]) {
         s.haystack.password = v;
     }
-    if let Some(v) = env_first(&["HAYSTACK_AUTH_MODE"]) {
+    if let Some(v) = env_first(&["HAYSTACK_AUTH_MODE", "OPENFDD_HAYSTACK_AUTH_MODE"]) {
         s.haystack.auth_mode = parse_haystack_auth_mode(&v);
     }
-    if let Some(v) = env_first(&["HAYSTACK_TLS_VERIFY"]) {
+    if let Some(v) = env_first(&["HAYSTACK_TLS_VERIFY", "OPENFDD_HAYSTACK_TLS_VERIFY"]) {
         s.haystack.tls_verify = env_bool(Some(&v), s.haystack.tls_verify);
     }
     if let Some(v) = env_first(&["MODBUS_DEFAULT_HOST"]) {

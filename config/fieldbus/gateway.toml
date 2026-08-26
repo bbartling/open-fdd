@@ -35,7 +35,10 @@ default_timeout_secs = 5.0
 base_url = "http://127.0.0.1:8081"
 username = "admin"
 # Local demo credentials only — override via env in real deployments (never use defaults OT-side).
+# Niagara nHaystack: HAYSTACK_AUTH_MODE=basic HAYSTACK_TLS_VERIFY=false HAYSTACK_BASE_URL=https://…/haystack
 password = "changeme"
+auth_mode = "scram"
+tls_verify = true
 
 # Generic REST/JSON driver (#540). Device catalog lives in rest_devices.toml.
 # Writes fail closed: allow_write here AND the per-binding enabled flag must
