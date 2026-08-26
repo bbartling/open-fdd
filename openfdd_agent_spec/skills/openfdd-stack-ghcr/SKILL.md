@@ -39,9 +39,9 @@ central service uses that name). Tip images resolve upstream DNS lazily
 is not ready at process start. Deploy **central healthy first**, then mqtt (for
 cloud MQTTS hubs), then web. Live OT hubs should include `openfdd-mqtt` by
 default — MQTTS is the cloud transport; fieldbus stays on-prem.
-recommended Railway service name). Local Compose keeps the default
-`central:8080`. Do not claim a Railway-ready nightly until stack + MCP GHCR
-publish jobs are green and the target `sha-*` digest resolves.
+Local Compose keeps the default `central:8080`. Do not claim a Railway-ready
+nightly until stack + MCP GHCR publish jobs are green and the target `sha-*`
+digest resolves.
 
 Hourly CSV append is API `POST /api/csv/import/package/append` on central (GHA image), not a local compile.
 
