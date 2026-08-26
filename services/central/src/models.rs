@@ -174,6 +174,16 @@ pub struct ErrorResponse {
 pub struct AuthStatusResponse {
     pub ok: bool,
     pub auth_required: bool,
+    /// True when `OPENFDD_AGENT_PASSWORD` is set (username `agent` → operator JWT).
+    #[serde(default)]
+    pub agent_login_configured: bool,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct AuthAgentTokenRequest {
+    /// Token lifetime in seconds (clamped 60..=86400). Default 3600.
+    #[serde(default)]
+    pub ttl_secs: Option<i64>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]

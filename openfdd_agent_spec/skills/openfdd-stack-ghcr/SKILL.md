@@ -39,6 +39,11 @@ central service uses that name). Tip images resolve upstream DNS lazily
 is not ready at process start. Deploy **central healthy first**, then mqtt (for
 cloud MQTTS hubs), then web. Live OT hubs should include `openfdd-mqtt` by
 default — MQTTS is the cloud transport; fieldbus stays on-prem.
+Set `OPENFDD_AGENT_PASSWORD` on central for FDD AI / MCP (username `agent` →
+operator JWT); do not put `OPENFDD_ADMIN_PASSWORD` into Cursor MCP config.
+Admins may `POST /api/auth/agent-token` for short-lived operator JWTs.
+Edge kits: operator/admin `POST /api/mqtt/edge-kits` or Operations MQTT UI
+(ZIP never includes CA private key).
 Local Compose keeps the default `central:8080`. Do not claim a Railway-ready
 nightly until stack + MCP GHCR publish jobs are green and the target `sha-*`
 digest resolves.

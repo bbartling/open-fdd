@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiFetch } from "../api/client";
+import { apiFetch, apiFetchBlob } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { Button } from "../components/widgets";
 
@@ -680,6 +680,89 @@ function MqttPanel() {
   );
 }
 
+function EdgeKitDownloadPanel() {
+  const [siteId, setSiteId] = useState("lab");
+  const [edgeId, setEdgeId] = useState("fieldbus-1");
+  const [brokerHost, setBrokerHost] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const download = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const body: Record<string, unknown> = {
+        site_id: siteId.trim(),
+        edge_id: edgeId.trim(),
+      };
+      if (brokerHost.trim()) {
+        body.broker_host = brokerHost.trim();
+      }
+      const { blob, filename } = await apiFetchBlob("/api/mqtt/edge-kits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const name = filename ?? `${siteId.trim()}__${edgeId.trim()}.zip`;
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = name;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setMessage(
+        `Downloaded ${name}. Unzip and mount at /mqtt on on-prem fieldbus (ca.pem + edge cert/key + edge.json). Never ship the CA private key.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [brokerHost, edgeId, siteId]);
+
+  return (
+    <section aria-labelledby="edge-kit-heading" data-testid="edge-kit-panel">
+      <div className="section-heading-row">
+        <div>
+          <h2 id="edge-kit-heading">Download edge kit</h2>
+          <p className="muted">
+            AWS IoT–style MQTTS bundle for on-prem fieldbus: public CA, edge client cert/key, and
+            edge.json. Mount the unzipped files at <code>/mqtt</code>; fieldbus only needs outbound
+            TCP 8883 to the cloud broker. CA private key never leaves Central.
+          </p>
+        </div>
+        <div className="button-row">
+          <Button
+            id="edge-kit-download"
+            label={busy ? "Provisioning…" : "Download edge kit (.zip)"}
+            loading={busy}
+            onClick={() => void download()}
+          />
+        </div>
+      </div>
+      {error ? <div className="inline-alert inline-alert--error" role="alert">{error}</div> : null}
+      {message ? <div className="inline-alert" role="status">{message}</div> : null}
+      <div className="form-row">
+        <label htmlFor="edge-kit-site-id">Site id</label>
+        <input id="edge-kit-site-id" value={siteId} onChange={(e) => setSiteId(e.target.value)} />
+        <label htmlFor="edge-kit-edge-id">Edge id</label>
+        <input id="edge-kit-edge-id" value={edgeId} onChange={(e) => setEdgeId(e.target.value)} />
+        <label htmlFor="edge-kit-broker">Broker host (optional)</label>
+        <input
+          id="edge-kit-broker"
+          value={brokerHost}
+          placeholder="defaults to OPENFDD_MQTT_HOST"
+          onChange={(e) => setBrokerHost(e.target.value)}
+        />
+      </div>
+    </section>
+  );
+}
+
 function TelemetrySuspendPanel() {
   const [siteId, setSiteId] = useState("local");
   const [edgeId, setEdgeId] = useState("fieldbus-1");
@@ -815,6 +898,7 @@ export function OperationsPage() {
       </fieldset>
       {view === "afdd" ? <AfddPanel /> : (
         <>
+          <EdgeKitDownloadPanel />
           <MqttPanel />
           <TelemetrySuspendPanel />
         </>

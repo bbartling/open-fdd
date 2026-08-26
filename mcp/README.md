@@ -17,15 +17,15 @@ export OPENFDD_IMAGE_TAG=nightly   # or a pinned semver / sha-*
 # Pull the slim MCP image (docker run will also pull if missing)
 ./scripts/openfdd_stack_pull.sh mcp
 
-# JWT for central REST (integrator or agent role)
-source scripts/openfdd_auth_lib.sh
-INTEGRATOR_PW="$(openfdd_auth_plaintext_password workspace/auth.env.local integrator)"
+# JWT for central REST — prefer dedicated agent identity (operator role)
+# On Railway: OPENFDD_AGENT_PASSWORD + username "agent", or admin POST /api/auth/agent-token
 export OPENFDD_MCP_TOKEN="$(
   curl -s -X POST http://127.0.0.1:8080/api/auth/login \
     -H 'Content-Type: application/json' \
-    -d "$(jq -nc --arg u integrator --arg p "$INTEGRATOR_PW" '{username:$u,password:$p}')" \
+    -d "$(jq -nc --arg u agent --arg p "${OPENFDD_AGENT_PASSWORD:?set OPENFDD_AGENT_PASSWORD}" '{username:$u,password:$p}')" \
   | jq -r '.token // .access_token'
 )"
+# LAN legacy (bootstrap / integrator) still works via scripts/openfdd_auth_lib.sh when present.
 ```
 
 **Cursor (stdio via Docker)** — MCP speaks JSON-RPC on stdin/stdout, not HTTP. Use `OPENFDD_API_BASE=http://central:8080` inside the compose network, or `http://127.0.0.1:8080` from the host:

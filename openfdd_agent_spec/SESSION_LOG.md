@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-08-26 — Edge kit download + Railway agent auth (in flight)
+
+- `POST /api/mqtt/edge-kits` + Operations MQTT **Download edge kit** (ZIP: public PEMs + `edge.json`, never CA key).
+- Central auth: `OPENFDD_AGENT_PASSWORD` → username `agent` → operator JWT; admin `POST /api/auth/agent-token` for short-lived MCP tokens.
+- Railway docs/checklist: dedicated agent secret, private MCP, no admin password in Cursor.
+
 ## 2026-08-26 — Ops MQTT UX closeout + Railway web DNS + 3.3.4 nightly
 
 - PR #779: Ops MQTT/Sites, modeling docs, AFDD operator schedule Save, agent-spec sync.

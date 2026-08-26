@@ -25,6 +25,8 @@ deploy/mqtt/
 
 ## Provision an edge kit
 
+### CLI
+
 ```bash
 cargo run -p openfdd_mqtt --bin openfdd-provision -- edge \
   --site-id lab \
@@ -32,6 +34,16 @@ cargo run -p openfdd_mqtt --bin openfdd-provision -- edge \
   --broker-host mqtt.example.com \
   --out-dir ./deploy/mqtt
 ```
+
+### Central API / Operations UI (GHCR tip)
+
+Authenticated operators can download the same kit as a ZIP (public PEMs + `edge.json` only — **never** `ca.key.pem`):
+
+- `POST /api/mqtt/edge-kits` with JSON `{ "site_id", "edge_id", "broker_host?", "broker_port?" }`
+- Operations → MQTT → **Download edge kit**
+- Central must see CA material at `OPENFDD_MQTT_CA_DIR` (default `{OPENFDD_WORKSPACE}/deploy/mqtt/ca`)
+
+Railway: mount CA (including `ca.key.pem`) on central’s private volume only; download the ZIP in the browser, then scp/mount onto on-prem fieldbus at `/mqtt`.
 
 The edge kit contains **only** the public `ca.pem` plus edge client cert/key. The CA private key stays under `deploy/mqtt/ca/` and must never be copied to remote edges.
 

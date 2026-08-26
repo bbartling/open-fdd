@@ -5,6 +5,8 @@ const TOKEN_KEY = "openfdd.auth.token";
 export interface AuthStatus {
   ok: boolean;
   auth_required: boolean;
+  /** Present when central reports OPENFDD_AGENT_PASSWORD is configured. */
+  agent_login_configured?: boolean;
 }
 
 export interface AuthMe {

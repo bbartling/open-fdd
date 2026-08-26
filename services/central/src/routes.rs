@@ -21,10 +21,10 @@ use crate::eplus_runner;
 use crate::fuel::{self, FuelRequest};
 use crate::jobs;
 use crate::models::{
-    AgentTool, AgentToolsResponse, AuthLoginRequest, AuthLoginResponse, AuthMeResponse,
-    AuthStatusResponse, CommandAckResponse, EdgeDetailResponse, EdgePayloadResponse,
-    EdgesListResponse, FddRunRequest, FddStatusResponse, IngestStatsResponse, IssueCommandRequest,
-    IssueCommandResponse, OkHealthResponse,
+    AgentTool, AgentToolsResponse, AuthAgentTokenRequest, AuthLoginRequest, AuthLoginResponse,
+    AuthMeResponse, AuthStatusResponse, CommandAckResponse, EdgeDetailResponse,
+    EdgePayloadResponse, EdgesListResponse, FddRunRequest, FddStatusResponse, IngestStatsResponse,
+    IssueCommandRequest, IssueCommandResponse, OkHealthResponse,
 };
 use crate::state::{AppState, PendingCommand};
 use crate::wattlab_dump;
@@ -41,6 +41,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/health/stack", get(health_stack))
         .route("/api/building/snapshot", get(building_snapshot))
         .route("/api/dashboard/summary", get(dashboard_summary));
+
+    // Admin-gated agent token mint lives on the authenticated router below.
 
     let csv = Router::new()
         .route("/api/csv/import/preview", post(csv_preview))
@@ -88,6 +90,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .layer(DefaultBodyLimit::max(128 * 1024 * 1024));
 
     let protected = Router::new()
+        .route("/api/auth/agent-token", post(auth_agent_token))
         .route("/api/edges", get(list_edges))
         .route("/api/edges/{edge_id}", get(get_edge))
         .route("/api/edges/{edge_id}/discovery", get(get_edge_discovery))
@@ -360,6 +363,7 @@ pub async fn auth_status(State(state): State<Arc<AppState>>) -> Json<AuthStatusR
     Json(AuthStatusResponse {
         ok: true,
         auth_required: state.auth.required(),
+        agent_login_configured: state.auth.agent_password.is_some(),
     })
 }
 
@@ -491,6 +495,69 @@ pub async fn auth_login(
         token_type: "Bearer".into(),
         role: role.as_str().into(),
         subject: sub,
+        error: None,
+    }))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/auth/agent-token",
+    tag = "central",
+    request_body = AuthAgentTokenRequest,
+    security(("bearerAuth" = [])),
+    responses(
+        (status = 200, description = "Short-lived operator JWT for FDD AI / MCP", body = AuthLoginResponse),
+        (status = 401, description = "Missing or invalid admin bearer"),
+        (status = 403, description = "Admin role required")
+    )
+)]
+pub async fn auth_agent_token(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<AuthAgentTokenRequest>,
+) -> Result<Json<AuthLoginResponse>, (axum::http::StatusCode, Json<Value>)> {
+    let request_id = crate::contract::ensure_request_id(&headers);
+    let user = state.auth.user_from_headers(&headers).map_err(|detail| {
+        (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": detail})),
+        )
+    })?;
+    if state.auth.required() && user.role != auth::Role::Admin {
+        return Err((
+            axum::http::StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "admin role required to mint agent tokens"
+            })),
+        ));
+    }
+    let ttl = body.ttl_secs.unwrap_or(3600).clamp(60, 86_400);
+    let token = state
+        .auth
+        .issue_token("agent", auth::Role::Operator, ttl)
+        .map_err(|_| {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": "token mint failed"})),
+            )
+        })?;
+    open_fdd_edge_prototype::auth::audit::log_event(
+        "agent_token_minted",
+        json!({
+            "by": user.sub,
+            "role": "operator",
+            "ttl_secs": ttl,
+            "request_id": request_id,
+        }),
+    );
+    Ok(Json(AuthLoginResponse {
+        ok: true,
+        token: token.clone(),
+        access_token: token,
+        token_type: "Bearer".into(),
+        role: auth::Role::Operator.as_str().into(),
+        subject: "agent".into(),
         error: None,
     }))
 }

@@ -18,10 +18,16 @@ paths:
   /api/auth/login:
     post:
       security: []
-      summary: Obtain JWT
+      summary: Obtain JWT (admin or agent)
       responses:
         "200":
           description: Token payload
+  /api/auth/agent-token:
+    post:
+      summary: Admin mints short-lived operator JWT for MCP/agents
+      responses:
+        "200":
+          description: Operator token payload
   /api/health/stack:
     get:
       summary: Stack health
