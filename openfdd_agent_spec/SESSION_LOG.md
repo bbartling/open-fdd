@@ -1,9 +1,16 @@
 # Session log
 
+## 2026-08-26 — Ops MQTT UX closeout + Railway web DNS + 3.3.4 nightly
+
+- PR #779: Ops MQTT/Sites, modeling docs, AFDD operator schedule Save, agent-spec sync.
+- `openfdd-web`: lazy nginx upstream (`resolver` + `$openfdd_central`) for Railway private DNS race; `OPENFDD_NGINX_RESOLVER=auto`.
+- Railway docs: deploy order central→mqtt→web; MQTTS hub default for live OT; checklist + `railway/` draft notes.
+- Platform patch **3.3.4** for GHCR nightly refresh. Fieldbus Haystack Basic merged via #778.
+
 ## 2026-08-26 — Modeling docs + Ops/Sites UX agent-spec sync (#779)
 
 - Product docs: `docs/modeling/{package-schema,heat-pump-buildings,rule-readiness}.md` + honesty gate on MCP package-mapping SCAFFOLD.
-- SPA: Operations OT strip / 1s MQTT poll; Sites CSV|MQTT|Both **inventory** labels (not dual historian).
+- SPA: Operations OT strip / MQTT console; Sites CSV|MQTT|Both **inventory** labels (not dual historian).
 - Agent OS sync: `openfdd-package-mapping`, `openfdd-react-spa`, `DATA_CONTRACT`, bootstrap links in this folder’s `AGENTS.md`.
 - No ingest/SQL/HP-1 contract code change. Fieldbus Niagara Basic is PR #778 (backend), not a data-contract change.
 - HARD STOP: Vite approve before GHCR web for #779.

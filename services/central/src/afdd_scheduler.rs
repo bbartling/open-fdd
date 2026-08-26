@@ -173,7 +173,9 @@ impl AfddSchedulerRuntime {
         let Some(window) = plan_continuous_cycle(checkpoint.as_ref(), now, latest, &config)? else {
             return Ok(None);
         };
-        self.execute_cycle(scope, "scheduled", window).await.map(Some)
+        self.execute_cycle(scope, "scheduled", window)
+            .await
+            .map(Some)
     }
 
     async fn run_now(&self, scope: &str) -> Result<AfddCycleRecord> {

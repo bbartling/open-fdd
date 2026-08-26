@@ -1,0 +1,13 @@
+# Sourced by nginx docker-entrypoint before envsubst (*.envsh).
+# Prefer explicit OPENFDD_NGINX_RESOLVER; otherwise first nameserver from
+# /etc/resolv.conf (Railway/Docker private DNS); fallback Docker embedded DNS.
+if [ -z "${OPENFDD_NGINX_RESOLVER:-}" ] || [ "${OPENFDD_NGINX_RESOLVER}" = "auto" ]; then
+  _ns="$(awk '/^nameserver[[:space:]]+/ { print $2; exit }' /etc/resolv.conf 2>/dev/null || true)"
+  if [ -n "${_ns}" ]; then
+    OPENFDD_NGINX_RESOLVER="${_ns}"
+  else
+    OPENFDD_NGINX_RESOLVER="127.0.0.11"
+  fi
+  export OPENFDD_NGINX_RESOLVER
+fi
+unset _ns

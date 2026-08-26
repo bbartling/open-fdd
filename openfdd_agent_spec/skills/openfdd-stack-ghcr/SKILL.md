@@ -34,6 +34,11 @@ Optional extra image tag `:3.3.2-n<run_number>` sits **beside** `:nightly` /
 
 For Railway, use the same GHCR `openfdd-web` image and set
 `OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080` (assuming the
+central service uses that name). Tip images resolve upstream DNS lazily
+(`OPENFDD_NGINX_RESOLVER=auto`) so nginx does not die when `.railway.internal`
+is not ready at process start. Deploy **central healthy first**, then mqtt (for
+cloud MQTTS hubs), then web. Live OT hubs should include `openfdd-mqtt` by
+default — MQTTS is the cloud transport; fieldbus stays on-prem.
 recommended Railway service name). Local Compose keeps the default
 `central:8080`. Do not claim a Railway-ready nightly until stack + MCP GHCR
 publish jobs are green and the target `sha-*` digest resolves.
