@@ -531,9 +531,7 @@ pub async fn spawn_if_configured(
     let delta_mode = mqtt_delta_enabled();
     info!(
         publish_interval_secs = interval,
-        cell_mode,
-        delta_mode,
-        "mqtt bridge publish profile"
+        cell_mode, delta_mode, "mqtt bridge publish profile"
     );
 
     let topics = TopicBuilder::new(site_id.clone(), edge_id.clone());
@@ -607,12 +605,7 @@ pub async fn spawn_if_configured(
                             .as_object()
                             .cloned()
                             .unwrap_or_default();
-                        historian_tags(
-                            base,
-                            building_id.as_deref(),
-                            equipment_id,
-                            point_name,
-                        )
+                        historian_tags(base, building_id.as_deref(), equipment_id, point_name)
                     };
                     Some(TelemetryPoint {
                         id,
@@ -663,8 +656,7 @@ pub async fn spawn_if_configured(
                 }
             }
             if !rest_out.is_empty() {
-                let env =
-                    TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Rest, seq, rest_out);
+                let env = TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Rest, seq, rest_out);
                 let topic = topics.topic(TopicKind::Telemetry, Some(Protocol::Rest));
                 if let Err(err) = spool.enqueue(&topic, env).await {
                     warn!(%err, "rest spool enqueue failed");
