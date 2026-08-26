@@ -941,8 +941,11 @@ pub fn load_rest_devices(
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::sync::Mutex;
 
     use super::*;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn repo_config_dir() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/fieldbus")
@@ -1017,6 +1020,18 @@ mod tests {
 
     #[test]
     fn env_alias_precedence_and_poll_settings() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        for key in [
+            "OPENFDD_FIELDBUS_DEV_FAST_POLL",
+            "OPENFDD_FIELDBUS_POLL_INTERVAL_SECS",
+            "RUSTY_GATEWAY_POLL_INTERVAL_SECS",
+            "OPENFDD_FIELDBUS_POLL_ENABLED",
+            "RUSTY_GATEWAY_POLL_ENABLED",
+            "OPENFDD_FIELDBUS_HTTP_PORT",
+            "RUSTY_GATEWAY_HTTP_PORT",
+        ] {
+            std::env::remove_var(key);
+        }
         std::env::set_var("RUSTY_GATEWAY_HTTP_PORT", "8080");
         std::env::set_var("OPENFDD_FIELDBUS_HTTP_PORT", "9091");
         assert_eq!(load_settings().http_port, 9091);
@@ -1033,6 +1048,9 @@ mod tests {
         assert!((load_settings().poll.interval_secs - 60.0).abs() < f64::EPSILON);
         std::env::remove_var("OPENFDD_FIELDBUS_POLL_ENABLED");
         std::env::remove_var("OPENFDD_FIELDBUS_POLL_INTERVAL_SECS");
+        std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
+        std::env::remove_var("RUSTY_GATEWAY_HTTP_PORT");
+        std::env::remove_var("OPENFDD_FIELDBUS_HTTP_PORT");
     }
 
     #[test]
