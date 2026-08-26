@@ -34,19 +34,15 @@ Artifacts: `reports/nightly-ot-*/digests.txt`, `image_revs.txt`, `pi_image_rev.t
 | Live curVal through fieldbus | **OK** — gate `extract_cur_val` fixed (#783) |
 | Allowlist (`/haystack/eval`) | **OK** — HTTP 404 |
 
-## B3 — MS/TP routing (device 5007) — FIX IN PR TRAIN
+## B3 — MS/TP routing (device 5007) — CLOSED (bench 2026-08-26)
 
-**Symptom (prior tip):** Who-Is found 5007 but `source_network` null; ReadProperty UNKNOWN_OBJECT.
+**Prior failure:** empty shipped `field_devices.toml` on bench (no 5007 seed) + I-Am overwrite edge case.
 
-**Root cause:** I-Am responses without NPDU routing overwrote `add_routed_device` seeds in the ephemeral client device table.
+**Fix train (`#784`):** vendored `DeviceTable::upsert` preserves routing; Who-Is merges `field_devices.toml`; seed logging.
 
-**Fix (`1540225`):**
+**Re-verify ( `sha-8e7899e` + bench overlay):** `02_bacnet_ot.sh` **GATE PASSED** — 15 pass / 0 fail (`source_network=2000`, read AI:1173, poll 3 points).
 
-- Vendored `DeviceTable::upsert` preserves `source_network` / `source_address` when I-Am lacks routing.
-- Who-Is merges configured routed devices from `field_devices.toml`.
-- Structured log on successful `add_routed_device` seed.
-
-**Re-verify:** `./scripts/nightly-ot-bench/02_bacnet_ot.sh` after GHCR pull of PR tip. Bench must mount [`field_devices.bench.example.toml`](../scripts/nightly-ot-bench/field_devices.bench.example.toml) → `config/fieldbus/field_devices.toml`.
+Bench requires: `cp scripts/nightly-ot-bench/field_devices.bench.example.toml config/fieldbus/field_devices.toml` + fieldbus recreate.
 
 ## MQTT / cell optimization — NEW IN PR TRAIN
 
@@ -59,7 +55,7 @@ Artifacts: `reports/nightly-ot-*/digests.txt`, `image_revs.txt`, `pi_image_rev.t
 
 Docs: [`BACNET_OT_POLICY.md`](BACNET_OT_POLICY.md), [`deploy/mqtt/README.md`](../../deploy/mqtt/README.md).
 
-**Gate 03 / ingest:** Re-run after B3 + new fieldbus image; weather/hosted points may prove MQTT path even when OT BACnet poll is sparse.
+**Gate 03 / ingest:** **GATE PASSED** on `sha-8e7899e` after B3 bench overlay + poll (ingest counter growth; artifacts under `reports/nightly-ot-bench_*`). Re-run on `#784` GHCR after merge.
 
 ## Dual-site MQTT (lab + bldg2) — gate 10
 
