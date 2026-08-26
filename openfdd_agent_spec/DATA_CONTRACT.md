@@ -140,8 +140,11 @@ Seed lane: `POST /api/csv/import/package`. Layout (generic `AHU_1` / `VAV_1` / `
 - `timestamp_utc` RFC3339 UTC (`Z` or `+00:00`).
 - Stamp `equipType` (`ahu` `vav` `chwPlant` `boiler` `heatPump` `weather`). `rtu`→AHU; `heatPump`→HP; UV/FCU air-side→ahu; chillers→chwPlant.
 - Sibling JSON `points` keys are Haystack names; ingest translates via `haystack_point_to_role` (`discharge-air-temp` → `sat`). Alias table: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](../docs/migration/vibe19/ROLE_MAPPING_PARITY.md). Authoring: [`docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md).
-- Empty Overview / RCx / Inspect = missing roles in the zip.
+- **Compact map is normative.** Rich MCP mapping-evidence shapes (`column`/`role`/`confidence`/PROVISIONAL) are SCAFFOLD — see [`docs/modeling/package-schema.md`](../docs/modeling/package-schema.md).
+- Empty Overview / RCx / Inspect = missing roles in the zip. Importable ≠ FDD-ready ([`docs/modeling/rule-readiness.md`](../docs/modeling/rule-readiness.md)).
+- Heat-pump / WSHP topology and anti-patterns: [`docs/modeling/heat-pump-buildings.md`](../docs/modeling/heat-pump-buildings.md). Do not copy AHU/VAV BUILDING_100 topology onto HP buildings.
 - Motor ≠ compressor ≠ valve (status/cmd before amps; never CHW pump / `clg_valve_pct` as compressor proof).
+- Sites UI may show CSV / MQTT / Both **inventory labels**; that is not a dual CSV+MQTT writer contract. Unified historian for the same `building_id` remains a later epic.
 
 ---
 

@@ -28,7 +28,7 @@ retest. Do not confuse those with this engineering OS.
 | `openfdd_agent_spec/` | Agent law, Milestone A, skills, session log |
 | Playground vibe19/20 | External demos; consumers of PyPI |
 
-**Package / timestamp contract (product + PyPI):** `timestamp_utc` is RFC3339 UTC (`Z` or `+00:00`). Rust ingest skips bad rows (no epoch 0 / now). Pandas oracle uses `open_fdd.timestamps.to_utc_datetime`. String `"equip"` on a Haystack sidecar is metadata. **Package authoring (any BAS job):** [`../docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md). Aliases: [`../docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](../docs/migration/vibe19/ROLE_MAPPING_PARITY.md).
+**Package / timestamp contract (product + PyPI):** `timestamp_utc` is RFC3339 UTC (`Z` or `+00:00`). Rust ingest skips bad rows (no epoch 0 / now). Pandas oracle uses `open_fdd.timestamps.to_utc_datetime`. String `"equip"` on a Haystack sidecar is metadata. **Package authoring (any BAS job):** [`../docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md). Modeling (compact map vs SCAFFOLD, HP buildings, readiness): [`../docs/modeling/`](../docs/modeling/). Aliases: [`../docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](../docs/migration/vibe19/ROLE_MAPPING_PARITY.md).
 
 **Naming (code truth):**
 
@@ -99,13 +99,14 @@ Nested instructions may specialize but never contradict a higher authority.
 1. [`../AGENTS.md`](../AGENTS.md)
 2. This file
 3. [`../docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md)
-4. [`ARCHITECTURE.md`](ARCHITECTURE.md) + [`ownership.yaml`](ownership.yaml)
-5. [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md)
-6. [`tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md`](../tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md)
-7. [`MILESTONE_A.md`](MILESTONE_A.md) if executing Milestone A
-8. [`PR_PROTOCOL.md`](PR_PROTOCOL.md) before opening a PR
-9. Matching skill
-10. Cookbooks under `docs/rules/cookbook/`
+4. [`../docs/modeling/`](../docs/modeling/) when packaging / HP / readiness context matters
+5. [`ARCHITECTURE.md`](ARCHITECTURE.md) + [`ownership.yaml`](ownership.yaml)
+6. [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md)
+7. [`tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md`](../tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md)
+8. [`MILESTONE_A.md`](MILESTONE_A.md) if executing Milestone A
+9. [`PR_PROTOCOL.md`](PR_PROTOCOL.md) before opening a PR
+10. Matching skill
+11. Cookbooks under `docs/rules/cookbook/`
 
 ---
 

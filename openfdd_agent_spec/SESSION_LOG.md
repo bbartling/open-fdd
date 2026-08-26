@@ -1,5 +1,13 @@
 # Session log
 
+## 2026-08-26 — Modeling docs + Ops/Sites UX agent-spec sync (#779)
+
+- Product docs: `docs/modeling/{package-schema,heat-pump-buildings,rule-readiness}.md` + honesty gate on MCP package-mapping SCAFFOLD.
+- SPA: Operations OT strip / 1s MQTT poll; Sites CSV|MQTT|Both **inventory** labels (not dual historian).
+- Agent OS sync: `openfdd-package-mapping`, `openfdd-react-spa`, `DATA_CONTRACT`, bootstrap links in this folder’s `AGENTS.md`.
+- No ingest/SQL/HP-1 contract code change. Fieldbus Niagara Basic is PR #778 (backend), not a data-contract change.
+- HARD STOP: Vite approve before GHCR web for #779.
+
 ## 2026-08-18 — Overview tables, plant health matrices, RCx plots, revision pin
 
 - Overview = DataTables + AHU/chiller/boiler/HP/VAV health matrices (`n/3`, unknown-not-PASS, red tint `--health-broken-*`). Plotly motor/mech/econ/BAS moved to additive RCx presets. CSV overlay is Inspect `/inspect`. Sidebar `GET /api/health` `3.3.1+shortsha`. Cargo **3.3.1**; PyPI stays **4.4.2**. Nightly stamps `version.json` + optional `:3.3.1-n<run>`.
