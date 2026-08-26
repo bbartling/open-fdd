@@ -1,5 +1,7 @@
 # Copy to compose.react.fieldbus.local.yml (gitignored) for OT LAN bind + API key.
 # Do not commit real addresses or production keys.
+# Niagara nHaystack (optional): set OPENFDD_HAYSTACK_USER/PASS in repo .env, then:
+#   HAYSTACK_BASE_URL / HAYSTACK_AUTH_MODE=basic / HAYSTACK_TLS_VERIFY=false
 services:
   fieldbus:
     environment:
@@ -7,3 +9,8 @@ services:
       OPENFDD_FIELDBUS_API_KEY: "bench-demo-key-1234567890"
       OPENFDD_FIELDBUS_OPENAPI: "1"
       OPENFDD_FIELDBUS_SWAGGER_BENCH: "1"
+      # HAYSTACK_BASE_URL: "https://<niagara-host>/haystack"
+      # HAYSTACK_USER: "${OPENFDD_HAYSTACK_USER}"
+      # HAYSTACK_PASS: "${OPENFDD_HAYSTACK_PASS}"
+      # HAYSTACK_AUTH_MODE: "basic"
+      # HAYSTACK_TLS_VERIFY: "false"

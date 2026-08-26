@@ -45,8 +45,8 @@ bacnet-server = "0.9"
 bytes = "1"
 chrono = { version = "0.4", features = ["serde"] }
 
-# rusty-haystack v0.8.1 — latest tagged release. main tip 0.9.0 pulls rand 0.10.1 vs
-# tungstenite's ^0.10.2 and fails to resolve in this workspace; revisit when upstream tags a fix.
+# rusty-haystack v0.8.1 — latest tagged release. Niagara Basic uses fieldbus reqwest+zinc
+# (haystack.rs); tip 0.9.0 needs rustc 1.97 + rand 0.10 conflict — revisit when tagged.
 haystack_client = { package = "rusty-haystack-client", git = "https://github.com/jscott3201/rusty-haystack", rev = "d85e72271e789d3dcf4a90f79adb7d1556faae80", version = "0.8.1" }
 haystack_core = { package = "rusty-haystack-core", git = "https://github.com/jscott3201/rusty-haystack", rev = "d85e72271e789d3dcf4a90f79adb7d1556faae80", version = "0.8.1" }
 
