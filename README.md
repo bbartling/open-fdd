@@ -144,4 +144,4 @@ Do **not** report vulnerabilities through public GitHub issues or discussions. U
 
 MIT — see [LICENSE](LICENSE).
 
-Version **3.3.3** on `master` · PyPI **4.4.2**
+Version **3.3.4** on `master` · PyPI **4.4.2**

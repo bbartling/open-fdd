@@ -6,32 +6,53 @@ nav_order: 4
 
 # Railway deployment
 
-> **Experimental cloud-lab path.** Open-FDD is local-first and currently intended for LAN/VPN/OT networks. The Railway recipe below is for CSV/package labs, demos, and controlled evaluation. It is **not** a claim that Open-FDD is production-hardened for direct public-internet exposure.
+> **Experimental cloud path.** Open-FDD is local-first and currently intended for LAN/VPN/OT networks. The Railway recipes below are for labs, demos, and controlled evaluation. They are **not** a claim that Open-FDD is production-hardened for direct public-internet exposure.
 
 Open-FDD publishes a Rust/React container stack to GHCR. Railway can run the cloud-friendly subset directly from those prebuilt images without rebuilding the application.
 
+**Operator checklist:** [RAILWAY_DEPLOYMENT_CHECKLIST.md](RAILWAY_DEPLOYMENT_CHECKLIST.md).
+
+## Deployment sequencing (required)
+
+Railway does **not** guarantee peer service DNS or health before dependents start. Agents and humans must:
+
+1. Deploy **`openfdd-central`** and wait until `GET /api/health` returns **200**.
+2. Deploy **`openfdd-mqtt`** when this is a **cloud MQTTS hub** (default for live OT).
+3. Deploy **`openfdd-web`** last, with `OPENFDD_CENTRAL_UPSTREAM` pointing at central’s private DNS.
+
+Healthcheck windows on Railway are often ~30s. If web starts while central’s `.railway.internal` name is not yet resolvable, **old** web images failed nginx startup with `host not found in upstream`. Tip `openfdd-web` images use **lazy DNS** (nginx `resolver` + variable `proxy_pass`) so the process can boot and resolve central on the first `/api` request. Still deploy central first — lazy DNS does not invent a healthy peer.
+
 ## What to deploy
 
-### Minimal cloud CSV lab
-
-Deploy these two services:
+### A. Cloud MQTTS hub (preferred for live OT)
 
 | Railway service | Image | Container port | Exposure |
 | --- | --- | ---: | --- |
-| `openfdd-central` | `ghcr.io/bbartling/openfdd-central:nightly` | `8080` | Private preferred; web must reach it |
+| `openfdd-central` | `ghcr.io/bbartling/openfdd-central:nightly` | `8080` | Private |
+| `openfdd-mqtt` | `ghcr.io/bbartling/openfdd-mqtt:nightly` | `8883` | Private MQTTS |
 | `openfdd-web` | `ghcr.io/bbartling/openfdd-web:nightly` | `8080` | Public HTTP |
 
-The browser talks to the React web service; the web image proxies same-origin `/api` and `/twins` to central. Central owns JWT auth, package import, historian storage, DataFusion FDD, and analytics.
+**Why mqtt is on by default for this path:** the cloud service’s job is to host **MQTTS** so on-prem `openfdd-fieldbus` can publish securely into Central. CSV-only labs may omit mqtt; live OT should not.
+
+Keep **fieldbus on-prem** (OT LAN / VPN). Do not expect BACnet discovery inside Railway.
+
+### B. Minimal CSV / package lab
+
+| Railway service | Image | Container port | Exposure |
+| --- | --- | ---: | --- |
+| `openfdd-central` | `ghcr.io/bbartling/openfdd-central:nightly` | `8080` | Private preferred |
+| `openfdd-web` | `ghcr.io/bbartling/openfdd-web:nightly` | `8080` | Public HTTP |
+
+The browser talks to the React web service; the web image proxies same-origin `/api` and `/twins` to central.
 
 Use `:nightly` for the latest green `master` channel or pin `:sha-<7>` for a reproducible deployment. Do not invent semver tags that are not published.
 
-### Optional services
+### Optional
 
 | Service | Image | Cloud notes |
 | --- | --- | --- |
 | MCP | `ghcr.io/bbartling/openfdd-mcp:nightly` | Optional agent sidecar. Set `OPENFDD_API_BASE` to central. |
-| MQTT | `ghcr.io/bbartling/openfdd-mqtt:nightly` | Useful only when the deployment has a deliberate MQTT/OT topology and certificates. |
-| Fieldbus | `ghcr.io/bbartling/openfdd-fieldbus:nightly` | BACnet/IP discovery normally needs access to the OT LAN/broadcast domain. A naive public Railway deployment cannot provide that. |
+| Fieldbus | `ghcr.io/bbartling/openfdd-fieldbus:nightly` | Run on-prem / OT-connected hosts; publish MQTTS to cloud mqtt. |
 
 The real image set is `openfdd-central`, `openfdd-web`, `openfdd-fieldbus`, `openfdd-mqtt`, and `openfdd-mcp`. There is no `openfdd-commission` or `openfdd-mcp-rag` service in the product stack.
 
@@ -41,36 +62,30 @@ Railway must be able to pull the selected GHCR images.
 
 For the easiest open-source deployment, make the Open-FDD GHCR packages public in GitHub package settings. New GHCR packages can default to private, so re-check visibility whenever a new image/package is introduced.
 
-A practical unauthenticated check is to pull the exact image from a machine that is **not** logged in to GHCR:
-
 ```bash
 docker logout ghcr.io 2>/dev/null || true
 docker pull ghcr.io/bbartling/openfdd-central:nightly
 docker pull ghcr.io/bbartling/openfdd-web:nightly
+docker pull ghcr.io/bbartling/openfdd-mqtt:nightly
 ```
 
-If package visibility must remain private, Railway supports GHCR registry credentials. As of this guide update, Railway private-registry credentials require a paid Pro plan; use a GitHub token scoped to `read:packages` only for deployment pulls. Do not reuse a CI token with write scope and never embed registry credentials in repository files.
+If package visibility must remain private, Railway supports GHCR registry credentials (plan-dependent). Use a GitHub token scoped to `read:packages` only. Never embed registry credentials in repository files.
 
 See [GHCR images](ghcr-images.md) for the image/tag contract.
 
 ## Create the Railway services
 
 1. Create a Railway project.
-2. Add a Docker-image service named **`openfdd-central`** from `ghcr.io/bbartling/openfdd-central:nightly`.
-3. Add a Docker-image service named **`openfdd-web`** from `ghcr.io/bbartling/openfdd-web:nightly`.
-4. Give only `openfdd-web` a public Railway domain for the minimal lab.
-5. Keep central private and connect web-to-central over Railway private networking.
-6. Attach a Railway volume to central at `/workspace` before relying on imported CSV/package history across redeploys.
-7. Configure central and web variables below.
-8. Configure the web service health check only after confirming the SPA is serving on port `8080`; central liveness is `/api/health`.
+2. Add **`openfdd-central`** from GHCR; attach volume at `/workspace`; set secrets; deploy; wait for `/api/health`.
+3. For MQTTS hub: add **`openfdd-mqtt`** (private); provision certs/ACL per mqtt image docs; confirm **8883**.
+4. Add **`openfdd-web`** from GHCR; set upstream; give **only web** a public domain; deploy.
+5. Keep central (and mqtt) private; use Railway private networking.
 
-Railway configuration should model the container ports, not the host-side ports shown by local Docker Compose. Both current central and web images listen on container port `8080`; local Compose maps web `3000:8080` only for developer convenience.
+Both central and web listen on container port `8080`. Local Compose maps web `3000:8080` for developer convenience only.
 
-Railway private DNS uses service names. With the recommended names above, central is reachable from web as `openfdd-central.railway.internal:8080`.
+Railway private DNS: `openfdd-central.railway.internal:8080`.
 
 ## Central variables
-
-Set at least:
 
 ```text
 OPENFDD_JWT_SECRET=<long deployment-unique random secret>
@@ -81,66 +96,41 @@ OPENFDD_REACT_UI=1
 OPENFDD_UI_GENERATION_DEFAULT=react
 ```
 
-`OPENFDD_JWT_SECRET` must be unique per deployment. Never commit either secret to Git.
-
-For the minimal CSV lab, do not require the OT MQTT path merely because local `compose.react.yml` includes it. The target cloud recipe is central + web; OT services are optional and topology-dependent.
+For MQTTS hub, also configure Central’s MQTT client settings to the private broker (host/port/certs) per stack env conventions used in Compose — never commit secrets.
 
 ## Web variables
 
-The GHCR web image is runtime-configurable and defaults to Compose-compatible `central:8080`. On Railway set:
-
 ```text
 OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080
+OPENFDD_NGINX_RESOLVER=auto
 ```
 
-Do not include `http://` in this value; it is the nginx upstream host and port. The browser still calls same-origin `/api`, so central does not need a public domain for the minimal lab.
-
-If you choose different Railway service names, update `OPENFDD_CENTRAL_UPSTREAM` to `<your-central-service>.railway.internal:8080`.
+Do not include `http://` in `OPENFDD_CENTRAL_UPSTREAM`. `OPENFDD_NGINX_RESOLVER=auto` (image default) picks the first nameserver from `/etc/resolv.conf`; override with an explicit IP if needed.
 
 ## Health and verification
 
-Central's health endpoint is:
-
-```text
-GET /api/health
-```
-
-From a network location that can reach central, verify:
-
 ```bash
 curl -fsS http://openfdd-central.railway.internal:8080/api/health
-```
-
-That command is normally run from another Railway service or a Railway shell because central should remain private. From the public web domain, verify the same-origin proxy instead:
-
-```bash
 curl -fsS https://<web-domain>/api/health
+getent hosts openfdd-central.railway.internal
 ```
 
-Then open the web domain, log in with the configured admin password, import an `openfdd_package_v1` CSV package, and confirm Overview/Inspect/FDD routes can query the imported building.
+Then open the web domain, log in, and for CSV labs import an `openfdd_package_v1` zip. For MQTTS hubs, confirm Operations MQTT monitor / ingest after fieldbus publishes.
 
 Do **not** use bare `/health`; the product route is `/api/health`.
 
-The sidebar revision should show the running central workspace semver plus short git SHA. For reproducibility, compare that SHA to the intended `sha-<7>` GHCR image tag.
-
 ## MCP sidecar
-
-If you add the optional MCP image, point it at central:
 
 ```text
 OPENFDD_API_BASE=http://openfdd-central.railway.internal:8080
 OPENFDD_MCP_TOKEN=<JWT/token appropriate for the deployment>
 ```
 
-Keep MCP private unless there is a deliberate authenticated agent gateway around it. `openfdd-mcp` is stdio-first; do not publish it as an unauthenticated HTTP service.
+Keep MCP private unless there is a deliberate authenticated agent gateway.
 
 ## OT / BACnet warning
 
-Railway is not a substitute for an OT network.
-
-BACnet/IP discovery commonly depends on local broadcast/subnet behavior, interface binding, router configuration, and access to building controls networks. `openfdd-fieldbus` therefore belongs on-site, behind a VPN/tunnel, or in infrastructure deliberately connected to the OT LAN. Do not advertise a one-click public-cloud deployment as automatic BACnet commissioning.
-
-For a cloud CSV/package lab, omit fieldbus and MQTT entirely unless they are genuinely needed.
+Railway is not a substitute for an OT network. BACnet/IP discovery belongs with on-prem fieldbus. Cloud MQTTS is the transport hub, not a BAS broadcast domain.
 
 ## GHCR release flow for Railway
 
@@ -148,56 +138,62 @@ A merge to `master` triggers the stack GHCR publisher (`openfdd-central`, `openf
 
 Before redeploying Railway:
 
-1. wait for the relevant GHCR publish workflows to finish green;
-2. resolve the immutable `sha-<7>` tag for that `master` commit;
-3. verify `:nightly` points at the expected digest if using the floating channel;
-4. prefer the immutable SHA tag for a controlled test and use `:nightly` only when you intentionally want the moving integration channel.
-
-Pushing a new GHCR digest does not necessarily mean an already-running Railway service changes immediately. Redeploy the service, update its image reference, or use Railway image auto-updates according to the deployment policy you choose.
+1. wait for publish workflows to finish green;
+2. resolve the immutable `sha-<7>` tag;
+3. verify `:nightly` digest if using the floating channel;
+4. redeploy services (image push alone may not restart Railway).
 
 ## Security posture
 
-Open-FDD's current product contract is LAN/VPN/local-first. Internet-facing hardening is still an explicit future target in the project README. Treat Railway as an experimental lab/demo deployment unless your own network controls, authentication, secrets, TLS, persistence, backups, and exposure policy have been reviewed.
+Treat Railway as an experimental lab/demo unless your own controls, TLS, persistence, backups, and exposure policy have been reviewed.
 
 Never:
 
-- commit `OPENFDD_JWT_SECRET`, admin passwords, registry tokens, or OT credentials;
-- expose BACnet write paths to the public internet;
-- assume a Railway public domain makes the whole stack production-safe;
-- add Python/Streamlit commissioning services that are not part of the Rust/React product stack.
+- commit secrets or OT credentials;
+- expose BACnet write paths publicly;
+- publish MQTTS `8883` to the open internet without a deliberate ACL/TLS design;
+- assume a public web domain makes the whole stack production-safe.
 
-Report suspected vulnerabilities privately through [GitHub Private Vulnerability Reporting](../../SECURITY.md), not public issues.
+Report vulnerabilities via [GitHub Private Vulnerability Reporting](../../SECURITY.md).
 
 ## Troubleshooting
 
+### `nginx: [emerg] host not found in upstream "….railway.internal"`
+
+**Cause:** nginx resolved the upstream hostname at **startup** before Railway private DNS had the peer.
+
+**Fix (tip images):** lazy DNS — variable upstream + `resolver` / `OPENFDD_NGINX_RESOLVER=auto`. Redeploy web on a nightly built after that change.
+
+**Operational:**
+
+1. Ensure central is deployed and `GET /api/health` is 200.
+2. Confirm `OPENFDD_CENTRAL_UPSTREAM` matches the Railway **service name** exactly.
+3. From Railway shell: `getent hosts openfdd-central.railway.internal`.
+4. Increase healthcheck retry window if central is slow; still prefer deploy-central-first.
+5. Retry web deploy after central is healthy.
+
 ### GHCR image will not pull
 
-Confirm the exact package is public, or configure Railway registry credentials with a read-only GHCR token. Package visibility is separate from repository visibility.
+Confirm package visibility or configure read-only GHCR credentials.
 
-### Health check fails
+### Health check fails (web)
 
-Check the container port (`8080` for central), use `/api/health`, and inspect central startup logs for missing JWT/auth configuration.
+Confirm container port `8080`. If `/` never becomes ready, inspect nginx logs for upstream/DNS errors. Prefer verifying `/api/health` through the web proxy once nginx is up.
 
 ### Web loads but `/api` fails
 
-Confirm web has:
-
-```text
-OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080
-```
-
-Then confirm both services are in the same Railway project/environment and central is listening on `8080`. Do not point browser JavaScript directly at an unrelated public central URL unless you intentionally redesign the proxy/security model.
+Confirm `OPENFDD_CENTRAL_UPSTREAM`, same Railway project/environment, and central on `8080`.
 
 ### Imported data disappears after redeploy
 
-Attach persistent storage for `/workspace`; central's imported packages, historian artifacts, and related state are not meant to live only on an ephemeral container filesystem.
+Attach persistent storage for `/workspace`.
 
 ### BACnet discovery finds nothing
 
-That is expected on a generic cloud network. Run fieldbus where it has routed/broadcast access to the OT LAN or through an explicitly engineered VPN/router topology.
+Expected on generic cloud networks — run fieldbus on the OT LAN and use cloud MQTTS.
 
 ## One-click template target
 
-The intended follow-up is a Railway Template for the **minimal cloud CSV lab** (`openfdd-web` + `openfdd-central`) with generated secrets, private service networking, persistent central storage, runtime `OPENFDD_CENTRAL_UPSTREAM`, and `/api/health` verification. Once a real template is published and tested, the project README can expose Railway's official **Deploy on Railway** button.
+Draft notes live under [`railway/`](../../railway/README.md). A verified Railway Template should create **central → mqtt → web**, generate secrets, attach `/workspace`, set `OPENFDD_CENTRAL_UPSTREAM`, keep central/mqtt private, and document first login. Do not add a README “Deploy on Railway” button until that template is published and tested.
 
-Do not add a placeholder button that points to an unpublished or unverified template.
+Railway currently lacks a first-class `dependsOn` / deploy-after field for private DNS peers — document sequencing in checklists until the platform supports it.

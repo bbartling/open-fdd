@@ -41,6 +41,7 @@ interface AfddSchedulerStatus {
   next_due_at_utc?: string | null;
   last_error?: string | null;
   recent_cycles: AfddCycleRecord[];
+  operator_schedule_editable?: boolean;
   error?: string;
 }
 
@@ -48,6 +49,44 @@ interface AfddRunNowResponse {
   ok: boolean;
   cycle?: AfddCycleRecord;
   error?: string;
+}
+
+interface AfddConfigSaveResponse {
+  ok: boolean;
+  config?: AfddConfig;
+  error?: string;
+}
+
+const AFDD_INTERVAL_OPTIONS: Array<{ minutes: number; label: string }> = [
+  { minutes: 60, label: "Every 1 hour" },
+  { minutes: 180, label: "Every 3 hours" },
+  { minutes: 360, label: "Every 6 hours" },
+  { minutes: 720, label: "Every 12 hours" },
+];
+
+const AFDD_LOOKBACK_OPTIONS: Array<{ days: number; label: string }> = [
+  { days: 1, label: "1 day" },
+  { days: 2, label: "2 days" },
+  { days: 3, label: "3 days" },
+];
+
+function lookbackDaysFromConfig(config?: AfddConfig | null): number {
+  if (!config) return 1;
+  if (config.lookback_unit === "days") return config.lookback_value;
+  if (config.lookback_unit === "hours") return Math.max(1, Math.round(config.lookback_value / 24));
+  if (config.lookback_unit === "minutes") {
+    return Math.max(1, Math.round(config.lookback_value / (24 * 60)));
+  }
+  return 1;
+}
+
+function nearestIntervalMinutes(minutes?: number): number {
+  if (minutes == null) return 60;
+  const allowed = AFDD_INTERVAL_OPTIONS.map((option) => option.minutes);
+  if (allowed.includes(minutes)) return minutes;
+  return allowed.reduce((best, value) =>
+    Math.abs(value - minutes) < Math.abs(best - minutes) ? value : best,
+  );
 }
 
 interface FddContinuityRow {
@@ -149,7 +188,11 @@ function AfddPanel() {
   const [continuity, setContinuity] = useState<FddContinuityRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [intervalMinutes, setIntervalMinutes] = useState(60);
+  const [lookbackDays, setLookbackDays] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -162,6 +205,11 @@ function AfddPanel() {
       setStatus(next);
       setHistorian(historianSummary);
       setContinuity(results?.results ?? []);
+      if (next.config) {
+        setIntervalMinutes(nearestIntervalMinutes(next.config.interval_minutes));
+        const days = lookbackDaysFromConfig(next.config);
+        setLookbackDays([1, 2, 3].includes(days) ? days : 1);
+      }
       setError(next.ok ? null : next.error ?? "AFDD scheduler status unavailable");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -177,6 +225,7 @@ function AfddPanel() {
   const runNow = useCallback(async () => {
     setRunning(true);
     setError(null);
+    setNotice(null);
     try {
       const result = await apiFetch<AfddRunNowResponse>("/api/afdd/scheduler/run-now", {
         method: "POST",
@@ -194,9 +243,37 @@ function AfddPanel() {
     }
   }, [refresh]);
 
+  const saveSchedule = useCallback(async () => {
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await apiFetch<AfddConfigSaveResponse>("/api/afdd/scheduler/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          interval_minutes: intervalMinutes,
+          lookback_days: lookbackDays,
+        }),
+      });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Failed to save AFDD schedule");
+      }
+      setNotice(
+        `Saved AFDD schedule: every ${intervalMinutes / 60}h · lookback ${lookbackDays} day${lookbackDays === 1 ? "" : "s"}.`,
+      );
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  }, [intervalMinutes, lookbackDays, refresh]);
+
   const recent = status?.recent_cycles ?? [];
   const latestCycle = recent[0];
   const config = status?.config;
+  const scheduleEditable = status?.operator_schedule_editable === true;
   const historianBackend = findScalar(historian, ["backend", "storage_backend", "storage", "scheme"]);
   const historianFiles = findScalar(historian, ["file_count", "files", "part_count", "parts"]);
   const historianBytes = findScalar(historian, ["total_bytes", "bytes", "size_bytes"]);
@@ -210,7 +287,8 @@ function AfddPanel() {
         <div>
           <h2 id="afdd-config-heading">AFDD Scheduler</h2>
           <p className="muted">
-            Deployment-backed scheduler settings are read-only here. Run Now uses the same H8 execution engine as scheduled cycles.
+            Continuous AFDD frequency and rolling lookback are operator-selectable (hours / days).
+            Mode stays deployment-owned. Run Now uses the same H8 engine as scheduled cycles.
           </p>
         </div>
         <div className="button-row">
@@ -220,12 +298,61 @@ function AfddPanel() {
       </div>
 
       {error ? <div className="inline-alert inline-alert--error" role="alert">{error}</div> : null}
+      {notice ? <div className="inline-alert" role="status">{notice}</div> : null}
       {status?.last_error ? <div className="inline-alert inline-alert--error" role="status">Last scheduler error: {status.last_error}</div> : null}
+
+      <div className="form-row" data-testid="afdd-schedule-controls">
+        <label htmlFor="afdd-frequency">Frequency</label>
+        <select
+          id="afdd-frequency"
+          value={intervalMinutes}
+          disabled={!scheduleEditable || saving}
+          onChange={(event) => setIntervalMinutes(Number(event.target.value))}
+        >
+          {AFDD_INTERVAL_OPTIONS.map((option) => (
+            <option key={option.minutes} value={option.minutes}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <label htmlFor="afdd-lookback">Rolling lookback</label>
+        <select
+          id="afdd-lookback"
+          value={lookbackDays}
+          disabled={!scheduleEditable || saving}
+          onChange={(event) => setLookbackDays(Number(event.target.value))}
+        >
+          {AFDD_LOOKBACK_OPTIONS.map((option) => (
+            <option key={option.days} value={option.days}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <Button
+          id="afdd-save-schedule"
+          label={saving ? "Saving…" : "Save schedule"}
+          loading={saving}
+          disabled={!scheduleEditable}
+          onClick={() => void saveSchedule()}
+        />
+        {!scheduleEditable ? (
+          <span className="muted">
+            Save requires Central with schedule API (after next GHCR central). Showing live values below.
+          </span>
+        ) : null}
+      </div>
 
       <div className="summary-grid">
         {metric("Mode", config?.mode ?? "—")}
-        {metric("Frequency", config ? `${config.interval_minutes} min` : "—")}
-        {metric("Rolling lookback", config ? `${config.lookback_value} ${config.lookback_unit}` : "—")}
+        {metric("Frequency", config ? `every ${config.interval_minutes / 60} h (${config.interval_minutes} min)` : "—")}
+        {metric(
+          "Rolling lookback",
+          config
+            ? config.lookback_unit === "days"
+              ? `${config.lookback_value} day${config.lookback_value === 1 ? "" : "s"}`
+              : `${config.lookback_value} ${config.lookback_unit}`
+            : "—",
+        )}
         {metric("Latest historian sample", formatTime(status?.latest_persisted_telemetry_utc))}
         {metric("BAS freshness", basFreshness(status?.latest_persisted_telemetry_utc))}
         {metric("Analyzed through", formatTime(status?.checkpoint?.analyzed_through_utc))}
@@ -314,13 +441,89 @@ function topicMatchesFilter(topic: string, filter: string): boolean {
   return topicLevels.length === filterLevels.length;
 }
 
+interface IngestStats {
+  ok?: boolean;
+  ingest_ok?: number;
+  ingest_dup?: number;
+  ingest_reject?: number;
+  dead_letters?: number;
+}
+
+interface EdgesListResponse {
+  ok?: boolean;
+  edges?: Array<{ edge_id: string; site_id?: string | null; has_telemetry?: boolean }>;
+}
+
+function OtStatusStrip() {
+  const [mqtt, setMqtt] = useState<MqttMonitorSnapshot | null>(null);
+  const [ingest, setIngest] = useState<IngestStats | null>(null);
+  const [edges, setEdges] = useState<EdgesListResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const [nextMqtt, nextIngest, nextEdges] = await Promise.all([
+        apiFetch<MqttMonitorSnapshot>("/api/mqtt/monitor"),
+        apiFetch<IngestStats>("/api/ingest/stats").catch(() => null),
+        apiFetch<EdgesListResponse>("/api/edges").catch(() => null),
+      ]);
+      setMqtt(nextMqtt);
+      setIngest(nextIngest);
+      setEdges(nextEdges);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 10000);
+    return () => window.clearInterval(timer);
+  }, [refresh]);
+
+  const liveEdges = (edges?.edges ?? []).filter((edge) => edge.has_telemetry).length;
+
+  return (
+    <div className="ops-ot-strip" data-testid="ops-ot-strip" role="status" aria-live="polite">
+      <div className="ops-ot-strip__item">
+        <span className="ops-ot-strip__label">MQTT</span>
+        <span className={`ops-ot-strip__value${mqtt?.connected ? " ops-ot-strip__value--ok" : " ops-ot-strip__value--bad"}`}>
+          {mqtt ? (mqtt.connected ? "Connected" : "Disconnected") : "—"}
+        </span>
+      </div>
+      <div className="ops-ot-strip__item">
+        <span className="ops-ot-strip__label">Ingest OK</span>
+        <span className="ops-ot-strip__value">{ingest?.ingest_ok != null ? String(ingest.ingest_ok) : "—"}</span>
+      </div>
+      <div className="ops-ot-strip__item">
+        <span className="ops-ot-strip__label">Rejects</span>
+        <span className="ops-ot-strip__value">{ingest?.ingest_reject != null ? String(ingest.ingest_reject) : "—"}</span>
+      </div>
+      <div className="ops-ot-strip__item">
+        <span className="ops-ot-strip__label">Edges w/ telemetry</span>
+        <span className="ops-ot-strip__value">{edges ? String(liveEdges) : "—"}</span>
+      </div>
+      <div className="ops-ot-strip__item">
+        <span className="ops-ot-strip__label">Monitor msgs</span>
+        <span className="ops-ot-strip__value">{mqtt ? String(mqtt.received_messages) : "—"}</span>
+      </div>
+      {error ? (
+        <div className="ops-ot-strip__item">
+          <span className="ops-ot-strip__label">Strip</span>
+          <span className="ops-ot-strip__value ops-ot-strip__value--bad">{error}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function MqttPanel() {
   const [topicFilter, setTopicFilter] = useState("openfdd/#");
   const [snapshot, setSnapshot] = useState<MqttMonitorSnapshot | null>(null);
-  /** Off by default — cell-modem / bandwidth: no polling until Start listening. */
+  /** Off until Start listening — console only; does not change fieldbus scrape/MQTT publish. */
   const [listening, setListening] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [pollMs, setPollMs] = useState(5000);
   const [clearedAt, setClearedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const filterOk = useMemo(() => validTopicFilter(topicFilter), [topicFilter]);
@@ -338,9 +541,9 @@ function MqttPanel() {
   useEffect(() => {
     if (!listening || paused) return undefined;
     void refresh();
-    const timer = window.setInterval(() => void refresh(), pollMs);
+    const timer = window.setInterval(() => void refresh(), 1000);
     return () => window.clearInterval(timer);
-  }, [listening, paused, pollMs, refresh]);
+  }, [listening, paused, refresh]);
 
   const messages = useMemo(() => {
     const cutoff = clearedAt ?? Number.NEGATIVE_INFINITY;
@@ -356,10 +559,10 @@ function MqttPanel() {
         <div>
           <h2 id="mqtt-config-heading">MQTT Test Client</h2>
           <p className="muted">
-            AWS IoT–style operator monitor: subscribe filter, live truncated payload feed, connection events.
-            Browser uses authenticated Central API snapshots (not broker credentials). Listening is off by
-            default and throttled for cell-modem sites. Full WSS-to-broker is optional later; production path
-            remains fieldbus → MQTTS → central ingest.
+            Operator live feed of what Central is already ingesting over MQTTS (fieldbus scrape →
+            secure publish). Topic filter, payloads, and connection events — no broker passwords and
+            no scrape-interval controls here. Start listening to watch; pause/clear only affect this
+            view.
           </p>
         </div>
         <div className="button-row">
@@ -380,26 +583,18 @@ function MqttPanel() {
             disabled={!listening}
           />
           <Button id="mqtt-clear" label="Clear local view" variant="secondary" onClick={() => setClearedAt(Date.now())} />
-          <Button id="mqtt-refresh" label="Refresh once" variant="secondary" onClick={() => void refresh()} />
         </div>
       </div>
 
       {error ? <div className="inline-alert inline-alert--error" role="alert">{error}</div> : null}
 
-      <div className="form-row">
-        <label htmlFor="mqtt-poll-ms">Poll interval (cell-aware)</label>
-        <select
-          id="mqtt-poll-ms"
-          value={pollMs}
-          onChange={(event) => setPollMs(Number(event.target.value))}
-        >
-          <option value={2000}>2 s</option>
-          <option value={5000}>5 s (default)</option>
-          <option value={10000}>10 s</option>
-          <option value={30000}>30 s</option>
-        </select>
-        <span>{listening ? (paused ? "Display paused" : `Polling every ${pollMs / 1000}s`) : "Not listening — no background traffic"}</span>
-      </div>
+      {!listening ? (
+        <p className="muted" data-testid="mqtt-listen-hint">
+          Not listening — click Start listening to follow the live buffer.
+        </p>
+      ) : paused ? (
+        <p className="muted">Display paused.</p>
+      ) : null}
 
       <div className="summary-grid">
         {metric("Broker state", snapshot?.connected ? "Connected" : "Disconnected")}
@@ -598,25 +793,30 @@ function TelemetrySuspendPanel() {
 }
 
 export function OperationsPage() {
-  const [view, setView] = useState<OperationsView>("afdd");
+  const [view, setView] = useState<OperationsView>("mqtt");
 
   return (
-    <AppShell title="Operations" caption="AFDD scheduler and MQTT operator tooling" activeSectionId="operations">
+    <AppShell
+      title="Operations"
+      caption="OT strip, MQTT live console, AFDD scheduler — Sites stays inventory; this tab is not nested under Sites."
+      activeSectionId="operations"
+    >
+      <OtStatusStrip />
       <fieldset className="section-tabs" aria-label="Operations configuration">
         <legend className="sr-only">Operations configuration</legend>
-        <label>
-          <input type="radio" name="operations-view" value="afdd" checked={view === "afdd"} onChange={() => setView("afdd")} />
-          AFDD Config
-        </label>
         <label>
           <input type="radio" name="operations-view" value="mqtt" checked={view === "mqtt"} onChange={() => setView("mqtt")} />
           MQTT Test Client
         </label>
+        <label>
+          <input type="radio" name="operations-view" value="afdd" checked={view === "afdd"} onChange={() => setView("afdd")} />
+          AFDD Config
+        </label>
       </fieldset>
       {view === "afdd" ? <AfddPanel /> : (
         <>
-          <TelemetrySuspendPanel />
           <MqttPanel />
+          <TelemetrySuspendPanel />
         </>
       )}
     </AppShell>

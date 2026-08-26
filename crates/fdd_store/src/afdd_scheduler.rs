@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::AfddConfig;
 
 pub const AFDD_SCHEDULER_CHECKPOINT_PATH: &str = "state/afdd/scheduler-checkpoint.json";
+pub const AFDD_SCHEDULER_RUNTIME_CONFIG_PATH: &str = "state/afdd/scheduler-runtime-config.json";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AfddSchedulerCheckpoint {

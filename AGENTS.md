@@ -99,23 +99,24 @@ Aliases: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](docs/migration/vibe19/
 
 ### Railway cloud lab
 
-Railway is an **experimental CSV/package lab/demo path**, not a replacement for the LAN/VPN/OT deployment contract or a claim of production public-internet hardening.
+Railway is an **experimental cloud path**, not a replacement for the LAN/VPN/OT deployment contract or a claim of production public-internet hardening.
 
-- Minimal cloud stack: `openfdd-central` + `openfdd-web`.
-- Real optional images: `openfdd-fieldbus`, `openfdd-mqtt`, `openfdd-mcp`.
+- **CSV-only lab:** `openfdd-central` + `openfdd-web`.
+- **Cloud MQTTS hub (preferred when live OT is the goal):** `openfdd-central` + `openfdd-web` + **`openfdd-mqtt`** on Railway private networking; keep **`openfdd-fieldbus` on-prem** publishing MQTTS into the cloud broker. MQTTS is the point of the hub — do not leave mqtt off by default for live sites.
+- Real optional image: `openfdd-mcp`.
 - Do **not** invent `openfdd-commission`, `openfdd-mcp-rag`, or a Python/Streamlit commissioning runtime.
 - Both central and web listen on container port `8080`; local Compose maps web host port `3000` to container `8080`.
 - Central health is `GET /api/health`, not `/health`.
-- Web proxies same-origin `/api` and `/twins` to `OPENFDD_CENTRAL_UPSTREAM` (default `central:8080`). For Railway services named `openfdd-central` and `openfdd-web`, set web `OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080`.
+- **Deploy order:** central (healthy `/api/health`) → mqtt (if hub) → web. Web uses `OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080` (no `http://`). Tip web images resolve upstream DNS lazily (`OPENFDD_NGINX_RESOLVER=auto`) so nginx does not crash if private DNS is not ready at process start.
 - Cloud pulls require public GHCR package visibility or Railway registry pull credentials. Railway private-registry credentials are plan-dependent; public GHCR is the simplest open-source path.
 - `OPENFDD_JWT_SECRET` and `OPENFDD_ADMIN_PASSWORD` must be deployment-unique secrets and must never be committed.
 - Attach persistent storage at central `/workspace` before relying on imported packages across redeploys.
 - BACnet/fieldbus generally requires deliberate OT-LAN/VPN/router access; generic Railway networking does not provide BACnet broadcast discovery automatically.
 - Prefer `:nightly` for the latest green `master` channel or `:sha-<7>` for reproducibility. A `master` merge triggers the GHCR stack and MCP publishers; do not claim the new nightly until those publish jobs are green and the target digest resolves.
 
-Full guide: [`docs/operations/RAILWAY_DEPLOYMENT.md`](docs/operations/RAILWAY_DEPLOYMENT.md). Image/tag contract: [`docs/operations/ghcr-images.md`](docs/operations/ghcr-images.md). Local stack entry point remains `./scripts/openfdd_stack_up.sh`.
+Full guide: [`docs/operations/RAILWAY_DEPLOYMENT.md`](docs/operations/RAILWAY_DEPLOYMENT.md). Checklist: [`docs/operations/RAILWAY_DEPLOYMENT_CHECKLIST.md`](docs/operations/RAILWAY_DEPLOYMENT_CHECKLIST.md). Image/tag contract: [`docs/operations/ghcr-images.md`](docs/operations/ghcr-images.md). Local stack entry point remains `./scripts/openfdd_stack_up.sh`.
 
-A Railway one-click template should represent the tested minimal `central + web` cloud-lab topology. Do not add a README deployment button until the real template exists and has been verified.
+A Railway one-click template should eventually encode **central → mqtt → web** with generated secrets. Do not add a README deployment button until the real template exists and has been verified.
 
 ## Low-RAM hosts (bensbench)
 

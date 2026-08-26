@@ -208,6 +208,12 @@ The operations page gains two additional radio-selectable configuration surfaces
 - [x] browser never receives MQTT passwords, private keys, S3 secrets, or raw deployment credentials
 - [x] MQTT monitor traffic is exposed through authenticated Central API plumbing rather than opening the broker directly to the browser
 
+Follow-on (PR #779, Vite-gated before GHCR web):
+
+- [x] Operations OT status strip (`/api/mqtt/monitor`, `/api/ingest/stats`, `/api/edges`)
+- [x] MQTT listen poll default **1 s** (cell-aware slower options retained)
+- [x] Sites inventory **Ingest** column CSV / MQTT / Both (labels only; not dual-writer historian)
+
 H9 is gated on the exact final PR head passing frontend/Rust/security/docs workflows with zero unresolved review threads before merge.
 
 ### H10 — Scale benchmarks and release qualification

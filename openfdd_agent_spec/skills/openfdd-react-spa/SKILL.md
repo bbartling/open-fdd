@@ -2,8 +2,8 @@
 name: openfdd-react-spa
 description: >-
   Maintain the Open-FDD React product SPA (frontend/web → openfdd-web). Use when
-  editing Overview, Inspect, FDD Plots, RCx, Mapping, auth UI, health matrices,
-  or client Plotly charts against central /api (DataFusion).
+  editing Overview, Inspect, FDD Plots, RCx, Mapping, Operations, Sites, auth UI,
+  health matrices, or client Plotly charts against central /api (DataFusion).
 ---
 
 # Open-FDD React SPA
@@ -12,6 +12,7 @@ description: >-
 
 - Changing `frontend/web` pages, API clients, or Plotly builders
 - Overview / FDD / RCx chart parity vs vibe19 **presentation** (colors, axes)
+- Operations MQTT monitor / OT strip, Sites inventory
 - Auth/login hygiene for internet-facing UI
 
 ## Rules
@@ -33,6 +34,15 @@ description: >-
    refetch results + series so `confirm_min` session overlays show up.
 10. Do not drop `REQUIRED_RCX_PRESET_IDS`. Health row tint uses existing
     `--health-broken-1/2/3` tokens (`n/3`; `?/3` is not red).
+11. **Operations** (`/operations`) stays its own main tab — not nested under Sites.
+    MQTT console watches Central’s ingest buffer (`GET /api/mqtt/monitor`) — no
+    operator-facing scrape/poll-interval knobs (fieldbus owns OT cadence). OT strip
+    may surface `/api/ingest/stats` + `/api/edges`. Never put broker credentials in
+    the browser.
+12. **Sites** (`/sites`) is package/edge **inventory**. CSV / MQTT / Both is an
+    operator label only — not a dual-writer historian epic.
+13. Low-RAM benches: prefer `npm run dev` (Vite → `:8080`) and get human approval
+    before GHCR `openfdd-web` fresh pulls after UI PRs.
 
 ## Key files
 
@@ -42,6 +52,8 @@ description: >-
 | Overview types | `frontend/web/src/api/overviewTypes.ts` |
 | Health matrices | `frontend/web/src/components/HealthMatrixSection.tsx` |
 | Inspect | `frontend/web/src/pages/InspectPage.tsx` |
+| Operations | `frontend/web/src/pages/OperationsPage.tsx` |
+| Sites | `frontend/web/src/pages/SitesPage.tsx` |
 | RCx Overview presets | `frontend/web/src/api/rcxOverviewPresets.ts` |
 | RCx / FDD charts | `frontend/web/src/api/vibeCharts.ts` |
 | Theme | `frontend/web/src/api/plotlyTheme.ts` |
@@ -53,3 +65,6 @@ description: >-
 - Computing fault logic in the browser beyond presentation masks
 - Hardcoding purple/glow “AI slop” themes that fight product CSS tokens
 - Putting Plotly motor/mech/econ/BAS hosts back on Overview
+- Nesting Operations under Sites or treating Sites ingest labels as backend mode
+- Exposing MQTT broker secrets to the SPA
+- Shipping GHCR web without Vite operator approval on low-RAM benches when required by the active plan

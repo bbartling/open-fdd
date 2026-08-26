@@ -3,6 +3,10 @@
 //! Scheduled cycles and operator-triggered run-now cycles share `execute_cycle`.
 //! A per-scope Tokio mutex prevents overlapping AFDD runs for the same building,
 //! while failures are recorded without advancing the persisted checkpoint.
+//!
+//! Mode remains deployment/env-owned. Interval + rolling lookback may be updated
+//! via authenticated `POST /api/afdd/scheduler/config` using an allowlisted set
+//! (1/3/6/12 hour frequency; 1/2/3 day lookback) and persist under canonical state.
 
 use std::collections::VecDeque;
 use std::path::Path;
@@ -17,8 +21,9 @@ use axum::{Json, Router};
 use chrono::{DateTime, Duration, Utc};
 use dashmap::DashMap;
 use fdd_store::{
-    next_due_at, plan_continuous_cycle, AfddConfig, AfddCycleWindow, AfddMode,
-    AfddSchedulerCheckpoint, AFDD_SCHEDULER_CHECKPOINT_PATH,
+    next_due_at, plan_continuous_cycle, AfddConfig, AfddCycleWindow, AfddLookbackUnit, AfddMode,
+    AfddOperatorSchedule, AfddSchedulerCheckpoint, AFDD_SCHEDULER_CHECKPOINT_PATH,
+    AFDD_SCHEDULER_RUNTIME_CONFIG_PATH, OPERATOR_INTERVAL_MINUTES, OPERATOR_LOOKBACK_DAYS,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -64,7 +69,7 @@ struct RuntimeStatus {
 }
 
 pub struct AfddSchedulerRuntime {
-    config: AfddConfig,
+    config: Mutex<AfddConfig>,
     store: CanonicalStateStore,
     scope_locks: DashMap<String, Arc<AsyncMutex<()>>>,
     status: Mutex<RuntimeStatus>,
@@ -72,14 +77,29 @@ pub struct AfddSchedulerRuntime {
 
 impl AfddSchedulerRuntime {
     pub fn from_env() -> Result<Arc<Self>> {
-        let config = AfddConfig::from_env().context("load AFDD scheduler config")?;
+        let mut config = AfddConfig::from_env().context("load AFDD scheduler config")?;
         let store = CanonicalStateStore::from_env().context("open canonical AFDD state store")?;
+        if let Some(schedule) = load_operator_schedule(&store)? {
+            if let Err(error) = config.apply_operator_schedule(&schedule) {
+                warn!(%error, "ignoring invalid persisted AFDD operator schedule");
+            } else {
+                info!(
+                    interval_minutes = schedule.interval_minutes,
+                    lookback_value = schedule.lookback_value,
+                    "loaded persisted AFDD operator schedule"
+                );
+            }
+        }
         Ok(Arc::new(Self {
-            config,
+            config: Mutex::new(config),
             store,
             scope_locks: DashMap::new(),
             status: Mutex::new(RuntimeStatus::default()),
         }))
+    }
+
+    fn config_snapshot(&self) -> AfddConfig {
+        self.config.lock().unwrap().clone()
     }
 
     fn checkpoint(&self) -> Result<Option<AfddSchedulerCheckpoint>> {
@@ -113,6 +133,21 @@ impl AfddSchedulerRuntime {
             .context("persist AFDD scheduler checkpoint")
     }
 
+    fn persist_operator_schedule(&self, schedule: &AfddOperatorSchedule) -> Result<()> {
+        let bytes = serde_json::to_vec_pretty(schedule)?;
+        self.store
+            .write(Path::new(AFDD_SCHEDULER_RUNTIME_CONFIG_PATH), &bytes)
+            .context("persist AFDD operator schedule")
+    }
+
+    fn update_operator_schedule(&self, schedule: AfddOperatorSchedule) -> Result<AfddConfig> {
+        schedule.validate_allowlist()?;
+        let mut config = self.config.lock().unwrap();
+        config.apply_operator_schedule(&schedule)?;
+        self.persist_operator_schedule(&schedule)?;
+        Ok(config.clone())
+    }
+
     fn record_cycle(&self, record: AfddCycleRecord) {
         let mut status = self.status.lock().unwrap();
         status.last_error = record.error.clone();
@@ -128,14 +163,14 @@ impl AfddSchedulerRuntime {
     }
 
     async fn run_scheduled_cycle(&self, scope: &str) -> Result<Option<AfddCycleRecord>> {
-        if self.config.mode != AfddMode::Continuous {
+        let config = self.config_snapshot();
+        if config.mode != AfddMode::Continuous {
             return Ok(None);
         }
         let now = Utc::now();
         let checkpoint = self.checkpoint()?;
         let latest = self.latest_telemetry()?;
-        let Some(window) = plan_continuous_cycle(checkpoint.as_ref(), now, latest, &self.config)?
-        else {
+        let Some(window) = plan_continuous_cycle(checkpoint.as_ref(), now, latest, &config)? else {
             return Ok(None);
         };
         self.execute_cycle(scope, "scheduled", window)
@@ -144,10 +179,11 @@ impl AfddSchedulerRuntime {
     }
 
     async fn run_now(&self, scope: &str) -> Result<AfddCycleRecord> {
+        let config = self.config_snapshot();
         let end_utc = self
             .latest_telemetry()?
             .ok_or_else(|| anyhow::anyhow!("no persisted telemetry watermark is available"))?;
-        let lookback_seconds = i64::try_from(self.config.lookback_seconds()?)?;
+        let lookback_seconds = i64::try_from(config.lookback_seconds()?)?;
         let now = Utc::now();
         let window = AfddCycleWindow {
             start_utc: end_utc - Duration::seconds(lookback_seconds),
@@ -224,26 +260,45 @@ impl AfddSchedulerRuntime {
     }
 
     fn status_json(&self) -> Result<Value> {
+        let config = self.config_snapshot();
         let checkpoint = self.checkpoint()?;
         let latest_telemetry = self.latest_telemetry()?;
-        let next_due = next_due_at(checkpoint.as_ref(), Utc::now(), &self.config)?;
+        let next_due = next_due_at(checkpoint.as_ref(), Utc::now(), &config)?;
         let status = self.status.lock().unwrap();
         Ok(json!({
             "ok": true,
-            "config": self.config,
+            "config": config,
             "checkpoint": checkpoint,
             "latest_persisted_telemetry_utc": latest_telemetry,
-            "next_due_at_utc": if self.config.mode == AfddMode::Continuous { Some(next_due) } else { None },
+            "next_due_at_utc": if config.mode == AfddMode::Continuous { Some(next_due) } else { None },
             "last_error": status.last_error,
             "recent_cycles": status.recent_cycles,
+            "operator_schedule_editable": true,
+            "operator_interval_minutes": OPERATOR_INTERVAL_MINUTES,
+            "operator_lookback_days": OPERATOR_LOOKBACK_DAYS,
         }))
     }
+}
+
+fn load_operator_schedule(store: &CanonicalStateStore) -> Result<Option<AfddOperatorSchedule>> {
+    let Some(bytes) = store.read_optional(Path::new(AFDD_SCHEDULER_RUNTIME_CONFIG_PATH))? else {
+        return Ok(None);
+    };
+    Ok(Some(
+        serde_json::from_slice(&bytes).context("decode AFDD operator schedule")?,
+    ))
 }
 
 #[derive(Debug, Deserialize)]
 pub struct RunNowRequest {
     #[serde(default)]
     building_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateConfigRequest {
+    interval_minutes: u64,
+    lookback_days: u64,
 }
 
 fn normalize_scope(building_id: Option<&str>) -> String {
@@ -258,6 +313,7 @@ pub fn router(state: Arc<AppState>, runtime: Arc<AfddSchedulerRuntime>) -> Route
     Router::new()
         .route("/api/afdd/scheduler/status", get(scheduler_status))
         .route("/api/afdd/scheduler/run-now", post(scheduler_run_now))
+        .route("/api/afdd/scheduler/config", post(scheduler_update_config))
         .layer(Extension(runtime))
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
@@ -284,8 +340,26 @@ async fn scheduler_run_now(
     }
 }
 
+async fn scheduler_update_config(
+    Extension(runtime): Extension<Arc<AfddSchedulerRuntime>>,
+    Json(body): Json<UpdateConfigRequest>,
+) -> Json<Value> {
+    let schedule = AfddOperatorSchedule {
+        interval_minutes: body.interval_minutes,
+        lookback_value: body.lookback_days,
+        lookback_unit: AfddLookbackUnit::Days,
+    };
+    match runtime.update_operator_schedule(schedule) {
+        Ok(config) => Json(json!({
+            "ok": true,
+            "config": config,
+        })),
+        Err(error) => Json(json!({"ok": false, "error": error.to_string()})),
+    }
+}
+
 pub fn spawn(runtime: Arc<AfddSchedulerRuntime>) -> Option<tokio::task::JoinHandle<()>> {
-    if runtime.config.mode != AfddMode::Continuous {
+    if runtime.config_snapshot().mode != AfddMode::Continuous {
         info!("AFDD scheduler is in bulk mode; continuous timer is disabled");
         return None;
     }

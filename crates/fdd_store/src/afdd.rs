@@ -8,13 +8,18 @@
 use std::env;
 
 use anyhow::{bail, Context, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_AFDD_INTERVAL_MINUTES: u64 = 60;
 pub const DEFAULT_AFDD_LOOKBACK_VALUE: u64 = 24;
 pub const DEFAULT_AFDD_LOOKBACK_UNIT: AfddLookbackUnit = AfddLookbackUnit::Hours;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// Operator UI allowlist: every 1 / 3 / 6 / 12 hours.
+pub const OPERATOR_INTERVAL_MINUTES: [u64; 4] = [60, 180, 360, 720];
+/// Operator UI allowlist: rolling lookback 1 / 2 / 3 days.
+pub const OPERATOR_LOOKBACK_DAYS: [u64; 3] = [1, 2, 3];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AfddMode {
     Bulk,
@@ -31,7 +36,7 @@ impl AfddMode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AfddLookbackUnit {
     Minutes,
@@ -61,9 +66,17 @@ impl AfddLookbackUnit {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AfddConfig {
     pub mode: AfddMode,
+    pub interval_minutes: u64,
+    pub lookback_value: u64,
+    pub lookback_unit: AfddLookbackUnit,
+}
+
+/// Persisted operator overrides (mode stays deployment/env-owned).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AfddOperatorSchedule {
     pub interval_minutes: u64,
     pub lookback_value: u64,
     pub lookback_unit: AfddLookbackUnit,
@@ -118,6 +131,47 @@ impl AfddConfig {
 
     pub fn lookback_seconds(&self) -> Result<u64> {
         self.lookback_unit.seconds(self.lookback_value)
+    }
+
+    /// Apply operator schedule allowlist (frequency hours + lookback days). Mode unchanged.
+    pub fn apply_operator_schedule(&mut self, schedule: &AfddOperatorSchedule) -> Result<()> {
+        schedule.validate_allowlist()?;
+        self.interval_minutes = schedule.interval_minutes;
+        self.lookback_value = schedule.lookback_value;
+        self.lookback_unit = schedule.lookback_unit;
+        self.validate()
+    }
+
+    pub fn operator_schedule(&self) -> AfddOperatorSchedule {
+        AfddOperatorSchedule {
+            interval_minutes: self.interval_minutes,
+            lookback_value: self.lookback_value,
+            lookback_unit: self.lookback_unit,
+        }
+    }
+}
+
+impl AfddOperatorSchedule {
+    pub fn validate_allowlist(&self) -> Result<()> {
+        if !OPERATOR_INTERVAL_MINUTES.contains(&self.interval_minutes) {
+            bail!(
+                "interval_minutes must be one of {:?} (1/3/6/12 hours)",
+                OPERATOR_INTERVAL_MINUTES
+            );
+        }
+        if self.lookback_unit != AfddLookbackUnit::Days
+            || !OPERATOR_LOOKBACK_DAYS.contains(&self.lookback_value)
+        {
+            bail!("lookback must be 1, 2, or 3 days");
+        }
+        AfddConfig {
+            mode: AfddMode::Continuous,
+            interval_minutes: self.interval_minutes,
+            lookback_value: self.lookback_value,
+            lookback_unit: self.lookback_unit,
+        }
+        .validate()?;
+        Ok(())
     }
 }
 
@@ -190,5 +244,33 @@ mod tests {
             ..AfddConfig::default()
         };
         assert!(zero_lookback.validate().is_err());
+    }
+
+    #[test]
+    fn operator_schedule_allowlist_accepts_hours_and_days() {
+        let mut config = AfddConfig {
+            mode: AfddMode::Continuous,
+            interval_minutes: 60,
+            lookback_value: 24,
+            lookback_unit: AfddLookbackUnit::Hours,
+        };
+        let schedule = AfddOperatorSchedule {
+            interval_minutes: 180,
+            lookback_value: 2,
+            lookback_unit: AfddLookbackUnit::Days,
+        };
+        config.apply_operator_schedule(&schedule).unwrap();
+        assert_eq!(config.interval_minutes, 180);
+        assert_eq!(config.lookback_seconds().unwrap(), 172_800);
+    }
+
+    #[test]
+    fn operator_schedule_rejects_arbitrary_intervals() {
+        let schedule = AfddOperatorSchedule {
+            interval_minutes: 15,
+            lookback_value: 1,
+            lookback_unit: AfddLookbackUnit::Days,
+        };
+        assert!(schedule.validate_allowlist().is_err());
     }
 }
