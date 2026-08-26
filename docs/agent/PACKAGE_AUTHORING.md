@@ -8,6 +8,12 @@ If Overview tables, RCx plots, Inspect traces, or health matrices are empty, the
 
 Haystack names in sidecar `points` translate via `haystack_point_to_role` (`discharge-air-temp` → `sat`). Do not invent a second vocabulary. Alias table: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](../migration/vibe19/ROLE_MAPPING_PARITY.md). Ingest shapes: [`docs/RUST_DATAFUSION_ENGINE.md`](../RUST_DATAFUSION_ENGINE.md).
 
+Modeling docs for agents: [`docs/modeling/`](../modeling/) — especially
+[package-schema](../modeling/package-schema.md) (compact vs SCAFFOLD evidence),
+[heat-pump buildings](../modeling/heat-pump-buildings.md), and
+[rule readiness](../modeling/rule-readiness.md). A parseable ZIP is not
+commissioning-grade FDD.
+
 ## What the preprocess agent must put in the zip
 
 | Need | Haystack `points` / SQL roles | If the BAS has no binary point |

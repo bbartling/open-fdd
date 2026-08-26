@@ -314,13 +314,91 @@ function topicMatchesFilter(topic: string, filter: string): boolean {
   return topicLevels.length === filterLevels.length;
 }
 
+interface IngestStats {
+  ok?: boolean;
+  ingest_ok?: number;
+  ingest_dup?: number;
+  ingest_reject?: number;
+  dead_letters?: number;
+}
+
+interface EdgesListResponse {
+  ok?: boolean;
+  edges?: Array<{ edge_id: string; site_id?: string | null; has_telemetry?: boolean }>;
+}
+
+function OtStatusStrip() {
+  const [mqtt, setMqtt] = useState<MqttMonitorSnapshot | null>(null);
+  const [ingest, setIngest] = useState<IngestStats | null>(null);
+  const [edges, setEdges] = useState<EdgesListResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const [nextMqtt, nextIngest, nextEdges] = await Promise.all([
+        apiFetch<MqttMonitorSnapshot>("/api/mqtt/monitor"),
+        apiFetch<IngestStats>("/api/ingest/stats").catch(() => null),
+        apiFetch<EdgesListResponse>("/api/edges").catch(() => null),
+      ]);
+      setMqtt(nextMqtt);
+      setIngest(nextIngest);
+      setEdges(nextEdges);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 10000);
+    return () => window.clearInterval(timer);
+  }, [refresh]);
+
+  const liveEdges = (edges?.edges ?? []).filter((edge) => edge.has_telemetry).length;
+
+  return (
+    <div className="ops-ot-strip" data-testid="ops-ot-strip" role="status" aria-live="polite">
+      <div className="ops-ot-strip__item">
+        <span className="ops-ot-strip__label">MQTT</span>
+        <span className={`ops-ot-strip__value${mqtt?.connected ? " ops-ot-strip__value--ok" : " ops-ot-strip__value--bad"}`}>
+          {mqtt ? (mqtt.connected ? "Connected" : "Disconnected") : "—"}
+        </span>
+      </div>
+      <div className="ops-ot-strip__item">
+        <span className="ops-ot-strip__label">Ingest OK</span>
+        <span className="ops-ot-strip__value">{ingest?.ingest_ok != null ? String(ingest.ingest_ok) : "—"}</span>
+      </div>
+      <div className="ops-ot-strip__item">
+        <span className="ops-ot-strip__label">Rejects</span>
+        <span className="ops-ot-strip__value">{ingest?.ingest_reject != null ? String(ingest.ingest_reject) : "—"}</span>
+      </div>
+      <div className="ops-ot-strip__item">
+        <span className="ops-ot-strip__label">Edges w/ telemetry</span>
+        <span className="ops-ot-strip__value">{edges ? String(liveEdges) : "—"}</span>
+      </div>
+      <div className="ops-ot-strip__item">
+        <span className="ops-ot-strip__label">Monitor msgs</span>
+        <span className="ops-ot-strip__value">{mqtt ? String(mqtt.received_messages) : "—"}</span>
+      </div>
+      {error ? (
+        <div className="ops-ot-strip__item">
+          <span className="ops-ot-strip__label">Strip</span>
+          <span className="ops-ot-strip__value ops-ot-strip__value--bad">{error}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function MqttPanel() {
   const [topicFilter, setTopicFilter] = useState("openfdd/#");
   const [snapshot, setSnapshot] = useState<MqttMonitorSnapshot | null>(null);
   /** Off by default — cell-modem / bandwidth: no polling until Start listening. */
   const [listening, setListening] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [pollMs, setPollMs] = useState(5000);
+  /** Live console default 1s while listening; slower options for cell-modem. */
+  const [pollMs, setPollMs] = useState(1000);
   const [clearedAt, setClearedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const filterOk = useMemo(() => validTopicFilter(topicFilter), [topicFilter]);
@@ -393,10 +471,11 @@ function MqttPanel() {
           value={pollMs}
           onChange={(event) => setPollMs(Number(event.target.value))}
         >
+          <option value={1000}>1 s (live)</option>
           <option value={2000}>2 s</option>
-          <option value={5000}>5 s (default)</option>
+          <option value={5000}>5 s</option>
           <option value={10000}>10 s</option>
-          <option value={30000}>30 s</option>
+          <option value={30000}>30 s (cell)</option>
         </select>
         <span>{listening ? (paused ? "Display paused" : `Polling every ${pollMs / 1000}s`) : "Not listening — no background traffic"}</span>
       </div>
@@ -598,25 +677,30 @@ function TelemetrySuspendPanel() {
 }
 
 export function OperationsPage() {
-  const [view, setView] = useState<OperationsView>("afdd");
+  const [view, setView] = useState<OperationsView>("mqtt");
 
   return (
-    <AppShell title="Operations" caption="AFDD scheduler and MQTT operator tooling" activeSectionId="operations">
+    <AppShell
+      title="Operations"
+      caption="OT strip, MQTT live console, AFDD scheduler — Sites stays inventory; this tab is not nested under Sites."
+      activeSectionId="operations"
+    >
+      <OtStatusStrip />
       <fieldset className="section-tabs" aria-label="Operations configuration">
         <legend className="sr-only">Operations configuration</legend>
-        <label>
-          <input type="radio" name="operations-view" value="afdd" checked={view === "afdd"} onChange={() => setView("afdd")} />
-          AFDD Config
-        </label>
         <label>
           <input type="radio" name="operations-view" value="mqtt" checked={view === "mqtt"} onChange={() => setView("mqtt")} />
           MQTT Test Client
         </label>
+        <label>
+          <input type="radio" name="operations-view" value="afdd" checked={view === "afdd"} onChange={() => setView("afdd")} />
+          AFDD Config
+        </label>
       </fieldset>
       {view === "afdd" ? <AfddPanel /> : (
         <>
-          <TelemetrySuspendPanel />
           <MqttPanel />
+          <TelemetrySuspendPanel />
         </>
       )}
     </AppShell>

@@ -8,6 +8,23 @@ nav_order: 1
 
 Status: **SCAFFOLD** (spec normative; tools not yet in `mcp/` crate).
 
+## Honesty gate (read first)
+
+The **shipped** package importer consumes **compact** sibling maps:
+
+```json
+{ "equipType": "heatPump", "points": { "discharge-air-temp": "da_t" } }
+```
+
+See [package-schema.md](../../modeling/package-schema.md) and
+[PACKAGE_AUTHORING.md](../../agent/PACKAGE_AUTHORING.md).
+
+The richer entry shape below (`column` / `role` / `unit` / `confidence` /
+PROVISIONAL) and the MCP tools in this pack are **not** the live ingest
+contract. Do not document or implement as though they already drive Central
+import. Until SCAFFOLD tools land, map with compact JSON and existing
+`openfdd_csv_import_*` tools.
+
 ## Mission
 
 Get a building's historian/point data into Open-FDD with an honest,
