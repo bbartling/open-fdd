@@ -1,8 +1,6 @@
 //! BACnet live wire I/O removed from central.
 //! Live BACnet is owned exclusively by `openfdd-fieldbus` over MQTTS.
 
-#![allow(dead_code)]
-
 use serde_json::Value;
 
 pub fn is_live_mode() -> bool {

@@ -448,7 +448,7 @@ pub fn delete_dataset(dataset_id: &str) -> Result<(), String> {
         arr.retain(|d| d.get("id").and_then(|v| v.as_str()) != Some(id.as_str()));
         save_registry(&reg)?;
     }
-    // Package / Haystack building cleanup: csv_buildings, feather, parquet partition.
+    // Package / Haystack building cleanup: csv_buildings + parquet partition.
     let ws = crate::historian::store::workspace_dir();
     let csv_buildings = ws.join("data").join("csv_buildings").join(&id);
     // Collect equipment ids before wiping the package tree so session_config can be trimmed.
@@ -457,10 +457,6 @@ pub fn delete_dataset(dataset_id: &str) -> Result<(), String> {
     if csv_buildings.exists() {
         let _ = fs::remove_dir_all(&csv_buildings);
     }
-    let _ = crate::historian::feather_store::remove_site("package", &id);
-    let _ = crate::historian::feather_store::remove_site("csv", &id);
-    let _ = crate::historian::feather_store::remove_site("mqtt", &id);
-    let _ = crate::historian::feather_store::remove_site("modbus", &id);
     let parquet_roots = [
         std::env::var("OPENFDD_PARQUET_ROOT")
             .ok()
@@ -606,31 +602,33 @@ mod tests {
     }
 
     #[test]
-    fn delete_dataset_purges_mqtt_and_modbus_feathers() {
+    fn delete_dataset_purges_parquet_partition() {
         let _guard = crate::test_support::workspace_env_lock();
         let tmp = TempDir::new().unwrap();
         let prev_ws = std::env::var("OPENFDD_WORKSPACE").ok();
+        let prev_pq = std::env::var("OPENFDD_PARQUET_ROOT").ok();
         std::env::set_var("OPENFDD_WORKSPACE", tmp.path());
+        let pq = tmp.path().join(".cache/parquet");
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &pq);
 
         let id = "SITE_MQTT";
-        for source in ["mqtt", "modbus", "package"] {
-            let dir = crate::historian::feather_store::site_dir(source, id);
-            fs::create_dir_all(&dir).unwrap();
-            fs::write(dir.join("marker.feather"), b"x").unwrap();
-            assert!(dir.exists());
-        }
+        let part = pq.join(format!("building={id}"));
+        fs::create_dir_all(&part).unwrap();
+        fs::write(part.join("marker.parquet"), b"x").unwrap();
+        assert!(part.exists());
 
         delete_dataset(id).expect("delete ok");
-
-        for source in ["mqtt", "modbus", "package"] {
-            let dir = crate::historian::feather_store::site_dir(source, id);
-            assert!(!dir.exists(), "{source} feather site dir must be purged");
-        }
+        assert!(!part.exists(), "parquet building partition must be purged");
 
         if let Some(ws) = prev_ws {
             std::env::set_var("OPENFDD_WORKSPACE", ws);
         } else {
             std::env::remove_var("OPENFDD_WORKSPACE");
+        }
+        if let Some(p) = prev_pq {
+            std::env::set_var("OPENFDD_PARQUET_ROOT", p);
+        } else {
+            std::env::remove_var("OPENFDD_PARQUET_ROOT");
         }
     }
 }

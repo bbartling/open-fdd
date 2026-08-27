@@ -215,12 +215,13 @@ done
 echo "OK central parsed and accepted canonical BACnet telemetry over MQTTS"
 
 # Durability proof: the live historian writes a canonical watermark only after persistence.
-WATERMARK=/workspace/.cache/parquet/state/live-historian/latest-telemetry.json
+# Path is under OPENFDD_STORAGE_URL root (compose: file:///workspace/openfdd).
+WATERMARK=/workspace/openfdd/state/live-historian/latest-telemetry.json
 deadline=$((SECONDS + 45))
 until "${COMPOSE[@]}" exec -T central sh -c "test -s '$WATERMARK'"; do
   if (( SECONDS >= deadline )); then
     echo "FAIL: canonical live historian watermark was not persisted" >&2
-    "${COMPOSE[@]}" exec -T central sh -c 'find /workspace/.cache/parquet -maxdepth 5 -type f -print 2>/dev/null | sort' >&2 || true
+    "${COMPOSE[@]}" exec -T central sh -c 'find /workspace/openfdd /workspace/.cache/parquet -maxdepth 6 -type f -print 2>/dev/null | sort' >&2 || true
     "${COMPOSE[@]}" logs --tail=250 central >&2 || true
     exit 1
   fi

@@ -9,6 +9,7 @@ pub mod eui;
 pub mod import;
 pub mod open_meteo;
 
+// Re-export surface for HTTP handlers / other modules.
 #[allow(unused_imports)]
 pub use analytics::{handle_fuel, FuelRequest};
 #[allow(unused_imports)]

@@ -21,7 +21,7 @@ Prefer `OPENFDD_IMAGE_TAG=sha-6c2b89e` (or later tip) — do not trust sticky `:
 | Gate / check | Result |
 |------|--------|
 | Who-Is F3 (#526 client) | **PASS** — `POST /bacnet/whois` lists **599999** + **600000** |
-| Prior OT train (`sha-71e1336`) | Gates `00`–`05`, `10` dual-MQTT **PASS** (retained) |
+| Prior OT train (`sha-71e1336`) | Gates `00`–`05`, `10` dual-MQTT **PASS** (retained); gate `03` now Parquet persist |
 | Synthetic-59 | **PASS** — 59/59 (prior tip) |
 
 ## #526 Who-Is client — CLOSED
@@ -51,7 +51,7 @@ See history on `sha-71e1336` (#783/#784): Haystack curVal, MS/TP 5007, 300 s pol
 | Item | Status |
 |------|--------|
 | H1–H9 Parquet path | **done** — canonical under `OPENFDD_STORAGE_URL` |
-| Feather / dual-write / H6 migrate product | **Plan 4** — delete (no live sites to migrate) |
+| Feather / dual-write / H6 migrate product | **CLOSED** — deleted writers / LEGACY_INGEST_MIRROR / product migrate CLI; gate `03` = Parquet |
 | Durable restore | same volume / `s3://` across GHCR image updates — **not** wipe `/workspace` |
 | H10 TB quals | **OPEN** |
 | Railway AI vs FDD AI | Railway may bootstrap GHCR; HVAC/FDD AI = local + **agent JWT** to private central |
@@ -60,12 +60,12 @@ See history on `sha-71e1336` (#783/#784): Haystack curVal, MS/TP 5007, 300 s pol
 
 | ID | Finding | Status |
 |----|---------|--------|
-| arm64 | No arm64 GHCR fieldbus; bosspi runs amd64 under qemu | **OPEN** — Plan 3 |
+| arm64 | Multi-arch fieldbus workflow (#788); bosspi native verify after GHCR publish | **IN PROGRESS** — Plan 3 |
 | H10 | Large historian quals | **OPEN** |
 | nightly lag | `:nightly` may lag `sha-*` after multi-image publish | pin `sha-*` on benches |
 
 ## Hygiene
 
-- #786 / #787 Who-Is client — tip `6c2b89e`.
+- #786 / #787 Who-Is; #788 BUG_REPORT + arm64 fieldbus publish; Plan 4 Feather retire.
 - Do not local `docker build` stack on bensbench — GHCR `sha-*` only.
 - Anti-hardcoding: no private OT IPs in this report.

@@ -709,28 +709,8 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
     }
 
     let out_dir = parquet_out_dir();
-    let mut feather_written = 0usize;
-    let mut feather_warnings: Vec<String> = Vec::new();
-    let building_id_for_feather = building_id.clone();
-    match fdd_store::ingest_building_with_batch_hook(
-        &data_root,
-        &building_id,
-        &out_dir,
-        |equipment_id, batch| {
-            match crate::historian::feather_store::write_equipment_history(
-                "package",
-                &building_id_for_feather,
-                equipment_id,
-                batch,
-            ) {
-                Ok(_) => feather_written += 1,
-                Err(e) => feather_warnings.push(format!("{equipment_id}: {e}")),
-            }
-            Ok(())
-        },
-    ) {
+    match fdd_store::ingest_building(&data_root, &building_id, &out_dir) {
         Ok(report) => {
-            warnings.extend(feather_warnings);
             if let Err(e) = sync_equipment_types_cache(&building_root, &out_dir, &building_id) {
                 warnings.push(e);
             }
@@ -740,7 +720,6 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
                 report.equipment_written,
                 &json!({
                     "package_root": building_root.display().to_string(),
-                    "feather_written": feather_written,
                 }),
             ) {
                 warnings.push(format!("dataset registry: {e}"));
@@ -759,8 +738,6 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
                 "out_dir": report.out_dir,
                 "package_root": building_root.display().to_string(),
                 "session_config": session_config,
-                "feather_written": feather_written,
-                "feather_files": feather_written,
                 "warnings": warnings,
             })
         }
@@ -983,21 +960,7 @@ pub fn update_package_roles_handler(body: &Value) -> Value {
         return json!({"ok": false, "error": e});
     }
     let out_dir = parquet_out_dir();
-    let building_id_for_feather = building_id.clone();
-    match fdd_store::ingest_building_with_batch_hook(
-        &data_root,
-        &building_id,
-        &out_dir,
-        |eq_id, batch| {
-            let _ = crate::historian::feather_store::write_equipment_history(
-                "package",
-                &building_id_for_feather,
-                eq_id,
-                batch,
-            );
-            Ok(())
-        },
-    ) {
+    match fdd_store::ingest_building(&data_root, &building_id, &out_dir) {
         Ok(report) => json!({
             "ok": true,
             "building_id": building_id,
@@ -1672,12 +1635,12 @@ mod tests {
             )
         });
         assert!(cols.contains("SF_SPD,fan_cmd"), "{cols}");
-        let feather =
+        let parquet =
             tmp.join(".cache/parquet/building=BUILDING_9/equipment=AHU_1/history.parquet");
-        let feather_alt = std::path::PathBuf::from(out["out_dir"].as_str().unwrap_or(""))
+        let parquet_alt = std::path::PathBuf::from(out["out_dir"].as_str().unwrap_or(""))
             .join("building=BUILDING_9/equipment=AHU_1/history.parquet");
         assert!(
-            feather.is_file() || feather_alt.is_file(),
+            parquet.is_file() || parquet_alt.is_file(),
             "missing history parquet; out={out}"
         );
 

@@ -91,16 +91,11 @@ fn disk_for_path(path: &Path) -> Value {
         used_bytes = meta.len();
     }
     let storage_summary = data_management::storage_summary();
-    let feather_bytes = storage_summary
-        .get("feather_bytes")
-        .and_then(|v| v.as_u64())
-        .unwrap_or_else(crate::historian::feather_store::total_bytes);
     json!({
         "available": true,
         "label": "Open-FDD workspace data",
         "path": path.display().to_string(),
         "used_bytes": used_bytes,
-        "feather_bytes": feather_bytes,
         "percent_used": null,
         "note": "Container filesystem — host disk totals may differ",
         "breakdown": storage_summary.get("by_subdir").cloned().unwrap_or(json!({}))

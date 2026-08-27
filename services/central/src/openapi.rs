@@ -17,7 +17,7 @@ use openfdd_contracts::{CommandAck, CommandEnvelope, TelemetryEnvelope};
 /// are documented as free-form JSON (`serde_json::Value`) because the handlers
 /// return `{ "ok": true, ... }` envelopes assembled at runtime.
 mod live_routes {
-    #![allow(dead_code)]
+    #![expect(dead_code)]
 
     #[utoipa::path(
         get, path = "/api/jobs", tag = "jobs",

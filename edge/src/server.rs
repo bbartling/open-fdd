@@ -2264,8 +2264,6 @@ fn agent_validate() -> Value {
         "drivers": {
             "modbus_poll": modbus_poll,
             "historian_row_count": historian_rows,
-            "feather_bytes": crate::historian::feather_store::total_bytes(),
-            "feather_files": crate::historian::feather_store::feather_file_count(),
         },
         "scripts": {
             "rigorous_bench": "scripts/openfdd_rev326_rigorous_report.sh",

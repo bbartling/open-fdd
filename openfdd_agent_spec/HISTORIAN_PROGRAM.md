@@ -1,9 +1,11 @@
 # Historian / Railway implementation program
 
-Last updated: 2026-08-22
+Last updated: 2026-08-27
 
 Canonical architecture: [`docs/HISTORIAN_ARCHITECTURE.md`](docs/HISTORIAN_ARCHITECTURE.md)  
 Full audit/design: [`../docs/architecture/historian.md`](../docs/architecture/historian.md)
+
+**Plan 4 (2026-08-27):** Feather / Arrow-IPC dual-write and `OPENFDD_LEGACY_INGEST_MIRROR` are **retired**. Canonical durability is Parquet under `OPENFDD_STORAGE_URL` only. App updates keep the same volume or S3 bucket — that is the restore path. H6 migrate CLI is **not** a product path (offline library helpers may remain in `fdd_store`; do not surface in `fdd_cli`).
 
 Legend: `[x]` merged/complete · `[~]` active/partial · `[ ]` not yet merged
 
@@ -129,7 +131,7 @@ Compatible providers may use path style instead. `OPENFDD_S3_ALLOW_HTTP=true` is
 - [x] restart-safe/idempotent reruns resume the exact publish plan; changed sources fail closed
 - [x] row-count preservation plus first/last timestamp and equipment identity reports
 - [x] footer-only local canonical historian stats: files, bytes, rows, partitions, buildings, equipment, month range, invalid layout, and H4-aligned small-file health
-- [x] public serializable `HistorianStats` / migration report API plus operator CLI commands `historian-dry-run`, `historian-migrate`, and `historian-stats`
+- [x] public serializable `HistorianStats` / migration report API (H6 library); product CLI `historian-dry-run` / `historian-migrate` / `historian-stats` **retired** (Plan 4 — not a cloud restore path)
 - [x] S3 compatibility registration carry-forward is fail-closed when a building scope is absent; explicit global/operator registration remains separate
 
 H6 remains offline/operator migration. It does not delete legacy data and does not make migration concurrent with live ingest. H6 merged only after PR #764's exact final head passed FDD, Rust stack, AppSec, docs/security workflows and had no review threads.
@@ -144,7 +146,7 @@ H6 remains offline/operator migration. It does not delete legacy data and does n
 - [x] persist latest successfully persisted eligible telemetry timestamp at `state/live-historian/latest-telemetry.json` on the configured canonical backend for H8 restart/scheduler use
 - [x] complete-object S3 live writer through the generic H5-compatible object-store contract; never fall back to ephemeral container disk
 - [x] stop durability-critical dependence on JSONL/Arrow-IPC snapshot rewrite
-- [x] Feather/JSONL MQTT mirror is compatibility-only, disabled by default, and requires explicit `OPENFDD_LEGACY_INGEST_MIRROR=1`
+- [x] Feather/JSONL MQTT mirror **retired** (Plan 4); was compatibility-only behind `OPENFDD_LEGACY_INGEST_MIRROR` — do not reintroduce
 - [x] preserve bad/stale scalar point roles as nullable values without changing an equipment schema mid-batch
 
 H7 uses explicit `OPENFDD_BUILDING_ID` plus configured device/point metadata at the fieldbus publisher. Missing building identity fails closed for canonical persistence; central does not infer building/equipment/role identity from transport IDs or topic strings. H7 merged only after PR #765's exact final head passed FDD, Rust stack, AppSec, docs/security workflows and had no unresolved review threads.
@@ -234,7 +236,7 @@ H9 is gated on the exact final PR head passing frontend/Rust/security/docs workf
 - Do not add a traditional database as canonical historian.
 - Do not hard-code Railway in historian/FDD logic.
 - Do not produce one Parquet file per telemetry sample.
-- Do not delete legacy Feather/JSONL paths before their consumers and migration needs are audited.
+- Do not reintroduce Feather/JSONL dual-write or treat Feather as durable restore (Plan 4 retired writers; restore = volume/`OPENFDD_STORAGE_URL`).
 - Do not make bulk CSV import start recurring AFDD.
 - Do not rescan retained history for every continuous AFDD cycle.
 - Do not weaken auth/security or log S3/MQTT secrets.

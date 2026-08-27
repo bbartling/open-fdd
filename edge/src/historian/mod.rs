@@ -6,5 +6,4 @@
 //! - keep protocol drivers decoupled from FDD rule execution.
 
 pub mod arrow_table;
-pub mod feather_store;
 pub mod store;
