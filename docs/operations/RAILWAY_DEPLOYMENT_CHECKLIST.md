@@ -115,7 +115,7 @@ Cloud MQTTS is the hub: on-prem fieldbus publishes into Railway MQTTS; Central i
 
 ## Step 3 — Deploy `openfdd-web` after central is healthy
 
-- [ ] Image `ghcr.io/bbartling/openfdd-web:nightly`
+- [ ] Image `ghcr.io/bbartling/openfdd-web:sha-<7>` (prefer over sticky `:nightly`)
 - [ ] `OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080` (no `http://`)
 - [ ] Optional: `OPENFDD_NGINX_RESOLVER=auto` (default) or pin a nameserver from `/etc/resolv.conf`
 - [ ] Public domain on **web only**
