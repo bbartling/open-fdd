@@ -9,7 +9,7 @@
 #   B. broker server cert must carry the LAN IP SAN (remote edges verify TLS by IP)
 #   C. provision second-site edge kit + merge broker ACL
 #   D. central multi-site subscribe (OPENFDD_SITE_ID="+" via local compose override)
-#   E. remote edge bring-up on the Pi (amd64 image under qemu/binfmt — arm64 gap is a finding)
+#   E. remote edge bring-up on the Pi (prefer native linux/arm64 fieldbus; qemu amd64 fallback)
 #   F. assertions: two edges on /api/edges, bldg2 telemetry with numeric values,
 #      Who-Is sees 599999 and 600000 as distinct hosted devices
 set -euo pipefail
@@ -163,20 +163,44 @@ fi
 # --- E. remote edge on the Pi ---------------------------------------------------
 hdr "E. remote edge bring-up on Pi (site=$SITE2 edge=$EDGE2 device=$DEV2)"
 
-# qemu/binfmt for amd64 images on aarch64 (stack images are amd64-only: known gap)
-AMD64_PROBE='timeout 60 docker run --rm --entrypoint /bin/sh --platform linux/amd64 ghcr.io/bbartling/openfdd-fieldbus:nightly -c "echo qemu-ok"'
-if pi "$AMD64_PROBE" 2>/dev/null | grep -q qemu-ok; then
-  ok "Pi can execute amd64 fieldbus image (binfmt present)"
+PI_FIELDBUS_IMAGE="${OPENFDD_FIELDBUS_IMAGE:-ghcr.io/bbartling/openfdd-fieldbus:${OPENFDD_IMAGE_TAG:-nightly}}"
+echo "${DIM}Pi fieldbus image pin: $PI_FIELDBUS_IMAGE${RST}"
+
+# Prefer native linux/arm64 when GHCR publishes a multi-arch fieldbus tip (#788+).
+# Fall back to amd64 under qemu/binfmt only if arm64 pull is unavailable.
+PI_PLATFORM=linux/arm64
+if pi "docker pull --platform linux/arm64 $PI_FIELDBUS_IMAGE >/dev/null 2>&1"; then
+  ok "Pi pulled native linux/arm64 tip ($PI_FIELDBUS_IMAGE)"
 else
-  echo "${DIM}installing qemu binfmt handlers on Pi${RST}"
-  pi 'docker run --privileged --rm tonistiigi/binfmt --install amd64' >/dev/null 2>&1 || true
+  echo "${DIM}arm64 pull unavailable — falling back to amd64 under qemu/binfmt${RST}"
+  PI_PLATFORM=linux/amd64
+  AMD64_PROBE="timeout 60 docker run --rm --entrypoint /bin/sh --platform linux/amd64 $PI_FIELDBUS_IMAGE -c \"echo qemu-ok\""
   if pi "$AMD64_PROBE" 2>/dev/null | grep -q qemu-ok; then
-    ok "qemu binfmt installed — amd64 image runs under emulation (finding: no arm64 nightlies)"
+    ok "Pi can execute amd64 fieldbus image (binfmt present)"
   else
-    bad "Pi cannot run amd64 fieldbus image even with binfmt — arm64 image gap blocks real deployments"
-    skip "falling back is manual: run a second edge compose project on the bench instead"
+    echo "${DIM}installing qemu binfmt handlers on Pi${RST}"
+    pi 'docker run --privileged --rm tonistiigi/binfmt --install amd64' >/dev/null 2>&1 || true
+    if pi "$AMD64_PROBE" 2>/dev/null | grep -q qemu-ok; then
+      ok "qemu binfmt installed — amd64 fieldbus under emulation (arm64 tip missing)"
+    else
+      bad "Pi cannot run fieldbus arm64 or amd64/qemu — blocks real deployments"
+      skip "falling back is manual: run a second edge compose project on the bench instead"
+      summary; exit 1
+    fi
+  fi
+  if ! pi "docker pull --platform linux/amd64 $PI_FIELDBUS_IMAGE >/dev/null 2>&1"; then
+    bad "explicit amd64 pull failed on Pi for $PI_FIELDBUS_IMAGE — refusing stale soak"
     summary; exit 1
   fi
+fi
+
+PI_REV="$(pi "docker inspect $PI_FIELDBUS_IMAGE --format '{{index .Config.Labels \"org.opencontainers.image.revision\"}}'" 2>/dev/null | head -c 12 || true)"
+BENCH_REV="$(docker inspect "$PI_FIELDBUS_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' 2>/dev/null | head -c 12 || true)"
+if [[ -n "$PI_REV" && "$PI_REV" == "$BENCH_REV" ]]; then
+  ok "Pi tip rev $PI_REV matches bench ($PI_PLATFORM)"
+else
+  bad "Pi tip rev '$PI_REV' != bench '$BENCH_REV' — stale image would fake results"
+  summary; exit 1
 fi
 
 # Ship the kit (public CA + edge cert/key only)
@@ -205,14 +229,12 @@ fi
 
 # compose.edge.yml does not pass OPENFDD_BACNET_DEVICE_INSTANCE through, so a local
 # (gitignored-style) override supplies it — this is the #532 env path under test.
-pi "cat > $PI_REPO/docker/compose.edge.local.yml <<'EOF'
+# Pin platform explicitly so compose does not reuse a stale local amd64 layer.
+pi "cat > $PI_REPO/docker/compose.edge.local.yml <<EOF
 # Cloud-sim bench override — hosted BACnet instance via env (#532). Do not commit.
 services:
   fieldbus:
-    # Explicit platform: 'pull always' fails on arm64 (no manifest, #530) and compose
-    # silently reuses the STALE local amd64 image — that shipped yesterday's build and
-    # caused the 2026-07-18 duplicate-instance-599999 incident in Workbench.
-    platform: linux/amd64
+    platform: ${PI_PLATFORM}
     environment:
       OPENFDD_BACNET_DEVICE_INSTANCE: \"${DEV2}\"
     # Bench mitigation for the per-operation UDP socket leak (BACnetClient::stop());
@@ -222,24 +244,7 @@ services:
         soft: 65536
         hard: 65536
 EOF
-echo wrote-override"
-
-# Pull the pinned tip image explicitly (amd64 under qemu) and FAIL LOUDLY on digest drift.
-PI_FIELDBUS_IMAGE="${OPENFDD_FIELDBUS_IMAGE:-ghcr.io/bbartling/openfdd-fieldbus:${OPENFDD_IMAGE_TAG:-nightly}}"
-echo "${DIM}Pi fieldbus image pin: $PI_FIELDBUS_IMAGE${RST}"
-if pi "docker pull --platform linux/amd64 $PI_FIELDBUS_IMAGE >/dev/null 2>&1"; then
-  PI_REV="$(pi "docker inspect $PI_FIELDBUS_IMAGE --format '{{index .Config.Labels \"org.opencontainers.image.revision\"}}'" 2>/dev/null | head -c 12 || true)"
-  BENCH_REV="$(docker inspect "$PI_FIELDBUS_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' 2>/dev/null | head -c 12 || true)"
-  if [[ -n "$PI_REV" && "$PI_REV" == "$BENCH_REV" ]]; then
-    ok "Pi pulled amd64 tip rev $PI_REV (matches bench)"
-  else
-    bad "Pi tip rev '$PI_REV' != bench '$BENCH_REV' — stale image would fake results"
-    summary; exit 1
-  fi
-else
-  bad "explicit amd64 pull failed on Pi for $PI_FIELDBUS_IMAGE — refusing stale soak"
-  summary; exit 1
-fi
+echo wrote-override platform=${PI_PLATFORM}"
 
 # field_devices: Pi polls the BIP bench sims as its "building devices" PLUS the bench
 # hosted server 599999 — the cross-device weather read for gate 08 (600000's edge
@@ -301,7 +306,7 @@ elif [[ -n "$PI_REV" ]]; then
   bad "Pi fieldbus rev drift: pi=${PI_REV:0:12} tip=${BENCH_FB_REV:0:12}"
 fi
 
-echo "${DIM}waiting up to 90s for Pi fieldbus health (qemu is slow)${RST}"
+echo "${DIM}waiting up to 90s for Pi fieldbus health ($PI_PLATFORM)${RST}"
 PI_HEALTH=""
 for _ in $(seq 1 18); do
   PI_HEALTH="$(pi 'curl -fsS --max-time 5 http://127.0.0.1:8081/health' 2>/dev/null || true)"
@@ -309,10 +314,17 @@ for _ in $(seq 1 18); do
   sleep 5
 done
 if [[ -n "$PI_HEALTH" ]] && jq -e '.ok==true' <<<"$PI_HEALTH" >/dev/null 2>&1; then
-  ok "Pi fieldbus healthy under emulation"
+  PI_ARCH="$(pi "docker image inspect \$(docker inspect openfdd-edge-fieldbus-1 --format '{{.Image}}') --format '{{.Architecture}}'" 2>/dev/null || true)"
+  if [[ "$PI_PLATFORM" == "linux/arm64" && "$PI_ARCH" == "arm64" ]]; then
+    ok "Pi fieldbus healthy on native arm64"
+  elif [[ "$PI_PLATFORM" == "linux/amd64" ]]; then
+    ok "Pi fieldbus healthy under amd64/qemu fallback"
+  else
+    ok "Pi fieldbus healthy (platform=$PI_PLATFORM arch=$PI_ARCH)"
+  fi
   echo "${DIM}  $(jq -c '{service,version}' <<<"$PI_HEALTH" 2>/dev/null)${RST}"
 else
-  bad "Pi fieldbus not healthy after 90s (qemu/arm64 gap — capture logs)"
+  bad "Pi fieldbus not healthy after 90s (platform=$PI_PLATFORM — capture logs)"
   pi "docker logs openfdd-edge-fieldbus-1 --tail 40" >"$ART/pi_fieldbus.log" 2>&1 || true
   tail -15 "$ART/pi_fieldbus.log" 2>/dev/null || true
 fi
