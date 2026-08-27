@@ -772,7 +772,7 @@ fn dev_fast_poll_enabled() -> bool {
 }
 
 /// Production floor: never poll faster than 60s unless dev/test escape hatch is set.
-fn finalize_poll_interval(s: &mut Settings) {
+pub(crate) fn finalize_poll_interval(s: &mut Settings) {
     const PROD_MIN_POLL_SECS: f64 = 60.0;
     if dev_fast_poll_enabled() {
         return;
@@ -1040,17 +1040,65 @@ mod tests {
 
         std::env::set_var("OPENFDD_FIELDBUS_POLL_ENABLED", "false");
         assert!(!load_settings().poll.enabled);
+        std::env::remove_var("OPENFDD_FIELDBUS_POLL_ENABLED");
+        std::env::remove_var("RUSTY_GATEWAY_HTTP_PORT");
+        std::env::remove_var("OPENFDD_FIELDBUS_HTTP_PORT");
+    }
+
+    #[test]
+    fn poll_interval_prod_floor_is_60_without_dev_fast_poll() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
+        let mut s = Settings::default();
+        s.poll.interval_secs = 12.5;
+        finalize_poll_interval(&mut s);
+        assert!((s.poll.interval_secs - 60.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn poll_interval_dev_fast_poll_skips_prod_floor() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
+        std::env::set_var("OPENFDD_FIELDBUS_DEV_FAST_POLL", "1");
+        let mut s = Settings::default();
+        s.poll.interval_secs = 12.5;
+        finalize_poll_interval(&mut s);
+        assert!((s.poll.interval_secs - 12.5).abs() < f64::EPSILON);
+        std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
+    }
+
+    #[test]
+    fn poll_interval_env_override_through_load_settings() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let tmp = std::env::temp_dir().join(format!("ofdd-cfg-test-{stamp}"));
+        std::fs::create_dir_all(&tmp).expect("temp config dir");
+        std::fs::write(
+            tmp.join("gateway.toml"),
+            "[bacnet_server]\ndevice_instance = 599999\n",
+        )
+        .expect("write gateway.toml");
+        std::env::set_var("OPENFDD_FIELDBUS_CONFIG_DIR", &tmp);
+        for key in [
+            "OPENFDD_FIELDBUS_DEV_FAST_POLL",
+            "OPENFDD_FIELDBUS_POLL_INTERVAL_SECS",
+            "RUSTY_GATEWAY_POLL_INTERVAL_SECS",
+        ] {
+            std::env::remove_var(key);
+        }
         std::env::set_var("OPENFDD_FIELDBUS_POLL_INTERVAL_SECS", "12.5");
         std::env::set_var("OPENFDD_FIELDBUS_DEV_FAST_POLL", "1");
         assert!((load_settings().poll.interval_secs - 12.5).abs() < f64::EPSILON);
         std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
         std::env::set_var("OPENFDD_FIELDBUS_POLL_INTERVAL_SECS", "12.5");
         assert!((load_settings().poll.interval_secs - 60.0).abs() < f64::EPSILON);
-        std::env::remove_var("OPENFDD_FIELDBUS_POLL_ENABLED");
+        std::env::remove_var("OPENFDD_FIELDBUS_CONFIG_DIR");
         std::env::remove_var("OPENFDD_FIELDBUS_POLL_INTERVAL_SECS");
         std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
-        std::env::remove_var("RUSTY_GATEWAY_HTTP_PORT");
-        std::env::remove_var("OPENFDD_FIELDBUS_HTTP_PORT");
+        let _ = std::fs::remove_dir_all(tmp);
     }
 
     #[test]
