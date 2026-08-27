@@ -1,6 +1,6 @@
 //! OpenAPI path documentation (utoipa path stubs — handlers live in `routes/`).
 
-#![allow(dead_code)]
+#![expect(dead_code)]
 
 use crate::models::*;
 

@@ -15,14 +15,14 @@ pub enum ApiError {
     BadRequest(String),
 
     #[error("{0}")]
-    #[allow(dead_code)]
+    #[expect(dead_code)] // reserved HTTP mapping
     Unauthorized(String),
 
     #[error("{0}")]
     Forbidden(String),
 
     #[error("{0}")]
-    #[allow(dead_code)]
+    #[expect(dead_code)] // reserved HTTP mapping
     NotFound(String),
 
     #[error("validation error")]
@@ -35,7 +35,7 @@ pub enum ApiError {
     Upstream(String),
 
     #[error("internal error: {0}")]
-    #[allow(dead_code)]
+    #[expect(dead_code)] // reserved HTTP mapping
     Internal(String),
 }
 
