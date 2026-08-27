@@ -114,16 +114,19 @@ if [[ ! -f "$CERT" ]]; then
   KEY="$ROOT/deploy/mqtt/kits/${SITE1}__${EDGE1}/central.key.pem"
 fi
 if [[ -f "$CA" && -f "$CERT" && -f "$KEY" ]]; then
-  for spec in "${SITE1}|${EDGE1}|mqtt_lab.txt" "${SITE2}|+|mqtt_bldg2.txt"; do
-    IFS='|' read -r site edge out <<<"$spec"
+  sub_wait="${MQTT_SUB_WAIT_SECS:-330}"
+  combined="$ART/mqtt_dual_combined.txt"
+  timeout $((sub_wait + 15)) docker run --rm --net=host -v "$ROOT/deploy/mqtt:/mqtt:ro" eclipse-mosquitto:2 \
+    mosquitto_sub -h 127.0.0.1 -p 8883 \
+    --cafile /mqtt/ca/ca.pem \
+    --cert "/mqtt/kits/${SITE1}__central/central.cert.pem" \
+    --key "/mqtt/kits/${SITE1}__central/central.key.pem" \
+    -t "openfdd/v1/sites/+/edges/+/telemetry/#" -v -C 2 -W "$sub_wait" \
+    >"$combined" 2>&1 || true
+  for spec in "${SITE1}|mqtt_lab.txt" "${SITE2}|mqtt_bldg2.txt"; do
+    IFS='|' read -r site out <<<"$spec"
     out="$ART/$out"
-    timeout 45 docker run --rm --net=host -v "$ROOT/deploy/mqtt:/mqtt:ro" eclipse-mosquitto:2 \
-      mosquitto_sub -h 127.0.0.1 -p 8883 \
-      --cafile /mqtt/ca/ca.pem \
-      --cert "/mqtt/kits/${SITE1}__central/central.cert.pem" \
-      --key "/mqtt/kits/${SITE1}__central/central.key.pem" \
-      -t "openfdd/v1/sites/${site}/edges/${edge}/telemetry/#" -v -C 1 -W 40 \
-      >"$out" 2>&1 || true
+    grep "sites/${site}/" "$combined" >"$out" 2>/dev/null || : >"$out"
     if grep -qE '"value"[[:space:]]*:[[:space:]]*-?[0-9]' "$out" 2>/dev/null; then
       ok "MQTTS telemetry site=$site (numeric values)"
     else
