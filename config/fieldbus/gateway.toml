@@ -10,7 +10,9 @@ broadcast = "255.255.255.255"
 [bacnet_client]
 interface = "0.0.0.0"
 broadcast = "255.255.255.255"
-# Ephemeral client bind — never share UDP :47808 with the hosted server socket.
+# Who-Is / discovery: 0 = auto-bind hosted bacnet_server.port (SO_REUSEADDR) so
+# broadcast I-Am is receivable (#526). Non-zero overrides. Unicast reads stay
+# on read_bind_port (0 = ephemeral) and must not hold :47808 across polls.
 whois_bind_port = 0
 read_bind_port = 0
 apdu_timeout_ms = 6000

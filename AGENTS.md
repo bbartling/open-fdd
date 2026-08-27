@@ -8,7 +8,7 @@ OpenClaw, Claude Desktop, or any MCP host — connect via **JWT REST** and optio
 
 | Layer | Responsibility |
 | --- | --- |
-| **central** | MQTTS ingest, Feather/Parquet historian, DataFusion SQL FDD + `/api/analytics/*`, REST + JWT (Rust image — no Python) |
+| **central** | MQTTS ingest, **Parquet** historian, DataFusion SQL FDD + `/api/analytics/*`, REST + JWT (Rust image — no Python) |
 | **web** | React product UI (`frontend/web`) — sole product UI ([ADR-001](docs/architecture/adr-001-react-rust-modernization.md)) |
 | **fieldbus** | BACnet / Modbus / Haystack OT drivers |
 | **mqtt** | Mosquitto MQTTS broker |
@@ -44,6 +44,18 @@ TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
 On Railway: set `OPENFDD_JWT_SECRET`, `OPENFDD_ADMIN_PASSWORD`, and `OPENFDD_AGENT_PASSWORD` on central; keep MCP private; see [RAILWAY_DEPLOYMENT.md](docs/operations/RAILWAY_DEPLOYMENT.md) § Secure agent auth. Admins can also `POST /api/auth/agent-token` for short-lived operator JWTs.
 
 Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/agent/tools | jq '.tools | length'`
+
+## Rust hygiene (agents)
+
+When changing Rust in this repo:
+
+- **Delete** unused items (`dead_code`) — do not keep “just in case”; Git retains history.
+- **Remove** `#[allow(...)]` / `#![allow(...)]`; fix the cause. Prefer `_` / `_guard`, `?`, or smallest-scope `#[expect(...)]` with a one-line constraint comment.
+- Never silently discard `Result`/`Option`; prefer `?` or explicit match/log. Last resort: `let _ = …;` + why.
+- Prefer `?` / combinators over `.unwrap()` on production paths.
+- Historian: **Parquet** under `OPENFDD_STORAGE_URL` is canonical; do not add Feather dual-write. App updates keep the same volume/S3 bucket.
+
+Full train checklist + sweep: Plans 1–4 under `~/.cursor/plans/` (`whois_client_526_fix` → `bug_report_tip_refresh` → `arm64_ghcr_fieldbus_pi` → `historian_legacy_retire`).
 
 ## Safe scripts
 
@@ -127,6 +139,7 @@ A Railway one-click template should eventually encode **central → mqtt → web
 - Before pulling new images: prune unused/old digests first, then `./scripts/openfdd_stack_pull.sh …` and `./scripts/openfdd_stack_up.sh … --no-pull`.
 - DataFusion: `OPENFDD_QUERY_MEMORY_MB=256` (or 512) + `OPENFDD_DATAFUSION_SPILL_DIR` — see [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md).
 - BACnet OT on cell edges: default **300 s** poll/publish, **60 s** floor, poll ~**30%** health points only — [`docs/operations/BACNET_OT_POLICY.md`](docs/operations/BACNET_OT_POLICY.md). Hard BACnet debug: [`docs/mcp-agents/companion-rusty-bacnet-mcp.md`](docs/mcp-agents/companion-rusty-bacnet-mcp.md).
+- Who-Is / discovery: fieldbus binds the hosted BACnet/IP port (`whois_bind_port = 0` → `bacnet_server.port`, `SO_REUSEADDR`) so broadcast I-Am is receivable (#526); unicast reads stay ephemeral — see [`services/fieldbus/AGENTS.md`](services/fieldbus/AGENTS.md).
 - Details: [`openfdd_agent_spec/CONTAINER_AGENT.md`](openfdd_agent_spec/CONTAINER_AGENT.md).
 
 ## AFDD vs bulk FDD

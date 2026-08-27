@@ -15,9 +15,13 @@ The gateway hosts a BACnet/IP server on UDP **47808** (configurable via `OPENFDD
 
 ### Server vs client UDP sockets
 
-- **Server** binds `0.0.0.0:47808` (or configured port) — only socket on that port.
-- **Client** uses **ephemeral** UDP ports (`whois_bind_port = 0` in `gateway.toml`).
-- Never bind the BACnet client to the same UDP port as the hosted server (causes Workbench `???` / dropped ReadProperty).
+- **Server** binds `0.0.0.0:47808` (or configured port) for Workbench / BMS discovery.
+- **Who-Is / discovery** (`device == None`): bind the **same** BACnet/IP port with
+  `SO_REUSEADDR` (`whois_bind_port = 0` → `bacnet_server.port`) so broadcast I-Am is
+  receivable (#526). Short-lived under the bus lock only.
+- **Unicast reads / RPM / poll**: ephemeral `read_bind_port = 0` (and routed seed
+  stays ephemeral). Do **not** hold `:47808` across long poll cycles — that steals
+  hosted-server unicast and causes Workbench `???` / dropped ReadProperty.
 
 ## REST vs BACnet write split (critical — no data races)
 

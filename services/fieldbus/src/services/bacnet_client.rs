@@ -77,11 +77,23 @@ impl BacnetClientService {
             .find(|d| d.device_instance == device_instance)
     }
 
+    /// UDP bind for a client session.
+    ///
+    /// - **Discovery / Who-Is** (`device == None`): hear broadcast I-Am on the BACnet/IP
+    ///   port. `whois_bind_port = 0` means "use hosted `bacnet_server.port`" (default
+    ///   47808). `bacnet-transport` BIP sets `SO_REUSEADDR`, so this coexists with the
+    ///   hosted server for the short Who-Is window (#526).
+    /// - **Routed MS/TP**: keep ephemeral (or explicit `whois_bind_port`) — do not hold
+    ///   `:47808` across long poll cycles (would steal hosted-server unicast).
+    /// - **IP field devices**: ephemeral `read_bind_port` for unicast ReadProperty.
     fn bind_port(&self, device: Option<&FieldDevice>) -> u16 {
-        if device.is_none() || device.is_some_and(|d| d.is_routed()) {
-            self.settings.bacnet_client.whois_bind_port
-        } else {
-            self.settings.bacnet_client.read_bind_port
+        match device {
+            None => discovery_bind_port(
+                self.settings.bacnet_client.whois_bind_port,
+                self.settings.bacnet_server.port,
+            ),
+            Some(d) if d.is_routed() => self.settings.bacnet_client.whois_bind_port,
+            Some(_) => self.settings.bacnet_client.read_bind_port,
         }
     }
 
@@ -575,8 +587,7 @@ impl BacnetClientService {
             self.seed_configured_field_devices(&client).await?;
             client.who_is(low, high).await.map_err(|e| e.to_string())?;
             tokio::time::sleep(Duration::from_secs_f64(cfg.whois_timeout_secs)).await;
-            // Re-seed so configured bench devices appear even when broadcast I-Am is not
-            // received on the client's ephemeral UDP port (hosted server owns :47808).
+            // Re-seed configured devices (table may already include live I-Am from #526 bind).
             self.seed_configured_field_devices(&client).await?;
             let devices = client.discovered_devices().await;
             // #539: discovered_devices() is a full device-table snapshot (incl.
@@ -589,9 +600,8 @@ impl BacnetClientService {
                 })
                 .map(device_summary)
                 .collect();
-            // #526 follow-up: co-located hosted BACnet server answers Workbench on :47808,
-            // but the client Who-Is socket is ephemeral and often never sees that I-Am.
-            // Surface the local hosted device in Who-Is results so self-discovery matches OT.
+            // Fallback only: live I-Am should cover remote + co-located hosted after
+            // discovery bind on bacnet_server.port (#526). Keep synthesize for edge cases.
             self.merge_local_hosted_device(&mut out, low, high);
             self.merge_configured_routed_devices(&mut out, low, high);
             Ok(out)
@@ -660,7 +670,7 @@ impl BacnetClientService {
             "source_network": null,
             "max_apdu": null,
             "hosted_local": true,
-            "note": "synthesized — client ephemeral Who-Is often misses I-Am on :47808 (#526)",
+            "note": "synthesized fallback — live I-Am missing after discovery bind on server port",
         }));
     }
 
@@ -1302,6 +1312,16 @@ fn select_poll_points(device: &FieldDevice, health_only: bool) -> Vec<FieldPoint
     selected
 }
 
+/// Resolve Who-Is / discovery UDP bind. `whois_bind_port == 0` → hosted server port
+/// so broadcast I-Am on BACnet/IP is receivable (`SO_REUSEADDR` in bacnet-transport).
+fn discovery_bind_port(whois_bind_port: u16, server_port: u16) -> u16 {
+    if whois_bind_port != 0 {
+        whois_bind_port
+    } else {
+        server_port
+    }
+}
+
 fn device_summary(d: &bacnet_client::discovery::DiscoveredDevice) -> Value {
     let mac = d.mac_address.as_slice();
     let addr = if mac.len() == 6 {
@@ -1356,6 +1376,13 @@ mod poll_select_tests {
         let d = dev("ahu", 1, points);
         let selected = select_poll_points(&d, true);
         assert_eq!(selected.len(), 3);
+    }
+
+    #[test]
+    fn discovery_bind_port_auto_uses_server_port() {
+        assert_eq!(discovery_bind_port(0, 47808), 47808);
+        assert_eq!(discovery_bind_port(0, 47809), 47809);
+        assert_eq!(discovery_bind_port(47900, 47808), 47900);
     }
 }
 
