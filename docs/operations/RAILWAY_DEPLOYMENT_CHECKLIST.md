@@ -107,7 +107,7 @@ Or admin mints a TTL-bound token: `POST /api/auth/agent-token` with `Authorizati
 
 Cloud MQTTS is the hub: on-prem fieldbus publishes into Railway MQTTS; Central ingests. Do **not** skip mqtt for live OT.
 
-- [ ] Image `ghcr.io/bbartling/openfdd-mqtt:nightly`
+- [ ] Image `ghcr.io/bbartling/openfdd-mqtt:sha-<7>` (prefer over sticky `:nightly`)
 - [ ] Private networking only (do not expose 8883 publicly without deliberate TLS/ACL design)
 - [ ] Provision / mount broker certs + ACL as required by mqtt image / [deploy/mqtt](../../deploy/mqtt/README.md)
 - [ ] Confirm broker listens on **8883** MQTTS inside the private network
