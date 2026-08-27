@@ -364,7 +364,7 @@ fi
 # F3: hosted instance discovery — HARD #526 retest: broadcast Who-Is via fieldbus client
 # AND raw unicast Who-Is straight at each hosted server socket. Both must yield I-Am for
 # Workbench discovery to work.
-PI_IP="${CLOUD_SIM_PI_SSH##*@}"
+PI_IP="${PI_SSH##*@}"
 if W="$(fb -X POST "$FIELDBUS_BASE/bacnet/whois" -d '{}' 2>/dev/null)"; then
   echo "$W" >"$ART/whois_cloudsim.json"
   for inst in "$HOSTED_DEVICE" "$DEV2"; do

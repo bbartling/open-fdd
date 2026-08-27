@@ -1,99 +1,71 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-08-26  
-**Platform:** `3.3.4` / `sha-71e1336` (`71e1336` merge #784 on master)  
-**Host:** low-RAM GHCR-only bench (`OPENFDD_QUERY_MEMORY_MB=256`, `OPENFDD_DATAFUSION_SPILL_DIR=/workspace/.cache/datafusion-spill`)  
-**Remote edge:** bosspi (`CLOUD_SIM_PI_SSH` in bench env) — fieldbus only (dual-MQTT gate 10)
+**Date:** 2026-08-27  
+**Platform:** `3.3.4` / `sha-6c2b89e` (merge #787 Who-Is INADDR_ANY; #786 discovery port bind)  
+**Host:** low-RAM GHCR-only bench (`OPENFDD_QUERY_MEMORY_MB=256`, `OPENFDD_DATAFUSION_SPILL_DIR`)  
+**Remote edge:** bosspi (`CLOUD_SIM_PI_SSH` in bench env) — fieldbus only
 
-Private OT LAN addresses and Niagara creds live only in gitignored `.env` / `bench.env.local` / `rusty-haystack/.../.env`.
+Private OT LAN addresses and Niagara creds live only in gitignored `.env` / `bench.env.local`.
 
 ## GHCR legitimacy (required sign-off)
 
 | Host | Role | Image ref | nightly↔sha | OCI revision | `/health` version |
 |------|------|-----------|-------------|--------------|-------------------|
-| bensbench | central / fieldbus / mqtt / web | `ghcr.io/bbartling/openfdd-*:sha-71e1336` | **PASS** (gate `00`) | `71e1336d95c9` | `3.3.4+71e1336d95c9` |
-| bosspi | fieldbus edge only | `openfdd-fieldbus:sha-71e1336` | n/a | **PASS** `71e1336d95c9` == bench | fieldbus healthy (qemu amd64) |
+| bensbench | central / fieldbus / mqtt / web | `ghcr.io/bbartling/openfdd-*:sha-6c2b89e` | pin tip explicitly if nightly lag | `6c2b89ee1fd1` | `3.3.4+6c2b89ee1fd1` |
+| bosspi | fieldbus edge only | `openfdd-fieldbus:nightly` @ tip rev | n/a | **PASS** `6c2b89ee1fd1` == bench | fieldbus healthy (amd64/qemu until Plan 3) |
 
-Artifacts: `reports/nightly-ot-bench_20260826T202049Z/digests.txt`, `image_revs.txt`, `pi_image_rev.txt` (gate 10).
+Prefer `OPENFDD_IMAGE_TAG=sha-6c2b89e` (or later tip) — do not trust sticky `:nightly` without digest check.
 
-Digest equality (gate `00`): central / fieldbus / mqtt / mcp `nightly` == `sha-71e1336` (see `digests.txt`).
+## Confirmed PASS (`sha-6c2b89e`)
 
-## Confirmed PASS (`sha-71e1336` after #784)
-
-| Gate | Result |
+| Gate / check | Result |
 |------|--------|
-| `00` GHCR pull + nightly↔sha | **GATE PASSED** |
-| `01` stack health | **GATE PASSED** |
-| `02` BACnet OT (5007 + BIP + poll) | **GATE PASSED** — 15 pass |
-| `03` MQTTS + Feather persistence | **GATE PASSED** |
-| `04` Modbus OT | **GATE PASSED** |
-| `05` Haystack live (`HAYSTACK_EXPECT_LIVE=1`) | **GATE PASSED** |
-| `07` cloud-sim (bosspi edge) | **22 pass / 1 fail** — see open #526 below |
-| `10` dual-MQTT sign-off | **GATE PASSED** |
-| Synthetic-59 target pairs | **PASS** — 59/59 (prior tip) |
+| Who-Is F3 (#526 client) | **PASS** — `POST /bacnet/whois` lists **599999** + **600000** |
+| Prior OT train (`sha-71e1336`) | Gates `00`–`05`, `10` dual-MQTT **PASS** (retained) |
+| Synthetic-59 | **PASS** — 59/59 (prior tip) |
 
-## Haystack via fieldbus (B1 / B2) — CLOSED
+## #526 Who-Is client — CLOSED
 
-| Check | Result |
-|-------|--------|
-| `GET /haystack/about` via fieldbus | **OK** |
-| Live curVal through fieldbus | **OK** — gate `extract_cur_val` fixed (#783) |
-| Allowlist (`/haystack/eval`) | **OK** — HTTP 404 |
+**Root cause:** discovery socket used ephemeral port and/or unicast `OPENFDD_FIELDBUS_BIND` address → missed directed-broadcast I-Am on Linux.
 
-## B3 — MS/TP routing (device 5007) — CLOSED
+**Fix:** `#786` bind discovery to `bacnet_server.port` with `SO_REUSEADDR`; `#787` bind Who-Is on **`0.0.0.0`** (not BIND unicast). Unicast reads stay ephemeral.
 
-**Prior failure:** empty shipped `field_devices.toml` on bench (no 5007 seed) + I-Am overwrite edge case.
+**Evidence (`sha-6c2b89e`):** devices include `600000` @ Pi BIP and `599999` (live or hosted_local fallback).
 
-**Fix train (#784):** vendored `DeviceTable::upsert` preserves routing; Who-Is merges `field_devices.toml`; seed logging.
+Unicast I-Am to ephemeral requester may still skip (server broadcasts I-Am) — Workbench on `:47808` is fine.
 
-**Re-verify (`sha-71e1336` + bench overlay):** `02_bacnet_ot.sh` **GATE PASSED** — 15 pass / 0 fail (`source_network=2000`, read AI:1173, poll 3 points).
+## Haystack / B3 / MQTT cell — CLOSED (prior)
 
-Bench requires: `cp scripts/nightly-ot-bench/field_devices.bench.example.toml config/fieldbus/field_devices.toml` + fieldbus recreate.
+See history on `sha-71e1336` (#783/#784): Haystack curVal, MS/TP 5007, 300 s poll / cell MQTT.
 
-## MQTT / cell optimization — SHIPPED (#784)
+## Dual-site MQTT (lab + bldg2)
 
-| Item | Before | After (`sha-71e1336`) |
-|------|--------|----------------------|
-| Default poll | 60 s | **300 s** (floor **60 s** unless `OPENFDD_FIELDBUS_DEV_FAST_POLL=1`) |
-| MQTT publish | tied to poll, 5 s floor | `OPENFDD_MQTT_PUBLISH_INTERVAL_SECS` (default 300, min 60) |
-| Payload | full snapshot every cycle | `OPENFDD_MQTT_DELTA=1`, `OPENFDD_MQTT_CELL_MODE=1` (slim tags, no display_name) |
-| Health subset | all points | `OPENFDD_POLL_HEALTH_ONLY=1` (~30% cap) |
+| Check | lab / fieldbus-1 | bldg2 / pi-1 |
+|-------|------------------|--------------|
+| Fieldbus rev tip | `6c2b89e` | `6c2b89e` |
+| Who-Is sees peer hosted | 600000 from bench | n/a |
+| MQTTS / `/api/edges` | recreate may need 300 s publish soak | restart edge after central recreate |
 
-Docs: [`BACNET_OT_POLICY.md`](BACNET_OT_POLICY.md), [`deploy/mqtt/README.md`](../../deploy/mqtt/README.md).
+## Historian ledger (H)
 
-**Gate 03 / ingest:** **GATE PASSED** on `sha-71e1336` (ingest counter growth).
-
-**Gate 10 note:** with 300 s publish interval, dual-MQTT peek uses combined wildcard subscribe (`MQTT_SUB_WAIT_SECS≥330`).
-
-## Dual-site MQTT (lab + bldg2) — gate 10 — PASS
-
-| Check | lab / fieldbus-1 @ bensbench | bldg2 / pi-1 @ bosspi |
-|-------|-------------------------------|------------------------|
-| GHCR fieldbus rev matches bench | n/a | **PASS** `71e1336d95c9` |
-| MQTTS telemetry | **PASS** numeric values | **PASS** numeric values |
-| Central `/api/edges` | listed + telemetry | listed + telemetry |
-| Weather city | Madison (Open-Meteo) | Chicago (Open-Meteo) |
-| Stack left running | yes | yes |
-
-Run: `RUN_CLOUD_SIM=1 DUAL_MQTT_WAIT_SECS=600 MQTT_SUB_WAIT_SECS=330 ./scripts/nightly-ot-bench/run_all.sh`
-
-**bosspi bootstrap:** minimal repo at `CLOUD_SIM_PI_REPO` needs `docker/compose.edge.yml`, `config/fieldbus/{gateway.toml,objects.csv}`, git init for gate `07` gateway patch.
+| Item | Status |
+|------|--------|
+| H1–H9 Parquet path | **done** — canonical under `OPENFDD_STORAGE_URL` |
+| Feather / dual-write / H6 migrate product | **Plan 4** — delete (no live sites to migrate) |
+| Durable restore | same volume / `s3://` across GHCR image updates — **not** wipe `/workspace` |
+| H10 TB quals | **OPEN** |
+| Railway AI vs FDD AI | Railway may bootstrap GHCR; HVAC/FDD AI = local + **agent JWT** to private central |
 
 ## Open findings
 
 | ID | Finding | Status |
 |----|---------|--------|
-| #526 | Hosted device 600000 absent from broadcast Who-Is (Pi edge); unicast I-Am to ephemeral source still skipped | **OPEN** — Workbench discovery on Pi-hosted instance |
-| arm64 | No arm64 GHCR fieldbus; bosspi runs amd64 under qemu | **OPEN** — documented |
-| #526 client | Fieldbus Who-Is bind ephemeral misses broadcast I-Am | **OPEN** — client-side |
-
-## Agent / docs hygiene
-
-- [`companion-rusty-bacnet-mcp.md`](../mcp-agents/companion-rusty-bacnet-mcp.md) — read-only BACnet debug MCP (not production poll).
-- `OPENFDD_AGENT_PASSWORD` optional on LAN bench; Railway requires it.
+| arm64 | No arm64 GHCR fieldbus; bosspi runs amd64 under qemu | **OPEN** — Plan 3 |
+| H10 | Large historian quals | **OPEN** |
+| nightly lag | `:nightly` may lag `sha-*` after multi-image publish | pin `sha-*` on benches |
 
 ## Hygiene
 
-- #783 merged → `fa14c05` (Haystack gate + BUG_REPORT refresh).
-- #784 merged → `71e1336` (B3 routing, OT policy, MQTT cell mode, gate 10, companion MCP docs).
+- #786 / #787 Who-Is client — tip `6c2b89e`.
 - Do not local `docker build` stack on bensbench — GHCR `sha-*` only.
+- Anti-hardcoding: no private OT IPs in this report.
