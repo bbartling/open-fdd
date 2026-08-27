@@ -206,7 +206,7 @@ pub fn read_and_store(payload: &Value) -> Value {
         } else {
             result["ingest"] = json!({
                 "samples_appended": 1,
-                "feather_source": "json_api",
+                "source": "json_api",
                 "historian_column": label
             });
         }

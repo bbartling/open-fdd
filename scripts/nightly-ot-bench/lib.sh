@@ -30,7 +30,7 @@ load_bench_env() {
   BENCH_DEVICE="${BENCH_DEVICE:-5007}"
   HOSTED_DEVICE="${HOSTED_DEVICE:-599999}"
   WORKSPACE_DIR="${WORKSPACE_DIR:-workspace}"
-  FEATHER_WAIT_SECS="${FEATHER_WAIT_SECS:-90}"
+  PARQUET_WAIT_SECS="${PARQUET_WAIT_SECS:-${FEATHER_WAIT_SECS:-90}}"
   export OPENFDD_REACT_UI="${OPENFDD_REACT_UI:-1}"
   export OPENFDD_UI_GENERATION_DEFAULT="${OPENFDD_UI_GENERATION_DEFAULT:-react}"
   # shellcheck source=scripts/openfdd_stack_lib.sh
@@ -303,9 +303,10 @@ artifact_dir() {
 }
 
 historian_snapshot() {
-  # Print path|mtime|size lines for historian/feather artifacts
+  # Print path|mtime|size lines for historian/Parquet artifacts
   local ws="$ROOT/${WORKSPACE_DIR}"
-  find "$ws/data" \( -name '*.feather' -o -name '*.arrow' -o -name 'telemetry_pivot.jsonl' -o -path '*historian*' \) \
+  find "$ws/data" "$ws/openfdd" "$ws/.cache/parquet" \
+    \( -name '*.parquet' -o -name '*.arrow' -o -name 'telemetry_pivot.jsonl' -o -path '*historian*' \) \
     -type f 2>/dev/null | sort | while read -r f; do
     stat -c '%n|%Y|%s' "$f" 2>/dev/null || stat -f '%N|%m|%z' "$f" 2>/dev/null
   done

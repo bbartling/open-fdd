@@ -385,9 +385,6 @@ fn handle_telemetry(
                 }
             }
 
-            if legacy_compatibility_mirror_enabled() {
-                persist_legacy_compatibility(&env);
-            }
             state.seen_messages.insert(key, ());
             let entry = state.edges.entry(env.edge_id.clone()).or_default();
             let mut shadow = entry.lock().unwrap();
@@ -423,49 +420,6 @@ fn record_reject(state: &AppState, payload: &[u8], error: &str) {
         "error": error,
         "raw": redact_payload(payload),
     }));
-}
-
-fn legacy_compatibility_mirror_enabled() -> bool {
-    matches!(
-        std::env::var("OPENFDD_LEGACY_INGEST_MIRROR")
-            .unwrap_or_default()
-            .trim()
-            .to_ascii_lowercase()
-            .as_str(),
-        "1" | "true" | "yes" | "on"
-    )
-}
-
-fn persist_legacy_compatibility(env: &TelemetryEnvelope) {
-    use open_fdd_edge_prototype::historian::{feather_store, store};
-    use std::collections::BTreeMap;
-
-    let ts = env.observed_at.to_rfc3339();
-    let mut wide: BTreeMap<String, f64> = BTreeMap::new();
-    for p in &env.points {
-        if let Some(n) = p.value.as_f64() {
-            wide.insert(p.id.clone(), n);
-        } else if let Some(n) = p.value.as_i64() {
-            wide.insert(p.id.clone(), n as f64);
-        }
-    }
-    if wide.is_empty() {
-        return;
-    }
-    let _ = feather_store::write_wide_shard("mqtt", &env.site_id, &ts, &wide);
-    let mut row = serde_json::json!({
-        "timestamp": ts,
-        "site_id": env.site_id,
-        "edge_id": env.edge_id,
-        "source": format!("{:?}", env.protocol).to_ascii_lowercase(),
-        "message_id": env.message_id,
-    });
-    if let Some(obj) = row.as_object_mut() {
-        for (k, v) in &wide {
-            obj.insert(k.clone(), serde_json::json!(v));
-        }
-    }
-    let _ = store::append_pivot_row(&row);
 }
 
 #[cfg(test)]

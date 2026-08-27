@@ -95,7 +95,7 @@ GHCR_WAIT_SECS=900 GHCR_POLL_SECS=30 ./scripts/nightly-ot-bench/00_pull_ghcr_up.
 2. react-ot healthy: fieldbus + mqtt + **central** + **React SPA** (`/api/ui/generation` → react)
 3. At least one LAN BACnet device discovered **and** poll returns live values
 4. Device **5007** read/poll of AI:1173 succeeds
-5. Central ingest/Feather shows **new** telemetry when MQTT path is live
+5. Central ingest/Parquet shows **new** telemetry when MQTT path is live
 6. React SPA routes + honesty/MCP gates pass
 7. Gates **14–15** PASS (capability ledger validator + product-truth honesty)
 8. Optional dual-MQTT (`RUN_CLOUD_SIM=1`): gate **10** — bosspi fieldbus OCI rev matches bench; both sites telemetry + ingest

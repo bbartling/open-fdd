@@ -89,22 +89,25 @@ Railway private DNS: `openfdd-central.railway.internal:8080`.
 
 ```text
 OPENFDD_JWT_SECRET=<long deployment-unique random secret, ≥32 chars>
-OPENFDD_ADMIN_PASSWORD=<strong deployment-unique password>
-OPENFDD_AGENT_PASSWORD=<strong password for FDD AI / MCP agents — not the admin password>
+OPENFDD_ADMIN_PASSWORD=<strong deployment-unique password — human browser UI only>
+OPENFDD_AGENT_PASSWORD=<strong password for external FDD AI / MCP — not the admin password>
 OPENFDD_WORKSPACE=/workspace
-OPENFDD_PARQUET_ROOT=/workspace/.cache/parquet
+OPENFDD_STORAGE_URL=file:///workspace/openfdd
+# Legacy alias (prefer STORAGE_URL on new deploys): OPENFDD_PARQUET_ROOT=/workspace/.cache/parquet
 OPENFDD_REACT_UI=1
 OPENFDD_UI_GENERATION_DEFAULT=react
 ```
 
 Store these only in Railway **Variables / Secrets**. Never commit them, never paste JWTs into chat transcripts or repo files.
 
+**Default hub = central + mqtt + web.** Railway AI / deploy assistants should follow [RAILWAY_DEPLOYMENT_CHECKLIST.md](RAILWAY_DEPLOYMENT_CHECKLIST.md) § *AI / Railway-assistant bootstrap context*. Railway AI does **not** run Open-FDD MCP or HVAC FDD — that is a **local external agent** with an operator JWT after deploy.
+
 | Identity | Login | JWT role | Use |
 | --- | --- | --- | --- |
 | `admin` | `OPENFDD_ADMIN_PASSWORD` | admin | Browser UI, mint agent tokens, edge kits |
-| `agent` | `OPENFDD_AGENT_PASSWORD` | operator | Cursor / MCP / REST FDD assistance |
+| `agent` | `OPENFDD_AGENT_PASSWORD` | operator | Cursor / MCP / REST FDD assistance (local AI → cloud central) |
 
-Prefer **`agent`** for remote AI assistance. Do not share the admin password with MCP hosts.
+Prefer **`agent`** for remote AI assistance. Do not share the admin password with MCP hosts. Do not treat Railway’s built-in assistant as the FDD/HVAC agent.
 
 ### Secure agent auth on Railway (Cursor / MCP)
 

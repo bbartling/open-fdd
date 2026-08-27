@@ -1,3 +1,5 @@
+# DEPRECATED — Feather dual-write retired (Plan 4). Durable historian is Parquet-only under `OPENFDD_STORAGE_URL` (volume/S3). Keep for historical context; do not implement Feather writers.
+
 # Product agent — Vibe16 BACnet + Feather port (paste into WSL / source Cursor)
 
 **Paste into Cursor on the Open-FDD source tree** (`/home/ben/src/open-fdd` — also referenced as `open-fdd-src`).

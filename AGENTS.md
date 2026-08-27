@@ -53,7 +53,7 @@ When changing Rust in this repo:
 - **Remove** `#[allow(...)]` / `#![allow(...)]`; fix the cause. Prefer `_` / `_guard`, `?`, or smallest-scope `#[expect(...)]` with a one-line constraint comment.
 - Never silently discard `Result`/`Option`; prefer `?` or explicit match/log. Last resort: `let _ = …;` + why.
 - Prefer `?` / combinators over `.unwrap()` on production paths.
-- Historian: **Parquet** under `OPENFDD_STORAGE_URL` is canonical; do not add Feather dual-write. App updates keep the same volume/S3 bucket.
+- Historian: **Parquet** under `OPENFDD_STORAGE_URL` is canonical; Feather dual-write is **retired** (do not reintroduce). App updates keep the same volume/S3 bucket — that is restore.
 
 Full train checklist + sweep: Plans 1–4 under `~/.cursor/plans/` (`whois_client_526_fix` → `bug_report_tip_refresh` → `arm64_ghcr_fieldbus_pi` → `historian_legacy_retire`).
 

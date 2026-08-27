@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-08-27 — Plan 4 Feather retirement
+
+- Deleted `feather_store` writers, central `OPENFDD_LEGACY_INGEST_MIRROR` dual-write, and product CLI `historian-migrate` / `historian-dry-run` / `historian-stats`.
+- Compose central env: `OPENFDD_STORAGE_URL=file:///workspace/openfdd` (replaces `OPENFDD_PARQUET_ROOT` examples). Restore = same volume/S3 bucket across image updates.
+- Nightly gate renamed `03_mqtt_parquet_persist.sh`; HISTORIAN_PROGRAM notes Feather retired / H6 not a product path.
+
 ## 2026-08-27 — Who-Is #526 CLOSED + BUG_REPORT tip `sha-6c2b89e`
 
 - F3: `POST /bacnet/whois` sees **599999** + **600000** on tip (`#786`/`#787`).

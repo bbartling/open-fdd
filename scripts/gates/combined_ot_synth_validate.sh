@@ -56,7 +56,7 @@ echo "==> BACnet OT (02)"
 ./scripts/nightly-ot-bench/02_bacnet_ot.sh 2>&1 | tee "$ART/02_bacnet_ot.log"
 
 echo "==> MQTT persist (03)"
-./scripts/nightly-ot-bench/03_mqtt_feather_persist.sh 2>&1 | tee "$ART/03_mqtt.log"
+./scripts/nightly-ot-bench/03_mqtt_parquet_persist.sh 2>&1 | tee "$ART/03_mqtt.log"
 
 echo "==> Modbus OT (04) — Pi sim @ MODBUS_SIM_HOST"
 ./scripts/nightly-ot-bench/04_modbus_ot.sh 2>&1 | tee "$ART/04_modbus.log"

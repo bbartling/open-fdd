@@ -21,7 +21,7 @@ Prefer `OPENFDD_IMAGE_TAG=sha-6c2b89e` (or later tip) — do not trust sticky `:
 | Gate / check | Result |
 |------|--------|
 | Who-Is F3 (#526 client) | **PASS** — `POST /bacnet/whois` lists **599999** + **600000** |
-| Prior OT train (`sha-71e1336`) | Gates `00`–`05`, `10` dual-MQTT **PASS** (retained) |
+| Prior OT train (`sha-71e1336`) | Gates `00`–`05`, `10` dual-MQTT **PASS** (retained); gate `03` now Parquet persist |
 | Synthetic-59 | **PASS** — 59/59 (prior tip) |
 
 ## #526 Who-Is client — CLOSED

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full nightly OT gate: GHCR pull → health → BACnet 5007 → MQTT/Feather persistence.
+# Full nightly OT gate: GHCR pull → health → BACnet 5007 → MQTT/Parquet persistence.
 # Writes a short markdown summary under reports/ (gitignored).
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -87,7 +87,7 @@ fi
 
 run_phase 01_health_gates.sh "01 health gates" || OVERALL=1
 run_phase 02_bacnet_ot.sh "02 BACnet OT (5007 + BIP + poll)" || OVERALL=1
-run_phase 03_mqtt_feather_persist.sh "03 MQTTS + Feather persistence" || OVERALL=1
+run_phase 03_mqtt_parquet_persist.sh "03 MQTTS + Parquet persistence" || OVERALL=1
 run_phase 04_modbus_ot.sh "04 Modbus OT (bench sim)" || OVERALL=1
 run_phase 05_haystack.sh "05 Haystack API surface" || OVERALL=1
 run_phase 06_csv_fdd_sql.sh "06 CSV import + SQL FDD (FC1)" || OVERALL=1
