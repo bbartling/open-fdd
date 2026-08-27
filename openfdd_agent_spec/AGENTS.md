@@ -49,6 +49,7 @@ retest. Do not confuse those with this engineering OS.
 4. **Product UI:** React SPA (`frontend/web` → `openfdd-web`, `compose.react.yml`) only. Overview = central `/api/analytics/*` (DataFusion) **tables + health matrices**. Plotly motor/mech/econ/BAS figures live on RCx (additive presets). Inspect radio hosts the CSV overlay. Browser → central Rust `/api` only — **no Python in the product request path**.
 5. **Internet-facing auth/UI hygiene:** Never put bench/dev secrets, credential file paths, default passwords, or JWT dumps on login or other product surfaces. Generic login errors only.
 6. Test containers on **`OPENFDD_IMAGE_TAG=nightly`**, but **pin/run `sha-*`** per [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md).
+6b. **Rust lint hygiene:** eliminate `#[allow]` / `#![allow]` — see [`docs/RUST_LINT_HYGIENE.md`](docs/RUST_LINT_HYGIENE.md). Prefer fix / `_` / `?` / smallest-scope `#[expect]` + comment; never crate-wide `#![allow]`.
 7. Playground images: `ghcr.io/bbartling/vibe19:develop`, `vibe20:develop` (external).
 8. `edge/` and `os/` are future concepts — never delete.
 9. Bounded PRs only — see [`PR_PROTOCOL.md`](PR_PROTOCOL.md).
