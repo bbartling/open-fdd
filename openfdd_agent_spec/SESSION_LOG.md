@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-08-27 — Plan 3 arm64 fieldbus CLOSED (bosspi native)
+
+- bosspi: `openfdd-fieldbus:sha-fadf167` **linux/arm64** healthy (no qemu); OCI rev `fadf167ee984`.
+- Gate `07` prefers native arm64 pull; amd64/qemu is fallback only.
+- BUG_REPORT arm64 row **CLOSED**.
+
 ## 2026-08-27 — Plan 4 Feather retirement
 
 - Deleted `feather_store` writers, central `OPENFDD_LEGACY_INGEST_MIRROR` dual-write, and product CLI `historian-migrate` / `historian-dry-run` / `historian-stats`.
