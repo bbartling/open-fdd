@@ -119,6 +119,8 @@ Read tools (preview, plan, preflight, contract, test-sql, fusion, historian quer
 
 Use **commission** API (`OPENFDD_COMMISSION_BASE`, default `http://127.0.0.1:9091`) for OT Who-Is/reads — not bridge host-network.
 
+On **fieldbus**, `POST /bacnet/whois` binds the hosted BACnet/IP port (`whois_bind_port = 0` → server port, `SO_REUSEADDR`) so broadcast I-Am is heard (#526). Unicast ReadProperty stays on ephemeral ports. Prefer fieldbus `:8081` for product discovery; commission/MCP companions for isolated debug.
+
 Production BACnet throttling (agents): **300 s** default poll, **60 s** minimum, ~**30%** HVAC health points on cell sites — [`docs/operations/BACNET_OT_POLICY.md`](../docs/operations/BACNET_OT_POLICY.md). Independent OT debug: [`docs/mcp-agents/companion-rusty-bacnet-mcp.md`](../docs/mcp-agents/companion-rusty-bacnet-mcp.md) (read-only; does not replace fieldbus).
 
 ## Model (Haystack RDF)

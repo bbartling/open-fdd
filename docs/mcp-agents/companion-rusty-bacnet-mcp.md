@@ -17,7 +17,7 @@ Production polling stays on **`openfdd-fieldbus`**. [rusty-bacnet-mcp](https://g
 |-----------|------|
 | FDD, historian, edges, MQTT ingest | `openfdd-mcp` → Central |
 | Routed MS/TP (device 5007), Who-Is, ReadProperty isolation | rusty-bacnet-mcp on OT subnet |
-| Product poll / MQTT publish | `openfdd-fieldbus` only |
+| Product poll / MQTT publish / Who-Is discovery (#526 bind) | `openfdd-fieldbus` only |
 
 ## Install (bench)
 
