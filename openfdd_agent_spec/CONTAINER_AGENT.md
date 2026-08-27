@@ -37,6 +37,10 @@ OT LAN benches need fieldbus — recipe **`react-ot`**
 (`compose.react.yml` + `compose.react.fieldbus.yml`). Full stress suite:
 [`scripts/nightly-ot-bench/`](../scripts/nightly-ot-bench/README.md).
 
+**Pi 3 edges (~905 MiB):** run **fieldbus-only** (no central/web soak). Prefer
+native `linux/arm64` `openfdd-fieldbus` from GHCR multi-arch; qemu-amd64 is a
+fallback only until the arm64 manifest is present.
+
 Post-merge soak: **wait for** `Publish Open-FDD stack to GHCR` (+ MCP) **success**
 on the tip SHA before pulling `sha-<7>`. Tip git SHA can exist minutes before
 GHCR tags. Prefer:

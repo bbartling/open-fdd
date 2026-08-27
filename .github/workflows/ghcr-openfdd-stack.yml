@@ -226,11 +226,12 @@ jobs:
 
       - name: Build and push openfdd-fieldbus
         uses: docker/build-push-action@v6
+        # Pi / arm64 edges (bosspi): multi-arch. Central/web stay amd64-first (RocksDB/QEMU cost).
         timeout-minutes: 240
         with:
           context: .
           file: services/fieldbus/Dockerfile
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.vars.outputs.fieldbus_tags }}
           labels: |

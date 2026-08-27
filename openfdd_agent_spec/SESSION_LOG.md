@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-08-27 — Who-Is #526 CLOSED + BUG_REPORT tip `sha-6c2b89e`
+
+- F3: `POST /bacnet/whois` sees **599999** + **600000** on tip (`#786`/`#787`).
+- BUG_REPORT refreshed to `sha-6c2b89e`; historian H1–H9 Parquet / Plan 4 Feather delete; arm64 fieldbus = Plan 3 (multi-arch GHCR).
+- Gate `07`: use `PI_SSH` for Pi IP (fix unbound `CLOUD_SIM_PI_SSH` under `set -u`).
+
 ## 2026-08-27 — Who-Is client #526 (discovery bind)
 
 - Fieldbus Who-Is: `whois_bind_port = 0` auto-binds hosted `bacnet_server.port` on **`0.0.0.0`** with `SO_REUSEADDR` so directed-broadcast I-Am (remote Pi 600000 + LAN devices) is receivable; unicast `OPENFDD_FIELDBUS_BIND` is not used for discovery (misses broadcasts). Unicast reads stay ephemeral.
