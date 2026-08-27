@@ -1,5 +1,10 @@
 # Session log
 
+## 2026-08-27 — Patch cycle start (3.3.5)
+
+- BUG_REPORT blanked for patch cycle starting **3.3.5**.
+- Agent law: [`docs/RUST_LINT_HYGIENE.md`](docs/RUST_LINT_HYGIENE.md) (allow/expect elimination rules).
+
 ## 2026-08-27 — Plan 3 arm64 fieldbus CLOSED (bosspi native)
 
 - bosspi: `openfdd-fieldbus:sha-fadf167` **linux/arm64** healthy (no qemu); OCI rev `fadf167ee984`.

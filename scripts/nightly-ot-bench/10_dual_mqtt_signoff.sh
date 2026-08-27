@@ -17,8 +17,10 @@ SITE1="${OPENFDD_SITE_ID:-lab}"
 EDGE1="${OPENFDD_EDGE_ID:-fieldbus-1}"
 SITE2="${CLOUD_SIM_SITE_ID:-bldg2}"
 EDGE2="${CLOUD_SIM_EDGE_ID:-pi-1}"
-WAIT="${DUAL_MQTT_WAIT_SECS:-120}"
+WAIT="${DUAL_MQTT_WAIT_SECS:-600}"
 PIN="${OPENFDD_IMAGE_TAG:-}"
+# Relative count/span tolerance between lab and bldg2 for shared OT points (same devices).
+PARITY_RATIO_MIN="${DUAL_MQTT_PARITY_RATIO_MIN:-0.5}"
 
 ART="${ARTIFACT_DIR:-$(artifact_dir)}"
 mkdir -p "$ART"
@@ -102,10 +104,7 @@ hdr "3. Ingest baseline"
 IB="$(central "$CENTRAL_BASE/api/ingest/stats" 2>/dev/null || echo '{}')"
 echo "$IB" | tee "$ART/ingest_dual_before.json" | jq -c . 2>/dev/null || echo "$IB"
 
-hdr "4. Wait ${WAIT}s for dual MQTT publish"
-sleep "$WAIT"
-
-hdr "5. MQTTS telemetry (both sites)"
+hdr "4. Wait ${WAIT}s for dual MQTT publish + continuous peek capture"
 CA="$ROOT/deploy/mqtt/ca/ca.pem"
 CERT="$ROOT/deploy/mqtt/kits/${SITE1}__central/central.cert.pem"
 KEY="$ROOT/deploy/mqtt/kits/${SITE1}__central/central.key.pem"
@@ -113,28 +112,98 @@ if [[ ! -f "$CERT" ]]; then
   CERT="$ROOT/deploy/mqtt/kits/${SITE1}__${EDGE1}/central.cert.pem"
   KEY="$ROOT/deploy/mqtt/kits/${SITE1}__${EDGE1}/central.key.pem"
 fi
+PEEK_PID=""
+combined="$ART/mqtt_dual_combined.txt"
+: >"$combined"
 if [[ -f "$CA" && -f "$CERT" && -f "$KEY" ]]; then
-  sub_wait="${MQTT_SUB_WAIT_SECS:-330}"
-  combined="$ART/mqtt_dual_combined.txt"
-  timeout $((sub_wait + 15)) docker run --rm --net=host -v "$ROOT/deploy/mqtt:/mqtt:ro" eclipse-mosquitto:2 \
+  # Background subscribe for the full soak window (many messages, not just 2).
+  docker run --rm --net=host -v "$ROOT/deploy/mqtt:/mqtt:ro" --name openfdd-dual-mqtt-peek \
+    eclipse-mosquitto:2 \
     mosquitto_sub -h 127.0.0.1 -p 8883 \
     --cafile /mqtt/ca/ca.pem \
     --cert "/mqtt/kits/${SITE1}__central/central.cert.pem" \
     --key "/mqtt/kits/${SITE1}__central/central.key.pem" \
-    -t "openfdd/v1/sites/+/edges/+/telemetry/#" -v -C 2 -W "$sub_wait" \
-    >"$combined" 2>&1 || true
+    -t "openfdd/v1/sites/+/edges/+/telemetry/#" -v \
+    >"$combined" 2>&1 &
+  PEEK_PID=$!
+  ok "MQTTS peek capture started (pid=$PEEK_PID, ${WAIT}s)"
+else
+  skip "MQTT central certs missing — peek capture skipped"
+fi
+sleep "$WAIT"
+if [[ -n "$PEEK_PID" ]]; then
+  docker stop openfdd-dual-mqtt-peek >/dev/null 2>&1 || true
+  wait "$PEEK_PID" 2>/dev/null || true
+fi
+
+hdr "5. MQTTS telemetry (both sites) + accumulation parity"
+if [[ -s "$combined" ]]; then
   for spec in "${SITE1}|mqtt_lab.txt" "${SITE2}|mqtt_bldg2.txt"; do
     IFS='|' read -r site out <<<"$spec"
     out="$ART/$out"
     grep "sites/${site}/" "$combined" >"$out" 2>/dev/null || : >"$out"
     if grep -qE '"value"[[:space:]]*:[[:space:]]*-?[0-9]' "$out" 2>/dev/null; then
-      ok "MQTTS telemetry site=$site (numeric values)"
+      ok "MQTTS telemetry site=$site (numeric values, $(wc -l <"$out") lines)"
     else
       bad "no numeric telemetry site=$site (see $out)"
     fi
   done
+  # Compare message counts / timestamp span between sites (same OT devices → similar rate).
+  if python3 - "$ART/mqtt_lab.txt" "$ART/mqtt_bldg2.txt" "$PARITY_RATIO_MIN" <<'PY'
+import json, re, sys
+from datetime import datetime, timezone
+
+def parse_ts(s: str):
+    # Prefer ISO timestamps inside JSON payloads.
+    for m in re.finditer(r'"timestamp(?:_utc)?"\s*:\s*"([^"]+)"', s):
+        raw = m.group(1)
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except Exception:
+            continue
+    return None
+
+def analyze(path: str):
+    lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
+    ts = []
+    numeric = 0
+    for ln in lines:
+        if re.search(r'"value"\s*:\s*-?[0-9]', ln):
+            numeric += 1
+        t = parse_ts(ln)
+        if t is not None:
+            ts.append(t)
+    span = (max(ts) - min(ts)).total_seconds() if len(ts) >= 2 else 0.0
+    return {"lines": len(lines), "numeric": numeric, "span_s": span, "n_ts": len(ts)}
+
+lo, hi, ratio_min = sys.argv[1], sys.argv[2], float(sys.argv[3])
+a, b = analyze(lo), analyze(hi)
+parity_path = lo.rsplit("/", 1)[0] + "/mqtt_dual_parity.json"
+open(parity_path, "w", encoding="utf-8").write(json.dumps({"lab": a, "bldg2": b}, indent=2))
+print(json.dumps({"lab": a, "bldg2": b}))
+if a["numeric"] < 1 or b["numeric"] < 1:
+    sys.exit(2)
+# Count parity: smaller/larger >= ratio_min
+c1, c2 = a["numeric"], b["numeric"]
+r = (min(c1, c2) / max(c1, c2)) if max(c1, c2) else 0.0
+if r < ratio_min:
+    print(f"count_parity={r:.3f} < {ratio_min}", file=sys.stderr)
+    sys.exit(3)
+# Span parity when both have timestamps
+if a["n_ts"] >= 2 and b["n_ts"] >= 2:
+    sr = (min(a["span_s"], b["span_s"]) / max(a["span_s"], b["span_s"])) if max(a["span_s"], b["span_s"]) else 0.0
+    if sr < ratio_min:
+        print(f"span_parity={sr:.3f} < {ratio_min}", file=sys.stderr)
+        sys.exit(4)
+sys.exit(0)
+PY
+  then
+    ok "dual-site accumulation parity (counts/span) within ratio≥${PARITY_RATIO_MIN}"
+  else
+    bad "dual-site accumulation parity failed (see mqtt_lab/bldg2 captures)"
+  fi
 else
-  skip "MQTT central certs missing for subscribe peek"
+  skip "no MQTT peek capture file — cannot assert parity"
 fi
 
 hdr "6. Central /api/edges + ingest after wait"

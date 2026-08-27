@@ -47,15 +47,15 @@ Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:808
 
 ## Rust hygiene (agents)
 
-When changing Rust in this repo:
+When changing Rust in this repo (full rules: [`openfdd_agent_spec/docs/RUST_LINT_HYGIENE.md`](openfdd_agent_spec/docs/RUST_LINT_HYGIENE.md)):
 
 - **Delete** unused items (`dead_code`) — do not keep “just in case”; Git retains history.
-- **Remove** `#[allow(...)]` / `#![allow(...)]`; fix the cause. Prefer `_` / `_guard`, `?`, or smallest-scope `#[expect(...)]` with a one-line constraint comment.
+- **Remove** `#[allow(...)]` / `#![allow(...)]`; fix the cause. Prefer `_` / `_guard`, `?`, or smallest-scope `#[expect(...)]` with a one-line constraint comment. Never crate-wide `#![allow]`.
 - Never silently discard `Result`/`Option`; prefer `?` or explicit match/log. Last resort: `let _ = …;` + why.
 - Prefer `?` / combinators over `.unwrap()` on production paths.
 - Historian: **Parquet** under `OPENFDD_STORAGE_URL` is canonical; Feather dual-write is **retired** (do not reintroduce). App updates keep the same volume/S3 bucket — that is restore.
 
-Full train checklist + sweep: Plans 1–4 under `~/.cursor/plans/` (`whois_client_526_fix` → `bug_report_tip_refresh` → `arm64_ghcr_fieldbus_pi` → `historian_legacy_retire`).
+Patch-cycle train after Plans 1–4: blank BUG_REPORT → tiny rev bump → GHCR `sha-*` → dual MQTT / synthetic / pcap → fill BUG_REPORT.
 
 ## Safe scripts
 
