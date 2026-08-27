@@ -139,7 +139,7 @@ A Railway one-click template should eventually encode **central → mqtt → web
 - Before pulling new images: prune unused/old digests first, then `./scripts/openfdd_stack_pull.sh …` and `./scripts/openfdd_stack_up.sh … --no-pull`.
 - DataFusion: `OPENFDD_QUERY_MEMORY_MB=256` (or 512) + `OPENFDD_DATAFUSION_SPILL_DIR` — see [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md).
 - BACnet OT on cell edges: default **300 s** poll/publish, **60 s** floor, poll ~**30%** health points only — [`docs/operations/BACNET_OT_POLICY.md`](docs/operations/BACNET_OT_POLICY.md). Hard BACnet debug: [`docs/mcp-agents/companion-rusty-bacnet-mcp.md`](docs/mcp-agents/companion-rusty-bacnet-mcp.md).
-- Who-Is / discovery: fieldbus binds the hosted BACnet/IP port (`whois_bind_port = 0` → `bacnet_server.port`, `SO_REUSEADDR`) so broadcast I-Am is receivable (#526); unicast reads stay ephemeral — see [`services/fieldbus/AGENTS.md`](services/fieldbus/AGENTS.md).
+- Who-Is / discovery: fieldbus binds **`0.0.0.0`** + hosted BACnet/IP port (`whois_bind_port = 0` → `bacnet_server.port`, `SO_REUSEADDR`) so directed-broadcast I-Am is receivable (#526); do not use the unicast `OPENFDD_FIELDBUS_BIND` address for discovery. Unicast reads stay ephemeral — see [`services/fieldbus/AGENTS.md`](services/fieldbus/AGENTS.md).
 - Details: [`openfdd_agent_spec/CONTAINER_AGENT.md`](openfdd_agent_spec/CONTAINER_AGENT.md).
 
 ## AFDD vs bulk FDD

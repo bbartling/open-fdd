@@ -2,7 +2,7 @@
 
 ## 2026-08-27 — Who-Is client #526 (discovery bind)
 
-- Fieldbus Who-Is: `whois_bind_port = 0` auto-binds hosted `bacnet_server.port` with `SO_REUSEADDR` so broadcast I-Am (remote Pi 600000 + local 599999) is receivable; unicast reads stay ephemeral.
+- Fieldbus Who-Is: `whois_bind_port = 0` auto-binds hosted `bacnet_server.port` on **`0.0.0.0`** with `SO_REUSEADDR` so directed-broadcast I-Am (remote Pi 600000 + LAN devices) is receivable; unicast `OPENFDD_FIELDBUS_BIND` is not used for discovery (misses broadcasts). Unicast reads stay ephemeral.
 - Gate `07` F3 expects both instances in `POST /bacnet/whois`. Docs: root `AGENTS.md`, `services/fieldbus/AGENTS.md`, mcp INSTRUCTIONS.
 
 ## 2026-08-26 — Edge kit download + Railway agent auth (in flight)

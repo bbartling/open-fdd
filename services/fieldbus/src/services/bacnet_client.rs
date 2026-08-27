@@ -102,8 +102,16 @@ impl BacnetClientService {
         device: Option<&FieldDevice>,
     ) -> Result<BACnetClient<bacnet_transport::bip::BipTransport>, String> {
         let cfg = &self.settings.bacnet_client;
+        // Who-Is must bind INADDR_ANY to receive BACnet/IP directed-broadcast I-Am.
+        // A unicast interface from OPENFDD_FIELDBUS_BIND (e.g. 192.168.204.55) misses
+        // those datagrams on Linux even with SO_REUSEADDR on :47808 (#526).
+        let interface = if device.is_none() {
+            Ipv4Addr::UNSPECIFIED
+        } else {
+            cfg.interface
+        };
         BACnetClient::bip_builder()
-            .interface(cfg.interface)
+            .interface(interface)
             .port(self.bind_port(device))
             .broadcast_address(cfg.broadcast)
             .apdu_timeout_ms(u64::from(cfg.apdu_timeout_ms))

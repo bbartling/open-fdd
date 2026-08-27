@@ -103,9 +103,11 @@ See [`docs/rust-migration-report.md`](docs/rust-migration-report.md) for the ful
 ## Design
 
 The hosted server binds `0.0.0.0:47808` for BMS/Workbench discovery. Who-Is
-temporarily shares that port via `SO_REUSEADDR` (`whois_bind_port = 0` → server
-port) so broadcast I-Am is receivable (#526). Unicast reads/RPM use ephemeral
-ports and must not hold `:47808` across polls.
+temporarily shares that port on **`0.0.0.0`** via `SO_REUSEADDR` (`whois_bind_port = 0`
+→ server port) so directed-broadcast I-Am is receivable (#526). Do not bind the
+unicast `OPENFDD_FIELDBUS_BIND` address for discovery. Unicast reads/RPM use
+ephemeral ports and must not hold `:47808` across polls. `OPENFDD_FIELDBUS_BIND`
+still derives the subnet broadcast used when *sending* Who-Is.
 
 Set **`OPENFDD_FIELDBUS_BACNET_PORT`** when the building uses a non-default BACnet UDP port.
 
