@@ -6,7 +6,7 @@ nav_order: 1
 
 # Railway deployment checklist (open-fdd)
 
-Use with [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md) and [external agents](../examples/external-agents.md). Prefer GHCR `:sha-<7>` for controlled tests; `:nightly` after a green master publish.
+Use with [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md) and [external agents](../examples/external-agents.md). Prefer GHCR **`sha-<7>`** (newest-by-created) for reproducible deploys; use `:nightly` only after confirming it matches that tip digest.
 
 > **Experimental cloud lab** — LAN/VPN-first product. This checklist is for labs/demos, not a public-internet hardening claim.
 
@@ -23,9 +23,9 @@ Deploy **three** Railway services from GHCR, in order:
 
 | Order | Service | Image | Exposure | Purpose |
 |------:|---------|-------|----------|---------|
-| 1 | `openfdd-central` | `ghcr.io/bbartling/openfdd-central:nightly` (or `:sha-<7>`) | **Private** | JWT API, Parquet historian, DataFusion FDD, MQTTS ingest client |
-| 2 | `openfdd-mqtt` | `ghcr.io/bbartling/openfdd-mqtt:nightly` | **Private** MQTTS `:8883` | Cloud broker hub — **default for live OT** |
-| 3 | `openfdd-web` | `ghcr.io/bbartling/openfdd-web:nightly` | **Public** HTTP | React SPA only |
+| 1 | `openfdd-central` | `ghcr.io/bbartling/openfdd-central:sha-<7>` (or `:nightly` only if digest==tip) | **Private** | JWT API, Parquet historian, DataFusion FDD, MQTTS ingest client |
+| 2 | `openfdd-mqtt` | `ghcr.io/bbartling/openfdd-mqtt:sha-<7>` | **Private** MQTTS `:8883` | Cloud broker hub — **default for live OT** |
+| 3 | `openfdd-web` | `ghcr.io/bbartling/openfdd-web:sha-<7>` | **Public** HTTP | React SPA only |
 
 **Do not deploy `openfdd-fieldbus` on Railway.** Fieldbus stays on-prem (OT LAN / VPN) and publishes MQTTS into the cloud broker. BACnet broadcast discovery does not work in Railway.
 
@@ -65,10 +65,12 @@ Deploy **three** Railway services from GHCR, in order:
 
 ### Mint agent JWT (from Railway shell or VPN that reaches private central)
 
+Railway private mesh is typically plain HTTP to `*.railway.internal` (TLS terminates at the public edge). Prefer that private hop over exposing central publicly. Do not put the password on the `curl` argv — pipe JSON via stdin:
+
 ```bash
-TOKEN="$(curl -fsS -X POST http://openfdd-central.railway.internal:8080/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d "{\"username\":\"agent\",\"password\":\"$OPENFDD_AGENT_PASSWORD\"}" \
+TOKEN="$(jq -nc --arg p "$OPENFDD_AGENT_PASSWORD" '{username:"agent",password:$p}' \
+  | curl -fsS -X POST http://openfdd-central.railway.internal:8080/api/auth/login \
+      -H 'Content-Type: application/json' --data-binary @- \
   | jq -r '.token // .access_token')"
 # Local MCP host: OPENFDD_API_BASE=<reachable central URL> OPENFDD_MCP_TOKEN=$TOKEN
 ```
@@ -86,7 +88,7 @@ Or admin mints a TTL-bound token: `POST /api/auth/agent-token` with `Authorizati
 
 ## Step 1 — Deploy `openfdd-central` first
 
-- [ ] Image `ghcr.io/bbartling/openfdd-central:nightly` (or sha pin)
+- [ ] Image `ghcr.io/bbartling/openfdd-central:sha-<7>` (prefer over sticky `:nightly`)
 - [ ] Volume on `/workspace` (≥5GB)
 - [ ] Vars (required):
   - `OPENFDD_JWT_SECRET` (≥32 chars)

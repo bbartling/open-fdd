@@ -9,14 +9,9 @@ pub mod eui;
 pub mod import;
 pub mod open_meteo;
 
-// Re-export surface for HTTP handlers / other modules (not all used in this crate).
-#[expect(unused_imports)]
+// Re-export surface for HTTP handlers / other modules.
 pub use analytics::{handle_fuel, FuelRequest};
-#[expect(unused_imports)]
 pub use campus::{annual_summary, load_campus, Campus, KBTU_PER_KWH, KBTU_PER_MCF};
-#[expect(unused_imports)]
 pub use eui::compare_eui;
-#[expect(unused_imports)]
 pub use import::{fuel_root, import_fuel_zip, list_campuses};
-#[expect(unused_imports)]
 pub use open_meteo::fetch_open_meteo_handler;

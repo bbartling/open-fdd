@@ -303,10 +303,10 @@ artifact_dir() {
 }
 
 historian_snapshot() {
-  # Print path|mtime|size lines for historian/Parquet artifacts
+  # Print path|mtime|size lines for Parquet/historian artifacts (exclude retired .feather).
   local ws="$ROOT/${WORKSPACE_DIR}"
   find "$ws/data" "$ws/openfdd" "$ws/.cache/parquet" \
-    \( -name '*.parquet' -o -name '*.arrow' -o -name 'telemetry_pivot.jsonl' -o -path '*historian*' \) \
+    \( -name '*.parquet' -o -name 'telemetry_pivot.jsonl' -o \( -path '*/historian/*' -name '*.parquet' \) \) \
     -type f 2>/dev/null | sort | while read -r f; do
     stat -c '%n|%Y|%s' "$f" 2>/dev/null || stat -f '%N|%m|%z' "$f" 2>/dev/null
   done

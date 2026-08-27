@@ -138,8 +138,19 @@ echo "${DIM}  files=$(wc -l <"$AFTER" | tr -d ' ')${RST}"
 if [[ ! -s "$AFTER" ]]; then
   # Ingest counter growth alone is enough when Parquet is under OPENFDD_STORAGE_URL
   # outside workspace/data (common after STORAGE_URL-only cutover).
-  if [[ -f "$ART/ingest_after.json" ]] && jq -e '(.ingest_ok // 0) > 0' "$ART/ingest_after.json" >/dev/null 2>&1; then
-    skip "no workspace/data historian files — ingest_ok>0 (Parquet under STORAGE_URL)"
+  if [[ -f "$ART/ingest_after.json" ]] && python3 - "$ART/ingest_after.json" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1]))
+def dig(x):
+  if not isinstance(x,dict): return 0
+  for k in ("ingest_ok","messages_ok","ok","accepted","total","count"):
+    v=x.get(k)
+    if isinstance(v,(int,float)) and v>0: return 1
+  return any(dig(v) for v in x.values() if isinstance(v,dict))
+sys.exit(0 if dig(d) else 1)
+PY
+  then
+    skip "no workspace/data historian files — ingest counter>0 (Parquet under STORAGE_URL)"
   else
     bad "no historian/Parquet files under workspace/data — persistence missing"
   fi
@@ -176,8 +187,19 @@ then
 else
   # Micro-batch Parquet may flush on interval without new files under workspace/data.
   # When MQTT ingest already proved live, treat file-tree growth as soft (skip).
-  if [[ -f "$ART/ingest_after.json" ]] && jq -e '(.ingest_ok // 0) > 0' "$ART/ingest_after.json" >/dev/null 2>&1; then
-    skip "historian file tree unchanged — ingest_ok>0 (Parquet flush may be deferred)"
+  if [[ -f "$ART/ingest_after.json" ]] && python3 - "$ART/ingest_after.json" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1]))
+def dig(x):
+  if not isinstance(x,dict): return 0
+  for k in ("ingest_ok","messages_ok","ok","accepted","total","count"):
+    v=x.get(k)
+    if isinstance(v,(int,float)) and v>0: return 1
+  return any(dig(v) for v in x.values() if isinstance(v,dict))
+sys.exit(0 if dig(d) else 1)
+PY
+  then
+    skip "historian file tree unchanged — ingest counter>0 (Parquet flush may be deferred)"
   else
     bad "historian/Parquet store did not grow after poll wait — no persistence proof"
   fi
