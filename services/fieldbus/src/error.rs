@@ -22,7 +22,6 @@ pub enum ApiError {
     Forbidden(String),
 
     #[error("{0}")]
-    #[expect(dead_code)] // reserved HTTP mapping
     NotFound(String),
 
     #[error("validation error")]
