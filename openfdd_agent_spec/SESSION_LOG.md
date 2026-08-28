@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-08-27 — Patch cycle 3.3.5 CLOSED (dual MQTT + pcap)
+
+- Tip `sha-fa83c72` / `3.3.5+fa83c7245942` on bensbench + bosspi **linux/arm64**.
+- Combined OT/synth **PASS**; dual MQTT 600s **PASS** (lab+bldg2 telemetry, ingest growth); pcap FP scan **PASS** (ReadProperty-heavy, no Who-Is storm).
+- BUG_REPORT filled; gate `11` uses privileged docker tcpdump + `bacnet capture --read --decode` when host lacks CAP_NET_RAW.
+- Artifacts: `reports/patch335_validate_233516/`.
+
 ## 2026-08-27 — Patch cycle start (3.3.5)
 
 - BUG_REPORT blanked for patch cycle starting **3.3.5**.
