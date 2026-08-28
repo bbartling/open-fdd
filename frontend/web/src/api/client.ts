@@ -81,8 +81,13 @@ export async function apiFetch<T>(
 
   if (!res.ok) {
     const text = await res.text();
+    // Skip global 401 redirect when the caller already aborted (navigated away
+    // while Overview analytics were still in flight) — otherwise a late 401
+    // clears the session and kicks the user to /auth from Actions.
+    const aborted = Boolean(init?.signal?.aborted);
     if (
       res.status === 401 &&
+      !aborted &&
       typeof window !== "undefined" &&
       !path.includes("/auth/login") &&
       !path.includes("/auth/status")

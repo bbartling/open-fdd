@@ -1,5 +1,10 @@
 # Session log
 
+## 2026-08-28 — Patch cycle start (3.3.6)
+
+- BUG_REPORT blanked for patch cycle starting **3.3.6**.
+- Scope: Overview→Actions 401 abort, BUILDING_100 FDD series building scope, mqtt-span `observed_at`, #763 bundle validate skeleton.
+
 ## 2026-08-27 — Patch cycle 3.3.5 CLOSED (dual MQTT + pcap)
 
 - Tip `sha-fa83c72` / `3.3.5+fa83c7245942` on bensbench + bosspi **linux/arm64**.

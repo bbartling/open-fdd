@@ -109,11 +109,13 @@ export interface FddEquipmentResponse {
 export async function postAnalytics(
   path: string,
   body: AnalyticsRequest,
+  init?: { signal?: AbortSignal },
 ): Promise<AnalyticsEnvelope> {
   const raw = await apiFetch<AnalyticsApiResponse | AnalyticsEnvelope>(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal: init?.signal,
   });
   if (
     raw &&
@@ -148,20 +150,23 @@ export async function postRcxVav(
 
 export async function postRuntime(
   body: AnalyticsRequest,
+  init?: { signal?: AbortSignal },
 ): Promise<AnalyticsEnvelope> {
-  return postAnalytics("/api/analytics/runtime", body);
+  return postAnalytics("/api/analytics/runtime", body, init);
 }
 
 export async function postMechanicalCooling(
   body: AnalyticsRequest,
+  init?: { signal?: AbortSignal },
 ): Promise<AnalyticsEnvelope> {
-  return postAnalytics("/api/analytics/mechanical-cooling", body);
+  return postAnalytics("/api/analytics/mechanical-cooling", body, init);
 }
 
 export async function postBasVsWebOat(
   body: AnalyticsRequest,
+  init?: { signal?: AbortSignal },
 ): Promise<AnalyticsEnvelope> {
-  return postAnalytics("/api/analytics/bas-vs-web-oat", body);
+  return postAnalytics("/api/analytics/bas-vs-web-oat", body, init);
 }
 
 export async function postInspect(
@@ -172,8 +177,9 @@ export async function postInspect(
 
 export async function postEconomizer(
   body: AnalyticsRequest,
+  init?: { signal?: AbortSignal },
 ): Promise<AnalyticsEnvelope> {
-  return postAnalytics("/api/analytics/economizer", body);
+  return postAnalytics("/api/analytics/economizer", body, init);
 }
 
 export async function postSchedule(

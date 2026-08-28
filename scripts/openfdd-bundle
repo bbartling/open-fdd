@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Thin CLI wrapper for #763 Phase-1 bundle validator (offline; not in central image).
+#   openfdd-bundle validate path/to/bundle.zip
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec python3 "$ROOT/scripts/openfdd_bundle_validate.py" "$@"

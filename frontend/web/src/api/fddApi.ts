@@ -184,7 +184,7 @@ export async function getFddSeries(
       : "";
     throw new Error(
       missing
-        ? `Rule unavailable — unmapped roles: ${missing}`
+        ? `Rule unavailable — unmapped roles: ${missing}. If package mapping already has these roles, re-ingest the site Parquet (building-scoped historian) and retry.`
         : body.error || "Failed to load FDD series",
     );
   }

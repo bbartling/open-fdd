@@ -1,6 +1,6 @@
 [package]
 name = "openfdd-fieldbus"
-version = "3.3.5"
+version = "3.3.6"
 edition = "2021"
 rust-version = "1.93"
 description = "Open-FDD fieldbus edge — BACnet/Modbus/Haystack poll + local Swagger + MQTTS publish"

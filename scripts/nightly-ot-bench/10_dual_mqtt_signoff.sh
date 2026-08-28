@@ -154,13 +154,30 @@ import json, re, sys
 from datetime import datetime, timezone
 
 def parse_ts(s: str):
-    # Prefer ISO timestamps inside JSON payloads.
-    for m in re.finditer(r'"timestamp(?:_utc)?"\s*:\s*"([^"]+)"', s):
-        raw = m.group(1)
-        try:
-            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except Exception:
-            continue
+    # Prefer ISO timestamps inside JSON payloads (observed_at is MQTT v1 SoT).
+    for key in (
+        r'"observed_at"\s*:\s*"([^"]+)"',
+        r'"timestamp(?:_utc)?"\s*:\s*"([^"]+)"',
+        r'"ts"\s*:\s*"([^"]+)"',
+    ):
+        for m in re.finditer(key, s):
+            raw = m.group(1)
+            try:
+                # Truncate >6 fractional digits (Rust nanos) for fromisoformat.
+                if "." in raw and ("Z" in raw or "+" in raw[10:]):
+                    head, rest = raw.split(".", 1)
+                    frac = ""
+                    tz = ""
+                    for i, ch in enumerate(rest):
+                        if ch.isdigit():
+                            frac += ch
+                        else:
+                            tz = rest[i:]
+                            break
+                    raw = f"{head}.{frac[:6]}{tz}"
+                return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            except Exception:
+                continue
     return None
 
 def analyze(path: str):
