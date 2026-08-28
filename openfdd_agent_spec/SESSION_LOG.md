@@ -1,5 +1,14 @@
 # Session log
 
+## 2026-08-28 — Patch cycle 3.3.6 CLOSED
+
+- Tip `sha-aac593c` / `3.3.6+aac593c19833` on bensbench + bosspi **linux/arm64**.
+- Combined OT/synth **PASS**; cloud-sim **PASS**; dual MQTT 600s **PASS** (after Pi `OPENFDD_MQTT_PUBLISH_INTERVAL_SECS=60`); pcap FP scan **PASS**.
+- UI smoke **PASS**: Actions during analytics (no 401); BUILDING_100 FC1 series 5000 rows; RCx economizer regression green.
+- Closeout re-check: live MQTT peek lab+bldg2 numeric **PASS**; containers healthy; GH tidy (0 open PRs, no stale remotes).
+- BUG_REPORT filled; stack left running on `sha-aac593c`.
+- Artifacts: `reports/patch336_20260828_201214/` + `reports/patch336_live_205929/`.
+
 ## 2026-08-28 — Patch cycle start (3.3.6)
 
 - BUG_REPORT blanked for patch cycle starting **3.3.6**.
