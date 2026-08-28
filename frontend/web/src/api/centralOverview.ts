@@ -694,18 +694,20 @@ export async function fetchCentralOverview(opts: {
   econ_overlay_equipment_id?: string | null;
   oat_err?: number;
   dt_min_f?: number;
+  signal?: AbortSignal;
 }): Promise<OverviewVibe19Response> {
   const t0 = performance.now();
   const building_id = opts.building_id;
   const oatErr = opts.oat_err ?? 5;
   const dtMin = opts.dt_min_f ?? 10;
   const body = { building_id, max_points: 4000, dt_min_f: dtMin };
+  const signal = opts.signal;
 
   const [runtime, mech, econ, bas, mapping] = await Promise.all([
-    postRuntime(body),
-    postMechanicalCooling(body),
-    postEconomizer(body),
-    postBasVsWebOat(body),
+    postRuntime(body, { signal }),
+    postMechanicalCooling(body, { signal }),
+    postEconomizer(body, { signal }),
+    postBasVsWebOat(body, { signal }),
     building_id
       ? getPackageMapping(building_id).catch(() => null)
       : Promise.resolve(null),

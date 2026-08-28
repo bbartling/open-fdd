@@ -174,6 +174,7 @@ export function OverviewPopulated({
   const overviewLoadStarted = useRef<number | null>(null);
   const hasOverview = useRef(false);
   const lastBuildingId = useRef(buildingId);
+  const overviewAbort = useRef<AbortController | null>(null);
 
   const sortedEquipment = useMemo(
     () =>
@@ -241,13 +242,18 @@ export function OverviewPopulated({
 
   const refreshOverview = useCallback(async () => {
     if (!buildingId) return;
+    overviewAbort.current?.abort();
+    const ac = new AbortController();
+    overviewAbort.current = ac;
     setLoadingOverview(true);
     setOverviewErr(null);
     try {
       const body = await fetchCentralOverview({
         building_id: buildingId,
         equipment,
+        signal: ac.signal,
       });
+      if (ac.signal.aborted) return;
       if (!body.ok) {
         throw new Error(body.error || "Central analytics failed");
       }
@@ -255,16 +261,26 @@ export function OverviewPopulated({
       setVavHealthToken((n) => n + 1);
       hasOverview.current = true;
       const results = await getFddResults(buildingId).catch(() => null);
+      if (ac.signal.aborted) return;
       if (results) setLastRuleResultCount(results.length);
     } catch (err) {
+      if (ac.signal.aborted) return;
       setOverviewErr(formatErr(err));
       if (!hasOverview.current) {
         setOverview(null);
       }
     } finally {
-      setLoadingOverview(false);
+      if (!ac.signal.aborted) {
+        setLoadingOverview(false);
+      }
     }
   }, [buildingId, equipment]);
+
+  useEffect(() => {
+    return () => {
+      overviewAbort.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     void refreshMeta();

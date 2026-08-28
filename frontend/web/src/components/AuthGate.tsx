@@ -23,6 +23,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    setState("loading");
     void (async () => {
       try {
         const status = await getAuthStatus();
