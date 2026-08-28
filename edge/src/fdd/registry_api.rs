@@ -641,7 +641,7 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                         &reg,
                         rule,
                         equipment_id,
-                        &root,
+                        &history_root,
                         &history_columns,
                         session_bag.as_ref(),
                     )
