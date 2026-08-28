@@ -523,30 +523,28 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
     // nested `history/` (MQTT canonical) and can hide package sidecars such as
     // `building=BUILDING_100/equipment=AHU_1` — FDD Plots then report every
     // required role as missing even when the site parquet has them.
-    let (history_root, weather_root): (PathBuf, PathBuf) = match building_id
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        Some(bid) => {
-            let scoped = pq.join(format!("building={bid}"));
-            if !scoped.is_dir() {
-                return json!({
-                    "ok": false,
-                    "error": format!(
-                        "no parquet for building_id={bid} under {} — ingest that package first",
-                        pq.display()
-                    ),
-                    "missing_roles": rule.required_roles,
-                    "equipment_id": equipment_id,
-                    "rule_id": rule.rule_id,
-                    "building_id": bid,
-                    "rows": [],
-                });
+    let (history_root, weather_root): (PathBuf, PathBuf) =
+        match building_id.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(bid) => {
+                let scoped = pq.join(format!("building={bid}"));
+                if !scoped.is_dir() {
+                    return json!({
+                        "ok": false,
+                        "error": format!(
+                            "no parquet for building_id={bid} under {} — ingest that package first",
+                            pq.display()
+                        ),
+                        "missing_roles": rule.required_roles,
+                        "equipment_id": equipment_id,
+                        "rule_id": rule.rule_id,
+                        "building_id": bid,
+                        "rows": [],
+                    });
+                }
+                (scoped, pq.clone())
             }
-            (scoped, pq.clone())
-        }
-        None => (pq.clone(), pq.clone()),
-    };
+            None => (pq.clone(), pq.clone()),
+        };
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
