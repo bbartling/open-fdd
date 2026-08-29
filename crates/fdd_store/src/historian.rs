@@ -396,7 +396,10 @@ mod tests {
     fn local_file_root_prefers_storage_url_over_parquet_root() {
         let prev_storage = env::var("OPENFDD_STORAGE_URL").ok();
         let prev_parquet = env::var("OPENFDD_PARQUET_ROOT").ok();
-        env::set_var("OPENFDD_STORAGE_URL", "file:///tmp/openfdd-storage-url-root");
+        env::set_var(
+            "OPENFDD_STORAGE_URL",
+            "file:///tmp/openfdd-storage-url-root",
+        );
         env::set_var("OPENFDD_PARQUET_ROOT", "/tmp/openfdd-legacy-parquet-root");
         assert_eq!(
             local_file_root_from_env(),
