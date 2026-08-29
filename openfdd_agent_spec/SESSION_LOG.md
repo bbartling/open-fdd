@@ -1,5 +1,15 @@
 # Session log
 
+## 2026-08-29 — Patch cycle 3.3.8 CLOSED
+
+- Tip `sha-9667888` / `3.3.8+96678888d875` on bensbench + bosspi **linux/arm64**.
+- Product: `OPENFDD_STORAGE_URL` for package-ingest/analytics roots; bench `field_devices` auto-restore; Railway web nginx IPv6 resolver bracket (#797).
+- Combined OT/synth **PASS**; cloud-sim **PASS**; dual MQTT 600s **PASS** (lab=bldg2=10 numeric, span≈540s); pcap FP scan **PASS**.
+- UI smoke **PASS**: Actions during analytics; RCx economizer/runtime/mech-cool/bas-vs-web-oat; FDD series FC1 (5000 overlay hits); SPA routes.
+- GH tidy: 0 open PRs, no stale `feat|fix` remotes; Publish GHCR **success**. Stack left running on `sha-9667888`.
+- Railway: tip image ships resolver fix — operator re-pin hub to `sha-9667888` + `OPENFDD_NGINX_RESOLVER=auto` (CLI token not on host this cycle).
+- Artifacts: `reports/patch338_20260829T152852Z/`.
+
 ## 2026-08-29 — Patch cycle start (3.3.8)
 
 - BUG_REPORT blanked for patch cycle starting **3.3.8**.
