@@ -1,5 +1,14 @@
 # Session log
 
+## 2026-08-29 — Patch cycle 3.3.7 CLOSED
+
+- Tip `sha-3395551` / `3.3.7+33955515540e` on bensbench + bosspi **linux/arm64**.
+- Product: bake `OPENFDD_MQTT_PUBLISH_INTERVAL_SECS=60` into `07_cloud_sim` Pi override (#795) — closes gate10-pi-mqtt-interval.
+- Combined OT/synth **PASS**; cloud-sim **PASS** (`mqtt_publish_interval=60`); dual MQTT 600s **PASS** (lab=bldg2=10 numeric, span≈540s, no hand-edit); pcap FP scan **PASS**.
+- UI smoke **PASS**: Actions during analytics (no 401); RCx economizer green; FC1 series API ok.
+- GH tidy: 0 open PRs, no stale `feat|fix` remotes. Stack left running on `sha-3395551`.
+- Artifacts: `reports/patch337_20260829_020507/`.
+
 ## 2026-08-28 — Patch cycle start (3.3.7)
 
 - BUG_REPORT blanked for patch cycle starting **3.3.7**.
