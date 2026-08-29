@@ -73,6 +73,99 @@ If package visibility must remain private, Railway supports GHCR registry creden
 
 See [GHCR images](ghcr-images.md) for the image/tag contract.
 
+## Railway CLI (bensbench / agent hosts)
+
+Verified on bensbench (**2026-08-29**): **`@railway/cli` 5.45.7** (`npm i -g @railway/cli`).  
+**Auth:** `railway login` (browser) works. Optional agent token: `~/.config/railway/bensbench.env` (`RAILWAY_TOKEN`).  
+**Link:** `~/open-fdd` → project **`gleaming-cooperation`** / env **`production`**.  
+Agent skill: [`openfdd-railway-cli`](../../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md). Checklist: [RAILWAY_DEPLOYMENT_CHECKLIST.md](RAILWAY_DEPLOYMENT_CHECKLIST.md) § *CLI*.
+
+This is **deploy ops**, not Open-FDD MCP. FDD agents use [`mcp/`](../../mcp/) + JWT to private central — see [mcp/INSTRUCTIONS.md](../../mcp/INSTRUCTIONS.md).
+
+### Live service names (gleaming-cooperation)
+
+| Role | Railway service name | Private DNS / notes |
+| --- | --- | --- |
+| central | `openfdd-central-cQ-F` | `openfdd-central-cQ-F.railway.internal:8080` |
+| mqtt | `openfdd-mqtt` | Private MQTTS |
+| web | `openfdd-web` | Public; `OPENFDD_CENTRAL_UPSTREAM=openfdd-central-cQ-F.railway.internal:8080` |
+
+Always confirm with `railway status` before scripting — the central name is **not** always `openfdd-central`.
+
+### Install
+
+```bash
+npm i -g @railway/cli
+railway --version   # expect 5.x
+```
+
+Optional (Railway’s own Cursor skills + MCP — **not** a substitute for Open-FDD agent law or `openfdd-mcp`):
+
+```bash
+railway setup agent -y
+```
+
+### Auth
+
+**Verified path (human):**
+
+```bash
+railway login
+railway whoami
+cd ~/open-fdd && railway link   # gleaming-cooperation / production
+railway status
+```
+
+**Agent / non-interactive:** create a Railway token → `~/.config/railway/bensbench.env` with `RAILWAY_TOKEN=…` (never commit). Example stub: `~/.config/railway/bensbench.env.example`.
+
+```bash
+set -a && source ~/.config/railway/bensbench.env && set +a
+railway whoami
+```
+
+### Re-pin tip images after a GHCR soak (operator)
+
+After a patch-cycle tip is published (e.g. `sha-9667888`), re-pin **central → mqtt → web**. Prefer immutable `:sha-<7>`.
+
+```bash
+cd ~/open-fdd
+SHA=sha-9667888
+CENTRAL_SVC=openfdd-central-cQ-F   # from railway status
+
+railway service source connect --service "$CENTRAL_SVC" \
+  --image "ghcr.io/bbartling/openfdd-central:${SHA}"
+# wait until private central /api/health is 200
+
+railway service source connect --service openfdd-mqtt \
+  --image "ghcr.io/bbartling/openfdd-mqtt:${SHA}"
+
+railway variable set OPENFDD_NGINX_RESOLVER=auto --service openfdd-web
+railway service source connect --service openfdd-web \
+  --image "ghcr.io/bbartling/openfdd-web:${SHA}"
+```
+
+If only env changed and the image source is already correct, `railway redeploy -s <service> -y` is enough. Confirm public SPA + `/api/health` after web comes up.
+
+**Known failure without tip web:** older images crash with `invalid port in resolver "fd12::10"` — fixed in tip `openfdd-web` entrypoint; re-pin + `OPENFDD_NGINX_RESOLVER=auto`.
+
+**Known failure (fixed in 3.3.9+):** variable `proxy_pass http://$openfdd_central/api/;` doubles the path to `/api/api/…` → empty **404**. Tip web uses `proxy_pass http://$openfdd_central;` (no URI suffix).
+
+### Continuous patch train (bosspi → Railway)
+
+Cloud soak gate is **not** bench dual-MQTT. Keep tiny platform revs until:
+
+1. Public web `/api/health` **200** (L1)
+2. `openfdd-mqtt` **Online** with certs volume + central ingest (L3)
+3. **bosspi** tip fieldbus publishes MQTTS into Railway; `has_telemetry` + ingest moving (L4 + stream health)
+4. Hub containers stay Online without recurring crash/log errors
+5. Then FDD smoke on that site (L5)
+
+Each bump: squash-merge → delete branch → **0 open PRs** → tip Actions green → GHCR Publish → re-pin Railway + Pi → update [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md) (CLOSE validated rows; keep unfinished deferred). Ops-only (volume/certs/TCP proxy) still counts as a loop iteration.
+
+**Primary topology:** `bosspi openfdd-fieldbus` → Railway mqtt `:8883` (TCP proxy / VPN) → central → public web. Bensbench = Railway CLI / cert staging only.
+
+Do not deploy fieldbus on Railway.
+
 ## Create the Railway services
 
 1. Create a Railway project.
@@ -251,3 +344,7 @@ Expected on generic cloud networks — run fieldbus on the OT LAN and use cloud 
 Draft notes live under [`railway/`](../../railway/README.md). A verified Railway Template should create **central → mqtt → web**, generate secrets, attach `/workspace`, set `OPENFDD_CENTRAL_UPSTREAM`, keep central/mqtt private, and document first login. Do not add a README “Deploy on Railway” button until that template is published and tested.
 
 Railway currently lacks a first-class `dependsOn` / deploy-after field for private DNS peers — document sequencing in checklists until the platform supports it.
+
+## CLI (operator / agent)
+
+See § [Railway CLI](#railway-cli-bensbench--agent-hosts) above and skill [`openfdd-railway-cli`](../../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md). Bensbench: CLI **5.45.7**, `railway login` verified, project **`gleaming-cooperation`** / **`production`**.

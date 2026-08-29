@@ -39,6 +39,12 @@ central service uses that name). Tip images resolve upstream DNS lazily
 is not ready at process start. Deploy **central healthy first**, then mqtt (for
 cloud MQTTS hubs), then web. Live OT hubs should include `openfdd-mqtt` by
 default — MQTTS is the cloud transport; fieldbus stays on-prem.
+**CLI re-pin** (bensbench): [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md)
+— `railway login` verified; project `gleaming-cooperation` / `production`; use live
+names (`openfdd-central-cQ-F`, …) with
+`railway service source connect --image ghcr.io/bbartling/<img>:sha-<7>` in
+central→mqtt→web order. Optional token file: `~/.config/railway/bensbench.env`.
+Railway CLI ≠ `openfdd-mcp` FDD tools.
 Set `OPENFDD_AGENT_PASSWORD` on central for FDD AI / MCP (username `agent` →
 operator JWT); do not put `OPENFDD_ADMIN_PASSWORD` into Cursor MCP config.
 Admins may `POST /api/auth/agent-token` for short-lived operator JWTs.

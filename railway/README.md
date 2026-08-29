@@ -23,3 +23,11 @@ Pin `:sha-<7>` for qualification; offer `:nightly` as the floating channel after
 ## Platform gap
 
 Railway does not currently expose a portable `dependsOn` for private-DNS peers. Templates and docs must still instruct: central healthy → mqtt → web.
+
+## CLI
+
+Operator hub ops use `@railway/cli` on bensbench — verified **`railway login`** + link to **`gleaming-cooperation`** / **`production`** (2026-08-29).
+
+Docs: [RAILWAY_DEPLOYMENT.md](../docs/operations/RAILWAY_DEPLOYMENT.md#railway-cli-bensbench--agent-hosts) · skill [`openfdd-railway-cli`](../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md).
+
+Live service names: `openfdd-central-cQ-F`, `openfdd-mqtt`, `openfdd-web` (confirm with `railway status` before re-pin).
