@@ -18,6 +18,11 @@ if [[ -f .env ]]; then
   set +a
 fi
 
+# Restore bench OT field_devices if tip left the committed example.
+# shellcheck source=scripts/nightly-ot-bench/lib.sh
+source "$ROOT/scripts/nightly-ot-bench/lib.sh"
+ensure_bench_field_devices
+
 FIELDBUS_BASE="${FIELDBUS_BASE:-http://127.0.0.1:8081}"
 FB_KEY="${OPENFDD_FIELDBUS_API_KEY:-bench-demo-key-1234567890}"
 

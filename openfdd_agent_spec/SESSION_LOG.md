@@ -1,5 +1,10 @@
 # Session log
 
+## 2026-08-29 — Patch cycle start (3.3.8)
+
+- BUG_REPORT blanked for patch cycle starting **3.3.8**.
+- Scope: honor `OPENFDD_STORAGE_URL` in package-ingest + analytics `parquet_root` (coderabbit-storage); auto-restore bench `field_devices.toml` for OT soak hygiene; fix Railway `openfdd-web` nginx resolver IPv6 (`auto` → bracket `fd12::10`).
+
 ## 2026-08-29 — Patch cycle 3.3.7 CLOSED
 
 - Tip `sha-3395551` / `3.3.7+33955515540e` on bensbench + bosspi **linux/arm64**.

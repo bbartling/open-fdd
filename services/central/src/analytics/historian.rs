@@ -59,8 +59,8 @@ const NUMERIC_ROLE_COLS: &[&str] = &[
 
 /// Resolve Parquet historian root — same env fallbacks as edge FDD registry.
 pub fn parquet_root() -> PathBuf {
-    if let Ok(p) = std::env::var("OPENFDD_PARQUET_ROOT") {
-        return PathBuf::from(p);
+    if let Some(p) = fdd_store::local_file_root_from_env() {
+        return p;
     }
     if let Ok(ws) = std::env::var("OPENFDD_WORKSPACE") {
         let under_ws = PathBuf::from(&ws).join(".cache/parquet");
@@ -3796,8 +3796,27 @@ mod tests {
     fn parquet_root_respects_env() {
         let _guard = ENV_LOCK.blocking_lock();
         let tmp = tempfile::TempDir::new().unwrap();
+        let prev_storage = std::env::var("OPENFDD_STORAGE_URL").ok();
+        let prev_parquet = std::env::var("OPENFDD_PARQUET_ROOT").ok();
+        std::env::remove_var("OPENFDD_STORAGE_URL");
         std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.path());
         assert_eq!(parquet_root(), tmp.path());
-        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        let storage = tmp.path().join("via-storage-url");
+        std::fs::create_dir_all(&storage).unwrap();
+        std::env::set_var(
+            "OPENFDD_STORAGE_URL",
+            format!("file://{}", storage.display()),
+        );
+        assert_eq!(parquet_root(), storage);
+        if let Some(v) = prev_storage {
+            std::env::set_var("OPENFDD_STORAGE_URL", v);
+        } else {
+            std::env::remove_var("OPENFDD_STORAGE_URL");
+        }
+        if let Some(v) = prev_parquet {
+            std::env::set_var("OPENFDD_PARQUET_ROOT", v);
+        } else {
+            std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        }
     }
 }

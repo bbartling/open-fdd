@@ -157,7 +157,7 @@ OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080
 OPENFDD_NGINX_RESOLVER=auto
 ```
 
-Do not include `http://` in `OPENFDD_CENTRAL_UPSTREAM`. `OPENFDD_NGINX_RESOLVER=auto` (image default) picks the first nameserver from `/etc/resolv.conf`; override with an explicit IP if needed.
+Do not include `http://` in `OPENFDD_CENTRAL_UPSTREAM`. `OPENFDD_NGINX_RESOLVER=auto` (image default) prefers an IPv4 nameserver from `/etc/resolv.conf`, then brackets IPv6 (`[fd12::10]`) so nginx does not treat `::` as a port. Override with an explicit IP if needed.
 
 ## Health and verification
 

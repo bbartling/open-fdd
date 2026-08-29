@@ -385,8 +385,8 @@ fn write_columns_csv(
 }
 
 fn parquet_out_dir() -> PathBuf {
-    if let Ok(p) = std::env::var("OPENFDD_PARQUET_ROOT") {
-        return PathBuf::from(p);
+    if let Some(p) = fdd_store::local_file_root_from_env() {
+        return p;
     }
     workspace_dir().join(".cache/parquet")
 }
@@ -1582,6 +1582,7 @@ mod tests {
         // Re-assert env immediately before each call that reads workspace_dir(),
         // because other tests still mutate OPENFDD_WORKSPACE without the lock.
         let set_ws = |tmp: &std::path::Path| {
+            std::env::remove_var("OPENFDD_STORAGE_URL");
             std::env::set_var("OPENFDD_WORKSPACE", tmp);
             std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.join(".cache/parquet"));
         };
@@ -1717,6 +1718,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         std::env::set_var("OPENFDD_WORKSPACE", &tmp);
+        std::env::remove_var("OPENFDD_STORAGE_URL");
         std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.join(".cache/parquet"));
 
         let map = r#"{"equipType":"ahu","points":{"fan-cmd":"SF_SPD","duct-static-pressure":"DA_P","duct-static-pressure-sp":"DA_P_SP"}}"#;
