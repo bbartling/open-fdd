@@ -1,13 +1,39 @@
 # Sourced by nginx docker-entrypoint before envsubst (*.envsh).
-# Prefer explicit OPENFDD_NGINX_RESOLVER; otherwise first nameserver from
+# Prefer explicit OPENFDD_NGINX_RESOLVER; otherwise nameserver from
 # /etc/resolv.conf (Railway/Docker private DNS); fallback Docker embedded DNS.
+#
+# Railway often lists an IPv6 nameserver first (e.g. fd12::10). nginx's
+# `resolver` directive requires bracketed IPv6 (`[fd12::10]`) — bare
+# `fd12::10` is parsed as host `fd12` + invalid port `::10` and the
+# process exits with: invalid port in resolver "fd12::10".
+# Prefer IPv4 when present; otherwise bracket IPv6.
+
+_openfdd_bracket_resolver() {
+  # Already bracketed or IPv4 / hostname → leave as-is.
+  case "$1" in
+    \[*\]) printf '%s' "$1" ;;
+    *:*) printf '[%s]' "$1" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
 if [ -z "${OPENFDD_NGINX_RESOLVER:-}" ] || [ "${OPENFDD_NGINX_RESOLVER}" = "auto" ]; then
-  _ns="$(awk '/^nameserver[[:space:]]+/ { print $2; exit }' /etc/resolv.conf 2>/dev/null || true)"
+  _ns=""
+  # Prefer first IPv4 nameserver (matches nginx.conf ipv6=off bias).
+  _ns="$(awk '/^nameserver[[:space:]]+/ && $2 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ { print $2; exit }' /etc/resolv.conf 2>/dev/null || true)"
+  if [ -z "${_ns}" ]; then
+    _ns="$(awk '/^nameserver[[:space:]]+/ { print $2; exit }' /etc/resolv.conf 2>/dev/null || true)"
+  fi
   if [ -n "${_ns}" ]; then
-    OPENFDD_NGINX_RESOLVER="${_ns}"
+    OPENFDD_NGINX_RESOLVER="$(_openfdd_bracket_resolver "${_ns}")"
   else
     OPENFDD_NGINX_RESOLVER="127.0.0.11"
   fi
   export OPENFDD_NGINX_RESOLVER
+elif printf '%s' "${OPENFDD_NGINX_RESOLVER}" | grep -q ':'; then
+  # Explicit IPv6 override without brackets.
+  OPENFDD_NGINX_RESOLVER="$(_openfdd_bracket_resolver "${OPENFDD_NGINX_RESOLVER}")"
+  export OPENFDD_NGINX_RESOLVER
 fi
 unset _ns
+unset -f _openfdd_bracket_resolver 2>/dev/null || true

@@ -458,9 +458,7 @@ pub fn delete_dataset(dataset_id: &str) -> Result<(), String> {
         let _ = fs::remove_dir_all(&csv_buildings);
     }
     let parquet_roots = [
-        std::env::var("OPENFDD_PARQUET_ROOT")
-            .ok()
-            .map(PathBuf::from),
+        fdd_store::local_file_root_from_env(),
         Some(ws.join(".cache/parquet")),
         Some(PathBuf::from(".cache/parquet")),
     ];
@@ -607,6 +605,8 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let prev_ws = std::env::var("OPENFDD_WORKSPACE").ok();
         let prev_pq = std::env::var("OPENFDD_PARQUET_ROOT").ok();
+        let prev_storage = std::env::var("OPENFDD_STORAGE_URL").ok();
+        std::env::remove_var("OPENFDD_STORAGE_URL");
         std::env::set_var("OPENFDD_WORKSPACE", tmp.path());
         let pq = tmp.path().join(".cache/parquet");
         std::env::set_var("OPENFDD_PARQUET_ROOT", &pq);
@@ -629,6 +629,11 @@ mod tests {
             std::env::set_var("OPENFDD_PARQUET_ROOT", p);
         } else {
             std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        }
+        if let Some(s) = prev_storage {
+            std::env::set_var("OPENFDD_STORAGE_URL", s);
+        } else {
+            std::env::remove_var("OPENFDD_STORAGE_URL");
         }
     }
 }

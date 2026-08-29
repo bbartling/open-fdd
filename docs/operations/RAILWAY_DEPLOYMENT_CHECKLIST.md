@@ -117,7 +117,7 @@ Cloud MQTTS is the hub: on-prem fieldbus publishes into Railway MQTTS; Central i
 
 - [ ] Image `ghcr.io/bbartling/openfdd-web:sha-<7>` (prefer over sticky `:nightly`)
 - [ ] `OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080` (no `http://`)
-- [ ] Optional: `OPENFDD_NGINX_RESOLVER=auto` (default) or pin a nameserver from `/etc/resolv.conf`
+- [ ] Optional: `OPENFDD_NGINX_RESOLVER=auto` (default — prefers IPv4, brackets IPv6). If an older web image crashes with `invalid port in resolver "fd12::10"`, set `OPENFDD_NGINX_RESOLVER=[fd12::10]` until tip web includes the entrypoint fix.
 - [ ] Public domain on **web only**
 - [ ] Healthcheck path `/` (SPA); also verify `/api/health` via the web proxy after boot
 - [ ] If older images fail with `host not found in upstream`: ensure central is healthy, then redeploy tip web (lazy DNS)

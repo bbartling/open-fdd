@@ -1,4 +1,5 @@
-//! After CSV execute, materialize a building package and ingest to OPENFDD_PARQUET_ROOT
+//! After CSV execute, materialize a building package and ingest under
+//! `OPENFDD_STORAGE_URL` (file:// / plain path) or legacy `OPENFDD_PARQUET_ROOT`
 //! so `/api/fdd/run` registry mode can run immediately on uploaded data.
 
 use crate::csv_ingest::plan::OutputRow;
@@ -9,8 +10,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 fn parquet_out_dir() -> PathBuf {
-    if let Ok(p) = std::env::var("OPENFDD_PARQUET_ROOT") {
-        return PathBuf::from(p);
+    if let Some(p) = fdd_store::local_file_root_from_env() {
+        return p;
     }
     let candidates = [
         PathBuf::from(".cache/parquet"),
@@ -186,6 +187,7 @@ mod tests {
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
         std::env::set_var("OPENFDD_WORKSPACE", &tmp);
+        std::env::remove_var("OPENFDD_STORAGE_URL");
         std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.join(".cache/parquet"));
 
         let mut values = BTreeMap::new();
@@ -234,5 +236,42 @@ mod tests {
             })
             .collect();
         assert_eq!(infer_grid_minutes(&rows), Some(1));
+    }
+
+    #[test]
+    fn ingest_rows_honors_storage_url() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!("openfdd_pq_storage_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        let storage = tmp.join("openfdd");
+        fs::create_dir_all(&storage).unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", &tmp);
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        std::env::set_var(
+            "OPENFDD_STORAGE_URL",
+            format!("file://{}", storage.display()),
+        );
+
+        let mut values = BTreeMap::new();
+        values.insert("fan_cmd".into(), "1.0".into());
+        let rows = vec![OutputRow {
+            ts_utc: Some(chrono::Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap()),
+            ts_local: String::new(),
+            timezone: "UTC".into(),
+            source_timestamp_raw: String::new(),
+            source_timestamp_parse_status: "ok".into(),
+            source_timestamp_fold: None,
+            source_file: "t.csv".into(),
+            source_row_number: 1,
+            values,
+            fill_created: false,
+        }];
+        let out = ingest_rows_to_parquet("storage_job", &rows);
+        assert_eq!(out.get("ok"), Some(&json!(true)), "{out}");
+        let pq = storage.join("building=storage_job/equipment=storage_job/history.parquet");
+        assert!(pq.is_file(), "missing {}", pq.display());
+        std::env::remove_var("OPENFDD_STORAGE_URL");
+        let _ = fs::remove_dir_all(&tmp);
     }
 }

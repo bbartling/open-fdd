@@ -36,6 +36,30 @@ load_bench_env() {
   # shellcheck source=scripts/openfdd_stack_lib.sh
   source "$ROOT/scripts/openfdd_stack_lib.sh"
   openfdd_stack_export_image_env
+  ensure_bench_field_devices
+}
+
+# Restore OT bench field_devices.toml when tip checkout left the committed example
+# (no enabled device 5007). Prefer gitignored .local overlay, else bench example.
+ensure_bench_field_devices() {
+  local dest="$ROOT/config/fieldbus/field_devices.toml"
+  local localf="$ROOT/config/fieldbus/field_devices.toml.local"
+  local example="$NIGHTLY_OT_BENCH_DIR/field_devices.bench.example.toml"
+  if [[ -f "$dest" ]] && grep -qE 'BENS-BENCHTEST-BOX|BensFakeAhu' "$dest" 2>/dev/null \
+    && grep -qE 'device_instance[[:space:]]*=[[:space:]]*5007' "$dest" 2>/dev/null; then
+    return 0
+  fi
+  local src=""
+  if [[ -f "$localf" ]]; then
+    src="$localf"
+  elif [[ -f "$example" ]]; then
+    src="$example"
+  else
+    echo "${DIM:-}ensure_bench_field_devices: no overlay/example — leave $dest${RST:-}" >&2
+    return 0
+  fi
+  cp "$src" "$dest"
+  echo "${DIM:-}ensure_bench_field_devices: restored $dest from $(basename "$src")${RST:-}" >&2
 }
 
 AUTH_HDR=()

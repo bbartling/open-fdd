@@ -104,6 +104,27 @@ pub struct HistorianConfig {
     pub legacy_parquet_root: Option<PathBuf>,
 }
 
+/// Local filesystem root for package-ingest / analytics PathBuf helpers.
+///
+/// Precedence matches live historian config for local paths:
+/// 1. `OPENFDD_STORAGE_URL` when it is `file://…` or a plain path
+/// 2. legacy `OPENFDD_PARQUET_ROOT`
+///
+/// Returns `None` when unset, when `OPENFDD_STORAGE_URL` is `s3://…` (callers
+/// keep PathBuf-only fallbacks), or when the storage URL cannot be parsed.
+pub fn local_file_root_from_env() -> Option<PathBuf> {
+    if let Ok(raw) = env::var("OPENFDD_STORAGE_URL") {
+        match StorageUrl::parse(&raw) {
+            Ok(StorageUrl::File { root }) => return Some(root),
+            Ok(StorageUrl::S3 { .. }) | Err(_) => {}
+        }
+    }
+    env::var("OPENFDD_PARQUET_ROOT")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .map(PathBuf::from)
+}
+
 impl HistorianConfig {
     pub fn from_env() -> Result<Self> {
         let (storage_url, legacy_parquet_root) = if let Ok(raw) = env::var("OPENFDD_STORAGE_URL") {
@@ -369,6 +390,36 @@ mod tests {
         );
         assert!(StorageUrl::parse("https://example.invalid").is_err());
         assert!(StorageUrl::parse("s3://").is_err());
+    }
+
+    #[test]
+    fn local_file_root_prefers_storage_url_over_parquet_root() {
+        let prev_storage = env::var("OPENFDD_STORAGE_URL").ok();
+        let prev_parquet = env::var("OPENFDD_PARQUET_ROOT").ok();
+        env::set_var("OPENFDD_STORAGE_URL", "file:///tmp/openfdd-storage-url-root");
+        env::set_var("OPENFDD_PARQUET_ROOT", "/tmp/openfdd-legacy-parquet-root");
+        assert_eq!(
+            local_file_root_from_env(),
+            Some(PathBuf::from("/tmp/openfdd-storage-url-root"))
+        );
+        env::set_var("OPENFDD_STORAGE_URL", "s3://bucket/prefix");
+        assert_eq!(
+            local_file_root_from_env(),
+            Some(PathBuf::from("/tmp/openfdd-legacy-parquet-root"))
+        );
+        env::remove_var("OPENFDD_STORAGE_URL");
+        assert_eq!(
+            local_file_root_from_env(),
+            Some(PathBuf::from("/tmp/openfdd-legacy-parquet-root"))
+        );
+        env::remove_var("OPENFDD_PARQUET_ROOT");
+        assert_eq!(local_file_root_from_env(), None);
+        if let Some(v) = prev_storage {
+            env::set_var("OPENFDD_STORAGE_URL", v);
+        }
+        if let Some(v) = prev_parquet {
+            env::set_var("OPENFDD_PARQUET_ROOT", v);
+        }
     }
 
     #[test]
