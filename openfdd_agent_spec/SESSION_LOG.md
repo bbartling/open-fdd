@@ -1,5 +1,10 @@
 # Session log
 
+## 2026-08-28 — Patch cycle start (3.3.7)
+
+- BUG_REPORT blanked for patch cycle starting **3.3.7**.
+- Scope: bake `OPENFDD_MQTT_PUBLISH_INTERVAL_SECS=60` into `07_cloud_sim` Pi edge override (gate10-pi-mqtt-interval).
+
 ## 2026-08-28 — Patch cycle 3.3.6 CLOSED
 
 - Tip `sha-aac593c` / `3.3.6+aac593c19833` on bensbench + bosspi **linux/arm64**.
