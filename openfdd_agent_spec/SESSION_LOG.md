@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-08-29 — Patch 3.3.10 (mqtt ACL on certs volume)
+
+- Railway mqtt crash-looped: ephemeral `/mosquitto/config/acl` lost on restart.
+- Move `acl_file` to `/mosquitto/certs/acl` (durable volume). Continue bosspi→Railway train.
+
+
 ## 2026-08-29 — Patch cycle 3.3.9 START (bosspi → Railway train)
 
 - Continuous tiny-rev train until bosspi MQTTS → Railway hub stream healthy (plan `patch_cycle_3.3.9_railway_web_api`).
