@@ -232,11 +232,13 @@ fi
 # Pin platform explicitly so compose does not reuse a stale local amd64 layer.
 pi "cat > $PI_REPO/docker/compose.edge.local.yml <<EOF
 # Cloud-sim bench override — hosted BACnet instance via env (#532). Do not commit.
+# OPENFDD_MQTT_PUBLISH_INTERVAL_SECS=60 matches bench soak density for gate 10 parity.
 services:
   fieldbus:
     platform: ${PI_PLATFORM}
     environment:
       OPENFDD_BACNET_DEVICE_INSTANCE: \"${DEV2}\"
+      OPENFDD_MQTT_PUBLISH_INTERVAL_SECS: \"60\"
     # Bench mitigation for the per-operation UDP socket leak (BACnetClient::stop());
     # keeps the long-term soak alive until the product fix ships.
     ulimits:
@@ -244,7 +246,7 @@ services:
         soft: 65536
         hard: 65536
 EOF
-echo wrote-override platform=${PI_PLATFORM}"
+echo wrote-override platform=${PI_PLATFORM} mqtt_publish_interval=60"
 
 # field_devices: Pi polls the BIP bench sims as its "building devices" PLUS the bench
 # hosted server 599999 — the cross-device weather read for gate 08 (600000's edge
