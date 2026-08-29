@@ -82,6 +82,7 @@ retest. Do not confuse those with this engineering OS.
 36. **Metric CSVs:** store as-uploaded; convert temperature roles C→F at run-rules/historian query. Do not duplicate 59 SQL files. Sliders display user units.
 37. **Package append:** `POST /api/csv/import/package/append` is the IoT hourly path (JWT + confirm). **AFDD routine sim:** `scripts/csv_flood_afdd_routine_sim.py` + `scripts/fixtures/b50_afdd_routine.json` on `raw_BUILDING_50_openfdd.zip` (append → session-config patch → `/api/fdd/run`). Doc: [`docs/agent/CSV_FLOOD_AFDD_ROUTINE.md`](../docs/agent/CSV_FLOOD_AFDD_ROUTINE.md). Vendor pullers stay out-of-repo.
 38. **E+ dump / clustering:** prefer `reports/eplus-dump/` (`EPLUS_DUMP_ROOT`); `scripts/eplus_dump_clustering_export.py` emits sklearn-ready features. Online: `scripts/agent_eplus_dump.sh`. Rust API routes still `/wattlab/dumps` until rename. Doc: [`docs/agent/EPLUS_DUMP_CLUSTERING.md`](../docs/agent/EPLUS_DUMP_CLUSTERING.md).
+39. **Railway hub CLI (bensbench):** `@railway/cli` via `npm i -g`; auth via `railway login` (verified) or optional `RAILWAY_TOKEN` in `~/.config/railway/bensbench.env`. Linked project **`gleaming-cooperation`** / **`production`**. Re-pin with **live** service names (`openfdd-central-cQ-F`, `openfdd-mqtt`, `openfdd-web`) per [`skills/openfdd-railway-cli/SKILL.md`](skills/openfdd-railway-cli/SKILL.md). Railway CLI ≠ [`mcp/`](../mcp/) FDD tools. Never commit tokens; never treat Railway AI as the FDD agent.
 
 ---
 
@@ -122,6 +123,7 @@ Nested instructions may specialize but never contradict a higher authority.
 | [`openfdd-pypi-oracle`](skills/openfdd-pypi-oracle/SKILL.md) | PyPI pandas oracle packaging |
 | [`openfdd-cookbook-parity`](skills/openfdd-cookbook-parity/SKILL.md) | Dual cookbook honesty |
 | [`openfdd-stack-ghcr`](skills/openfdd-stack-ghcr/SKILL.md) | GHCR pull / recreate |
+| [`openfdd-railway-cli`](skills/openfdd-railway-cli/SKILL.md) | Railway CLI auth / tip re-pin |
 | [`openfdd-ecm-engineering`](skills/openfdd-ecm-engineering/SKILL.md) | ECM math library |
 | [`openfdd-milestone-a-pr`](skills/openfdd-milestone-a-pr/SKILL.md) | Milestone A PR loop |
 

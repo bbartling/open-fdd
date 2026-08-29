@@ -1,10 +1,11 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
 **Date:** 2026-08-29  
-**Platform:** `3.3.8` / `sha-9667888` (`3.3.8+96678888d875`)  
+**Platform:** `3.3.9` / `sha-TBD` (bump in flight; baseline was `3.3.8` / `sha-9667888`)  
 **Host:** low-RAM GHCR-only bench (`OPENFDD_QUERY_MEMORY_MB=256`, `OPENFDD_DATAFUSION_SPILL_DIR`)  
-**Remote edge:** bosspi (`CLOUD_SIM_PI_SSH` in bench env) — fieldbus only (`linux/arm64`)  
-**Artifacts:** `reports/patch338_20260829T152852Z/`
+**Remote edge:** bosspi (`Host bosspi` / `CLOUD_SIM_PI_SSH`) — fieldbus only (`linux/arm64`)  
+**Artifacts:** prior `reports/patch338_20260829T152852Z/`; this cycle TBD  
+**Train:** continuous tiny-rev until bosspi → Railway stream healthy — plan [`patch_cycle_3.3.9_railway_web_api`](../../../.cursor/plans/patch_cycle_3.3.9_railway_web_api.plan.md)
 
 Private OT LAN addresses and Niagara creds live only in gitignored `.env` / `bench.env.local`.
 
@@ -15,71 +16,89 @@ Private OT LAN addresses and Niagara creds live only in gitignored `.env` / `ben
 
 | Host | Role | Image ref | nightly↔sha | OCI revision | `/health` version |
 |------|------|-----------|-------------|--------------|-------------------|
-| bensbench | central / fieldbus / mqtt / web | `ghcr.io/bbartling/openfdd-*:sha-9667888` | match (digest equal) | `96678888d875…` | `3.3.8+96678888d875` |
-| bosspi | fieldbus edge only | `openfdd-fieldbus:sha-9667888` **linux/arm64** | tip rev match | `96678888d875…` | fieldbus healthy |
+| bensbench | (ops host; stack optional) | TBD after 3.3.9 Publish | TBD | TBD | TBD |
+| Railway hub | central / mqtt / web | TBD `sha-*` after Publish | TBD | TBD | TBD |
+| bosspi | fieldbus edge only | was `sha-9667888` arm64 healthy; re-pin after tip | TBD | TBD | TBD |
 
 Prefer `OPENFDD_IMAGE_TAG=sha-<7>` — do not trust sticky `:nightly` without digest check.
 
-## Confirmed PASS
+## Confirmed PASS (historical — 3.3.8 bench soak)
 
 | Gate / check | Result |
 |------|--------|
 | `00_pull_ghcr_up` react-ot | **PASS** — pin `sha-9667888` |
 | `01_health_gates` | **PASS** |
-| `combined_ot_synth_validate` | **PASS** (OT Who-Is/RP/poll + MQTT ingest + Modbus + Haystack + synth matrix) |
-| `07_cloud_sim` (Pi) | **PASS** — Pi `mqtt_publish_interval=60`, multi-site edges lab+bldg2 |
-| `10_dual_mqtt_signoff` `DUAL_MQTT_WAIT_SECS=600` | **PASS** |
-| `11_bacnet_pcap_fp_scan` | **PASS** — clean FP scan |
-| BUILDING_100 UI smoke | **PASS** — Actions during analytics; economizer/runtime/mech-cool/bas-vs-web-oat; FDD series FC1 (5000 overlay hits); SPA `/` `/actions` `/plot` |
+| `combined_ot_synth_validate` | **PASS** |
+| `07_cloud_sim` (Pi) | **PASS** — `mqtt_publish_interval=60` |
+| `10_dual_mqtt_signoff` | **PASS** (historical bench; **not** 3.3.9 cloud gate) |
+| `11_bacnet_pcap_fp_scan` | **PASS** |
+| BUILDING_100 UI smoke | **PASS** |
 
-## Dual-site MQTT (lab + bldg2)
+## This cycle (3.3.9) — OPEN / in progress
 
-| Check | lab / fieldbus-1 | bldg2 / pi-1 |
-|-------|------------------|--------------|
-| Fieldbus platform | linux/amd64 (bench) | linux/arm64 (Pi) |
-| Fieldbus tip | `sha-9667888` rev `96678888d875` | `sha-9667888` rev `96678888d875` |
-| Ingest / telemetry span | 10 numeric lines, span≈540s | 10 numeric lines, span≈540s |
-| Edges after dual wait | `has_telemetry=true` | `has_telemetry=true` |
-| Ingest after dual | `ingest_ok` 39→59 (no dup/reject) | (same central) |
+| ID | Finding | Status | Next |
+|----|---------|--------|------|
+| **railway-web-api-double-path** | `/api/*` empty 404 via variable `proxy_pass …/api/` | **FIX SHIPPING** in 3.3.9 nginx | CLOSE when public `/api/health` 200 on tip web |
+| **railway-mqtt-certs** | mqtt Crashed; no `/mosquitto/certs`; `volumes: []` | **OPEN** ops | Volume + upload PEMs → Online |
+| **bosspi-railway-mqtt** | Pi → Railway MQTTS not yet | **OPEN** | After L1+L3 |
+| **railway-stream-health** | Hub/stream container health | **OPEN** | After L4 |
+| **railway-fdd-zn-duct** | FDD on bosspi stream | **OPEN** | After stream healthy |
+| **bench-stack-down** | react-ot exited 137 | **OPEN** non-blocking | Optional local restore |
 
-## BUILDING_100 UI (FDD Plots / Actions)
+## Prior cycle (3.3.8) — CLOSED
 
-| Check | Result |
-|------|--------|
-| Overview → Actions while analytics running | **PASS** (HTTP 200, no 401) |
-| FDD Plots AHU_1 / FC1 | **PASS** (`/api/fdd/series?rule_id=FC1`, 5000 overlay hits) |
-| RCx economizer / runtime / mech-cool / bas-vs-web-oat | **PASS** |
+| ID | Resolution |
+|----|------------|
+| coderabbit-storage | **CLOSED** #797 |
+| bench-field-devices | **CLOSED** #797 |
+| railway-web-resolver | **CLOSED** tip image #797 (web Online; SPA OK) |
 
-## BACnet pcap
+## Railway hub — inventory + maturity march
 
-| Check | Result |
-|------|--------|
-| Capture tool | privileged docker `tcpdump` + rusty-bacnet decode |
-| Decode / FP scan vs bad_rusty_bacnet_app | **PASS** — `whois=0`, `ephemeral_whois=0`, `read_property=32`, findings=[] |
+**Project:** `gleaming-cooperation` / `production`.  
+**Skill:** [`openfdd-railway-cli`](../../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md)
 
-## This cycle (3.3.8) — CLOSED
+| Role | Service | Private / public |
+|------|---------|------------------|
+| central | `openfdd-central-cQ-F` | `openfdd-central-cq-f.railway.internal:8080` |
+| mqtt | `openfdd-mqtt` | private 8883 (+ TCP proxy when approved) |
+| web | `openfdd-web` | `https://openfdd-web-production-af99.up.railway.app` |
 
-| ID | Finding | Resolution |
-|----|---------|------------|
-| coderabbit-storage | Package-ingest / analytics ignored `OPENFDD_STORAGE_URL` | **CLOSED** — `fdd_store::local_file_root_from_env()` prefers `OPENFDD_STORAGE_URL` (#797) |
-| bench-field-devices | Tip checkout resets OT `field_devices.toml` | **CLOSED** — `ensure_bench_field_devices()` in nightly lib + combined preflight (#797) |
-| railway-web-resolver | Railway web crash: bare IPv6 resolver `fd12::10` | **CLOSED in tip image** — nginx entrypoint brackets IPv6 / prefers IPv4 (#797). **Operator:** re-pin Railway central/mqtt/web to `sha-9667888`, set `OPENFDD_NGINX_RESOLVER=auto` (clear interim `[fd12::10]`), verify public SPA + `/api/health` |
+### Snapshot (pre-3.3.9 Publish, baseline `sha-9667888`)
 
-## Open findings (deferred — future cycles)
+| Service | Status | Notes |
+|---------|--------|-------|
+| central | Online | MQTT ingest off |
+| web | Online | SPA OK; `/api` **404** |
+| mqtt | **Crashed** | missing CA; no volumes |
+| bosspi fieldbus | Up healthy | `sha-9667888` arm64; still aimed at prior broker |
 
-| ID | Finding | Notes | Pointer |
-|----|---------|-------|---------|
-| **H10** | Large historian scale / release quals | Multi-cycle program; not a tiny-rev | [`HISTORIAN_PROGRAM.md` §H10](../../openfdd_agent_spec/HISTORIAN_PROGRAM.md); [`HISTORIAN_SCALE_QUALIFICATION.md`](./HISTORIAN_SCALE_QUALIFICATION.md) |
-| **issue-763-ml** | Engineering bundle phases 2–8 | ML features/labels/splits, exports, WattLab→Engineering rename | [#763](https://github.com/bbartling/open-fdd/issues/763) |
-| **dependabot-thrift** | Sticky Dependabot thrift updates fail on master | **Non-product** — dismiss until DataFusion/Arrow drop thrift | [`thrift-advisory.md`](../security/thrift-advisory.md) |
-| **lint-sweep** | Remaining `#[allow]` / `#[expect]` outside scoped passes | **Hygiene** — scoped sweeps only per agent law | [`RUST_LINT_HYGIENE.md`](../../openfdd_agent_spec/docs/RUST_LINT_HYGIENE.md) |
+### Maturity ladder
+
+| Level | Gate | Status |
+|------:|------|--------|
+| L0 | tip `sha-*` on hub + Pi | Partial (mqtt crash; awaiting 3.3.9) |
+| L1 | public `/api/health` 200 | **Blocked** → 3.3.9 |
+| L2 | JWT + CSV | Optional backup |
+| L3 | mqtt Online + ingest | **Blocked** (certs) |
+| L4 | bosspi → Railway telemetry | Not started |
+| Stream | ingest + no crash loops | Not started |
+| L5 | FDD zn_t/duct_t | Not started |
+
+**March:** L1 → L3 → L4 → stream → L5. No bench dual-MQTT cloud gate.
+
+## Open findings (deferred — unfinished prior work)
+
+| ID | Finding | Pointer |
+|----|---------|---------|
+| **H10** | Historian scale quals | [`HISTORIAN_PROGRAM.md`](../../openfdd_agent_spec/HISTORIAN_PROGRAM.md) |
+| **issue-763-ml** | Engineering bundle phases 2–8 | [#763](https://github.com/bbartling/open-fdd/issues/763) |
+| **dependabot-thrift** | Sticky thrift Dependabot | [`thrift-advisory.md`](../security/thrift-advisory.md) |
+| **lint-sweep** | Scoped lint hygiene only | [`RUST_LINT_HYGIENE.md`](../../openfdd_agent_spec/docs/RUST_LINT_HYGIENE.md) |
+| **bench-dual-mqtt** | Deferred as cloud gate | Historical PASS only |
 
 ## Hygiene
 
-- Patch-cycle train: blank → tip soak → fill this report. Agent law: [`openfdd_agent_spec/`](../../openfdd_agent_spec/).
-- Do not local `docker build` stack on bensbench — GHCR `sha-*` only.
-- Anti-hardcoding: no private OT IPs in this report.
-- No stale PRs / feature branches after each tiny rev bump.
-- This report is **open-fdd only** (not vibe_code_apps_13).
-- Railway hub re-pin to tip is operator/CLI follow-up (no `RAILWAY_TOKEN` on bensbench this cycle).
-- Next product fix after 3.3.8 closeout → bump `3.3.8` → `3.3.9`, wait GHCR, re-pin both hosts to the same `sha-*`.
+- Living queue: CLOSE/remove only with evidence; never drop unfinished deferred.
+- Tiny rev → GHCR → GH tidy → re-pin → gates → sync this file → repeat until north star.
+- No secrets; no local docker build on bensbench; bosspi arm64 `sha-*` only.

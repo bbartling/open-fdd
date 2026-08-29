@@ -79,6 +79,34 @@ Or admin mints a TTL-bound token: `POST /api/auth/agent-token` with `Authorizati
 
 ---
 
+## CLI on bensbench (verified 2026-08-29)
+
+- [x] `railway --version` → `@railway/cli` **5.45.7**
+- [x] Auth via **`railway login`** (browser) — `railway whoami` OK
+- [x] `cd ~/open-fdd && railway link` → **`gleaming-cooperation`** / **`production`**
+- [ ] Optional non-interactive: `RAILWAY_TOKEN` in `~/.config/railway/bensbench.env` (never in repo)
+- [ ] Agent protocol: [`openfdd-railway-cli`](../../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md)
+
+### Live names (do not assume `openfdd-central`)
+
+| Role | Service |
+| --- | --- |
+| central | `openfdd-central-cQ-F` |
+| mqtt | `openfdd-mqtt` |
+| web | `openfdd-web` |
+
+Web upstream: `OPENFDD_CENTRAL_UPSTREAM=openfdd-central-cQ-F.railway.internal:8080`
+
+### CLI re-pin (after tip GHCR publish — pending for `sha-9667888`)
+
+- [ ] `railway status` — confirm service names
+- [ ] Re-pin `openfdd-central-cQ-F` → `ghcr.io/bbartling/openfdd-central:sha-<7>`
+- [ ] Wait central healthy
+- [ ] Re-pin `openfdd-mqtt` → same `sha-<7>`
+- [ ] `railway variable set OPENFDD_NGINX_RESOLVER=auto --service openfdd-web`
+- [ ] Re-pin `openfdd-web` → same `sha-<7>` (fixes `invalid port in resolver "fd12::10"` on old images)
+- [ ] Smoke: public SPA + `/api/health`; sidebar matches tip
+
 ## Pre-deployment
 
 - [ ] GHCR packages pull without login (or Railway has read-only GHCR credentials)

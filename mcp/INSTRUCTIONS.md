@@ -44,6 +44,16 @@ MCP runs on the **host** and needs a **Bearer JWT** in `OPENFDD_MCP_TOKEN`. Pref
 
 Railway: keep MCP on private networking; see [RAILWAY_DEPLOYMENT.md](../docs/operations/RAILWAY_DEPLOYMENT.md). Works with **Cursor, Claude Desktop, Codex CLI, OpenClaw**, or any MCP host. Open-FDD does **not** ship a built-in chatbot — connect external agents through this stdio server or JWT REST.
 
+### Railway CLI vs this MCP
+
+| Tool | Purpose |
+|------|---------|
+| **`railway` CLI** (`@railway/cli`) | Deploy/re-pin hub images, vars, logs on Railway (`gleaming-cooperation`). Skill: [`openfdd-railway-cli`](../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md). |
+| **Railway’s optional MCP** (`railway setup agent`) | Railway platform deploys/docs — **not** HVAC FDD. |
+| **`openfdd-mcp` (this package)** | FDD / sites / historian tools against central via `OPENFDD_MCP_TOKEN`. |
+
+Do not point Cursor at Railway MCP and expect Open-FDD AFDD tools. For cloud lab: keep central private; mint agent JWT; set `OPENFDD_API_BASE` to a reachable central URL (private mesh or VPN), not the public web SPA alone for write tools.
+
 ## Model + FDD wiresheet
 
 After `openfdd_model_assignments_save` (with `confirm: true`), the **FDD wiresheet** on Model → **FDD wiresheet** tab auto-syncs (`graph:live-fdd-validation`). Or call `openfdd_fdd_wires_sync` / `openfdd_fdd_wires_propose`.

@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-08-29 — Patch cycle 3.3.9 START (bosspi → Railway train)
+
+- Continuous tiny-rev train until bosspi MQTTS → Railway hub stream healthy (plan `patch_cycle_3.3.9_railway_web_api`).
+- Baseline: tip `sha-9667888` / 3.3.8; Railway web `/api` 404 (double-path); mqtt Crashed (no cert volume); bosspi fieldbus healthy on `sha-9667888` arm64.
+- First bump: nginx `proxy_pass http://$openfdd_central;` + platform **3.3.9**; living BUG_REPORT; railway CLI skill + docs (Pi→Railway topology, GH tidy loop).
+
+
 ## 2026-08-29 — Patch cycle 3.3.8 CLOSED
 
 - Tip `sha-9667888` / `3.3.8+96678888d875` on bensbench + bosspi **linux/arm64**.
