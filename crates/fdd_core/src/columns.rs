@@ -147,12 +147,9 @@ pub fn normalize_role(role: &str) -> String {
         "oat" | "outside_air_temp" | "outside_air_temp_f" | "weather_oat" | "oa_temp" => {
             "oa_t".into()
         }
-        "zone_temp"
-        | "zone_temperature"
-        | "space_temp"
-        | "zonetemp"
-        | "zn_t"
-        | "zone_t" => "zone_t".into(),
+        "zone_temp" | "zone_temperature" | "space_temp" | "zonetemp" | "zn_t" | "zone_t" => {
+            "zone_t".into()
+        }
         "supply_air_temp"
         | "supply_air_temperature"
         | "discharge_air_temp"
