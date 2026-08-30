@@ -150,6 +150,11 @@ def apply_patches(routine: dict, step: int) -> tuple[dict, list[str]]:
 
 
 def list_history_entries(zf: zipfile.ZipFile, building_id: str) -> list[tuple[str, str]]:
+    """Map each ``…/<equipment_id>/history_wide.csv`` to equipment_id.
+
+    Nested layouts (e.g. ``BUILDING_50/VAV/VAV_100/history_wide.csv``) must use the
+    leaf folder (``VAV_100``), not the parent type folder (``VAV``).
+    """
     prefix = f"{building_id}/"
     out: list[tuple[str, str]] = []
     for name in zf.namelist():
@@ -158,7 +163,7 @@ def list_history_entries(zf: zipfile.ZipFile, building_id: str) -> list[tuple[st
         parts = name[len(prefix) :].split("/")
         if len(parts) < 2:
             continue
-        eq_id = parts[0]
+        eq_id = parts[-2]
         if eq_id.lower() in ("weather",):
             continue
         out.append((eq_id, name))
@@ -224,7 +229,7 @@ def write_seed_zip(
             ):
                 parts = item.filename[len(building_id) + 1 :].split("/")
                 if len(parts) >= 2:
-                    eq_id = parts[0]
+                    eq_id = parts[-2]
                     if eq_id in seed_h0:
                         data = seed_h0[eq_id].encode("utf-8")
             zout.writestr(item, data)
