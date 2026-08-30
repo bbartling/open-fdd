@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-08-30 — Patch cycle 3.3.11 START (UI P0 + MQTT≡CSV + tip pin)
+
+- Hub still `3.3.9+2dce59a` while tip Publish `sha-7163be9` / VERSION→**3.3.11**.
+- Product: nginx `client_max_body_size 128m` (CSV HTTP2); `normalize_role` aliases `zonetemp`→`zone_t`, `sa_t`/`duct_t`→`sat`.
+- Ops: Railway backup script; bosspi weather device 599999 disabled; poll+publish 60s; fieldbus remains stopped until tip re-pin.
+- Docs/skills: BUG_REPORT P0 IDs; railway-cli backup+always-pin-tip; package-mapping live MQTT; AGENTS 40–41.
+
 ## 2026-08-29 — Patch 3.3.10 (mqtt ACL on certs volume)
 
 - Railway mqtt crash-looped: ephemeral `/mosquitto/config/acl` lost on restart.

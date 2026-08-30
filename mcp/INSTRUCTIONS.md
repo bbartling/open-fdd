@@ -62,6 +62,8 @@ After `openfdd_model_assignments_save` (with `confirm: true`), the **FDD wireshe
 
 Empty analytics after import = **missing roles**, not a broken MCP tool or FDD engine. Stamp `equipType`; Haystack `points` → SQL via `haystack_point_to_role`; weather at `{building}/weather/`; motor ≠ compressor ≠ valve. Full table: [`docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md) · aliases [`ROLE_MAPPING_PARITY.md`](../docs/migration/vibe19/ROLE_MAPPING_PARITY.md).
 
+**Live MQTT (Railway `bldg2`):** healthy `ingest_ok` with blank Overview usually means live tags (`zonetemp`, `sa_t`) were not normalized to cookbook `zone_t` / `sat`. Product aliases: `normalize_role` in `fdd_core`. Do not rename remote OT devices. CSV package uploads need JWT + web nginx body ≥128m.
+
 Use existing `openfdd_csv_import_*` + `openfdd_csv_package_append`. SCAFFOLD `package_preflight` / `mapping_suggest` are **not** in this crate.
 
 ## CSV agent workflow (agent-first ingest)
