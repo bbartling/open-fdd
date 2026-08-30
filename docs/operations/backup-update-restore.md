@@ -60,8 +60,12 @@ Optional: `OPENFDD_BACKUP_MQTT_CERTS=0` to skip mqtt certs volume.
 1. Tip Actions green + GHCR **Publish** success for the tip SHA  
 2. `SHA=sha-<7 tip>`  
 3. Re-pin **central → mqtt → web** to `$SHA` (same volume IDs)  
-4. bosspi fieldbus arm64 `$SHA` with `OPENFDD_FIELDBUS_POLL_INTERVAL_SECS=60` and `OPENFDD_MQTT_PUBLISH_INTERVAL_SECS=60`  
-5. Verify: `/api/health` version matches tip; volume still mounted; MQTT ingest; Overview/CSV  
+4. Set `OPENFDD_PARQUET_ROOT=/workspace/openfdd` on central when using `OPENFDD_STORAGE_URL=file:///workspace/openfdd` (required for `/api/fdd/run` on imported packages)  
+5. bosspi fieldbus arm64 `$SHA` with `OPENFDD_FIELDBUS_POLL_INTERVAL_SECS=60` and `OPENFDD_MQTT_PUBLISH_INTERVAL_SECS=60` (Railway only)  
+6. Local firewall hub: `OPENFDD_IMAGE_TAG=$SHA ./scripts/openfdd_stack_up.sh react --no-pull` (pull first; place ACL at `deploy/mqtt/certs/acl`)  
+7. Verify: `/api/health` version matches tip; volume still mounted; MQTT ingest; CSV import; FDD  
+
+**Dual pipeline:** bosspi → Railway exclusive; bensbench local stack for on-prem. Do not point bosspi at local mqtt (or bench edge at Railway) for the parity gate.
 
 ### Restore if wipe
 

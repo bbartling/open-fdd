@@ -76,22 +76,27 @@ railway status >/dev/null 2>&1 || railway link
 # Expect: gleaming-cooperation / production
 
 # 4) Re-pin tip — use REAL service names from status
-SHA=sha-9667888
+SHA=sha-91fb350
 CENTRAL_SVC=openfdd-central-cQ-F   # confirm via railway status
 
 railway service source connect --service "$CENTRAL_SVC" \
   --image "ghcr.io/bbartling/openfdd-central:${SHA}"
-# wait private /api/health 200
+# wait private /api/health 200 — then mqtt → web
 
 railway service source connect --service openfdd-mqtt \
   --image "ghcr.io/bbartling/openfdd-mqtt:${SHA}"
 
 railway variable set OPENFDD_NGINX_RESOLVER=auto --service openfdd-web
+# Historian packages under OPENFDD_STORAGE_URL need FDD parquet root:
+railway variable set OPENFDD_PARQUET_ROOT=/workspace/openfdd --service "$CENTRAL_SVC"
 railway service source connect --service openfdd-web \
   --image "ghcr.io/bbartling/openfdd-web:${SHA}"
+# If ingest_ok stuck at 0 after mqtt re-pin: railway redeploy -s "$CENTRAL_SVC" -y
 ```
 
-Smoke: public SPA + `https://<web>/api/health`. Sidebar version must match tip.
+Smoke: public SPA + `https://<web>/api/health`. Sidebar version must match tip (`3.3.11+91fb350…`).
+
+**Dual pipeline:** bosspi → Railway only; bensbench local react stack (`OPENFDD_IMAGE_TAG=sha-*` pull, `--no-pull`) for firewall/on-prem. Do not cross-wire edges for the parity gate.
 
 ## BACKUP before every central re-pin (hard gate)
 

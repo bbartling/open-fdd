@@ -84,6 +84,9 @@ retest. Do not confuse those with this engineering OS.
 38. **E+ dump / clustering:** prefer `reports/eplus-dump/` (`EPLUS_DUMP_ROOT`); `scripts/eplus_dump_clustering_export.py` emits sklearn-ready features. Online: `scripts/agent_eplus_dump.sh`. Rust API routes still `/wattlab/dumps` until rename. Doc: [`docs/agent/EPLUS_DUMP_CLUSTERING.md`](../docs/agent/EPLUS_DUMP_CLUSTERING.md).
 39. **Railway hub CLI (bensbench):** `@railway/cli` via `npm i -g`; auth via `railway login` (verified) or optional `RAILWAY_TOKEN` in `~/.config/railway/bensbench.env`. Linked project **`gleaming-cooperation`** / **`production`**. Re-pin with **live** service names (`openfdd-central-cQ-F`, `openfdd-mqtt`, `openfdd-web`) per [`skills/openfdd-railway-cli/SKILL.md`](skills/openfdd-railway-cli/SKILL.md). Railway CLI ≠ [`mcp/`](../mcp/) FDD tools. Never commit tokens; never treat Railway AI as the FDD agent.
 40. **Always pin tip after Publish:** hub sidebar/`/api/health` must match tip `sha-*`. Stale `3.3.9` while tip is newer is a P0 fail. **Backup** `/workspace` before every central re-pin (`scripts/railway_central_workspace_backup.sh`).
+41. **Dual pipeline:** bosspi → Railway (cloud exclusive); bensbench local GHCR react stack for firewall/on-prem. Same tip `sha-*` both sides; 60s poll+publish on both edges; do not cross-wire for parity.
+42. **FDD + STORAGE_URL:** when `OPENFDD_STORAGE_URL=file:///workspace/openfdd`, set `OPENFDD_PARQUET_ROOT=/workspace/openfdd` so `/api/fdd/run` finds package historian parquet (else “parquet cache missing”).
+43. **Tip mqtt ACL path:** `acl_file /mosquitto/certs/acl` — local stacks must place ACL under `deploy/mqtt/certs/acl`, not only `deploy/mqtt/acl`.
 41. **Stream roles ≠ package roles until mapped:** live tags `zonetemp`/`sa_t` normalize to `zone_t`/`sat`. Empty Overview with rising `ingest_ok` ⇒ roles, not nginx. OT poll+MQTT publish floor **60s**.
 
 ---
