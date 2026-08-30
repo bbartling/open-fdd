@@ -80,7 +80,7 @@ Private OT LAN addresses and Niagara creds live only in gitignored `.env` / `ben
 
 ## Point sample (streaming)
 
-ZoneTemp / SA-T from BIP benches `192.168.204.13/.14`; outdoor weather device **599999** skipped.
+ZoneTemp / SA-T from BIP benches on the OT LAN; outdoor weather device **599999** skipped.
 
 ## Railway hub inventory
 
