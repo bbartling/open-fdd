@@ -1,5 +1,13 @@
 # Session log
 
+## 2026-08-30 — Patch cycle 3.3.11 CLOSEOUT (tip pin + dual pipeline)
+
+- Tip `sha-91fb350` / `3.3.11+91fb3501aed2` on Railway (central+mqtt+web) + bosspi fieldbus arm64 + local react stack.
+- Backup `~/openfdd-backups/railway/20260830T195849Z/` then re-pin; workspace historian intact; stream `edges:1` / `ingest_ok` advancing @ 60s.
+- BUILDING_100 CSV import **HTTP 200** Railway + local; Railway FDD registry **ok** with `OPENFDD_PARQUET_ROOT=/workspace/openfdd`.
+- Dual pipeline: bosspi→Railway exclusive; local GHCR pull react hub for firewall path. Soft-OPEN: SPA Overview browser confirm; live role_map; ≥1h parity soak; local full-B100 FDD latency.
+- GH: tip Publish green; optional BACnet-MQTT failure not a product gate; 0 open product PRs at closeout start.
+
 ## 2026-08-30 — Patch cycle 3.3.11 START (UI P0 + MQTT≡CSV + tip pin)
 
 - Hub still `3.3.9+2dce59a` while tip Publish `sha-7163be9` / VERSION→**3.3.11**.
