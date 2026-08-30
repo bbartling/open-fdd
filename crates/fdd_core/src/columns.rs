@@ -147,11 +147,18 @@ pub fn normalize_role(role: &str) -> String {
         "oat" | "outside_air_temp" | "outside_air_temp_f" | "weather_oat" | "oa_temp" => {
             "oa_t".into()
         }
-        "zone_temp" | "zone_temperature" | "space_temp" | "zn_t" | "zone_t" => "zone_t".into(),
+        "zone_temp"
+        | "zone_temperature"
+        | "space_temp"
+        | "zonetemp"
+        | "zn_t"
+        | "zone_t" => "zone_t".into(),
         "supply_air_temp"
         | "supply_air_temperature"
         | "discharge_air_temp"
         | "discharge_air_temp_f"
+        | "sa_t"
+        | "duct_t"
         | "sat" => "sat".into(),
         // Keep web_oa_t as identity (mech_oat / econ3/6/7 SQL require that column name).
         // Liberty economizer historian accepts web_oa_t as an oa_t alias in historian.rs.
@@ -450,6 +457,9 @@ mod tests {
 
     #[test]
     fn normalize_oat_alias() {
+        assert_eq!(normalize_role("zonetemp"), "zone_t");
+        assert_eq!(normalize_role("sa_t"), "sat");
+        assert_eq!(normalize_role("duct_t"), "sat");
         assert_eq!(normalize_role("outside_air_temp"), "oa_t");
         assert_eq!(normalize_role("supply_fan"), "fan_cmd");
         assert_eq!(normalize_role("fan_status"), "fan_status");

@@ -93,10 +93,32 @@ railway service source connect --service openfdd-web \
 
 Smoke: public SPA + `https://<web>/api/health`. Sidebar version must match tip.
 
+## BACKUP before every central re-pin (hard gate)
+
+```bash
+cd ~/open-fdd
+./scripts/railway_central_workspace_backup.sh
+# → ~/openfdd-backups/railway/<UTC>/central-workspace.tgz (+ optional mqtt-certs.tgz)
+```
+
+Re-pin = **image tag only**. Never delete/recreate the `/workspace` volume. Docs: [`backup-update-restore.md`](../../../docs/operations/backup-update-restore.md).
+
+**Always pin tip after Publish:** production showing `3.3.9+2dce59a` while tip is newer is an automatic P0 fail. After GHCR Publish, re-pin central + mqtt + web + bosspi fieldbus to the same `sha-<7>`.
+
+## OT floor (bosspi)
+
+`OPENFDD_FIELDBUS_POLL_INTERVAL_SECS=60` and `OPENFDD_MQTT_PUBLISH_INTERVAL_SECS=60`. Never set `OPENFDD_FIELDBUS_DEV_FAST_POLL=1` in production.
+
+## Data model (empty Overview)
+
+Empty charts/FDD with healthy `ingest_ok` ⇒ missing **roles** (`zonetemp`/`sa_t` must normalize to `zone_t`/`sat`), not broken nginx. See package-mapping skill + `normalize_role` in `fdd_core`.
+
 ## Anti-patterns
 
 - Logging `railway variable list --json` (secrets) into SESSION_LOG / chat.
 - Hard-coding `--service openfdd-central` when the live name is `openfdd-central-cQ-F`.
 - Re-pinning web before central is healthy.
+- Re-pinning central **without** a workspace backup.
 - Deploying `openfdd-fieldbus` on Railway for BACnet.
 - Confusing Railway CLI/MCP with `openfdd-mcp` FDD tools.
+- Leaving hub on a stale `sha-*` after tip Publish.

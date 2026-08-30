@@ -38,6 +38,20 @@ Modeling (agent context, docs-only expansions):
 9. No vendor/city hardcoding in product. Gold ids: `AHU_1` / `VAV_1` / `CHW_1` / `weather/`.
 10. **HP-1 caveat:** registry may list `fan_status` optional while SQL still gates on `fan_cmd` — fan-status-only packages are typically **not runnable**. Do not map binary fan status into fake percent `fan_cmd`. See rule-readiness doc.
 
+## Live MQTT stream (bosspi → Railway)
+
+Empty Overview with healthy `ingest_ok` is the same doctrine as empty packages: **missing cookbook roles**, not broken nginx.
+
+| Live MQTT `role` tag | After `normalize_role` | Cookbook / analytics |
+|----------------------|------------------------|----------------------|
+| `zonetemp` / `zone_temp` / `zn_t` | `zone_t` | zone temperature |
+| `sa_t` / `duct_t` / `sat` | `sat` | supply / discharge air |
+| outdoor air tags | `oa_t` | when quality good |
+
+Product aliases live in `crates/fdd_core/src/columns.rs` (`normalize_role`). Prefer that over renaming OT devices. CSV package import and MQTT ingest both need these identities for Overview / RCx / FDD.
+
+Large package uploads need web nginx `client_max_body_size 128m` (matches central Axum) — otherwise Railway SPA shows `ERR_HTTP2_PROTOCOL_ERROR`.
+
 ## Anti-patterns
 
 - Patching SQL because a plot is empty
