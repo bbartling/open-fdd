@@ -96,7 +96,7 @@ No `if building == …`, no vendor suffix table, no default weather city, no gly
 
 Use existing tools: `openfdd_csv_import_*`, `openfdd_csv_package_append`, `openfdd_ingest_contract`. SCAFFOLD `package_preflight` / `mapping_suggest` are **not** in the `mcp/` crate this cycle.
 
-TADCO / Niagara long-format grids are a **preprocess example** (pivot before ingest), not product hardcoding.
+Vendor long-format BAS grids are a **preprocess example** (pivot before ingest), not product hardcoding.
 
 ## Equipment type precedence
 

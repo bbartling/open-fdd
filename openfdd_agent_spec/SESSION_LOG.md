@@ -1,9 +1,9 @@
 # Session log
 
-## 2026-08-30 — Enhanced CSV/AFDD/TADCO stress → 3.3.12
+## 2026-08-30 — Enhanced CSV/AFDD stress → 3.3.12
 
 - Fixed `csv_flood_afdd_routine_sim` nested VAV equipment_id (leaf folder).
-- Railway: BUILDING_50 import + 12h AFDD flood PASS; LibertyCenter TADCO lake package import + FDD/series PASS; MQTT `bldg2/pi-1` ingest advancing.
+- Railway: BUILDING_50 import + 12h AFDD flood PASS; private lake bench package import + FDD/series PASS; MQTT `bldg2/pi-1` ingest advancing.
 - Tip bump **3.3.12** (script + BUG_REPORT). Re-pin hub after Publish.
 
 
