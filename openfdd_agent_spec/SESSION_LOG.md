@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-08-30 — Enhanced CSV/AFDD/TADCO stress → 3.3.12
+
+- Fixed `csv_flood_afdd_routine_sim` nested VAV equipment_id (leaf folder).
+- Railway: BUILDING_50 import + 12h AFDD flood PASS; LibertyCenter TADCO lake package import + FDD/series PASS; MQTT `bldg2/pi-1` ingest advancing.
+- Tip bump **3.3.12** (script + BUG_REPORT). Re-pin hub after Publish.
+
+
 ## 2026-08-30 — Patch cycle 3.3.11 CLOSEOUT (tip pin + dual pipeline)
 
 - Tip `sha-91fb350` / `3.3.11+91fb3501aed2` on Railway (central+mqtt+web) + bosspi fieldbus arm64 + local react stack.
