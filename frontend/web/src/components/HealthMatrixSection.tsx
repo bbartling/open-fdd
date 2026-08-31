@@ -120,13 +120,16 @@ export function HealthMatrixSection({
       { key: "equipment_id", header: "equip" },
     ];
     for (const col of flagColumns) {
+      const full = healthColumnHeader(col.ruleId, col.haystackTags);
       cols.push({
         key: col.key,
-        header: healthColumnHeader(col.ruleId, col.haystackTags),
+        header: col.ruleId,
+        headerTitle: full,
       });
       cols.push({
         key: `${col.key}_fault_h`,
-        header: `${col.ruleId} fault_h`,
+        header: `${col.ruleId} h`,
+        headerTitle: `${col.ruleId} fault_h`,
       });
     }
     cols.push({ key: "total_fault_h", header: "total fault_h" });

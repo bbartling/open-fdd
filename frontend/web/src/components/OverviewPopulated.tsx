@@ -751,12 +751,10 @@ export function OverviewPopulated({
       <PlantHealthSections
         buildingId={buildingId}
         refreshToken={vavHealthToken}
-        equipment={equipment}
       />
       <VavHealthSection
         buildingId={buildingId}
         refreshToken={vavHealthToken}
-        equipment={equipment}
       />
       <WeatherHealthSection
         buildingId={buildingId}

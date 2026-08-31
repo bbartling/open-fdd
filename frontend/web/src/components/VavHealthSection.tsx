@@ -1,25 +1,18 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { HealthMatrixSection } from "./HealthMatrixSection";
 import { postVavHealth } from "../api/analyticsApi";
-import type { FddEquipmentItem } from "../api/analyticsApi";
-import { plantEquipmentFamilies } from "../lib/plantEquipment";
 
 export function VavHealthSection({
   buildingId,
   refreshToken,
-  equipment,
 }: {
   buildingId: string;
   refreshToken: number;
-  equipment: FddEquipmentItem[];
 }) {
-  const families = useMemo(() => plantEquipmentFamilies(equipment), [equipment]);
   const fetchHealth = useCallback(
     (id: string) => postVavHealth({ building_id: id }),
     [],
   );
-
-  if (!families.hasVav) return null;
 
   return (
     <HealthMatrixSection
@@ -29,6 +22,7 @@ export function VavHealthSection({
       buildingId={buildingId}
       refreshToken={refreshToken}
       fetchHealth={fetchHealth}
+      renderEmptyTable
       flagColumns={[
         {
           key: "broken_box",
