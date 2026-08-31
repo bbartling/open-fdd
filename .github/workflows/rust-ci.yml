@@ -19,6 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: VERSION matches workspace Cargo.toml
+        run: |
+          bash -n scripts/check_version_sync.sh
+          ./scripts/check_version_sync.sh
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.95.0
