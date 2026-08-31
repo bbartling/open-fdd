@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { DataTable, InlineAlert } from "./widgets";
+import type { DataTableColumn } from "./widgets/DataTable";
 import type { AnalyticsEnvelope } from "../api/analyticsApi";
 import { healthColumnHeader } from "../lib/cookbookRuleCatalog";
 import { naturalCompare } from "../lib/naturalSort";
@@ -115,8 +116,8 @@ export function HealthMatrixSection({
 
   const empty = !loading && !err && env !== null && rows.length === 0;
 
-  const tableColumns = useMemo(() => {
-    const cols: Array<{ key: string; header: string }> = [
+  const tableColumns = useMemo((): DataTableColumn<Record<string, unknown>>[] => {
+    const cols: DataTableColumn<Record<string, unknown>>[] = [
       { key: "equipment_id", header: "equip" },
     ];
     for (const col of flagColumns) {

@@ -29,8 +29,8 @@ use fdd_store::{
 use object_store::aws::AmazonS3Builder;
 use object_store::path::Path as ObjectPath;
 use object_store::ObjectStore;
-use openfdd_contracts::{Quality, TelemetryEnvelope, TelemetryPoint, ValueKind};
 use open_fdd_edge_prototype::equipment_types;
+use openfdd_contracts::{Quality, TelemetryEnvelope, TelemetryPoint, ValueKind};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use url::Url;
@@ -459,8 +459,7 @@ impl LiveHistorian {
                 .insert(equipment_id, stamp);
         }
         for (building_id, stamps) in by_building {
-            let mut merged =
-                equipment_types::load_type_map(root, Some(building_id.as_str()));
+            let mut merged = equipment_types::load_type_map(root, Some(building_id.as_str()));
             merged.extend(stamps);
             if let Err(error) = equipment_types::write_type_map(root, &building_id, &merged) {
                 warn!(%error, building_id, "live historian equipment type registry update failed");

@@ -23,8 +23,17 @@ fn normalized_token(raw: &str) -> String {
 /// not in Open-FDD product code.
 pub fn canonical_kind(raw: &str) -> Option<&'static str> {
     match normalized_token(raw).as_str() {
-        "ahu" | "airhandler" | "airhandlingunit" | "rtu" | "mau" | "doas" | "fcu" | "cvahu"
-        | "vavahu" | "erv" | "energyrecoveryventilator" => Some("ahu"),
+        "ahu"
+        | "airhandler"
+        | "airhandlingunit"
+        | "rtu"
+        | "mau"
+        | "doas"
+        | "fcu"
+        | "cvahu"
+        | "vavahu"
+        | "erv"
+        | "energyrecoveryventilator" => Some("ahu"),
         "vav" | "zoneterminal" => Some("vav"),
         "zoneother" => Some("zone_other"),
         "vrf" => Some("vrf"),

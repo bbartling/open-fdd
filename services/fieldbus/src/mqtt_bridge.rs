@@ -530,11 +530,8 @@ fn rest_telemetry_points(
             if device.trim().is_empty() || point.trim().is_empty() {
                 return None;
             }
-            let equipment_type = equipment_type_for(
-                type_stamps,
-                device,
-                row_equipment_type_stamp(v).as_deref(),
-            );
+            let equipment_type =
+                equipment_type_for(type_stamps, device, row_equipment_type_stamp(v).as_deref());
             let tags = serde_json::json!({"rest": true, "device": device})
                 .as_object()
                 .cloned()
@@ -705,7 +702,8 @@ pub async fn spawn_if_configured(
                 })
                 .collect();
             let rest_rows = rest.last_values().await;
-            let rest_points = rest_telemetry_points(&rest_rows, building_id.as_deref(), &type_stamps);
+            let rest_points =
+                rest_telemetry_points(&rest_rows, building_id.as_deref(), &type_stamps);
             let mut bacnet_points = if delta_mode {
                 apply_delta_filter(points, &mut last_published)
             } else {
@@ -828,10 +826,7 @@ mod tests {
     #[test]
     fn equipment_type_stamp_prefers_row_then_map_then_default() {
         std::env::set_var("OPENFDD_EQUIPMENT_TYPE", "zone_other");
-        std::env::set_var(
-            "OPENFDD_EQUIPMENT_TYPE_MAP",
-            r#"{"FEC_1":"cv_ahu"}"#,
-        );
+        std::env::set_var("OPENFDD_EQUIPMENT_TYPE_MAP", r#"{"FEC_1":"cv_ahu"}"#);
         let stamps = load_equipment_type_stamps();
         assert_eq!(
             equipment_type_for(&stamps, "FEC_1", Some("vav")),
@@ -861,7 +856,8 @@ mod tests {
                 "value": null, "units": "", "error": "circuit open"
             }),
         ];
-        let points = rest_telemetry_points(&rows, Some("BUILDING_100"), &EquipmentTypeStamps::default());
+        let points =
+            rest_telemetry_points(&rows, Some("BUILDING_100"), &EquipmentTypeStamps::default());
         assert_eq!(points.len(), 2);
         assert_eq!(points[0].id, "rest:chiller-api:CHW-ST");
         assert_eq!(points[0].quality, Quality::Good);
