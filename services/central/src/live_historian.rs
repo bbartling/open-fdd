@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::env;
 use std::fmt;
 use std::future::Future;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -29,6 +29,7 @@ use fdd_store::{
 use object_store::aws::AmazonS3Builder;
 use object_store::path::Path as ObjectPath;
 use object_store::ObjectStore;
+use open_fdd_edge_prototype::equipment_types;
 use openfdd_contracts::{Quality, TelemetryEnvelope, TelemetryPoint, ValueKind};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
@@ -37,6 +38,8 @@ use url::Url;
 const TAG_BUILDING_ID: &str = "building_id";
 const TAG_EQUIPMENT_ID: &str = "equipment_id";
 const TAG_ROLE: &str = "role";
+const TAG_EQUIPMENT_TYPE: &str = "equipment_type";
+const TAG_EQUIP_TYPE: &str = "equipType";
 const LATEST_TELEMETRY_WATERMARK: &str = "state/live-historian/latest-telemetry.json";
 
 type EquipmentKey = (String, String);
@@ -306,6 +309,8 @@ pub struct LiveHistorian {
     batches: MicroBatchHistorian,
     watermark_store: WatermarkStore,
     latest_persisted_timestamp_utc: Option<DateTime<Utc>>,
+    parquet_root: Option<PathBuf>,
+    pending_type_stamps: BTreeMap<EquipmentKey, String>,
 }
 
 impl LiveHistorian {
@@ -341,14 +346,21 @@ impl LiveHistorian {
             Duration::from_secs(config.flush_seconds),
         )?;
         let latest_persisted_timestamp_utc = watermark_store.read()?;
+        let parquet_root = match &config.storage_url {
+            StorageUrl::File { root } => Some(root.clone()),
+            StorageUrl::S3 { .. } => None,
+        };
         Ok(Self {
             batches,
             watermark_store,
             latest_persisted_timestamp_utc,
+            parquet_root,
+            pending_type_stamps: BTreeMap::new(),
         })
     }
 
     pub fn ingest_envelope(&mut self, env: &TelemetryEnvelope) -> Result<LiveHistorianIngest> {
+        collect_type_stamps(env, &mut self.pending_type_stamps);
         let (groups, eligible_points, skipped_points) = normalized_batches(env)?;
         let mut report = LiveHistorianIngest {
             eligible_points,
@@ -416,6 +428,7 @@ impl LiveHistorian {
             }
         }
         if !flushes.is_empty() {
+            self.persist_type_stamps();
             if let Some(timestamp) = self.latest_persisted_timestamp_utc {
                 // The immutable Parquet objects are canonical. A watermark write
                 // failure must never make successfully persisted telemetry look
@@ -428,6 +441,31 @@ impl LiveHistorian {
         }
         report.latest_persisted_timestamp_utc = self.latest_persisted_timestamp_utc;
         Ok(())
+    }
+
+    fn persist_type_stamps(&mut self) {
+        let Some(root) = self.parquet_root.as_deref() else {
+            self.pending_type_stamps.clear();
+            return;
+        };
+        let pending = std::mem::take(&mut self.pending_type_stamps);
+        let mut by_building: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+        for ((building_id, equipment_id), stamp) in pending {
+            if stamp.trim().is_empty() {
+                continue;
+            }
+            by_building
+                .entry(building_id)
+                .or_default()
+                .insert(equipment_id, stamp);
+        }
+        for (building_id, stamps) in by_building {
+            let mut merged = equipment_types::load_type_map(root, Some(building_id.as_str()));
+            merged.extend(stamps);
+            if let Err(error) = equipment_types::write_type_map(root, &building_id, &merged) {
+                warn!(%error, building_id, "live historian equipment type registry update failed");
+            }
+        }
     }
 }
 
@@ -492,6 +530,34 @@ fn normalized_batches(env: &TelemetryEnvelope) -> Result<NormalizedBatches> {
         out.insert(identity, batch);
     }
     Ok((out, eligible, skipped))
+}
+
+fn collect_type_stamps(env: &TelemetryEnvelope, out: &mut BTreeMap<EquipmentKey, String>) {
+    for point in &env.points {
+        let Some(building_id) = string_tag(point, TAG_BUILDING_ID) else {
+            continue;
+        };
+        let Some(equipment_id) = string_tag(point, TAG_EQUIPMENT_ID) else {
+            continue;
+        };
+        let Ok(building_id) = safe_partition_value(building_id, TAG_BUILDING_ID) else {
+            continue;
+        };
+        let Ok(equipment_id) = safe_partition_value(equipment_id, TAG_EQUIPMENT_ID) else {
+            continue;
+        };
+        if let Some(stamp) = equipment_type_stamp(point) {
+            out.insert((building_id, equipment_id), stamp);
+        }
+    }
+}
+
+fn equipment_type_stamp(point: &TelemetryPoint) -> Option<String> {
+    string_tag(point, TAG_EQUIPMENT_TYPE)
+        .or_else(|| string_tag(point, TAG_EQUIP_TYPE))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 fn point_identity(point: &TelemetryPoint) -> Result<Option<(String, String, String)>> {
@@ -664,11 +730,19 @@ mod tests {
             legacy_parquet_root: None,
         };
         let mut live = LiveHistorian::from_config(&config).unwrap();
-        let report = live
-            .ingest_envelope(&envelope(vec![point("sat", json!(55.0))]))
-            .unwrap();
+        let mut point = point("sat", json!(55.0));
+        point
+            .tags
+            .insert("equipment_type".into(), json!("zone_other"));
+        let report = live.ingest_envelope(&envelope(vec![point])).unwrap();
         assert_eq!(report.persisted_rows, 1);
         assert_eq!(report.flushes, 1);
+        let types_path = tmp
+            .path()
+            .join("building=BUILDING_100/equipment_types.json");
+        let types: BTreeMap<String, String> =
+            serde_json::from_str(&std::fs::read_to_string(types_path).unwrap()).unwrap();
+        assert_eq!(types.get("AHU_1").map(String::as_str), Some("zone_other"));
         assert_eq!(
             report.latest_persisted_timestamp_utc.unwrap().to_rfc3339(),
             "2026-08-21T12:00:00+00:00"

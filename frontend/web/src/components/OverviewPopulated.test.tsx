@@ -251,11 +251,10 @@ describe("OverviewPopulated metric isolation", () => {
     expect(screen.getByTestId("overview-ahu-economizer-health")).toBeTruthy();
     expect(screen.getByTestId("overview-pid-health")).toBeTruthy();
     expect(screen.getByTestId("overview-sensor-health")).toBeTruthy();
-    expect(screen.queryByTestId("overview-chiller-health")).toBeNull();
-    expect(screen.queryByTestId("overview-cooling-tower-health")).toBeNull();
-    expect(screen.queryByTestId("overview-boiler-health")).toBeNull();
-    expect(screen.queryByTestId("overview-hp-health")).toBeNull();
-    expect(screen.queryByTestId("overview-vav-health")).toBeNull();
+    expect(screen.getByTestId("overview-chiller-health")).toBeTruthy();
+    expect(screen.getByTestId("overview-cooling-tower-health")).toBeTruthy();
+    expect(screen.getByTestId("overview-hp-health")).toBeTruthy();
+    expect(screen.getByTestId("overview-vav-health")).toBeTruthy();
     expect(screen.queryByTestId("overview-motor-runtime")).toBeNull();
     expect(screen.queryByTestId("overview-mech-cooling")).toBeNull();
     expect(screen.getByTestId("overview-devices-by-type")).toBeTruthy();

@@ -109,6 +109,8 @@ describe("health matrix tint", () => {
 
     expect(await screen.findByText("No sensor faults in window")).toBeTruthy();
     expect(screen.getByTestId("sensor-health-table")).toBeTruthy();
-    expect(screen.getByText("SV-FLATLINE fault_h")).toBeTruthy();
+    expect(screen.getByText("SV-FLATLINE h")).toBeTruthy();
+    const header = screen.getByText("SV-FLATLINE h").closest("th");
+    expect(header?.getAttribute("title")).toBe("SV-FLATLINE fault_h");
   });
 });

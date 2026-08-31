@@ -6,6 +6,8 @@ import { widgetTestId } from "./types";
 export interface DataTableColumn<T extends Record<string, unknown>> {
   key: keyof T & string;
   header: string;
+  /** Full header text for hover tooltips (compact tables). */
+  headerTitle?: string;
 }
 
 export interface DataTableProps<T extends Record<string, unknown>>
@@ -65,7 +67,7 @@ export function DataTable<T extends Record<string, unknown>>({
           <thead>
             <tr>
               {columns.map((col) => (
-                <th key={col.key} scope="col">
+                <th key={col.key} scope="col" title={col.headerTitle ?? col.header}>
                   {col.header}
                 </th>
               ))}

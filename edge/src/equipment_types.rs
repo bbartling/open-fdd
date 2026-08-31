@@ -23,8 +23,20 @@ fn normalized_token(raw: &str) -> String {
 /// not in Open-FDD product code.
 pub fn canonical_kind(raw: &str) -> Option<&'static str> {
     match normalized_token(raw).as_str() {
-        "ahu" | "airhandler" | "airhandlingunit" | "rtu" | "mau" | "doas" | "fcu" => Some("ahu"),
+        "ahu"
+        | "airhandler"
+        | "airhandlingunit"
+        | "rtu"
+        | "mau"
+        | "doas"
+        | "fcu"
+        | "cvahu"
+        | "vavahu"
+        | "erv"
+        | "energyrecoveryventilator" => Some("ahu"),
         "vav" | "zoneterminal" => Some("vav"),
+        "zoneother" => Some("zone_other"),
+        "vrf" => Some("vrf"),
         "chiller" | "chwplant" | "chilledwaterplant" => Some("chiller"),
         "coolingtower" | "tower" => Some("cooling_tower"),
         "boiler" | "hwplant" | "hotwaterplant" => Some("boiler"),
@@ -63,13 +75,26 @@ pub fn kind_for(equipment_id: &str, stamped_type: Option<&str>) -> &'static str 
         .unwrap_or_else(|| infer_kind_from_id(equipment_id))
 }
 
+/// Display label for Overview inventory / devices-by-type tables.
 pub fn api_equipment_type_for(equipment_id: &str, stamped_type: Option<&str>) -> &'static str {
+    if let Some(raw) = stamped_type {
+        match normalized_token(raw).as_str() {
+            "zoneother" | "zone_other" => return "Zone Other",
+            "cvahu" | "cv_ahu" => return "CV AHU",
+            "vavahu" | "vav_ahu" => return "VAV AHU",
+            "erv" | "energyrecoveryventilator" => return "ERV",
+            "vrf" => return "VRF",
+            _ => {}
+        }
+    }
     match kind_for(equipment_id, stamped_type) {
         "vav" => "VAV",
         "ahu" => "AHU",
         "chiller" | "boiler" | "cooling_tower" => "PLANT",
         "heatpump" => "HEAT_PUMP",
         "weather" => "WEATHER",
+        "zone_other" => "Zone Other",
+        "vrf" => "VRF",
         _ => "GENERAL",
     }
 }
@@ -149,6 +174,17 @@ mod tests {
         assert_eq!(infer_kind_from_id("AC_1"), "unknown");
         assert_eq!(kind_for("AC_1", Some("ahu")), "ahu");
         assert_eq!(api_equipment_type_for("AC_1", Some("ahu")), "AHU");
+    }
+
+    #[test]
+    fn zone_other_stamp_maps_to_display_label() {
+        assert_eq!(canonical_kind("zone_other"), Some("zone_other"));
+        assert_eq!(
+            api_equipment_type_for("FEC_1", Some("zone_other")),
+            "Zone Other"
+        );
+        assert_eq!(api_equipment_type_for("AC_1", Some("cv_ahu")), "CV AHU");
+        assert_eq!(api_equipment_type_for("AC_2", Some("vrf")), "VRF");
     }
 
     #[test]

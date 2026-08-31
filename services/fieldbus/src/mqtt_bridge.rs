@@ -63,10 +63,66 @@ fn mqtt_publish_interval_secs(settings: &Settings) -> f64 {
     }
 }
 
+/// Site-wide and per-equipment `equipType` stamps for canonical historian typing.
+#[derive(Debug, Clone, Default)]
+struct EquipmentTypeStamps {
+    default_type: Option<String>,
+    by_equipment: HashMap<String, String>,
+}
+
+fn load_equipment_type_stamps() -> EquipmentTypeStamps {
+    let default_type = std::env::var("OPENFDD_EQUIPMENT_TYPE")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let by_equipment = std::env::var("OPENFDD_EQUIPMENT_TYPE_MAP")
+        .ok()
+        .and_then(|raw| serde_json::from_str::<HashMap<String, String>>(&raw).ok())
+        .unwrap_or_default();
+    EquipmentTypeStamps {
+        default_type,
+        by_equipment,
+    }
+}
+
+fn row_equipment_type_stamp(row: &serde_json::Value) -> Option<String> {
+    for key in ["equipment_type", "equipType"] {
+        if let Some(stamp) = row.get(key).and_then(|v| v.as_str()).map(str::trim) {
+            if !stamp.is_empty() {
+                return Some(stamp.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn equipment_type_for(
+    stamps: &EquipmentTypeStamps,
+    equipment_id: &str,
+    row_stamp: Option<&str>,
+) -> Option<String> {
+    row_stamp
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| stamps.by_equipment.get(equipment_id).cloned())
+        .or_else(|| stamps.default_type.clone())
+}
+
+fn insert_equipment_type_tag(
+    tags: &mut serde_json::Map<String, serde_json::Value>,
+    stamp: Option<String>,
+) {
+    if let Some(stamp) = stamp.filter(|value| !value.is_empty()) {
+        tags.insert("equipment_type".into(), serde_json::Value::String(stamp));
+    }
+}
+
 fn historian_tags_slim(
     building_id: Option<&str>,
     equipment_id: &str,
     point_name: &str,
+    equipment_type: Option<String>,
 ) -> serde_json::Map<String, serde_json::Value> {
     let mut tags = serde_json::Map::new();
     tags.insert(
@@ -83,6 +139,7 @@ fn historian_tags_slim(
             serde_json::Value::String(building_id.to_string()),
         );
     }
+    insert_equipment_type_tag(&mut tags, equipment_type);
     tags
 }
 
@@ -323,6 +380,7 @@ fn historian_tags(
     building_id: Option<&str>,
     equipment_id: &str,
     point_name: &str,
+    equipment_type: Option<String>,
 ) -> serde_json::Map<String, serde_json::Value> {
     tags.insert(
         "equipment_id".into(),
@@ -338,6 +396,7 @@ fn historian_tags(
             serde_json::Value::String(building_id.to_string()),
         );
     }
+    insert_equipment_type_tag(&mut tags, equipment_type);
     tags
 }
 
@@ -462,6 +521,7 @@ async fn connect_mqtt_session(
 fn rest_telemetry_points(
     rows: &[serde_json::Value],
     building_id: Option<&str>,
+    type_stamps: &EquipmentTypeStamps,
 ) -> Vec<TelemetryPoint> {
     rows.iter()
         .filter_map(|v| {
@@ -470,6 +530,8 @@ fn rest_telemetry_points(
             if device.trim().is_empty() || point.trim().is_empty() {
                 return None;
             }
+            let equipment_type =
+                equipment_type_for(type_stamps, device, row_equipment_type_stamp(v).as_deref());
             let tags = serde_json::json!({"rest": true, "device": device})
                 .as_object()
                 .cloned()
@@ -489,7 +551,7 @@ fn rest_telemetry_points(
                 } else {
                     Quality::Bad
                 },
-                tags: historian_tags(tags, building_id, device, point),
+                tags: historian_tags(tags, building_id, device, point, equipment_type),
             })
         })
         .collect()
@@ -554,6 +616,7 @@ pub async fn spawn_if_configured(
 
         let mut mqtt: Option<MqttSession> = None;
         let mut last_published: HashMap<String, String> = HashMap::new();
+        let type_stamps = load_equipment_type_stamps();
 
         let mut seq = 0u64;
         loop {
@@ -598,14 +661,30 @@ pub async fn spawn_if_configured(
                     } else {
                         Quality::Bad
                     };
+                    let equipment_type = equipment_type_for(
+                        &type_stamps,
+                        equipment_id,
+                        row_equipment_type_stamp(&v).as_deref(),
+                    );
                     let tags = if cell_mode {
-                        historian_tags_slim(building_id.as_deref(), equipment_id, point_name)
+                        historian_tags_slim(
+                            building_id.as_deref(),
+                            equipment_id,
+                            point_name,
+                            equipment_type,
+                        )
                     } else {
                         let base = serde_json::json!({"bacnet": true, "device_instance": device})
                             .as_object()
                             .cloned()
                             .unwrap_or_default();
-                        historian_tags(base, building_id.as_deref(), equipment_id, point_name)
+                        historian_tags(
+                            base,
+                            building_id.as_deref(),
+                            equipment_id,
+                            point_name,
+                            equipment_type,
+                        )
                     };
                     Some(TelemetryPoint {
                         id,
@@ -623,7 +702,8 @@ pub async fn spawn_if_configured(
                 })
                 .collect();
             let rest_rows = rest.last_values().await;
-            let rest_points = rest_telemetry_points(&rest_rows, building_id.as_deref());
+            let rest_points =
+                rest_telemetry_points(&rest_rows, building_id.as_deref(), &type_stamps);
             let mut bacnet_points = if delta_mode {
                 apply_delta_filter(points, &mut last_published)
             } else {
@@ -735,10 +815,33 @@ mod tests {
             Some("BUILDING_100"),
             "AHU_1",
             "discharge-air-temp",
+            Some("ahu".into()),
         );
         assert_eq!(tags["building_id"], serde_json::json!("BUILDING_100"));
         assert_eq!(tags["equipment_id"], serde_json::json!("AHU_1"));
         assert_eq!(tags["role"], serde_json::json!("sat"));
+        assert_eq!(tags["equipment_type"], serde_json::json!("ahu"));
+    }
+
+    #[test]
+    fn equipment_type_stamp_prefers_row_then_map_then_default() {
+        std::env::set_var("OPENFDD_EQUIPMENT_TYPE", "zone_other");
+        std::env::set_var("OPENFDD_EQUIPMENT_TYPE_MAP", r#"{"FEC_1":"cv_ahu"}"#);
+        let stamps = load_equipment_type_stamps();
+        assert_eq!(
+            equipment_type_for(&stamps, "FEC_1", Some("vav")),
+            Some("vav".into())
+        );
+        assert_eq!(
+            equipment_type_for(&stamps, "FEC_1", None),
+            Some("cv_ahu".into())
+        );
+        assert_eq!(
+            equipment_type_for(&stamps, "OTHER", None),
+            Some("zone_other".into())
+        );
+        std::env::remove_var("OPENFDD_EQUIPMENT_TYPE");
+        std::env::remove_var("OPENFDD_EQUIPMENT_TYPE_MAP");
     }
 
     #[test]
@@ -753,7 +856,8 @@ mod tests {
                 "value": null, "units": "", "error": "circuit open"
             }),
         ];
-        let points = rest_telemetry_points(&rows, Some("BUILDING_100"));
+        let points =
+            rest_telemetry_points(&rows, Some("BUILDING_100"), &EquipmentTypeStamps::default());
         assert_eq!(points.len(), 2);
         assert_eq!(points[0].id, "rest:chiller-api:CHW-ST");
         assert_eq!(points[0].quality, Quality::Good);
