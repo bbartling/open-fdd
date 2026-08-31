@@ -448,8 +448,9 @@ impl LiveHistorian {
             self.pending_type_stamps.clear();
             return;
         };
+        let pending = std::mem::take(&mut self.pending_type_stamps);
         let mut by_building: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
-        for ((building_id, equipment_id), stamp) in self.pending_type_stamps.drain() {
+        for ((building_id, equipment_id), stamp) in pending {
             if stamp.trim().is_empty() {
                 continue;
             }
