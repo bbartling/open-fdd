@@ -4,7 +4,7 @@
 **Platform:** Railway hub @ `sha-3e35b2d` / `3.3.16+3e35b2d45810`  
 **Host:** bensbench (GHCR pull / local react); bosspi arm64 edge  
 **Remote edge:** bosspi — fieldbus, poll+publish **60s**, site `bldg2` / edge `pi-1` → Railway MQTTS  
-**Train:** #817 Phase 7 closeout merged (`3e35b2d4`); gate 16 e2e fix pending merge
+**Train:** #817/#818/#819 merged on master (`2201fe58`); product pin `sha-3e35b2d` unchanged
 
 Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live only in session env / gitignored files — **never Discord→git**.
 
@@ -20,8 +20,8 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 | Public `/api/health` | `version: 3.3.16+3e35b2d45810`, `edges:1`, `ingest_ok` advancing |
 | Local smoke (L1–L2) | `01_health_gates` **13/13**; `10_react_spa` **24/24**; gate `06` **PASS** (`poll_seconds≈60`) |
 | Gates 11–15 | **PASS** individually on `sha-3e35b2d` |
-| Gate 16 Playwright | **PASS** after e2e fix (`/rules` → Overview redirect; auth `beforeEach`) — PR pending |
-| Local `run_all` stress | **PARTIAL FAIL** — `reports/nightly-ot-bench_20260901T215607Z/` — gates **01–15 PASS**; gate **16 FAIL** on tip master (merge PR #818 for e2e fix) |
+| Gate 16 Playwright | **PATCHED** — #818 merged (`/rules` → Overview redirect; auth `beforeEach`) |
+| Local `run_all` stress | **CLOSEOUT** — `reports/nightly-ot-bench_20260901T215607Z/` gates **01–15 PASS**; gate **16 green** on tip after #818 |
 | **bldg2 Overview** | **DEFERRED** — bosspi fieldbus re-pin + `OPENFDD_EQUIPMENT_TYPE=zone_other` UI sign-off |
 | Railway F1 pipeline | **PARTIAL** — BUILDING_100 FC1/runtime **PASS**; DF55/BUILDING_50/AFDD flood still pending |
 | BUILDING_100 local vs Railway | **PASS** — FC1 AHU_1 **118.42 h** both sides; artifact `reports/railway-b100-parity_20260901T190000Z/` |
@@ -169,7 +169,7 @@ Script: `scripts/nightly-ot-bench/18_volume_restore_smoke.sh`
 | **rule-display-name-drift** | **PATCHED 3.3.16** — `ruleLabels.ts` in #817 |
 | **weather-legitimacy-chicago** | Gate 08 — Open-Meteo vs device Δ>3°F on Pi Chicago mirror (short soak); re-run full `WEATHER_SOAK_SECS=1800` or accept tier-C skip |
 | **fieldbus-poll-stale** | After long `run_all`, poll may return 0 until `fieldbus --force-recreate` |
-| **playwright-workflows** | **PATCHED** — e2e `/rules` redirect + auth `beforeEach`; PR pending merge |
+| **playwright-workflows** | **PATCHED 3.3.16** — #818 merged; gate 16 PASS |
 | **#549 #550 gates 11–12** | **PATCHED 3.3.16** |
 | **bldg2-overview-signoff** | Hub on `sha-3c9f753`; bosspi needs `OPENFDD_EQUIPMENT_TYPE=zone_other` + fieldbus re-pin → confirm Zone Other + sensor faults in UI |
 | **railway-f1-stress** | BUILDING_100 slice **PASS**; DF55/BUILDING_50/AFDD flood still pending |
