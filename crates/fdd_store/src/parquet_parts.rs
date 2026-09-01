@@ -256,7 +256,7 @@ fn encode_parquet(batch: &RecordBatch, row_group_rows: usize) -> Result<Vec<u8>>
     let props = WriterProperties::builder()
         .set_compression(Compression::SNAPPY)
         .set_statistics_enabled(EnabledStatistics::Page)
-        .set_max_row_group_size(row_group_rows)
+        .set_max_row_group_row_count(Some(row_group_rows))
         .set_created_by(format!("open-fdd/{}", env!("CARGO_PKG_VERSION")))
         .build();
     let mut writer = ArrowWriter::try_new(Vec::new(), batch.schema(), Some(props))?;
