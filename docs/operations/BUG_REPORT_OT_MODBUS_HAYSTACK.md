@@ -1,14 +1,26 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-08-30 (enhanced CSV/AFDD stress + tip `3.3.12`)  
-**Platform:** Railway hub re-pinned to tip after `3.3.12` Publish  
-**Host:** bensbench (ops / Railway CLI / local GHCR pull); bosspi arm64 edge  
-**Remote edge:** bosspi — fieldbus tip, poll+publish **60s**, site `bldg2` / edge `pi-1` → Railway MQTTS  
-**Train:** patch_cycle_3.3.11 closeout + enhanced CSV flood / private-lake bench AFDD
+**Date:** 2026-08-31 (3.3.14 MQTT Overview parity closeout)  
+**Platform:** Railway hub @ `sha-a1b1c52` / `3.3.14+a1b1c5215e8d`  
+**Host:** bensbench (GHCR pull / local react); bosspi arm64 edge  
+**Remote edge:** bosspi — fieldbus, poll+publish **60s**, site `bldg2` / edge `pi-1` → Railway MQTTS  
+**Train:** outstanding_bug_patches — Patch A 3.3.13 + Patch B 3.3.14 (#809, #810)
 
 Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live only in session env / gitignored files — **never Discord→git**.
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
+
+## Verdict — 3.3.14 MQTT Overview parity (2026-08-31)
+
+| Check | Evidence |
+|-------|----------|
+| **PR #810** merged | `a1b1c521` — MQTT `equipment_type` tags, `equipment_types.json` persist on flush, Overview health shells |
+| GHCR Publish | Run `33435756763` **success** — all images `sha-a1b1c52` |
+| Railway re-pin | central + mqtt + web → `sha-a1b1c52`; backup `~/openfdd-backups/railway/20260831T204204Z/` |
+| Public `/api/health` | `version: 3.3.14+a1b1c5215e8d`, `edges:1`, `ingest_ok` advancing |
+| Local smoke (L1–L2) | `01_health_gates` 10/12 pass (fieldbus `:8081` absent — bosspi→Railway only); `10_react_spa` **24 pass** |
+| BUILDING_100 regression | Prior **PASS** (3.3.12 stress); not re-run this cycle |
+| **bldg2 Overview** | **DEFERRED** — bosspi fieldbus re-pin + `OPENFDD_EQUIPMENT_TYPE=zone_other`; UI sign-off after equip types ingest |
 
 ## Verdict — enhanced stress (2026-08-30 evening)
 
@@ -26,28 +38,30 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 
 | Pipeline | Status |
 |----------|--------|
-| **A Cloud** bosspi → Railway | **PASS** streaming |
-| **B Local** react tip | Hub healthy (prior); not re-tested this evening |
+| **A Cloud** bosspi → Railway | **PASS** streaming @ 3.3.14 |
+| **B Local** react `sha-a1b1c52` | **PASS** SPA gate; central healthy; no local fieldbus (by design) |
 
 ## This cycle — bugs found / patched
 
 | ID | Severity | Resolution |
 |----|----------|------------|
-| **csv-flood-vav-parent-equip** | P0 for AFDD stream sim | **FIXED** in `scripts/csv_flood_afdd_routine_sim.py` — nested `VAV/<id>/history_wide.csv` used parent `VAV` as `equipment_id` → append failed `equipment VAV missing history_wide.csv`. Use leaf folder (`parts[-2]`). Ships in **3.3.12**. |
-| **lake-current-ts-column** | P1 bench lake tool | **FIXED** in private sidecar scrape tool — current snapshot table uses `polled_at`, not `ts`. |
-| **lake-role-heuristics** | P2 packaging | Manual AHU package maps vendor leaf names to cookbook roles — 13 roles / 7d / 15‑min grid. |
+| **mqtt-equipment-types-missing** | P0 bldg2 Overview | **FIXED 3.3.14** — fieldbus `equipment_type` tag + central `equipment_types.json` persist (#810) |
+| **overview-shells-hidden** | P0 MQTT UX | **FIXED 3.3.14** — all health-matrix shells always visible (#810) |
+| **csv-flood-vav-parent-equip** | P0 AFDD stream sim | **FIXED** 3.3.12 — `csv_flood_afdd_routine_sim.py` leaf equipment_id |
+| **lake-current-ts-column** | P1 bench lake tool | **FIXED** private sidecar — `polled_at` not `ts` |
+| **lake-role-heuristics** | P2 packaging | Manual AHU package maps vendor leaf names to cookbook roles |
 
 ## Soft-OPEN / follow-up
 
 | ID | Notes |
 |----|-------|
-| **railway-spa-overview-blank** / **mqtt-role_map** | Live MQTT Overview charts may still need hub `role_map.json` for bldg2 (aliases help; full cookbook map preferred) |
-| **lake-credential-rotation** | Read-only lake password was shared in chat — rotate and keep session-env only |
-| **lake→openfdd packaging** | Manual zip builder worked for bench AHU package; formalize in private sidecar tool later (no Railway write from lake tool by default) |
-| **local-fdd-latency** | Full B100 local FDD still soft-OPEN |
-| **#803 lint hygiene** | Scoped Rust lint sweep — [issue #803](https://github.com/bbartling/open-fdd/issues/803) |
-| **#804 thrift / DF upgrade** | DataFusion 54+ / Arrow 59+ / Parquet 57+ — [issue #804](https://github.com/bbartling/open-fdd/issues/804) (after #803) |
-| **Optional BACnet→MQTT CI** | Not a product gate |
+| **bldg2-overview-signoff** | Hub on tip; bosspi needs `OPENFDD_EQUIPMENT_TYPE=zone_other` + fieldbus `sha-a1b1c52` re-pin → confirm Zone Other + sensor faults in UI |
+| **lake-credential-rotation** | Read-only lake password was shared in chat — rotate; session-env only |
+| **lake→openfdd packaging** | Manual zip builder worked; formalize in private sidecar later |
+| **local-fdd-latency** | Full B100 local FDD still soft-OPEN — Patch D |
+| **#803 lint hygiene** | [issue #803](https://github.com/bbartling/open-fdd/issues/803) — next scoped PR |
+| **#804 thrift / DF upgrade** | [issue #804](https://github.com/bbartling/open-fdd/issues/804) — after #803 |
+| **Optional BACnet→MQTT CI** | Not a product gate; sticky failures deleted |
 
 ## AFDD flood evidence (post-fix)
 
@@ -71,5 +85,6 @@ artifacts: reports/wattlab-parity/artifacts/csv_flood_sim/BUILDING_50/
 1. Backup before every central re-pin.  
 2. Re-pin order: central → mqtt → web; bosspi fieldbus; redeploy central if ingest stuck at 0.  
 3. `OPENFDD_PARQUET_ROOT=/workspace/openfdd` when `OPENFDD_STORAGE_URL=file:///workspace/openfdd`.  
-4. AFDD stream sim: `scripts/csv_flood_afdd_routine_sim.py` + `scripts/fixtures/b50_afdd_routine.json`.  
-5. Private lake bench: read-only Postgres via session tunnel; credentials never in git.
+4. Bench pin: `OPENFDD_IMAGE_TAG=sha-a1b1c52` in local `.env` (gitignored).  
+5. AFDD stream sim: `scripts/csv_flood_afdd_routine_sim.py` + `scripts/fixtures/b50_afdd_routine.json`.  
+6. Private lake bench: read-only Postgres via session tunnel; credentials never in git.
