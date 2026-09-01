@@ -35,6 +35,22 @@ tar -xzf ~/openfdd-backups/latest/workspace-full.tgz -C ~/open-fdd
 ./scripts/openfdd_health_check.sh
 ```
 
+### Local FDD + MCP smoke (low-RAM)
+
+Central resolves historian parquet via `OPENFDD_STORAGE_URL` (preferred) or legacy `OPENFDD_PARQUET_ROOT`. For `/api/fdd/run` and MCP `openfdd_fdd_*` tools to return rows, the root must match where CSV/package ingest wrote parquet (typically `workspace/openfdd` locally or `/workspace/openfdd` on Railway).
+
+```bash
+cd ~/open-fdd
+
+# Health + MCP initialize only (no parquet import required):
+OPENFDD_SMOKE_HEALTH_ONLY=1 OPENFDD_SMOKE_TIMEOUT_SECS=60 ./scripts/release/smoke_mcp_central.sh
+
+# Full FDD parity (empty registry OK on fresh central; import package first for non-zero rows):
+OPENFDD_PARQUET_ROOT="$PWD/workspace/openfdd" ./scripts/release/smoke_mcp_central.sh
+```
+
+Scoped FDD on Railway/local: use `rule_ids` in `/api/fdd/run` POST body; avoid full-building rule floods within the default 120s smoke window.
+
 ## Railway hub (mandatory before central re-pin)
 
 **Primary durability:** change the **image tag only**. Keep the same Railway volume mounted at `/workspace`. Never `volume delete`, never attach a **new empty** volume for an upgrade.
