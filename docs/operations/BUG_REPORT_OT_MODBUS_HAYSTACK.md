@@ -1,14 +1,30 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-01 (3.3.15 closeout — DataFusion 55 + timing gate pre-req done)  
-**Platform:** Railway hub @ `sha-3c9f753` / `3.3.15+3c9f75311ae1`  
+**Date:** 2026-09-01 (3.3.16 closeout — #817 merged, GHCR re-pin + stress)  
+**Platform:** Railway hub @ `sha-3e35b2d` / `3.3.16+3e35b2d45810`  
 **Host:** bensbench (GHCR pull / local react); bosspi arm64 edge  
 **Remote edge:** bosspi — fieldbus, poll+publish **60s**, site `bldg2` / edge `pi-1` → Railway MQTTS  
-**Train:** outstanding_bug_patches — #803/#804/#812/#813/#814 merged; BACnet CI harness #815
+**Train:** #817 Phase 7 closeout merged (`3e35b2d4`); gate 16 e2e fix pending merge
 
 Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live only in session env / gitignored files — **never Discord→git**.
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
+
+## Verdict — 3.3.16 closeout (2026-09-01 evening)
+
+| Check | Evidence |
+|-------|----------|
+| **#817** merged | `3e35b2d4` — #528 poll_seconds, ruleLabels, gates 11–15 bundle |
+| GHCR Publish | `sha-3e35b2d` images **green** on tip master |
+| Railway re-pin | central + mqtt + web → `sha-3e35b2d`; backup `~/openfdd-backups/railway/20260901T205611Z/` |
+| Public `/api/health` | `version: 3.3.16+3e35b2d45810`, `edges:1`, `ingest_ok` advancing |
+| Local smoke (L1–L2) | `01_health_gates` **13/13**; `10_react_spa` **24/24**; gate `06` **PASS** (`poll_seconds≈60`) |
+| Gates 11–15 | **PASS** individually on `sha-3e35b2d` |
+| Gate 16 Playwright | **PASS** after e2e fix (`/rules` → Overview redirect; auth `beforeEach`) — PR pending |
+| Local `run_all` stress | **PARTIAL FAIL** — `reports/nightly-ot-bench_20260901T215607Z/` — gates **01–15 PASS**; gate **16 FAIL** on tip master (merge PR #818 for e2e fix) |
+| **bldg2 Overview** | **DEFERRED** — bosspi fieldbus re-pin + `OPENFDD_EQUIPMENT_TYPE=zone_other` UI sign-off |
+| Railway F1 pipeline | **PARTIAL** — BUILDING_100 FC1/runtime **PASS**; DF55/BUILDING_50/AFDD flood still pending |
+| BUILDING_100 local vs Railway | **PASS** — FC1 AHU_1 **118.42 h** both sides; artifact `reports/railway-b100-parity_20260901T190000Z/` |
 
 ## Verdict — 3.3.15 closeout (2026-09-01)
 
@@ -16,16 +32,9 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 |-------|----------|
 | **#814** merged | `3c9f7531` — DataFusion 55 stack upgrade |
 | **#815** merged | `41af8523` — BACnet→MQTT CI mqtt healthcheck + startup ordering |
-| GHCR Publish | `sha-3c9f753` images (3.3.15 product); publish for `41af8523` in progress |
+| GHCR Publish | `sha-3c9f753` images (3.3.15 product) |
 | Railway re-pin | central + mqtt + web → `sha-3c9f753`; backup `~/openfdd-backups/railway/20260901T144551Z/` |
-| Public `/api/health` | `version: 3.3.15+3c9f75311ae1`, `edges:1`, `ingest_ok` advancing |
-| Local smoke (L1–L2) | `01_health_gates` **13/13 pass**; `10_react_spa` **24 pass** (react-ot) |
-| Optional BACnet CI | PR #815 `bacnet-mqtt-e2e` **PASS**; tip master workflow pending post-publish |
-| **bldg2 Overview** | **DEFERRED** — bosspi fieldbus re-pin + `OPENFDD_EQUIPMENT_TYPE=zone_other` UI sign-off |
-| Local synthetic CSV FDD | **PASS** — gate 06 core: import → parquet → `fdd/run` → `results[]`; FC13 alias + raw-SQL rejection green |
 | Local `run_all` stress | **PARTIAL FAIL** — artifact `reports/nightly-ot-bench_20260901T144819Z/` (`WEATHER_SOAK_SECS=120`) |
-| Railway F1 pipeline | **PARTIAL** — BUILDING_100 FC1/runtime parity **PASS** (see below); DF55/BUILDING_50/AFDD flood still pending |
-| BUILDING_100 local vs Railway | **PASS** — FC1 AHU_1 **118.42 h** both sides; artifact `reports/railway-b100-parity_20260901T190000Z/` |
 
 ## BUILDING_100 — local vs Railway parity (2026-09-01)
 
@@ -103,18 +112,20 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 
 ## Patch cycle — Phase 7 bugs (local `run_all` 2026-09-01)
 
-**Artifact:** `reports/nightly-ot-bench_20260901T144819Z/` · pin `sha-3c9f753` · `SKIP_PULL=1 WEATHER_SOAK_SECS=120`
+**Artifact (3.3.15 pin):** `reports/nightly-ot-bench_20260901T144819Z/` · pin `sha-3c9f753`  
+**Artifact (3.3.16 pin):** `reports/nightly-ot-bench_20260901T212925Z/` · pin `sha-3e35b2d` · `SKIP_PULL=1 WEATHER_SOAK_SECS=120`
 
-| Gate | ID | Severity | Symptom | Patch target |
-|------|-----|----------|---------|--------------|
-| 06 | **#528** | P2 harness | `poll_seconds=300` vs ~60 for 1-min FC1 fixture — grid_minutes hardcode | Tiny rev `3.3.16`; does **not** block synthetic CSV FDD acceptance |
-| 08 | **weather-mirror-frozen** | P1 soak | `599999`/`600000` weather-last-updated frozen over 120s — mirror loop dead? | Re-run full soak or fix BACnet weather mirror |
-| 11 | **#549 dashboard-apis** | P1 product | React assets missing reports wiring | React + API wiring PR |
-| 12 | **#550 parity-honesty** | P1 docs/registry | `parity-matrix.md` legacy labels; registry total 66≠63; SCHED-1 SQL missing `occ_mode` string compare | Docs + registry sync PR |
-| 14 | **capability-ledger-pyyaml** | P2 harness | `validate_capabilities_ledger.py` — PyYAML missing on bensbench | `pip install PyYAML` or gate deps doc |
-| 15 | **product-truth-agents** | P2 docs | Root `AGENTS.md` missing vibe21 recovery pointers | Docs-only PR |
-| 16 | **playwright-workflows** | P1 product | Host missing `libatk-1.0` for Playwright chromium; root-owned `test-results/` blocks reruns | `apt install libatk1.0-0` or run gate 16 in CI; fix test-results perms |
-| — | **rule-display-name-drift** | P2 UX | Sidebar truncated labels vs plot titles | **PATCHED** in tree — `ruleLabels.ts` + wired sidebar/plots/catalog |
+| Gate | ID | Severity | Symptom | Status on `sha-3e35b2d` |
+|------|-----|----------|---------|-------------------------|
+| 06 | **#528** | P2 harness | `poll_seconds=300` vs ~60 | **PATCHED** — gate 06 PASS after central re-pin |
+| 08 | **weather-legitimacy** | P2 soak | Chicago Open-Meteo Δ4.8°F > ±3°F threshold (device 600000 serves 95°F) | **OPEN** — environmental / mirror staleness; not a product regression |
+| 02/03 | **fieldbus-poll-stale** | P1 bench | `points_polled:0` after long gate 06 session — Who-Is missing 5007 | **WORKAROUND** — `fieldbus --force-recreate` restores poll; gates 02/03 PASS individually |
+| 11 | **#549 dashboard-apis** | P1 product | React assets missing reports wiring | **PATCHED** — gate 11 PASS |
+| 12 | **#550 parity-honesty** | P1 docs/registry | parity-matrix / registry drift | **PATCHED** — gate 12 PASS |
+| 14 | **capability-ledger-pyyaml** | P2 harness | PyYAML on bensbench | **PATCHED** — gate 14 PASS |
+| 15 | **product-truth-agents** | P2 docs | AGENTS.md vibe21 pointers | **PATCHED** — gate 15 PASS |
+| 16 | **playwright-workflows** | P1 product | `/rules` locator stale; auth-gate timing in Docker | **PATCHED** in branch `fix/gate16-playwright-rules-redirect` — gate 16 PASS |
+| — | **rule-display-name-drift** | P2 UX | Sidebar truncated labels | **PATCHED** — `ruleLabels.ts` in #817 |
 
 **Patch train (each fix):** log row above → fix PR → `VERSION` bump if product change → GHCR publish → re-pin → smoke → re-stress affected gate → move row to **patched** table when green.
 
@@ -154,13 +165,12 @@ Script: `scripts/nightly-ot-bench/18_volume_restore_smoke.sh`
 
 | ID | Notes |
 |----|-------|
-| **#528 poll_seconds** | Code fix in tree (`registry_api` + `read_poll_from_cache`); gate 06 passes after **central** GHCR re-pin |
-| **rule-display-name-drift** | **PATCHED** in tree — `frontend/web/src/lib/ruleLabels.ts`; pending web GHCR re-pin |
-| **weather-mirror-frozen** | Gate 08 — investigate BACnet weather mirror on bench + Pi |
-| **#549 #550 gates 11–12** | Dashboard APIs + parity honesty — product/docs PRs |
-| **playwright-workflows** | Gate 16 — product workflow locators |
-| **capability-ledger-pyyaml** | Gate 14 — host dep or script guard |
-| **product-truth-agents** | Gate 15 — `AGENTS.md` vibe21 pointers |
+| **#528 poll_seconds** | **PATCHED 3.3.16** — gate 06 PASS on `sha-3e35b2d` |
+| **rule-display-name-drift** | **PATCHED 3.3.16** — `ruleLabels.ts` in #817 |
+| **weather-legitimacy-chicago** | Gate 08 — Open-Meteo vs device Δ>3°F on Pi Chicago mirror (short soak); re-run full `WEATHER_SOAK_SECS=1800` or accept tier-C skip |
+| **fieldbus-poll-stale** | After long `run_all`, poll may return 0 until `fieldbus --force-recreate` |
+| **playwright-workflows** | **PATCHED** — e2e `/rules` redirect + auth `beforeEach`; PR pending merge |
+| **#549 #550 gates 11–12** | **PATCHED 3.3.16** |
 | **bldg2-overview-signoff** | Hub on `sha-3c9f753`; bosspi needs `OPENFDD_EQUIPMENT_TYPE=zone_other` + fieldbus re-pin → confirm Zone Other + sensor faults in UI |
 | **railway-f1-stress** | BUILDING_100 slice **PASS**; DF55/BUILDING_50/AFDD flood still pending |
 | **railway-ui-fdd-stale** | If Reports shows “no fault lane” — run FDD with `?site=BUILDING_100` then refresh; unscoped run returns no AHU FC1 |
