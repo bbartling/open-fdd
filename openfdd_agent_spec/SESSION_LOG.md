@@ -1,5 +1,15 @@
 # Session log
 
+## 2026-09-01 (late evening) — 3.3.16 closeout stress (post-GHCR)
+
+- **GHCR + re-pin:** `sha-3e35b2d` / `3.3.16+3e35b2d45810` on Railway + local react; backup `~/openfdd-backups/railway/20260901T205611Z/`.
+- **#817** merged on master (`3e35b2d4`) — #528, ruleLabels, gates 11–15.
+- **Individual gates on `sha-3e35b2d`:** 01/06/08/10–15 **PASS**; 02/03 **PASS** after `fieldbus --force-recreate`; 16 **PASS** after e2e fix (`fix/gate16-playwright-rules-redirect`).
+- **`run_all`:** `215607Z` — gates **01–15 PASS** on `sha-3e35b2d`; gate **16 FAIL** on tip master (e2e fix in PR #818).
+- **Gate 16 fix:** `/rules` legacy bookmark redirects to Overview; `ensureProductSession` in `beforeEach`; assert `/actions` instead of removed Run Rules page.
+- **Deferred:** phase4 bldg2 Overview, phase6 Railway F1 remainder (DF55, BUILDING_50, AFDD flood).
+- Living docs: [`BUG_REPORT`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) · plan `.cursor/plans/3.3.15_closeout_stress_9022f038.plan.md`.
+
 ## 2026-09-01 (evening) — Phase 7 patches in tree (pre-GHCR)
 
 - **ruleLabels** — `frontend/web/src/lib/ruleLabels.ts`; sidebar/plots/reports use `ruleLabelStandard` / `ruleLabelPlotTitle` (no 36-char truncation).
