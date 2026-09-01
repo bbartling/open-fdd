@@ -10,7 +10,39 @@ import { ensureProductSession } from "./session";
 const base = process.env.OPENFDD_PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 const requireStack = process.env.OPENFDD_PLAYWRIGHT_REQUIRE_STACK === "1";
 
+async function waitForGatedPage(
+  page: import("@playwright/test").Page,
+  testId: string,
+  label: string,
+) {
+  await expect(page.getByTestId("auth-gate-loading")).toHaveCount(0, {
+    timeout: 15_000,
+  });
+  await expect(page.getByTestId(testId), label).toBeVisible({ timeout: 15_000 });
+}
+
+async function clearAuthSession(page: import("@playwright/test").Page) {
+  await page.evaluate(() => sessionStorage.removeItem("openfdd.auth.token"));
+}
+
+/** Dev contract metrics live in a collapsed expander on empty sites. */
+async function openOverviewDevMetrics(page: import("@playwright/test").Page) {
+  const metrics = page.getByTestId("overview-react-ui");
+  if (await metrics.isVisible().catch(() => false)) {
+    return;
+  }
+  const expander = page.getByTestId("overview-dev-metrics");
+  if (await expander.isVisible().catch(() => false)) {
+    await expander.getByRole("button").click();
+  }
+  await expect(metrics).toBeVisible({ timeout: 10_000 });
+}
+
 test.describe("react product workflows (real stack)", () => {
+  test.beforeEach(async ({ page, request }) => {
+    await ensureProductSession(page, request);
+  });
+
   test.beforeAll(async ({ request }) => {
     if (process.env.OPENFDD_PLAYWRIGHT_SKIP === "1") {
       test.skip(true, "OPENFDD_PLAYWRIGHT_SKIP=1");
@@ -42,25 +74,32 @@ test.describe("react product workflows (real stack)", () => {
     await page.goto("/");
     await expect(page.getByTestId("overview-page")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("home-loading")).toHaveCount(0, { timeout: 20_000 });
-    await expect(page.getByTestId("overview-react-ui")).toContainText(/on|off|—/);
-    await expect(page.getByTestId("overview-ui-generation")).toBeVisible();
-    await expect(page.getByTestId("contract-version")).toBeVisible();
+    const populated = page.getByTestId("overview-populated");
+    if (await populated.isVisible().catch(() => false)) {
+      await expect(populated).toBeVisible();
+      await expect(page.getByTestId("overview-metrics")).toBeVisible();
+    } else {
+      await openOverviewDevMetrics(page);
+      await expect(page.getByTestId("overview-react-ui")).toContainText(/on|off|—/);
+      await expect(page.getByTestId("overview-ui-generation")).toBeVisible();
+      await expect(page.getByTestId("contract-version")).toBeVisible();
+    }
     expect(errors, `page errors: ${errors.join(" | ")}`).toEqual([]);
   });
 
   test("auth page login mints or refreshes session", async ({ page }) => {
     await page.goto("/auth");
+    await clearAuthSession(page);
+    await page.reload();
     await expect(page.getByTestId("auth-page")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("auth-required")).toBeVisible();
+    await expect(page.getByTestId("auth-username")).toBeVisible();
 
     const password = process.env.OPENFDD_ADMIN_PASSWORD ?? "";
+    test.skip(!password, "OPENFDD_ADMIN_PASSWORD required for auth stack gate");
     await page.getByTestId("auth-username").fill("admin");
-    if (password) {
-      await page.getByTestId("auth-password").fill(password);
-    }
+    await page.getByTestId("auth-password").fill(password);
     await page.getByTestId("auth-login").click();
-    await expect(page.getByTestId("auth-notice")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("auth-notice")).toContainText(/Logged in/i);
+    await expect(page.getByTestId("overview-page")).toBeVisible({ timeout: 15_000 });
   });
 
   test("auth login works without crypto.randomUUID (LAN HTTP)", async ({ page }) => {
@@ -70,6 +109,8 @@ test.describe("react product workflows (real stack)", () => {
     const errors = collectPageErrors(page);
 
     await page.goto("/auth");
+    await clearAuthSession(page);
+    await page.reload();
     await expect(page.getByTestId("auth-page")).toBeVisible({ timeout: 15_000 });
 
     const hasUuid = await page.evaluate(
@@ -78,13 +119,11 @@ test.describe("react product workflows (real stack)", () => {
     expect(hasUuid, "simulateLanHttpCrypto must remove randomUUID").toBe(false);
 
     const password = process.env.OPENFDD_ADMIN_PASSWORD ?? "";
+    test.skip(!password, "OPENFDD_ADMIN_PASSWORD required for auth stack gate");
     await page.getByTestId("auth-username").fill("admin");
-    if (password) {
-      await page.getByTestId("auth-password").fill(password);
-    }
+    await page.getByTestId("auth-password").fill(password);
     await page.getByTestId("auth-login").click();
-    await expect(page.getByTestId("auth-notice")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("auth-notice")).toContainText(/Logged in/i);
+    await expect(page.getByTestId("overview-page")).toBeVisible({ timeout: 15_000 });
 
     const uuidErrors = errors.filter((e) => /randomUUID/i.test(e));
     expect(uuidErrors, `LAN crypto errors: ${uuidErrors.join(" | ")}`).toEqual([]);
@@ -92,6 +131,7 @@ test.describe("react product workflows (real stack)", () => {
 
   test("/login bookmark is not a blank page (redirects to /auth)", async ({ page }) => {
     // Regression: SPA had no /login route → empty #root for remote bookmarks.
+    await clearAuthSession(page);
     const errors = collectPageErrors(page);
     const response = await page.goto("/login", { waitUntil: "networkidle" });
     // nginx may 302 before SPA Navigate; either path must land on auth UI.
@@ -120,7 +160,9 @@ test.describe("react product workflows (real stack)", () => {
     const routes: { path: string; testId: string }[] = [
       { path: "/upload", testId: "upload-page" },
       { path: "/mapping", testId: "mapping-page" },
-      { path: "/rules", testId: "rules-page" },
+      // Legacy bookmark — Run Rules tab lives on Overview (#817).
+      { path: "/rules", testId: "overview-page" },
+      { path: "/actions", testId: "actions-page" },
       { path: "/findings", testId: "findings-page" },
       { path: "/reports", testId: "reports-page" },
       { path: "/metering", testId: "metering-page" },
@@ -129,9 +171,7 @@ test.describe("react product workflows (real stack)", () => {
     ];
     for (const { path, testId } of routes) {
       await page.goto(path);
-      await expect(page.getByTestId(testId), `${path} → ${testId}`).toBeVisible({
-        timeout: 15_000,
-      });
+      await waitForGatedPage(page, testId, `${path} → ${testId}`);
     }
   });
 
