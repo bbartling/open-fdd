@@ -9,7 +9,9 @@ permalink: /operations/thrift-advisory.html
 
 ## thrift (CVE-2026-43868) — medium
 
-**Chain:** `open_fdd_edge_prototype` → `datafusion 43` → `parquet 53` → `thrift 0.17.0`
+**Chain (pre-3.3.15):** `open_fdd_edge_prototype` → `datafusion 43` → `parquet 53` → `thrift 0.17.0`
+
+**Fixed in 3.3.15:** workspace upgraded to `datafusion 55` / `arrow 59` / `parquet 59` (thrift dropped from dependency tree).
 
 **Why not bumped in 3.2.5:** `parquet` pins `thrift ^0.17`. `thrift 0.23.0` exists on crates.io but is incompatible with parquet 53 without upgrading the Arrow/DataFusion stack.
 

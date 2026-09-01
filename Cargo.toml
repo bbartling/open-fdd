@@ -20,19 +20,19 @@ members = [
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/bbartling/open-fdd"
-version = "3.3.14"
+version = "3.3.15"
 rust-version = "1.80"
 
 [workspace.dependencies]
 anyhow = "1"
-arrow = "53"
-arrow-schema = "53"
-chrono = { version = "=0.4.39", features = ["serde"] }
+arrow = "59"
+arrow-schema = "59"
+chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 csv = "1"
-datafusion = "43"
-object_store = { version = "0.11.2", features = ["aws"] }
-parquet = "53"
+datafusion = "55"
+object_store = { version = "0.13", features = ["aws"] }
+parquet = "59"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"

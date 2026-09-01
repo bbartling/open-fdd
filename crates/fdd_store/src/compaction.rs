@@ -223,7 +223,7 @@ impl ParquetCompactor {
             let props = WriterProperties::builder()
                 .set_compression(Compression::SNAPPY)
                 .set_statistics_enabled(EnabledStatistics::Page)
-                .set_max_row_group_size(self.row_group_rows)
+                .set_max_row_group_row_count(Some(self.row_group_rows))
                 .set_created_by(format!("open-fdd/{} compactor", env!("CARGO_PKG_VERSION")))
                 .build();
             let mut writer = ArrowWriter::try_new(file, merged_schema.clone(), Some(props))?;

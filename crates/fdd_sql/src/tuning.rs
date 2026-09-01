@@ -1,6 +1,6 @@
 //! DataFusion execution tuning for historian workloads.
 //!
-//! DataFusion 43 already enables CPU-sized target partitions, parallel file
+//! DataFusion 55 enables CPU-sized target partitions, parallel file
 //! scans/joins/windows/sorts, Parquet row-group pruning, page-index pruning,
 //! and batch coalescing. Open-FDD keeps those defaults and layers on the knobs
 //! that materially help selective historian scans, especially over object
@@ -11,6 +11,7 @@
 use std::env;
 
 use anyhow::{bail, Context, Result};
+use datafusion::config::ConfigNonZeroUsize;
 use datafusion::prelude::SessionConfig;
 
 const DEFAULT_S3_METADATA_SIZE_HINT_KB: usize = 512;
@@ -67,7 +68,7 @@ impl DataFusionTuning {
         })
     }
 
-    pub fn session_config(&self) -> SessionConfig {
+    pub fn session_config(&self) -> Result<SessionConfig> {
         let mut config = SessionConfig::new()
             .with_parquet_pruning(true)
             .with_parquet_page_index_pruning(true)
@@ -86,17 +87,18 @@ impl DataFusionTuning {
         options.execution.parquet.reorder_filters = self.parquet_reorder_filters;
         options.execution.parquet.metadata_size_hint = self.parquet_metadata_size_hint_bytes;
         if let Some(concurrency) = self.meta_fetch_concurrency {
-            options.execution.meta_fetch_concurrency = concurrency;
+            options.execution.meta_fetch_concurrency = ConfigNonZeroUsize::try_new(concurrency)
+                .context("OPENFDD_DATAFUSION_META_FETCH_CONCURRENCY must be greater than zero")?;
         }
         if let Some(min_size) = self.repartition_file_min_size_bytes {
             options.optimizer.repartition_file_min_size = min_size;
         }
-        config
+        Ok(config)
     }
 }
 
 pub fn historian_session_config_from_env() -> Result<SessionConfig> {
-    Ok(DataFusionTuning::from_env()?.session_config())
+    DataFusionTuning::from_env()?.session_config()
 }
 
 fn env_optional_usize(name: &str) -> Result<Option<usize>> {
