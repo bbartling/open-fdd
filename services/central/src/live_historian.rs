@@ -29,6 +29,7 @@ use fdd_store::{
 use object_store::aws::AmazonS3Builder;
 use object_store::path::Path as ObjectPath;
 use object_store::ObjectStore;
+use object_store::ObjectStoreExt;
 use open_fdd_edge_prototype::equipment_types;
 use openfdd_contracts::{Quality, TelemetryEnvelope, TelemetryPoint, ValueKind};
 use serde::{Deserialize, Serialize};

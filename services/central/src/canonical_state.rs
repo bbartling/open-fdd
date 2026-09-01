@@ -15,6 +15,7 @@ use fdd_store::{HistorianConfig, LocalStorage, StorageUrl};
 use object_store::aws::AmazonS3Builder;
 use object_store::path::Path as ObjectPath;
 use object_store::ObjectStore;
+use object_store::ObjectStoreExt;
 use url::Url;
 
 #[derive(Clone)]
