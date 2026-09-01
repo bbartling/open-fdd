@@ -147,7 +147,8 @@ fn parse_rest_auth(raw: &str) -> Result<RestAuth, String> {
 pub struct RestPoint {
     pub point_name: String,
     /// Validated to GET at load time; retained for catalog parity.
-    #[expect(dead_code, reason = "loaded from rest_points.toml for catalog parity; not yet read on poll path")]
+    /// Catalog field loaded from rest_points.toml; not yet read on poll path.
+    #[expect(dead_code)]
     pub method: String,
     pub path: String,
     pub select: String,
@@ -265,7 +266,8 @@ pub struct FieldPoint {
     pub object_type: String,
     pub object_instance: u32,
     pub point_name: String,
-    #[expect(dead_code, reason = "loaded from field_devices.toml units column; display/export TBD")]
+    /// Loaded from field_devices.toml units column; display/export TBD.
+    #[expect(dead_code)]
     pub units: String,
 }
 
