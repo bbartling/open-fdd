@@ -9,7 +9,7 @@ nav_order: 6
 **Contract:** machine-readable inventory at [`sql_rules/generated/parity_inventory.yaml`](../../../sql_rules/generated/parity_inventory.yaml) (`parity-inventory-v2`).  
 Regenerate with `python3 scripts/generate_parity_inventory.py`. Drift fails CI via `--check`.
 
-**Audit:** 2026-08-07 — legacy `proven_building_100` / `ported_from_cookbook` labels removed.  
+**Audit:** 2026-08-07 — legacy building-100 / cookbook-port parity labels removed.  
 **Audit:** 2026-08-11 — flat `matrix[]` columns (title, roles, proof, thresholds, docs, tests, difference class).
 
 ## Why 62 versus 66 (do not pad)
@@ -40,7 +40,7 @@ Product UI is **React** (`frontend/web`). Do not delete pandas because SQL exist
 | `duration_parity` | Fault hours / intervals match within tolerance |
 | `site_soak` | Reproducible multi-building soak evidence |
 
-**Wave 0 default:** all former `proven_building_100` / `ported_from_cookbook` claims were **downgraded** to `sql_screening` (or `concept_only` for `FC7`) until executable oracle fixtures justify a higher level.
+**Wave 0 default:** all former production parity claims were **downgraded** to `sql_screening` (or `concept_only` for `FC7`) until executable oracle fixtures justify a higher level.
 
 **Do not claim “54 full parity.”** That figure was aspirational catalog coverage, not mask-level SQL↔Pandas agreement.
 

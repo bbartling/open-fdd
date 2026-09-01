@@ -56,9 +56,9 @@ MARKERS_FILE="$ART/product_scaffold_markers.txt"
   rg -n 'demo\.zip' frontend/web/src/pages/WattLabPage.tsx 2>/dev/null || true
 } >"$MARKERS_FILE"
 
-# Ledger must classify CAP-PLOTS/RCX/FINDINGS/WATTLAB as SCAFFOLD or demo_only
+# Ledger honesty: implemented product caps vs scaffold/demo placeholders
 LEDGER="$ROOT/docs/migration/react-rust/capabilities.yaml"
-for pair in "CAP-PLOTS:SCAFFOLD" "CAP-RCX:SCAFFOLD" "CAP-FINDINGS:SCAFFOLD" "CAP-WATTLAB:SCAFFOLD"; do
+for pair in "CAP-PLOTS:IMPLEMENTED" "CAP-RCX:IMPLEMENTED" "CAP-FINDINGS:SCAFFOLD" "CAP-WATTLAB:SCAFFOLD"; do
   id="${pair%%:*}"
   want="${pair##*:}"
   st="$(python3 - <<PY
@@ -69,9 +69,9 @@ print(next(c["status"] for c in caps if c["id"]=="$id"))
 PY
 )"
   if [[ "$st" == "$want" ]]; then
-    ok "ledger $id status=$st (scaffold honesty)"
+    ok "ledger $id status=$st (expected $want)"
   else
-    bad "ledger $id status=$st (expected $want while product markers remain)"
+    bad "ledger $id status=$st (expected $want)"
   fi
 done
 

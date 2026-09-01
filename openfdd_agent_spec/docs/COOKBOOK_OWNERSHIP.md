@@ -16,9 +16,10 @@ Both expression cookbooks are **permanent project deliverables**.
 3. Keep rule IDs and metadata synchronized; be honest about parity gaps.
 4. Hand-written engineering expressions stay in cookbooks — manifests hold identity/metadata only.
 5. CI: `.github/workflows/cookbook-parity.yml` → inventory + `sql_pandas_oracle_check.py` + `cookbook_parity_check.py`.
-6. When adding a production SQL rule, update registry + SQL file + cookbook heading + inventory + fixture scaffold.
-7. When adding a pandas oracle rule, update `open_fdd.rules` + pandas cookbook + inventory.
-8. Canonical doc also at [`docs/COOKBOOK_OWNERSHIP.md`](../../docs/COOKBOOK_OWNERSHIP.md).
+8. When adding a production SQL rule, update registry + SQL file + cookbook heading + inventory + fixture scaffold.
+9. When adding a pandas oracle rule, update `open_fdd.rules` + pandas cookbook + inventory.
+10. **Display names:** registry `description` = short UI name; cookbook heading must match — see [`RULE_DISPLAY_NAMES.md`](../../openfdd_agent_spec/docs/RULE_DISPLAY_NAMES.md).
+11. Canonical doc also at [`docs/COOKBOOK_OWNERSHIP.md`](../../docs/COOKBOOK_OWNERSHIP.md).
 
 ## Milestone A hardening targets
 

@@ -60,5 +60,7 @@ After GHCR publish, poll with `./scripts/ghcr_watch_central.py` (legacy shim: `w
 
 **BUILDING_50 stream sim:** `scripts/csv_flood_afdd_routine_sim.py` — see [`docs/agent/CSV_FLOOD_AFDD_ROUTINE.md`](../../docs/agent/CSV_FLOOD_AFDD_ROUTINE.md).
 
+**Ops patch cycle:** gate FAILs → [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) Phase 7 table before fix; re-pin after publish per [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md).
+
 Workflow: `ghcr-openfdd-stack.yml` (retargets nightly on master).
 MCP: separate `rust-ghcr-mcp.yml`.

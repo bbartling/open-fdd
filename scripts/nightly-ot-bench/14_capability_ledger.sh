@@ -21,7 +21,12 @@ fi
 cp "$LEDGER" "$ART/capabilities.yaml"
 
 if ! python3 -c 'import yaml' 2>/dev/null; then
-  python3 -m pip install --user -q PyYAML || true
+  if ! python3 -m pip install --user -q PyYAML 2>/dev/null \
+    && ! python3 -m pip install --break-system-packages -q PyYAML 2>/dev/null; then
+    bad "PyYAML required — pip install PyYAML"
+    summary
+    exit 1
+  fi
 fi
 
 OUT="$ART/capabilities_ledger_validate.txt"

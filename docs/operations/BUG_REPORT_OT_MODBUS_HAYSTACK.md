@@ -22,7 +22,39 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 | Local smoke (L1–L2) | `01_health_gates` **13/13 pass**; `10_react_spa` **24 pass** (react-ot) |
 | Optional BACnet CI | PR #815 `bacnet-mqtt-e2e` **PASS**; tip master workflow pending post-publish |
 | **bldg2 Overview** | **DEFERRED** — bosspi fieldbus re-pin + `OPENFDD_EQUIPMENT_TYPE=zone_other` UI sign-off |
-| Full `run_all` stress | **IN PROGRESS** — `WEATHER_SOAK_SECS=120` shortened tier on bensbench |
+| Local synthetic CSV FDD | **PASS** — gate 06 core: import → parquet → `fdd/run` → `results[]`; FC13 alias + raw-SQL rejection green |
+| Local `run_all` stress | **PARTIAL FAIL** — artifact `reports/nightly-ot-bench_20260901T144819Z/` (`WEATHER_SOAK_SECS=120`) |
+| Railway F1 pipeline | **PARTIAL** — BUILDING_100 FC1/runtime parity **PASS** (see below); DF55/BUILDING_50/AFDD flood still pending |
+| BUILDING_100 local vs Railway | **PASS** — FC1 AHU_1 **118.42 h** both sides; artifact `reports/railway-b100-parity_20260901T190000Z/` |
+
+## BUILDING_100 — local vs Railway parity (2026-09-01)
+
+**Question:** Railway UI showed no FC1 faults for AHU_1; run times looked wrong.  
+**Answer:** Central API parity is **identical** on pin `sha-3c9f753` when `building_id=BUILDING_100`.
+
+| API | Local | Railway | WattLab dump |
+|-----|-------|---------|--------------|
+| `POST /api/fdd/run` FC1 AHU_1 | FAULT **118.42 h** | FAULT **118.42 h** | `fdd_findings.csv` **118.42 h** |
+| `poll_seconds` | 300 | 300 | — |
+| `POST /api/analytics/runtime` AHU_1 `run_hours` | **1638.75** | **1638.75** | — |
+| `FAN-RUNTIME-HOURS` AHU_1 | PASS (0 h fault) | PASS (0 h fault) | PASS |
+| `GET /api/fdd/series` FC1 AHU_1 | `has_confirmed_fault: true` | same | — |
+| `POST /api/analytics/ahu-pressure-health` `duct_low` | true | true | — |
+
+**Storage env (differs, not blocking scoped BUILDING_100):**
+
+| | Local | Railway |
+|---|-------|---------|
+| `parquet_root` (cache status) | `/workspace/.cache/parquet` | `/workspace/openfdd` |
+| `OPENFDD_PARQUET_ROOT` | unset (legacy fallback) | `/workspace/openfdd` |
+
+**Why UI can still look “no faults” on Railway:**
+
+1. **Site not locked** — FDD without `building_id` returns **zero AHU FC1 rows** (unscoped parquet root is MQTT `history/` tree). UI needs `?site=BUILDING_100` on Overview / Reports / Run Rules.
+2. **No prior building-scoped run** — Railway had `result_file_count: 0` until `POST /api/fdd/run` with `building_id`; Reports reads cached `GET /api/fdd/results?building_id=BUILDING_100`.
+3. **Runtime labels** — Overview motor **run_hours** (~1638 h) ≠ `FAN-RUNTIME-HOURS` fault lane (PASS/0 h). Both match WattLab; not a local/Railway split.
+
+**Artifact:** `reports/railway-b100-parity_20260901T190000Z/` (raw JSON + `summary.json`).
 
 ## Verdict — 3.3.14 MQTT Overview parity (2026-08-31)
 
@@ -69,11 +101,71 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 | **lake-current-ts-column** | P1 bench lake tool | **FIXED** private sidecar — `polled_at` not `ts` |
 | **lake-role-heuristics** | P2 packaging | Manual AHU package maps vendor leaf names to cookbook roles |
 
+## Patch cycle — Phase 7 bugs (local `run_all` 2026-09-01)
+
+**Artifact:** `reports/nightly-ot-bench_20260901T144819Z/` · pin `sha-3c9f753` · `SKIP_PULL=1 WEATHER_SOAK_SECS=120`
+
+| Gate | ID | Severity | Symptom | Patch target |
+|------|-----|----------|---------|--------------|
+| 06 | **#528** | P2 harness | `poll_seconds=300` vs ~60 for 1-min FC1 fixture — grid_minutes hardcode | Tiny rev `3.3.16`; does **not** block synthetic CSV FDD acceptance |
+| 08 | **weather-mirror-frozen** | P1 soak | `599999`/`600000` weather-last-updated frozen over 120s — mirror loop dead? | Re-run full soak or fix BACnet weather mirror |
+| 11 | **#549 dashboard-apis** | P1 product | React assets missing reports wiring | React + API wiring PR |
+| 12 | **#550 parity-honesty** | P1 docs/registry | `parity-matrix.md` legacy labels; registry total 66≠63; SCHED-1 SQL missing `occ_mode` string compare | Docs + registry sync PR |
+| 14 | **capability-ledger-pyyaml** | P2 harness | `validate_capabilities_ledger.py` — PyYAML missing on bensbench | `pip install PyYAML` or gate deps doc |
+| 15 | **product-truth-agents** | P2 docs | Root `AGENTS.md` missing vibe21 recovery pointers | Docs-only PR |
+| 16 | **playwright-workflows** | P1 product | Host missing `libatk-1.0` for Playwright chromium; root-owned `test-results/` blocks reruns | `apt install libatk1.0-0` or run gate 16 in CI; fix test-results perms |
+| — | **rule-display-name-drift** | P2 UX | Sidebar truncated labels vs plot titles | **PATCHED** in tree — `ruleLabels.ts` + wired sidebar/plots/catalog |
+
+**Patch train (each fix):** log row above → fix PR → `VERSION` bump if product change → GHCR publish → re-pin → smoke → re-stress affected gate → move row to **patched** table when green.
+
+**Synthetic CSV FDD (local):** Core fault-finding path **PASS** — gate 06 FAIL is **#528 metadata only**.
+
+## Railway F1 pipeline (separate tier — partial)
+
+| Check | Last evidence | Re-run on `sha-3c9f753` |
+|-------|---------------|-------------------------|
+| Hub health | `3.3.15+3c9f753`, `ingest_ok` advancing | ✅ current pin |
+| **BUILDING_100 FC1 + runtime** | **PASS** 2026-09-01 — AHU_1 FC1 118.42 h; `run_hours` 1638.75 local=Rwy | ✅ |
+| DF55 spot-check | Prior cycles | **PENDING** |
+| BUILDING_50 import/FDD | **PASS** 3.3.14 enhanced stress | **PENDING** |
+| AFDD flood (short) | **PASS** post csv-flood fix 3.3.12 | **PENDING** (`--max-hours 4`) |
+| bldg2 Overview | **DEFERRED** — bosspi re-pin | After `OPENFDD_EQUIPMENT_TYPE=zone_other` |
+
+Local bench `run_all` green does **not** require Railway F1 in the same session.
+
+## Data restore across patch / nightly re-pin (2026-09-01)
+
+**Model:** durability = **same volume**, not a per-message backup file.
+
+| Data class | Where it lives | Survives image re-pin? | Disaster backup |
+|------------|----------------|------------------------|-----------------|
+| **CSV / package import** | `workspace/data/csv_buildings/` + Parquet under `OPENFDD_STORAGE_URL` | **Yes** — bind-mount (local) or Railway `/workspace` volume | `central-workspace.tgz` |
+| **MQTT stream (live OT)** | `openfdd/history/building_id=…/part-*.parquet` on same volume | **Yes** — Parquet **is** the historian; no stream backup file | same tarball |
+| **Weather (BACnet mirror)** | Fieldbus → MQTT → central weather Parquet | **Yes** — same volume | same tarball |
+| **`ingest_ok` counter** | Process/runtime | May reset on container recreate — use Parquet counts for restore proof | n/a |
+
+**Gate 18 PASS:** `reports/volume-restore-smoke_20260901T173000Z/` — force-recreate central, `workspace/` unchanged: parquet 2500→2500, datasets 3→3, historian files 7408→7408.
+
+**Railway tarball:** `~/openfdd-backups/railway/20260901T144551Z/` includes package Parquet (`LibertyCenter`) **and** streamed MQTT history (`bldg2/…/part-*.parquet`).
+
+Script: `scripts/nightly-ot-bench/18_volume_restore_smoke.sh`
+
 ## Soft-OPEN / follow-up
 
 | ID | Notes |
 |----|-------|
+| **#528 poll_seconds** | Code fix in tree (`registry_api` + `read_poll_from_cache`); gate 06 passes after **central** GHCR re-pin |
+| **rule-display-name-drift** | **PATCHED** in tree — `frontend/web/src/lib/ruleLabels.ts`; pending web GHCR re-pin |
+| **weather-mirror-frozen** | Gate 08 — investigate BACnet weather mirror on bench + Pi |
+| **#549 #550 gates 11–12** | Dashboard APIs + parity honesty — product/docs PRs |
+| **playwright-workflows** | Gate 16 — product workflow locators |
+| **capability-ledger-pyyaml** | Gate 14 — host dep or script guard |
+| **product-truth-agents** | Gate 15 — `AGENTS.md` vibe21 pointers |
 | **bldg2-overview-signoff** | Hub on `sha-3c9f753`; bosspi needs `OPENFDD_EQUIPMENT_TYPE=zone_other` + fieldbus re-pin → confirm Zone Other + sensor faults in UI |
+| **railway-f1-stress** | BUILDING_100 slice **PASS**; DF55/BUILDING_50/AFDD flood still pending |
+| **railway-ui-fdd-stale** | If Reports shows “no fault lane” — run FDD with `?site=BUILDING_100` then refresh; unscoped run returns no AHU FC1 |
+| **local-parquet-root-split** | Local `parquet_root` reports `.cache/parquet` while package data also under `openfdd/` — #528 fix in 3.3.16; scoped BUILDING_100 still matches Railway |
+| **rule-display-name-drift** | Sidebar vs center vs cookbook names diverge — `phase7-rule-display-names`; contract in `openfdd_agent_spec/docs/RULE_DISPLAY_NAMES.md` |
 | **lake-credential-rotation** | Read-only lake password was shared in chat — rotate; session-env only |
 | **lake→openfdd packaging** | Manual zip builder worked; formalize in private sidecar later |
 | **local-fdd-latency** | **CLOSED** — Patch D (#813) |

@@ -18,7 +18,7 @@ OpenClaw, Claude Desktop, or any MCP host — connect via **JWT REST** and optio
 
 **Software-engineering agent OS:** [`openfdd_agent_spec/`](openfdd_agent_spec/) — architecture locks, skills, Milestone A.
 
-**Active recovery / Vibe 21 twin program:** [`tools/open-fdd-vibe21-production/`](tools/open-fdd-vibe21-production/README.md) · capability ledger [`docs/migration/react-rust/capabilities.yaml`](docs/migration/react-rust/capabilities.yaml).
+**Active recovery / Vibe 21 twin program:** [`tools/open-fdd-vibe21-production/`](tools/open-fdd-vibe21-production/README.md) · capability ledger [`docs/migration/react-rust/capabilities.yaml`](docs/migration/react-rust/capabilities.yaml). Modernization Phase 1+2 exit is **architecture direction**; Vibe 21 recovery is the active qualification program (not “Phase 1 complete”).
 
 **PyPI (`open-fdd`):** ECM engineering + pandas oracle (`open_fdd.rules` / `analytics` / `reporting`) for **third-party tooling** outside the product app. Product FDD is DataFusion on GHCR.
 
@@ -55,7 +55,7 @@ When changing Rust in this repo (full rules: [`openfdd_agent_spec/docs/RUST_LINT
 - Prefer `?` / combinators over `.unwrap()` on production paths.
 - Historian: **Parquet** under `OPENFDD_STORAGE_URL` is canonical; Feather dual-write is **retired** (do not reintroduce). App updates keep the same volume/S3 bucket — that is restore.
 
-Patch-cycle train after Plans 1–4: blank BUG_REPORT → tiny rev bump → GHCR `sha-*` → dual MQTT / synthetic / pcap → fill BUG_REPORT.
+Patch-cycle train after Plans 1–4: log gate FAILs in [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) **before** fixing → tiny rev bump (product only) → GHCR `sha-*` → re-pin → smoke → re-stress affected gate → move row to patched. Local synthetic CSV FDD and Railway F1 are separate stress tiers (see [`openfdd_agent_spec/CONTAINER_AGENT.md`](openfdd_agent_spec/CONTAINER_AGENT.md) § Ops patch cycle).
 
 ## Safe scripts
 

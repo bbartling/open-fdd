@@ -27,7 +27,7 @@ import type { FddEquipmentItem } from "../api/analyticsApi";
 import { VavHealthSection } from "./VavHealthSection";
 import { PlantHealthSections } from "./PlantHealthSections";
 import { WeatherHealthSection } from "./WeatherHealthSection";
-import { mergeRuleCatalogFromApi } from "../lib/cookbookRuleCatalog";
+import { mergeRuleDescriptionsFromApi } from "../lib/ruleLabels";
 import { RULES_UPDATED_EVENT } from "./RuleTuningPanel";
 import { naturalCompare } from "../lib/naturalSort";
 import {
@@ -217,7 +217,7 @@ export function OverviewPopulated({
         listFddRules().catch(() => []),
       ]);
       setRuleCount(cookbookRuleCount(rules, status?.rule_count));
-      mergeRuleCatalogFromApi(rules);
+      mergeRuleDescriptionsFromApi(rules);
       if (!buildingId) return;
       const map = await getPackageMapping(buildingId).catch(() => null);
       const frames = map?.equipment ?? [];

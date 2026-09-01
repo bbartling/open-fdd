@@ -99,3 +99,33 @@ params such as FC1 `confirm_min` match the merged tip.
 **not** ship Python. To run dumps on a bench, set
 `OPENFDD_WATTLAB_PYTHON_EXPORT=1` and mount script + interpreter — never
 required for health, FDD, or Overview analytics.
+
+---
+
+## Ops patch cycle (3.3.15+ closeout)
+
+During platform closeout, nightly gates drive a **patch train** documented in
+[`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).
+
+| Step | Action |
+| --- | --- |
+| Discover | `run_all` or single gate script under `scripts/nightly-ot-bench/` |
+| Log | Add row to BUG_REPORT **Patch cycle — Phase 7 bugs** before coding |
+| Fix | One concern per PR; `VERSION` bump only for product changes |
+| Publish | Wait GHCR Publish green on merge sha |
+| Re-pin | Railway central → mqtt → web; local `.env` `OPENFDD_IMAGE_TAG=sha-*` |
+| Verify | Smoke `01_health_gates` + `10_react_spa`; re-run **only** fixed gate(s) |
+| Close | Move BUG_REPORT row to **patched** when green |
+
+**Stress tiers (do not conflate):**
+
+| Tier | Scope |
+| --- | --- |
+| Local OT core | Gates 01–05, 09–10, 13 — bench closeout |
+| Synthetic CSV FDD | Gate 06 core path (import → `fdd/run` → `results[]`); **#528** `poll_seconds` is harness-only |
+| Weather soak | Gate 08 — shorten with `WEATHER_SOAK_SECS` on low-RAM |
+| Railway F1 | DF55, BUILDING_50, AFDD flood, bldg2 — **separate** from local `run_all` |
+
+**Volume restore (gate 18):** after re-pin, `./scripts/nightly-ot-bench/18_volume_restore_smoke.sh` — CSV packages + MQTT-streamed Parquet survive container recreate on the same `workspace/` volume (no per-message backup). Tarball restore: [`backup-update-restore.md`](../docs/operations/backup-update-restore.md).
+
+Session log: [`SESSION_LOG.md`](SESSION_LOG.md). Agent law: [`AGENTS.md`](AGENTS.md) rule 45.

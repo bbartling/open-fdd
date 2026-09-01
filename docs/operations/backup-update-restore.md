@@ -51,6 +51,26 @@ OPENFDD_PARQUET_ROOT="$PWD/workspace/openfdd" ./scripts/release/smoke_mcp_centra
 
 Scoped FDD on Railway/local: use `rule_ids` in `/api/fdd/run` POST body; avoid full-building rule floods within the default 120s smoke window.
 
+### Patch-cycle restore smoke (gate 18)
+
+After every image re-pin (local or Railway), historian data must still be queryable from the **same volume**:
+
+```bash
+cd ~/open-fdd
+# Stack must be up; requires existing Parquet on workspace/openfdd
+./scripts/nightly-ot-bench/18_volume_restore_smoke.sh
+```
+
+What this proves:
+
+| Source | Persisted as | Restore mechanism |
+|--------|--------------|-------------------|
+| CSV import / package zip | `workspace/data/` + `openfdd/building=*/` Parquet | Volume bind-mount / Railway `/workspace` |
+| MQTT telemetry stream | `openfdd/history/.../part-*.parquet` | Same volume — **no per-message backup file** |
+| BACnet weather mirror | Weather historian partition on central | Same volume |
+
+`ingest_ok` in `/api/health` may reset when central restarts; use Parquet file counts and `/api/datasets` as restore proof.
+
 ## Railway hub (mandatory before central re-pin)
 
 **Primary durability:** change the **image tag only**. Keep the same Railway volume mounted at `/workspace`. Never `volume delete`, never attach a **new empty** volume for an upgrade.

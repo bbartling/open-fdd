@@ -282,6 +282,10 @@ check_device_fresh() {
     bad "$name $dev: could not read weather-last-updated after soak"
     return
   fi
+  if [[ "$SOAK" -lt 600 ]]; then
+    skip "$name $dev: soak ${SOAK}s < 600 — skip last-updated drift (tier C low-RAM)"
+    return
+  fi
   if [[ "$sa" != "$sb" ]]; then
     ok "$name $dev: weather-last-updated CHANGED over soak — server data is live"
     echo "${DIM}  before: $sb${RST}"

@@ -197,6 +197,7 @@ tracks the recovery program evidence gates.
 - [ ] P1-M2-B — unified error/loading/recovery matrix
 - [ ] P1-M2-C — accessibility/responsive shell (axe/keyboard)
 - [x] P1-M3 partial — Playwright product markers (Overview/Auth/Jobs/…/WattLab) + nightly gate 16; PlotlyHost/demo strip still open
+- [ ] **3.3.15 Phase 7** — local `run_all` PARTIAL (`20260901T144819Z`): gates 08, 11–16 open; synthetic CSV FDD core PASS; #528 harness-only — see BUG_REPORT Phase 7 table
 - [ ] P1-M3-* — PlotlyHost replacement; remove demo/stub product controls; full browser-qualify workflows
 - [ ] P1-M4-* — SQL oracle closure by family; RCx/metering real algorithms; report no-Python
 - [ ] P1-M5-* — independent qualification pack + React retirement guard

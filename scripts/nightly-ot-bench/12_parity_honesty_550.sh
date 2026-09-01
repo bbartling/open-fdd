@@ -66,10 +66,10 @@ CONCEPT="$(jq '[.rules[]? | select(.parity_status=="concept_only")] | length' <<
 LEGACY="$(jq '[.rules[]? | select(.parity_status=="proven_building_100" or .parity_status=="ported_from_cookbook" or .parity_status=="skipped_missing_roles")] | length' <<<"$RULES")"
 TOTAL="$(jq '[.rules[]?] | length' <<<"$RULES")"
 echo "${DIM}  registry sql_screening=$SCREEN concept_only=$CONCEPT legacy=$LEGACY total=$TOTAL${RST}"
-if [[ "$TOTAL" -eq 63 ]]; then
-  ok "registry total=63"
+if [[ "$TOTAL" -eq 66 ]]; then
+  ok "registry total=66 (62 diagnostics + 4 SQL-only analytics)"
 else
-  bad "registry total=$TOTAL (expected 63)"
+  bad "registry total=$TOTAL (expected 66)"
 fi
 if [[ "$LEGACY" -eq 0 ]]; then
   ok "no legacy parity_status labels on tip"
@@ -92,7 +92,7 @@ else
   bad "SCHED-1 missing occ_mode role: $SCHED_META"
 fi
 SQL_FILE="$ROOT/sql_rules/sched1_unoccupied_runtime.sql"
-if [[ -f "$SQL_FILE" ]] && grep -q "LOWER(occ_mode)" "$SQL_FILE" && grep -q "unoccupied" "$SQL_FILE"; then
+if [[ -f "$SQL_FILE" ]] && grep -qE 'LOWER\([^)]*occ_mode' "$SQL_FILE" && grep -q "unoccupied" "$SQL_FILE"; then
   ok "SCHED-1 SQL compares string occ_mode (LOWER = unoccupied)"
 else
   bad "SCHED-1 SQL missing string occ_mode compare"

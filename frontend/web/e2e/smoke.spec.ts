@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { ensureProductSession } from "./session";
 
 /**
  * Real-stack smoke — no route/network mocks. Requires react SPA on :3000
@@ -18,6 +19,10 @@ test.describe("react product smoke (real stack)", () => {
     } catch {
       test.skip(true, `SPA unreachable at ${base}`);
     }
+  });
+
+  test.beforeEach(async ({ page, request }) => {
+    await ensureProductSession(page, request);
   });
 
   test("SPA shell loads without console errors", async ({ page }) => {

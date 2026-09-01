@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { LockedSiteCaption } from "../components/LockedSiteCaption";
+import { ruleLabelStandard, mergeRuleDescriptionsFromApi } from "../lib/ruleLabels";
 import { RULES_UPDATED_EVENT } from "../components/RuleTuningPanel";
 import {
   Button,
@@ -119,6 +120,7 @@ export function ReportsPage() {
   useEffect(() => {
     void listFddRules()
       .then((list) => {
+        mergeRuleDescriptionsFromApi(list);
         setRules(list);
       })
       .catch(() => undefined);
@@ -220,7 +222,7 @@ export function ReportsPage() {
       { value: "", label: "— rule —" },
       ...applicableRules.map((r) => ({
         value: r.rule_id,
-        label: `${r.rule_id} — ${r.description ?? ""}`,
+        label: ruleLabelStandard(r.rule_id, r.description),
       })),
     ],
     [applicableRules],

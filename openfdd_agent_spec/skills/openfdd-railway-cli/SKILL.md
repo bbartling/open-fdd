@@ -14,16 +14,15 @@ Checklist: [`RAILWAY_DEPLOYMENT_CHECKLIST.md`](../../../docs/operations/RAILWAY_
 
 **Not Open-FDD MCP.** Railway CLI / Railway’s optional MCP manage cloud deploys. HVAC FDD tools stay in [`mcp/`](../../../mcp/) (`openfdd-mcp` + agent JWT to private central).
 
-## Verified host state (bensbench, 2026-08-29)
+## Verified host state (bensbench, 2026-09-01)
 
 | Item | Value |
 | --- | --- |
 | Package | `@railway/cli` via `npm i -g @railway/cli` |
-| Verified version | **5.45.7** |
-| Binary | `~/.nvm/versions/node/*/bin/railway` (nvm PATH) |
-| Auth | **`railway login`** (browser) — verified; optional `RAILWAY_TOKEN` in `~/.config/railway/bensbench.env` for non-interactive |
+| Auth | **`railway login`** (browser) — verified; optional `RAILWAY_TOKEN` in `~/.config/railway/bensbench.env` |
 | Link | `~/open-fdd` → project **`gleaming-cooperation`**, env **`production`** |
-| Workspace | Ben Bartling's Projects |
+| **Current hub pin** | **`sha-3c9f753`** / `3.3.15+3c9f75311ae1` (re-pin after each Phase 7 fix publish) |
+| Last backup | `~/openfdd-backups/railway/20260901T144551Z/` |
 
 ### Live services (names matter for CLI)
 
@@ -37,7 +36,7 @@ Always `railway status` / `railway service list` before re-pin — do **not** as
 
 Post-auth snapshot (pre tip re-pin): mqtt Online on `sha-3395551`; web **Crashed** with `invalid port in resolver "fd12::10"` (needs tip `openfdd-web:sha-9667888` + `OPENFDD_NGINX_RESOLVER=auto`).
 
-## Patch train (bosspi → Railway)
+## Patch train (bosspi → Railway + Phase 7 local gates)
 
 Do **not** treat bensbench dual-MQTT as the cloud gate. After each tiny rev / ops fix:
 
@@ -45,7 +44,8 @@ Do **not** treat bensbench dual-MQTT as the cloud gate. After each tiny rev / op
 2. GH tidy (0 open PRs; delete feature branch)
 3. Re-pin central → mqtt → web; bosspi fieldbus arm64 to same `sha-*`
 4. Gates: L1 `/api/health` → L3 mqtt Online + ingest → L4 Pi `has_telemetry` → stream healthy → L5 FDD
-5. Sync [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../../../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) — CLOSE/remove validated; keep deferred unfinished
+5. **Local bench:** re-stress only the gate(s) fixed (`scripts/nightly-ot-bench/<gate>.sh`); full `run_all` when Phase 7 queue is empty
+6. Sync [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../../../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) — log FAIL before fix; move to **patched** when green; Railway F1 under separate table
 
 MQTT certs: `railway volume add` on `openfdd-mqtt` at `/mosquitto/certs`, upload `ca.pem` + server cert/key. Pi reachability: `railway tcp-proxy create --port 8883 --service openfdd-mqtt` (human-approved) or VPN. Never commit PEMs/tokens.
 
