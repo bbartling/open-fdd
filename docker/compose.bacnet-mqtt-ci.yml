@@ -15,6 +15,12 @@ services:
       - ${OPENFDD_BACNET_MQTT_CERT_DIR:?set OPENFDD_BACNET_MQTT_CERT_DIR}/broker:/mosquitto/certs:ro
       - ${OPENFDD_BACNET_MQTT_CERT_DIR}/acl:/mosquitto/config/acl:ro
       - mqtt-data:/mosquitto/data
+    healthcheck:
+      test: ["CMD-SHELL", "pidof mosquitto >/dev/null"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     networks:
       ci_net:
         ipv4_address: 172.30.0.30
@@ -43,7 +49,8 @@ services:
     ports:
       - "127.0.0.1:18080:8080"
     depends_on:
-      - mqtt
+      mqtt:
+        condition: service_healthy
     networks:
       ci_net:
         ipv4_address: 172.30.0.40
@@ -71,8 +78,10 @@ services:
     ports:
       - "127.0.0.1:18081:8081"
     depends_on:
-      - bacnet-sim
-      - mqtt
+      bacnet-sim:
+        condition: service_started
+      mqtt:
+        condition: service_healthy
     networks:
       ci_net:
         ipv4_address: 172.30.0.20
