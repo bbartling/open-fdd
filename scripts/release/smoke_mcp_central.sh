@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Boot central in Docker and smoke MCP stdio against /api/health.
+# Local FDD paths: set OPENFDD_PARQUET_ROOT (or OPENFDD_STORAGE_URL=file://…) to match
+# imported package parquet before expecting openfdd_fdd_* tools to return rows.
+# Low-RAM: OPENFDD_SMOKE_HEALTH_ONLY=1 skips FDD parity; OPENFDD_SMOKE_TIMEOUT_SECS=60 shortens health wait (default 120).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -10,6 +13,7 @@ CENTRAL_NAME="openfdd-central-smoke-$$"
 CENTRAL_IMAGE="${OPENFDD_CENTRAL_SMOKE_IMAGE:-openfdd-central:ci}"
 MCP_IMAGE="${OPENFDD_MCP_SMOKE_IMAGE:-openfdd-mcp:ci}"
 TIMEOUT_SECS="${OPENFDD_SMOKE_TIMEOUT_SECS:-120}"
+HEALTH_ONLY="${OPENFDD_SMOKE_HEALTH_ONLY:-0}"
 
 cleanup() {
   docker rm -f "$CENTRAL_NAME" >/dev/null 2>&1 || true
@@ -43,6 +47,12 @@ until curl -fsS "http://127.0.0.1:18080/api/health" \
   sleep 2
 done
 echo "OK central health"
+
+if [[ "$HEALTH_ONLY" == "1" ]]; then
+  echo "SKIP FDD parity (OPENFDD_SMOKE_HEALTH_ONLY=1)"
+  echo "PASS: MCP central smoke (health only)"
+  exit 0
+fi
 
 MCP_OUT="$(printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
