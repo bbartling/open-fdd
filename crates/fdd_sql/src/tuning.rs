@@ -87,10 +87,8 @@ impl DataFusionTuning {
         options.execution.parquet.reorder_filters = self.parquet_reorder_filters;
         options.execution.parquet.metadata_size_hint = self.parquet_metadata_size_hint_bytes;
         if let Some(concurrency) = self.meta_fetch_concurrency {
-            options.execution.meta_fetch_concurrency =
-                ConfigNonZeroUsize::try_new(concurrency).context(
-                    "OPENFDD_DATAFUSION_META_FETCH_CONCURRENCY must be greater than zero",
-                )?;
+            options.execution.meta_fetch_concurrency = ConfigNonZeroUsize::try_new(concurrency)
+                .context("OPENFDD_DATAFUSION_META_FETCH_CONCURRENCY must be greater than zero")?;
         }
         if let Some(min_size) = self.repartition_file_min_size_bytes {
             options.optimizer.repartition_file_min_size = min_size;
