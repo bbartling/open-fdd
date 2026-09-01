@@ -1,5 +1,23 @@
 # Session log
 
+## 2026-09-01 (evening) — Phase 7 patches in tree (pre-GHCR)
+
+- **ruleLabels** — `frontend/web/src/lib/ruleLabels.ts`; sidebar/plots/reports use `ruleLabelStandard` / `ruleLabelPlotTitle` (no 36-char truncation).
+- **#528** — `edge/src/fdd/registry_api.rs` STORAGE_URL-first parquet root; `fdd_rules::read_poll_from_cache` parent manifest walk (unit test PASS). Gate 06 still FAIL on running `sha-3c9f753` central until re-pin.
+- **Gates re-run (individual, not full `run_all`):** 11 PASS (source fallback for reports wiring); 12 PASS; 14 PASS; 15 PASS (ledger IMPLEMENTED honesty for CAP-PLOTS/RCX); 06 FAIL poll_seconds only; 16 blocked host `libatk-1.0`.
+- **BUILDING_100 Railway parity PASS** — artifact `reports/railway-b100-parity_20260901T190000Z/`.
+- VERSION **3.3.16** in tree; stress `run_all` deferred until GHCR publish + re-pin.
+
+## 2026-09-01 — 3.3.15 closeout + Phase 7 patch cycle (local stress)
+
+- Product pin **`sha-3c9f753`** / `3.3.15+3c9f75311ae1` on Railway (central+mqtt+web) + local react; backup `~/openfdd-backups/railway/20260901T144551Z/`.
+- Merged **#814** DataFusion 55 (`3c9f753`), **#815** BACnet→MQTT CI (`41af8523`), docs **#816** BUG_REPORT partial verdict (`6efd1f74`).
+- Smoke **PASS**: `01_health_gates` 13/13; `10_react_spa` 24/24 (`sha-3c9f753`).
+- Local `run_all` **PARTIAL FAIL** — `reports/nightly-ot-bench_20260901T144819Z/` (`SKIP_PULL=1`, `WEATHER_SOAK_SECS=120`): gates 01–05, 09–10, 13 PASS; **synthetic CSV FDD core PASS** (gate 06 FAIL = **#528** `poll_seconds` harness only).
+- Phase 7 patch queue (log each in BUG_REPORT before fix): gate 08 weather mirror; gates 11–16 dashboard/parity/ledger/product-truth/Playwright. **Railway F1** (DF55, BUILDING_50, AFDD flood, bldg2) = separate tier — not local `run_all`.
+- GH hygiene: 0 open PRs; 0 stale `feat/*`/`fix/*`; tip Actions green (optional BACnet `33529566569`).
+- Living docs: [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) Phase 7 table; plan `.cursor/plans/3.3.15_closeout_stress_9022f038.plan.md`.
+
 ## 2026-08-30 — Enhanced CSV/AFDD stress → 3.3.12
 
 - Fixed `csv_flood_afdd_routine_sim` nested VAV equipment_id (leaf folder).

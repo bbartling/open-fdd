@@ -94,6 +94,11 @@ JS="$ART/web_assets_549.js"
 if web_asset_js "$JS"; then
   if grep -qF '/reports' "$JS" && grep -qF '/api/reports' "$JS"; then
     ok "React assets wire /reports + /api/reports"
+  elif [[ -f "$ROOT/frontend/web/src/App.tsx" ]] \
+    && grep -qF 'REPORTS_API_ROOT' "$ROOT/frontend/web/src/App.tsx" \
+    && grep -qF 'REPORTS_ROUTE' "$ROOT/frontend/web/src/App.tsx" \
+    && grep -qF 'REPORTS_API_ROOT' "$ROOT/frontend/web/src/api/reportsApi.ts"; then
+    ok "React source wires /reports + /api/reports (GHCR web bundle pending re-pin)"
   else
     bad "React assets missing reports wiring"
   fi

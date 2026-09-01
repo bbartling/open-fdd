@@ -20,3 +20,6 @@ Workflow: `.github/workflows/cookbook-parity.yml`.
 When changing rule identity or count, update both cookbooks and the parity
 matrix in the same PR family. Accidental cookbook shrinkage must fail CI
 (harden under Milestone A Phase 0/2).
+
+Display-name contract (registry `description` ↔ cookbook short title ↔ React
+labels): [`docs/RULE_DISPLAY_NAMES.md`](../../docs/RULE_DISPLAY_NAMES.md).

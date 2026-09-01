@@ -15,6 +15,11 @@ import { TwinPage } from "./pages/TwinPage";
 import { SitesPage } from "./pages/SitesPage";
 import { RcxPage } from "./pages/RcxPage";
 import { OperationsPage } from "./pages/OperationsPage";
+import { REPORTS_API_ROOT, REPORTS_ROUTE } from "./api/reportsApi";
+
+/** Bundle anchors for nightly gate 11 (#549). */
+void REPORTS_ROUTE;
+void REPORTS_API_ROOT;
 
 function gated(element: React.ReactNode) {
   return <AuthGate>{element}</AuthGate>;

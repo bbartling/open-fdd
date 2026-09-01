@@ -75,7 +75,7 @@ retest. Do not confuse those with this engineering OS.
 29. **Low-RAM / bensbench:** never local stack `docker build`; prune old images before pull; wait for GHCR publish then pull `sha-*` / `nightly`. Synthetic-59 soaks: `scripts/synthetic_59_*.py` (OpenFDD-only). GHCR poll: `scripts/ghcr_watch_central.py`. E+ dump/clustering: `scripts/eplus_dump_clustering_export.py`, `scripts/agent_eplus_dump.sh`. Vibe19 B100 dump-parity **retired** → `scripts/retired/vibe19-parity/`. Never edit goldens to hide misses.
 30. **Plot PNG downloads:** `PlotlyHost` must pass `toImageButtonOptions.filename` (Overview/Reports). Default Plotly `newplot.png` is a regression.
 31. **Full-width UI:** `.app-content` / `.overview-populated` stretch (`max-width: none`) like Streamlit — do not reintroduce a rem content cap on Overview plots.
-32. **Rule Lab menu:** `RuleTuningPanel` sorts visible rules A–Z by `rule_id` (registry YAML order is engine priority only).
+32. **Rule Lab menu:** `RuleTuningPanel` sorts visible rules A–Z by `rule_id` (registry YAML order is engine priority only). Labels must use the shared rule display contract — [`docs/RULE_DISPLAY_NAMES.md`](../../docs/RULE_DISPLAY_NAMES.md); no sidebar truncation vs full center labels.
 33. **FDD Plots series roles:** `series_response` SELECT = `required_roles ∪ optional_roles` (SV-*/PID-HUNT keep required empty). Soft-empty when none present on equipment.
 34. **Mech cooling OAT bins:** status/cmd proof **before** amps (never OR amps when status exists); prefer web/`dry_bulb_f`/weather OAT over site-averaged AHU BAS `oa_t`. Version `mechanical-cooling-oat-bins-v2`.
 35. **Synthetic analytics soak:** `scripts/synthetic_59_overview_analytics_soak.py` asserts runtime + mech bin envelopes (separate from FDD pair scores).
@@ -87,7 +87,11 @@ retest. Do not confuse those with this engineering OS.
 41. **Dual pipeline:** bosspi → Railway (cloud exclusive); bensbench local GHCR react stack for firewall/on-prem. Same tip `sha-*` both sides; 60s poll+publish on both edges; do not cross-wire for parity.
 42. **FDD + STORAGE_URL:** when `OPENFDD_STORAGE_URL=file:///workspace/openfdd`, set `OPENFDD_PARQUET_ROOT=/workspace/openfdd` so `/api/fdd/run` finds package historian parquet (else “parquet cache missing”).
 43. **Tip mqtt ACL path:** `acl_file /mosquitto/certs/acl` — local stacks must place ACL under `deploy/mqtt/certs/acl`, not only `deploy/mqtt/acl`.
-41. **Stream roles ≠ package roles until mapped:** live tags `zonetemp`/`sa_t` normalize to `zone_t`/`sat`. Empty Overview with rising `ingest_ok` ⇒ roles, not nginx. OT poll+MQTT publish floor **60s**.
+44. **Stream roles ≠ package roles until mapped:** live tags `zonetemp`/`sa_t` normalize to `zone_t`/`sat`. Empty Overview with rising `ingest_ok` ⇒ roles, not nginx. OT poll+MQTT publish floor **60s**.
+45. **Patch cycle (3.3.15+ ops closeout):** every nightly gate FAIL → log row in [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) **Patch cycle — Phase 7 bugs** before opening a fix PR. Train: fix (one concern/PR) → `VERSION` bump if product change → GHCR publish → backup + re-pin → smoke `01`/`10` → **gate 18** volume restore → re-stress affected gate only → move row to **patched** when green. **Local synthetic CSV FDD** is accepted when import → parquet → `fdd/run` → `results[]` passes; gate 06 **#528** `poll_seconds` is harness-only. **Railway F1** (DF55, BUILDING_50 import/FDD, AFDD flood, bldg2 Overview) is a **separate** stress tier — do not block local bench closeout on Railway F1 in the same `run_all` session.
+46. **Rule display names (one contract):** `rule_id` is the machine key; `sql_rules/registry.yaml` `description` is the **short human name** for all product UI. Cookbook headings extend that name (GL36 refs, etc.) — see [`docs/RULE_DISPLAY_NAMES.md`](docs/RULE_DISPLAY_NAMES.md). React must use shared formatters (`ruleLabels.ts` — planned) in sidebar `RuleTuningPanel`, FDD Plots picker, plot titles, health-matrix tooltips, and CSV exports. Do **not** truncate sidebar labels while showing full names in the center panel. Merge API rules into `cookbookRuleCatalog` at boot; avoid duplicate static description maps. Cookbook/registry drift is a parity bug — fix in the same PR family as rule changes.
+
+**Current ops pin (2026-09-01):** `sha-3c9f753` / `3.3.15+3c9f75311ae1` — verdict + Phase 7 queue in BUG_REPORT.
 
 ---
 
@@ -112,8 +116,9 @@ Nested instructions may specialize but never contradict a higher authority.
 7. [`tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md`](../tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md)
 8. [`MILESTONE_A.md`](MILESTONE_A.md) if executing Milestone A
 9. [`PR_PROTOCOL.md`](PR_PROTOCOL.md) before opening a PR
-10. Matching skill
-11. Cookbooks under `docs/rules/cookbook/`
+10. [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) during ops patch cycles
+11. Matching skill
+12. Cookbooks under `docs/rules/cookbook/` + [`docs/RULE_DISPLAY_NAMES.md`](docs/RULE_DISPLAY_NAMES.md) when touching rule labels in UI
 
 ---
 

@@ -7,6 +7,7 @@ import {
   type PlotlyTrace,
 } from "./plotDataset";
 import { overviewChartLayout, rainbowColor } from "./plotlyTheme";
+import { ruleLabelPlotTitle } from "../lib/ruleLabels";
 import { familyOrderKeys, resolveRoleUnit, unitFamily } from "./roleUnits";
 
 /** Outlier red — vibe19 charts.py stroke for z-score outliers. */
@@ -571,7 +572,7 @@ export function ruleResultChart(
 
   const data: PlotlyTrace[] = [];
   const layout: Record<string, unknown> = {
-    title: `${opts.ruleId} · ${opts.equipmentId}`,
+    title: ruleLabelPlotTitle(opts.ruleId, opts.equipmentId),
     legend: { orientation: "h", yanchor: "bottom", y: 1.02, x: 0, font: { size: 10 } },
     hovermode: "x unified",
     height: Math.max(320, 90 * nSig + (hasFault ? 90 : 0) + 80),

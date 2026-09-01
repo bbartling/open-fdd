@@ -102,6 +102,7 @@ GHCR_WAIT_SECS=900 GHCR_POLL_SECS=30 ./scripts/nightly-ot-bench/00_pull_ghcr_up.
 6. React SPA routes + honesty/MCP gates pass
 7. Gates **14–15** PASS (capability ledger validator + product-truth honesty)
 8. Optional dual-MQTT (`RUN_CLOUD_SIM=1`): gate **10** — bosspi fieldbus OCI rev matches bench; both sites telemetry + ingest
+9. **Patch-cycle restore:** gate **18** — `18_volume_restore_smoke.sh` after central re-pin (CSV + MQTT-stream Parquet on same volume)
 
 Low-RAM bench: set `OPENFDD_QUERY_MEMORY_MB=256` in `.env`. Document GHCR legitimacy for **bensbench + bosspi** in [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).
 

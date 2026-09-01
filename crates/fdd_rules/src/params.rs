@@ -110,26 +110,66 @@ pub fn rule_params(poll_seconds: f64, confirm_seconds: u32) -> HashMap<String, S
     m
 }
 
-/// Read poll interval from ingest sidecar manifest written during ingest.
-pub fn read_poll_from_cache(parquet_root: &Path) -> Option<f64> {
-    let manifest = parquet_root.join("manifest.json");
-    if !manifest.is_file() {
-        return None;
-    }
-    let text = std::fs::read_to_string(&manifest).ok()?;
-    let v: Value = serde_json::from_str(&text).ok()?;
+fn json_as_f64(v: &Value) -> Option<f64> {
+    v.as_f64()
+        .or_else(|| v.as_u64().map(|n| n as f64))
+        .or_else(|| v.as_i64().map(|n| n as f64))
+}
+
+fn poll_from_manifest_json(v: &Value) -> Option<f64> {
     v.get("effective_poll_seconds")
-        .and_then(|x| x.as_f64())
+        .and_then(json_as_f64)
         .or_else(|| {
             v.get("grid_minutes")
-                .and_then(|x| x.as_f64())
+                .and_then(json_as_f64)
                 .map(|m| m * 60.0)
         })
+}
+
+/// Read poll interval from ingest sidecar manifest written during ingest.
+pub fn read_poll_from_cache(parquet_root: &Path) -> Option<f64> {
+    let mut dirs = vec![parquet_root.to_path_buf()];
+    if parquet_root
+        .file_name()
+        .and_then(|s| s.to_str())
+        .is_some_and(|s| s.starts_with("building="))
+    {
+        if let Some(parent) = parquet_root.parent() {
+            dirs.push(parent.to_path_buf());
+        }
+    }
+    for dir in dirs {
+        let manifest = dir.join("manifest.json");
+        if !manifest.is_file() {
+            continue;
+        }
+        let text = std::fs::read_to_string(&manifest).ok()?;
+        let v: Value = serde_json::from_str(&text).ok()?;
+        if let Some(poll) = poll_from_manifest_json(&v) {
+            return Some(poll);
+        }
+    }
+    None
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn read_poll_from_building_scoped_parent_manifest() {
+        let tmp = std::env::temp_dir().join(format!("poll_cache_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("building=B1")).unwrap();
+        std::fs::write(
+            tmp.join("manifest.json"),
+            r#"{"grid_minutes":1,"effective_poll_seconds":60}"#,
+        )
+        .unwrap();
+        let scoped = tmp.join("building=B1");
+        assert_eq!(read_poll_from_cache(&scoped), Some(60.0));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 
     #[test]
     fn substitutes_poll_seconds() {

@@ -7,6 +7,7 @@ import {
   type FddRuleSummary,
 } from "../api/fddApi";
 import { getSessionConfig, putSessionConfig } from "../api/mappingApi";
+import { ruleLabelStandard, mergeRuleDescriptionsFromApi } from "../lib/ruleLabels";
 import {
   effectiveRunParams,
   loadLocalRuleParams,
@@ -108,7 +109,7 @@ function RuleExpander({
       data-testid={`rule-tune-${rule.rule_id}`}
     >
       <summary>
-        {rule.rule_id} — {(rule.description || rule.rule_id).slice(0, 36)}
+        {ruleLabelStandard(rule.rule_id, rule.description)}
         {modified ? " · modified" : ""}
       </summary>
       <div className="oracle-sidebar__expander-body">
@@ -209,7 +210,10 @@ export function RuleTuningPanel() {
     let cancelled = false;
     listFddRules()
       .then((list) => {
-        if (!cancelled) setRules(list);
+        if (!cancelled) {
+          mergeRuleDescriptionsFromApi(list);
+          setRules(list);
+        }
       })
       .catch((e: unknown) => {
         if (!cancelled) {

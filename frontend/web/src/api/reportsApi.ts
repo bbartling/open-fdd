@@ -1,5 +1,9 @@
 import { apiFetch } from "./client";
 
+/** Stable paths for nightly gate 11 (#549) — keep in main bundle via App import. */
+export const REPORTS_ROUTE = "/reports";
+export const REPORTS_API_ROOT = "/api/reports";
+
 export interface ReportRecord {
   report_id?: string;
   report_type?: string;

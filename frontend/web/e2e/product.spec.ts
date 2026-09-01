@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { collectPageErrors, simulateLanHttpCrypto } from "./lanHttp";
+import { ensureProductSession } from "./session";
 
 /**
  * P1-M3 real-stack product markers — no route/network mocks.
@@ -28,6 +29,10 @@ test.describe("react product workflows (real stack)", () => {
       }
       test.skip(true, `SPA unreachable at ${base}`);
     }
+  });
+
+  test.beforeEach(async ({ page, request }) => {
+    await ensureProductSession(page, request);
   });
 
   test("overview loads capabilities and generation markers", async ({ page }) => {

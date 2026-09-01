@@ -109,6 +109,10 @@ fn apply_session_bag_to_sql_params(
 }
 
 fn parquet_root() -> PathBuf {
+    // Match CSV ingest + historian: OPENFDD_STORAGE_URL file root first (#528).
+    if let Some(p) = fdd_store::local_file_root_from_env() {
+        return p;
+    }
     if let Ok(p) = std::env::var("OPENFDD_PARQUET_ROOT") {
         return PathBuf::from(p);
     }

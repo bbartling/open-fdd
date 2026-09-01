@@ -43,6 +43,11 @@ description: >-
     operator label only — not a dual-writer historian epic.
 13. Low-RAM benches: prefer `npm run dev` (Vite → `:8080`) and get human approval
     before GHCR `openfdd-web` fresh pulls after UI PRs.
+14. **Rule display names:** one contract across sidebar, FDD Plots, plot titles, health
+    matrices, and exports — see [`docs/RULE_DISPLAY_NAMES.md`](../../docs/RULE_DISPLAY_NAMES.md).
+    Registry `description` is canonical short name; cookbooks add long titles. Use shared
+    `ruleLabels` helpers (planned); merge `GET /api/fdd/rules` into `cookbookRuleCatalog`
+    at boot instead of duplicating static maps.
 
 ## Key files
 
@@ -57,6 +62,7 @@ description: >-
 | RCx Overview presets | `frontend/web/src/api/rcxOverviewPresets.ts` |
 | RCx / FDD charts | `frontend/web/src/api/vibeCharts.ts` |
 | Theme | `frontend/web/src/api/plotlyTheme.ts` |
+| Rule labels | `frontend/web/src/lib/cookbookRuleCatalog.ts`; planned `lib/ruleLabels.ts` |
 | SPA shell | `frontend/web/src/App.tsx`, `components/` |
 
 ## Anti-patterns
