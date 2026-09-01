@@ -74,6 +74,7 @@ issue_cert edge 'edge:ci:fieldbus-1' clientAuth
 cp "$TMP/ca.pem" "$TMP/mqtt/broker/ca.pem"
 cp "$TMP/server.cert.pem" "$TMP/mqtt/broker/server.cert.pem"
 cp "$TMP/server.key.pem" "$TMP/mqtt/broker/server.key.pem"
+cp "$TMP/mqtt/acl" "$TMP/mqtt/broker/acl"
 
 cp "$TMP/ca.pem" "$TMP/mqtt/central/ca.pem"
 cp "$TMP/central.cert.pem" "$TMP/mqtt/central/central.cert.pem"
@@ -116,6 +117,34 @@ wait_http() {
 wait_http http://127.0.0.1:18081/health "fieldbus health"
 wait_http http://127.0.0.1:18080/api/health "central health"
 
+TOKEN="$(curl -fsS -X POST http://127.0.0.1:18080/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"bacnet-mqtt-ci-admin"}' \
+  | jq -r '.token // .access_token // empty')"
+if [[ -z "$TOKEN" ]]; then
+  echo "FAIL: central login did not return a token" >&2
+  "${COMPOSE[@]}" logs --tail=200 central >&2 || true
+  exit 1
+fi
+
+echo "== Wait for central MQTT client connected =="
+mqtt_deadline=$((SECONDS + 120))
+while true; do
+  MONITOR="$(curl -fsS http://127.0.0.1:18080/api/mqtt/monitor \
+    -H "Authorization: Bearer $TOKEN")"
+  if echo "$MONITOR" | jq -e '.connected == true' >/dev/null 2>&1; then
+    echo "OK central MQTT connected"
+    break
+  fi
+  if (( SECONDS >= mqtt_deadline )); then
+    echo "FAIL: central MQTT client never connected" >&2
+    echo "$MONITOR" | jq . >&2 || true
+    "${COMPOSE[@]}" logs --tail=200 central mqtt >&2 || true
+    exit 1
+  fi
+  sleep 2
+done
+
 # Exercise the real Open-FDD BACnet client against the BACpypes3 server.
 echo "== BACnet read =="
 READ_JSON='{"device_instance":3456,"object_type":"analog-value","object_instance":1,"property_id":"present-value"}'
@@ -144,16 +173,6 @@ echo "$POLL_STATUS" | jq -e '
   ))
 ' >/dev/null
 echo "OK fieldbus poll state contains BACpypes3 point"
-
-TOKEN="$(curl -fsS -X POST http://127.0.0.1:18080/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"bacnet-mqtt-ci-admin"}' \
-  | jq -r '.token // .access_token // empty')"
-if [[ -z "$TOKEN" ]]; then
-  echo "FAIL: central login did not return a token" >&2
-  "${COMPOSE[@]}" logs --tail=200 central >&2 || true
-  exit 1
-fi
 
 # Wait until central observes, parses, and accepts the fieldbus BACnet telemetry envelope.
 deadline=$((SECONDS + 90))
