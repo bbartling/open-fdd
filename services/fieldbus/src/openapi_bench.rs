@@ -66,7 +66,8 @@ pub fn bacnet_write_bench() -> Value {
     })
 }
 
-#[allow(dead_code)]
+/// OpenAPI bench fixture for BACnet write dry-run; retained for utoipa example expansion.
+#[expect(dead_code)]
 pub fn bacnet_write_dry_run_bench() -> Value {
     json!({
         "device_instance": 5007,
