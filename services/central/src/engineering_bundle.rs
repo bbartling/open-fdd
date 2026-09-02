@@ -88,12 +88,12 @@ fn export_dir(job_id: &str, export_id: &str) -> Result<PathBuf, JobError> {
     Ok(jobs::job_dir(job_id)?.join("exports").join(export_id))
 }
 
-fn collect_files(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), JobError> {
+fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), JobError> {
     let entries = fs::read_dir(dir).map_err(|e| JobError::Io(e.to_string()))?;
     for entry in entries {
         let path = entry.map_err(|e| JobError::Io(e.to_string()))?.path();
         if path.is_dir() {
-            collect_files(root, &path, out)?;
+            collect_files(&path, out)?;
         } else if path.is_file() {
             out.push(path);
         }
@@ -106,7 +106,7 @@ fn zip_tree(source: &Path, destination: &Path, prefix: &str) -> Result<u64, JobE
     let mut writer = ZipWriter::new(file);
     let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
     let mut files = Vec::new();
-    collect_files(source, source, &mut files)?;
+    collect_files(source, &mut files)?;
     files.sort();
     for path in files {
         let rel = path
