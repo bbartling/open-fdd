@@ -14,16 +14,16 @@ hdr "Engineering bundle validate (gate 19)"
 
 BASE="${BASE:-http://127.0.0.1:8080}"
 BUILDING_ID="${BUILDING_ID:-BUILDING_100}"
-PASS="${OPENFDD_ADMIN_PASSWORD:-}"
+ADMIN_PASS="${OPENFDD_ADMIN_PASSWORD:-}"
 
 login() {
   curl -fsS --max-time 30 -X POST "$BASE/api/auth/login" \
     -H 'Content-Type: application/json' \
-    -d "$(jq -nc --arg u admin --arg p "$PASS" '{username:$u,password:$p}')" \
+    -d "$(jq -nc --arg u admin --arg p "$ADMIN_PASS" '{username:$u,password:$p}')" \
     | jq -r '.token // .access_token // empty'
 }
 
-if [[ -z "$PASS" ]]; then
+if [[ -z "$ADMIN_PASS" ]]; then
   bad "OPENFDD_ADMIN_PASSWORD required"
 fi
 

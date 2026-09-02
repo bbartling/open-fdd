@@ -1,5 +1,15 @@
 # Session log
 
+## 2026-09-02 (evening) — 3.3.20 engineering export + utilities closeout
+
+- **Merge:** #827 → `15baccf8`; VERSION **3.3.19**; Export & ML UI, `openfdd_engineering_bundle_v1`, `utilities_v1`, Creekside nested import, `UTIL-MONTHLY`/`UTIL-INTERVAL`.
+- **GHCR + re-pin:** `sha-15baccf`; local react `openfdd_maint_update_resume.sh react-ot sha-15baccf --skip-maintenance`; health `3.3.19+15baccf84e24`.
+- **Gates:** Creekside import **PASS** (`reports/creekside-package-import_20260902T230020Z/`); gate 19 bundle validator **READY** (`reports/nightly-ot-bench_20260902T230020Z/`).
+- **Hotfix:** #828 — gate 19 jq `NOT_READY` quote + `PASS` counter shadow fix.
+- **Issues closed:** #763, #805.
+- **GH hygiene END:** 0 open PRs after #828 merge; only `master`.
+- Plan: `.cursor/plans/3.3.20_engineering_ml_bundle_utilities.plan.md`
+
 ## 2026-09-02 (afternoon) — 3.3.20 engineering export + utilities (in flight)
 
 - **Branch:** `fix/3.3.20-engineering-ml-export` — nested Creekside import, `utilities_v1`, Rust `openfdd_engineering_bundle_v1`, Export & ML UI, `UTIL-MONTHLY`/`UTIL-INTERVAL`, gate 19 + Creekside spot.
