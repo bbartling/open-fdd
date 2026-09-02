@@ -1,5 +1,19 @@
 # Session log
 
+## 2026-09-02 (afternoon) — 3.3.19 remaining bugs + stress closeout
+
+- **GH hygiene START:** 0 open PRs; only `master`; tip Actions green.
+- **GHCR + re-pin:** `sha-b565d78` / `3.3.18+b565d78d2cae` on Railway (central→mqtt→web), local react, bosspi fieldbus arm64; backup `~/openfdd-backups/railway/20260902T145413Z/`.
+- **bosspi bldg2:** `OPENFDD_EQUIPMENT_TYPE=zone_other` in `compose.edge.local.yml` (ops); Pipeline A **PASS** (`pi-1`/`bldg2` `has_telemetry:true`).
+- **Smoke:** gates 01/06/10/18 PASS before stress (`reports/nightly-ot-bench_20260902T145608Z/` gate 18).
+- **`run_all` stress:** `reports/nightly-ot-bench_20260902T145737Z/` — gates **00–16 PASS** (`unset SKIP_PULL`, `WEATHER_SOAK_SECS=120`).
+- **Synthetic-59:** target-pair soak **59/59 PASS** → `reports/wattlab-parity/artifacts/synthetic_59/`.
+- **Gate 17:** `RUN_SYNTH59_HEALTH_MATRIX=1` — health matrix + overview analytics **PASS**.
+- **BUILDING_100 parity:** `reports/railway-b100-parity_20260902T151009Z/` — FC1 **118.42 h**, runtime **1638.75 h**, series confirmed, `poll_seconds=300` (local ≡ Railway).
+- **Harness:** `scripts/gates/railway_b100_parity_spot.sh` (B100 API capture + `summary.json`).
+- **Deferred:** bldg2 Overview SPA browser sign-off; BUILDING_50 import + AFDD flood (no package on bench).
+- Living docs: [`BUG_REPORT`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) · plan `.cursor/plans/3.3.19_remaining_bugs_stress.plan.md`.
+
 ## 2026-09-02 (midday) — 3.3.18 nightly refresh (post docker maintenance)
 
 - **Docker maintenance** by operator; local stack restored via `openfdd_maint_update_resume.sh react-ot sha-ca67707 --skip-maintenance`.
