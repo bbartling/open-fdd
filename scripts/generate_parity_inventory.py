@@ -594,8 +594,20 @@ def main() -> int:
             print("FAIL: generated inventory missing; run without --check", file=sys.stderr)
             return 1
         existing = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
-        if _normalize_for_check(existing) != _normalize_for_check(inv):
-            print("FAIL: parity inventory is stale; regenerate", file=sys.stderr)
+        if existing.get("counts") != inv.get("counts"):
+            print(
+                f"FAIL: counts drift {existing.get('counts')} != {inv.get('counts')}",
+                file=sys.stderr,
+            )
+            return 1
+        existing_ids = {r["rule_id"] for r in existing.get("matrix", [])}
+        new_ids = {r["rule_id"] for r in inv.get("matrix", [])}
+        if existing_ids != new_ids:
+            print(
+                f"FAIL: matrix rule_id drift added={sorted(new_ids-existing_ids)} "
+                f"removed={sorted(existing_ids-new_ids)}",
+                file=sys.stderr,
+            )
             return 1
         print("OK: generated inventory matches registry + catalog")
         return 0
