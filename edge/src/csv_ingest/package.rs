@@ -243,7 +243,7 @@ fn resolve_building_prefix(entries: &BTreeMap<PathBuf, Vec<u8>>) -> Result<PathB
     let mut package_roots: Vec<PathBuf> = entries
         .iter()
         .filter(|(p, _)| p.file_name().map(|f| f == "manifest.json").unwrap_or(false))
-        .filter(|(p, bytes)| is_package_manifest(bytes))
+        .filter(|(_, bytes)| is_package_manifest(bytes))
         .filter(|(p, _)| p.components().count() <= MAX_PATH_DEPTH)
         .filter_map(|(p, _)| p.parent().map(Path::to_path_buf))
         .collect();
