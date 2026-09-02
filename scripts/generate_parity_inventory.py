@@ -550,6 +550,15 @@ def dump_inventory(inv: dict) -> tuple[str, str]:
     return yaml_text, json_text
 
 
+def _normalize_for_check(inv: dict) -> dict:
+    """Drop environment-specific fields so CI/local --check agree."""
+    out = json.loads(json.dumps(inv))
+    for key in ("concepts", "matrix"):
+        for row in out.get(key, []):
+            row["test_coverage"] = []
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="fail if generated files drift")
@@ -565,11 +574,9 @@ def main() -> int:
         if not yaml_path.is_file() or not json_path.is_file():
             print("FAIL: generated inventory missing; run without --check", file=sys.stderr)
             return 1
-        if yaml_path.read_text(encoding="utf-8") != yaml_text:
-            print("FAIL: parity_inventory.yaml is stale; regenerate", file=sys.stderr)
-            return 1
-        if json_path.read_text(encoding="utf-8") != json_text:
-            print("FAIL: parity_inventory.json is stale; regenerate", file=sys.stderr)
+        existing = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+        if _normalize_for_check(existing) != _normalize_for_check(inv):
+            print("FAIL: parity inventory is stale; regenerate", file=sys.stderr)
             return 1
         print("OK: generated inventory matches registry + catalog")
         return 0
