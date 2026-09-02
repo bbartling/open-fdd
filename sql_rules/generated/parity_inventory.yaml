@@ -7,9 +7,7 @@ counts:
   concepts: 68
   aliases: 3
   building_100_cartesian: 48 equipment × 62 diagnostics
-count_explanation: '62 is the executable pandas cookbook (CookbookRule constructors).
-  68 is the SQL registry: those 62 twins plus 6 SQL-only analytics. Aliases SV-SLEW,
-  FC13, and excess_runtime are not extra rules.'
+count_explanation: '62 is the executable pandas cookbook (CookbookRule constructors). 68 is the SQL registry: those 62 twins plus 6 SQL-only analytics. Aliases SV-SLEW, FC13, and excess_runtime are not extra rules.'
 parity_levels:
 - concept_only
 - duration_parity
@@ -268,9 +266,7 @@ matrix:
   - tests/rules/test_parity_inventory.py
   - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
-  known_semantic_differences: Pandas ROLE_TO_PROFILE has 30+ quantity/location slew
-    limits; SQL windows five air temps against one STEADY_FAULT_PER_HOUR. Leave sql_screening;
-    do not mark proven from B100 hours. Alias SV-SLEW is not an extra rule.
+  known_semantic_differences: Pandas ROLE_TO_PROFILE has 30+ quantity/location slew limits; SQL windows five air temps against one STEADY_FAULT_PER_HOUR. Leave sql_screening; do not mark proven from B100 hours. Alias SV-SLEW is not an extra rule.
   difference_class: semantic_gap
 - rule_id: PID-HUNT-1
   title: Suspected control-output hunting
@@ -595,8 +591,7 @@ matrix:
   - tests/rules/test_parity_inventory.py
   - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
-  known_semantic_differences: concept_only — SQL file is a placeholder; do not claim
-    twin parity
+  known_semantic_differences: concept_only — SQL file is a placeholder; do not claim twin parity
   difference_class: missing_implementation
 - rule_id: FC8
   title: SAT vs MAT while economizing
@@ -1723,8 +1718,7 @@ matrix:
   - tests/rules/test_parity_inventory.py
   - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
-  known_semantic_differences: Missing proof → pandas SKIPPED_MISSING_ROLES; SQL returns
-    0 fault hours (optional proof roles). Proven-off zeros do not accumulate ΔT hours.
+  known_semantic_differences: Missing proof → pandas SKIPPED_MISSING_ROLES; SQL returns 0 fault hours (optional proof roles). Proven-off zeros do not accumulate ΔT hours.
   difference_class: none
 - rule_id: CHW-2
   title: DP below SP at max pump speed
@@ -2154,9 +2148,7 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: SCHED-1
-  title: Excess / wasted unoccupied fan runtime when the zone is already in the comfort
-    band (optimal-start / schedule misconfig signal). Without zone_t, falls back to
-    unoccupied + fan_on (pandas sched1 base).
+  title: Excess / wasted unoccupied fan runtime when the zone is already in the comfort band (optimal-start / schedule misconfig signal). Without zone_t, falls back to unoccupied + fan_on (pandas sched1 base).
   equipment_types: &id331 []
   required_roles: &id332
   - occ_mode
@@ -2229,9 +2221,7 @@ matrix:
   - tests/rules/test_sched247_proof.py
   - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
-  known_semantic_differences: 4.3 ranked proof (status/current > command; pressure
-    inferred only). SQL mean(on) >= always_on_pct over the analysis window matches
-    pandas _sched247. Keep sql_screening; do not mark proven from B100 hours.
+  known_semantic_differences: 4.3 ranked proof (status/current > command; pressure inferred only). SQL mean(on) >= always_on_pct over the analysis window matches pandas _sched247. Keep sql_screening; do not mark proven from B100 hours.
   difference_class: none
 - rule_id: RESET-1
   title: SAT reset not tracking outdoor air
@@ -3006,9 +2996,7 @@ concepts:
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: semantic_gap
-  known_semantic_differences: Pandas ROLE_TO_PROFILE has 30+ quantity/location slew
-    limits; SQL windows five air temps against one STEADY_FAULT_PER_HOUR. Leave sql_screening;
-    do not mark proven from B100 hours. Alias SV-SLEW is not an extra rule.
+  known_semantic_differences: Pandas ROLE_TO_PROFILE has 30+ quantity/location slew limits; SQL windows five air temps against one STEADY_FAULT_PER_HOUR. Leave sql_screening; do not mark proven from B100 hours. Alias SV-SLEW is not an extra rule.
   operational_gate: fan_or_occupied_when_declared
   startup_delay_seconds: null
   confirm_seconds: 600
@@ -3863,8 +3851,7 @@ concepts:
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: missing_implementation
-  known_semantic_differences: concept_only — SQL file is a placeholder; do not claim
-    twin parity
+  known_semantic_differences: concept_only — SQL file is a placeholder; do not claim twin parity
   operational_gate: fan_or_occupied_when_declared
   startup_delay_seconds: null
   confirm_seconds: 600
@@ -7062,8 +7049,7 @@ concepts:
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
-  known_semantic_differences: Missing proof → pandas SKIPPED_MISSING_ROLES; SQL returns
-    0 fault hours (optional proof roles). Proven-off zeros do not accumulate ΔT hours.
+  known_semantic_differences: Missing proof → pandas SKIPPED_MISSING_ROLES; SQL returns 0 fault hours (optional proof roles). Proven-off zeros do not accumulate ΔT hours.
   operational_gate: fan_or_occupied_when_declared
   startup_delay_seconds: null
   confirm_seconds: 900
@@ -8323,9 +8309,7 @@ concepts:
 - canonical_id: SCHED-1
   pandas_id: SCHED-1
   rule_id: SCHED-1
-  title: Excess / wasted unoccupied fan runtime when the zone is already in the comfort
-    band (optimal-start / schedule misconfig signal). Without zone_t, falls back to
-    unoccupied + fan_on (pandas sched1 base).
+  title: Excess / wasted unoccupied fan runtime when the zone is already in the comfort band (optimal-start / schedule misconfig signal). Without zone_t, falls back to unoccupied + fan_on (pandas sched1 base).
   aliases:
   - excess_runtime
   kind: diagnostic
@@ -8452,9 +8436,7 @@ concepts:
   parity_status: sql_screening
   parity_level: sql_screening
   difference_class: none
-  known_semantic_differences: 4.3 ranked proof (status/current > command; pressure
-    inferred only). SQL mean(on) >= always_on_pct over the analysis window matches
-    pandas _sched247. Keep sql_screening; do not mark proven from B100 hours.
+  known_semantic_differences: 4.3 ranked proof (status/current > command; pressure inferred only). SQL mean(on) >= always_on_pct over the analysis window matches pandas _sched247. Keep sql_screening; do not mark proven from B100 hours.
   operational_gate: fan_or_occupied_when_declared
   startup_delay_seconds: null
   confirm_seconds: 3600

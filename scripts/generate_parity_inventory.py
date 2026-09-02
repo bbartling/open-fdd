@@ -543,7 +543,9 @@ def build_inventory() -> dict:
 
 
 def dump_inventory(inv: dict) -> tuple[str, str]:
-    yaml_text = yaml.safe_dump(inv, sort_keys=False, allow_unicode=True)
+    yaml_text = yaml.safe_dump(
+        inv, sort_keys=False, allow_unicode=True, width=10_000
+    )
     json_text = json.dumps(inv, indent=2, sort_keys=False) + "\n"
     return yaml_text, json_text
 
