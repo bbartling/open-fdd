@@ -57,7 +57,7 @@ curl -fsS --max-time 300 \
 
 VALIDATE_JSON="$ART/bundle_validate.json"
 python3 "$ROOT/scripts/openfdd_bundle_validate.py" validate "$ZIP_PATH" >"$VALIDATE_JSON"
-STATUS="$(jq -r '.status // NOT_READY' "$VALIDATE_JSON")"
+STATUS="$(jq -r '.status // "NOT_READY"' "$VALIDATE_JSON")"
 if [[ "$STATUS" == "NOT_READY" ]]; then
   jq . "$VALIDATE_JSON" >&2
   bad "bundle validator NOT_READY"
