@@ -3,7 +3,9 @@ use std::path::Path;
 
 use anyhow::Result;
 use datafusion::prelude::*;
-use fdd_sql::{register_parquet_tree, register_utility_if_present, register_weather_if_present, run_sql};
+use fdd_sql::{
+    register_parquet_tree, register_utility_if_present, register_weather_if_present, run_sql,
+};
 use serde::Serialize;
 
 use crate::params::{read_poll_from_cache, rule_params, substitute_sql};

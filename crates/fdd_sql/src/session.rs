@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use datafusion::prelude::*;
@@ -34,10 +34,7 @@ pub async fn register_parquet_tree(ctx: &SessionContext, parquet_root: &Path) ->
 /// Register utility CSV tables from `workspace/data/csv_buildings/<building_id>/utilities/`.
 ///
 /// Tables: `utility_monthly`, `utility_interval`, `bas_submeter` (empty view when missing).
-pub async fn register_utility_if_present(
-    ctx: &SessionContext,
-    building_id: &str,
-) -> Result<bool> {
+pub async fn register_utility_if_present(ctx: &SessionContext, building_id: &str) -> Result<bool> {
     let workspace = std::env::var("OPENFDD_WORKSPACE")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("workspace"));
@@ -48,11 +45,7 @@ pub async fn register_utility_if_present(
         .join("utilities");
     let mut registered = false;
 
-    async fn register_csv_table(
-        ctx: &SessionContext,
-        table: &str,
-        path: &Path,
-    ) -> Result<bool> {
+    async fn register_csv_table(ctx: &SessionContext, table: &str, path: &Path) -> Result<bool> {
         if !path.is_file() {
             return Ok(false);
         }
