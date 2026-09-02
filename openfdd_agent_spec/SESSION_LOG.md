@@ -1,5 +1,14 @@
 # Session log
 
+## 2026-09-02 — 3.3.18 phase2 bench hygiene closeout
+
+- **#821** merged — 3.3.17 `recreate_bench_fieldbus` in `00_pull` + `run_all` (fixes `fieldbus-poll-stale`).
+- **#822** merged — 3.3.18 gate 03 ingest honesty (MQTTS + `ingest_ok>0` when counter stale).
+- Container refresh: `openfdd_maint_update_resume.sh react-ot sha-3e35b2d`.
+- **`run_all` PASS** — `reports/nightly-ot-bench_20260902T013750Z/` gates **01–16** (`WEATHER_SOAK_SECS=120`).
+- GHCR publish pending on `0e5a9b16`; Railway re-pin deferred to `sha-0e5a9b1`.
+- Living docs: [`BUG_REPORT`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) · plan `.cursor/plans/3.3.15_closeout_stress_9022f038.plan.md`.
+
 ## 2026-09-01 (late evening) — 3.3.16 closeout stress (post-GHCR)
 
 - **GHCR + re-pin:** `sha-3e35b2d` / `3.3.16+3e35b2d45810` on Railway + local react; backup `~/openfdd-backups/railway/20260901T205611Z/`.
