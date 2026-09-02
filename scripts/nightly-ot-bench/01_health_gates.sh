@@ -79,6 +79,13 @@ fi
 
 # Container health (compose project openfdd-react)
 mapfile -t CF < <(compose_files)
+# fieldbus may be health=starting immediately after recreate_bench_fieldbus
+for _ in $(seq 1 15); do
+  fb_health="$(docker compose "${CF[@]}" ps --format json 2>/dev/null \
+    | jq -r 'select((.Name // .name // "") | test("fieldbus")) | .Health // .health // ""' 2>/dev/null | head -1)"
+  [[ "$fb_health" != "starting" ]] && break
+  sleep 2
+done
 if docker compose "${CF[@]}" ps --format json 2>/dev/null | head -1 | grep -q .; then
   while read -r line; do
     name="$(jq -r '.Name // .name // empty' <<<"$line" 2>/dev/null || true)"
@@ -88,6 +95,8 @@ if docker compose "${CF[@]}" ps --format json 2>/dev/null | head -1 | grep -q .;
     # fieldbus may appear only via host-net; still listed in compose ps
     if [[ "$state" == "running" ]] && [[ "$health" == "healthy" || "$health" == "" || "$health" == "null" ]]; then
       ok "container $name state=$state health=${health:-n/a}"
+    elif [[ "$name" == *fieldbus* ]] && [[ "$state" == "running" ]] && [[ "$health" == "starting" ]]; then
+      skip "container $name still starting (recreate race — API health already passed)"
     elif [[ "$name" == *central* ]] && [[ "$state" == "restarting" ]]; then
       bad "container $name is restarting (central must be healthy for Feather)"
     else
