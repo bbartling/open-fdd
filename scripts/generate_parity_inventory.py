@@ -556,6 +556,8 @@ def _normalize_for_check(inv: dict) -> dict:
     for key in ("concepts", "matrix"):
         for row in out.get(key, []):
             row["test_coverage"] = []
+            if key == "concepts":
+                row["proof_fixtures"] = []
     return out
 
 
