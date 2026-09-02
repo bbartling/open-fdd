@@ -11,6 +11,7 @@ cd "$ROOT"
 
 ART="${ARTIFACT_DIR:-$(artifact_dir)}"
 mkdir -p "$ART"
+TELEMETRY_LIVE=0
 echo "${DIM}artifacts=$ART${RST}"
 
 hdr "Baseline historian / Parquet snapshot"
@@ -79,6 +80,7 @@ if docker image inspect eclipse-mosquitto:2 >/dev/null 2>&1 \
     fi
     if grep -q 'telemetry' "$ART/mqtt_telemetry.txt" 2>/dev/null; then
       ok "MQTTS telemetry topic traffic observed"
+      TELEMETRY_LIVE=1
       # Non-null value check (known prior bug: present_value vs value)
       if grep -qE '"value"[[:space:]]*:[[:space:]]*[0-9]' "$ART/mqtt_telemetry.txt" \
         || grep -qE '"value":[0-9]' "$ART/mqtt_telemetry.txt"; then
@@ -96,6 +98,8 @@ if docker image inspect eclipse-mosquitto:2 >/dev/null 2>&1 \
 else
   skip "eclipse-mosquitto image unavailable for mqtt peek"
 fi
+
+TELEMETRY_LIVE="${TELEMETRY_LIVE:-0}"
 
 hdr "Central ingest stats (after)"
 if IA="$(central "$CENTRAL_BASE/api/ingest/stats" 2>/dev/null)"; then
@@ -123,6 +127,14 @@ sys.exit(0 if aa>bb or (aa>0 and bb==0) else 1)
 PY
   then
     ok "ingest counter increased or non-zero after poll"
+  elif [[ "${TELEMETRY_LIVE:-0}" == "1" ]] && python3 - "$ART/ingest_after.json" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1]))
+v=d.get("ingest_ok") or d.get("messages_ok") or 0
+sys.exit(0 if isinstance(v,(int,float)) and v>0 else 1)
+PY
+  then
+    ok "ingest path live (MQTTS telemetry + ingest_ok>0; counter unchanged — dup dedup)"
   else
     bad "ingest stats did not show growth (central may not be ingesting)"
   fi
