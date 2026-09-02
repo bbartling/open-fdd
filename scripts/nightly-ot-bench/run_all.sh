@@ -51,7 +51,7 @@ finish_report() {
     echo
     echo "## Verdict"
     if [[ "$OVERALL" -eq 0 ]]; then
-      echo "**PASS** — tip GHCR + React SPA + fieldbus OT through gates 00–15."
+      echo "**PASS** — tip GHCR + React SPA + fieldbus OT through gates 00–16."
     else
       echo "**FAIL** — see phase logs in this directory."
     fi
@@ -86,6 +86,10 @@ else
 fi
 
 run_phase 01_health_gates.sh "01 health gates" || OVERALL=1
+
+hdr "fieldbus refresh before BACnet/MQTT gates"
+recreate_bench_fieldbus || true
+
 run_phase 02_bacnet_ot.sh "02 BACnet OT (5007 + BIP + poll)" || OVERALL=1
 run_phase 03_mqtt_parquet_persist.sh "03 MQTTS + Parquet persistence" || OVERALL=1
 run_phase 04_modbus_ot.sh "04 Modbus OT (bench sim)" || OVERALL=1

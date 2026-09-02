@@ -110,6 +110,10 @@ Low-RAM bench: set `OPENFDD_QUERY_MEMORY_MB=256` in `.env`. Document GHCR legiti
 failures (5007 missing, MQTT silent, weather freeze) remain honest FAILs —
 recovery gates 14–15 still report product truth.
 
+`00_pull` and `run_all` call `recreate_bench_fieldbus` before BACnet/MQTT gates so
+MS/TP poll does not return `points_polled:0` after long compose sessions (see
+BUG_REPORT `fieldbus-poll-stale`).
+
 Default write policy is **read/poll/discover**. Active REST write clamps require
 `BENCH_ALLOW_WRITES=1`.
 

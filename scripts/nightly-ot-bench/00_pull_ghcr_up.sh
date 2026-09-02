@@ -134,4 +134,8 @@ while ((SECONDS < fb_deadline)); do
 done
 
 ok "compose up issued (verify health with 01_health_gates.sh)"
+
+hdr "fieldbus refresh (bench OT)"
+recreate_bench_fieldbus || true
+
 summary
