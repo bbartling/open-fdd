@@ -336,6 +336,35 @@ historian_snapshot() {
   done
 }
 
+# After long gate sessions or compose drift, MS/TP poll can return points_polled=0
+# until fieldbus reloads field_devices.toml. Force-recreate before BACnet/MQTT gates.
+recreate_bench_fieldbus() {
+  local cf=()
+  mapfile -t cf < <(compose_files)
+  echo "${DIM:-}recreate_bench_fieldbus: force-recreate fieldbus${RST:-}" >&2
+  docker compose "${cf[@]}" up -d fieldbus --force-recreate >/dev/null
+
+  local deadline=$((SECONDS + 90))
+  while ((SECONDS < deadline)); do
+    if curl -fsS --max-time 3 "$FIELDBUS_BASE/health" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 2
+  done
+
+  auth_setup
+  local poll_body polled=0
+  if poll_body="$(fb -X POST "$FIELDBUS_BASE/bacnet/poll/once" 2>/dev/null)"; then
+    polled="$(jq -r '.points_polled // 0' <<<"$poll_body" 2>/dev/null || echo 0)"
+  fi
+  echo "${DIM:-}recreate_bench_fieldbus: points_polled=${polled}${RST:-}" >&2
+  if [[ "${polled:-0}" -ge 1 ]]; then
+    return 0
+  fi
+  echo "WARN: recreate_bench_fieldbus: poll still empty (OT LAN may be down)" >&2
+  return 0
+}
+
 web_asset_js() {
   # Dump SPA JS bundle from running web container or local WEB image into $1.
   local out="$1"
