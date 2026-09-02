@@ -234,11 +234,7 @@ fn read_zip_entries(bytes: &[u8]) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> 
 /// safe depth (Creekside-style wrappers: `OpenFdd_Creekside/.../LAKESIDE_ES/manifest.json`).
 fn resolve_building_prefix(entries: &BTreeMap<PathBuf, Vec<u8>>) -> Result<PathBuf, String> {
     if entries.contains_key(Path::new("manifest.json")) {
-        if let Some(bytes) = entries.get(Path::new("manifest.json")) {
-            if is_package_manifest(bytes) {
-                return Ok(PathBuf::new());
-            }
-        }
+        return Ok(PathBuf::new());
     }
     let mut package_roots: Vec<PathBuf> = entries
         .iter()
