@@ -1,5 +1,17 @@
 # Session log
 
+## 2026-09-02 (midday) — 3.3.18 nightly refresh (post docker maintenance)
+
+- **Docker maintenance** by operator; local stack restored via `openfdd_maint_update_resume.sh react-ot sha-ca67707 --skip-maintenance`.
+- **Railway re-pin** already on `sha-ca67707`; backup `~/openfdd-backups/railway/20260902T120941Z/`.
+- **bosspi fieldbus** re-pinned `sha-ca67707` arm64; Pipeline A **PASS** (`pi-1`/`bldg2` `has_telemetry:true`) after `railway redeploy` central+mqtt.
+- **Nightly cycle 1:** `reports/nightly-ot-bench_20260902T123715Z/` — gate **00 GHCR pull PASS**; gate **01 FAIL** (fieldbus `health=starting` race); gates **02–16 PASS**.
+- **Nightly cycle 2:** `reports/nightly-ot-bench_20260902T125016Z/` — gates **01–16 PASS** after harness fixes (`fix/nightly-harness-gates-01-18`).
+- **Gate 18:** `reports/nightly-ot-bench_20260902T124850Z/` PASS (ingest_ok reset accepted when volume preserved).
+- **BUILDING_100 Railway** FC1 AHU_1 **118.42 h** @ `sha-ca67707` — `reports/railway-f1-spot_20260902T124900Z/`.
+- **Deferred:** bldg2 Overview UI; Railway F1 DF55/BUILDING_50/AFDD flood.
+- Living docs: [`BUG_REPORT`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) · plan `.cursor/plans/3.3.18_nightly_refresh_ca67707.plan.md`.
+
 ## 2026-09-02 — 3.3.18 phase2 bench hygiene closeout
 
 - **#821** merged — 3.3.17 `recreate_bench_fieldbus` in `00_pull` + `run_all` (fixes `fieldbus-poll-stale`).
