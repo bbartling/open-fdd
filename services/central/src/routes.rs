@@ -17,6 +17,7 @@ use serde_json::{json, Value};
 use crate::actions;
 use crate::analytics::{self, AnalyticsRequest};
 use crate::auth;
+use crate::engineering_bundle;
 use crate::eplus_runner;
 use crate::fuel::{self, FuelRequest};
 use crate::jobs;
@@ -27,7 +28,6 @@ use crate::models::{
     IssueCommandRequest, IssueCommandResponse, OkHealthResponse,
 };
 use crate::state::{AppState, PendingCommand};
-use crate::engineering_bundle;
 use crate::wattlab_dump;
 
 pub fn router(state: Arc<AppState>) -> Router {
@@ -2001,7 +2001,10 @@ async fn jobs_create_wattlab_dump(
     let dump = wattlab_dump::create_dump(&job_id, body)
         .await
         .map_err(job_err)?;
-    Ok((StatusCode::CREATED, Json(json!({"ok": true, "dump": dump, "export": dump}))))
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({"ok": true, "dump": dump, "export": dump})),
+    ))
 }
 
 async fn jobs_download_wattlab_dump(

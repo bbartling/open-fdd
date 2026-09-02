@@ -252,8 +252,7 @@ fn resolve_building_prefix(entries: &BTreeMap<PathBuf, Vec<u8>>) -> Result<PathB
     match package_roots.len() {
         1 => Ok(package_roots.remove(0)),
         0 => Err(
-            "package is missing openfdd_package_v1 manifest.json (root or nested folder)"
-                .into(),
+            "package is missing openfdd_package_v1 manifest.json (root or nested folder)".into(),
         ),
         n => Err(format!(
             "found {n} openfdd_package_v1 manifest.json files; expected 1"
@@ -289,9 +288,9 @@ fn collect_wrapper_utility_files(
     for (path, bytes) in entries {
         if building_prefix.as_os_str().is_empty() || !path.starts_with(building_prefix) {
             // only files under a known wrapper root, not the building tree itself
-            let under_wrapper = search_roots.iter().any(|w| {
-                w.as_os_str().is_empty() || path.starts_with(w)
-            });
+            let under_wrapper = search_roots
+                .iter()
+                .any(|w| w.as_os_str().is_empty() || path.starts_with(w));
             if !under_wrapper {
                 continue;
             }
@@ -334,16 +333,13 @@ fn materialize_utilities(
         return Ok(Vec::new());
     }
     let util_root = building_root.join("utilities");
-    std::fs::create_dir_all(&util_root)
-        .map_err(|e| format!("mkdir utilities: {e}"))?;
+    std::fs::create_dir_all(&util_root).map_err(|e| format!("mkdir utilities: {e}"))?;
     let mut written = Vec::new();
     for (rel, bytes) in utility_files {
         let dest = if rel.eq_ignore_ascii_case("utility_bills_monthly.csv")
             || rel.ends_with("/utility_bills_monthly.csv")
         {
-            util_root
-                .join("electric")
-                .join("monthly_bills.csv")
+            util_root.join("electric").join("monthly_bills.csv")
         } else {
             util_root.join(rel.strip_prefix("utilities/").unwrap_or(rel))
         };
@@ -352,7 +348,12 @@ fn materialize_utilities(
                 .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
         }
         std::fs::write(&dest, bytes).map_err(|e| format!("write {}: {e}", dest.display()))?;
-        written.push(dest.strip_prefix(building_root).unwrap_or(&dest).display().to_string());
+        written.push(
+            dest.strip_prefix(building_root)
+                .unwrap_or(&dest)
+                .display()
+                .to_string(),
+        );
     }
     let manifest = json!({
         "schema_version": "utilities_v1",
@@ -1718,10 +1719,7 @@ mod tests {
         assert_eq!(out["ok"], json!(true), "{out}");
         assert_eq!(out["building_id"], json!("LAKESIDE_ES"));
         assert!(
-            out["utilities_written"]
-                .as_array()
-                .map(|a| !a.is_empty())
-                == Some(true),
+            out["utilities_written"].as_array().map(|a| !a.is_empty()) == Some(true),
             "{out}"
         );
     }

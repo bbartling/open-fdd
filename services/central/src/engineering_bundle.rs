@@ -85,9 +85,7 @@ fn export_dir(job_id: &str, export_id: &str) -> Result<PathBuf, JobError> {
     if !export_id.starts_with("export-") {
         return Err(JobError::Invalid(format!("invalid export_id: {export_id}")));
     }
-    Ok(jobs::job_dir(job_id)?
-        .join("exports")
-        .join(export_id))
+    Ok(jobs::job_dir(job_id)?.join("exports").join(export_id))
 }
 
 fn collect_files(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), JobError> {
@@ -161,12 +159,11 @@ Canonical tables use Parquet; summaries include Excel-friendly CSV.
 3. Use `labels/label_catalog.json` — FDD outputs are weak labels unless marked verified.
 4. Respect `splits/chronological_splits.json` for time-aware train/val/test.
 
-## Pandas quick start
+## Data frame quick start
 
-```python
-import pandas as pd
-inv = pd.read_json("catalog/equipment.json")
-# Long telemetry: melt wide historian or read data/telemetry/*.parquet when present
+```text
+Read catalog/equipment.json and summaries/*.csv with your preferred dataframe library.
+Long telemetry: melt wide historian or read data/telemetry/*.parquet when present.
 ```
 "#
     );

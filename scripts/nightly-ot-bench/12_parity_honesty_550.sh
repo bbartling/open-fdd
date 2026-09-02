@@ -69,7 +69,7 @@ echo "${DIM}  registry sql_screening=$SCREEN concept_only=$CONCEPT legacy=$LEGAC
 if [[ "$TOTAL" -eq 66 ]]; then
   ok "registry total=66 (62 diagnostics + 4 SQL-only analytics)"
 else
-  bad "registry total=$TOTAL (expected 66)"
+  bad "registry total=$TOTAL (expected 68)"
 fi
 if [[ "$LEGACY" -eq 0 ]]; then
   ok "no legacy parity_status labels on tip"

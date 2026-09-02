@@ -37,6 +37,8 @@ SQL_ANALYTICS = frozenset(
         "AVG-ZONE-TEMP",
         "ZONE-COMFORT-PCT",
         "FAULT-ELAPSED-HOURS",
+        "UTIL-MONTHLY",
+        "UTIL-INTERVAL",
     }
 )
 
@@ -331,8 +333,8 @@ def build_inventory() -> dict:
         )
 
     reg = load_registry()
-    if len(reg) != 66:
-        raise SystemExit(f"FAIL: expected 66 registry rules, found {len(reg)}")
+    if len(reg) != 68:
+        raise SystemExit(f"FAIL: expected 68 registry rules, found {len(reg)}")
 
     by_sql = {r["rule_id"]: r for r in reg if isinstance(r, dict) and "rule_id" in r}
     aliases_index: dict[str, str] = {}
@@ -528,7 +530,7 @@ def build_inventory() -> dict:
         },
         "count_explanation": (
             "62 is the executable pandas cookbook (CookbookRule constructors). "
-            "66 is the SQL registry: those 62 twins plus 4 SQL-only analytics. "
+            "68 is the SQL registry: those 62 twins plus 6 SQL-only analytics. "
             "Aliases SV-SLEW, FC13, and excess_runtime are not extra rules."
         ),
         "parity_levels": sorted(PARITY_LEVELS),

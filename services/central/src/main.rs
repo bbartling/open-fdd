@@ -7,6 +7,7 @@ mod auth;
 mod canonical_state;
 mod contract;
 mod cutover;
+mod engineering_bundle;
 mod eplus_runner;
 mod fuel;
 mod ingest;
@@ -19,7 +20,6 @@ mod openapi;
 mod routes;
 mod state;
 mod vibe21;
-mod engineering_bundle;
 mod wattlab_dump;
 
 use std::net::SocketAddr;
