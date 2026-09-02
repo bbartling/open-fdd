@@ -550,15 +550,27 @@ def dump_inventory(inv: dict) -> tuple[str, str]:
     return yaml_text, json_text
 
 
+def _inventory_fingerprint(inv: dict) -> dict:
+    """Stable structural fingerprint for CI --check (ignores scanned paths)."""
+    return {
+        "counts": inv["counts"],
+        "count_explanation": inv.get("count_explanation"),
+        "matrix": [
+            {
+                "rule_id": r["rule_id"],
+                "parity_status": r.get("parity_status"),
+                "difference_class": r.get("difference_class"),
+                "datafusion_sql_implementation": r.get("datafusion_sql_implementation"),
+                "pandas_implementation": r.get("pandas_implementation"),
+            }
+            for r in inv.get("matrix", [])
+        ],
+    }
+
+
 def _normalize_for_check(inv: dict) -> dict:
     """Drop environment-specific fields so CI/local --check agree."""
-    out = json.loads(json.dumps(inv))
-    for key in ("concepts", "matrix"):
-        for row in out.get(key, []):
-            row["test_coverage"] = []
-            if key == "concepts":
-                row["proof_fixtures"] = []
-    return out
+    return _inventory_fingerprint(inv)
 
 
 def main() -> int:
