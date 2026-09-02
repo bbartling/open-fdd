@@ -3,8 +3,8 @@
   "generated_by": "scripts/generate_parity_inventory.py",
   "counts": {
     "pandas_diagnostics": 62,
-    "sql_analytics": 4,
-    "sql_registry": 66,
+    "sql_analytics": 6,
+    "sql_registry": 68,
     "concepts": 68,
     "aliases": 3,
     "building_100_cartesian": "48 equipment \u00d7 62 diagnostics"

@@ -522,8 +522,8 @@ def build_inventory() -> dict:
         "generated_by": "scripts/generate_parity_inventory.py",
         "counts": {
             "pandas_diagnostics": 62,
-            "sql_analytics": 4,
-            "sql_registry": 66,
+            "sql_analytics": 6,
+            "sql_registry": 68,
             "concepts": len(concepts),
             "aliases": len(aliases_index),
             "building_100_cartesian": "48 equipment × 62 diagnostics",
