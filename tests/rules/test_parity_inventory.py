@@ -1,4 +1,4 @@
-"""Parity inventory contract: 59 diagnostics, 4 SQL analytics, no alias padding."""
+"""Parity inventory contract: 62 diagnostics, 6 SQL analytics, no alias padding."""
 
 from __future__ import annotations
 
@@ -37,19 +37,19 @@ def test_inventory_files_exist_and_agree():
     assert y["schema_version"] == "parity-inventory-v2"
     assert y["counts"] == j["counts"]
     assert y["counts"]["pandas_diagnostics"] == 62
-    assert y["counts"]["sql_analytics"] == 4
-    assert y["counts"]["sql_registry"] == 66
-    assert "62" in y["count_explanation"] and "66" in y["count_explanation"]
+    assert y["counts"]["sql_analytics"] == 6
+    assert y["counts"]["sql_registry"] == 68
+    assert "62" in y["count_explanation"] and "68" in y["count_explanation"]
 
 
 def test_matrix_has_required_columns_and_true_counts():
     inv = yaml.safe_load(INV_YAML.read_text(encoding="utf-8"))
     matrix = inv["matrix"]
-    assert len(matrix) == 66
+    assert len(matrix) == 68
     diagnostics = [r for r in matrix if r["pandas_implementation"]]
     analytics = [r for r in matrix if r["pandas_implementation"] is None]
     assert len(diagnostics) == 62
-    assert len(analytics) == 4
+    assert len(analytics) == 6
     for row in matrix:
         assert REQUIRED <= set(row)
     aliases = set(inv["aliases_index"])

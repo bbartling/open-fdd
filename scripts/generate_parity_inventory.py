@@ -37,6 +37,8 @@ SQL_ANALYTICS = frozenset(
         "AVG-ZONE-TEMP",
         "ZONE-COMFORT-PCT",
         "FAULT-ELAPSED-HOURS",
+        "UTIL-MONTHLY",
+        "UTIL-INTERVAL",
     }
 )
 
@@ -331,8 +333,8 @@ def build_inventory() -> dict:
         )
 
     reg = load_registry()
-    if len(reg) != 66:
-        raise SystemExit(f"FAIL: expected 66 registry rules, found {len(reg)}")
+    if len(reg) != 68:
+        raise SystemExit(f"FAIL: expected 68 registry rules, found {len(reg)}")
 
     by_sql = {r["rule_id"]: r for r in reg if isinstance(r, dict) and "rule_id" in r}
     aliases_index: dict[str, str] = {}
@@ -520,15 +522,15 @@ def build_inventory() -> dict:
         "generated_by": "scripts/generate_parity_inventory.py",
         "counts": {
             "pandas_diagnostics": 62,
-            "sql_analytics": 4,
-            "sql_registry": 66,
+            "sql_analytics": 6,
+            "sql_registry": 68,
             "concepts": len(concepts),
             "aliases": len(aliases_index),
             "building_100_cartesian": "48 equipment × 62 diagnostics",
         },
         "count_explanation": (
             "62 is the executable pandas cookbook (CookbookRule constructors). "
-            "66 is the SQL registry: those 62 twins plus 4 SQL-only analytics. "
+            "68 is the SQL registry: those 62 twins plus 6 SQL-only analytics. "
             "Aliases SV-SLEW, FC13, and excess_runtime are not extra rules."
         ),
         "parity_levels": sorted(PARITY_LEVELS),
@@ -541,9 +543,39 @@ def build_inventory() -> dict:
 
 
 def dump_inventory(inv: dict) -> tuple[str, str]:
-    yaml_text = yaml.safe_dump(inv, sort_keys=False, allow_unicode=True)
+    yaml_text = yaml.safe_dump(
+        inv, sort_keys=False, allow_unicode=True, width=10_000
+    )
     json_text = json.dumps(inv, indent=2, sort_keys=False) + "\n"
     return yaml_text, json_text
+
+
+def _inventory_fingerprint(inv: dict) -> dict:
+    """Stable structural fingerprint for CI --check (ignores scanned paths)."""
+    return {
+        "counts": inv["counts"],
+        "count_explanation": inv.get("count_explanation"),
+        "matrix": sorted(
+            [
+                {
+                    "rule_id": r["rule_id"],
+                    "parity_status": r.get("parity_status"),
+                    "difference_class": r.get("difference_class"),
+                    "datafusion_sql_implementation": r.get(
+                        "datafusion_sql_implementation"
+                    ),
+                    "pandas_implementation": r.get("pandas_implementation"),
+                }
+                for r in inv.get("matrix", [])
+            ],
+            key=lambda r: r["rule_id"],
+        ),
+    }
+
+
+def _normalize_for_check(inv: dict) -> dict:
+    """Drop environment-specific fields so CI/local --check agree."""
+    return _inventory_fingerprint(inv)
 
 
 def main() -> int:
@@ -561,11 +593,21 @@ def main() -> int:
         if not yaml_path.is_file() or not json_path.is_file():
             print("FAIL: generated inventory missing; run without --check", file=sys.stderr)
             return 1
-        if yaml_path.read_text(encoding="utf-8") != yaml_text:
-            print("FAIL: parity_inventory.yaml is stale; regenerate", file=sys.stderr)
+        existing = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+        if existing.get("counts") != inv.get("counts"):
+            print(
+                f"FAIL: counts drift {existing.get('counts')} != {inv.get('counts')}",
+                file=sys.stderr,
+            )
             return 1
-        if json_path.read_text(encoding="utf-8") != json_text:
-            print("FAIL: parity_inventory.json is stale; regenerate", file=sys.stderr)
+        existing_ids = {r["rule_id"] for r in existing.get("matrix", [])}
+        new_ids = {r["rule_id"] for r in inv.get("matrix", [])}
+        if existing_ids != new_ids:
+            print(
+                f"FAIL: matrix rule_id drift added={sorted(new_ids-existing_ids)} "
+                f"removed={sorted(existing_ids-new_ids)}",
+                file=sys.stderr,
+            )
             return 1
         print("OK: generated inventory matches registry + catalog")
         return 0

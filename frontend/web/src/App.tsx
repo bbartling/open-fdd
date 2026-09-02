@@ -9,7 +9,7 @@ import { FindingsPage } from "./pages/FindingsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { MeteringPage } from "./pages/MeteringPage";
 import { InspectPage } from "./pages/InspectPage";
-import { WattLabPage } from "./pages/WattLabPage";
+import { ExportPage } from "./pages/WattLabPage";
 import { AuthPage } from "./pages/AuthPage";
 import { TwinPage } from "./pages/TwinPage";
 import { SitesPage } from "./pages/SitesPage";
@@ -43,7 +43,8 @@ export default function App() {
         <Route path="/reports" element={gated(<ReportsPage />)} />
         <Route path="/rcx" element={gated(<RcxPage />)} />
         <Route path="/metering" element={gated(<MeteringPage />)} />
-        <Route path="/wattlab" element={gated(<WattLabPage />)} />
+        <Route path="/export" element={gated(<ExportPage />)} />
+        <Route path="/wattlab" element={<Navigate to="/export" replace />} />
         <Route path="/twin" element={gated(<TwinPage />)} />
         <Route path="/operations" element={gated(<OperationsPage />)} />
       </Routes>

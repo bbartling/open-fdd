@@ -52,7 +52,7 @@ MARKERS_FILE="$ART/product_scaffold_markers.txt"
   rg -n 'rule:DEMO' frontend/web/src/pages/FindingsPage.tsx 2>/dev/null || true
   echo "## RCx stub"
   rg -n 'RCx AHU stub|stub' frontend/web/src/pages/MeteringPage.tsx 2>/dev/null | head -10 || true
-  echo "## WattLab demo.zip"
+  echo "## Export demo.zip"
   rg -n 'demo\.zip' frontend/web/src/pages/WattLabPage.tsx 2>/dev/null || true
 } >"$MARKERS_FILE"
 

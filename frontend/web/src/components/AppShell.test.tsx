@@ -98,7 +98,7 @@ describe("AppShell layout parity", () => {
       "FDD Plots",
       "RCx Plots",
       "Metering",
-      "WattLab",
+      "Export & ML",
       "Sites",
       "Operations",
     ]);

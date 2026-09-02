@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA = "openfdd_bundle_validation_v1"
+ENGINEERING_SCHEMA = "openfdd_engineering_bundle_v1"
 SECRET_HINTS = re.compile(
     r"(password|secret|token|api[_-]?key|authorization|private[_-]?key)",
     re.I,
@@ -137,6 +138,17 @@ def validate_zip(path: Path) -> dict[str, Any]:
             errors.append("MANIFEST.json missing")
         else:
             ml_readiness["has_manifest"] = True
+            schema = manifest.get("schema_version")
+            if schema == ENGINEERING_SCHEMA:
+                ml_readiness["engineering_bundle_v1"] = True
+                for key in (
+                    "catalog/feature_catalog.json",
+                    "labels/label_catalog.json",
+                ):
+                    if key not in names:
+                        warnings.append(f"engineering bundle path missing: {key}")
+            elif schema and schema != ENGINEERING_SCHEMA:
+                warnings.append(f"unexpected manifest schema_version: {schema!r}")
             # Manifest may list files as list[str] or dict with path keys.
             listed: list[str] = []
             if isinstance(manifest.get("files"), list):

@@ -21,8 +21,8 @@ pub use object_store::{
 };
 pub use query::{collect_sql_bounded, stream_sql, DEFAULT_INTERACTIVE_MAX_ROWS};
 pub use session::{
-    register_weather_if_present, run_sql, run_sql_bounded, run_sql_file, run_sql_file_bounded,
-    QueryResult,
+    register_utility_if_present, register_weather_if_present, run_sql, run_sql_bounded,
+    run_sql_file, run_sql_file_bounded, QueryResult,
 };
 pub use tuning::{historian_session_config_from_env, DataFusionTuning};
 

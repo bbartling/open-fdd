@@ -7,6 +7,7 @@ mod auth;
 mod canonical_state;
 mod contract;
 mod cutover;
+mod engineering_bundle;
 mod eplus_runner;
 mod fuel;
 mod ingest;

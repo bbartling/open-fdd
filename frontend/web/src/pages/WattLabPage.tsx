@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { AppShell } from "../components/AppShell";
 import { FuelDashboard } from "../components/FuelDashboard";
@@ -12,22 +12,21 @@ import {
 import { listJobs, createJob, type JobMeta } from "../api/jobsApi";
 import { createWattlabHandoff } from "../api/reportsApi";
 import {
-  createDump,
-  downloadDump,
-  type WattlabDump,
-  type WattlabDumpProfile,
-} from "../api/wattlabApi";
-import { importFuelCampus } from "../api/fuelApi";
+  createExport,
+  downloadExport,
+  type EngineeringExport,
+  type ExportProfile,
+} from "../api/exportApi";
 import { LockedSiteCaption } from "../components/LockedSiteCaption";
 
-const WATTLab_PAGES = [
+const EXPORT_PAGES = [
   { value: "Uploads", label: "Uploads" },
   { value: "Fuel dashboard", label: "Fuel dashboard" },
   { value: "Twin / calibrate", label: "Twin / calibrate" },
   { value: "ECMs", label: "ECMs" },
 ] as const;
 
-const DUMP_PROFILES: { value: WattlabDumpProfile; label: string }[] = [
+const EXPORT_PROFILES: { value: ExportProfile; label: string }[] = [
   { value: "summary", label: "summary" },
   { value: "diagnostic", label: "diagnostic" },
   { value: "forensic", label: "forensic" },
@@ -37,8 +36,8 @@ function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** Vibe 20 Studio workflows + authenticated WattLab dump download. */
-export function WattLabPage() {
+/** Engineering & ML export workflows + authenticated bundle download. */
+export function ExportPage() {
   const { query, setQuery } = useSessionQuery();
   const page = query.wattlabPage ?? "Uploads";
   const jobId = query.jobId ?? "";
@@ -46,15 +45,12 @@ export function WattLabPage() {
 
   const [jobs, setJobs] = useState<JobMeta[]>([]);
   const [uri, setUri] = useState("workspace://exports/demo.zip");
-  const [profile, setProfile] = useState<WattlabDumpProfile>("summary");
-  const [dump, setDump] = useState<WattlabDump | null>(null);
+  const [profile, setProfile] = useState<ExportProfile>("summary");
+  const [bundle, setBundle] = useState<EngineeringExport | null>(null);
   const [handoffJson, setHandoffJson] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [fuelCampusId, setFuelCampusId] = useState<string | null>(null);
-  const [fuelUploading, setFuelUploading] = useState(false);
-  const fuelFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void listJobs()
@@ -65,15 +61,15 @@ export function WattLabPage() {
   const ensureJob = async (): Promise<string> => {
     if (jobId) return jobId;
     const job = await createJob({
-      jobName: `WattLab · ${buildingId || "site"}`,
-      description: "react wattlab dump",
+      jobName: `Export · ${buildingId || "site"}`,
+      description: "engineering & ML bundle export",
     });
     setQuery({ jobId: job.job_id }, true);
     setJobs((prev) => [job, ...prev]);
     return job.job_id;
   };
 
-  const onBuildDump = async () => {
+  const onBuildBundle = async () => {
     if (!buildingId) {
       setError("Lock a site on Overview first (import a package if needed)");
       return;
@@ -83,10 +79,13 @@ export function WattLabPage() {
     setNotice(null);
     try {
       const jid = await ensureJob();
-      const artifact = await createDump(jid, buildingId, profile);
-      setDump(artifact);
-      setUri(artifact.download_url || `workspace://jobs/${jid}/wattlab/dumps/${artifact.dump_id}`);
-      setNotice(`Built dump ${artifact.dump_id} (${artifact.filename})`);
+      const artifact = await createExport(jid, buildingId, profile);
+      setBundle(artifact);
+      setUri(
+        artifact.download_url ||
+          `workspace://jobs/${jid}/exports/${artifact.export_id}`,
+      );
+      setNotice(`Built bundle ${artifact.export_id} (${artifact.filename})`);
     } catch (err) {
       setError(formatErr(err));
     } finally {
@@ -94,13 +93,13 @@ export function WattLabPage() {
     }
   };
 
-  const onDownloadDump = async () => {
-    if (!dump || !jobId) return;
+  const onDownloadBundle = async () => {
+    if (!bundle || !jobId) return;
     setSaving(true);
     setError(null);
     try {
-      await downloadDump(jobId, dump.dump_id, dump.filename);
-      setNotice(`Downloaded ${dump.filename}`);
+      await downloadExport(jobId, bundle.export_id, bundle.filename);
+      setNotice(`Downloaded ${bundle.filename}`);
     } catch (err) {
       setError(formatErr(err));
     } finally {
@@ -116,10 +115,10 @@ export function WattLabPage() {
     try {
       const handoff = await createWattlabHandoff(jobId, {
         portable_zip_uri: uri,
-        source: "react-wattlab-page",
+        source: "react-export-page",
         wattlab_studio_page: page,
         building_id: buildingId || undefined,
-        dump_id: dump?.dump_id,
+        dump_id: bundle?.export_id,
       });
       setHandoffJson(JSON.stringify(handoff, null, 2));
       setNotice(`Created handoff ${String(handoff.handoff_id ?? "")}`);
@@ -130,42 +129,19 @@ export function WattLabPage() {
     }
   };
 
-  const onFuelZipSelected = async (file: File | undefined) => {
-    if (!file) return;
-    setFuelUploading(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await importFuelCampus(file);
-      const id = res.campus_id ?? res.campus?.campus_id ?? null;
-      setFuelCampusId(id);
-      setNotice(
-        id
-          ? `Imported fuel campus ${id}`
-          : "Fuel campus import succeeded",
-      );
-    } catch (err) {
-      setFuelCampusId(null);
-      setError(formatErr(err));
-    } finally {
-      setFuelUploading(false);
-      if (fuelFileRef.current) fuelFileRef.current.value = "";
-    }
-  };
-
   return (
     <AppShell
-      title="WattLab"
-      caption="Vibe 20 Studio — Uploads / Fuel / Twin / ECMs + dump ZIP"
-      activeSectionId="wattlab"
+      title="Export & ML"
+      caption="Engineering & ML bundle export — utilities ship with package import"
+      activeSectionId="export"
     >
       <div className="page-stack" data-testid="wattlab-page">
         <RadioGroup
-          id="wattlab-page"
-          label="WattLab workflow"
-          description="Maps st.session_state wattlab_studio_page → URL ?wl="
+          id="export-page"
+          label="Export workflow"
+          description="Package utilities ingest on Upload; fuel analytics on Fuel dashboard"
           value={page}
-          options={[...WATTLab_PAGES]}
+          options={[...EXPORT_PAGES]}
           onChange={(value) => setQuery({ wattlabPage: value }, true)}
           testId="wattlab-page-radio"
         />
@@ -176,11 +152,11 @@ export function WattLabPage() {
         <LockedSiteCaption buildingId={buildingId} testId="locked-site" />
 
         <Select
-          id="wattlab-job"
+          id="export-job"
           label="Job"
           value={jobId}
           options={[
-            { value: "", label: "— auto-create on dump —" },
+            { value: "", label: "— auto-create on export —" },
             ...jobs.map((j) => ({
               value: j.job_id,
               label: `${j.job_name} (${j.job_id})`,
@@ -192,69 +168,39 @@ export function WattLabPage() {
 
         {page === "Uploads" ? (
           <section data-testid="wattlab-uploads">
-            <h3>Uploads</h3>
+            <h3>Engineering &amp; ML bundle</h3>
             <p>
-              Build a Vibe19-compatible WattLab dump (v3) from the imported
-              package (authenticated job dump).
+              Build an <code>openfdd_engineering_bundle_v1</code> ZIP from the
+              imported package (Rust-first; no Python in central image).
             </p>
             <Select
-              id="wattlab-profile"
+              id="export-profile"
               label="Export profile"
               value={profile}
-              options={DUMP_PROFILES}
-              onChange={(v) => setProfile(v as WattlabDumpProfile)}
+              options={EXPORT_PROFILES}
+              onChange={(v) => setProfile(v as ExportProfile)}
               testId="wattlab-profile"
             />
             <div className="oracle-sidebar__btn-row">
               <Button
-                id="wattlab-build-dump"
-                label={saving ? "Working…" : "Build WattLab dump (zip)"}
-                onClick={() => void onBuildDump()}
+                id="export-build-bundle"
+                label={saving ? "Working…" : "Build Engineering & ML Bundle"}
+                onClick={() => void onBuildBundle()}
                 disabled={!buildingId || saving}
                 testId="wattlab-build-dump"
               />
               <Button
-                id="wattlab-dl-dump"
-                label="Download WattLab dump (zip)"
-                onClick={() => void onDownloadDump()}
-                disabled={!dump || !jobId || saving}
+                id="export-dl-bundle"
+                label="Download bundle (zip)"
+                onClick={() => void onDownloadBundle()}
+                disabled={!bundle || !jobId || saving}
                 testId="wattlab-dl-dump"
               />
             </div>
-            {dump ? (
+            {bundle ? (
               <pre data-testid="wattlab-dump-meta">
-                {JSON.stringify(dump, null, 2)}
+                {JSON.stringify(bundle, null, 2)}
               </pre>
-            ) : null}
-
-            <h4>Fuel campus ZIP</h4>
-            <p>
-              Import campus.json + monthly bill CSVs (multipart .zip).
-            </p>
-            <input
-              ref={fuelFileRef}
-              id="wattlab-fuel-zip"
-              type="file"
-              accept=".zip,application/zip"
-              hidden
-              data-testid="wattlab-fuel-zip-input"
-              onChange={(e) =>
-                void onFuelZipSelected(e.target.files?.[0] ?? undefined)
-              }
-            />
-            <Button
-              id="wattlab-fuel-upload"
-              label={
-                fuelUploading ? "Importing fuel…" : "Upload fuel campus ZIP"
-              }
-              onClick={() => fuelFileRef.current?.click()}
-              disabled={fuelUploading || saving}
-              testId="wattlab-fuel-upload"
-            />
-            {fuelCampusId ? (
-              <p data-testid="wattlab-fuel-campus-id">
-                Imported campus_id: <strong>{fuelCampusId}</strong>
-              </p>
             ) : null}
           </section>
         ) : null}
@@ -262,6 +208,10 @@ export function WattLabPage() {
         {page === "Fuel dashboard" ? (
           <section data-testid="wattlab-fuel">
             <h3>Fuel dashboard</h3>
+            <p>
+              Utility bills and submeters load via package import under{" "}
+              <code>utilities/</code>.
+            </p>
             <FuelDashboard />
           </section>
         ) : null}
@@ -271,9 +221,7 @@ export function WattLabPage() {
             <h3>Twin / calibrate</h3>
             <p>
               Stub only — EnergyPlus visualizer, G14 crosscheck, and Unity WebGL
-              wiring are Phase B follow-up. The Twin page exists for handoff /
-              WebGL experiments; this WattLab tab is not a finished calibrate
-              workflow.
+              wiring are Phase B follow-up.
             </p>
             <Link to="/twin">Open Twin / Unity WebGL</Link>
           </section>
@@ -284,16 +232,15 @@ export function WattLabPage() {
             <h3>ECMs</h3>
             <p>
               Stub only — spreadsheet vs EnergyPlus energy · cost · ROI is Phase
-              C follow-up. Dump + handoff artifacts are prerequisites; no ECM
-              calc UI is shipped here yet.
+              C follow-up. Bundle + handoff artifacts are prerequisites.
             </p>
           </section>
         ) : null}
 
-        <label htmlFor="wattlab-uri">
+        <label htmlFor="export-uri">
           portable_zip_uri
           <input
-            id="wattlab-uri"
+            id="export-uri"
             data-testid="wattlab-uri"
             value={uri}
             onChange={(e) => setUri(e.target.value)}
@@ -302,7 +249,7 @@ export function WattLabPage() {
         </label>
 
         <Button
-          id="wattlab-handoff"
+          id="export-handoff"
           label={saving ? "Working…" : "Create handoff"}
           onClick={() => void onCreateHandoff()}
           disabled={!jobId || saving}
@@ -310,12 +257,12 @@ export function WattLabPage() {
         />
 
         {error ? (
-          <InlineAlert id="wattlab-error" variant="danger">
+          <InlineAlert id="export-error" variant="danger">
             {error}
           </InlineAlert>
         ) : null}
         {notice ? (
-          <InlineAlert id="wattlab-notice" variant="success" testId="wattlab-notice">
+          <InlineAlert id="export-notice" variant="success" testId="wattlab-notice">
             {notice}
           </InlineAlert>
         ) : null}
@@ -326,3 +273,6 @@ export function WattLabPage() {
     </AppShell>
   );
 }
+
+/** @deprecated Use ExportPage — kept for bookmarked imports during rename. */
+export const WattLabPage = ExportPage;

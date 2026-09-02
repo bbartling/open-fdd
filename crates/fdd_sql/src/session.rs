@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use datafusion::prelude::*;
@@ -31,6 +31,76 @@ pub async fn register_parquet_tree(ctx: &SessionContext, parquet_root: &Path) ->
 ///    sidecar, so without this the rule 413/crashes instead of running.
 ///
 /// Returns `true` when a `weather` relation was registered by either path.
+/// Register utility CSV tables from `workspace/data/csv_buildings/<building_id>/utilities/`.
+///
+/// Tables: `utility_monthly`, `utility_interval`, `bas_submeter` (empty view when missing).
+pub async fn register_utility_if_present(ctx: &SessionContext, building_id: &str) -> Result<bool> {
+    let workspace = std::env::var("OPENFDD_WORKSPACE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("workspace"));
+    let util_root = workspace
+        .join("data")
+        .join("csv_buildings")
+        .join(building_id)
+        .join("utilities");
+    let mut registered = false;
+
+    async fn register_csv_table(ctx: &SessionContext, table: &str, path: &Path) -> Result<bool> {
+        if !path.is_file() {
+            return Ok(false);
+        }
+        let path_str = path.to_string_lossy().replace('\\', "/");
+        let sql = format!(
+            "CREATE OR REPLACE VIEW {table} AS \
+             SELECT * FROM read_csv('{path_str}', header=true)"
+        );
+        let df = ctx.sql(&sql).await?;
+        let _ = df.collect().await;
+        Ok(ctx.table(table).await.is_ok())
+    }
+
+    if register_csv_table(
+        ctx,
+        "utility_monthly",
+        &util_root.join("electric/monthly_bills.csv"),
+    )
+    .await?
+    {
+        registered = true;
+    }
+    if register_csv_table(
+        ctx,
+        "utility_interval",
+        &util_root.join("electric/utility_interval_15m.csv"),
+    )
+    .await?
+    {
+        registered = true;
+    }
+    if register_csv_table(
+        ctx,
+        "bas_submeter",
+        &util_root.join("electric/bas_submeter_interval.csv"),
+    )
+    .await?
+    {
+        registered = true;
+    }
+
+    if !registered {
+        let empty = "CREATE OR REPLACE VIEW utility_monthly AS \
+            SELECT CAST(NULL AS VARCHAR) AS account, \
+                   CAST(NULL AS VARCHAR) AS billing_period, \
+                   CAST(NULL AS DOUBLE) AS kwh, \
+                   CAST(NULL AS DOUBLE) AS demand_kw \
+            WHERE 1=0";
+        if ctx.sql(empty).await.is_ok() {
+            let _ = ctx.table("utility_monthly").await;
+        }
+    }
+    Ok(registered)
+}
+
 pub async fn register_weather_if_present(
     ctx: &SessionContext,
     parquet_root: &Path,

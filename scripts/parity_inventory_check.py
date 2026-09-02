@@ -27,6 +27,8 @@ SQL_ANALYTICS = frozenset(
         "AVG-ZONE-TEMP",
         "ZONE-COMFORT-PCT",
         "FAULT-ELAPSED-HOURS",
+        "UTIL-MONTHLY",
+        "UTIL-INTERVAL",
     }
 )
 ALLOWED_LEVELS = frozenset(
@@ -61,15 +63,15 @@ def main() -> int:
         fail(f"schema_version={inv.get('schema_version')!r} want parity-inventory-v2")
     if counts.get("pandas_diagnostics") != 62:
         fail(f"inventory pandas_diagnostics={counts.get('pandas_diagnostics')} want 62")
-    if counts.get("sql_analytics") != 4:
-        fail(f"inventory sql_analytics={counts.get('sql_analytics')} want 4")
-    if counts.get("sql_registry") != 66:
-        fail(f"inventory sql_registry={counts.get('sql_registry')} want 66")
-    if len(concepts) != 66:
-        fail(f"inventory concepts={len(concepts)} want 66")
+    if counts.get("sql_analytics") != 6:
+        fail(f"inventory sql_analytics={counts.get('sql_analytics')} want 6")
+    if counts.get("sql_registry") != 68:
+        fail(f"inventory sql_registry={counts.get('sql_registry')} want 68")
+    if len(concepts) != 68:
+        fail(f"inventory concepts={len(concepts)} want 68")
     matrix = inv.get("matrix") or []
-    if len(matrix) != 66:
-        fail(f"inventory matrix={len(matrix)} want 66")
+    if len(matrix) != 68:
+        fail(f"inventory matrix={len(matrix)} want 68")
     required_matrix = {
         "rule_id",
         "title",
@@ -111,11 +113,11 @@ def main() -> int:
     if sv_rate.get("difference_class") != "semantic_gap":
         fail(f"SV-RATE unexpected difference_class={sv_rate.get('difference_class')}")
     if "count_explanation" not in inv:
-        fail("missing count_explanation for 62-versus-66")
+        fail("missing count_explanation for 62-versus-68")
 
     diag = [c for c in concepts if c.get("kind") == "diagnostic"]
     analytics = [c for c in concepts if c.get("kind") == "sql_analytics"]
-    if len(diag) != 62 or len(analytics) != 4:
+    if len(diag) != 62 or len(analytics) != 6:
         fail(f"kind split diagnostic={len(diag)} analytics={len(analytics)}")
 
     analytics_ids = {c["canonical_id"] for c in analytics}
@@ -125,8 +127,8 @@ def main() -> int:
     # Registry live check
     reg = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
     rules = reg.get("rules") or []
-    if len(rules) != 66:
-        fail(f"registry rules={len(rules)} want 66")
+    if len(rules) != 68:
+        fail(f"registry rules={len(rules)} want 68")
 
     levels = Counter()
     for r in rules:

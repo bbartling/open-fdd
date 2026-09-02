@@ -230,26 +230,137 @@ fn read_zip_entries(bytes: &[u8]) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> 
     Ok(out)
 }
 
-/// Root may be the building itself or a single top-level folder holding manifest.json.
+/// Root may be the building folder holding `openfdd_package_v1` manifest.json at any
+/// safe depth (Creekside-style wrappers: `OpenFdd_Creekside/.../LAKESIDE_ES/manifest.json`).
 fn resolve_building_prefix(entries: &BTreeMap<PathBuf, Vec<u8>>) -> Result<PathBuf, String> {
     if entries.contains_key(Path::new("manifest.json")) {
         return Ok(PathBuf::new());
     }
-    let mut candidates: Vec<PathBuf> = entries
-        .keys()
-        .filter(|p| p.file_name().map(|f| f == "manifest.json").unwrap_or(false))
-        .filter(|p| p.components().count() == 2)
-        .filter_map(|p| p.parent().map(Path::to_path_buf))
+    let mut package_roots: Vec<PathBuf> = entries
+        .iter()
+        .filter(|(p, _)| p.file_name().map(|f| f == "manifest.json").unwrap_or(false))
+        .filter(|(_, bytes)| is_package_manifest(bytes))
+        .filter(|(p, _)| p.components().count() <= MAX_PATH_DEPTH)
+        .filter_map(|(p, _)| p.parent().map(Path::to_path_buf))
         .collect();
-    candidates.sort();
-    candidates.dedup();
-    match candidates.len() {
-        1 => Ok(candidates.remove(0)),
-        0 => Err("package is missing manifest.json (root or single top-level folder)".into()),
+    package_roots.sort();
+    package_roots.dedup();
+    match package_roots.len() {
+        1 => Ok(package_roots.remove(0)),
+        0 => Err(
+            "package is missing openfdd_package_v1 manifest.json (root or nested folder)".into(),
+        ),
         n => Err(format!(
-            "found {n} top-level manifest.json files; expected 1"
+            "found {n} openfdd_package_v1 manifest.json files; expected 1"
         )),
     }
+}
+
+fn is_package_manifest(bytes: &[u8]) -> bool {
+    let Ok(v) = serde_json::from_slice::<Value>(bytes) else {
+        return false;
+    };
+    v.get("schema_version")
+        .and_then(|s| s.as_str())
+        .map(|s| s == PACKAGE_SCHEMA)
+        .unwrap_or(false)
+}
+
+/// Wrapper-level utility files (sibling to nested package folders), e.g. Creekside
+/// `OpenFdd_Creekside/utility_bills_monthly.csv` alongside `.../LAKESIDE_ES/manifest.json`.
+fn collect_wrapper_utility_files(
+    entries: &BTreeMap<PathBuf, Vec<u8>>,
+    building_prefix: &Path,
+) -> Vec<(String, Vec<u8>)> {
+    let mut out = Vec::new();
+    let wrapper_root = building_prefix
+        .components()
+        .next()
+        .map(|c| PathBuf::from(c.as_os_str()));
+    let search_roots: Vec<PathBuf> = match wrapper_root {
+        Some(w) if !w.as_os_str().is_empty() => vec![w],
+        _ => vec![PathBuf::new()],
+    };
+    for (path, bytes) in entries {
+        if building_prefix.as_os_str().is_empty() || !path.starts_with(building_prefix) {
+            // only files under a known wrapper root, not the building tree itself
+            let under_wrapper = search_roots
+                .iter()
+                .any(|w| w.as_os_str().is_empty() || path.starts_with(w));
+            if !under_wrapper {
+                continue;
+            }
+        } else {
+            continue;
+        }
+        let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        let rel = path.to_string_lossy().replace('\\', "/");
+        if name.eq_ignore_ascii_case("utility_bills_monthly.csv") {
+            out.push((rel, bytes.clone()));
+        }
+    }
+    // Also accept utilities/ inside the building prefix.
+    for (path, bytes) in entries {
+        if !building_prefix.as_os_str().is_empty() && !path.starts_with(building_prefix) {
+            continue;
+        }
+        let rel = if building_prefix.as_os_str().is_empty() {
+            path.clone()
+        } else {
+            path.strip_prefix(building_prefix)
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|_| path.clone())
+        };
+        let rel_s = rel.to_string_lossy().replace('\\', "/");
+        if rel_s.starts_with("utilities/") && !rel_s.ends_with('/') {
+            out.push((rel_s, bytes.clone()));
+        }
+    }
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out.dedup_by(|a, b| a.0 == b.0);
+    out
+}
+
+fn materialize_utilities(
+    building_root: &Path,
+    utility_files: &[(String, Vec<u8>)],
+) -> Result<Vec<String>, String> {
+    if utility_files.is_empty() {
+        return Ok(Vec::new());
+    }
+    let util_root = building_root.join("utilities");
+    std::fs::create_dir_all(&util_root).map_err(|e| format!("mkdir utilities: {e}"))?;
+    let mut written = Vec::new();
+    for (rel, bytes) in utility_files {
+        let dest = if rel.eq_ignore_ascii_case("utility_bills_monthly.csv")
+            || rel.ends_with("/utility_bills_monthly.csv")
+        {
+            util_root.join("electric").join("monthly_bills.csv")
+        } else {
+            util_root.join(rel.strip_prefix("utilities/").unwrap_or(rel))
+        };
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        }
+        std::fs::write(&dest, bytes).map_err(|e| format!("write {}: {e}", dest.display()))?;
+        written.push(
+            dest.strip_prefix(building_root)
+                .unwrap_or(&dest)
+                .display()
+                .to_string(),
+        );
+    }
+    let manifest = json!({
+        "schema_version": "utilities_v1",
+        "electric": { "monthly_bills": "utilities/electric/monthly_bills.csv" },
+    });
+    std::fs::write(
+        util_root.join("manifest.json"),
+        serde_json::to_string_pretty(&manifest).unwrap_or_default(),
+    )
+    .map_err(|e| format!("utilities manifest: {e}"))?;
+    Ok(written)
 }
 
 /// Extract `{point/role → csv column}` pairs for one equipment from any accepted
@@ -645,6 +756,15 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         }
     }
 
+    let utility_files = collect_wrapper_utility_files(&entries, &prefix);
+    let utilities_written = match materialize_utilities(&building_root, &utility_files) {
+        Ok(paths) => paths,
+        Err(e) => {
+            warnings.push(format!("utilities ingest: {e}"));
+            Vec::new()
+        }
+    };
+
     let stamped_types: BTreeMap<String, String> = plans
         .iter()
         .filter_map(|plan| {
@@ -738,6 +858,7 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
                 "out_dir": report.out_dir,
                 "package_root": building_root.display().to_string(),
                 "session_config": session_config,
+                "utilities_written": utilities_written,
                 "warnings": warnings,
             })
         }
@@ -1544,6 +1665,57 @@ mod tests {
         assert_eq!(out["ok"], json!(false), "{out}");
         assert!(
             out["error"].as_str().is_some() || out["missing_maps"].is_array(),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn accepts_creekside_nested_package_and_utilities() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd_creekside_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let set_ws = |tmp: &std::path::Path| {
+            std::env::remove_var("OPENFDD_STORAGE_URL");
+            std::env::set_var("OPENFDD_WORKSPACE", tmp);
+            std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.join(".cache/parquet"));
+        };
+        set_ws(&tmp);
+
+        let map = r#"{"equipType":"ahu","points":{
+            "fan-cmd":"SF_SPD",
+            "duct-static-pressure":"DA_P",
+            "duct-static-pressure-sp":"DA_P_SP"
+        }}"#;
+        let bills = "account,billing_period,kwh,demand_kw\nACCT1,2024-01,1000,50\n";
+        let zip = build_zip(&[
+            (
+                "OpenFdd_Creekside/LAKESIDE_ES_openfdd_package_v1/LAKESIDE_ES/manifest.json",
+                r#"{"schema_version":"openfdd_package_v1","building_id":"LAKESIDE_ES","grid_minutes":5,"timezone":"UTC"}"#,
+            ),
+            (
+                "OpenFdd_Creekside/LAKESIDE_ES_openfdd_package_v1/LAKESIDE_ES/AHU_1/history_wide.csv",
+                &history_csv(),
+            ),
+            (
+                "OpenFdd_Creekside/LAKESIDE_ES_openfdd_package_v1/LAKESIDE_ES/AHU_1/history_wide.json",
+                map,
+            ),
+            ("OpenFdd_Creekside/utility_bills_monthly.csv", bills),
+        ]);
+        set_ws(&tmp);
+        let out = import_package_zip(&zip);
+        assert_eq!(out["ok"], json!(true), "{out}");
+        assert_eq!(out["building_id"], json!("LAKESIDE_ES"));
+        assert!(
+            out["utilities_written"].as_array().map(|a| !a.is_empty()) == Some(true),
             "{out}"
         );
     }

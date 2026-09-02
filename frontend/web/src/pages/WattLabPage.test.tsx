@@ -39,16 +39,16 @@ vi.mock("../api/reportsApi", () => ({
   })),
 }));
 
-vi.mock("../api/wattlabApi", () => ({
-  createDump: vi.fn(async () => ({
-    dump_id: "dump-1",
+vi.mock("../api/exportApi", () => ({
+  createExport: vi.fn(async () => ({
+    export_id: "export-1",
     job_id: "job-1",
     building_id: "BUILDING_100",
     profile: "summary",
-    filename: "wattlab_dump_BUILDING_100.zip",
-    download_url: "/api/jobs/job-1/wattlab/dumps/dump-1/download",
+    filename: "openfdd_engineering_BUILDING_100_summary.zip",
+    download_url: "/api/jobs/job-1/exports/export-1/download",
   })),
-  downloadDump: vi.fn(async () => undefined),
+  downloadExport: vi.fn(async () => undefined),
 }));
 
 vi.mock("../api/fddApi", () => ({
@@ -59,13 +59,13 @@ vi.mock("../api/fddApi", () => ({
 vi.mock("../api/uploadApi", () => ({ uploadPackage: vi.fn() }));
 
 import { createWattlabHandoff } from "../api/reportsApi";
-import { createDump, downloadDump } from "../api/wattlabApi";
+import { createExport, downloadExport } from "../api/exportApi";
 
 describe("WattLabPage handoff", () => {
   beforeEach(() => {
     vi.mocked(createWattlabHandoff).mockClear();
-    vi.mocked(createDump).mockClear();
-    vi.mocked(downloadDump).mockClear();
+    vi.mocked(createExport).mockClear();
+    vi.mocked(downloadExport).mockClear();
   });
 
   it("creates a handoff for ?job=", async () => {
@@ -104,7 +104,7 @@ describe("WattLabPage handoff", () => {
     );
 
     await waitFor(() => {
-      expect(createDump).toHaveBeenCalledWith(
+      expect(createExport).toHaveBeenCalledWith(
         "job-1",
         "BUILDING_100",
         "summary",

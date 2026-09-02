@@ -166,6 +166,7 @@ test.describe("react product workflows (real stack)", () => {
       { path: "/findings", testId: "findings-page" },
       { path: "/reports", testId: "reports-page" },
       { path: "/metering", testId: "metering-page" },
+      { path: "/export", testId: "wattlab-page" },
       { path: "/wattlab", testId: "wattlab-page" },
       { path: "/twin", testId: "twin-page" },
     ];

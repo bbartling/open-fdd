@@ -8,7 +8,7 @@ export const MAIN_SECTIONS = [
   { id: "fdd-plots", label: "FDD Plots", path: "/reports?section=fdd-plots" },
   { id: "rcx-plots", label: "RCx Plots", path: "/rcx" },
   { id: "metering", label: "Metering", path: "/metering" },
-  { id: "wattlab", label: "WattLab", path: "/wattlab" },
+  { id: "export", label: "Export & ML", path: "/export" },
   { id: "sites", label: "Sites", path: "/sites" },
   { id: "operations", label: "Operations", path: "/operations" },
 ] as const;
@@ -24,7 +24,7 @@ export const SIDEBAR_NAV = [
   { to: "/findings", label: "Findings", short: "F", testId: "nav-findings" },
   { to: "/reports", label: "FDD Plots", short: "P", testId: "nav-reports" },
   { to: "/metering", label: "Metering", short: "E", testId: "nav-metering" },
-  { to: "/wattlab", label: "WattLab", short: "W", testId: "nav-wattlab" },
+  { to: "/export", label: "Export & ML", short: "X", testId: "nav-export" },
   { to: "/twin", label: "Twin", short: "T", testId: "nav-twin" },
   { to: "/operations", label: "Operations", short: "O", testId: "nav-operations" },
 ] as const;
