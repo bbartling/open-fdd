@@ -1,16 +1,32 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-02 (3.3.19 remaining bugs + stress closeout **CLOSED**)  
-**Platform:** Railway hub @ `sha-b565d78` / `3.3.18+b565d78d2cae`  
+**Date:** 2026-09-02 (3.3.20 engineering export + utilities — **IN FLIGHT**)  
+**Platform:** Railway hub @ `sha-42b3f49` / `3.3.18+42b3f498` (pre-3.3.19 repin)  
 **Host:** bensbench (GHCR pull / local react); bosspi arm64 edge  
 **Remote edge:** bosspi — fieldbus, poll+publish **60s**, site `bldg2` / edge `pi-1` → Railway MQTTS  
-**Train:** `b565d78d` (#824 harness + #825 docs + 3.3.19 harness/docs); VERSION **3.3.18**
+**Train:** `42b3f498` (#826 B100 parity); VERSION bump **3.3.19** on `fix/3.3.20-engineering-ml-export`
 
 Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live only in session env / gitignored files — **never Discord→git**.
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
 
-## Verdict — 3.3.19 remaining bugs + stress (2026-09-02)
+## Verdict — 3.3.20 engineering export + utilities (2026-09-02)
+
+| Check | Evidence |
+|-------|----------|
+| Nested Creekside import | Code + `tests/fixtures/creekside_nested/` + `scripts/gates/creekside_package_import_spot.sh` — live gate after GHCR repin |
+| Utilities in package | `utilities_v1` materialize in `package.rs`; fuel ZIP upload removed from Export UI |
+| Engineering bundle | `openfdd_engineering_bundle_v1` Rust export; `POST /api/jobs/{id}/exports`; `/wattlab/dumps` alias |
+| Utility FDD rules | `UTIL-MONTHLY`, `UTIL-INTERVAL` + meter roles on `SV-RANGE` |
+| Gate 19 | `scripts/nightly-ot-bench/19_engineering_bundle_validate.sh` |
+| GHCR + stress | **PENDING** — merge PR → publish → re-pin → `run_all` + gate 19 + Creekside gate |
+| **bldg2 Overview UI** | **DEFERRED** (carried from 3.3.19) |
+| BUILDING_50 / AFDD flood | **DEFERRED** |
+| Legacy fuel ZIP | `services/central/src/fuel/import.rs` read-only for `liberty_practice_bensbench` |
+
+**Issues closed:** [#763](https://github.com/bbartling/open-fdd/issues/763) (engineering bundle), [#805](https://github.com/bbartling/open-fdd/issues/805) (utilities in package) — evidence on merge PR.
+
+## Verdict — 3.3.19 remaining bugs + stress (2026-09-02) — CLOSED
 
 | Check | Evidence |
 |-------|----------|

@@ -27,6 +27,7 @@ use crate::models::{
     IssueCommandRequest, IssueCommandResponse, OkHealthResponse,
 };
 use crate::state::{AppState, PendingCommand};
+use crate::engineering_bundle;
 use crate::wattlab_dump;
 
 pub fn router(state: Arc<AppState>) -> Router {
@@ -169,6 +170,14 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/api/jobs/{job_id}/wattlab/handoffs",
             post(jobs_create_wattlab_handoff),
+        )
+        .route(
+            "/api/jobs/{job_id}/exports",
+            post(jobs_create_engineering_export),
+        )
+        .route(
+            "/api/jobs/{job_id}/exports/{export_id}/download",
+            get(jobs_download_engineering_export),
         )
         .route(
             "/api/jobs/{job_id}/wattlab/dumps",
@@ -1947,6 +1956,44 @@ async fn jobs_create_wattlab_handoff(
     ))
 }
 
+async fn jobs_create_engineering_export(
+    Path(job_id): Path<String>,
+    Json(body): Json<engineering_bundle::CreateExportRequest>,
+) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
+    let export = engineering_bundle::create_export(&job_id, body)
+        .await
+        .map_err(job_err)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({"ok": true, "export": export})),
+    ))
+}
+
+async fn jobs_download_engineering_export(
+    Path((job_id, export_id)): Path<(String, String)>,
+) -> Result<(StatusCode, HeaderMap, Vec<u8>), (StatusCode, Json<Value>)> {
+    let loaded =
+        tokio::task::spawn_blocking(move || engineering_bundle::load_export(&job_id, &export_id))
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"ok": false, "error": format!("export download task: {e}")})),
+                )
+            })?
+            .map_err(job_err)?;
+    let (artifact, bytes) = loaded;
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_TYPE, "application/zip".parse().unwrap());
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        format!("attachment; filename=\"{}\"", artifact.filename)
+            .parse()
+            .unwrap(),
+    );
+    Ok((StatusCode::OK, headers, bytes))
+}
+
 async fn jobs_create_wattlab_dump(
     Path(job_id): Path<String>,
     Json(body): Json<wattlab_dump::CreateDumpRequest>,
@@ -1954,7 +2001,7 @@ async fn jobs_create_wattlab_dump(
     let dump = wattlab_dump::create_dump(&job_id, body)
         .await
         .map_err(job_err)?;
-    Ok((StatusCode::CREATED, Json(json!({"ok": true, "dump": dump}))))
+    Ok((StatusCode::CREATED, Json(json!({"ok": true, "dump": dump, "export": dump}))))
 }
 
 async fn jobs_download_wattlab_dump(

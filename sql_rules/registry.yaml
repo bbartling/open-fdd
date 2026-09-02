@@ -569,13 +569,13 @@ rules:
 # --- Ported from datafusion-sql-cookbook (feat/sql-rules-59) ---
 
   - rule_id: SV-RANGE
-    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump]
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump, meter]
     sql_file: sv_range.sql
     pandas_function: null
     description: Sensor out of hard range
     required_roles: []
     # Pandas SENSOR_LIMITS catalog (temps + humidity + duct static).
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, kwh, electric_kw, electric_kwh]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -2495,3 +2495,51 @@ rules:
         unit: frac
         frontend_control: slider
         sql_placeholder: ALWAYS_ON_PCT
+
+  - rule_id: UTIL-MONTHLY
+    equipment_kinds: [meter, ahu, heatpump]
+    sql_file: util_monthly_fault.sql
+    pandas_function: null
+    description: BAS monthly kWh vs utility monthly bills (% deviation)
+    required_roles: []
+    optional_roles: [kwh, electric_kw]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      util_pct_err:
+        label: Monthly kWh deviation
+        default: 10.0
+        min: 2.0
+        max: 50.0
+        step: 1.0
+        unit: '%'
+        frontend_control: slider
+        sql_placeholder: UTIL_PCT_ERR
+
+  - rule_id: UTIL-INTERVAL
+    equipment_kinds: [meter, ahu, heatpump]
+    sql_file: util_interval_fault.sql
+    pandas_function: null
+    description: BAS 15m vs utility interval (MAE threshold)
+    required_roles: []
+    optional_roles: [kwh, electric_kw]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      util_interval_mae:
+        label: Interval MAE threshold
+        default: 5.0
+        min: 0.5
+        max: 100.0
+        step: 0.5
+        unit: kWh
+        frontend_control: slider
+        sql_placeholder: UTIL_INTERVAL_MAE

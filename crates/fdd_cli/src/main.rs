@@ -161,6 +161,7 @@ async fn main() -> Result<()> {
                     weather_root: None,
                     unit_system: Some(unit_system.as_str()),
                     time_window: None,
+                    building_id: None,
                 },
             )
             .await?;

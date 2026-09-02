@@ -63,8 +63,8 @@ retest. Do not confuse those with this engineering OS.
 17. Bound each PR to its declared scope.
 18. **Active program:** [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/README.md) Master Loop. Keep [`capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml) honest.
 19. For `frontend/web` work: follow [`openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md).
-20. Central product image is **debian + Rust binaries only** — no Python. WattLab AFDD zip export is optional offline tooling (`OPENFDD_WATTLAB_PYTHON_EXPORT=1`).
-21. **Site lock:** Overview + sidebar Active site are the only editors of `?site=`. `SectionTabs` (and sidebar App pages) must `navigate` with `hrefWithSession` so `site` + `eq` survive. FDD / RCx / Results / WattLab show a locked `zip:BUILDING_*` caption — no Building `<Select>`.
+20. Central product image is **debian + Rust binaries only** — no Python. **Engineering & ML bundle** export is Rust-first (`POST /api/jobs/{id}/exports`, schema `openfdd_engineering_bundle_v1`). Offline Python parity stays in `tools/wattlab_export/` (`OPENFDD_WATTLAB_PYTHON_EXPORT=1` bench only). `/wattlab/dumps` is a deprecated alias.
+21. **Site lock:** Overview + sidebar Active site are the only editors of `?site=`. `SectionTabs` (and sidebar App pages) must `navigate` with `hrefWithSession` so `site` + `eq` survive. FDD / RCx / Results / **Export & ML** show a locked `zip:BUILDING_*` caption — no Building `<Select>`.
 22. **FDD Plots = vibe19 `rule_result_chart`:** auto-load series; last y-axis title is `fault`; `confirmed_fault` is the last trace on the bottom domain (`domain[0] < 0.4`). A successful rule run with an empty overlay is a bug (fail the test), not a soft banner.
 23. **RCx catalog freeze:** every `REQUIRED_RCX_PRESET_IDS` id must stay listed. Family picker order is `RCX_FAMILY_ORDER` (Zones first) plus empty Heat pump / Weather placeholders. Auto-run the selected preset when site+preset are set.
 24. **Actions housekeeping:** default `GET /api/actions?limit=10`; `DELETE /api/actions/:id` and `DELETE /api/actions`; JSONL prune cap 50.
@@ -81,7 +81,7 @@ retest. Do not confuse those with this engineering OS.
 35. **Synthetic analytics soak:** `scripts/synthetic_59_overview_analytics_soak.py` asserts runtime + mech bin envelopes (separate from FDD pair scores).
 36. **Metric CSVs:** store as-uploaded; convert temperature roles C→F at run-rules/historian query. Do not duplicate 59 SQL files. Sliders display user units.
 37. **Package append:** `POST /api/csv/import/package/append` is the IoT hourly path (JWT + confirm). **AFDD routine sim:** `scripts/csv_flood_afdd_routine_sim.py` + `scripts/fixtures/b50_afdd_routine.json` on `raw_BUILDING_50_openfdd.zip` (append → session-config patch → `/api/fdd/run`). Doc: [`docs/agent/CSV_FLOOD_AFDD_ROUTINE.md`](../docs/agent/CSV_FLOOD_AFDD_ROUTINE.md). Vendor pullers stay out-of-repo.
-38. **E+ dump / clustering:** prefer `reports/eplus-dump/` (`EPLUS_DUMP_ROOT`); `scripts/eplus_dump_clustering_export.py` emits sklearn-ready features. Online: `scripts/agent_eplus_dump.sh`. Rust API routes still `/wattlab/dumps` until rename. Doc: [`docs/agent/EPLUS_DUMP_CLUSTERING.md`](../docs/agent/EPLUS_DUMP_CLUSTERING.md).
+38. **E+ dump / clustering:** prefer `reports/eplus-dump/` (`EPLUS_DUMP_ROOT`); `scripts/eplus_dump_clustering_export.py` emits sklearn-ready features. Online: `scripts/agent_eplus_dump.sh` (calls `/exports` or deprecated `/wattlab/dumps`). Bundle schema: `openfdd_engineering_bundle_v1`. Doc: [`docs/agent/EPLUS_DUMP_CLUSTERING.md`](../docs/agent/EPLUS_DUMP_CLUSTERING.md).
 39. **Railway hub CLI (bensbench):** `@railway/cli` via `npm i -g`; auth via `railway login` (verified) or optional `RAILWAY_TOKEN` in `~/.config/railway/bensbench.env`. Linked project **`gleaming-cooperation`** / **`production`**. Re-pin with **live** service names (`openfdd-central-cQ-F`, `openfdd-mqtt`, `openfdd-web`) per [`skills/openfdd-railway-cli/SKILL.md`](skills/openfdd-railway-cli/SKILL.md). Railway CLI ≠ [`mcp/`](../mcp/) FDD tools. Never commit tokens; never treat Railway AI as the FDD agent.
 40. **Always pin tip after Publish:** hub sidebar/`/api/health` must match tip `sha-*`. Stale `3.3.9` while tip is newer is a P0 fail. **Backup** `/workspace` before every central re-pin (`scripts/railway_central_workspace_backup.sh`).
 41. **Dual pipeline:** bosspi → Railway (cloud exclusive); bensbench local GHCR react stack for firewall/on-prem. Same tip `sha-*` both sides; 60s poll+publish on both edges; do not cross-wire for parity.
@@ -90,8 +90,10 @@ retest. Do not confuse those with this engineering OS.
 44. **Stream roles ≠ package roles until mapped:** live tags `zonetemp`/`sa_t` normalize to `zone_t`/`sat`. Empty Overview with rising `ingest_ok` ⇒ roles, not nginx. OT poll+MQTT publish floor **60s**.
 45. **Patch cycle (3.3.15+ ops closeout):** every nightly gate FAIL → log row in [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) **Patch cycle — Phase 7 bugs** before opening a fix PR. Train: fix (one concern/PR) → `VERSION` bump if product change → GHCR publish → backup + re-pin → smoke `01`/`10` → **gate 18** volume restore → re-stress affected gate only → move row to **patched** when green. **Local synthetic CSV FDD** is accepted when import → parquet → `fdd/run` → `results[]` passes; gate 06 **#528** `poll_seconds` is harness-only. **Railway F1** (DF55, BUILDING_50 import/FDD, AFDD flood, bldg2 Overview) is a **separate** stress tier — do not block local bench closeout on Railway F1 in the same `run_all` session.
 46. **Rule display names (one contract):** `rule_id` is the machine key; `sql_rules/registry.yaml` `description` is the **short human name** for all product UI. Cookbook headings extend that name (GL36 refs, etc.) — see [`docs/RULE_DISPLAY_NAMES.md`](docs/RULE_DISPLAY_NAMES.md). React must use shared formatters (`ruleLabels.ts` — planned) in sidebar `RuleTuningPanel`, FDD Plots picker, plot titles, health-matrix tooltips, and CSV exports. Do **not** truncate sidebar labels while showing full names in the center panel. Merge API rules into `cookbookRuleCatalog` at boot; avoid duplicate static description maps. Cookbook/registry drift is a parity bug — fix in the same PR family as rule changes.
+47. **Package utilities (#805):** `openfdd_package_v1` may include `utilities/manifest.json` (`utilities_v1`) with `electric/monthly_bills.csv`, optional interval/submeter CSVs, or wrapper-level `utility_bills_monthly.csv` (Creekside). Ingest code: [`edge/src/csv_ingest/package.rs`](../edge/src/csv_ingest/package.rs). Legacy fuel campus ZIP: [`services/central/src/fuel/import.rs`](../services/central/src/fuel/import.rs) (read-only).
+48. **Utility meter FDD:** `UTIL-MONTHLY` / `UTIL-INTERVAL` in `sql_rules/registry.yaml` compare BAS vs utility bills/intervals; `SV-*` rules accept `kwh` / `electric_kw` roles on `meter` equipment. Modeling skill: [`skills/data-modeling/SKILL.md`](skills/data-modeling/SKILL.md).
 
-**Current ops pin (2026-09-01):** `sha-3c9f753` / `3.3.15+3c9f75311ae1` — verdict + Phase 7 queue in BUG_REPORT.
+**Current ops pin (2026-09-02):** `sha-42b3f49` / `3.3.18` baseline → **3.3.19** engineering export train — verdict in BUG_REPORT.
 
 ---
 
@@ -136,6 +138,7 @@ Nested instructions may specialize but never contradict a higher authority.
 | [`openfdd-railway-cli`](skills/openfdd-railway-cli/SKILL.md) | Railway CLI auth / tip re-pin |
 | [`openfdd-ecm-engineering`](skills/openfdd-ecm-engineering/SKILL.md) | ECM math library |
 | [`openfdd-milestone-a-pr`](skills/openfdd-milestone-a-pr/SKILL.md) | Milestone A PR loop |
+| [`data-modeling`](skills/data-modeling/SKILL.md) | Package layout, utilities/, equipType, export bundle |
 
 ### Equipment typing contract
 

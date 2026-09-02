@@ -19,6 +19,7 @@ mod openapi;
 mod routes;
 mod state;
 mod vibe21;
+mod engineering_bundle;
 mod wattlab_dump;
 
 use std::net::SocketAddr;

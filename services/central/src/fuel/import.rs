@@ -1,4 +1,8 @@
 //! Fuel campus ZIP import → `$OPENFDD_WORKSPACE/data/fuel/<campus_id>/`.
+//!
+//! **Legacy path (read-only):** new sites should ship utilities inside
+//! `openfdd_package_v1` under `utilities/` (see `edge/src/csv_ingest/package.rs`).
+//! This ZIP importer remains for `liberty_practice_bensbench` until migrated.
 
 use std::fs;
 use std::io::{Cursor, Read, Write};

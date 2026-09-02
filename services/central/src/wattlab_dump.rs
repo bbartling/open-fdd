@@ -9,6 +9,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::engineering_bundle;
 use crate::jobs::{self, JobError};
 
 const PROFILES: &[&str] = &["summary", "diagnostic", "forensic"];
@@ -177,106 +178,46 @@ pub async fn create_dump(
     job_id: &str,
     request: CreateDumpRequest,
 ) -> Result<DumpArtifact, JobError> {
-    // Product central image is Rust-only (no Python). WattLab AFDD zip export is
-    // optional offline tooling via tools/wattlab_export — never a product dependency.
-    let export_enabled = std::env::var("OPENFDD_WATTLAB_PYTHON_EXPORT")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
-    if !export_enabled {
-        return Err(JobError::Invalid(
-            "WattLab package dump export is offline PyPI tooling (tools/wattlab_export), \
-             not part of the product central image. Set OPENFDD_WATTLAB_PYTHON_EXPORT=1 \
-             and provide OPENFDD_AGENT_AFDD_SCRIPT + OPENFDD_PYTHON only for bench tooling."
-                .into(),
-        ));
-    }
-
-    let job = jobs::load_job(job_id)?;
-    let building_id = validate_segment(&request.building_id, "building_id")?;
-    if let Some(site_id) = job.site_id.as_deref().filter(|s| !s.trim().is_empty()) {
-        if site_id != building_id {
-            return Err(JobError::Invalid(format!(
-                "building_id {building_id} does not match job site_id {site_id}"
-            )));
-        }
-    }
-    let profile = validate_profile(&request.profile)?;
-    let package = package_root(&building_id)?;
-    let script = agent_script()?;
-    let python = std::env::var("OPENFDD_PYTHON").unwrap_or_else(|_| "python3".into());
-    let dump_id = format!("dump-{}", Uuid::new_v4());
-    let root = dump_dir(job_id, &dump_id)?;
-    let contents = root.join("contents");
-    fs::create_dir_all(&contents).map_err(|e| JobError::Io(e.to_string()))?;
-
-    let output = tokio::process::Command::new(&python)
-        .arg(&script)
-        .arg("--package")
-        .arg(&package)
-        .arg("--out")
-        .arg(&contents)
-        .arg("--export-profile")
-        .arg(&profile)
-        .arg("--no-bootstrap")
-        .current_dir(script.parent().unwrap_or_else(|| Path::new(".")))
-        .env("PYTHONUNBUFFERED", "1")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .await
-        .map_err(|e| {
-            JobError::Io(format!(
-                "failed to start offline WattLab exporter ({python}): {e}"
-            ))
-        })?;
-
-    if !output.status.success() {
-        let _ = fs::remove_dir_all(&root);
-        let detail = String::from_utf8_lossy(&output.stderr);
-        let detail = detail.chars().take(4000).collect::<String>();
-        return Err(JobError::Io(format!(
-            "cookbook exporter failed ({}): {}",
-            output.status,
-            detail.trim()
-        )));
-    }
-
-    let filename = format!("wattlab_dump_{building_id}.zip");
-    let zip_path = root.join(&filename);
-    let size_bytes = match zip_directory(&contents, &zip_path) {
-        Ok(size) => size,
-        Err(error) => {
-            let _ = fs::remove_dir_all(&root);
-            return Err(error);
-        }
-    };
-    let artifact = DumpArtifact {
-        dump_id: dump_id.clone(),
-        job_id: job_id.to_string(),
-        building_id,
-        profile,
-        filename,
-        download_url: format!("/api/jobs/{job_id}/wattlab/dumps/{dump_id}/download"),
-        created_at: Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
-        size_bytes,
-    };
-    jobs::atomic_write_json(
-        &root.join("metadata.json"),
-        &serde_json::to_value(&artifact).map_err(|e| JobError::Io(e.to_string()))?,
-    )?;
-    Ok(artifact)
+    let export = engineering_bundle::create_export(
+        job_id,
+        engineering_bundle::CreateExportRequest {
+            building_id: request.building_id,
+            profile: request.profile,
+        },
+    )
+    .await?;
+    Ok(DumpArtifact {
+        dump_id: export.export_id,
+        job_id: export.job_id,
+        building_id: export.building_id,
+        profile: export.profile,
+        filename: export.filename,
+        download_url: export.download_url,
+        created_at: export.created_at,
+        size_bytes: export.size_bytes,
+    })
 }
 
 pub fn load_dump(job_id: &str, dump_id: &str) -> Result<(DumpArtifact, Vec<u8>), JobError> {
-    jobs::load_job(job_id)?;
-    let root = dump_dir(job_id, dump_id)?;
-    let metadata = fs::read_to_string(root.join("metadata.json"))
-        .map_err(|_| JobError::NotFound(format!("WattLab dump not found: {dump_id}")))?;
-    let artifact: DumpArtifact =
-        serde_json::from_str(&metadata).map_err(|e| JobError::Io(e.to_string()))?;
-    let bytes = fs::read(root.join(&artifact.filename))
-        .map_err(|_| JobError::NotFound(format!("WattLab dump zip not found: {dump_id}")))?;
-    Ok((artifact, bytes))
+    let export_id = if dump_id.starts_with("dump-") {
+        dump_id.replacen("dump-", "export-", 1)
+    } else {
+        dump_id.to_string()
+    };
+    let (export, bytes) = engineering_bundle::load_export(job_id, &export_id)?;
+    Ok((
+        DumpArtifact {
+            dump_id: export.export_id.clone(),
+            job_id: export.job_id,
+            building_id: export.building_id,
+            profile: export.profile,
+            filename: export.filename,
+            download_url: export.download_url,
+            created_at: export.created_at,
+            size_bytes: export.size_bytes,
+        },
+        bytes,
+    ))
 }
 
 #[cfg(test)]

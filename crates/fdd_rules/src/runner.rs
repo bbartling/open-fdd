@@ -3,7 +3,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use datafusion::prelude::*;
-use fdd_sql::{register_parquet_tree, register_weather_if_present, run_sql};
+use fdd_sql::{register_parquet_tree, register_utility_if_present, register_weather_if_present, run_sql};
 use serde::Serialize;
 
 use crate::params::{read_poll_from_cache, rule_params, substitute_sql};
@@ -125,6 +125,8 @@ pub struct RunOptions<'a> {
     pub unit_system: Option<&'a str>,
     /// Continuous AFDD lookback `[start_utc, end_utc)`. Bulk passes `None`.
     pub time_window: Option<(&'a str, &'a str)>,
+    /// Building id for utility CSV registration (`utilities_v1` under csv_buildings).
+    pub building_id: Option<&'a str>,
 }
 
 pub async fn run_all_rules(
@@ -205,6 +207,9 @@ pub async fn run_all_rules_with_overrides(
     register_parquet_tree(&ctx, parquet_root).await?;
     let wx_root = options.weather_root.unwrap_or(parquet_root);
     register_weather_if_present(&ctx, wx_root).await?;
+    if let Some(bid) = options.building_id.filter(|s| !s.is_empty()) {
+        register_utility_if_present(&ctx, bid).await?;
+    }
     if let Some((start_utc, end_utc)) = options.time_window {
         scope_history_to_time_window(&ctx, start_utc, end_utc).await?;
     }

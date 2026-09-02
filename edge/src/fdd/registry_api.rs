@@ -1267,6 +1267,7 @@ pub fn run_registry(payload: &Value) -> Value {
             weather_root: Some(weather_root.as_path()),
             unit_system: Some(unit_system),
             time_window,
+            building_id: Some(building_id),
         },
     )) {
         Ok(report) => {

@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-09-02 (afternoon) — 3.3.20 engineering export + utilities (in flight)
+
+- **Branch:** `fix/3.3.20-engineering-ml-export` — nested Creekside import, `utilities_v1`, Rust `openfdd_engineering_bundle_v1`, Export & ML UI, `UTIL-MONTHLY`/`UTIL-INTERVAL`, gate 19 + Creekside spot.
+- **VERSION:** `3.3.19`
+- **Pending closeout:** merge PR → GHCR publish → re-pin → stress (`run_all` + gate 19 + Creekside import) → BUG_REPORT final → GH hygiene END.
+- Plan: `.cursor/plans/3.3.20_engineering_ml_bundle_utilities.plan.md`
+
 ## 2026-09-02 (afternoon) — 3.3.19 remaining bugs + stress closeout
 
 - **GH hygiene START:** 0 open PRs; only `master`; tip Actions green.

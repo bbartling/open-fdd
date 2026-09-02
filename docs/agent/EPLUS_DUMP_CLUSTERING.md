@@ -6,15 +6,21 @@ nav_order: 21
 
 # E+ dump and clustering export
 
-User-facing name for engineering bundle export + offline pandas clustering (legacy paths still say “WattLab” in Rust API routes).
+User-facing name for **Engineering & ML bundle** export + offline pandas clustering.
 
-## Online dump (central)
+## Online export (central — Rust-first)
 
-[`scripts/agent_eplus_dump.sh`](../../scripts/agent_eplus_dump.sh) (shim: `agent_wattlab_dump.sh`):
+[`scripts/agent_eplus_dump.sh`](../../scripts/agent_eplus_dump.sh):
 
-1. Import package → create job → `POST /api/jobs/{id}/wattlab/dumps` (API rename to `/eplus/dumps` is follow-up)
-2. Download zip
-3. Chain [`scripts/eplus_dump_clustering_export.py`](../../scripts/eplus_dump_clustering_export.py)
+1. Import package → create job → `POST /api/jobs/{id}/exports` (deprecated alias: `/wattlab/dumps`)
+2. Download `openfdd_engineering_bundle_v1` zip
+3. Optional offline: [`scripts/eplus_dump_clustering_export.py`](../../scripts/eplus_dump_clustering_export.py)
+
+Validate structure:
+
+```bash
+python3 scripts/openfdd_bundle_validate.py validate path/to/bundle.zip
+```
 
 ## Offline clustering (pandas / sklearn)
 
@@ -37,6 +43,7 @@ Artifact root: `EPLUS_DUMP_ROOT` (default `reports/eplus-dump/`). Legacy `report
 
 ## Agent spec
 
-- Dump engine: `tools/wattlab_export/` (offline; central shells when `OPENFDD_WATTLAB_PYTHON_EXPORT=1`)
+- Product export: `services/central/src/engineering_bundle.rs` (Rust; no Python in image)
+- Offline parity: `tools/wattlab_export/` (`OPENFDD_WATTLAB_PYTHON_EXPORT=1`)
 - Compare helpers (tests): `scripts/eplus_parity_compare.py`
 - Retired vibe19 dual-parity: `scripts/retired/vibe19-parity/`
