@@ -139,7 +139,7 @@ def main() -> int:
             errors.append(f"{cid}: demo_only=true requires status SCAFFOLD or lower")
 
     # Required core routes present in ledger
-    required_routes = {"/", "/auth", "/jobs", "/upload", "/mapping", "/rules", "/findings", "/reports", "/metering", "/wattlab"}
+    required_routes = {"/", "/auth", "/jobs", "/upload", "/mapping", "/rules", "/findings", "/reports", "/metering", "/export"}
     ledger_routes = {
         c.get("react_route")
         for c in caps
