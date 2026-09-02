@@ -555,16 +555,21 @@ def _inventory_fingerprint(inv: dict) -> dict:
     return {
         "counts": inv["counts"],
         "count_explanation": inv.get("count_explanation"),
-        "matrix": [
-            {
-                "rule_id": r["rule_id"],
-                "parity_status": r.get("parity_status"),
-                "difference_class": r.get("difference_class"),
-                "datafusion_sql_implementation": r.get("datafusion_sql_implementation"),
-                "pandas_implementation": r.get("pandas_implementation"),
-            }
-            for r in inv.get("matrix", [])
-        ],
+        "matrix": sorted(
+            [
+                {
+                    "rule_id": r["rule_id"],
+                    "parity_status": r.get("parity_status"),
+                    "difference_class": r.get("difference_class"),
+                    "datafusion_sql_implementation": r.get(
+                        "datafusion_sql_implementation"
+                    ),
+                    "pandas_implementation": r.get("pandas_implementation"),
+                }
+                for r in inv.get("matrix", [])
+            ],
+            key=lambda r: r["rule_id"],
+        ),
     }
 
 
