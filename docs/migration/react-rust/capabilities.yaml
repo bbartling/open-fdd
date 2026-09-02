@@ -241,9 +241,9 @@ capabilities:
       - PDF/DOCX may remain oracle-backed.
 
   - id: CAP-WATTLAB
-    user_story: WattLab dump + job-native handoff
-    react_route: /wattlab
-    react_owner: WattLabPage
+    user_story: Engineering & ML bundle export + job-native handoff
+    react_route: /export
+    react_owner: ExportPage
     central_apis:
       - /api/jobs
     computation_owner: central.jobs
