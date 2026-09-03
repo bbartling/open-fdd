@@ -50,9 +50,11 @@ operator JWT); do not put `OPENFDD_ADMIN_PASSWORD` into Cursor MCP config.
 Admins may `POST /api/auth/agent-token` for short-lived operator JWTs.
 Edge kits: operator/admin `POST /api/mqtt/edge-kits` or Operations MQTT UI
 (ZIP never includes CA private key).
-Local Compose keeps the default `central:8080`. Do not claim a Railway-ready
-nightly until stack + MCP GHCR publish jobs are green and the target `sha-*`
-digest resolves.
+Local Compose keeps the default `central:8080`. **Local dashboard is HTTP only** (UI `:3000`, API `:8080`) behind a firewall — product Compose does **not** terminate TLS yet. Handbook: [`docs/operations/LOCAL_DEPLOYMENT.md`](../../docs/operations/LOCAL_DEPLOYMENT.md).
+
+Do not claim a Railway-ready nightly until stack + MCP GHCR publish jobs are green and the target `sha-*` digest resolves.
+
+**Stress LAST** after re-pin: [`docs/operations/STRESS_CLOSEOUT.md`](../../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md).
 
 Hourly CSV append is API `POST /api/csv/import/package/append` on central (GHA image), not a local compile.
 

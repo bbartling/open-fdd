@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-09-03 — Agent ops docs: stress + local/Railway bootstrap
+
+- Added [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) (STRESS 1–7 incl. light OWASP ZAP) + skill `openfdd-stress-closeout`.
+- Added [`docs/operations/LOCAL_DEPLOYMENT.md`](../docs/operations/LOCAL_DEPLOYMENT.md) — firewall hub, **HTTP only / no product TLS yet**.
+- Wired AGENTS.md rules 49–50, railway-cli / stack-ghcr skills, `mcp/README.md` + `INSTRUCTIONS.md`, `RAILWAY_DEPLOYMENT.md` related-docs table.
+- Plan stress remaining: `.cursor/plans/3.3.20_engineering_ml_bundle_utilities.plan.md` (do not start stress in this docs pass).
+
 ## 2026-09-02 (evening) — 3.3.20 engineering export + utilities closeout
 
 - **Merge:** #827 → `15baccf8`; VERSION **3.3.19**; Export & ML UI, `openfdd_engineering_bundle_v1`, `utilities_v1`, Creekside nested import, `UTIL-MONTHLY`/`UTIL-INTERVAL`.
@@ -8,6 +15,7 @@
 - **Hotfix:** #828 — gate 19 jq `NOT_READY` quote + `PASS` counter shadow fix.
 - **Issues closed:** #763, #805.
 - **GH hygiene END:** 0 open PRs after #828 merge; only `master`.
+- **Note:** full stress matrix (`run_all` / synth59 / B100 / ZAP) still pending per STRESS_CLOSEOUT — BUG_REPORT 3.3.20 verdict still thin until then.
 - Plan: `.cursor/plans/3.3.20_engineering_ml_bundle_utilities.plan.md`
 
 ## 2026-09-02 (afternoon) — 3.3.20 engineering export + utilities (in flight)

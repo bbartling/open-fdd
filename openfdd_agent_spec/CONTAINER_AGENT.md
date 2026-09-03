@@ -35,7 +35,12 @@ Product UI: **React** (`compose.react.yml` → host `:3000`). Central image is
 
 OT LAN benches need fieldbus — recipe **`react-ot`**
 (`compose.react.yml` + `compose.react.fieldbus.yml`). Full stress suite:
-[`scripts/nightly-ot-bench/`](../scripts/nightly-ot-bench/README.md).
+[`scripts/nightly-ot-bench/`](../scripts/nightly-ot-bench/README.md) · agent handbook
+[`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md).
+
+**Local UI/API are plain HTTP** (`:3000` / `:8080`) behind a firewall — product
+Compose does **not** terminate TLS yet. See
+[`docs/operations/LOCAL_DEPLOYMENT.md`](../docs/operations/LOCAL_DEPLOYMENT.md).
 
 **Pi 3 edges (~905 MiB):** run **fieldbus-only** (no central/web soak). Prefer
 native `linux/arm64` `openfdd-fieldbus` from GHCR multi-arch (Plan 3 CLOSED on

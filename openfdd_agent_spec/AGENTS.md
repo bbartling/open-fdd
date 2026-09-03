@@ -92,8 +92,10 @@ retest. Do not confuse those with this engineering OS.
 46. **Rule display names (one contract):** `rule_id` is the machine key; `sql_rules/registry.yaml` `description` is the **short human name** for all product UI. Cookbook headings extend that name (GL36 refs, etc.) — see [`docs/RULE_DISPLAY_NAMES.md`](docs/RULE_DISPLAY_NAMES.md). React must use shared formatters (`ruleLabels.ts` — planned) in sidebar `RuleTuningPanel`, FDD Plots picker, plot titles, health-matrix tooltips, and CSV exports. Do **not** truncate sidebar labels while showing full names in the center panel. Merge API rules into `cookbookRuleCatalog` at boot; avoid duplicate static description maps. Cookbook/registry drift is a parity bug — fix in the same PR family as rule changes.
 47. **Package utilities (#805):** `openfdd_package_v1` may include `utilities/manifest.json` (`utilities_v1`) with `electric/monthly_bills.csv`, optional interval/submeter CSVs, or wrapper-level `utility_bills_monthly.csv` (Creekside). Ingest code: [`edge/src/csv_ingest/package.rs`](../edge/src/csv_ingest/package.rs). Legacy fuel campus ZIP: [`services/central/src/fuel/import.rs`](../services/central/src/fuel/import.rs) (read-only).
 48. **Utility meter FDD:** `UTIL-MONTHLY` / `UTIL-INTERVAL` in `sql_rules/registry.yaml` compare BAS vs utility bills/intervals; `SV-*` rules accept `kwh` / `electric_kw` roles on `meter` equipment. Modeling skill: [`skills/data-modeling/SKILL.md`](skills/data-modeling/SKILL.md).
+49. **Local deploy = HTTP behind firewall** — Compose UI `:3000` / API `:8080` are **plain HTTP**; product local stack does **not** terminate TLS yet. Do not expose to the public internet; do not claim local HTTPS unless an ops reverse proxy is documented. Handbook: [`docs/operations/LOCAL_DEPLOYMENT.md`](../docs/operations/LOCAL_DEPLOYMENT.md).
+50. **Stress LAST (rigorous closeout):** after tip GHCR + Railway/local re-pin — smoke → `run_all` 00–16 → synth59 → gate 17 → B100 Railway vs local → Creekside → gate 19 bundle → optional light OWASP ZAP on **Railway public URL only**. Cite tip-pin artifacts only (never older-pin stress as proof). Handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](skills/openfdd-stress-closeout/SKILL.md).
 
-**Current ops pin (2026-09-02):** `sha-42b3f49` / `3.3.18` baseline → **3.3.19** engineering export train — verdict in BUG_REPORT.
+**Current ops pin (2026-09-03):** tip `233e6cf6` / product **`sha-15baccf`** / **3.3.19** — engineering export shipped; stress closeout remaining per STRESS_CLOSEOUT + plan 3.3.20. Verdict in BUG_REPORT (flesh after stress).
 
 ---
 
@@ -114,13 +116,14 @@ Nested instructions may specialize but never contradict a higher authority.
 3. [`../docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md)
 4. [`../docs/modeling/`](../docs/modeling/) when packaging / HP / readiness context matters
 5. [`ARCHITECTURE.md`](ARCHITECTURE.md) + [`ownership.yaml`](ownership.yaml)
-6. [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md)
-7. [`tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md`](../tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md)
-8. [`MILESTONE_A.md`](MILESTONE_A.md) if executing Milestone A
-9. [`PR_PROTOCOL.md`](PR_PROTOCOL.md) before opening a PR
-10. [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) during ops patch cycles
-11. Matching skill
-12. Cookbooks under `docs/rules/cookbook/` + [`docs/RULE_DISPLAY_NAMES.md`](docs/RULE_DISPLAY_NAMES.md) when touching rule labels in UI
+6. Deploy bootstrap: [`docs/operations/LOCAL_DEPLOYMENT.md`](../docs/operations/LOCAL_DEPLOYMENT.md) (firewall HTTP hub) + [`docs/operations/RAILWAY_DEPLOYMENT.md`](../docs/operations/RAILWAY_DEPLOYMENT.md) (Railway CLI) + [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) (stress LAST)
+7. [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md)
+8. [`tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md`](../tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md)
+9. [`MILESTONE_A.md`](MILESTONE_A.md) if executing Milestone A
+10. [`PR_PROTOCOL.md`](PR_PROTOCOL.md) before opening a PR
+11. [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) during ops patch cycles
+12. Matching skill
+13. Cookbooks under `docs/rules/cookbook/` + [`docs/RULE_DISPLAY_NAMES.md`](docs/RULE_DISPLAY_NAMES.md) when touching rule labels in UI
 
 ---
 
@@ -134,8 +137,9 @@ Nested instructions may specialize but never contradict a higher authority.
 | [`openfdd-sql-fdd`](skills/openfdd-sql-fdd/SKILL.md) | DataFusion SQL rules |
 | [`openfdd-pypi-oracle`](skills/openfdd-pypi-oracle/SKILL.md) | PyPI pandas oracle packaging |
 | [`openfdd-cookbook-parity`](skills/openfdd-cookbook-parity/SKILL.md) | Dual cookbook honesty |
-| [`openfdd-stack-ghcr`](skills/openfdd-stack-ghcr/SKILL.md) | GHCR pull / recreate |
+| [`openfdd-stack-ghcr`](skills/openfdd-stack-ghcr/SKILL.md) | GHCR pull / recreate / local firewall hub |
 | [`openfdd-railway-cli`](skills/openfdd-railway-cli/SKILL.md) | Railway CLI auth / tip re-pin |
+| [`openfdd-stress-closeout`](skills/openfdd-stress-closeout/SKILL.md) | Stress LAST / run_all / ZAP / BUG_REPORT evidence |
 | [`openfdd-ecm-engineering`](skills/openfdd-ecm-engineering/SKILL.md) | ECM math library |
 | [`openfdd-milestone-a-pr`](skills/openfdd-milestone-a-pr/SKILL.md) | Milestone A PR loop |
 | [`data-modeling`](skills/data-modeling/SKILL.md) | Package layout, utilities/, equipType, export bundle |
