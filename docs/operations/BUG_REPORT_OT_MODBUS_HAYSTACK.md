@@ -1,34 +1,41 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-02 (3.3.20 engineering export shipped — **stress closeout remaining**)  
-**Platform:** Railway hub @ `sha-15baccf` / `3.3.19+15baccf84` (hub re-pin + full stress still pending evidence)  
-**Host:** bensbench (GHCR pull / local react); bosspi arm64 edge  
-**Remote edge:** bosspi — fieldbus, poll+publish **60s**, site `bldg2` / edge `pi-1` → Railway MQTTS  
-**Train:** `15baccf8` (#827 3.3.20); hotfix gate 19 shell (#828)
+**Date:** 2026-09-03 (3.3.20 stress closeout)  
+**Platform:** Railway + local + bosspi @ **`sha-0c1029d`** / **`3.3.19+0c1029da60c7`**  
+**Host:** bensbench (GHCR pull / local react-ot HTTP); bosspi arm64 edge  
+**Remote edge:** bosspi — fieldbus, poll+publish **60s**, site `bldg2` / edge `pi-1` → Railway MQTTS `reseau.proxy.rlwy.net:44763`  
+**Train:** tip `0c1029da` (#829 docs on #828/#827 product)
 
 Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live only in session env / gitignored files — **never Discord→git**.
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
 
-## Verdict — 3.3.20 engineering export + utilities (2026-09-02) — PRODUCT SHIPPED / STRESS PENDING
+## Verdict — 3.3.20 engineering export + utilities (2026-09-03) — CLOSED
 
 | Check | Evidence |
 |-------|----------|
-| Merge | #827 → `15baccf8`; VERSION **3.3.19** |
-| GHCR publish | `sha-15baccf` central/fieldbus/mqtt pulled; health `3.3.19+15baccf84e24` |
-| Local re-pin | `openfdd_maint_update_resume.sh react-ot sha-15baccf --skip-maintenance` |
-| Nested Creekside import | **PASS** — `reports/creekside-package-import_20260902T230020Z/` |
-| Engineering bundle | **PASS** — gate 19 artifact `READY` @ `reports/nightly-ot-bench_20260902T230020Z/bundle_validate.json` |
-| Utilities in package | `utilities_v1` in `package.rs`; fuel ZIP upload removed from Export UI |
-| Utility FDD rules | `UTIL-MONTHLY`, `UTIL-INTERVAL` in registry |
-| Gate 19 shell | jq + `PASS` counter shadow fix in #828 |
-| Railway hub re-pin + backup | **PENDING** — see [`STRESS_CLOSEOUT.md`](./STRESS_CLOSEOUT.md) |
-| Full stress (`run_all` / synth59 / gate17 / B100 / ZAP) | **PENDING** — do not cite 3.3.19 `sha-b565d78` artifacts as tip proof |
-| **bldg2 Overview UI** | **DEFERRED** (carried from 3.3.19) |
+| Product merge | #827 → `15baccf8`; VERSION **3.3.19**; #828 gate-19 shell; #829 agent/ops handbooks |
+| Tip / pin | `0c1029da` · GHCR **`sha-0c1029d`** · health **`3.3.19+0c1029da60c7`** (local + Railway) |
+| GHCR publish | **green** on tip — central/web/mqtt/fieldbus `sha-0c1029d` (nightly digest match on gate 00) |
+| Railway backup | `~/openfdd-backups/railway/20260903T175358Z/` (`central-workspace.tgz` + mqtt certs) |
+| Railway hub re-pin | central → mqtt → web `sha-0c1029d`; central redeploy after mqtt (ingest resume) |
+| Local re-pin | `.env` `OPENFDD_IMAGE_TAG=sha-0c1029d`; `openfdd_maint_update_resume.sh react-ot sha-0c1029d --skip-maintenance` |
+| bosspi fieldbus | arm64 `sha-0c1029d` (bench `docker save` load — Pi GHCR DNS timeout); `zone_other`; MQTTS connected `edge:bldg2:pi-1` |
+| Pipeline A | **PASS** — `/api/health` `edges:1` `ingest_ok` advancing; `/api/edges` `pi-1` `has_telemetry:true` |
+| Smoke 01/06/10/18 | **PASS** inside `run_all` + gate 18 `reports/nightly-ot-bench_20260903T180949Z/` |
+| STRESS 1 `run_all` | **PASS** gates **00–16** @ `reports/nightly-ot-bench_20260903T180949Z/` (`unset SKIP_PULL`, `WEATHER_SOAK_SECS=120`). First pass gate **12 FAIL** (harness still expected 66); re-run **PASS** after registry total **68** (UTIL-MONTHLY/INTERVAL) |
+| STRESS 2 synth59 | **PASS 59/59** — `reports/wattlab-parity/artifacts/synthetic_59/` |
+| STRESS 3 gate 17 | **PASS** — health matrix + overview (`RUN_SYNTH59_HEALTH_MATRIX=1` in nightly `20260903T180949Z`) |
+| STRESS 4 B100 | **PASS** — `reports/railway-b100-parity_20260903T182530Z/summary.json` (also copied in nightly dir). FC1 **118.42 h**, runtime **1638.75 h**, `has_confirmed_fault:true`, `poll_seconds=300` local ≡ Railway |
+| STRESS 5 Creekside | **PASS** fixture + **full** `/home/ben/OpenFdd_Creekside.zip` → `LAKESIDE_ES` @ `reports/creekside-package-import_20260903T182802Z/` |
+| STRESS 6 gate 19 | **PASS READY** — `reports/nightly-ot-bench_20260903T182826Z/bundle_validate.json` |
+| STRESS 7 ZAP | **PASS** (light) — `reports/zap-railway_20260903T182838Z/` · `FAIL-NEW:0` / `WARN-NEW:11` / `PASS:56`. No High/Critical. Accepted residuals: missing CSP / X-Frame-Options / SRI (Medium); HSTS/X-CTO/Permissions-Policy/COOP/COEP (Low); cache + plotly timestamp (Info) |
+| Utilities / Export UI | `utilities_v1`; `UTIL-MONTHLY`/`UTIL-INTERVAL`; `/export`; fuel ZIP upload removed |
+| **bldg2 Overview UI** | **DEFERRED** |
 | BUILDING_50 / AFDD flood | **DEFERRED** |
-| Legacy fuel ZIP | `services/central/src/fuel/import.rs` read-only for `liberty_practice_bensbench` |
+| Deep / authenticated ZAP | **DEFERRED** — STRESS 7 is unauthenticated baseline only |
 
-**Issues closed (foundation):** [#763](https://github.com/bbartling/open-fdd/issues/763), [#805](https://github.com/bbartling/open-fdd/issues/805) — #827. ML/vibe20 depth deferred.
+**Issues closed (foundation):** [#763](https://github.com/bbartling/open-fdd/issues/763), [#805](https://github.com/bbartling/open-fdd/issues/805) — do not reopen. ML/vibe20 depth deferred.
 
 ## Verdict — 3.3.19 remaining bugs + stress (2026-09-02) — CLOSED
 
@@ -100,8 +107,8 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 
 | Pipeline | Status |
 |----------|--------|
-| **A Cloud** bosspi → Railway | **PASS** — `pi-1`/`bldg2` `has_telemetry:true` @ `sha-b565d78`; `ingest_ok` advancing |
-| **B Local** react bench | **PASS** — full `run_all` @ `sha-b565d78` (`20260902T145737Z`) |
+| **A Cloud** bosspi → Railway | **PASS** — `pi-1` `has_telemetry:true` @ `sha-0c1029d` / `3.3.19+0c1029da60c7`; `ingest_ok` advancing (after central redeploy) |
+| **B Local** react-ot bench | **PASS** — `run_all` @ `sha-0c1029d` (`20260903T180949Z`) |
 
 ## Patch cycle — Phase 7 + phase2 bench hygiene (2026-09-01 → 2026-09-02)
 
@@ -157,7 +164,7 @@ Script: `scripts/nightly-ot-bench/18_volume_restore_smoke.sh`
 
 | ID | Notes |
 |----|-------|
-| **bldg2-overview-signoff** | `OPENFDD_EQUIPMENT_TYPE=zone_other` + bosspi `sha-b565d78` + Pipeline A PASS; SPA Zone Other shells need operator browser confirm |
+| **bldg2-overview-signoff** | `OPENFDD_EQUIPMENT_TYPE=zone_other` + bosspi `sha-0c1029d` + Pipeline A PASS; SPA Zone Other shells need operator browser confirm |
 | **railway-f1-stress** | B100 parity **PASS** @ `20260902T151009Z`; B50/AFDD **DEFERRED** |
 | **weather-legitimacy-chicago** | Tier-C short soak; full `WEATHER_SOAK_SECS=1800` optional |
 | **railway-ui-fdd-stale** | `?site=BUILDING_100` scoped FDD UX — use building filter in API |
