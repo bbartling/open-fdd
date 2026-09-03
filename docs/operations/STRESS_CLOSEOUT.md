@@ -23,7 +23,7 @@ Same tip `sha-<7>` both sides. Do **not** point bosspi at local mqtt (or bench e
 
 1. Tip Actions green + GHCR **Publish Open-FDD stack** success for tip (or accept product `sha-*` if hotfix is harness-only).
 2. **Railway:** backup → re-pin central → mqtt → web — [`RAILWAY_DEPLOYMENT.md`](RAILWAY_DEPLOYMENT.md) · skill [`openfdd-railway-cli`](../../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md).
-3. **Local:** `./scripts/openfdd_maint_update_resume.sh react-ot sha-<7> --skip-maintenance` — [`LOCAL_DEPLOYMENT.md`](LOCAL_DEPLOYMENT.md). **Plain HTTP** (`:3000`/`:8080`) sends passwords and Bearer JWTs in the clear — **trusted/isolated LAN or VPN only**. For shared or untrusted networks, put a TLS-terminating reverse proxy in front (not shipped in default `react-ot`).
+3. **Local:** `SHA=sha-<7chars>; ./scripts/openfdd_maint_update_resume.sh react-ot "$SHA" --skip-maintenance` — [`LOCAL_DEPLOYMENT.md`](LOCAL_DEPLOYMENT.md). After tip publish, GHCR web on that SHA is correct when the tree matches tip. Overlay a local Overview bundle **only** if `frontend/web` is dirty/unmerged. **Plain HTTP** (`:3000`/`:8080`) sends passwords and Bearer JWTs in the clear — **trusted/isolated LAN or VPN only**. For shared or untrusted networks, put a TLS-terminating reverse proxy in front (not shipped in default `react-ot`).
 4. **bosspi:** fieldbus arm64 same `sha-*`; 60s poll+publish; Pipeline A `/api/edges` check.
 5. Smoke 01 / 06 / 10 / 18 + Pipeline A, **then** stress.
 

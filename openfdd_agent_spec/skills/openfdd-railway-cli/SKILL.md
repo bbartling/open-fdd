@@ -78,7 +78,7 @@ railway status >/dev/null 2>&1 || railway link
 # Expect: gleaming-cooperation / production
 
 # 4) Re-pin tip — use REAL service names from status
-SHA=sha-15baccf   # product pin 3.3.19; or sha-233e6cf if tip publish available
+SHA=sha-15baccf   # product pin 3.3.19 (#827). Health must match THIS tag.
 CENTRAL_SVC=openfdd-central-cQ-F   # confirm via railway status
 
 railway service source connect --service "$CENTRAL_SVC" \
@@ -96,9 +96,9 @@ railway service source connect --service openfdd-web \
 # If ingest_ok stuck at 0 after mqtt re-pin: railway redeploy -s "$CENTRAL_SVC" -y
 ```
 
-Smoke: public SPA + `https://<web>/api/health`. Sidebar version must match tip (`3.3.19+15baccf…`).
+Smoke: public SPA + `https://<web>/api/health`. Sidebar / `/api/health` version must match the **pinned** SHA (`3.3.19+15baccf…` for `sha-15baccf`).
 
-**Dual pipeline:** bosspi → Railway only; bensbench local react stack (`OPENFDD_IMAGE_TAG=sha-*` pull) for firewall/on-prem. Local UI/API are **plain HTTP** (`:3000`/`:8080`) — **no product TLS yet**; keep behind firewall. Do not cross-wire edges for the parity gate. See [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md).
+**Dual pipeline:** bosspi → Railway only; bensbench local `react-ot` for firewall/on-prem. After tip GHCR publish, pull **the same** `sha-*` for central/mqtt/fieldbus **and** web when the checkout matches that tip. Use a local Overview overlay / bind-mount **only** if `frontend/web` is dirty or unmerged (GHCR web would be stale). Local UI/API are **plain HTTP** (`:3000`/`:8080`) — **no product TLS yet**; keep behind firewall. Do not cross-wire edges for the parity gate. See [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md).
 
 ## BACKUP before every central re-pin (hard gate)
 
