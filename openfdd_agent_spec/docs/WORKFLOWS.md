@@ -14,12 +14,14 @@ Actual workflow files under `.github/workflows/` (open-fdd). Re-list with
 | `docs-pdf.yml` | Docs PDF |
 | `publish-open-fdd.yml` | Publish `open-fdd` to PyPI |
 | `ghcr-openfdd-stack.yml` | Publish stack images; retarget `:nightly` on master |
-
-Low-RAM hosts: **never** local `docker build` of stack images. Wait for this workflow, prune, pull `sha-*`, `openfdd_stack_up.sh --no-pull`.
 | `rust-ghcr-mcp.yml` | Publish `openfdd-mcp` (`:nightly`) |
 | `ghcr-prune.yml` | GHCR retention |
 | `rust-release.yml` | Rust release |
 | `security.yml` / `appsec.yml` | Security / AppSec |
+
+Low-RAM hosts: **never** local `docker build` of stack images. Wait for GHCR publish, prune, pull `sha-*`, `openfdd_stack_up.sh --no-pull`.
+
+**Ops closeout:** after tip publish + re-pin, stress LAST — [`docs/operations/STRESS_CLOSEOUT.md`](../../docs/operations/STRESS_CLOSEOUT.md). Local hub HTTP only — [`docs/operations/LOCAL_DEPLOYMENT.md`](../../docs/operations/LOCAL_DEPLOYMENT.md).
 
 ## Playground (reference)
 

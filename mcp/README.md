@@ -10,6 +10,14 @@ Open-FDD does **not** include a built-in AI chatbot. External agents (Codex CLI,
 
 MCP is opt-in — bring up a stack recipe first, then pull MCP on the **same tag**.
 
+**Deploy bootstrap (agents):**
+
+| Path | Doc / skill |
+|------|-------------|
+| Local firewall hub (HTTP `:3000`/`:8080`, **no TLS**) | [`docs/operations/LOCAL_DEPLOYMENT.md`](../docs/operations/LOCAL_DEPLOYMENT.md) · `SHA=sha-<7chars>; ./scripts/openfdd_maint_update_resume.sh react-ot \"$SHA\" --skip-maintenance` |
+| Railway cloud hub | [`docs/operations/RAILWAY_DEPLOYMENT.md`](../docs/operations/RAILWAY_DEPLOYMENT.md) · skill [`openfdd-railway-cli`](../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md) |
+| Stress LAST after re-pin | [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd_agent_spec/skills/openfdd-stress-closeout/SKILL.md) |
+
 ```bash
 cd ~/open-fdd
 export OPENFDD_IMAGE_TAG=nightly   # or a pinned semver / sha-*
@@ -18,6 +26,7 @@ export OPENFDD_IMAGE_TAG=nightly   # or a pinned semver / sha-*
 ./scripts/openfdd_stack_pull.sh mcp
 
 # JWT for central REST — prefer dedicated agent identity (operator role)
+# Local: http://127.0.0.1:8080 (plain HTTP — no TLS on Compose yet)
 # On Railway: OPENFDD_AGENT_PASSWORD + username "agent", or admin POST /api/auth/agent-token
 # Hub deploy/re-pin is the Railway CLI (not this MCP) — see docs/operations/RAILWAY_DEPLOYMENT.md
 #   and openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md (project gleaming-cooperation).

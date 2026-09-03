@@ -8,6 +8,15 @@ nav_order: 4
 
 > **Experimental cloud path.** Open-FDD is local-first and currently intended for LAN/VPN/OT networks. The Railway recipes below are for labs, demos, and controlled evaluation. They are **not** a claim that Open-FDD is production-hardened for direct public-internet exposure.
 
+**Related agent handbooks**
+
+| Doc | Role |
+| --- | --- |
+| [LOCAL_DEPLOYMENT.md](LOCAL_DEPLOYMENT.md) | Firewall / on-prem Compose hub — **plain HTTP**, no product TLS yet |
+| [STRESS_CLOSEOUT.md](STRESS_CLOSEOUT.md) | Rigorous stress LAST after tip re-pin (run_all → … → light ZAP) |
+| [backup-update-restore.md](backup-update-restore.md) | Backup before every central re-pin |
+| Skill [`openfdd-railway-cli`](../../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md) | CLI auth / re-pin on bensbench |
+
 Open-FDD publishes a Rust/React container stack to GHCR. Railway can run the cloud-friendly subset directly from those prebuilt images without rebuilding the application.
 
 **Operator checklist:** [RAILWAY_DEPLOYMENT_CHECKLIST.md](RAILWAY_DEPLOYMENT_CHECKLIST.md).

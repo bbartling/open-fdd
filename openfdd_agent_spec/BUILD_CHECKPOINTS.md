@@ -229,3 +229,14 @@ Product voice = React + DataFusion only. Track deletion / GHCR / agent_spec hone
 - [x] P1-M7-02 — H5 generic S3/object-store + DataFusion tuning + central scoped runtime/Railway/loopback-MinIO merged via #762 (`9239574a`); canonical S3 bucket remains private and container disk is scratch/spill
 - [~] P1-M7-03 — H6 migration/operator tooling active via #764: trusted Parquet/JSONL/Arrow discovery + bounded restart-safe conversion, preservation receipts/reports, footer-only canonical stats, operator CLI, fail-closed S3 compatibility scope
 - [ ] P1-M7-04 — H7 live-ingest micro-batch cutover: trustworthy equipment/role identity, H2 accumulator wiring, elapsed/shutdown flush, persisted latest timestamp, retire durability-critical JSONL/IPC rewrite
+
+---
+
+# Ops train 3.3.20 (2026-09-03)
+
+Product ship vs stress closeout — living detail: [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) · [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md).
+
+- [x] Engineering export + utilities foundation — #827 `15baccf8` / pin `sha-15baccf` / VERSION **3.3.19**; #828 gate-19 shell
+- [x] Agent handbooks — `LOCAL_DEPLOYMENT.md`, `STRESS_CLOSEOUT.md`, skill `openfdd-stress-closeout` (#829)
+- [ ] 3.3.20 rigorous stress LAST — Railway backup + hub re-pin evidence, `run_all` 00–16, synth59, gate 17, B100, Creekside full, gate 19 re-run, optional ZAP
+- [ ] capabilities.yaml — **not** an ops-stress ledger; leave product-capability rows unchanged for this train

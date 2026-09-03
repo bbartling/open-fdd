@@ -1,7 +1,7 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-02 (3.3.20 engineering export + utilities — **CLOSED**)  
-**Platform:** Railway hub @ `sha-15baccf` / `3.3.19+15baccf84`  
+**Date:** 2026-09-02 (3.3.20 engineering export shipped — **stress closeout remaining**)  
+**Platform:** Railway hub @ `sha-15baccf` / `3.3.19+15baccf84` (hub re-pin + full stress still pending evidence)  
 **Host:** bensbench (GHCR pull / local react); bosspi arm64 edge  
 **Remote edge:** bosspi — fieldbus, poll+publish **60s**, site `bldg2` / edge `pi-1` → Railway MQTTS  
 **Train:** `15baccf8` (#827 3.3.20); hotfix gate 19 shell (#828)
@@ -10,7 +10,7 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
 
-## Verdict — 3.3.20 engineering export + utilities (2026-09-02) — CLOSED
+## Verdict — 3.3.20 engineering export + utilities (2026-09-02) — PRODUCT SHIPPED / STRESS PENDING
 
 | Check | Evidence |
 |-------|----------|
@@ -22,11 +22,13 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 | Utilities in package | `utilities_v1` in `package.rs`; fuel ZIP upload removed from Export UI |
 | Utility FDD rules | `UTIL-MONTHLY`, `UTIL-INTERVAL` in registry |
 | Gate 19 shell | jq + `PASS` counter shadow fix in #828 |
+| Railway hub re-pin + backup | **PENDING** — see [`STRESS_CLOSEOUT.md`](./STRESS_CLOSEOUT.md) |
+| Full stress (`run_all` / synth59 / gate17 / B100 / ZAP) | **PENDING** — do not cite 3.3.19 `sha-b565d78` artifacts as tip proof |
 | **bldg2 Overview UI** | **DEFERRED** (carried from 3.3.19) |
 | BUILDING_50 / AFDD flood | **DEFERRED** |
 | Legacy fuel ZIP | `services/central/src/fuel/import.rs` read-only for `liberty_practice_bensbench` |
 
-**Issues closed:** [#763](https://github.com/bbartling/open-fdd/issues/763) (engineering bundle), [#805](https://github.com/bbartling/open-fdd/issues/805) (utilities in package) — #827 + gate evidence.
+**Issues closed (foundation):** [#763](https://github.com/bbartling/open-fdd/issues/763), [#805](https://github.com/bbartling/open-fdd/issues/805) — #827. ML/vibe20 depth deferred.
 
 ## Verdict — 3.3.19 remaining bugs + stress (2026-09-02) — CLOSED
 

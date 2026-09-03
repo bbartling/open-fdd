@@ -14,7 +14,7 @@ OpenClaw, Claude Desktop, or any MCP host — connect via **JWT REST** and optio
 | **mqtt** | Mosquitto MQTTS broker |
 | **mcp** | Optional read-first stdio tools → central (`OPENFDD_API_BASE`) |
 
-**Docs:** [Build recipes](docs/operations/build-recipes.md) · [External agents](docs/examples/external-agents.md) · [MCP README](mcp/README.md) · [ECM engineering (PyPI)](docs/ecm/README.md) · [Package authoring](docs/agent/PACKAGE_AUTHORING.md) · [Security](SECURITY.md)
+**Docs:** [Build recipes](docs/operations/build-recipes.md) · [Local deploy (HTTP / firewall)](docs/operations/LOCAL_DEPLOYMENT.md) · [Railway CLI hub](docs/operations/RAILWAY_DEPLOYMENT.md) · [Stress closeout](docs/operations/STRESS_CLOSEOUT.md) · [External agents](docs/examples/external-agents.md) · [MCP README](mcp/README.md) · [ECM engineering (PyPI)](docs/ecm/README.md) · [Package authoring](docs/agent/PACKAGE_AUTHORING.md) · [Security](SECURITY.md)
 
 **Software-engineering agent OS:** [`openfdd_agent_spec/`](openfdd_agent_spec/) — architecture locks, skills, Milestone A.
 
