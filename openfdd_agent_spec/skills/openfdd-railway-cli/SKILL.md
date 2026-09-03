@@ -21,7 +21,7 @@ Checklist: [`RAILWAY_DEPLOYMENT_CHECKLIST.md`](../../../docs/operations/RAILWAY_
 | Package | `@railway/cli` via `npm i -g @railway/cli` |
 | Auth | **`railway login`** (browser) — verified; optional `RAILWAY_TOKEN` in `~/.config/railway/bensbench.env` |
 | Link | `~/open-fdd` → project **`gleaming-cooperation`**, env **`production`** |
-| **Product hub pin (shipped)** | **`sha-15baccf`** / `3.3.19+15baccf84e24` (#827); tip commit `233e6cf6` (#828 harness) |
+| **Product hub pin (shipped)** | **`sha-0c1029d`** / `3.3.19+0c1029da60c7` (tip after #829; 3.3.20 stress closeout) |
 | Stress closeout | After re-pin — [`STRESS_CLOSEOUT.md`](../../../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md) |
 | Local firewall hub | HTTP only — [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md) |
 
@@ -78,7 +78,7 @@ railway status >/dev/null 2>&1 || railway link
 # Expect: gleaming-cooperation / production
 
 # 4) Re-pin tip — use REAL service names from status
-SHA=sha-15baccf   # product pin 3.3.19 (#827). Health must match THIS tag.
+SHA=sha-0c1029d   # tip pin. Health must match THIS tag (3.3.19+0c1029da…).
 CENTRAL_SVC=openfdd-central-cQ-F   # confirm via railway status
 
 railway service source connect --service "$CENTRAL_SVC" \

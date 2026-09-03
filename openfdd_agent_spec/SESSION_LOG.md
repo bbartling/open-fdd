@@ -1,5 +1,17 @@
 # Session log
 
+## 2026-09-03 — 3.3.20 stress closeout CLOSED
+
+- **Pin:** `sha-0c1029d` / `3.3.19+0c1029da60c7` on Railway (central→mqtt→web), local react-ot, bosspi fieldbus arm64.
+- **Backup:** `~/openfdd-backups/railway/20260903T175358Z/`.
+- **Pipeline A:** mqtt `edge:bldg2:pi-1` TLS; `/api/edges` `has_telemetry:true`; `ingest_ok` after central redeploy.
+- **STRESS 1:** `reports/nightly-ot-bench_20260903T180949Z/` gates 00–16 (gate 12 re-run after registry total 68).
+- **STRESS 2–3:** synth59 **59/59** + gate 17 PASS (`reports/wattlab-parity/artifacts/synthetic_59/`).
+- **STRESS 4:** B100 local ≡ Railway — `reports/railway-b100-parity_20260903T182530Z/` (FC1 118.42 h / runtime 1638.75 h).
+- **STRESS 5–6:** Creekside fixture + full zip `20260903T182802Z`; gate 19 READY `20260903T182826Z`.
+- **STRESS 7:** ZAP baseline `reports/zap-railway_20260903T182838Z/` — no High/Critical; header residuals accepted.
+- Living evidence: [`BUG_REPORT`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).
+
 ## 2026-09-03 — Agent ops docs: stress + local/Railway bootstrap
 
 - Added [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) (STRESS 1–7 incl. light OWASP ZAP) + skill `openfdd-stress-closeout`.

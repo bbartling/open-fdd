@@ -238,5 +238,5 @@ Product ship vs stress closeout — living detail: [`docs/operations/BUG_REPORT_
 
 - [x] Engineering export + utilities foundation — #827 `15baccf8` / pin `sha-15baccf` / VERSION **3.3.19**; #828 gate-19 shell
 - [x] Agent handbooks — `LOCAL_DEPLOYMENT.md`, `STRESS_CLOSEOUT.md`, skill `openfdd-stress-closeout` (#829)
-- [ ] 3.3.20 rigorous stress LAST — Railway backup + hub re-pin evidence, `run_all` 00–16, synth59, gate 17, B100, Creekside full, gate 19 re-run, optional ZAP
+- [x] 3.3.20 rigorous stress LAST — Railway backup `20260903T175358Z` + hub/local/bosspi `sha-0c1029d`; `run_all` 00–16; synth59 59/59; gate 17; B100; Creekside full; gate 19 READY; ZAP baseline (no High/Critical)
 - [ ] capabilities.yaml — **not** an ops-stress ledger; leave product-capability rows unchanged for this train
