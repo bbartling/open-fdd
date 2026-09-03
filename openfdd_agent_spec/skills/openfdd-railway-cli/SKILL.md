@@ -78,7 +78,7 @@ railway status >/dev/null 2>&1 || railway link
 # Expect: gleaming-cooperation / production
 
 # 4) Re-pin tip — use REAL service names from status
-SHA=sha-91fb350
+SHA=sha-15baccf   # product pin 3.3.19; or sha-233e6cf if tip publish available
 CENTRAL_SVC=openfdd-central-cQ-F   # confirm via railway status
 
 railway service source connect --service "$CENTRAL_SVC" \
@@ -96,7 +96,7 @@ railway service source connect --service openfdd-web \
 # If ingest_ok stuck at 0 after mqtt re-pin: railway redeploy -s "$CENTRAL_SVC" -y
 ```
 
-Smoke: public SPA + `https://<web>/api/health`. Sidebar version must match tip (`3.3.11+91fb350…`).
+Smoke: public SPA + `https://<web>/api/health`. Sidebar version must match tip (`3.3.19+15baccf…`).
 
 **Dual pipeline:** bosspi → Railway only; bensbench local react stack (`OPENFDD_IMAGE_TAG=sha-*` pull) for firewall/on-prem. Local UI/API are **plain HTTP** (`:3000`/`:8080`) — **no product TLS yet**; keep behind firewall. Do not cross-wire edges for the parity gate. See [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md).
 

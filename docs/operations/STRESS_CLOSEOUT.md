@@ -23,7 +23,7 @@ Same tip `sha-<7>` both sides. Do **not** point bosspi at local mqtt (or bench e
 
 1. Tip Actions green + GHCR **Publish Open-FDD stack** success for tip (or accept product `sha-*` if hotfix is harness-only).
 2. **Railway:** backup → re-pin central → mqtt → web — [`RAILWAY_DEPLOYMENT.md`](RAILWAY_DEPLOYMENT.md) · skill [`openfdd-railway-cli`](../../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md).
-3. **Local:** `./scripts/openfdd_maint_update_resume.sh react-ot sha-<7> --skip-maintenance` — [`LOCAL_DEPLOYMENT.md`](LOCAL_DEPLOYMENT.md) (HTTP only behind firewall; **no TLS yet**).
+3. **Local:** `./scripts/openfdd_maint_update_resume.sh react-ot sha-<7> --skip-maintenance` — [`LOCAL_DEPLOYMENT.md`](LOCAL_DEPLOYMENT.md). **Plain HTTP** (`:3000`/`:8080`) sends passwords and Bearer JWTs in the clear — **trusted/isolated LAN or VPN only**. For shared or untrusted networks, put a TLS-terminating reverse proxy in front (not shipped in default `react-ot`).
 4. **bosspi:** fieldbus arm64 same `sha-*`; 60s poll+publish; Pipeline A `/api/edges` check.
 5. Smoke 01 / 06 / 10 / 18 + Pipeline A, **then** stress.
 
@@ -35,10 +35,10 @@ Low-RAM: never local `docker build` for stack images; `WEATHER_SOAK_SECS=120`; `
 |---|------|--------------------|------|
 | Prep | Smoke + Pipeline A | gates `01`/`06`/`10`/`18`; `/api/edges` | health OK; telemetry present |
 | 1 | `run_all` | `unset SKIP_PULL`; `WEATHER_SOAK_SECS=120`; `./scripts/nightly-ot-bench/run_all.sh` | gates **00–16** PASS → `reports/nightly-ot-bench_<TS>/` |
-| 2 | Synthetic-59 soak | `synthetic_59_target_pair_soak.py --side ofdd` | **59/59** → `reports/wattlab-parity/artifacts/synthetic_59/` |
-| 3 | Gate 17 | `RUN_SYNTH59_HEALTH_MATRIX=1 ./scripts/nightly-ot-bench/17_*.sh` | health matrix + overview analytics PASS |
+| 2 | Synthetic-59 soak | `python3 scripts/synthetic_59_target_pair_soak.py --side ofdd` (from repo root) | **59/59** → `reports/wattlab-parity/artifacts/synthetic_59/` |
+| 3 | Gate 17 | `RUN_SYNTH59_HEALTH_MATRIX=1 ./scripts/nightly-ot-bench/17_synthetic_health_matrix_fault_hours.sh` | health matrix + overview analytics PASS |
 | 4 | B100 parity | `./scripts/gates/railway_b100_parity_spot.sh` | local ≡ Railway within tolerance → `reports/railway-b100-parity_<TS>/` |
-| 5 | Creekside | `creekside_package_import_spot.sh` (+ full zip if available) | nested import PASS; utilities preferred |
+| 5 | Creekside | `./scripts/gates/creekside_package_import_spot.sh` (+ full zip if available) | nested import PASS; utilities preferred |
 | 6 | Gate 19 bundle | `./scripts/nightly-ot-bench/19_engineering_bundle_validate.sh` | validator **READY** |
 | 7 | OWASP ZAP (light) | Docker `zap-baseline.py` vs **Railway public HTTPS URL only** | No unexplained High/Critical; HTML/JSON under `reports/zap-railway_<TS>/` |
 

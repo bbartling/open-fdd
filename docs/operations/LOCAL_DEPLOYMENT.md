@@ -12,7 +12,7 @@ Open-FDD is **local-first**. The typical bench path is a GHCR-pulled Compose sta
 
 | Fact | Implication for agents |
 |------|------------------------|
-| Dashboard + API are **plain HTTP** on the LAN | Expect `http://127.0.0.1:3000` (UI) and `http://127.0.0.1:8080` (API). **No product TLS termination on local Compose yet.** |
+| Dashboard + API are **plain HTTP** on the LAN | Expect `http://127.0.0.1:3000` (UI) and `http://127.0.0.1:8080` (API). **No product TLS termination on local Compose yet.** Login passwords and Bearer JWTs travel in the clear — **trusted/isolated LAN or VPN only**. For shared/untrusted networks, terminate TLS on an ops reverse proxy in front of Compose. |
 | Intended exposure | Host firewall / VPN / OT LAN only. Do **not** advertise local `:3000`/`:8080` to the public internet. |
 | Railway vs local | Railway public **web** may terminate TLS at the edge; local stack does **not** mirror that. Private Railway mesh to central is also plain HTTP on `*.railway.internal`. |
 | Auth still required | Admin / agent JWT on central even over HTTP — never skip auth “because it’s local.” |

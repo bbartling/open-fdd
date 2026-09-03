@@ -50,7 +50,7 @@ Railway: keep MCP on private networking; see [RAILWAY_DEPLOYMENT.md](../docs/ope
 |------|---------|
 | **`railway` CLI** (`@railway/cli`) | Deploy/re-pin hub images, vars, logs on Railway (`gleaming-cooperation`). Skill: [`openfdd-railway-cli`](../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md). Docs: [`RAILWAY_DEPLOYMENT.md`](../docs/operations/RAILWAY_DEPLOYMENT.md). |
 | **Local Compose (`react-ot`)** | Firewall / on-prem hub — **plain HTTP** UI `:3000` / API `:8080`; **no product TLS yet**. Docs: [`LOCAL_DEPLOYMENT.md`](../docs/operations/LOCAL_DEPLOYMENT.md). |
-| **Stress closeout** | After tip re-pin: `run_all` → synth59 → gate17 → B100 → Creekside → gate19 → optional light ZAP on Railway public URL. Docs: [`STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd_agent_spec/skills/openfdd-stress-closeout/SKILL.md). |
+| **Stress closeout** | After tip re-pin: smoke 01/06/10/18 + Pipeline A, then `run_all` → synth59 → gate17 → B100 → Creekside → gate19 → optional light ZAP on Railway public URL. Docs: [`STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd_agent_spec/skills/openfdd-stress-closeout/SKILL.md). |
 | **Railway’s optional MCP** (`railway setup agent`) | Railway platform deploys/docs — **not** HVAC FDD. |
 | **`openfdd-mcp` (this package)** | FDD / sites / historian tools against central via `OPENFDD_MCP_TOKEN`. |
 
