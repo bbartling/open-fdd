@@ -11,9 +11,14 @@ UTC="$(date -u +%Y%m%dT%H%M%SZ)"
 ART="${ARTIFACT_DIR:-$ROOT/reports/creekside-package-import_${UTC}}"
 mkdir -p "$ART"
 
+_railway_pw="${RAILWAY_ADMIN_PASSWORD:-}"
 if [[ -f "$ROOT/.env" ]]; then
   # shellcheck disable=SC1091
   set -a && source "$ROOT/.env" && set +a
+fi
+if [[ "${RAILWAY_ONLY:-0}" == "1" && -n "$_railway_pw" ]]; then
+  export RAILWAY_ADMIN_PASSWORD="$_railway_pw"
+  export OPENFDD_ADMIN_PASSWORD="$_railway_pw"
 fi
 
 PASS="${OPENFDD_ADMIN_PASSWORD:-}"

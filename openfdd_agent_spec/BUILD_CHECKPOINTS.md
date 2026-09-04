@@ -241,8 +241,8 @@ Product ship vs stress closeout — living detail: [`docs/operations/BUG_REPORT_
 - [x] 3.3.20 rigorous stress LAST — Railway backup `20260903T175358Z` + hub/local/bosspi `sha-0c1029d`; `run_all` 00–16; synth59 59/59; gate 17; B100; Creekside full; gate 19 READY; ZAP baseline (no High/Critical)
 - [ ] capabilities.yaml — **not** an ops-stress ledger; leave product-capability rows unchanged for this train
 
-# Ops train 3.3.20 platform (x86 → Railway, 2026-09-03)
+# Ops train 3.3.20 platform (x86 → Railway, 2026-09-04)
 
-- [ ] VERSION **3.3.20** + Railway-hub stress harness (this PR)
-- [ ] Field cutover: stop react-ot + bosspi; `openfdd_fieldbus_railway_up.sh`
-- [ ] `run_railway_hub_stress.sh` + BUG_REPORT verdict fill-in
+- [x] VERSION **3.3.20** + Railway-hub stress harness — #831 `aef6fc1f` / `sha-aef6fc1`
+- [x] Field cutover: react-ot + bosspi off closeout; `openfdd_fieldbus_railway_up.sh sha-aef6fc1`; hosted-weather loopback
+- [x] `run_railway_hub_stress.sh` + BUG_REPORT verdict CLOSED (CSV + ZAP)

@@ -1,28 +1,27 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-03 (3.3.20 VERSION bump — x86 field → Railway hub)  
+**Date:** 2026-09-04 (3.3.20 CLOSED — x86 field → Railway hub)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in stress)  
-**Last closed utilities train:** tip `d83dbf91` / `sha-0c1029d` / `3.3.19+0c1029da60c7`  
-**This cycle pin:** *fill after GHCR* `sha-<7>` / `3.3.20+…`  
-**Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2`; MQTT client id currently reused `pi-1` kit — Railway mqtt volume has CA cert but no CA key, so a newly minted `bensbench-1` kit will not verify)  
+**Tip / pin:** `aef6fc1f` · GHCR **`sha-aef6fc1`** · health **`3.3.20+aef6fc1f5b29`**  
+**Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit reused — Railway mqtt volume has CA cert but no CA key, so a newly minted `bensbench-1` kit will not verify). Telemetry = hosted weather AV `9101` loopback (no Pi, no JCI required).  
 **Pis freed (not in stress):** bosspi · BensFakeAhu (fake AHU) · Zone1VAV (fake VAV) — vibe13 / other. Private OT LAN addresses stay in session env only.
 
 ## Next patch cycle (copy into `.cursor/plans/patch_cycle_3.3.N_<slug>.plan.md`)
 
-Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check these off as you go:
+Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes in the **3.3.21** column as you go. Do **not** bump VERSION for a pure evidence/docs PR.
 
-| TODO | 3.3.N |
-|------|-------|
-| Hygiene START (0 PRs, only master, tip Actions green) | |
-| VERSION + Cargo `3.3.(N-1)` → `3.3.N` | |
-| One-concern fix | |
-| PR squash-merge + delete branch | |
-| GHCR Publish `sha-<7>` | |
-| Railway backup + re-pin central→mqtt→web | |
-| `openfdd_fieldbus_railway_up.sh sha-<7>` | |
-| `run_railway_hub_stress.sh` (CSV + ZAP) | |
-| This file: new **Verdict — 3.3.N** table + artifact paths | |
-| Hygiene END | |
+| TODO | 3.3.20 | 3.3.21 |
+|------|--------|--------|
+| Hygiene START (0 PRs, only master, tip Actions green) | [x] | |
+| VERSION + Cargo `3.3.(N-1)` → `3.3.N` | [x] 3.3.19→3.3.20 | |
+| One-concern fix | [x] x86→Railway hub | |
+| PR squash-merge + delete branch | [x] #831 | |
+| GHCR Publish `sha-<7>` | [x] `sha-aef6fc1` | |
+| Railway backup + re-pin central→mqtt→web | [x] `20260904T035328Z` | |
+| `openfdd_fieldbus_railway_up.sh sha-<7>` | [x] | |
+| `run_railway_hub_stress.sh` (CSV + ZAP) | [x] | |
+| This file: new **Verdict — 3.3.N** table + artifact paths | [x] | |
+| Hygiene END | [x] after evidence PR | |
 
 Do **not** reopen #763 / #805 for depth. Do **not** put Pis back on the closeout path.
 
@@ -30,19 +29,31 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
 
-## Verdict — 3.3.20 x86 fieldbus → Railway hub — IN FLIGHT
+## Verdict — 3.3.20 x86 fieldbus → Railway hub (2026-09-04) — CLOSED
 
 | Check | Evidence |
 |-------|----------|
-| VERSION | **3.3.20** (workspace + crates) |
-| Topology | Railway hub; bensbench x86 fieldbus MQTTS only; **no Pi** |
-| Field script | `scripts/openfdd_fieldbus_railway_up.sh` + `docker/compose.edge.railway.yml` |
-| Stress harness | `scripts/nightly-ot-bench/run_railway_hub_stress.sh` (CSV + ZAP) |
+| Product merge | #831 → `aef6fc1f`; VERSION **3.3.20** |
+| Topology | Railway hub only; bensbench x86 fieldbus MQTTS; **no Pi** |
+| Field identity | `bldg2` / `pi-1` kit (CA reuse); `config/fieldbus/field_devices.toml` hosted-weather `127.0.0.1` AV 9101 |
+| Tip / pin | `aef6fc1f` · GHCR **`sha-aef6fc1`** · health **`3.3.20+aef6fc1f5b29`** (central + web `version.json`) |
+| GHCR publish | **green** — central/web/mqtt/fieldbus `sha-aef6fc1` |
+| Railway backup | `~/openfdd-backups/railway/20260904T035328Z/` |
+| Railway hub re-pin | central → mqtt → web `sha-aef6fc1`; central redeploy after mqtt (ingest resume) |
+| x86 fieldbus | `openfdd_fieldbus_railway_up.sh sha-aef6fc1`; MQTTS connected; `/api/edges` `pi-1` `has_telemetry:true` |
+| STRESS 0 hub + edges | **PASS** — `reports/nightly-ot-bench_20260904T040851Z/` |
+| STRESS 1 synth59 | **PASS 59/59** — `reports/wattlab-parity/artifacts/synthetic_59/` |
+| STRESS 2 gate 17 | **PASS** (re-run after Railway admin not clobbered by local `.env`) — `reports/railway-hub-rerun_20260904T041358Z/` |
+| STRESS 3 B100 | **PASS** `RAILWAY_ONLY=1` — FC1 **118.42 h**, runtime **1638.75 h**, `has_confirmed_fault:true`, `poll_seconds=300` @ `20260904T040851Z/summary.json` |
+| STRESS 4 Creekside | **PASS** fixture + full zip → `LAKESIDE_ES` @ `reports/railway-hub-rerun_20260904T041358Z/` |
+| STRESS 5 gate 19 | **PASS READY** — same rerun dir `bundle_validate.json` |
+| STRESS 6 ZAP | **PASS** (light) — `reports/zap-railway_20260904T040909Z/` · `FAIL-NEW:0` / `WARN-NEW:11` / `PASS:56`. No High/Critical. Same header residuals as prior cycle |
 | Rev template | [`PATCH_CYCLE.md`](PATCH_CYCLE.md) |
-| GHCR / re-pin / stress artifacts | *pending publish + closeout* |
 | **bldg2 Overview UI** | **DEFERRED** |
 | BUILDING_50 / AFDD flood | **DEFERRED** |
 | Deep / authenticated ZAP | **DEFERRED** |
+
+Harness note: `RAILWAY_ONLY=1` must keep `RAILWAY_ADMIN_PASSWORD` after sourcing local `.env` (`lib.sh` + Creekside spot).
 
 ## Verdict — 3.3.19 utilities/export train (plan name 3.3.20, 2026-09-03) — CLOSED
 
@@ -141,7 +152,7 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 
 | Pipeline | Status |
 |----------|--------|
-| **Railway hub + x86 field** (3.3.20+) | **IN FLIGHT** — bensbench fieldbus → MQTTS; Pis removed from stress |
+| **Railway hub + x86 field** (3.3.20+) | **PASS** @ `sha-aef6fc1` — hosted-weather loopback → MQTTS; Pis removed from stress |
 | **A Cloud** bosspi → Railway (historical) | **PASS** last @ `sha-0c1029d` — **retired** for closeout |
 | **B Local** react-ot (historical) | **PASS** last `20260903T180949Z` — **lab only**, not closeout |
 
