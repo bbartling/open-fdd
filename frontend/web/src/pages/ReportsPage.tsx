@@ -292,15 +292,15 @@ export function ReportsPage() {
         Number(resultRow?.fault_hours ?? 0) > 0;
       if (!fig) {
         setError("No plottable series for this equipment/rule.");
-      } else if (resultsFault && trueFaultCount === 0) {
-        setNoFaultIsError(true);
-        setNoFaultBanner(
-          "Results status is FAULT but this series window has 0 confirmed_fault trues — check the latest-window overlay (or re-run the rule).",
-        );
       } else if (!hasFaultOverlay && resultExists) {
         setNoFaultIsError(true);
         setNoFaultBanner(
           "Fault overlay missing after a successful rule run — timestamp join failed. This is a bug, not “no fault lane yet.”",
+        );
+      } else if (resultsFault && hasFaultOverlay && trueFaultCount === 0) {
+        setNoFaultIsError(true);
+        setNoFaultBanner(
+          "Results status is FAULT but this series window has 0 confirmed_fault trues — check the latest-window overlay (or re-run the rule).",
         );
       } else if (!hasFaultOverlay) {
         setNoFaultIsError(false);
