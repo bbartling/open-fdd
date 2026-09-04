@@ -240,3 +240,9 @@ Product ship vs stress closeout — living detail: [`docs/operations/BUG_REPORT_
 - [x] Agent handbooks — `LOCAL_DEPLOYMENT.md`, `STRESS_CLOSEOUT.md`, skill `openfdd-stress-closeout` (#829)
 - [x] 3.3.20 rigorous stress LAST — Railway backup `20260903T175358Z` + hub/local/bosspi `sha-0c1029d`; `run_all` 00–16; synth59 59/59; gate 17; B100; Creekside full; gate 19 READY; ZAP baseline (no High/Critical)
 - [ ] capabilities.yaml — **not** an ops-stress ledger; leave product-capability rows unchanged for this train
+
+# Ops train 3.3.20 platform (x86 → Railway, 2026-09-03)
+
+- [ ] VERSION **3.3.20** + Railway-hub stress harness (this PR)
+- [ ] Field cutover: stop react-ot + bosspi; `openfdd_fieldbus_railway_up.sh`
+- [ ] `run_railway_hub_stress.sh` + BUG_REPORT verdict fill-in

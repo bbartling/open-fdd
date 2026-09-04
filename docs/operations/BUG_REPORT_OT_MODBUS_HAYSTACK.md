@@ -1,16 +1,50 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-03 (3.3.20 stress closeout)  
-**Platform:** Railway + local + bosspi @ **`sha-0c1029d`** / **`3.3.19+0c1029da60c7`**  
-**Host:** bensbench (GHCR pull / local react-ot HTTP); bosspi arm64 edge  
-**Remote edge:** bosspi — fieldbus, poll+publish **60s**, site `bldg2` / edge `pi-1` → Railway MQTTS `reseau.proxy.rlwy.net:44763`  
-**Train:** tip `0c1029da` (#829 docs on #828/#827 product)
+**Date:** 2026-09-03 (3.3.20 VERSION bump — x86 field → Railway hub)  
+**Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in stress)  
+**Last closed utilities train:** tip `d83dbf91` / `sha-0c1029d` / `3.3.19+0c1029da60c7`  
+**This cycle pin:** *fill after GHCR* `sha-<7>` / `3.3.20+…`  
+**Field:** bensbench → MQTTS `reseau.proxy.rlwy.net:44763` (`bldg2` / `bensbench-1`)  
+**Pis freed:** `192.168.204.12` bosspi · `.13` BensFakeAhu · `.14` Zone1VAV (vibe13 / other)
+
+## Next patch cycle (copy into `.cursor/plans/patch_cycle_3.3.N_<slug>.plan.md`)
+
+Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check these off as you go:
+
+| TODO | 3.3.N |
+|------|-------|
+| Hygiene START (0 PRs, only master, tip Actions green) | |
+| VERSION + Cargo `3.3.(N-1)` → `3.3.N` | |
+| One-concern fix | |
+| PR squash-merge + delete branch | |
+| GHCR Publish `sha-<7>` | |
+| Railway backup + re-pin central→mqtt→web | |
+| `openfdd_fieldbus_railway_up.sh sha-<7>` | |
+| `run_railway_hub_stress.sh` (CSV + ZAP) | |
+| This file: new **Verdict — 3.3.N** table + artifact paths | |
+| Hygiene END | |
+
+Do **not** reopen #763 / #805 for depth. Do **not** put Pis back on the closeout path.
 
 Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live only in session env / gitignored files — **never Discord→git**.
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
 
-## Verdict — 3.3.20 engineering export + utilities (2026-09-03) — CLOSED
+## Verdict — 3.3.20 x86 fieldbus → Railway hub — IN FLIGHT
+
+| Check | Evidence |
+|-------|----------|
+| VERSION | **3.3.20** (workspace + crates) |
+| Topology | Railway hub; bensbench x86 fieldbus MQTTS only; **no Pi** |
+| Field script | `scripts/openfdd_fieldbus_railway_up.sh` + `docker/compose.edge.railway.yml` |
+| Stress harness | `scripts/nightly-ot-bench/run_railway_hub_stress.sh` (CSV + ZAP) |
+| Rev template | [`PATCH_CYCLE.md`](PATCH_CYCLE.md) |
+| GHCR / re-pin / stress artifacts | *pending publish + closeout* |
+| **bldg2 Overview UI** | **DEFERRED** |
+| BUILDING_50 / AFDD flood | **DEFERRED** |
+| Deep / authenticated ZAP | **DEFERRED** |
+
+## Verdict — 3.3.19 utilities/export train (plan name 3.3.20, 2026-09-03) — CLOSED
 
 | Check | Evidence |
 |-------|----------|
@@ -107,8 +141,9 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 
 | Pipeline | Status |
 |----------|--------|
-| **A Cloud** bosspi → Railway | **PASS** — `pi-1` `has_telemetry:true` @ `sha-0c1029d` / `3.3.19+0c1029da60c7`; `ingest_ok` advancing (after central redeploy) |
-| **B Local** react-ot bench | **PASS** — `run_all` @ `sha-0c1029d` (`20260903T180949Z`) |
+| **Railway hub + x86 field** (3.3.20+) | **IN FLIGHT** — bensbench fieldbus → MQTTS; Pis removed from stress |
+| **A Cloud** bosspi → Railway (historical) | **PASS** last @ `sha-0c1029d` — **retired** for closeout |
+| **B Local** react-ot (historical) | **PASS** last `20260903T180949Z` — **lab only**, not closeout |
 
 ## Patch cycle — Phase 7 + phase2 bench hygiene (2026-09-01 → 2026-09-02)
 

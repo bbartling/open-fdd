@@ -6,41 +6,39 @@ nav_order: 6
 
 # Stress closeout — agent handbook
 
-Canonical **rigorous stress LAST** protocol after a product tip lands on GHCR. Living evidence: [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md). Plan example: `.cursor/plans/3.3.20_engineering_ml_bundle_utilities.plan.md`.
+Canonical **rigorous stress LAST** protocol after a product tip lands on GHCR. Living evidence: [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md). Next-rev template: [`PATCH_CYCLE.md`](PATCH_CYCLE.md).
 
 **Do not claim a train CLOSED** with only merge + one spot gate. Cite tip-pin artifacts (not an older `sha-*` stress run).
 
-## Dual pipeline (never cross-wire for parity)
+## Topology (3.3.20+)
 
-| Pipeline | Where | Purpose |
-|----------|--------|---------|
-| **A Cloud** | bosspi fieldbus → Railway mqtt → Railway central/web | Live OT MQTTS hub |
-| **B Local** | bensbench `react-ot` GHCR pull | Firewall / on-prem dashboard + OT soak |
+| Role | Where | Purpose |
+|------|--------|---------|
+| **Hub** | Railway central + mqtt + web | AFDD / CSV / UI head-end |
+| **Field** | bensbench **x86** `openfdd-fieldbus` only | MQTTS into Railway (`reseau.proxy.rlwy.net:44763`) |
 
-Same tip `sha-<7>` both sides. Do **not** point bosspi at local mqtt (or bench edge at Railway) during the parity gate.
+Raspberry Pis are **out of** Open-FDD stress (bosspi / fake AHU `.13` / fake VAV `.14` freed). Do not stand up a local `react-ot` hub for patch-cycle closeout. Optional local `run_all` remains a lab recipe only.
 
 ## Bootstrap before stress
 
-1. Tip Actions green + GHCR **Publish Open-FDD stack** success for tip (or accept product `sha-*` if hotfix is harness-only).
+1. Tip Actions green + GHCR **Publish Open-FDD stack** success.
 2. **Railway:** backup → re-pin central → mqtt → web — [`RAILWAY_DEPLOYMENT.md`](RAILWAY_DEPLOYMENT.md) · skill [`openfdd-railway-cli`](../../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md).
-3. **Local:** `SHA=sha-<7chars>; ./scripts/openfdd_maint_update_resume.sh react-ot "$SHA" --skip-maintenance` — [`LOCAL_DEPLOYMENT.md`](LOCAL_DEPLOYMENT.md). After tip publish, GHCR web on that SHA is correct when the tree matches tip. Overlay a local Overview bundle **only** if `frontend/web` is dirty/unmerged. **Plain HTTP** (`:3000`/`:8080`) sends passwords and Bearer JWTs in the clear — **trusted/isolated LAN or VPN only**. For shared or untrusted networks, put a TLS-terminating reverse proxy in front (not shipped in default `react-ot`).
-4. **bosspi:** fieldbus arm64 same `sha-*`; 60s poll+publish; Pipeline A `/api/edges` check.
-5. Smoke 01 / 06 / 10 / 18 + Pipeline A, **then** stress.
+3. **Field:** `./scripts/openfdd_fieldbus_railway_up.sh sha-<7>` (stops local react-ot; host-net fieldbus → Railway). Kit via `POST /api/mqtt/edge-kits` (`bldg2` / `bensbench-1`).
+4. Then `./scripts/nightly-ot-bench/run_railway_hub_stress.sh`.
 
-Low-RAM: never local `docker build` for stack images; `WEATHER_SOAK_SECS=120`; `unset SKIP_PULL` on full `run_all`.
+Low-RAM: never local `docker build`; no local central/web/mqtt on the closeout path.
 
 ## Stress matrix (fill BUG_REPORT)
 
 | # | Name | Command / artifact | Pass |
 |---|------|--------------------|------|
-| Prep | Smoke + Pipeline A | gates `01`/`06`/`10`/`18`; `/api/edges` | health OK; telemetry present |
-| 1 | `run_all` | `unset SKIP_PULL`; `WEATHER_SOAK_SECS=120`; `./scripts/nightly-ot-bench/run_all.sh` | gates **00–16** PASS → `reports/nightly-ot-bench_<TS>/` |
-| 2 | Synthetic-59 soak | `python3 scripts/synthetic_59_target_pair_soak.py --side ofdd` (from repo root) | **59/59** → `reports/wattlab-parity/artifacts/synthetic_59/` |
-| 3 | Gate 17 | `RUN_SYNTH59_HEALTH_MATRIX=1 ./scripts/nightly-ot-bench/17_synthetic_health_matrix_fault_hours.sh` | health matrix + overview analytics PASS |
-| 4 | B100 parity | `./scripts/gates/railway_b100_parity_spot.sh` | local ≡ Railway within tolerance → `reports/railway-b100-parity_<TS>/` |
-| 5 | Creekside | `./scripts/gates/creekside_package_import_spot.sh` (+ full zip if available) | nested import PASS; utilities preferred |
-| 6 | Gate 19 bundle | `./scripts/nightly-ot-bench/19_engineering_bundle_validate.sh` | validator **READY** |
-| 7 | OWASP ZAP (light) | Docker `zap-baseline.py` vs **Railway public HTTPS URL only** | No unexplained High/Critical; HTML/JSON under `reports/zap-railway_<TS>/` |
+| 0 | Hub + field + edges | `run_railway_hub_stress.sh` prep | Railway health `3.3.N+…`; fieldbus `:8081`; `has_telemetry:true` |
+| 1 | Synthetic-59 | `--api-base` Railway | **59/59** |
+| 2 | Gate 17 | `RUN_SYNTH59_HEALTH_MATRIX=1` against Railway | health matrix + overview |
+| 3 | B100 | `RAILWAY_ONLY=1 ./scripts/gates/railway_b100_parity_spot.sh` | FC1 / runtime / series on Railway |
+| 4 | Creekside | `BASE=$RAILWAY` fixture + full zip | `LAKESIDE_ES` |
+| 5 | Gate 19 | against Railway | validator **READY** |
+| 6 | OWASP ZAP (light) | `zap-baseline.py` vs **Railway public HTTPS** | no unexplained High/Critical → `reports/zap-railway_<TS>/` |
 
 ### STRESS 7 notes (fluffy, not bug bounty)
 
@@ -74,8 +72,9 @@ Export UI: `/export` (alias `/wattlab`). Bundle API: `POST /api/jobs/{id}/export
 
 ## Anti-patterns
 
-- Claiming CLOSED after merge without `run_all` / synth59 / B100 on tip pin.
-- Citing `sha-b565d78` stress as proof for a newer tip.
+- Claiming CLOSED after merge without Railway CSV + edges + ZAP on **this** tip pin.
+- Citing an older `sha-*` stress run as proof for a newer tip.
 - Scanning non-owned hosts with ZAP.
-- Cross-wiring Pipeline A and B for “parity.”
+- Putting Raspberry Pi fieldbus / fake-device Pis back on the closeout path.
+- Standing up local `react-ot` as the AFDD head-end for a patch cycle.
 - Local `docker build` of central/web on low-RAM benches.

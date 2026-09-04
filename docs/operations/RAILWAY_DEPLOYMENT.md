@@ -13,7 +13,8 @@ nav_order: 4
 | Doc | Role |
 | --- | --- |
 | [LOCAL_DEPLOYMENT.md](LOCAL_DEPLOYMENT.md) | Firewall / on-prem Compose hub — **plain HTTP**, no product TLS yet |
-| [STRESS_CLOSEOUT.md](STRESS_CLOSEOUT.md) | Rigorous stress LAST after tip re-pin (run_all → … → light ZAP) |
+| [STRESS_CLOSEOUT.md](STRESS_CLOSEOUT.md) | Rigorous stress LAST (Railway hub + CSV + ZAP) |
+| [PATCH_CYCLE.md](PATCH_CYCLE.md) | Tiny VERSION rev template → Cursor plan YAML |
 | [backup-update-restore.md](backup-update-restore.md) | Backup before every central re-pin |
 | Skill [`openfdd-railway-cli`](../../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md) | CLI auth / re-pin on bensbench |
 
