@@ -8,6 +8,12 @@ ROOT="$(cd "$NIGHTLY_OT_BENCH_DIR/../.." && pwd)"
 load_bench_env() {
   local example="$NIGHTLY_OT_BENCH_DIR/bench.env.example"
   local localf="$NIGHTLY_OT_BENCH_DIR/bench.env.local"
+  # Railway hub stress: local .env / bench.env.local must not clobber the hub password.
+  local railway_pw="${RAILWAY_ADMIN_PASSWORD:-}"
+  local railway_only="${RAILWAY_ONLY:-0}"
+  local saved_api="${OPENFDD_API_BASE:-}"
+  local saved_base="${BASE:-}"
+  local saved_central="${CENTRAL_BASE:-}"
   if [[ -f "$ROOT/.env" ]]; then
     # shellcheck disable=SC1091
     set -a && source "$ROOT/.env" && set +a
@@ -19,6 +25,15 @@ load_bench_env() {
     echo "WARN: no bench.env.local — sourcing bench.env.example (edit OT IPs for real LAN)" >&2
     # shellcheck disable=SC1090
     set -a && source "$example" && set +a
+  fi
+  if [[ "$railway_only" == "1" ]]; then
+    if [[ -n "$railway_pw" ]]; then
+      export RAILWAY_ADMIN_PASSWORD="$railway_pw"
+      export OPENFDD_ADMIN_PASSWORD="$railway_pw"
+    fi
+    [[ -n "$saved_api" ]] && export OPENFDD_API_BASE="$saved_api"
+    [[ -n "$saved_base" ]] && export BASE="$saved_base"
+    [[ -n "$saved_central" ]] && CENTRAL_BASE="$saved_central"
   fi
 
   FIELDBUS_BASE="${FIELDBUS_BASE:-http://127.0.0.1:8081}"

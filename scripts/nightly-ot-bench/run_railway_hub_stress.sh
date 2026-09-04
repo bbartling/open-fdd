@@ -38,6 +38,10 @@ REPORT="$ART/SUMMARY.md"
 OVERALL=0
 run_named() {
   local title="$1"; shift
+  # Re-assert Railway admin after any child that sourced local .env.
+  if [[ -n "${RAILWAY_ADMIN_PASSWORD:-}" ]]; then
+    export OPENFDD_ADMIN_PASSWORD="$RAILWAY_ADMIN_PASSWORD"
+  fi
   hdr "$title"
   local log="$ART/$(echo "$title" | tr ' /' '__').log"
   set +e

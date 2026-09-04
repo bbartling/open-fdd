@@ -1,5 +1,14 @@
 # Session log
 
+## 2026-09-04 — 3.3.20 x86 field → Railway hub CLOSED
+
+- **Merge:** #831 → `aef6fc1f`; VERSION **3.3.20**; pin **`sha-aef6fc1`**; health **`3.3.20+aef6fc1f5b29`**.
+- **Backup:** `~/openfdd-backups/railway/20260904T035328Z/`. Hub re-pin central→mqtt→web; x86 `openfdd_fieldbus_railway_up.sh sha-aef6fc1`.
+- **Field:** MQTTS `bldg2`/`pi-1` kit; hosted-weather AV 9101 loopback (no Pi). `/api/edges` `has_telemetry:true`.
+- **STRESS:** `reports/nightly-ot-bench_20260904T040851Z/` (00, synth59 59/59, B100, ZAP `FAIL-NEW:0`); rerun `reports/railway-hub-rerun_20260904T041358Z/` (gate 17 + Creekside + gate 19) after Railway admin preserved over local `.env`.
+- Pis (bosspi / BensFakeAhu / Zone1VAV) stay off the closeout path.
+- Next rev: copy [`PATCH_CYCLE.md`](../docs/operations/PATCH_CYCLE.md) YAML → `.cursor/plans/patch_cycle_3.3.21_<slug>.plan.md`.
+
 ## 2026-09-03 — 3.3.20 VERSION + x86 field → Railway hub (start)
 
 - Bump **3.3.19 → 3.3.20**. Closeout path is Railway hub + bensbench fieldbus only.
