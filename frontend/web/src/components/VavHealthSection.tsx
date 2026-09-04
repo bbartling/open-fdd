@@ -5,9 +5,11 @@ import { postVavHealth } from "../api/analyticsApi";
 export function VavHealthSection({
   buildingId,
   refreshToken,
+  pendingFlags = false,
 }: {
   buildingId: string;
   refreshToken: number;
+  pendingFlags?: boolean;
 }) {
   const fetchHealth = useCallback(
     (id: string) => postVavHealth({ building_id: id }),
@@ -23,6 +25,7 @@ export function VavHealthSection({
       refreshToken={refreshToken}
       fetchHealth={fetchHealth}
       renderEmptyTable
+      pendingFlags={pendingFlags}
       flagColumns={[
         {
           key: "broken_box",

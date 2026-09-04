@@ -33,7 +33,11 @@ export function InspectPage() {
   const seq = useRef(0);
 
   useEffect(() => {
-    if (!buildingId) return;
+    if (!buildingId) {
+      setOptions([]);
+      setPick("");
+      return;
+    }
     void getPackageMapping(buildingId)
       .then((inv) => {
         const ids = [
@@ -44,10 +48,19 @@ export function InspectPage() {
               .sort(naturalCompare),
           ),
         ];
-        if (ids.length) setOptions(ids);
-        setPick((prev) => prev || equipmentId || ids[0] || "");
+        // Always replace options for the active site — never keep prior building's list.
+        setOptions(ids);
+        setPick((prev) => {
+          if (equipmentId && ids.includes(equipmentId)) return equipmentId;
+          if (prev && ids.includes(prev)) return prev;
+          return ids[0] || "";
+        });
       })
-      .catch(() => undefined);
+      .catch(() => {
+        setOptions([]);
+        setPick("");
+        setErr(`No historian mapping for site ${buildingId}`);
+      });
   }, [buildingId, equipmentId]);
 
   const refresh = useCallback(

@@ -24,6 +24,7 @@ pub const QV_BOILER_HEALTH: &str = "boiler-health-v1";
 pub const QV_HP_HEALTH: &str = "hp-health-v1";
 pub const QV_SENSOR_FAULTS: &str = "sensor-faults-v1";
 pub const QV_PID_HUNTING: &str = "pid-hunting-v1";
+pub const QV_ZONE_OTHER_HEALTH: &str = "zone-other-health-v1";
 
 pub const SCHEMA_AHU_HEALTH: &str = "ahu_health_matrix_v1";
 pub const SCHEMA_AHU_TEMPERATURE_HEALTH: &str = "ahu_temperature_health_matrix_v1";
@@ -35,6 +36,7 @@ pub const SCHEMA_BOILER_HEALTH: &str = "boiler_health_matrix_v1";
 pub const SCHEMA_HP_HEALTH: &str = "hp_health_matrix_v1";
 pub const SCHEMA_SENSOR_FAULTS: &str = "sensor_fault_matrix_v1";
 pub const SCHEMA_PID_HUNTING: &str = "pid_hunting_matrix_v1";
+pub const SCHEMA_ZONE_OTHER_HEALTH: &str = "zone_other_health_matrix_v1";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PlantFamily {
@@ -43,6 +45,7 @@ pub enum PlantFamily {
     CoolingTower,
     Boiler,
     HeatPump,
+    ZoneOther,
 }
 
 #[derive(Clone, Copy)]
@@ -334,6 +337,50 @@ const PID_FLAGS: &[FlagSpec] = &[
         fallback: None,
     },
 ];
+const ZONE_OTHER_FLAGS: &[FlagSpec] = &[
+    FlagSpec {
+        key: "zone_comfort",
+        label: "Zone comfort",
+        primary: "VAV-1",
+        fallback: None,
+    },
+    FlagSpec {
+        key: "flatline",
+        label: "Flatline",
+        primary: "SV-FLATLINE",
+        fallback: None,
+    },
+    FlagSpec {
+        key: "range",
+        label: "Range",
+        primary: "SV-RANGE",
+        fallback: None,
+    },
+    FlagSpec {
+        key: "rate",
+        label: "Rate",
+        primary: "SV-RATE",
+        fallback: None,
+    },
+    FlagSpec {
+        key: "spike",
+        label: "Spike",
+        primary: "SV-SPIKE",
+        fallback: None,
+    },
+    FlagSpec {
+        key: "stale",
+        label: "Stale",
+        primary: "SV-STALE",
+        fallback: None,
+    },
+    FlagSpec {
+        key: "occupancy",
+        label: "Occupancy",
+        primary: "SCHED-1",
+        fallback: None,
+    },
+];
 
 const AHU_LEGACY_SPEC: MatrixSpec = MatrixSpec { scope: EquipmentScope::Family(PlantFamily::Ahu), query_version: QV_AHU_HEALTH, schema: SCHEMA_AHU_HEALTH, flags: AHU_LEGACY_FLAGS, notes: "Compatibility AHU matrix; new Overview uses temperature, pressure/fan, and economizer endpoints.", faults_only: false };
 const AHU_TEMPERATURE_SPEC: MatrixSpec = MatrixSpec {
@@ -408,6 +455,14 @@ const PID_SPEC: MatrixSpec = MatrixSpec {
     notes: "PID/operating-state hunting evidence from FC4 and PID-HUNT-1.",
     faults_only: false,
 };
+const ZONE_OTHER_SPEC: MatrixSpec = MatrixSpec {
+    scope: EquipmentScope::Family(PlantFamily::ZoneOther),
+    query_version: QV_ZONE_OTHER_HEALTH,
+    schema: SCHEMA_ZONE_OTHER_HEALTH,
+    flags: ZONE_OTHER_FLAGS,
+    notes: "Zone Other / MQTT generic zone monitoring (SV + VAV-1 + SCHED-1).",
+    faults_only: false,
+};
 
 pub async fn handle_ahu(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     handle_matrix(req, &AHU_LEGACY_SPEC).await
@@ -438,6 +493,9 @@ pub async fn handle_sensor_faults(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 }
 pub async fn handle_pid_hunting(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     handle_matrix(req, &PID_SPEC).await
+}
+pub async fn handle_zone_other(req: &AnalyticsRequest) -> AnalyticsEnvelope {
+    handle_matrix(req, &ZONE_OTHER_SPEC).await
 }
 
 async fn handle_matrix(req: &AnalyticsRequest, spec: &MatrixSpec) -> AnalyticsEnvelope {
@@ -478,6 +536,7 @@ pub fn matches_family_typed(
         PlantFamily::CoolingTower => kind == "cooling_tower",
         PlantFamily::Boiler => kind == "boiler",
         PlantFamily::HeatPump => kind == "heatpump" || is_heat_pump_id(equipment_id),
+        PlantFamily::ZoneOther => kind == "zone_other",
     }
 }
 
@@ -840,6 +899,7 @@ mod tests {
         assert_eq!(COOLING_TOWER_SPEC.flags.len(), 3);
         assert_eq!(SENSOR_SPEC.flags.len(), 5);
         assert_eq!(PID_SPEC.flags.len(), 2);
+        assert_eq!(ZONE_OTHER_SPEC.flags.len(), 7);
     }
 
     #[test]
@@ -854,6 +914,16 @@ mod tests {
             PlantFamily::CoolingTower,
             "CT_opaque",
             Some("coolingTower")
+        ));
+        assert!(matches_family_typed(
+            PlantFamily::ZoneOther,
+            "hosted-weather",
+            Some("zone_other"),
+        ));
+        assert!(!matches_family_typed(
+            PlantFamily::Ahu,
+            "hosted-weather",
+            Some("zone_other"),
         ));
     }
 

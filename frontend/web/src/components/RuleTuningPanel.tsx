@@ -22,6 +22,7 @@ import {
   storeScalar,
   isTempUnit,
 } from "../api/roleUnits";
+import { naturalCompare } from "../lib/naturalSort";
 
 export const RULES_UPDATED_EVENT = "openfdd:rules-updated";
 const UNITS_KEY = "openfdd.ui.unit_system";
@@ -31,7 +32,7 @@ function familyOf(ruleId: string): string {
   return i > 0 ? ruleId.slice(0, i) : ruleId;
 }
 
-/** Lab UX: A–Z by rule_id after category filter (registry order stays for the engine). */
+/** Lab UX: natural A–Z by rule_id after category filter (registry order stays for the engine). */
 export function visibleRulesForLab(
   rules: FddRuleSummary[],
   family: string,
@@ -40,7 +41,7 @@ export function visibleRulesForLab(
     family === "(all)"
       ? [...rules]
       : rules.filter((r) => familyOf(r.rule_id) === family);
-  return filtered.sort((a, b) => a.rule_id.localeCompare(b.rule_id));
+  return filtered.sort((a, b) => naturalCompare(a.rule_id, b.rule_id));
 }
 
 function formatErr(err: unknown): string {

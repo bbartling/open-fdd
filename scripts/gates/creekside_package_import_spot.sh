@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Creekside-style nested openfdd_package_v1 import spot-check (#805 / 3.3.20).
+# Creekside-style nested openfdd_package_v1 import spot-check (#805 / 3.3.21).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -89,6 +89,35 @@ import_zip fixture "$ZIP"
 
 if [[ -f "$BENCH_ZIP" && "${RUN_CREEKSIDE_FULL:-0}" == "1" ]]; then
   import_zip full "$BENCH_ZIP"
+  # HP matrix / plot smoke — LAKESIDE_ES maps HEAT_PUMP ids (no fake fan_cmd).
+  curl -fsS --max-time 120 -X POST "$BASE/api/analytics/hp-health" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H 'Content-Type: application/json' \
+    -d '{"building_id":"LAKESIDE_ES"}' \
+    >"$ART/hp_health.json" 2>"$ART/hp_health.err" || echo '{"ok":false}' >"$ART/hp_health.json"
+  jq -e '.ok == true' "$ART/hp_health.json" >/dev/null || {
+    echo "FAIL hp-health envelope: $(head -c 400 "$ART/hp_health.json")" >&2
+    exit 1
+  }
+  rows="$(jq -r '.analytics.rows // .rows // [] | length' "$ART/hp_health.json")"
+  [[ "$rows" -gt 0 ]] || {
+    echo "FAIL hp-health expected HP rows for LAKESIDE_ES, got $rows" >&2
+    exit 1
+  }
+  echo "OK hp-health rows=$rows"
+  # Spot one HP equipment series path (roles may be sparse without fan_cmd — ok must be true or missing_roles honest).
+  HP_EQ="$(jq -r '.analytics.rows // .rows // [] | map(.equipment_id) | .[0] // empty' "$ART/hp_health.json")"
+  if [[ -n "$HP_EQ" ]]; then
+    curl -fsS --max-time 120 \
+      -H "Authorization: Bearer $TOKEN" \
+      "$BASE/api/fdd/series?building_id=LAKESIDE_ES&equipment_id=${HP_EQ}&rule_id=HP-1" \
+      >"$ART/hp1_series.json" 2>"$ART/hp1_series.err" || true
+    if [[ -f "$ART/hp1_series.json" ]]; then
+      jq -e '(.ok == true) or (.error != null)' "$ART/hp1_series.json" >/dev/null \
+        && echo "OK HP-1 series probe equipment=$HP_EQ" \
+        || echo "WARN HP-1 series probe inconclusive for $HP_EQ"
+    fi
+  fi
 fi
 
 jq -n --arg art "$ART" '{ok:true,artifact:$art,building_id:"LAKESIDE_ES"}' >"$ART/summary.json"

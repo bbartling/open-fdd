@@ -42,4 +42,13 @@ describe("plantEquipmentFamilies", () => {
     const f = plantEquipmentFamilies([{ equipment_id: "AHU_2", equipment_type: "AHU" }]);
     expect(f.hasHeatPump).toBe(false);
   });
+
+  it("recognizes Zone Other stamps for MQTT / generic zone section", () => {
+    const f = plantEquipmentFamilies([
+      { equipment_id: "hosted-weather", equipment_type: "Zone Other" },
+      { equipment_id: "FEC_1", equipment_type: "zone_other" },
+    ]);
+    expect(f.hasZoneOther).toBe(true);
+    expect(f.hasAhu).toBe(false);
+  });
 });

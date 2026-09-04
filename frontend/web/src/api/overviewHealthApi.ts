@@ -22,3 +22,6 @@ export const postPidHunting = (body: AnalyticsRequest) =>
 
 export const postSensorFaults = (body: AnalyticsRequest) =>
   postHealth("/api/analytics/sensor-faults", body);
+
+export const postZoneOtherHealth = (body: AnalyticsRequest) =>
+  postHealth("/api/analytics/zone-other-health", body);

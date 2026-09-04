@@ -8,15 +8,18 @@ import {
   postCoolingTowerHealth,
   postPidHunting,
   postSensorFaults,
+  postZoneOtherHealth,
 } from "../api/overviewHealthApi";
 
 /** MQTT and CSV sites share the same Overview health-matrix chrome (empty shells when no equip). */
 export function PlantHealthSections({
   buildingId,
   refreshToken,
+  pendingFlags = false,
 }: {
   buildingId: string;
   refreshToken: number;
+  pendingFlags?: boolean;
 }) {
   const fetchAhuTemperature = useCallback(
     (id: string) => postAhuTemperatureHealth({ building_id: id }),
@@ -50,6 +53,10 @@ export function PlantHealthSections({
     (id: string) => postSensorFaults({ building_id: id }),
     [],
   );
+  const fetchZoneOther = useCallback(
+    (id: string) => postZoneOtherHealth({ building_id: id }),
+    [],
+  );
 
   return (
     <>
@@ -61,6 +68,7 @@ export function PlantHealthSections({
         refreshToken={refreshToken}
         fetchHealth={fetchAhuTemperature}
         renderEmptyTable
+        pendingFlags={pendingFlags}
         flagColumns={[
           {
             key: "sat_dev",
@@ -89,6 +97,7 @@ export function PlantHealthSections({
         refreshToken={refreshToken}
         fetchHealth={fetchAhuPressure}
         renderEmptyTable
+        pendingFlags={pendingFlags}
         flagColumns={[
           {
             key: "duct_high",
@@ -120,6 +129,7 @@ export function PlantHealthSections({
         refreshToken={refreshToken}
         fetchHealth={fetchAhuEconomizer}
         renderEmptyTable
+        pendingFlags={pendingFlags}
         flagColumns={[
           {
             key: "stuck_closed",
@@ -167,6 +177,7 @@ export function PlantHealthSections({
         refreshToken={refreshToken}
         fetchHealth={fetchChiller}
         renderEmptyTable
+        pendingFlags={pendingFlags}
         flagColumns={[
           {
             key: "low_delta_t",
@@ -201,6 +212,7 @@ export function PlantHealthSections({
         refreshToken={refreshToken}
         fetchHealth={fetchCoolingTower}
         renderEmptyTable
+        pendingFlags={pendingFlags}
         flagColumns={[
           {
             key: "approach_high",
@@ -224,6 +236,7 @@ export function PlantHealthSections({
         refreshToken={refreshToken}
         fetchHealth={fetchHp}
         renderEmptyTable
+        pendingFlags={pendingFlags}
         flagColumns={[
           {
             key: "hp_1",
@@ -251,6 +264,7 @@ export function PlantHealthSections({
         refreshToken={refreshToken}
         fetchHealth={fetchPid}
         renderEmptyTable
+        pendingFlags={pendingFlags}
         flagColumns={[
           { key: "operating_state_hunt", ruleId: "FC4" },
           { key: "control_output_hunt", ruleId: "PID-HUNT-1" },
@@ -273,6 +287,32 @@ export function PlantHealthSections({
         ]}
         emptyMessage="No sensor faults in window"
         renderEmptyTable
+        pendingFlags={pendingFlags}
+      />
+
+      <HealthMatrixSection
+        family="zone-other"
+        title="Generic zone monitoring"
+        caption="Zone Other / MQTT field equipment — zone temp, sensor validation, and occupancy. Not AHU FC/SATDEV."
+        buildingId={buildingId}
+        refreshToken={refreshToken}
+        fetchHealth={fetchZoneOther}
+        renderEmptyTable
+        pendingFlags={pendingFlags}
+        emptyMessage="No Zone Other equipment in this data model — waiting MQTT or package stamp zone_other."
+        flagColumns={[
+          {
+            key: "zone_comfort",
+            ruleId: "VAV-1",
+            haystackTags: ["zoneAir"],
+          },
+          { key: "flatline", ruleId: "SV-FLATLINE" },
+          { key: "range", ruleId: "SV-RANGE" },
+          { key: "rate", ruleId: "SV-RATE" },
+          { key: "spike", ruleId: "SV-SPIKE" },
+          { key: "stale", ruleId: "SV-STALE" },
+          { key: "occupancy", ruleId: "SCHED-1", haystackTags: ["occupied"] },
+        ]}
       />
     </>
   );
