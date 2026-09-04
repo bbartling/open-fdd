@@ -326,6 +326,8 @@ export function OverviewPopulated({
           ? `Rule ${detail.rule_id} updated · ${n ?? "—"} result row(s)`
           : `Rules updated · ${n ?? "—"} result row(s)`,
       );
+      // Matrices join FDD results — bump refresh so health cells leave stale/unknown.
+      setVavHealthToken((t) => t + 1);
       void getFddResults(buildingId)
         .then((rows) => setLastRuleResultCount(rows.length))
         .catch(() => undefined);
@@ -437,6 +439,17 @@ export function OverviewPopulated({
   };
 
   const busy = loadingOverview && !overview;
+  const fddPending =
+    lastRuleResultCount == null || lastRuleResultCount === 0;
+  const readinessLabel = (() => {
+    if (rulesBusy) return "Running all rules…";
+    if (busy || loadingOverview) return "Updating analytics…";
+    if (overview && fddPending) return "Needs Run all rules";
+    if (overview && lastRuleResultCount != null && lastRuleResultCount > 0) {
+      return `Ready (${lastRuleResultCount} result rows)`;
+    }
+    return "Idle";
+  })();
   const datasetStart = formatOverviewTs(overview?.span?.start ?? firstTs);
   const datasetEnd = formatOverviewTs(overview?.span?.end ?? lastTs);
 
@@ -502,6 +515,23 @@ export function OverviewPopulated({
         </p>
       ) : null}
 
+      <InlineAlert
+        id="overview-readiness"
+        variant={
+          readinessLabel.startsWith("Needs")
+            ? "warning"
+            : readinessLabel.startsWith("Ready")
+              ? "info"
+              : "info"
+        }
+        testId="overview-readiness"
+      >
+        Overview status: <strong data-testid="overview-readiness-label">{readinessLabel}</strong>
+        {overview && fddPending && !rulesBusy
+          ? " — charts may be loaded, but health matrices need Run all rules."
+          : null}
+      </InlineAlert>
+
       {!busy && overview ? (
         <InlineAlert
           id="overview-charts-ready"
@@ -532,7 +562,7 @@ export function OverviewPopulated({
             testId="overview-refresh"
           />
           <p className="oracle-sidebar__caption">
-            Manual — builds building charts when you click
+            Update analytics = charts
           </p>
         </div>
         <div className="overview-toolbar__action">
@@ -544,7 +574,7 @@ export function OverviewPopulated({
             testId="overview-update-all-rules"
           />
           <p className="oracle-sidebar__caption">
-            Manual — DataFusion FDD registry → Results / FDD Plots
+            Run all rules = health flags
           </p>
         </div>
         {overview ? (
@@ -567,10 +597,9 @@ export function OverviewPopulated({
       ) : null}
 
       <p className="oracle-sidebar__caption" data-testid="overview-dual-catalog">
-        Two manual actions: <strong>Update analytics</strong> builds Overview
-        tables and health matrices; <strong>Run all rules</strong> runs the FDD SQL
-        registry. Sidebar <strong>Update this rule</strong> re-runs one rule.
-        Equipment for Inspect / FDD Plots is chosen in those sections — not here.
+        Update analytics = charts. Run all rules = health flags. Sidebar{" "}
+        <strong>Update this rule</strong> re-runs one rule. Equipment for Inspect /
+        FDD Plots is chosen in those sections — not here.
       </p>
 
       <SectionTabs activeSectionId="overview" embedded />
@@ -751,10 +780,12 @@ export function OverviewPopulated({
       <PlantHealthSections
         buildingId={buildingId}
         refreshToken={vavHealthToken}
+        pendingFlags={fddPending}
       />
       <VavHealthSection
         buildingId={buildingId}
         refreshToken={vavHealthToken}
+        pendingFlags={fddPending}
       />
       <WeatherHealthSection
         buildingId={buildingId}

@@ -191,6 +191,13 @@ mod live_routes {
     pub fn analytics_hp_health() {}
 
     #[utoipa::path(
+        post, path = "/api/analytics/zone-other-health", tag = "analytics",
+        request_body = serde_json::Value,
+        responses((status = 200, description = "Building-scoped zone_other_health_matrix_v1 (VAV-1/SV/SCHED)", body = serde_json::Value))
+    )]
+    pub fn analytics_zone_other_health() {}
+
+    #[utoipa::path(
         post, path = "/api/analytics/mechanical-cooling", tag = "analytics",
         request_body = serde_json::Value,
         responses((status = 200, description = "Mechanical cooling diagnostics", body = serde_json::Value))
@@ -308,6 +315,7 @@ mod live_routes {
         live_routes::analytics_chiller_health,
         live_routes::analytics_boiler_health,
         live_routes::analytics_hp_health,
+        live_routes::analytics_zone_other_health,
         live_routes::analytics_mechanical_cooling,
         live_routes::analytics_metering,
         live_routes::analytics_setpoints,

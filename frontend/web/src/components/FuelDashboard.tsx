@@ -78,9 +78,14 @@ function coolSeasonFromWeather(
 export type FuelDashboardProps = {
   /** When this value changes, re-fetch the campus list (e.g. after import). */
   reloadToken?: number;
+  /** Prefer campus matching active site / package building id when present. */
+  preferredCampusId?: string;
 };
 
-export function FuelDashboard({ reloadToken }: FuelDashboardProps = {}) {
+export function FuelDashboard({
+  reloadToken,
+  preferredCampusId,
+}: FuelDashboardProps = {}) {
   const [campuses, setCampuses] = useState<FuelCampusMeta[]>([]);
   const [campusId, setCampusId] = useState("");
   const [tab, setTab] = useState<string>(TAB_IDS.overview);
@@ -101,6 +106,12 @@ export function FuelDashboard({ reloadToken }: FuelDashboardProps = {}) {
       setCampuses(list.filter((c) => c.campus_id && !c.error));
       setCampusId((prev) => {
         if (prev && list.some((c) => c.campus_id === prev)) return prev;
+        if (
+          preferredCampusId &&
+          list.some((c) => c.campus_id === preferredCampusId)
+        ) {
+          return preferredCampusId;
+        }
         const active = res.active?.campus_id;
         if (active && list.some((c) => c.campus_id === active)) return active;
         return list[0]?.campus_id ?? "";
@@ -112,7 +123,7 @@ export function FuelDashboard({ reloadToken }: FuelDashboardProps = {}) {
     } finally {
       setLoadingCampuses(false);
     }
-  }, []);
+  }, [preferredCampusId]);
 
   useEffect(() => {
     void refreshCampuses();
@@ -326,8 +337,10 @@ export function FuelDashboard({ reloadToken }: FuelDashboardProps = {}) {
     return (
       <div data-testid="fuel-dashboard" className="page-stack">
         <InlineAlert id="fuel-empty" variant="info" testId="fuel-upload-prompt">
-          No fuel campuses imported yet. Use the Uploads tab to import a fuel
-          campus ZIP (campus.json + bill CSVs), then return here.
+          No fuel campuses available yet. Import a building package with{" "}
+          <code>utilities_v1</code> (or wrapper <code>utility_bills_monthly.csv</code>)
+          on Uploads / Sites, then return here. Legacy fuel campus ZIP is not the
+          primary Metering path.
         </InlineAlert>
         {error ? (
           <InlineAlert id="fuel-error" variant="danger">
@@ -343,7 +356,7 @@ export function FuelDashboard({ reloadToken }: FuelDashboardProps = {}) {
       <Select
         id="fuel-campus"
         label="Fuel campus"
-        description="Imported fuel campus packages"
+        description="Campuses from package utilities / residual fuel data"
         value={campusId}
         options={[
           { value: "", label: "— select campus —" },

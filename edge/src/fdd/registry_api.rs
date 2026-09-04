@@ -611,8 +611,10 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                 "roles": [],
             });
         }
+        // Latest N samples (DESC then re-ASC) so Plots show the recent fault window,
+        // not the oldest 5000 rows of a multi-month historian.
         let sql = format!(
-            "SELECT timestamp_utc, equipment_id, {} FROM history WHERE equipment_id = '{}' ORDER BY timestamp_utc LIMIT 5000",
+            "SELECT * FROM (SELECT timestamp_utc, equipment_id, {} FROM history WHERE equipment_id = '{}' ORDER BY timestamp_utc DESC LIMIT 5000) AS recent ORDER BY timestamp_utc",
             columns.join(", "),
             escaped_equipment
         );
@@ -662,6 +664,7 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                     }
                 }
                 let mut overlay_hits = 0usize;
+                let mut confirmed_true_hits = 0usize;
                 if !fault_by_ts.is_empty() {
                     for row in &mut result.rows {
                         if let Some(obj) = row.as_object_mut() {
@@ -673,6 +676,9 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                             if let Some(flag) = lookup_fault_flag(&fault_by_ts, ts) {
                                 obj.insert("confirmed_fault".into(), json!(flag));
                                 overlay_hits += 1;
+                                if flag {
+                                    confirmed_true_hits += 1;
+                                }
                             }
                         }
                     }
@@ -686,9 +692,10 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                     "rows": result.rows,
                     "downsampled": result.row_count >= 5000,
                     "max_points": 5000,
-                    "has_confirmed_fault": overlay_hits > 0,
+                    "has_confirmed_fault": confirmed_true_hits > 0,
                     "fault_overlay_source": overlay_source,
                     "fault_overlay_hits": overlay_hits,
+                    "fault_overlay_true_hits": confirmed_true_hits,
                     "building_id": building_id,
                 })
             }

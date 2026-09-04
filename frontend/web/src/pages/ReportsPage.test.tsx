@@ -73,7 +73,7 @@ vi.mock("../api/analyticsApi", () => ({
 
 vi.mock("../api/uploadApi", () => ({ uploadPackage: vi.fn() }));
 
-import { getFddSeries } from "../api/fddApi";
+import { getFddSeries, getFddResults } from "../api/fddApi";
 
 function renderPlots(entry = "/reports?site=B1&eq=VAV_1") {
   return render(
@@ -86,6 +86,23 @@ function renderPlots(entry = "/reports?site=B1&eq=VAV_1") {
 describe("ReportsPage FDD Plots", () => {
   beforeEach(() => {
     vi.mocked(getFddSeries).mockClear();
+    vi.mocked(getFddResults).mockReset();
+    vi.mocked(getFddResults).mockResolvedValue([
+      { rule_id: "VAV-1", equipment_id: "VAV_1", status: "FAULT" },
+    ]);
+    vi.mocked(getFddSeries).mockResolvedValue({
+      ok: true,
+      equipment_id: "VAV_1",
+      rule_id: "VAV-1",
+      roles: ["zone_t"],
+      rows: [
+        { timestamp_utc: "2024-01-01T00:00:00Z", zone_t: 70, confirmed_fault: 0 },
+        { timestamp_utc: "2024-01-01T00:05:00Z", zone_t: 71, confirmed_fault: 1 },
+      ],
+      downsampled: false,
+      max_points: 5000,
+      has_confirmed_fault: true,
+    });
   });
 
   it("shows FDD Plots title without artifacts mode or building reselect", async () => {
@@ -117,6 +134,10 @@ describe("ReportsPage FDD Plots", () => {
   });
 
   it("fails when results exist but confirmed_fault overlay is absent", async () => {
+    const { getFddResults } = await import("../api/fddApi");
+    vi.mocked(getFddResults).mockResolvedValue([
+      { rule_id: "VAV-1", equipment_id: "VAV_1", status: "PASS", fault_hours: 0 },
+    ]);
     vi.mocked(getFddSeries).mockResolvedValue({
       ok: true,
       equipment_id: "VAV_1",
@@ -134,6 +155,28 @@ describe("ReportsPage FDD Plots", () => {
     await waitFor(() => {
       expect(screen.getByTestId("plots-no-fault").textContent).toMatch(
         /timestamp join failed/,
+      );
+    });
+  });
+
+  it("flags FAULT results when the series window has 0 confirmed_fault trues", async () => {
+    vi.mocked(getFddSeries).mockResolvedValue({
+      ok: true,
+      equipment_id: "VAV_1",
+      rule_id: "VAV-1",
+      roles: ["zone_t"],
+      rows: [
+        { timestamp_utc: "2024-01-01T00:00:00Z", zone_t: 70, confirmed_fault: false },
+        { timestamp_utc: "2024-01-01T00:05:00Z", zone_t: 71, confirmed_fault: false },
+      ],
+      downsampled: false,
+      max_points: 5000,
+      has_confirmed_fault: false,
+    });
+    renderPlots();
+    await waitFor(() => {
+      expect(screen.getByTestId("plots-no-fault").textContent).toMatch(
+        /0 confirmed_fault trues/,
       );
     });
   });

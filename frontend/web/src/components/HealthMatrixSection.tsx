@@ -5,9 +5,11 @@ import type { AnalyticsEnvelope } from "../api/analyticsApi";
 import { healthColumnHeader } from "../lib/cookbookRuleCatalog";
 import { naturalCompare } from "../lib/naturalSort";
 
-export function tri(v: unknown): string {
+/** Display flag cell. Pending = FDD not run yet (avoid raw "unknown"). */
+export function tri(v: unknown, opts?: { pending?: boolean }): string {
   if (v === true) return "true";
   if (v === false) return "false";
+  if (opts?.pending) return "—";
   return "unknown";
 }
 
@@ -63,6 +65,11 @@ export interface HealthMatrixSectionProps {
   emptyMessage?: string;
   /** Keep the table headers visible when rows are empty. */
   renderEmptyTable?: boolean;
+  /**
+   * When true, missing flags show "—" (pending) instead of "unknown".
+   * Use until Run all rules has produced FDD result rows.
+   */
+  pendingFlags?: boolean;
 }
 
 export function HealthMatrixSection({
@@ -75,6 +82,7 @@ export function HealthMatrixSection({
   flagColumns,
   emptyMessage,
   renderEmptyTable = false,
+  pendingFlags = false,
 }: HealthMatrixSectionProps) {
   const [env, setEnv] = useState<AnalyticsEnvelope | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -144,7 +152,7 @@ export function HealthMatrixSection({
       total_fault_h: fmtHours(r.total_fault_h),
     };
     for (const col of flagColumns) {
-      out[col.key] = tri(r[col.key]);
+      out[col.key] = tri(r[col.key], { pending: pendingFlags });
       const fhKey = col.faultHoursKey ?? `${col.key}_fault_h`;
       out[`${col.key}_fault_h`] = fmtHours(r[fhKey]);
     }
@@ -179,6 +187,16 @@ export function HealthMatrixSection({
               <strong>Update analytics</strong> / <strong>Run all rules</strong> after mapping.
             </>
           )}
+        </InlineAlert>
+      ) : null}
+      {pendingFlags && matrixRows.length > 0 ? (
+        <InlineAlert
+          id={`${family}-health-pending`}
+          variant="info"
+          testId={test("pending")}
+        >
+          Health flags pending — run <strong>Run all rules</strong> (Update analytics builds
+          charts only).
         </InlineAlert>
       ) : null}
       {showTable ? (

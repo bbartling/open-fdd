@@ -23,9 +23,27 @@ describe("visibleRulesForLab", () => {
     ]);
   });
 
-  it("filters by family then sorts", () => {
-    const rules = [rule("SV-STALE"), rule("FC1"), rule("SV-FLATLINE")];
+  it("natural-sorts FC1→FC2→…→FC10 (registry YAML order must not win)", () => {
+    const rules = [
+      rule("FC10"),
+      rule("FC2"),
+      rule("FC1"),
+      rule("FC9"),
+      rule("ECON-1"),
+    ];
+    expect(visibleRulesForLab(rules, "(all)").map((r) => r.rule_id)).toEqual([
+      "ECON-1",
+      "FC1",
+      "FC2",
+      "FC9",
+      "FC10",
+    ]);
+  });
+
+  it("filters by family then natural-sorts", () => {
+    const rules = [rule("SV-STALE"), rule("FC1"), rule("SV-FLATLINE"), rule("SV-10")];
     expect(visibleRulesForLab(rules, "SV").map((r) => r.rule_id)).toEqual([
+      "SV-10",
       "SV-FLATLINE",
       "SV-STALE",
     ]);

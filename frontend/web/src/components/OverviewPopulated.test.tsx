@@ -255,9 +255,57 @@ describe("OverviewPopulated metric isolation", () => {
     expect(screen.getByTestId("overview-cooling-tower-health")).toBeTruthy();
     expect(screen.getByTestId("overview-hp-health")).toBeTruthy();
     expect(screen.getByTestId("overview-vav-health")).toBeTruthy();
+    expect(screen.getByTestId("overview-zone-other-health")).toBeTruthy();
     expect(screen.queryByTestId("overview-motor-runtime")).toBeNull();
     expect(screen.queryByTestId("overview-mech-cooling")).toBeNull();
     expect(screen.getByTestId("overview-devices-by-type")).toBeTruthy();
+  });
+
+  it("shows readiness Idle then Needs Run all rules after analytics without FDD", async () => {
+    renderOverview();
+    await waitFor(() => {
+      expect(screen.getByTestId("overview-readiness-label").textContent).toBe(
+        "Idle",
+      );
+    });
+    fireEvent.click(
+      screen.getByTestId("overview-refresh").querySelector("button")!,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("overview-readiness-label").textContent).toMatch(
+        /Needs Run all rules/,
+      );
+    });
+  });
+
+  it("bumps health refresh when RULES_UPDATED_EVENT fires", async () => {
+    const { getFddResults } = await import("../api/fddApi");
+    const { RULES_UPDATED_EVENT } = await import("./RuleTuningPanel");
+    vi.mocked(getFddResults).mockResolvedValue(
+      Array.from({ length: 12 }, (_, i) => ({
+        rule_id: `R${i}`,
+        equipment_id: "AHU_1",
+        status: "PASS",
+        fault_hours: 0,
+      })),
+    );
+    renderOverview();
+    fireEvent.click(
+      screen.getByTestId("overview-refresh").querySelector("button")!,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("overview-charts-ready")).toBeTruthy();
+    });
+    window.dispatchEvent(
+      new CustomEvent(RULES_UPDATED_EVENT, {
+        detail: { mode: "all", building_id: "B1", count: 12 },
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("overview-readiness-label").textContent).toMatch(
+        /Ready \(12 result rows\)/,
+      );
+    });
   });
 
   it("does not render an Overview equipment picker", async () => {

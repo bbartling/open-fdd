@@ -32,6 +32,7 @@ describe("health matrix tint", () => {
     expect(healthRowClass("0/3")).toBeUndefined();
     expect(healthRowClass("?/3")).toBeUndefined();
     expect(tri(null)).toBe("unknown");
+    expect(tri(null, { pending: true })).toBe("—");
     expect(tri(true)).toBe("true");
   });
 

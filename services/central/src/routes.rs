@@ -226,6 +226,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route("/api/analytics/hp-health", post(analytics_hp_health))
         .route(
+            "/api/analytics/zone-other-health",
+            post(analytics_zone_other_health),
+        )
+        .route(
             "/api/analytics/sensor-health",
             post(analytics_sensor_health),
         )
@@ -2143,6 +2147,13 @@ async fn analytics_hp_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
     Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_hp(&req).await.to_json(),
+    }))
+}
+
+async fn analytics_zone_other_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::plant_health::handle_zone_other(&req).await.to_json(),
     }))
 }
 

@@ -75,6 +75,7 @@ export interface PlantEquipmentFamilies {
   hasHeatPump: boolean;
   hasVav: boolean;
   hasWeather: boolean;
+  hasZoneOther: boolean;
 }
 
 /** Data-model driven — only show health matrices when equipment exists in package. */
@@ -88,6 +89,7 @@ export function plantEquipmentFamilies(
   let hasBoiler = false;
   let hasHeatPump = false;
   let hasVav = false;
+  let hasZoneOther = false;
   const hasWeather = equipment.some((e) => isWeatherEquipment(e));
 
   for (const e of items) {
@@ -95,6 +97,13 @@ export function plantEquipmentFamilies(
     const kind = String(e.equipment_type ?? "").trim().toUpperCase();
     const tower = isCoolingTowerEquipment(e);
     if (kind === "VAV" || isZoneTerminalEquipment(e)) hasVav = true;
+    if (
+      kind === "ZONE_OTHER" ||
+      kind === "ZONE OTHER" ||
+      kind === "ZONEOTHER"
+    ) {
+      hasZoneOther = true;
+    }
     if (kind === "AHU" || plantGroupFor(id) === "air") hasAhu = true;
     if (tower) hasCoolingTower = true;
     if (kind === "PLANT" && plantGroupFor(id) === "boiler") hasBoiler = true;
@@ -114,5 +123,6 @@ export function plantEquipmentFamilies(
     hasHeatPump,
     hasVav,
     hasWeather,
+    hasZoneOther,
   };
 }

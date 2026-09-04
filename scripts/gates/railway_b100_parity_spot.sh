@@ -181,6 +181,7 @@ def extract(side):
         "fc1_fault_hours": fh,
         "poll_seconds": run.get("poll_seconds"),
         "has_confirmed_fault": series.get("has_confirmed_fault"),
+        "fault_overlay_true_hits": series.get("fault_overlay_true_hits"),
         "series_ok": series.get("ok"),
         "run_hours": ahu_runtime(runtime),
         "duct_low": duct_low(load(side, "ahu_pressure_health.json")),
@@ -199,6 +200,12 @@ if railway and not local.get("version") and not (root / "local").is_dir():
     add("fc1_fault_hours", railway.get("fc1_fault_hours") is not None, f"railway={railway.get('fc1_fault_hours')}")
     add("runtime", railway.get("run_hours") is not None, f"railway={railway.get('run_hours')}")
     add("series_confirmed_fault", railway.get("has_confirmed_fault") is True, f"railway={railway.get('has_confirmed_fault')}")
+    true_hits = railway.get("fault_overlay_true_hits")
+    add(
+        "series_confirmed_true_hits",
+        isinstance(true_hits, int) and true_hits > 0,
+        f"railway={true_hits}",
+    )
     add("poll_seconds", railway.get("poll_seconds") is not None, f"railway={railway.get('poll_seconds')}")
 elif railway:
     lf, rf = local.get("fc1_fault_hours"), railway.get("fc1_fault_hours")
@@ -217,6 +224,12 @@ elif railway:
         "series_confirmed_fault",
         local.get("has_confirmed_fault") is True and railway.get("has_confirmed_fault") is True,
         f"local={local.get('has_confirmed_fault')} railway={railway.get('has_confirmed_fault')}",
+    )
+    lt, rt = local.get("fault_overlay_true_hits"), railway.get("fault_overlay_true_hits")
+    add(
+        "series_confirmed_true_hits",
+        isinstance(lt, int) and lt > 0 and isinstance(rt, int) and rt > 0,
+        f"local={lt} railway={rt}",
     )
     lp, rp = local.get("poll_seconds"), railway.get("poll_seconds")
     if lp is not None and rp is not None:
