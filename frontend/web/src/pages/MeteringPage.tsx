@@ -22,7 +22,7 @@ export function MeteringPage() {
         <InlineAlert id="metering-scope" variant="info" testId="metering-scope">
           Import a building package with <code>utilities_v1</code> (or wrapper{" "}
           <code>utility_bills_monthly.csv</code>, e.g. Creekside) on{" "}
-          <Link to="/uploads">Uploads</Link> / <Link to="/sites">Sites</Link>.
+          <Link to="/upload">Upload</Link> / <Link to="/sites">Sites</Link>.
           Metering reads package utilities for the active site
           {siteId ? (
             <>

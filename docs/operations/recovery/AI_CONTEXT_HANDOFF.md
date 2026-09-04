@@ -32,7 +32,7 @@ Optional local Cursor UI copies: `~/.cursor/plans/*.plan.md` (same content mirro
 
 ## Current product pain (why the trains exist)
 
-1. **Export & ML** tab = confusing multi-page (Uploads / Fuel / Twin / ECM) — want **one Dump**; CSV ingest **left rail only**
+1. ~~**Export & ML** tab = confusing multi-page~~ → **3.3.22 One Dump** (ingest left-rail Upload)
 2. **Faults** feels like a wall of settings — Lab should own tuners; Faults own outcomes
 3. **Lab tuners ~184** vs **Vibe19 UI ~414** — largest gaps GL36 FC2/3/8–15
 

@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-09-04 — 3.3.21 closeout CLOSED + 3.3.22 Dump IA (product)
+
+- **Closeout pin:** `792ebeec` / **`sha-792ebee`** / health **`3.3.21+792ebeec4be3`**. Backup `~/openfdd-backups/railway/20260904T193732Z/`. Stress `reports/nightly-ot-bench_20260904T194123Z/` + ZAP `reports/zap-railway_20260904T194203Z/` (`FAIL-NEW:0`).
+- **DEFERRED:** bldg2 Overview site cleanup → 3.3.26; B50; deep ZAP.
+- **3.3.22 product:** VERSION **3.3.22**; nav **Dump**; single dump workflow (no Uploads/Fuel/Twin/ECM radio); ingest via Upload / Sites only; Metering keeps package utilities.
+- Next after merge: GHCR → Railway re-pin → stress → Verdict 3.3.22 → then 3.3.23 Faults Lab declutter.
+
 ## 2026-09-04 — Bench recovery pack + patch trains mirrored in-repo
 
 - Added `docs/operations/BENCH_RECOVERY.md`, `docs/operations/recovery/AI_CONTEXT_HANDOFF.md`
