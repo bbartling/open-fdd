@@ -18,7 +18,10 @@ if [[ "${OPENFDD_FIELD_IDENTITY_FROM_ENV:-0}" != "1" ]]; then
   export OPENFDD_MQTT_HOST=reseau.proxy.rlwy.net
   export OPENFDD_MQTT_PORT=44763
   export OPENFDD_SITE_ID=bldg2
-  export OPENFDD_EDGE_ID=bensbench-1
+  # Live broker CA has no ca.key.pem on Railway — reuse the already-signed
+  # pi-1 kit on this x86 host (physical Pi is stopped). Override when a
+  # CA-signed bensbench-1 kit exists.
+  export OPENFDD_EDGE_ID="${OPENFDD_RAILWAY_EDGE_ID:-pi-1}"
 fi
 export OPENFDD_EDGE_KIT_DIR="${OPENFDD_EDGE_KIT_DIR:-$ROOT/deploy/mqtt/kits/${OPENFDD_SITE_ID}__${OPENFDD_EDGE_ID}}"
 
