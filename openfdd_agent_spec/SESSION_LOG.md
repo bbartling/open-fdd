@@ -3,7 +3,7 @@
 ## 2026-09-03 — 3.3.20 VERSION + x86 field → Railway hub (start)
 
 - Bump **3.3.19 → 3.3.20**. Closeout path is Railway hub + bensbench fieldbus only.
-- Raspberry Pis (`192.168.204.12/13/14`) **out** of Open-FDD stress (vibe13 / other).
+- Raspberry Pis (bosspi / BensFakeAhu / Zone1VAV) **out** of Open-FDD stress (vibe13 / other).
 - Harness: `openfdd_fieldbus_railway_up.sh`, `run_railway_hub_stress.sh`, [`PATCH_CYCLE.md`](../docs/operations/PATCH_CYCLE.md).
 - Prior utilities train remains CLOSED @ `d83dbf91` / `sha-0c1029d`.
 

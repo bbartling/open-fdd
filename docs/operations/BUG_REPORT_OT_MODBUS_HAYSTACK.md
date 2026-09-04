@@ -4,8 +4,8 @@
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in stress)  
 **Last closed utilities train:** tip `d83dbf91` / `sha-0c1029d` / `3.3.19+0c1029da60c7`  
 **This cycle pin:** *fill after GHCR* `sha-<7>` / `3.3.20+…`  
-**Field:** bensbench → MQTTS `reseau.proxy.rlwy.net:44763` (`bldg2` / `bensbench-1`)  
-**Pis freed:** `192.168.204.12` bosspi · `.13` BensFakeAhu · `.14` Zone1VAV (vibe13 / other)
+**Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2`; MQTT client id currently reused `pi-1` kit — Railway mqtt volume has CA cert but no CA key, so a newly minted `bensbench-1` kit will not verify)  
+**Pis freed (not in stress):** bosspi · BensFakeAhu (fake AHU) · Zone1VAV (fake VAV) — vibe13 / other. Private OT LAN addresses stay in session env only.
 
 ## Next patch cycle (copy into `.cursor/plans/patch_cycle_3.3.N_<slug>.plan.md`)
 
@@ -218,8 +218,8 @@ Script: `scripts/nightly-ot-bench/18_volume_restore_smoke.sh`
 ## Ops notes
 
 1. Backup before every central re-pin.  
-2. Re-pin order: central → mqtt → web; bosspi fieldbus.  
+2. Re-pin order: central → mqtt → web, then `./scripts/openfdd_fieldbus_railway_up.sh sha-<7>` on this x86 host.  
 3. After mqtt/central redeploy: `railway redeploy -s openfdd-central-cQ-F` if `edges:0` persists.  
-4. Bench refresh: `./scripts/openfdd_maint_update_resume.sh react-ot sha-<tip>` (`--skip-maintenance` after operator docker prune).  
-5. Full stress **LAST**: `unset SKIP_PULL` for gate 00 pull evidence; `WEATHER_SOAK_SECS=120` on low-RAM.  
+4. Do **not** bring local `react-ot` or Raspberry Pi fieldbus back for closeout.  
+5. Full stress **LAST**: `./scripts/nightly-ot-bench/run_railway_hub_stress.sh` (CSV synth59 + gate 17 + B100 `RAILWAY_ONLY=1` + Creekside + gate 19 + light ZAP).  
 6. `OPENFDD_PARQUET_ROOT=/workspace/openfdd` on Railway when `STORAGE_URL=file:///workspace/openfdd`.
