@@ -140,6 +140,19 @@ Intended for **LAN / VPN / OT networks**, not public internet hosting.
 
 Do **not** report vulnerabilities through public GitHub issues or discussions. Use [GitHub Private Vulnerability Reporting](https://github.com/bbartling/open-fdd/security/advisories/new). See [SECURITY.md](SECURITY.md) for what to include and how to redact sensitive OT/deployment evidence.
 
+## 💛 Support Open-FDD
+
+If Open-FDD saves you time or helps with BAS/FDD work, you can support continued open-source development through PayPal.
+
+<p align="center">
+  <a href="https://www.paypal.com/donate/?business=VBRBPMBZ6ZKM8&amount=25&no_recurring=0&item_name=Thank+you+for+supporting+open+source+building+automation+system+software+development&currency_code=USD"><img src="https://img.shields.io/badge/Donate-$25-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate $25 via PayPal"></a>
+  <a href="https://www.paypal.com/donate/?business=VBRBPMBZ6ZKM8&amount=50&no_recurring=0&item_name=Thank+you+for+supporting+open+source+building+automation+system+software+development&currency_code=USD"><img src="https://img.shields.io/badge/Donate-$50-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate $50 via PayPal"></a>
+  <a href="https://www.paypal.com/donate/?business=VBRBPMBZ6ZKM8&amount=250&no_recurring=0&item_name=Thank+you+for+supporting+open+source+building+automation+system+software+development&currency_code=USD"><img src="https://img.shields.io/badge/Donate-$250-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate $250 via PayPal"></a>
+  <a href="https://www.paypal.com/donate/?business=VBRBPMBZ6ZKM8&no_recurring=0&item_name=Thank+you+for+supporting+open+source+building+automation+system+software+development&currency_code=USD"><img src="https://img.shields.io/badge/Donate-Custom%20Amount-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Choose a custom PayPal donation amount"></a>
+</p>
+
+The repository Sponsor button uses the same custom PayPal donation page so the popup stays clean with a single external link.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
