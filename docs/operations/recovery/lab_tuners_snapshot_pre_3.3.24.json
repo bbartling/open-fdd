@@ -1,0 +1,674 @@
+{
+  "generated": "2026-09-04",
+  "note": "Open-FDD Lab-facing tuners (confirm_seconds\u2192confirm_min). Pre tuner-wave baseline ~184 sum.",
+  "rule_count": 68,
+  "lab_tuner_sum": 184,
+  "rules": [
+    {
+      "rule_id": "FAN-RUNTIME-HOURS",
+      "lab_n": 1,
+      "lab_keys": [
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-1",
+      "lab_n": 3,
+      "lab_keys": [
+        "zone_t_lo",
+        "zone_t_hi",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-2",
+      "lab_n": 2,
+      "lab_keys": [
+        "setback_hi",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "AVG-ZONE-TEMP",
+      "lab_n": 3,
+      "lab_keys": [
+        "zone_t_lo",
+        "zone_t_hi",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "ZONE-COMFORT-PCT",
+      "lab_n": 3,
+      "lab_keys": [
+        "zone_t_lo",
+        "zone_t_hi",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FAULT-ELAPSED-HOURS",
+      "lab_n": 3,
+      "lab_keys": [
+        "zone_t_lo",
+        "zone_t_hi",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "OAT-METEO",
+      "lab_n": 2,
+      "lab_keys": [
+        "oat_err",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC13-SAT-HIGH",
+      "lab_n": 5,
+      "lab_keys": [
+        "sat_err",
+        "clg_valve_min",
+        "oa_damper_econ_low",
+        "oa_damper_econ_high",
+        "confirm_min"
+      ],
+      "aliases": [
+        "FC13"
+      ]
+    },
+    {
+      "rule_id": "ECON-2",
+      "lab_n": 3,
+      "lab_keys": [
+        "econ2_oat_hi",
+        "econ2_damper",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC1",
+      "lab_n": 3,
+      "lab_keys": [
+        "eps_dsp",
+        "eps_vfd_spd",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC2",
+      "lab_n": 1,
+      "lab_keys": [
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC3",
+      "lab_n": 1,
+      "lab_keys": [
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC7",
+      "lab_n": 3,
+      "lab_keys": [
+        "sat_err",
+        "htg_full_min",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC8",
+      "lab_n": 1,
+      "lab_keys": [
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC9",
+      "lab_n": 1,
+      "lab_keys": [
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC10",
+      "lab_n": 1,
+      "lab_keys": [
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC11",
+      "lab_n": 1,
+      "lab_keys": [
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC12",
+      "lab_n": 1,
+      "lab_keys": [
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "ECON-1",
+      "lab_n": 3,
+      "lab_keys": [
+        "econ1_oat_min",
+        "econ1_damper_max",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "ECON-4",
+      "lab_n": 2,
+      "lab_keys": [
+        "oa_min_pct",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "SV-RANGE",
+      "lab_n": 2,
+      "lab_keys": [
+        "range_scale_temperature",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "SV-FLATLINE",
+      "lab_n": 3,
+      "lab_keys": [
+        "flatline_tol",
+        "flatline_hours",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "SV-SPIKE",
+      "lab_n": 2,
+      "lab_keys": [
+        "spike_scale",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "SV-STALE",
+      "lab_n": 3,
+      "lab_keys": [
+        "stale_hours",
+        "stale_tol",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "SV-RATE",
+      "lab_n": 3,
+      "lab_keys": [
+        "persistence_min",
+        "steady_fault_per_hour",
+        "confirm_min"
+      ],
+      "aliases": [
+        "SV-SLEW"
+      ]
+    },
+    {
+      "rule_id": "PID-HUNT-1",
+      "lab_n": 8,
+      "lab_keys": [
+        "window_hours",
+        "change_deadband_pct",
+        "minimum_span_pct",
+        "total_variation_fault_pct",
+        "minimum_equivalent_cycles",
+        "minimum_reversals",
+        "minimum_coverage_pct",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC4",
+      "lab_n": 2,
+      "lab_keys": [
+        "delta_os_max",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC5",
+      "lab_n": 3,
+      "lab_keys": [
+        "mix_tol",
+        "htg_on_min",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC6",
+      "lab_n": 4,
+      "lab_keys": [
+        "airflow_err",
+        "delta_t_min",
+        "min_cfm_design",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC14",
+      "lab_n": 2,
+      "lab_keys": [
+        "mix_tol",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC15",
+      "lab_n": 2,
+      "lab_keys": [
+        "mix_tol",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "AHU-SATDEV",
+      "lab_n": 2,
+      "lab_keys": [
+        "sat_dev_err",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "AHU-DUCTHI",
+      "lab_n": 3,
+      "lab_keys": [
+        "duct_high_margin",
+        "pressure_on_min",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "AHU-SIMUL",
+      "lab_n": 2,
+      "lab_keys": [
+        "valve_open_pct",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "ECON-3",
+      "lab_n": 5,
+      "lab_keys": [
+        "econ3_db_min",
+        "econ3_db_max",
+        "econ3_dp_max",
+        "econ3_damper_hi",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "ECON-5",
+      "lab_n": 2,
+      "lab_keys": [
+        "preheat_over_f",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "ECON-6",
+      "lab_n": 3,
+      "lab_keys": [
+        "econ6_oat_max_f",
+        "econ6_damper_max",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "ECON-7",
+      "lab_n": 5,
+      "lab_keys": [
+        "econ7_db_min",
+        "econ7_db_max",
+        "econ7_dp_max",
+        "econ7_damper_min",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "MECH-OAT-1",
+      "lab_n": 2,
+      "lab_keys": [
+        "mech_oat_max_f",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CMD-1",
+      "lab_n": 1,
+      "lab_keys": [
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "OA-1",
+      "lab_n": 3,
+      "lab_keys": [
+        "min_oa_frac",
+        "oat_rat_guard",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "DMP-1",
+      "lab_n": 2,
+      "lab_keys": [
+        "leak_delta",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VLV-1",
+      "lab_n": 3,
+      "lab_keys": [
+        "sat_err",
+        "mat_leak_delta",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-3",
+      "lab_n": 4,
+      "lab_keys": [
+        "reheat_oat",
+        "reheat_pct",
+        "flow_on_min",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-4",
+      "lab_n": 4,
+      "lab_keys": [
+        "full_open_pct",
+        "flow_on_min",
+        "sustain_hours",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-5",
+      "lab_n": 1,
+      "lab_keys": [
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-6",
+      "lab_n": 3,
+      "lab_keys": [
+        "free_cool_oat",
+        "reheat_pct",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-REHEAT",
+      "lab_n": 4,
+      "lab_keys": [
+        "reheat_cmd",
+        "min_rise",
+        "flow_on_min",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-AHU-LEAVE",
+      "lab_n": 3,
+      "lab_keys": [
+        "delta_f",
+        "flow_on_min",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-7",
+      "lab_n": 6,
+      "lab_keys": [
+        "high_min_flow_sp",
+        "flow_on_min",
+        "fixed_flow_hours",
+        "fixed_flow_max_std",
+        "fixed_flow_min_mean",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "RESET-1",
+      "lab_n": 5,
+      "lab_keys": [
+        "reset_err_f",
+        "reset_sat_at_65",
+        "reset_slope",
+        "reset_oat_ref",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CHW-NOLOAD-1",
+      "lab_n": 1,
+      "lab_keys": [
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CHW-1",
+      "lab_n": 2,
+      "lab_keys": [
+        "min_dt",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CHW-2",
+      "lab_n": 3,
+      "lab_keys": [
+        "dp_margin",
+        "pump_hi",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CHW-3",
+      "lab_n": 2,
+      "lab_keys": [
+        "sp_band",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CHW-4",
+      "lab_n": 3,
+      "lab_keys": [
+        "flow_hi",
+        "pump_hi",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CW-OPT-1",
+      "lab_n": 3,
+      "lab_keys": [
+        "cw_approach",
+        "cw_slack",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CW-APR-1",
+      "lab_n": 3,
+      "lab_keys": [
+        "approach_max_f",
+        "tower_fan_hi",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CW-FAN-1",
+      "lab_n": 4,
+      "lab_keys": [
+        "cw_approach",
+        "excess_beyond_approach_f",
+        "tower_fan_hi",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "HP-1",
+      "lab_n": 3,
+      "lab_keys": [
+        "min_sat",
+        "zone_cold",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "WX-1",
+      "lab_n": 2,
+      "lab_keys": [
+        "spike_limit",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "TRIM-1",
+      "lab_n": 3,
+      "lab_keys": [
+        "duct_hi",
+        "request_lo",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "TRIM-3",
+      "lab_n": 3,
+      "lab_keys": [
+        "hwst_hi",
+        "request_lo",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "TRIM-4",
+      "lab_n": 3,
+      "lab_keys": [
+        "chw_lo",
+        "request_lo",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "SCHED-1",
+      "lab_n": 3,
+      "lab_keys": [
+        "comfort_low_f",
+        "comfort_high_f",
+        "confirm_min"
+      ],
+      "aliases": [
+        "excess_runtime"
+      ]
+    },
+    {
+      "rule_id": "SCHED-247",
+      "lab_n": 2,
+      "lab_keys": [
+        "always_on_pct",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "UTIL-MONTHLY",
+      "lab_n": 2,
+      "lab_keys": [
+        "util_pct_err",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "UTIL-INTERVAL",
+      "lab_n": 2,
+      "lab_keys": [
+        "util_interval_mae",
+        "confirm_min"
+      ],
+      "aliases": []
+    }
+  ]
+}

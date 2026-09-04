@@ -12,7 +12,9 @@ Copy this file’s **Cursor plan YAML** into `.cursor/plans/patch_cycle_3.3.N_<s
 **Field:** bensbench **x86** `openfdd-fieldbus` only → Railway MQTTS.  
 **Pis:** not in Open-FDD stress (freed for vibe13 / other benches).
 
-Living evidence: [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md). Stress handbook: [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md).
+Living evidence: [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md). Stress handbook: [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md).  
+**Machine death / new bench:** [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md). **AI handoff:** [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
+**Active series (3.3.21–3.3.26):** [`patch_trains/`](patch_trains/) (mirrored Cursor plans — keep GitHub as source of truth).
 
 ## Rev bump rule
 
