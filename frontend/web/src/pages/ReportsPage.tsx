@@ -536,7 +536,7 @@ export function ReportsPage() {
 
           <RadioGroup
             id="plots-status"
-            label="Status"
+            label="Result status (outcomes only — thresholds stay in Lab)"
             value={statusFilter}
             options={STATUS_FILTERS.map((s) => ({ value: s, label: s }))}
             onChange={(v) => setStatusFilter(v as FddStatusFilter)}
