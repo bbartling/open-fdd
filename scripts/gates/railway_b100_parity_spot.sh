@@ -69,14 +69,18 @@ capture_side() {
 echo "== BUILDING_100 parity capture =="
 echo "artifact=$ART"
 
-LOCAL_PASS="${OPENFDD_ADMIN_PASSWORD:-}"
-if [[ -z "$LOCAL_PASS" ]]; then
-  echo "ERROR: OPENFDD_ADMIN_PASSWORD required in env or $ROOT/.env" >&2
-  exit 2
+if [[ "${RAILWAY_ONLY:-0}" != "1" ]]; then
+  LOCAL_PASS="${OPENFDD_ADMIN_PASSWORD:-}"
+  if [[ -z "$LOCAL_PASS" ]]; then
+    echo "ERROR: OPENFDD_ADMIN_PASSWORD required in env or $ROOT/.env" >&2
+    exit 2
+  fi
+  LOCAL_TOKEN="$(login "$LOCAL_BASE" admin "$LOCAL_PASS")"
+  [[ -n "$LOCAL_TOKEN" ]] || { echo "ERROR: local login failed" >&2; exit 2; }
+  capture_side local "$LOCAL_BASE" "$LOCAL_TOKEN"
+else
+  echo "RAILWAY_ONLY=1 — skip local hub capture"
 fi
-LOCAL_TOKEN="$(login "$LOCAL_BASE" admin "$LOCAL_PASS")"
-[[ -n "$LOCAL_TOKEN" ]] || { echo "ERROR: local login failed" >&2; exit 2; }
-capture_side local "$LOCAL_BASE" "$LOCAL_TOKEN"
 
 RAILWAY_PASS="${RAILWAY_ADMIN_PASSWORD:-}"
 if [[ -z "$RAILWAY_PASS" ]] && command -v railway >/dev/null 2>&1; then
@@ -191,7 +195,12 @@ def add(name, ok, detail):
     checks.append({"name": name, "ok": bool(ok), "detail": detail})
 
 
-if railway:
+if railway and not local.get("version") and not (root / "local").is_dir():
+    add("fc1_fault_hours", railway.get("fc1_fault_hours") is not None, f"railway={railway.get('fc1_fault_hours')}")
+    add("runtime", railway.get("run_hours") is not None, f"railway={railway.get('run_hours')}")
+    add("series_confirmed_fault", railway.get("has_confirmed_fault") is True, f"railway={railway.get('has_confirmed_fault')}")
+    add("poll_seconds", railway.get("poll_seconds") is not None, f"railway={railway.get('poll_seconds')}")
+elif railway:
     lf, rf = local.get("fc1_fault_hours"), railway.get("fc1_fault_hours")
     if lf is not None and rf is not None:
         add("fc1_fault_hours_parity", abs(lf - rf) <= fault_tol, f"local={lf} railway={rf} tol={fault_tol}")

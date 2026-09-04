@@ -1,0 +1,10 @@
+# bensbench x86 fieldbus → Railway MQTTS hub. No Raspberry Pi.
+# Pair with compose.edge.yml. Do not set OPENFDD_FIELDBUS_DEV_FAST_POLL.
+services:
+  fieldbus:
+    environment:
+      OPENFDD_MQTT_PUBLISH_INTERVAL_SECS: "60"
+      OPENFDD_FIELDBUS_POLL_INTERVAL_SECS: "60"
+      OPENFDD_BUILDING_ID: "bldg2"
+      OPENFDD_EQUIPMENT_TYPE: "zone_other"
+      OPENFDD_FIELDBUS_DEV_FAST_POLL: "0"

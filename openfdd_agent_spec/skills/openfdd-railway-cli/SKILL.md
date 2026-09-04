@@ -21,7 +21,7 @@ Checklist: [`RAILWAY_DEPLOYMENT_CHECKLIST.md`](../../../docs/operations/RAILWAY_
 | Package | `@railway/cli` via `npm i -g @railway/cli` |
 | Auth | **`railway login`** (browser) — verified; optional `RAILWAY_TOKEN` in `~/.config/railway/bensbench.env` |
 | Link | `~/open-fdd` → project **`gleaming-cooperation`**, env **`production`** |
-| **Product hub pin (shipped)** | **`sha-0c1029d`** / `3.3.19+0c1029da60c7` (tip after #829; 3.3.20 stress closeout) |
+| **Product hub pin** | Bump each cycle — health must match pinned `sha-<7>` (`3.3.N+…`) |
 | Stress closeout | After re-pin — [`STRESS_CLOSEOUT.md`](../../../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md) |
 | Local firewall hub | HTTP only — [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md) |
 
@@ -37,17 +37,16 @@ Always `railway status` / `railway service list` before re-pin — do **not** as
 
 Post-auth snapshot (pre tip re-pin): mqtt Online on `sha-3395551`; web **Crashed** with `invalid port in resolver "fd12::10"` (needs tip `openfdd-web:sha-9667888` + `OPENFDD_NGINX_RESOLVER=auto`).
 
-## Patch train (bosspi → Railway + stress LAST)
+## Patch train (x86 fieldbus → Railway + stress LAST)
 
-Do **not** treat bensbench dual-MQTT as the cloud gate. After each tiny rev / ops fix:
+See [`PATCH_CYCLE.md`](../../../docs/operations/PATCH_CYCLE.md). After each tiny rev:
 
-1. Tip Actions green + GHCR Publish (`sha-*` == nightly digest when retargeted)
+1. Tip Actions green + GHCR Publish
 2. GH tidy (0 open PRs; delete feature branch)
-3. **Backup** then re-pin central → mqtt → web; bosspi fieldbus arm64 to same `sha-*`
-4. Gates: L1 `/api/health` → L3 mqtt Online + ingest → L4 Pi `has_telemetry` → stream healthy → L5 FDD
-5. **Local bench:** `openfdd_maint_update_resume.sh react-ot sha-* --skip-maintenance` (HTTP `:3000`/`:8080`, **no TLS**)
-6. **Stress LAST:** full matrix in [`STRESS_CLOSEOUT.md`](../../../docs/operations/STRESS_CLOSEOUT.md) (`run_all` → synth59 → gate17 → B100 → Creekside → gate19 → optional ZAP)
-7. Sync [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../../../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) — tip-pin artifact paths only
+3. **Backup** then re-pin central → mqtt → web
+4. `./scripts/openfdd_fieldbus_railway_up.sh sha-<7>` (bensbench x86 only — no Pi)
+5. `./scripts/nightly-ot-bench/run_railway_hub_stress.sh`
+6. Sync [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../../../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md)
 
 MQTT certs: `railway volume add` on `openfdd-mqtt` at `/mosquitto/certs`, upload `ca.pem` + server cert/key. Pi reachability: `railway tcp-proxy create --port 8883 --service openfdd-mqtt` (human-approved) or VPN. Never commit PEMs/tokens.
 
@@ -78,7 +77,7 @@ railway status >/dev/null 2>&1 || railway link
 # Expect: gleaming-cooperation / production
 
 # 4) Re-pin tip — use REAL service names from status
-SHA=sha-0c1029d   # tip pin. Health must match THIS tag (3.3.19+0c1029da…).
+SHA=sha-<7>   # tip pin. Health must match THIS tag (3.3.N+…).
 CENTRAL_SVC=openfdd-central-cQ-F   # confirm via railway status
 
 railway service source connect --service "$CENTRAL_SVC" \
@@ -98,7 +97,7 @@ railway service source connect --service openfdd-web \
 
 Smoke: public SPA + `https://<web>/api/health`. Sidebar / `/api/health` version must match the **pinned** SHA (`3.3.19+15baccf…` for `sha-15baccf`).
 
-**Dual pipeline:** bosspi → Railway only; bensbench local `react-ot` for firewall/on-prem. After tip GHCR publish, pull **the same** `sha-*` for central/mqtt/fieldbus **and** web when the checkout matches that tip. Use a local Overview overlay / bind-mount **only** if `frontend/web` is dirty or unmerged (GHCR web would be stale). Local UI/API are **plain HTTP** (`:3000`/`:8080`) — **no product TLS yet**; keep behind firewall. Do not cross-wire edges for the parity gate. See [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md).
+**Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS only. Raspberry Pis are out of stress. See [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md).
 
 ## BACKUP before every central re-pin (hard gate)
 
@@ -110,9 +109,9 @@ cd ~/open-fdd
 
 Re-pin = **image tag only**. Never delete/recreate the `/workspace` volume. Docs: [`backup-update-restore.md`](../../../docs/operations/backup-update-restore.md).
 
-**Always pin tip after Publish:** production showing `3.3.9+2dce59a` while tip is newer is an automatic P0 fail. After GHCR Publish, re-pin central + mqtt + web + bosspi fieldbus to the same `sha-<7>`.
+**Always pin tip after Publish:** stale `3.3.N+oldsha` on Railway while tip is newer is a P0 fail. Re-pin central + mqtt + web + x86 fieldbus to the same `sha-<7>`.
 
-## OT floor (bosspi)
+## OT floor (x86 fieldbus)
 
 `OPENFDD_FIELDBUS_POLL_INTERVAL_SECS=60` and `OPENFDD_MQTT_PUBLISH_INTERVAL_SECS=60`. Never set `OPENFDD_FIELDBUS_DEV_FAST_POLL=1` in production.
 

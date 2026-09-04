@@ -23,8 +23,9 @@ If a customer needs HTTPS on-prem, that is an **ops add-on** (reverse proxy / Ca
 
 | Recipe | Compose | Use |
 |--------|---------|-----|
-| `react` | web + central (+ optional) | CSV / package lab UI |
-| **`react-ot`** | + fieldbus + mqtt | OT soak / nightly stress (default bench) |
+| **`edge` + `compose.edge.railway.yml`** | fieldbus only → Railway MQTTS | **Patch-cycle default** — `./scripts/openfdd_fieldbus_railway_up.sh sha-*` |
+| `react` | web + central (+ optional) | Optional local CSV lab UI (not closeout) |
+| `react-ot` | + fieldbus + mqtt | Optional local OT lab (not closeout; no Pis) |
 
 Docs: [build-recipes.md](build-recipes.md) · agent: [`CONTAINER_AGENT.md`](../../openfdd_agent_spec/CONTAINER_AGENT.md) · skill [`openfdd-stack-ghcr`](../../openfdd_agent_spec/skills/openfdd-stack-ghcr/SKILL.md).
 
@@ -48,12 +49,9 @@ curl -sf http://127.0.0.1:8080/api/health | jq '{ok,version,service}'
 
 MQTT ACL for local: place under `deploy/mqtt/certs/acl` (tip mqtt images read `acl_file /mosquitto/certs/acl`).
 
-## Dual pipeline
+## Dual pipeline (retired for closeout)
 
-- **Local** = Pipeline B (firewall dashboard + optional local OT).
-- **Railway** = Pipeline A (bosspi → cloud MQTTS). Bootstrap: [`RAILWAY_DEPLOYMENT.md`](RAILWAY_DEPLOYMENT.md).
-
-Same tip `sha-*` both sides. Do not cross-wire for parity.
+Patch-cycle OT is **one** MQTTS path: this x86 fieldbus → Railway. Raspberry Pis are not in stress. Optional local `react-ot` is a lab only — do not use it as the AFDD head-end. Hub bootstrap: [`RAILWAY_DEPLOYMENT.md`](RAILWAY_DEPLOYMENT.md).
 
 ## MCP against local central
 
@@ -65,9 +63,9 @@ export OPENFDD_MCP_TOKEN=…
 
 Use `http://` (not `https://`) for local Compose. See [`mcp/README.md`](../../mcp/README.md).
 
-## Stress on local
+## Stress
 
-After re-pin, run the stress matrix in [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) (`run_all`, synth59, gate 17, …). STRESS 7 (ZAP) targets **Railway public URL**, not the local HTTP dashboard.
+Closeout: [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) / `./scripts/nightly-ot-bench/run_railway_hub_stress.sh` against **Railway**. ZAP targets the Railway public URL.
 
 ## Anti-patterns
 

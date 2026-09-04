@@ -84,7 +84,7 @@ retest. Do not confuse those with this engineering OS.
 38. **E+ dump / clustering:** prefer `reports/eplus-dump/` (`EPLUS_DUMP_ROOT`); `scripts/eplus_dump_clustering_export.py` emits sklearn-ready features. Online: `scripts/agent_eplus_dump.sh` (calls `/exports` or deprecated `/wattlab/dumps`). Bundle schema: `openfdd_engineering_bundle_v1`. Doc: [`docs/agent/EPLUS_DUMP_CLUSTERING.md`](../docs/agent/EPLUS_DUMP_CLUSTERING.md).
 39. **Railway hub CLI (bensbench):** `@railway/cli` via `npm i -g`; auth via `railway login` (verified) or optional `RAILWAY_TOKEN` in `~/.config/railway/bensbench.env`. Linked project **`gleaming-cooperation`** / **`production`**. Re-pin with **live** service names (`openfdd-central-cQ-F`, `openfdd-mqtt`, `openfdd-web`) per [`skills/openfdd-railway-cli/SKILL.md`](skills/openfdd-railway-cli/SKILL.md). Railway CLI ≠ [`mcp/`](../mcp/) FDD tools. Never commit tokens; never treat Railway AI as the FDD agent.
 40. **Always pin tip after Publish:** hub sidebar/`/api/health` must match tip `sha-*`. Stale `3.3.9` while tip is newer is a P0 fail. **Backup** `/workspace` before every central re-pin (`scripts/railway_central_workspace_backup.sh`).
-41. **Dual pipeline:** bosspi → Railway (cloud exclusive); bensbench local GHCR react stack for firewall/on-prem. Same tip `sha-*` both sides; 60s poll+publish on both edges; do not cross-wire for parity.
+41. **Field → Railway only:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS. Raspberry Pis are **out** of Open-FDD stress. Do not stand up local `react-ot` as the patch-cycle AFDD head-end. 60s poll+publish. Handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · [`PATCH_CYCLE.md`](../docs/operations/PATCH_CYCLE.md).
 42. **FDD + STORAGE_URL:** when `OPENFDD_STORAGE_URL=file:///workspace/openfdd`, set `OPENFDD_PARQUET_ROOT=/workspace/openfdd` so `/api/fdd/run` finds package historian parquet (else “parquet cache missing”).
 43. **Tip mqtt ACL path:** `acl_file /mosquitto/certs/acl` — local stacks must place ACL under `deploy/mqtt/certs/acl`, not only `deploy/mqtt/acl`.
 44. **Stream roles ≠ package roles until mapped:** live tags `zonetemp`/`sa_t` normalize to `zone_t`/`sat`. Empty Overview with rising `ingest_ok` ⇒ roles, not nginx. OT poll+MQTT publish floor **60s**.
@@ -93,9 +93,9 @@ retest. Do not confuse those with this engineering OS.
 47. **Package utilities (#805):** `openfdd_package_v1` may include `utilities/manifest.json` (`utilities_v1`) with `electric/monthly_bills.csv`, optional interval/submeter CSVs, or wrapper-level `utility_bills_monthly.csv` (Creekside). Ingest code: [`edge/src/csv_ingest/package.rs`](../edge/src/csv_ingest/package.rs). Legacy fuel campus ZIP: [`services/central/src/fuel/import.rs`](../services/central/src/fuel/import.rs) (read-only).
 48. **Utility meter FDD:** `UTIL-MONTHLY` / `UTIL-INTERVAL` in `sql_rules/registry.yaml` compare BAS vs utility bills/intervals; `SV-*` rules accept `kwh` / `electric_kw` roles on `meter` equipment. Modeling skill: [`skills/data-modeling/SKILL.md`](skills/data-modeling/SKILL.md).
 49. **Local deploy = HTTP behind firewall** — Compose UI `:3000` / API `:8080` are **plain HTTP**; product local stack does **not** terminate TLS yet. Do not expose to the public internet; do not claim local HTTPS unless an ops reverse proxy is documented. Handbook: [`docs/operations/LOCAL_DEPLOYMENT.md`](../docs/operations/LOCAL_DEPLOYMENT.md).
-50. **Stress LAST (rigorous closeout):** after tip GHCR + Railway/local re-pin — smoke → `run_all` 00–16 → synth59 → gate 17 → B100 Railway vs local → Creekside → gate 19 bundle → optional light OWASP ZAP on **Railway public URL only**. Cite tip-pin artifacts only (never older-pin stress as proof). Handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](skills/openfdd-stress-closeout/SKILL.md).
+50. **Stress LAST (rigorous closeout):** after tip GHCR + Railway hub re-pin + x86 fieldbus up — `run_railway_hub_stress.sh` (edges + synth59 + gate 17 + B100 `RAILWAY_ONLY=1` + Creekside + gate 19 + light OWASP ZAP on **Railway public URL**). Cite tip-pin artifacts only. Next-rev template: [`PATCH_CYCLE.md`](../docs/operations/PATCH_CYCLE.md). Skill [`openfdd-stress-closeout`](skills/openfdd-stress-closeout/SKILL.md).
 
-**Current ops pin (2026-09-03):** tip `233e6cf6` / product **`sha-15baccf`** / **3.3.19** — engineering export shipped; stress closeout remaining per STRESS_CLOSEOUT + plan 3.3.20. Verdict in BUG_REPORT (flesh after stress).
+**Current ops pin (2026-09-03):** VERSION **3.3.20** — x86 fieldbus → Railway hub. Prior utilities closeout `d83dbf91` / `sha-0c1029d`. Stress: `run_railway_hub_stress.sh`. Template: [`PATCH_CYCLE.md`](../docs/operations/PATCH_CYCLE.md).
 
 ---
 
@@ -116,7 +116,7 @@ Nested instructions may specialize but never contradict a higher authority.
 3. [`../docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md)
 4. [`../docs/modeling/`](../docs/modeling/) when packaging / HP / readiness context matters
 5. [`ARCHITECTURE.md`](ARCHITECTURE.md) + [`ownership.yaml`](ownership.yaml)
-6. Deploy bootstrap: [`docs/operations/LOCAL_DEPLOYMENT.md`](../docs/operations/LOCAL_DEPLOYMENT.md) (firewall HTTP hub) + [`docs/operations/RAILWAY_DEPLOYMENT.md`](../docs/operations/RAILWAY_DEPLOYMENT.md) (Railway CLI) + [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) (stress LAST)
+6. Deploy bootstrap: [`PATCH_CYCLE.md`](../docs/operations/PATCH_CYCLE.md) + [`STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) + [`RAILWAY_DEPLOYMENT.md`](../docs/operations/RAILWAY_DEPLOYMENT.md) + [`LOCAL_DEPLOYMENT.md`](../docs/operations/LOCAL_DEPLOYMENT.md) (x86 field only)
 7. [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md)
 8. [`tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md`](../tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md)
 9. [`MILESTONE_A.md`](MILESTONE_A.md) if executing Milestone A
@@ -139,7 +139,7 @@ Nested instructions may specialize but never contradict a higher authority.
 | [`openfdd-cookbook-parity`](skills/openfdd-cookbook-parity/SKILL.md) | Dual cookbook honesty |
 | [`openfdd-stack-ghcr`](skills/openfdd-stack-ghcr/SKILL.md) | GHCR pull / recreate / local firewall hub |
 | [`openfdd-railway-cli`](skills/openfdd-railway-cli/SKILL.md) | Railway CLI auth / tip re-pin |
-| [`openfdd-stress-closeout`](skills/openfdd-stress-closeout/SKILL.md) | Stress LAST / run_all / ZAP / BUG_REPORT evidence |
+| [`openfdd-stress-closeout`](skills/openfdd-stress-closeout/SKILL.md) | Stress LAST / Railway CSV + ZAP / BUG_REPORT |
 | [`openfdd-ecm-engineering`](skills/openfdd-ecm-engineering/SKILL.md) | ECM math library |
 | [`openfdd-milestone-a-pr`](skills/openfdd-milestone-a-pr/SKILL.md) | Milestone A PR loop |
 | [`data-modeling`](skills/data-modeling/SKILL.md) | Package layout, utilities/, equipType, export bundle |
