@@ -11,12 +11,15 @@ if [[ -f "$ROOT/.env" ]]; then
   set -a && source "$ROOT/.env" && set +a
 fi
 
+# Railway field identity wins over local .env (lab/fieldbus-1) unless opted out.
 export OPENFDD_IMAGE_TAG="$SHA"
-export OPENFDD_FIELDBUS_IMAGE="${OPENFDD_FIELDBUS_IMAGE:-ghcr.io/bbartling/openfdd-fieldbus:${SHA}}"
-export OPENFDD_MQTT_HOST="${OPENFDD_MQTT_HOST:-reseau.proxy.rlwy.net}"
-export OPENFDD_MQTT_PORT="${OPENFDD_MQTT_PORT:-44763}"
-export OPENFDD_SITE_ID="${OPENFDD_SITE_ID:-bldg2}"
-export OPENFDD_EDGE_ID="${OPENFDD_EDGE_ID:-bensbench-1}"
+export OPENFDD_FIELDBUS_IMAGE="ghcr.io/bbartling/openfdd-fieldbus:${SHA}"
+if [[ "${OPENFDD_FIELD_IDENTITY_FROM_ENV:-0}" != "1" ]]; then
+  export OPENFDD_MQTT_HOST=reseau.proxy.rlwy.net
+  export OPENFDD_MQTT_PORT=44763
+  export OPENFDD_SITE_ID=bldg2
+  export OPENFDD_EDGE_ID=bensbench-1
+fi
 export OPENFDD_EDGE_KIT_DIR="${OPENFDD_EDGE_KIT_DIR:-$ROOT/deploy/mqtt/kits/${OPENFDD_SITE_ID}__${OPENFDD_EDGE_ID}}"
 
 if [[ ! -f "$OPENFDD_EDGE_KIT_DIR/ca.pem" || ! -f "$OPENFDD_EDGE_KIT_DIR/edge.cert.pem" ]]; then
