@@ -11,7 +11,7 @@ const ORACLE_MAIN_SECTIONS = [
   "FDD Plots",
   "RCx Plots",
   "Metering",
-  "Export & ML",
+  "Dump",
   "Sites",
   "Operations",
 ] as const;

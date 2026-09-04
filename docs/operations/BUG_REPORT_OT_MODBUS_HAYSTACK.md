@@ -1,8 +1,8 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-04 (3.3.20 CLOSED — x86 field → Railway hub)  
+**Date:** 2026-09-04 (3.3.21 CLOSED — Railway re-pin + stress; 3.3.22 Dump IA shipping)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in stress)  
-**Tip / pin:** `aef6fc1f` · GHCR **`sha-aef6fc1`** · health **`3.3.20+aef6fc1f5b29`**  
+**Tip / pin (closeout claim):** `792ebeec` · GHCR **`sha-792ebee`** · health **`3.3.21+792ebeec4be3`**  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit reused — Railway mqtt volume has CA cert but no CA key, so a newly minted `bensbench-1` kit will not verify). Telemetry = hosted weather AV `9101` loopback (no Pi, no JCI required).  
 **Pis freed (not in stress):** bosspi · BensFakeAhu (fake AHU) · Zone1VAV (fake VAV) — vibe13 / other. Private OT LAN addresses stay in session env only.
 
@@ -18,8 +18,8 @@ Topology: Railway hub + bensbench **x86 fieldbus** + light ZAP. **Skip** only wi
 
 | Rev | In-repo plan | Concern | Status |
 |-----|--------------|---------|--------|
-| 3.3.21 closeout | [`patch_trains/3.3.21_closeout_railway_stress.plan.md`](patch_trains/3.3.21_closeout_railway_stress.plan.md) | Re-pin + stress + Verdict (product already merged) | PENDING |
-| 3.3.22 | [`patch_trains/3.3.22_one_dump_ia.plan.md`](patch_trains/3.3.22_one_dump_ia.plan.md) | One **Dump** page; ingest left-rail only; kill Export&ML multi-page | PENDING |
+| 3.3.21 closeout | [`patch_trains/3.3.21_closeout_railway_stress.plan.md`](patch_trains/3.3.21_closeout_railway_stress.plan.md) | Re-pin + stress + Verdict (product already merged) | **CLOSED** |
+| 3.3.22 | [`patch_trains/3.3.22_one_dump_ia.plan.md`](patch_trains/3.3.22_one_dump_ia.plan.md) | One **Dump** page; ingest left-rail only; kill Export&ML multi-page | IN PROGRESS |
 | 3.3.23 | [`patch_trains/3.3.23_faults_lab_declutter.plan.md`](patch_trains/3.3.23_faults_lab_declutter.plan.md) | Faults/Lab declutter (category-first; less settings-on-faults) | PENDING |
 | 3.3.24 | [`patch_trains/3.3.24_tuners_gl36_wave.plan.md`](patch_trains/3.3.24_tuners_gl36_wave.plan.md) | Lab/registry GL36 FC thresholds (SQL-honest) | PENDING |
 | 3.3.25 | [`patch_trains/3.3.25_tuners_sv_econ_ahu_wave.plan.md`](patch_trains/3.3.25_tuners_sv_econ_ahu_wave.plan.md) | Lab/registry SV/ECON/AHU/plant gaps | PENDING |
@@ -27,24 +27,49 @@ Topology: Railway hub + bensbench **x86 fieldbus** + light ZAP. **Skip** only wi
 
 **Tuner reference:** Vibe19 UI ~414 vs Lab ~184 — JSON snapshots in [`recovery/`](recovery/). Goal = phased SQL-honest Lab expansion — **not** a hard 414.
 
-| TODO | 3.3.20 | 3.3.21 |
-|------|--------|--------|
-| Hygiene START (0 PRs, only master, tip Actions green) | [x] | |
-| VERSION + Cargo `3.3.(N-1)` → `3.3.N` | [x] 3.3.19→3.3.20 | [ ] product merged; closeout ops |
-| One-concern fix | [x] x86→Railway hub | [x] Overview/MQTT/Metering (#833) |
-| PR squash-merge + delete branch | [x] #831 | [x] #833 |
-| GHCR Publish `sha-<7>` | [x] `sha-aef6fc1` | |
-| Railway backup + re-pin central→mqtt→web | [x] `20260904T035328Z` | |
-| `openfdd_fieldbus_railway_up.sh sha-<7>` | [x] | |
-| `run_railway_hub_stress.sh` (CSV + ZAP) | [x] | |
-| This file: new **Verdict — 3.3.N** table + artifact paths | [x] | |
-| Hygiene END | [x] after evidence PR | |
+| TODO | 3.3.20 | 3.3.21 | 3.3.22 |
+|------|--------|--------|--------|
+| Hygiene START (0 PRs, only master, tip Actions green) | [x] | [x] | [x] |
+| VERSION + Cargo `3.3.(N-1)` → `3.3.N` | [x] 3.3.19→3.3.20 | [x] product #833 (ops closeout no bump) | [ ] 3.3.21→3.3.22 |
+| One-concern fix | [x] x86→Railway hub | [x] Overview/MQTT/Metering (#833) | [ ] One Dump IA |
+| PR squash-merge + delete branch | [x] #831 | [x] #833 | |
+| GHCR Publish `sha-<7>` | [x] `sha-aef6fc1` | [x] `sha-792ebee` (product tip) | |
+| Railway backup + re-pin central→mqtt→web | [x] `20260904T035328Z` | [x] `20260904T193732Z` | |
+| `openfdd_fieldbus_railway_up.sh sha-<7>` | [x] | [x] `sha-792ebee` | |
+| `run_railway_hub_stress.sh` (CSV + ZAP) | [x] | [x] | |
+| This file: new **Verdict — 3.3.N** table + artifact paths | [x] | [x] | |
+| Hygiene END | [x] after evidence PR | [x] | |
 
 Do **not** reopen #763 / #805 for depth. Do **not** put Pis back on the closeout path.
 
 Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live only in session env / gitignored files — **never Discord→git**.
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
+
+## Verdict — 3.3.21 Overview / MQTT / Metering closeout (2026-09-04) — CLOSED
+
+| Check | Evidence |
+|-------|----------|
+| Product merge | #833 → `792ebeec` (plus #835 PayPal polish on tip used for pin); VERSION **3.3.21** |
+| Topology | Railway hub only; bensbench x86 fieldbus MQTTS; **no Pi** |
+| Field identity | `bldg2` / `pi-1` kit (CA reuse); hosted-weather AV 9101 loopback |
+| Tip / pin (closeout) | `792ebeec` · GHCR **`sha-792ebee`** · health **`3.3.21+792ebeec4be3`** |
+| Docs tip note | #836 paypal.me + #837 recovery pack later on master — **not** used for closeout pin identity |
+| GHCR publish | **green** — central/web/mqtt/fieldbus `sha-792ebee` |
+| Railway backup | `~/openfdd-backups/railway/20260904T193732Z/` |
+| Railway hub re-pin | central → mqtt → web `sha-792ebee`; central redeploy after mqtt |
+| x86 fieldbus | `openfdd_fieldbus_railway_up.sh sha-792ebee`; health `edges:1`; `ingest_ok` advancing |
+| STRESS 0 hub + edges | **PASS** — `reports/nightly-ot-bench_20260904T194123Z/` |
+| STRESS 1 synth59 | **PASS** — same dir `01_synth59_Railway.log` |
+| STRESS 2 gate 17 | **PASS** — `02_gate_17.log` |
+| STRESS 3 B100 | **PASS** — `03_B100_Railway-only.log` |
+| STRESS 4 Creekside | **PASS** — `04_Creekside.log` |
+| STRESS 5 gate 19 | **PASS** — `05_gate_19.log` + `bundle_validate.json` |
+| STRESS 6 ZAP | **PASS** (light) — `reports/zap-railway_20260904T194203Z/` · `FAIL-NEW:0` / `WARN-NEW:11` / `PASS:56`. No High/Critical |
+| Shipped (product) | Overview readiness A–Z; MQTT Zone Other; Metering package utilities |
+| **bldg2 Overview UI** site cleanup | **DEFERRED** → revisit 3.3.26 soft-OPEN |
+| BUILDING_50 / AFDD flood | **DEFERRED** |
+| Deep / authenticated ZAP | **DEFERRED** |
 
 ## Verdict — 3.3.20 x86 fieldbus → Railway hub (2026-09-04) — CLOSED
 

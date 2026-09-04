@@ -339,7 +339,7 @@ export function FuelDashboard({
         <InlineAlert id="fuel-empty" variant="info" testId="fuel-upload-prompt">
           No fuel campuses available yet. Import a building package with{" "}
           <code>utilities_v1</code> (or wrapper <code>utility_bills_monthly.csv</code>)
-          on Uploads / Sites, then return here. Legacy fuel campus ZIP is not the
+          on Upload / Sites, then return here. Legacy fuel campus ZIP is not the
           primary Metering path.
         </InlineAlert>
         {error ? (

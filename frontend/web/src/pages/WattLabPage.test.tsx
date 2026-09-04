@@ -68,6 +68,20 @@ describe("WattLabPage handoff", () => {
     vi.mocked(downloadExport).mockClear();
   });
 
+  it("renders one Dump page without Export multi-page radio", async () => {
+    render(
+      <MemoryRouter initialEntries={["/wattlab?job=job-1"]}>
+        <WattLabPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => screen.getByTestId("wattlab-page"));
+    expect(screen.getByRole("heading", { name: "Dump" })).toBeTruthy();
+    expect(screen.queryByTestId("wattlab-page-radio")).toBeNull();
+    expect(screen.getByTestId("dump-related-links").textContent).toMatch(
+      /Upload/,
+    );
+  });
+
   it("creates a handoff for ?job=", async () => {
     render(
       <MemoryRouter initialEntries={["/wattlab?job=job-1"]}>
@@ -81,7 +95,10 @@ describe("WattLabPage handoff", () => {
     await waitFor(() => {
       expect(createWattlabHandoff).toHaveBeenCalledWith(
         "job-1",
-        expect.objectContaining({ portable_zip_uri: expect.any(String) }),
+        expect.objectContaining({
+          portable_zip_uri: expect.any(String),
+          wattlab_studio_page: "Dump",
+        }),
       );
       expect(screen.getByTestId("wattlab-notice").textContent).toMatch(
         /handoff-9/,
