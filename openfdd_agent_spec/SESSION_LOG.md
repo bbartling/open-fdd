@@ -1,5 +1,14 @@
 # Session log
 
+## 2026-09-04 — Bench recovery pack + patch trains mirrored in-repo
+
+- Added `docs/operations/BENCH_RECOVERY.md`, `docs/operations/recovery/AI_CONTEXT_HANDOFF.md`
+- Mirrored Cursor plans → `docs/operations/patch_trains/` (3.3.21 closeout … 3.3.26)
+- Tuner snapshots: Lab ~184 (`lab_tuners_snapshot_pre_3.3.24.json`), Vibe19 UI ~414 (`vibe19_ui_tuners_snapshot.json`)
+- BUG_REPORT / PATCH_CYCLE / STRESS_CLOSEOUT link to in-repo trains + recovery
+- Operator still must off-box copy: Railway backups, mqtt edge kit, Creekside zip, tokens
+
+
 ## 2026-09-04 — 3.3.20 x86 field → Railway hub CLOSED
 
 - **Merge:** #831 → `aef6fc1f`; VERSION **3.3.20**; pin **`sha-aef6fc1`**; health **`3.3.20+aef6fc1f5b29`**.

@@ -62,7 +62,8 @@ docker run --rm -v "$PWD/$ART:/zap/wrk:rw" -t ghcr.io/zaproxy/zaproxy:stable \
 | `scripts/nightly-ot-bench/19_engineering_bundle_validate.sh` | `openfdd_engineering_bundle_v1` structural validate |
 | `scripts/openfdd_bundle_validate.py` | Offline bundle schema / READY |
 
-Export UI: `/export` (alias `/wattlab`). Bundle API: `POST /api/jobs/{id}/exports`.
+Export / Dump UI: `/export` (nav label **Dump** after 3.3.22; alias `/wattlab`). Bundle API: `POST /api/jobs/{id}/exports`.  
+Machine recreate: [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md). Patch trains: [`patch_trains/`](patch_trains/).
 
 ## After stress
 

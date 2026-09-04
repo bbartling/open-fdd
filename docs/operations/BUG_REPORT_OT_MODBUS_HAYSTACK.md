@@ -8,14 +8,31 @@
 
 ## Next patch cycle (copy into `.cursor/plans/patch_cycle_3.3.N_<slug>.plan.md`)
 
-Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes in the **3.3.21** column as you go. Do **not** bump VERSION for a pure evidence/docs PR.
+Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. Do **not** bump VERSION for a pure evidence/docs PR.
+
+### Upcoming trains (Cursor plans — 2026-09-04)
+
+**Source of truth in-repo (survives laptop death):** [`patch_trains/`](patch_trains/) · machine recreate [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md) · AI handoff [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
+Optional local Cursor copies: `~/.cursor/plans/` (keep in sync with `patch_trains/`).  
+Topology: Railway hub + bensbench **x86 fieldbus** + light ZAP. **Skip** only with a **DEFERRED** row here.
+
+| Rev | In-repo plan | Concern | Status |
+|-----|--------------|---------|--------|
+| 3.3.21 closeout | [`patch_trains/3.3.21_closeout_railway_stress.plan.md`](patch_trains/3.3.21_closeout_railway_stress.plan.md) | Re-pin + stress + Verdict (product already merged) | PENDING |
+| 3.3.22 | [`patch_trains/3.3.22_one_dump_ia.plan.md`](patch_trains/3.3.22_one_dump_ia.plan.md) | One **Dump** page; ingest left-rail only; kill Export&ML multi-page | PENDING |
+| 3.3.23 | [`patch_trains/3.3.23_faults_lab_declutter.plan.md`](patch_trains/3.3.23_faults_lab_declutter.plan.md) | Faults/Lab declutter (category-first; less settings-on-faults) | PENDING |
+| 3.3.24 | [`patch_trains/3.3.24_tuners_gl36_wave.plan.md`](patch_trains/3.3.24_tuners_gl36_wave.plan.md) | Lab/registry GL36 FC thresholds (SQL-honest) | PENDING |
+| 3.3.25 | [`patch_trains/3.3.25_tuners_sv_econ_ahu_wave.plan.md`](patch_trains/3.3.25_tuners_sv_econ_ahu_wave.plan.md) | Lab/registry SV/ECON/AHU/plant gaps | PENDING |
+| 3.3.26 | [`patch_trains/3.3.26_tuners_gates_residual.plan.md`](patch_trains/3.3.26_tuners_gates_residual.plan.md) | Optional gate trio + soft-OPEN triage + series wrap | PENDING |
+
+**Tuner reference:** Vibe19 UI ~414 vs Lab ~184 — JSON snapshots in [`recovery/`](recovery/). Goal = phased SQL-honest Lab expansion — **not** a hard 414.
 
 | TODO | 3.3.20 | 3.3.21 |
 |------|--------|--------|
 | Hygiene START (0 PRs, only master, tip Actions green) | [x] | |
-| VERSION + Cargo `3.3.(N-1)` → `3.3.N` | [x] 3.3.19→3.3.20 | |
-| One-concern fix | [x] x86→Railway hub | |
-| PR squash-merge + delete branch | [x] #831 | |
+| VERSION + Cargo `3.3.(N-1)` → `3.3.N` | [x] 3.3.19→3.3.20 | [ ] product merged; closeout ops |
+| One-concern fix | [x] x86→Railway hub | [x] Overview/MQTT/Metering (#833) |
+| PR squash-merge + delete branch | [x] #831 | [x] #833 |
 | GHCR Publish `sha-<7>` | [x] `sha-aef6fc1` | |
 | Railway backup + re-pin central→mqtt→web | [x] `20260904T035328Z` | |
 | `openfdd_fieldbus_railway_up.sh sha-<7>` | [x] | |
