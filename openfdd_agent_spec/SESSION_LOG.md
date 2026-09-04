@@ -1,5 +1,13 @@
 # Session log
 
+## 2026-09-04 — 3.3.22 One Dump IA CLOSED
+
+- **Merge:** #838 → `b3004aa3`; VERSION **3.3.22**; pin **`sha-b3004aa`**; health **`3.3.22+b3004aa33bc2`**.
+- **Backup:** `~/openfdd-backups/railway/20260904T222234Z/`. Hub re-pin central→mqtt→web; x86 `openfdd_fieldbus_railway_up.sh sha-b3004aa`.
+- **STRESS:** `reports/nightly-ot-bench_20260904T222851Z/` PASS 00–06; ZAP `reports/zap-railway_20260904T222928Z/` (`FAIL-NEW:0`). First stress `222500Z` failed on Railway admin clobbered by local `.env`.
+- **Shipped:** Dump nav + single dump page; ingest left-rail Upload/Sites only.
+- Next: 3.3.23 Faults/Lab declutter.
+
 ## 2026-09-04 — 3.3.21 closeout CLOSED + 3.3.22 Dump IA (product)
 
 - **Closeout pin:** `792ebeec` / **`sha-792ebee`** / health **`3.3.21+792ebeec4be3`**. Backup `~/openfdd-backups/railway/20260904T193732Z/`. Stress `reports/nightly-ot-bench_20260904T194123Z/` + ZAP `reports/zap-railway_20260904T194203Z/` (`FAIL-NEW:0`).
