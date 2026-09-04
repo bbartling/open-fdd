@@ -145,13 +145,13 @@ Do **not** report vulnerabilities through public GitHub issues or discussions. U
 If Open-FDD saves you time or helps with BAS/FDD work, you can support continued open-source development through PayPal.
 
 <p align="center">
-  <a href="https://www.paypal.com/donate/?business=VBRBPMBZ6ZKM8&amount=25&no_recurring=0&item_name=Thank+you+for+supporting+open+source+building+automation+system+software+development&currency_code=USD"><img src="https://img.shields.io/badge/Donate-$25-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate $25 via PayPal"></a>
-  <a href="https://www.paypal.com/donate/?business=VBRBPMBZ6ZKM8&amount=50&no_recurring=0&item_name=Thank+you+for+supporting+open+source+building+automation+system+software+development&currency_code=USD"><img src="https://img.shields.io/badge/Donate-$50-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate $50 via PayPal"></a>
-  <a href="https://www.paypal.com/donate/?business=VBRBPMBZ6ZKM8&amount=250&no_recurring=0&item_name=Thank+you+for+supporting+open+source+building+automation+system+software+development&currency_code=USD"><img src="https://img.shields.io/badge/Donate-$250-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate $250 via PayPal"></a>
-  <a href="https://www.paypal.com/donate/?business=VBRBPMBZ6ZKM8&no_recurring=0&item_name=Thank+you+for+supporting+open+source+building+automation+system+software+development&currency_code=USD"><img src="https://img.shields.io/badge/Donate-Custom%20Amount-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Choose a custom PayPal donation amount"></a>
+  <a href="https://paypal.me/benbartling20/25"><img src="https://img.shields.io/badge/Donate-$25-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate $25 via PayPal"></a>
+  <a href="https://paypal.me/benbartling20/50"><img src="https://img.shields.io/badge/Donate-$50-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate $50 via PayPal"></a>
+  <a href="https://paypal.me/benbartling20/250"><img src="https://img.shields.io/badge/Donate-$250-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate $250 via PayPal"></a>
+  <a href="https://paypal.me/benbartling20"><img src="https://img.shields.io/badge/Donate-Custom%20Amount-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Choose a custom PayPal donation amount"></a>
 </p>
 
-The repository Sponsor button uses the same custom PayPal donation page so the popup stays clean with a single external link.
+The repository Sponsor button uses [paypal.me/benbartling20](https://paypal.me/benbartling20) so donors see your PayPal profile photo/banner with a single clean link.
 
 ## License
 
