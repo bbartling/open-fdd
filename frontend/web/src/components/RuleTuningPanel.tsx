@@ -28,6 +28,7 @@ export const RULES_UPDATED_EVENT = "openfdd:rules-updated";
 const UNITS_KEY = "openfdd.ui.unit_system";
 
 function familyOf(ruleId: string): string {
+  if (/^FC\d+/i.test(ruleId)) return "FC";
   const i = ruleId.indexOf("-");
   return i > 0 ? ruleId.slice(0, i) : ruleId;
 }
@@ -179,12 +180,23 @@ function RuleExpander({
   );
 }
 
+/** Prefer a concrete family on first paint so Lab is not a 60+ rule wall. */
+export function defaultLabFamily(rules: FddRuleSummary[]): string {
+  const have = new Set(rules.map((r) => familyOf(r.rule_id)));
+  for (const pref of ["FC", "VAV", "AHU", "ECON", "SV"]) {
+    if (have.has(pref)) return pref;
+  }
+  const sorted = [...have].sort();
+  return sorted[0] ?? "(all)";
+}
+
 /** Rule tuning left-rail (expanders + sliders). */
 export function RuleTuningPanel() {
   const { query } = useSessionQuery();
   const buildingId = query.siteId ?? "";
   const [rules, setRules] = useState<FddRuleSummary[]>([]);
   const [family, setFamily] = useState<string>("(all)");
+  const familyDefaulted = useRef(false);
   const [opsGate, setOpsGate] = useState(true);
   const [params, setParams] = useState<RuleParamMap>(loadLocalRuleParams);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -214,6 +226,10 @@ export function RuleTuningPanel() {
         if (!cancelled) {
           mergeRuleDescriptionsFromApi(list);
           setRules(list);
+          if (!familyDefaulted.current && list.length > 0) {
+            familyDefaulted.current = true;
+            setFamily(defaultLabFamily(list));
+          }
         }
       })
       .catch((e: unknown) => {
@@ -359,12 +375,13 @@ export function RuleTuningPanel() {
 
   return (
     <section className="oracle-sidebar__block" data-testid="sidebar-rule-tuning">
-      <h3 className="oracle-sidebar__h3">Rule tuning</h3>
+      <h3 className="oracle-sidebar__h3">Lab · rule thresholds</h3>
       <p className="oracle-sidebar__caption">
-        Sliders are in the selected unit system (metric shows °C for temperature
-        tuners; FDD SQL stays °F internally). After switching units or moving a
-        slider, click <strong>Update this rule</strong> or{" "}
-        <strong>Run all rules</strong> on Overview.
+        Sliders store thresholds only (unit system applies to display; FDD SQL
+        stays °F). Expand a rule to tune — then click{" "}
+        <strong>Update this rule</strong>. Overview{" "}
+        <strong>Run all rules</strong> evaluates health flags;{" "}
+        <strong>Update analytics</strong> is not an FDD run.
       </p>
       <label className="oracle-sidebar__check">
         <input
@@ -393,6 +410,10 @@ export function RuleTuningPanel() {
           ))}
         </select>
       </label>
+      <p className="oracle-sidebar__caption" data-testid="sidebar-tune-count">
+        {visible.length} rule{visible.length === 1 ? "" : "s"} in category —
+        expand to tune
+      </p>
       <div className="oracle-sidebar__btn-row">
         <button
           type="button"

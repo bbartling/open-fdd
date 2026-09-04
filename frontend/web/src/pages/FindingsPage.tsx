@@ -30,6 +30,7 @@ function formatErr(err: unknown): string {
 }
 
 function familyOf(ruleId: string): string {
+  if (/^FC\d+/i.test(ruleId)) return "FC";
   const i = ruleId.indexOf("-");
   return i > 0 ? ruleId.slice(0, i) : ruleId || "other";
 }
@@ -146,11 +147,15 @@ export function FindingsPage() {
   return (
     <AppShell
       title="Results by Category"
-      caption="FDD rule results grouped by family — run FDD from Overview or the left rail first"
+      caption="Outcomes by family — tune thresholds in Lab (left rail); this page is not a settings sheet"
       activeSectionId="results"
     >
       <div className="page-stack" data-testid="findings-page">
         <LockedSiteCaption buildingId={buildingId} testId="locked-site" />
+        <InlineAlert id="results-lab-hint" variant="info" testId="results-lab-hint">
+          Threshold sliders live in the left-rail <strong>Lab</strong>. Here:
+          filter outcomes and refresh after a run.
+        </InlineAlert>
         <Select
           id="results-category"
           label="Category"
@@ -174,7 +179,7 @@ export function FindingsPage() {
         {!buildingId ? (
           <InlineAlert id="results-hint" variant="info">
             No site locked — pick a building on Overview, then run FDD or{" "}
-            <strong>Update this rule</strong> in the left rail.
+            <strong>Update this rule</strong> in Lab (left rail).
           </InlineAlert>
         ) : null}
         <DataTable

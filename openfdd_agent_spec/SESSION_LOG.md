@@ -1,5 +1,9 @@
 # Session log
 
+## 2026-09-04 — 3.3.23 Faults/Lab declutter (product)
+
+- VERSION **3.3.23**; Lab defaults to FC/VAV category; group `FC*` under family FC; Results/Plots copy clarifies Lab vs outcomes; Overview Start-here Run vs Update analytics.
+
 ## 2026-09-04 — 3.3.22 One Dump IA CLOSED
 
 - **Merge:** #838 → `b3004aa3`; VERSION **3.3.22**; pin **`sha-b3004aa`**; health **`3.3.22+b3004aa33bc2`**.

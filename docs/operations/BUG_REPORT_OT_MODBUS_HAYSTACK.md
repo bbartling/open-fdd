@@ -20,7 +20,7 @@ Topology: Railway hub + bensbench **x86 fieldbus** + light ZAP. **Skip** only wi
 |-----|--------------|---------|--------|
 | 3.3.21 closeout | [`patch_trains/3.3.21_closeout_railway_stress.plan.md`](patch_trains/3.3.21_closeout_railway_stress.plan.md) | Re-pin + stress + Verdict (product already merged) | **CLOSED** |
 | 3.3.22 | [`patch_trains/3.3.22_one_dump_ia.plan.md`](patch_trains/3.3.22_one_dump_ia.plan.md) | One **Dump** page; ingest left-rail only; kill Export&ML multi-page | **CLOSED** |
-| 3.3.23 | [`patch_trains/3.3.23_faults_lab_declutter.plan.md`](patch_trains/3.3.23_faults_lab_declutter.plan.md) | Faults/Lab declutter (category-first; less settings-on-faults) | PENDING |
+| 3.3.23 | [`patch_trains/3.3.23_faults_lab_declutter.plan.md`](patch_trains/3.3.23_faults_lab_declutter.plan.md) | Faults/Lab declutter (category-first; less settings-on-faults) | IN PROGRESS |
 | 3.3.24 | [`patch_trains/3.3.24_tuners_gl36_wave.plan.md`](patch_trains/3.3.24_tuners_gl36_wave.plan.md) | Lab/registry GL36 FC thresholds (SQL-honest) | PENDING |
 | 3.3.25 | [`patch_trains/3.3.25_tuners_sv_econ_ahu_wave.plan.md`](patch_trains/3.3.25_tuners_sv_econ_ahu_wave.plan.md) | Lab/registry SV/ECON/AHU/plant gaps | PENDING |
 | 3.3.26 | [`patch_trains/3.3.26_tuners_gates_residual.plan.md`](patch_trains/3.3.26_tuners_gates_residual.plan.md) | Optional gate trio + soft-OPEN triage + series wrap | PENDING |

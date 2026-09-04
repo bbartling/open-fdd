@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FddRuleSummary } from "../api/fddApi";
-import { visibleRulesForLab } from "./RuleTuningPanel";
+import { defaultLabFamily, visibleRulesForLab } from "./RuleTuningPanel";
 
 function rule(rule_id: string): FddRuleSummary {
   return {
@@ -47,5 +47,32 @@ describe("visibleRulesForLab", () => {
       "SV-FLATLINE",
       "SV-STALE",
     ]);
+  });
+});
+
+describe("defaultLabFamily", () => {
+  it("prefers FC over dumping (all) when present", () => {
+    expect(
+      defaultLabFamily([rule("VAV-1"), rule("FC1"), rule("AHU-FC2")]),
+    ).toBe("FC");
+  });
+
+  it("falls back along preference then first sorted family", () => {
+    expect(defaultLabFamily([rule("VAV-1"), rule("SV-STALE")])).toBe("VAV");
+    expect(defaultLabFamily([rule("SV-STALE"), rule("PID-HUNT-1")])).toBe(
+      "SV",
+    );
+    expect(defaultLabFamily([rule("PID-HUNT-1"), rule("UTIL-MONTHLY")])).toBe(
+      "PID",
+    );
+  });
+
+  it("groups FC1/FC10 under family FC for Lab category", () => {
+    expect(
+      visibleRulesForLab(
+        [rule("FC10"), rule("VAV-1"), rule("FC2")],
+        "FC",
+      ).map((r) => r.rule_id),
+    ).toEqual(["FC2", "FC10"]);
   });
 });

@@ -143,8 +143,9 @@ export function HomePage() {
               <strong>Start here:</strong> sidebar →{" "}
               <strong>Building package zip</strong> →{" "}
               <strong>Load package</strong>. Then Data Model →{" "}
-              <strong>Update analytics</strong> / <strong>Run all rules</strong>{" "}
-              → <strong>FDD Plots</strong> / <strong>RCx</strong>.
+              <strong>Run all rules</strong> (health flags) / tune in Lab →{" "}
+              <strong>FDD Plots</strong> / <strong>RCx</strong>.{" "}
+              <strong>Update analytics</strong> is not an FDD run.
             </InlineAlert>
             <SectionTabs activeSectionId="overview" embedded />
             <p className="oracle-overview__footer-links">
