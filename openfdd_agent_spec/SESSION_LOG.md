@@ -1,5 +1,13 @@
 # Session log
 
+## 2026-09-05 — 3.3.23 Faults/Lab declutter CLOSED
+
+- **Merge:** #840 → `40ac0664`; VERSION **3.3.23**; health **`3.3.23+40ac06640af4`**.
+- **Pin:** central/web **`sha-40ac066`**; mqtt/fieldbus remained **`sha-b3004aa`** (GHCR fieldbus multi-arch Publish hung — DEFERRED tip sync).
+- **Backup:** `~/openfdd-backups/railway/20260905T021711Z/`. Stress `reports/nightly-ot-bench_20260905T021921Z/` PASS; ZAP `reports/zap-railway_20260905T021959Z/`.
+- **Shipped:** Lab category-first FC/VAV; FC* family grouping; Run vs Tune vs Update analytics copy.
+- Next: 3.3.24 GL36 Lab tuners (branch `feat/3.3.24-tuners-gl36` ready).
+
 ## 2026-09-04 — 3.3.23 Faults/Lab declutter (product)
 
 - VERSION **3.3.23**; Lab defaults to FC/VAV category; group `FC*` under family FC; Results/Plots copy clarifies Lab vs outcomes; Overview Start-here Run vs Update analytics.
