@@ -1,8 +1,8 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-05 (3.3.25 CLOSED — SV/ECON Lab tuners; hybrid GHCR pin)  
+**Date:** 2026-09-05 (3.3.26 IN PROGRESS — qualification harness + Path B gate DEFER)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in stress)  
-**Tip / pin (closeout claim):** `e78a6089` · GHCR central/web **`sha-e78a608`** · health **`3.3.25+e78a608934ed`** (mqtt/fieldbus **`sha-b3004aa`** — DEFERRED tip sync)  
+**Tip / pin (last CLOSED):** `e78a6089` · GHCR central/web **`sha-e78a608`** · health **`3.3.25+e78a608934ed`** (mqtt/fieldbus **`sha-b3004aa`** — DEFERRED tip sync)  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit reused — Railway mqtt volume has CA cert but no CA key, so a newly minted `bensbench-1` kit will not verify). Telemetry = hosted weather AV `9101` loopback (no Pi, no JCI required).  
 **Pis freed (not in stress):** bosspi · BensFakeAhu (fake AHU) · Zone1VAV (fake VAV) — vibe13 / other. Private OT LAN addresses stay in session env only.
 
@@ -23,7 +23,7 @@ Topology: Railway hub + bensbench **x86 fieldbus** + light ZAP. **Skip** only wi
 | 3.3.23 | [`patch_trains/3.3.23_faults_lab_declutter.plan.md`](patch_trains/3.3.23_faults_lab_declutter.plan.md) | Faults/Lab declutter (category-first; less settings-on-faults) | **CLOSED** |
 | 3.3.24 | [`patch_trains/3.3.24_tuners_gl36_wave.plan.md`](patch_trains/3.3.24_tuners_gl36_wave.plan.md) | Lab/registry GL36 FC thresholds (SQL-honest) | **CLOSED** |
 | 3.3.25 | [`patch_trains/3.3.25_tuners_sv_econ_ahu_wave.plan.md`](patch_trains/3.3.25_tuners_sv_econ_ahu_wave.plan.md) | Lab/registry SV/ECON/AHU/plant gaps | **CLOSED** (partial: SV-RANGE + ECON-4; residual DEFERRED→3.3.26) |
-| 3.3.26 | [`patch_trains/3.3.26_tuners_gates_residual.plan.md`](patch_trains/3.3.26_tuners_gates_residual.plan.md) | Optional gate trio + soft-OPEN triage + series wrap | PENDING |
+| 3.3.26 | [`patch_trains/3.3.26_tuners_gates_residual.plan.md`](patch_trains/3.3.26_tuners_gates_residual.plan.md) | Qualification harness + Path B gate DEFER + soft-OPEN + series wrap | **IN PROGRESS** |
 
 **Tuner reference:** Vibe19 UI ~414 vs Lab ~184 — JSON snapshots in [`recovery/`](recovery/). Goal = phased SQL-honest Lab expansion — **not** a hard 414.
 
@@ -312,15 +312,33 @@ Script: `scripts/nightly-ot-bench/18_volume_restore_smoke.sh`
 
 ## Soft-OPEN / follow-up
 
-| ID | Notes |
-|----|-------|
-| **bldg2-overview-signoff** | `OPENFDD_EQUIPMENT_TYPE=zone_other` + bosspi `sha-0c1029d` + Pipeline A PASS; SPA Zone Other shells need operator browser confirm |
-| **railway-f1-stress** | B100 parity **PASS** @ `20260902T151009Z`; B50/AFDD **DEFERRED** |
-| **weather-legitimacy-chicago** | Tier-C short soak; full `WEATHER_SOAK_SECS=1800` optional |
-| **railway-ui-fdd-stale** | `?site=BUILDING_100` scoped FDD UX — use building filter in API |
-| **local-parquet-root-split** | `.cache/parquet` vs `openfdd/` on scoped B100 local queries |
-| **lake-credential-rotation** | Rotated; session-env only (no git) |
-| **deploy-mqtt-acl-mount** | Local `deploy/mqtt/acl` must be a **file** (not directory); `cp services/mqtt/acl.example deploy/mqtt/acl` |
+Triage as of **3.3.26** (series residual). Prior PASS rows are **not** rewritten as enhanced-suite evidence.
+
+| ID | Disposition | Notes |
+|----|-------------|-------|
+| **bldg2-overview-signoff** | **DEFERRED** → operator browser | SPA Zone Other shells still need human confirm; not blocked on harness |
+| **railway-f1-stress** | **CLOSED** (B100) / **DEFERRED** (B50/AFDD) | B100 PASS retained; B50 package + AFDD flood still operator-skip |
+| **weather-legitimacy-chicago** | **DEFERRED** → tier-C | Full soak optional; short soak already green historically |
+| **railway-ui-fdd-stale** | **DEFERRED** → UX | Use building filter; not a stress-harness gate |
+| **local-parquet-root-split** | **DEFERRED** → lab | Local path split; Railway uses `/workspace/openfdd` |
+| **lake-credential-rotation** | **CLOSED** | Ops hygiene done; session-env only |
+| **deploy-mqtt-acl-mount** | **CLOSED** | Documented ops note; file-not-dir |
+| **vibe19-operational-gate-lab** | **DEFERRED** → future | No SQL/session binding for `require_operational_gate` / `startup_delay_min` / `minimum_active_coverage_pct` — Path B (fake Lab sliders refused) |
+| **mqtt-fieldbus-tip-pin-sync** | **DEFERRED** → next pin train | Hybrid central/web tip vs older mqtt/fieldbus `sha-*` remains allowed with explicit hybrid note |
+| **isolated-authenticated-zap-af** | **DEFERRED** → isolated tier | Field closeout keeps public baseline only; AF+OpenAPI+roles not on live OT |
+| **qualification-viewer-login** | **DEFERRED** → product | RBAC has `viewer`; Railway password login is admin/agent only |
+
+## Series wrap draft — Lab tuners 3.3.21→3.3.26
+
+| Metric | 3.3.21 hub | 3.3.26 tip (product) |
+|--------|------------|----------------------|
+| Dump IA | pre | shipped **3.3.22** |
+| Faults Lab declutter | pre | shipped **3.3.23** |
+| GL36 Lab tuners | pre | shipped **3.3.24** |
+| SV/ECON Lab tuners | pre | shipped **3.3.25** (partial wave) |
+| Operational-gate Lab trio | no | **DEFERRED** (no honest SQL binding) |
+| Qualification harness | shallow SUMMARY | **3.3.26** manifest + ZAP honesty + auth matrix + Railway MCP |
+| Vibe19 UI reference | ~414 | ~414 (not a hard success target) |
 
 ## Railway hub inventory
 

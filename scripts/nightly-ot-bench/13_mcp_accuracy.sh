@@ -13,6 +13,12 @@ cd "$ROOT"
 ART="${ARTIFACT_DIR:-$(artifact_dir)}"
 mkdir -p "$ART"
 
+# Railway field tier: never fall back to local/disposable central.
+if [[ "${RAILWAY_ONLY:-0}" == "1" || "${OPENFDD_MCP_RAILWAY:-0}" == "1" ]]; then
+  export RAILWAY_ONLY=1
+  exec "$ROOT/scripts/qualification/railway_mcp_accuracy.sh"
+fi
+
 MCP_IMAGE="${OPENFDD_MCP_IMAGE:-ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}}"
 CENTRAL_IMAGE="${OPENFDD_CENTRAL_IMAGE:-ghcr.io/bbartling/openfdd-central:nightly}"
 NET="openfdd-mcp-bench-$$"

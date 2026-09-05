@@ -45,13 +45,16 @@ Open-FDD maps Haystack-style JSON point roles to live or historical OT/CSV data 
 - GHCR images: `central`, `web`, `fieldbus`, `mqtt`, `mcp`
 - [PyPI `open-fdd`](https://pypi.org/project/open-fdd/) — pandas cookbooks and ECM for notebooks; not the product runtime
 
-**Ready today — local, behind the firewall:** `./scripts/openfdd_stack_up.sh react` for CSV/zip FDD on your LAN or VPN. Not intended for the public internet.
+**Local LAN / VPN (ready today):** `./scripts/openfdd_stack_up.sh react` for CSV/zip FDD behind the firewall. Not intended for the public internet.
 
-**Experimental cloud lab:** Railway can run the minimal `openfdd-central` + `openfdd-web` CSV/package stack directly from GHCR. The web image supports a runtime central upstream for Railway private DNS. See [Railway deployment](docs/operations/RAILWAY_DEPLOYMENT.md). This is a lab/demo path, not a production-hardening claim.
+**Experimental Railway field lab (active):** Railway runs `openfdd-central` + `openfdd-mqtt` + `openfdd-web` from GHCR, with bensbench **x86 `openfdd-fieldbus` → MQTTS** into the hub (no Raspberry Pi; no local `react-ot` as the AFDD head-end). Closeout stress covers the CSV fault matrix, light public ZAP, auth role checks, and Railway MCP↔REST parity via [qualification manifests](scripts/qualification/README.md). See [Railway deployment](docs/operations/RAILWAY_DEPLOYMENT.md). Lab/demo path — not a production-hardening claim.
 
-**Coming soon:** OT edge (`react-ot` — BACnet, Modbus, Haystack, MQTTS) and managed **cloud hosting**. Internet-facing deployment with production security hardening targets **Fall 2026**.
+**Roadmap:** managed cloud hosting and internet-facing deployment with production security hardening target **Fall 2026**. Field OT (BACnet / Modbus / Haystack / MQTTS) already ships in `openfdd-fieldbus` for the Railway lab path.
 
 ---
+
+<details>
+<summary>FDD Rule Cookbook</summary>
 
 ## FDD Rule Cookbook (the heart of the project)
 
@@ -60,7 +63,10 @@ The **[HVAC FDD Rule Cookbook](https://bbartling.github.io/open-fdd/rules/cookbo
 - **[DataFusion SQL cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/datafusion-sql-cookbook.html)** — copy-paste SQL that runs on the edge/central Arrow historian
 - **[Pandas cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html)** — the same rules for notebooks, CSV exports, and RCx studies
 
----
+</details>
+
+<details>
+<summary>Install / run</summary>
 
 ## Install / run
 
@@ -84,7 +90,7 @@ export OPENFDD_ADMIN_PASSWORD='change-me'
 
 ./scripts/openfdd_stack_up.sh react       # local CSV lab (ready today)
 ./scripts/openfdd_stack_up.sh csv         # central + web only
-# react-ot (OT edge) — coming soon; bench preview only
+# Field OT into Railway lab: openfdd-fieldbus → MQTTS (see docs/operations/RAILWAY_DEPLOYMENT.md)
 ```
 
 Update a running stack (pull, backup, rollback if health fails):
@@ -108,7 +114,10 @@ docker run -i --rm --network host \
 
 Tool list: [mcp/README.md](mcp/README.md).
 
----
+</details>
+
+<details>
+<summary>PyPI package</summary>
 
 ## PyPI package
 
@@ -118,7 +127,10 @@ pip install open-fdd
 
 Library for notebooks and ECM helpers — not the operator stack. See [PyPI](https://pypi.org/project/open-fdd/) and [docs](https://bbartling.github.io/open-fdd/).
 
----
+</details>
+
+<details>
+<summary>Develop</summary>
 
 ## Develop
 
@@ -130,19 +142,32 @@ cd frontend/web && npm ci && npm run dev
 
 Rust: `cargo test --workspace`
 
+</details>
+
+<details>
+<summary>Releases</summary>
+
 ## Releases
 
 GHCR images build on every `master` merge. Set **`OPENFDD_IMAGE_TAG=nightly`** (or `sha-<7>` to pin). Beta/stable are not published yet — [release policy](https://bbartling.github.io/open-fdd/operations/release-channels.html).
 
-Intended for **LAN / VPN / OT networks**, not public internet hosting.
+Intended for **LAN / VPN / OT networks**, not public internet hosting. The Railway field lab is experimental (see status blurb above).
+
+</details>
+
+<details>
+<summary>Security</summary>
 
 ## Security
 
 Do **not** report vulnerabilities through public GitHub issues or discussions. Use [GitHub Private Vulnerability Reporting](https://github.com/bbartling/open-fdd/security/advisories/new). See [SECURITY.md](SECURITY.md) for what to include and how to redact sensitive OT/deployment evidence.
 
-## 💛 Support Open-FDD
+</details>
 
-If Open-FDD saves you time or helps with BAS/FDD work, you can support continued open-source development through PayPal.
+<details>
+<summary>💛 Support This Work</summary>
+
+If Open-FDD saves you time or budget, or helps with BAS/FDD work, you can support continued open-source development through PayPal. Your contribution directly helps fund the monthly time and labor required to keep the project moving forward. Your support is greatly appreciated.
 
 <p align="center">
   <a href="https://paypal.me/benbartling20/25"><img src="https://img.shields.io/badge/Donate-$25-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate $25 via PayPal"></a>
@@ -151,10 +176,10 @@ If Open-FDD saves you time or helps with BAS/FDD work, you can support continued
   <a href="https://paypal.me/benbartling20"><img src="https://img.shields.io/badge/Donate-Custom%20Amount-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Choose a custom PayPal donation amount"></a>
 </p>
 
-The repository Sponsor button uses [paypal.me/benbartling20](https://paypal.me/benbartling20) so donors see your PayPal profile photo/banner with a single clean link.
+</details>
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
 
-Version **3.3.4** on `master` · PyPI **4.4.2**
+Version **3.3.26** on tip · PyPI **4.4.2**

@@ -107,30 +107,31 @@ required for health, FDD, or Overview analytics.
 
 ---
 
-## Ops patch cycle (3.3.15+ closeout)
+## Ops patch cycle (Railway hub + qualification — 3.3.20+)
 
-During platform closeout, nightly gates drive a **patch train** documented in
-[`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).
+Living log: [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).  
+Active program: [`docs/operations/patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md`](../docs/operations/patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md).  
+Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · entry [`scripts/qualification/README.md`](../scripts/qualification/README.md).
 
 | Step | Action |
 | --- | --- |
-| Discover | `run_all` or single gate script under `scripts/nightly-ot-bench/` |
-| Log | Add row to BUG_REPORT **Patch cycle — Phase 7 bugs** before coding |
-| Fix | One concern per PR; `VERSION` bump only for product changes |
+| Discover | Soft-OPEN / DEFERRED rows + child plan one-concern |
+| Fix | One PR; VERSION bump when shipping stack images |
 | Publish | Wait GHCR Publish green on merge sha |
-| Re-pin | Railway central → mqtt → web; local `.env` `OPENFDD_IMAGE_TAG=sha-*` |
-| Verify | Smoke `01_health_gates` + `10_react_spa`; re-run **only** fixed gate(s) |
-| Close | Move BUG_REPORT row to **patched** when green |
+| Re-pin | Railway central → mqtt → web; `./scripts/openfdd_fieldbus_railway_up.sh sha-*` |
+| Stress LAST | `OPENFDD_MCP_IMAGE=…:sha-* ./scripts/nightly-ot-bench/run_railway_hub_stress.sh` |
+| Cleanup | `docker rm -f` zap-* / openfdd-mcp-railway-* leftovers (low-RAM) |
+| Close | BUG_REPORT Verdict + cite `qualification_manifest.json` `fully_qualified` |
 
 **Stress tiers (do not conflate):**
 
 | Tier | Scope |
 | --- | --- |
-| Local OT core | Gates 01–05, 09–10, 13 — bench closeout |
-| Synthetic CSV FDD | Gate 06 core path (import → `fdd/run` → `results[]`); **#528** `poll_seconds` is harness-only |
-| Weather soak | Gate 08 — shorten with `WEATHER_SOAK_SECS` on low-RAM |
-| Railway F1 | DF55, BUILDING_50, AFDD flood, bldg2 — **separate** from local `run_all` |
+| Railway field | CSV matrix + public ZAP + auth + Railway MCP — closeout path |
+| Isolated candidate | Authenticated ZAP AF / MQTTS ACL / restore — disposable only |
+| Local `run_all` | Lab recipe only — **not** patch-cycle closeout |
 
-**Volume restore (gate 18):** after re-pin, `./scripts/nightly-ot-bench/18_volume_restore_smoke.sh` — CSV packages + MQTT-streamed Parquet survive container recreate on the same `workspace/` volume (no per-message backup). Tarball restore: [`backup-update-restore.md`](../docs/operations/backup-update-restore.md).
+**Volume restore (gate 18):** disposable empty volume only for true restore (3.3.32). Never restore over live Railway workspace.
 
-Session log: [`SESSION_LOG.md`](SESSION_LOG.md). Agent law: [`AGENTS.md`](AGENTS.md) rule 45.
+Session log: [`SESSION_LOG.md`](SESSION_LOG.md). Machine port: [`AI_CONTEXT_HANDOFF.md`](../docs/operations/recovery/AI_CONTEXT_HANDOFF.md).
+

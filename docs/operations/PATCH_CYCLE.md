@@ -13,6 +13,7 @@ Copy this file’s **Cursor plan YAML** into `.cursor/plans/patch_cycle_3.3.N_<s
 **Pis:** not in Open-FDD stress (freed for vibe13 / other benches).
 
 Living evidence: [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md). Stress handbook: [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md).  
+Qualification entry (tiers + manifest): [`scripts/qualification/README.md`](../../scripts/qualification/README.md).  
 **Machine death / new bench:** [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md). **AI handoff:** [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
 **Active series (3.3.21–3.3.26):** [`patch_trains/`](patch_trains/) (mirrored Cursor plans — keep GitHub as source of truth).
 
@@ -49,7 +50,7 @@ todos:
     content: Railway backup + re-pin central→mqtt→web; x86 fieldbus same sha-*
     status: pending
   - id: p5-stress
-    content: ./scripts/nightly-ot-bench/run_railway_hub_stress.sh (CSV + ZAP)
+    content: run_railway_hub_stress.sh — cite qualification_manifest fully_qualified (CSV+ZAP+auth+MCP)
     status: pending
   - id: p6-bug-report
     content: BUG_REPORT verdict 3.3.N + SESSION_LOG artifact paths
@@ -93,7 +94,7 @@ export OPENFDD_API_BASE=https://openfdd-web-production-af99.up.railway.app
 | 3 | B100 `RAILWAY_ONLY=1` | FC1 / runtime / series |
 | 4 | Creekside fixture + full zip | `LAKESIDE_ES` |
 | 5 | Gate 19 | **READY** |
-| 6 | ZAP baseline Railway public URL | no unexplained High/Critical |
+| 6 | ZAP baseline Railway public URL | High=0; every Medium explicitly accepted (`ACCEPT_ZAP_MEDIUM` / reviewed); cite `qualification_manifest` `fully_qualified` |
 
 ## Anti-patterns
 
