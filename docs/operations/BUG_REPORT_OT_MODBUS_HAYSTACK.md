@@ -1,8 +1,8 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-05 (Wave A tip **CLOSED**; Wave B 3.3.28 **CLOSED**; Wave C next)  
+**Date:** 2026-09-05 (Wave A tip **CLOSED**; Wave B 3.3.28 **CLOSED**; Wave C isolated harness **in PR**)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in stress)  
-**Tip / pin (Wave B):** `10d1ec56` · VERSION **3.3.28** · health **`3.3.28+10d1ec569e83`** · GHCR **central/web/mcp/mqtt/fieldbus `sha-10d1ec5`**  
+**Tip / pin (Wave B product):** `10d1ec56` · VERSION **3.3.28** · health **`3.3.28+10d1ec569e83`** · GHCR **central/web/mcp/mqtt/fieldbus `sha-10d1ec5`**  
 **Last CLOSED tip:** `10d1ec56` · **`sha-10d1ec5`** · **`3.3.28+10d1ec569e83`**  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Telemetry = hosted AV `9101` loopback as `bldg2-zone-loopback` / role **`zone_t`** / `equipment_type=zone_other`.  
 **Backup:** `~/openfdd-backups/railway/20260905T195204Z/`  
@@ -14,7 +14,8 @@
 | ID | Status | Symptom | Evidence | Next |
 |----|--------|---------|----------|------|
 | **railway-ui-fdd-stale** | **DEFERRED** → UX | Building filter / scoped FDD UX across sites | BUG_REPORT prior | Soft-OPEN; not a stress-harness gate |
-| **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` → `username=viewer` JWT | Railway var set; login probe PASS | Auth matrix still JWT-mint path; password path live on hub |
+| **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` → `username=viewer` JWT | Railway var set; login probe PASS | Optional: teach `auth_role_matrix.sh` password path |
+| **wave-c-railway-smoke** | **OPEN** | End Wave C with Railway smoke (health/edges/`zone_t`) | After harness merge | No full matrix unless images/topology moved |
 
 ## Next patch cycle (copy into `.cursor/plans/patch_cycle_3.3.N_<slug>.plan.md`)
 
@@ -28,8 +29,8 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 | Rev / wave | In-repo plan | Concern | Status |
 |------------|--------------|---------|--------|
 | **Wave A** | closeout + [`3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md`](patch_trains/3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) | Tip pin + one full stress | **CLOSED** |
-| **Wave B** | [`3.3.28`](patch_trains/3.3.28_lab_tuners_econ_ahu_residual.plan.md) + [`3.3.29`](patch_trains/3.3.29_viewer_login_and_ui_scope.plan.md) | Lab + viewer + #851 historian scope | **CLOSED** — #852 · tip `sha-10d1ec5` · stress PASS · #851 CLOSED |
-| **Wave C** | [`3.3.30`](patch_trains/3.3.30_isolated_zap_af_auth.plan.md)–[`3.3.32`](patch_trains/3.3.32_durability_restore_perf.plan.md) | Isolated ZAP/MQTTS/restore + smoke | **pending** |
+| **Wave B** | [`3.3.28`](patch_trains/3.3.28_lab_tuners_econ_ahu_residual.plan.md) + [`3.3.29`](patch_trains/3.3.29_viewer_login_and_ui_scope.plan.md) | Lab + viewer + #851 historian scope | **CLOSED** — #852 · tip `sha-10d1ec5` · stress PASS · #851 CLOSED · docs #853 |
+| **Wave C** | [`3.3.30`](patch_trains/3.3.30_isolated_zap_af_auth.plan.md)–[`3.3.32`](patch_trains/3.3.32_durability_restore_perf.plan.md) | Isolated ZAP/MQTTS/restore + smoke | **in progress** — harness local PASS; Railway smoke pending |
 | 3.3.21–3.3.26 | prior patch_trains children | — | **CLOSED** |
 
 **Tuner reference:** Vibe19 UI ~414 vs Lab ~184 — JSON snapshots in [`recovery/`](recovery/). Goal = phased SQL-honest Lab expansion — **not** a hard 414.
@@ -50,6 +51,18 @@ Do **not** reopen #763 / #805 for depth. Do **not** put Pis back on the closeout
 Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live only in session env / gitignored files — **never Discord→git**.
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
+
+## Verdict — Wave C isolated harness (2026-09-05) — PENDING smoke
+
+| Check | Evidence |
+|-------|----------|
+| VERSION | unchanged **3.3.28** (harness/docs only; no GHCR retarget) |
+| 3.3.30 ZAP AF | **PASS** disposable central — OpenAPI import + passive; High=0; scanner `ghcr.io/zaproxy/zaproxy@sha256:781a2bda…`; local `reports/waveC_zap_af_local2/` |
+| 3.3.31 MQTTS | **PASS** allow / cross-site deny (no delivery) / foreign CA fail / QoS1 / reconnect — `reports/waveC_mqtts_isolation_local/` |
+| 3.3.32 restore+perf | **PASS** backup→empty volume markers + bounded `/api/health`+`/api/datasets` budgets — `reports/waveC_restore_empty_local/` |
+| Entry | `scripts/qualification/run_wave_c_isolated.sh` · workflow `wave-c-isolated.yml` |
+| Railway smoke | **pending** after merge (health + fieldbus + edges + Overview `zone_t`) |
+| Field public ZAP | unchanged — still public baseline only on live hub |
 
 ## Verdict — Wave B / 3.3.28 (2026-09-05) — CLOSED
 
@@ -375,8 +388,8 @@ Triage as of **3.3.26** (series residual). Prior PASS rows are **not** rewritten
 | **deploy-mqtt-acl-mount** | **CLOSED** | Documented ops note; file-not-dir |
 | **vibe19-operational-gate-lab** | **DEFERRED** → future | No SQL/session binding for `require_operational_gate` / `startup_delay_min` / `minimum_active_coverage_pct` — Path B (fake Lab sliders refused) |
 | **mqtt-fieldbus-tip-pin-sync** | **DEFERRED** → next pin train | Hybrid central/web tip vs older mqtt/fieldbus `sha-*` remains allowed with explicit hybrid note |
-| **isolated-authenticated-zap-af** | **DEFERRED** → isolated tier | Field closeout keeps public baseline only; AF+OpenAPI+roles not on live OT |
-| **qualification-viewer-login** | **DEFERRED** → product | RBAC has `viewer`; Railway password login is admin/agent only |
+| **isolated-authenticated-zap-af** | **CLOSED** (Wave C harness) | Disposable AF+OpenAPI PASS; field closeout stays public baseline |
+| **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` on Railway; optional matrix password path remains soft |
 
 ## Series wrap draft — Lab tuners 3.3.21→3.3.26
 

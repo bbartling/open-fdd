@@ -1,0 +1,70 @@
+name: Wave C isolated suites
+
+# Disposable ZAP AF + MQTTS isolation + restore-to-empty. Pull GHCR only; no local stack builds.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Immutable Open-FDD GHCR tag (sha-xxxxxxx)
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - .github/workflows/wave-c-isolated.yml
+      - scripts/integration/mqtts_transport_isolation.sh
+      - scripts/qualification/run_isolated_zap_af.sh
+      - scripts/qualification/restore_to_empty.sh
+      - scripts/qualification/run_wave_c_isolated.sh
+      - scripts/qualification/zap/**
+      - scripts/qualification/fixtures/bounded_perf_baseline.json
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  isolated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve image tag
+        id: image
+        shell: bash
+        env:
+          DISPATCH_TAG: ${{ inputs.image_tag }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="$DISPATCH_TAG"
+          else
+            [[ "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+            tag="sha-${PR_BASE_SHA:0:7}"
+          fi
+          if [[ ! "$tag" =~ ^sha-[0-9a-f]{7}$ ]]; then
+            echo "invalid tag: $tag" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Run Wave C isolated suites
+        env:
+          OPENFDD_IMAGE_TAG: ${{ steps.image.outputs.tag }}
+          ARTIFACT_DIR: ${{ github.workspace }}/reports/waveC_isolated_ci
+        run: |
+          chmod +x \
+            scripts/integration/mqtts_transport_isolation.sh \
+            scripts/qualification/restore_to_empty.sh \
+            scripts/qualification/run_isolated_zap_af.sh \
+            scripts/qualification/run_wave_c_isolated.sh
+          ./scripts/qualification/run_wave_c_isolated.sh
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wave-c-isolated-${{ steps.image.outputs.tag }}
+          path: reports/waveC_isolated_ci
+          if-no-files-found: ignore
