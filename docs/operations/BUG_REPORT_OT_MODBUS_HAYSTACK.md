@@ -1,6 +1,6 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-05 (Wave A tip **CLOSED**; Wave B 3.3.28 **CLOSED**; Wave C isolated harness **in PR**)  
+**Date:** 2026-09-05 (Wave A tip **CLOSED**; Wave B 3.3.28 **CLOSED**; Wave C isolated **CLOSED**)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in stress)  
 **Tip / pin (Wave B product):** `10d1ec56` · VERSION **3.3.28** · health **`3.3.28+10d1ec569e83`** · GHCR **central/web/mcp/mqtt/fieldbus `sha-10d1ec5`**  
 **Last CLOSED tip:** `10d1ec56` · **`sha-10d1ec5`** · **`3.3.28+10d1ec569e83`**  
@@ -15,7 +15,7 @@
 |----|--------|---------|----------|------|
 | **railway-ui-fdd-stale** | **DEFERRED** → UX | Building filter / scoped FDD UX across sites | BUG_REPORT prior | Soft-OPEN; not a stress-harness gate |
 | **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` → `username=viewer` JWT | Railway var set; login probe PASS | Optional: teach `auth_role_matrix.sh` password path |
-| **wave-c-railway-smoke** | **PASS** (local) | End Wave C with Railway smoke (health/edges/`zone_t`) | `reports/waveC_railway_smoke_final/` | Cite in Verdict after #854 merge |
+| **wave-c-railway-smoke** | **CLOSED** | End Wave C with Railway smoke (health/edges/`zone_t`) | `reports/waveC_railway_smoke_final/` · #854 | Program wrap |
 
 ## Next patch cycle (copy into `.cursor/plans/patch_cycle_3.3.N_<slug>.plan.md`)
 
@@ -30,7 +30,7 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 |------------|--------------|---------|--------|
 | **Wave A** | closeout + [`3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md`](patch_trains/3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) | Tip pin + one full stress | **CLOSED** |
 | **Wave B** | [`3.3.28`](patch_trains/3.3.28_lab_tuners_econ_ahu_residual.plan.md) + [`3.3.29`](patch_trains/3.3.29_viewer_login_and_ui_scope.plan.md) | Lab + viewer + #851 historian scope | **CLOSED** — #852 · tip `sha-10d1ec5` · stress PASS · #851 CLOSED · docs #853 |
-| **Wave C** | [`3.3.30`](patch_trains/3.3.30_isolated_zap_af_auth.plan.md)–[`3.3.32`](patch_trains/3.3.32_durability_restore_perf.plan.md) | Isolated ZAP/MQTTS/restore + smoke | **in progress** — harness local PASS; Railway smoke pending |
+| **Wave C** | [`3.3.30`](patch_trains/3.3.30_isolated_zap_af_auth.plan.md)–[`3.3.32`](patch_trains/3.3.32_durability_restore_perf.plan.md) | Isolated ZAP/MQTTS/restore + smoke | **CLOSED** — #854 · CI isolated PASS · Railway smoke PASS · tip stays `sha-10d1ec5` |
 | 3.3.21–3.3.26 | prior patch_trains children | — | **CLOSED** |
 
 **Tuner reference:** Vibe19 UI ~414 vs Lab ~184 — JSON snapshots in [`recovery/`](recovery/). Goal = phased SQL-honest Lab expansion — **not** a hard 414.
