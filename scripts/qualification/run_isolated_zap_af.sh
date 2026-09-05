@@ -25,6 +25,7 @@ ART="${ARTIFACT_DIR:-$ROOT/reports/waveC_zap_af_$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$ART"
 WRK="$ART/zap_wrk"
 mkdir -p "$WRK"
+chmod -R a+rwX "$ART" "$WRK"
 cp "$ROOT/docs/openapi.yaml" "$WRK/openapi.yaml"
 
 NET="openfdd-zap-af-${RANDOM}"
@@ -91,22 +92,22 @@ cp "$WRK/af_plan.yaml" "$ART/af_plan.rendered.yaml"
 
 echo "== ZAP Automation Framework (OpenAPI + passive) =="
 set +e
+# Run as root in CI so mounted report dir is writable regardless of host uid mapping.
 docker run --rm --network "$NET" \
   -v "$WRK:/zap/wrk:rw" \
-  -u zap \
+  -e ZAP_AUTH_HEADER_VALUE="Bearer ${TOKEN}" \
   "$ZAP_IMAGE" \
   zap.sh -cmd -autorun /zap/wrk/af_plan.yaml \
   >"$ART/zap_af.stdout.log" 2>"$ART/zap_af.stderr.log"
 ZAP_RC=$?
 set -e
+chmod -R a+rwX "$WRK" 2>/dev/null || true
 
-# Fallback: if AF auth/jobs fail, still prove OpenAPI import path via baseline-style API call list
-# using bearer header (passive only). Record AF status honestly.
+# Prefer AF report even when ZAP exits non-zero (warnings / auth soft-fail).
 AF_STATUS="PASS"
-if [[ "$ZAP_RC" != "0" ]] || [[ ! -f "$WRK/zap-af-report.json" ]]; then
+if [[ ! -f "$WRK/zap-af-report.json" ]]; then
   AF_STATUS="BLOCKED"
-  echo "WARN: ZAP AF exited rc=$ZAP_RC or missing report — running OpenAPI-aware fallback crawl" | tee "$ART/af_fallback.txt"
-  # Write a minimal URLs file for authenticated GETs from OpenAPI paths we care about.
+  echo "WARN: ZAP AF exited rc=$ZAP_RC without report — running OpenAPI-aware fallback crawl" | tee "$ART/af_fallback.txt"
   cat >"$WRK/urls.txt" <<EOF
 ${TARGET_URL}api/health
 ${TARGET_URL}api/datasets
@@ -115,9 +116,9 @@ EOF
   set +e
   docker run --rm --network "$NET" \
     -v "$WRK:/zap/wrk:rw" \
-    -u zap \
+    -w /zap/wrk \
     "$ZAP_IMAGE" \
-    zap-baseline.py -t "$TARGET_URL" -J zap-fallback-report.json \
+    zap-baseline.py -t "$TARGET_URL" -J zap-fallback-report.json -d \
     -z "-config replacer.full_list(0).description=auth \
         -config replacer.full_list(0).enabled=true \
         -config replacer.full_list(0).matchtype=REQ_HEADER \
@@ -127,6 +128,14 @@ EOF
   FB_RC=$?
   set -e
   echo "fallback_rc=$FB_RC" | tee "$ART/fallback_rc.txt"
+  chmod -R a+rwX "$WRK" 2>/dev/null || true
+  # baseline exits 2 on warnings — still accept JSON report with 0 High
+  if [[ -f "$WRK/zap-fallback-report.json" ]]; then
+    AF_STATUS="FALLBACK"
+  fi
+elif [[ "$ZAP_RC" != "0" ]]; then
+  AF_STATUS="PASS_WITH_WARNINGS"
+  echo "WARN: ZAP AF rc=$ZAP_RC but report present — continuing" | tee "$ART/af_rc_note.txt"
 fi
 
 REPORT=""
@@ -141,7 +150,6 @@ fi
 HIGH=0
 MED=0
 if [[ -n "$REPORT" ]]; then
-  # ZAP traditional-json shapes vary; count High/Medium site alerts if present.
   read -r HIGH MED <<<"$(python3 - "$REPORT" <<'PY'
 import json, sys
 from pathlib import Path
@@ -172,10 +180,6 @@ PY
 )"
 fi
 
-PASS=true
-[[ "$HIGH" == "0" ]] || PASS=false
-# AF_STATUS BLOCKED still allows suite PASS if fallback produced report with 0 High
-# and disposable target was scanned — but record AF job as BLOCKED for honesty.
 SUITE_PASS=true
 [[ "$HIGH" == "0" ]] || SUITE_PASS=false
 [[ -n "$REPORT" ]] || SUITE_PASS=false
@@ -202,6 +206,8 @@ jq -n \
 
 if [[ "$SUITE_PASS" != "true" ]]; then
   echo "FAIL: isolated ZAP AF suite" >&2
+  tail -80 "$ART/zap_af.stderr.log" 2>/dev/null >&2 || true
+  tail -40 "$ART/zap_fallback.stderr.log" 2>/dev/null >&2 || true
   exit 1
 fi
 echo "PASS: isolated ZAP AF (af_job_status=$AF_STATUS) → $ART"
