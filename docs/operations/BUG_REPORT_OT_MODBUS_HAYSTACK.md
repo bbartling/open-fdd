@@ -13,7 +13,7 @@
 
 | ID | Status | Symptom | Evidence | Next |
 |----|--------|---------|----------|------|
-| **railway-mqtt-overview-empty** | **OPEN** | `/api/edges` `pi-1`/`bldg2` `has_telemetry:true`, but Overview **Zone Other** / historian for `building_id=bldg2` has **0** numeric roles / no `zone_t` series (empty charts). `BUILDING_100` CSV historian still has sensor-stats rows. | `reports/waveA_overview_probe_20260905T181432Z/` · zone-other warn “Run all rules…” · sensor-stats-bldg2 “no numeric roles” | Wave B or hotfix: map MQTT hosted-weather → `zone_t` / Zone Other equipment so Overview charts populate; keep on soft-OPEN until then |
+| **railway-mqtt-overview-empty** | **OPEN** [#851](https://github.com/bbartling/open-fdd/issues/851) | `/api/edges` `pi-1`/`bldg2` `has_telemetry:true`, but Overview **Zone Other** / historian for `building_id=bldg2` has **0** numeric roles / no `zone_t` series (empty charts). `BUILDING_100` CSV historian still has sensor-stats rows. | `reports/waveA_overview_probe_20260905T181432Z/` · zone-other warn “Run all rules…” · sensor-stats-bldg2 “no numeric roles” | Wave B or hotfix: map MQTT hosted-weather → `zone_t` / Zone Other equipment so Overview charts populate; keep on soft-OPEN until then |
 | **ghcr-mqtt-fieldbus-tip** | **OPEN** (Publish in flight) | Tip `sha-c354ea9` missing mqtt+fieldbus tags; Publish `#33978234108` stuck on multi-arch fieldbus build | central/web/mcp OK; mqtt/fieldbus MISSING | Wait Publish or **DEFER** with run URL if hang; do not silent-skip |
 | **docs-pr-850** | OPEN CLEAN | Overview chart stress gate + wave A/B/C docs | [#850](https://github.com/bbartling/open-fdd/pull/850) | Merge **after** tip Publish completes (avoid cancel loop) |
 
