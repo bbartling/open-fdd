@@ -1,8 +1,8 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-05 (3.3.23 CLOSED — Faults/Lab declutter; hybrid GHCR pin)  
+**Date:** 2026-09-05 (3.3.24 CLOSED — GL36 Lab tuners; hybrid GHCR pin)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in stress)  
-**Tip / pin (closeout claim):** `40ac0664` · GHCR central/web **`sha-40ac066`** · health **`3.3.23+40ac06640af4`** (mqtt/fieldbus stayed **`sha-b3004aa`** — see DEFERRED)  
+**Tip / pin (closeout claim):** `72b22995` · GHCR central/web **`sha-72b2299`** · health **`3.3.24+72b2299541e9`** (mqtt/fieldbus **`sha-b3004aa`** — DEFERRED tip sync)  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit reused — Railway mqtt volume has CA cert but no CA key, so a newly minted `bensbench-1` kit will not verify). Telemetry = hosted weather AV `9101` loopback (no Pi, no JCI required).  
 **Pis freed (not in stress):** bosspi · BensFakeAhu (fake AHU) · Zone1VAV (fake VAV) — vibe13 / other. Private OT LAN addresses stay in session env only.
 
@@ -21,30 +21,43 @@ Topology: Railway hub + bensbench **x86 fieldbus** + light ZAP. **Skip** only wi
 | 3.3.21 closeout | [`patch_trains/3.3.21_closeout_railway_stress.plan.md`](patch_trains/3.3.21_closeout_railway_stress.plan.md) | Re-pin + stress + Verdict (product already merged) | **CLOSED** |
 | 3.3.22 | [`patch_trains/3.3.22_one_dump_ia.plan.md`](patch_trains/3.3.22_one_dump_ia.plan.md) | One **Dump** page; ingest left-rail only; kill Export&ML multi-page | **CLOSED** |
 | 3.3.23 | [`patch_trains/3.3.23_faults_lab_declutter.plan.md`](patch_trains/3.3.23_faults_lab_declutter.plan.md) | Faults/Lab declutter (category-first; less settings-on-faults) | **CLOSED** |
-| 3.3.24 | [`patch_trains/3.3.24_tuners_gl36_wave.plan.md`](patch_trains/3.3.24_tuners_gl36_wave.plan.md) | Lab/registry GL36 FC thresholds (SQL-honest) | PENDING |
+| 3.3.24 | [`patch_trains/3.3.24_tuners_gl36_wave.plan.md`](patch_trains/3.3.24_tuners_gl36_wave.plan.md) | Lab/registry GL36 FC thresholds (SQL-honest) | **CLOSED** |
 | 3.3.25 | [`patch_trains/3.3.25_tuners_sv_econ_ahu_wave.plan.md`](patch_trains/3.3.25_tuners_sv_econ_ahu_wave.plan.md) | Lab/registry SV/ECON/AHU/plant gaps | PENDING |
 | 3.3.26 | [`patch_trains/3.3.26_tuners_gates_residual.plan.md`](patch_trains/3.3.26_tuners_gates_residual.plan.md) | Optional gate trio + soft-OPEN triage + series wrap | PENDING |
 
 **Tuner reference:** Vibe19 UI ~414 vs Lab ~184 — JSON snapshots in [`recovery/`](recovery/). Goal = phased SQL-honest Lab expansion — **not** a hard 414.
 
-| TODO | 3.3.22 | 3.3.23 |
+| TODO | 3.3.23 | 3.3.24 |
 |------|--------|--------|
 | Hygiene START | [x] | [x] |
-| VERSION bump | [x] #838 | [x] #840 |
-| One-concern fix | [x] Dump IA | [x] Lab declutter |
-| PR squash-merge | [x] #838 | [x] #840 |
-| GHCR Publish full stack `sha-<7>` | [x] `sha-b3004aa` | [~] central/web `sha-40ac066`; mqtt/fieldbus **DEFERRED** |
-| Railway backup + re-pin | [x] `20260904T222234Z` | [x] `20260905T021711Z` (central+web) |
-| Fieldbus same tip sha | [x] | [ ] stayed `sha-b3004aa` |
+| VERSION bump | [x] #840 | [x] #842 |
+| One-concern fix | [x] Lab declutter | [x] GL36 Lab tuners |
+| PR squash-merge | [x] #840 | [x] #842 |
+| GHCR full stack tip | [~] hybrid | [~] central/web `sha-72b2299`; mqtt/fieldbus DEFERRED |
+| Railway backup + re-pin | [x] | [x] `20260905T034509Z` |
 | Stress CSV + ZAP | [x] | [x] |
-| Verdict table | [x] | [x] |
-| Hygiene END | [x] #839 | [ ] this PR |
+| Verdict | [x] | [x] |
 
 Do **not** reopen #763 / #805 for depth. Do **not** put Pis back on the closeout path.
 
 Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live only in session env / gitignored files — **never Discord→git**.
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
+
+## Verdict — 3.3.24 GL36 Lab tuners (2026-09-05) — CLOSED
+
+| Check | Evidence |
+|-------|----------|
+| Product merge | #842 → `72b22995`; VERSION **3.3.24** |
+| Tip / pin | central/web **`sha-72b2299`** · health **`3.3.24+72b2299541e9`** |
+| Shipped | FC2/3/5/8–12 SQL-honest Lab params (`MIX_TOL`, `DELTA_SUPPLY_FAN`, econ/clg thresholds, …); defaults = prior literals |
+| GHCR | central+web tags OK; mqtt/fieldbus Publish still slow/hung — **DEFERRED** tip sync |
+| Railway backup | `~/openfdd-backups/railway/20260905T034509Z/` |
+| Fieldbus | `sha-b3004aa` (prior); `edges:1` |
+| STRESS | **PASS** — `reports/nightly-ot-bench_20260905T035119Z/` (first `034632Z` 00 FAIL edges race; re-run PASS) |
+| ZAP | **PASS** — `reports/zap-railway_20260905T035155Z/` · `FAIL-NEW:0` |
+| Gate trio / mode_delay | **DEFERRED** → 3.3.26 |
+| mqtt/fieldbus tip pin | **DEFERRED** |
 
 ## Verdict — 3.3.23 Faults/Lab declutter (2026-09-05) — CLOSED
 

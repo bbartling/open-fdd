@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-09-05 — 3.3.24 GL36 Lab tuners CLOSED
+
+- **Merge:** #842 → `72b22995`; VERSION **3.3.24**; health **`3.3.24+72b2299541e9`** (central/web `sha-72b2299`).
+- mqtt/fieldbus tip sync still **DEFERRED** (`sha-b3004aa`). Stress `reports/nightly-ot-bench_20260905T035119Z/` PASS.
+- Next: 3.3.25 SV/ECON wave (local WIP on `feat/3.3.25-tuners-sv-econ-ahu`).
+
 ## 2026-09-05 — 3.3.23 Faults/Lab declutter CLOSED
 
 - **Merge:** #840 → `40ac0664`; VERSION **3.3.23**; health **`3.3.23+40ac06640af4`**.
