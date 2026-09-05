@@ -1,8 +1,8 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-05 (3.3.24 CLOSED — GL36 Lab tuners; hybrid GHCR pin)  
+**Date:** 2026-09-05 (3.3.25 CLOSED — SV/ECON Lab tuners; hybrid GHCR pin)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in stress)  
-**Tip / pin (closeout claim):** `72b22995` · GHCR central/web **`sha-72b2299`** · health **`3.3.24+72b2299541e9`** (mqtt/fieldbus **`sha-b3004aa`** — DEFERRED tip sync)  
+**Tip / pin (closeout claim):** `e78a6089` · GHCR central/web **`sha-e78a608`** · health **`3.3.25+e78a608934ed`** (mqtt/fieldbus **`sha-b3004aa`** — DEFERRED tip sync)  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit reused — Railway mqtt volume has CA cert but no CA key, so a newly minted `bensbench-1` kit will not verify). Telemetry = hosted weather AV `9101` loopback (no Pi, no JCI required).  
 **Pis freed (not in stress):** bosspi · BensFakeAhu (fake AHU) · Zone1VAV (fake VAV) — vibe13 / other. Private OT LAN addresses stay in session env only.
 
@@ -22,19 +22,19 @@ Topology: Railway hub + bensbench **x86 fieldbus** + light ZAP. **Skip** only wi
 | 3.3.22 | [`patch_trains/3.3.22_one_dump_ia.plan.md`](patch_trains/3.3.22_one_dump_ia.plan.md) | One **Dump** page; ingest left-rail only; kill Export&ML multi-page | **CLOSED** |
 | 3.3.23 | [`patch_trains/3.3.23_faults_lab_declutter.plan.md`](patch_trains/3.3.23_faults_lab_declutter.plan.md) | Faults/Lab declutter (category-first; less settings-on-faults) | **CLOSED** |
 | 3.3.24 | [`patch_trains/3.3.24_tuners_gl36_wave.plan.md`](patch_trains/3.3.24_tuners_gl36_wave.plan.md) | Lab/registry GL36 FC thresholds (SQL-honest) | **CLOSED** |
-| 3.3.25 | [`patch_trains/3.3.25_tuners_sv_econ_ahu_wave.plan.md`](patch_trains/3.3.25_tuners_sv_econ_ahu_wave.plan.md) | Lab/registry SV/ECON/AHU/plant gaps | PENDING |
+| 3.3.25 | [`patch_trains/3.3.25_tuners_sv_econ_ahu_wave.plan.md`](patch_trains/3.3.25_tuners_sv_econ_ahu_wave.plan.md) | Lab/registry SV/ECON/AHU/plant gaps | **CLOSED** (partial: SV-RANGE + ECON-4; residual DEFERRED→3.3.26) |
 | 3.3.26 | [`patch_trains/3.3.26_tuners_gates_residual.plan.md`](patch_trains/3.3.26_tuners_gates_residual.plan.md) | Optional gate trio + soft-OPEN triage + series wrap | PENDING |
 
 **Tuner reference:** Vibe19 UI ~414 vs Lab ~184 — JSON snapshots in [`recovery/`](recovery/). Goal = phased SQL-honest Lab expansion — **not** a hard 414.
 
-| TODO | 3.3.23 | 3.3.24 |
+| TODO | 3.3.24 | 3.3.25 |
 |------|--------|--------|
 | Hygiene START | [x] | [x] |
-| VERSION bump | [x] #840 | [x] #842 |
-| One-concern fix | [x] Lab declutter | [x] GL36 Lab tuners |
-| PR squash-merge | [x] #840 | [x] #842 |
-| GHCR full stack tip | [~] hybrid | [~] central/web `sha-72b2299`; mqtt/fieldbus DEFERRED |
-| Railway backup + re-pin | [x] | [x] `20260905T034509Z` |
+| VERSION bump | [x] #842 | [x] #844 |
+| One-concern fix | [x] GL36 | [x] SV-RANGE + ECON-4 |
+| PR squash-merge | [x] #842 | [x] #844 |
+| GHCR full stack tip | [~] hybrid | [~] central/web `sha-e78a608` |
+| Railway backup + re-pin | [x] | [x] `20260905T052041Z` |
 | Stress CSV + ZAP | [x] | [x] |
 | Verdict | [x] | [x] |
 
@@ -43,6 +43,19 @@ Do **not** reopen #763 / #805 for depth. Do **not** put Pis back on the closeout
 Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live only in session env / gitignored files — **never Discord→git**.
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
+
+## Verdict — 3.3.25 SV/ECON Lab tuners (2026-09-05) — CLOSED
+
+| Check | Evidence |
+|-------|----------|
+| Product merge | #844 → `e78a6089`; VERSION **3.3.25** |
+| Tip / pin | central/web **`sha-e78a608`** · health **`3.3.25+e78a608934ed`** |
+| Shipped | SV-RANGE `range_scale_humidity` / `range_scale_pressure`; ECON-4 `oat_rat_delta_min` |
+| Not in this rev (residual) | Broader ECON-2..7 / AHU / VAV / plant Lab gaps → **DEFERRED** → 3.3.26 residual |
+| GHCR | central+web OK; mqtt/fieldbus tip sync **DEFERRED** (`sha-b3004aa`) |
+| Railway backup | `~/openfdd-backups/railway/20260905T052041Z/` |
+| STRESS | **PASS** — `reports/nightly-ot-bench_20260905T052208Z/` |
+| ZAP | **PASS** — `reports/zap-railway_20260905T052244Z/` · `FAIL-NEW:0` |
 
 ## Verdict — 3.3.24 GL36 Lab tuners (2026-09-05) — CLOSED
 
