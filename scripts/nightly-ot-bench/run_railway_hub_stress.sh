@@ -18,6 +18,10 @@ export CENTRAL_BASE="$RAILWAY_BASE"
 export BASE="$RAILWAY_BASE"
 export RAILWAY_ONLY=1
 export RUN_CREEKSIDE_FULL="${RUN_CREEKSIDE_FULL:-1}"
+if [[ "$RAILWAY_BASE" != https://* ]]; then
+  echo "ERROR: Railway field stress requires https:// hub, got: $RAILWAY_BASE" >&2
+  exit 1
+fi
 EXPECTED_EDGE_ID="${EXPECTED_EDGE_ID:-}"
 EXPECTED_SITE_ID="${EXPECTED_SITE_ID:-}"
 ACCEPT_ZAP_MEDIUM="${ACCEPT_ZAP_MEDIUM:-1}"
@@ -65,7 +69,7 @@ python3 "$MANIFEST_PY" create \
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"
-  shift 3 || true
+  shift 4 || true
   local args=(python3 "$MANIFEST_PY" record --manifest "$MANIFEST" --gate "$gate" --status "$status" --title "$title")
   [[ -n "$reason" ]] && args+=(--reason "$reason")
   local art
@@ -169,9 +173,13 @@ else
       record_gate "06_zap_baseline" PASS "06 ZAP baseline" \
         "public baseline; High=0; Medium disposition ACCEPT_ZAP_MEDIUM=$ACCEPT_ZAP_MEDIUM (not authenticated AF scan)" \
         "$ZJSON" "$ART/zap_measured.json" "$ART/06_zap_baseline.log"
+    elif grep -qE '^ERROR: (malformed|missing|ZAP JSON)' "$ART/06_zap_baseline.log" 2>/dev/null; then
+      record_gate "06_zap_baseline" ERROR "06 ZAP baseline" \
+        "malformed/invalid zap_baseline.json (scanner evidence unusable); exit=$zverdict" \
+        "$ZJSON" "$ART/06_zap_baseline.log"
     else
       record_gate "06_zap_baseline" FAIL "06 ZAP baseline" \
-        "zap_baseline_verdict exit=$zverdict" \
+        "zap_baseline_verdict exit=$zverdict (High or unaccepted Medium)" \
         "$ZJSON" "$ART/06_zap_baseline.log"
     fi
   fi

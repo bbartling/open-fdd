@@ -36,7 +36,7 @@ Optional local Cursor UI copies: `~/.cursor/plans/*.plan.md` (same content mirro
 2. ~~**Faults** wall of settings~~ → **3.3.23** declutter
 3. ~~GL36 Lab gaps~~ → **3.3.24**; ~~SV/ECON partial~~ → **3.3.25**
 4. **3.3.26 (active):** qualification harness honesty (manifests, SKIP_ZAP, auth, Railway MCP); operational-gate Lab trio **DEFERRED** (Path B)
-5. Stress entry: [`scripts/qualification/README.md`](../../scripts/qualification/README.md) · cite `fully_qualified` from manifest
+5. Stress entry: [`scripts/qualification/README.md`](../../../scripts/qualification/README.md) · cite `fully_qualified` from manifest
 
 ## Runtime facts (verify on tip — do not assume)
 

@@ -27,14 +27,15 @@ def load_report(path: Path) -> dict[str, Any]:
 
 
 def summarize(data: dict[str, Any]) -> dict[str, Any]:
-    site = data.get("site") or []
+    if "site" not in data or not isinstance(data.get("site"), list):
+        raise SystemExit("ERROR: ZAP JSON missing list-valued 'site' field")
+    site = data["site"]
     alerts: list[dict[str, Any]] = []
-    if isinstance(site, list):
-        for s in site:
-            if isinstance(s, dict):
-                for a in s.get("alerts") or []:
-                    if isinstance(a, dict):
-                        alerts.append(a)
+    for s in site:
+        if isinstance(s, dict):
+            for a in s.get("alerts") or []:
+                if isinstance(a, dict):
+                    alerts.append(a)
 
     by_risk: dict[str, int] = {
         "High": 0,
@@ -102,6 +103,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         assert high["by_risk"]["High"] == 1
         assert "SQL Injection" in high["high_alerts"]
+        try:
+            summarize({})
+            raise AssertionError("missing site should error")
+        except SystemExit:
+            pass
         print("selftest OK")
         return 0
 

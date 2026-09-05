@@ -29,6 +29,7 @@ DEFAULT_REQUIRED = (
     "05_gate19",
     "06_zap_baseline",
     "07_auth_role_matrix",
+    "08_mcp_accuracy",
 )
 
 

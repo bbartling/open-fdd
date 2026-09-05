@@ -29,8 +29,9 @@ if [[ -z "$MCP_IMAGE" ]]; then
   echo "ERROR: OPENFDD_MCP_IMAGE required (exact sha-* or digest; no silent :nightly)" >&2
   exit 1
 fi
-if [[ "$MCP_IMAGE" == *:nightly || "$MCP_IMAGE" == *:latest ]]; then
-  echo "ERROR: refusing moving tag $MCP_IMAGE — pin sha-* or @sha256:" >&2
+# Accept only :sha-<hex> tags or @sha256:<digest> references.
+if [[ ! "$MCP_IMAGE" =~ @sha256:[0-9a-fA-F]{64}$ && ! "$MCP_IMAGE" =~ :sha-[0-9a-fA-F]{7,}$ ]]; then
+  echo "ERROR: refusing non-immutable MCP image $MCP_IMAGE — pin :sha-<7+> or @sha256:<64>" >&2
   exit 1
 fi
 if [[ -z "${OPENFDD_ADMIN_PASSWORD:-}" ]]; then

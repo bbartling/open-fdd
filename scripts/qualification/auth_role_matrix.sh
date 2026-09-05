@@ -15,6 +15,10 @@ if [[ -z "$BASE" ]]; then
   echo "ERROR: OPENFDD_API_BASE / RAILWAY_BASE required" >&2
   exit 1
 fi
+if [[ "$BASE" != https://* ]]; then
+  echo "ERROR: auth role matrix requires https:// hub, got: $BASE" >&2
+  exit 1
+fi
 if [[ -z "${OPENFDD_ADMIN_PASSWORD:-}" ]]; then
   echo "ERROR: OPENFDD_ADMIN_PASSWORD required" >&2
   exit 1
@@ -22,7 +26,7 @@ fi
 
 code_of() {
   local method="$1" url="$2" token="${3:-}" body="${4:-}"
-  local args=(-sS -o /tmp/auth_matrix_body.$$ -w "%{http_code}" --max-time 25 -X "$method")
+  local args=(-sS -o /dev/null -w "%{http_code}" --max-time 25 -X "$method")
   [[ -n "$token" ]] && args+=(-H "Authorization: Bearer $token")
   if [[ -n "$body" ]]; then
     args+=(-H "Content-Type: application/json" -d "$body")

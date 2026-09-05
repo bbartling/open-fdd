@@ -94,7 +94,7 @@ export OPENFDD_API_BASE=https://openfdd-web-production-af99.up.railway.app
 | 3 | B100 `RAILWAY_ONLY=1` | FC1 / runtime / series |
 | 4 | Creekside fixture + full zip | `LAKESIDE_ES` |
 | 5 | Gate 19 | **READY** |
-| 6 | ZAP baseline Railway public URL | no unexplained High/Critical |
+| 6 | ZAP baseline Railway public URL | High=0; every Medium explicitly accepted (`ACCEPT_ZAP_MEDIUM` / reviewed); cite `qualification_manifest` `fully_qualified` |
 
 ## Anti-patterns
 
