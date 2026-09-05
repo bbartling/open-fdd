@@ -37,33 +37,11 @@
 </p>
 
 
-> **Semantic building analytics and HVAC fault detection — local-first, on-premises, vendor-neutral.**
+Open-FDD is a free, open-source building-to-cloud pipeline for HVAC analytics and fault detection. The same stack runs on-premises or in the cloud: high-performance Apache Arrow storage and Apache DataFusion SQL, a Rust central service, React operator UI, Mosquitto MQTTS ingest, and fieldbus edge agents for BACnet, Modbus, and Haystack — plus REST APIs and CSV/zip import when you are not on live OT.
 
-Open-FDD maps Haystack-style JSON point roles to live or historical OT/CSV data and runs fault detection with **DataFusion SQL** over an **Apache Arrow** historian. The operator stack is **Rust central** and **React web**; the SPA talks to central `/api` only.
-
-- **62** cookbook rules (**66** SQL registry ids) — FDD, RCx, Overview, findings
-- GHCR images: `central`, `web`, `fieldbus`, `mqtt`, `mcp`
-- [PyPI `open-fdd`](https://pypi.org/project/open-fdd/) — pandas cookbooks and ECM for notebooks; not the product runtime
-
-**Local LAN / VPN (ready today):** `./scripts/openfdd_stack_up.sh react` for CSV/zip FDD behind the firewall. Not intended for the public internet.
-
-**Experimental Railway field lab (active):** Railway runs `openfdd-central` + `openfdd-mqtt` + `openfdd-web` from GHCR, with bensbench **x86 `openfdd-fieldbus` → MQTTS** into the hub (no Raspberry Pi; no local `react-ot` as the AFDD head-end). Closeout stress covers the CSV fault matrix, light public ZAP, auth role checks, and Railway MCP↔REST parity via [qualification manifests](scripts/qualification/README.md). See [Railway deployment](docs/operations/RAILWAY_DEPLOYMENT.md). Lab/demo path — not a production-hardening claim.
-
-**Roadmap:** managed cloud hosting and internet-facing deployment with production security hardening target **Fall 2026**. Field OT (BACnet / Modbus / Haystack / MQTTS) already ships in `openfdd-fieldbus` for the Railway lab path.
+Deploy locally or as a cloud hub and pull building data over MQTTS, APIs, or files. Today’s product is SQL-based FDD and RCx on that Arrow/DataFusion engine; the roadmap is ML and clustering on the same foundation.
 
 ---
-
-<details>
-<summary>FDD Rule Cookbook</summary>
-
-## FDD Rule Cookbook (the heart of the project)
-
-The **[HVAC FDD Rule Cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/)** is the validated catalog of **62 fault-detection rules**, published in two parity-matched flavors:
-
-- **[DataFusion SQL cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/datafusion-sql-cookbook.html)** — copy-paste SQL that runs on the edge/central Arrow historian
-- **[Pandas cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html)** — the same rules for notebooks, CSV exports, and RCx studies
-
-</details>
 
 <details>
 <summary>Install / run</summary>
@@ -90,7 +68,7 @@ export OPENFDD_ADMIN_PASSWORD='change-me'
 
 ./scripts/openfdd_stack_up.sh react       # local CSV lab (ready today)
 ./scripts/openfdd_stack_up.sh csv         # central + web only
-# Field OT into Railway lab: openfdd-fieldbus → MQTTS (see docs/operations/RAILWAY_DEPLOYMENT.md)
+# Cloud hub path: openfdd-fieldbus → MQTTS (see docs/operations/RAILWAY_DEPLOYMENT.md)
 ```
 
 Update a running stack (pull, backup, rollback if health fails):
