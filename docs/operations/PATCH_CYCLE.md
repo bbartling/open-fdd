@@ -91,6 +91,7 @@ export OPENFDD_API_BASE=https://openfdd-web-production-af99.up.railway.app
 | # | Gate | Pass |
 |---|------|------|
 | 0 | Hub health + x86 fieldbus + `/api/edges` telemetry | `3.3.N+…`; `has_telemetry:true` |
+| 0b | MQTTS → Overview Zone Other / `zone_t` charts | Hosted-weather AV 9101 charts populated (not empty + rising ingest) |
 | 1 | synth59 `--api-base` Railway | **59/59** |
 | 2 | Gate 17 | health matrix + overview |
 | 3 | B100 `RAILWAY_ONLY=1` | FC1 / runtime / series |
