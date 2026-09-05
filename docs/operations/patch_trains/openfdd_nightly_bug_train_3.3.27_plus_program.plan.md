@@ -1,82 +1,60 @@
 ---
 name: Open-FDD nightly bug train 3.3.27+
-overview: "Master Cursor program index for Open-FDD nightlies 3.3.27→3.3.32: one TODO per child plan in order, each linking the child `.plan.md`. Start only after 3.3.26 closeout is CLOSED."
+overview: "Optimized 3.3.27→3.3.32 program: batch product work, full Railway stress only on image-shipping waves, isolated suites prove themselves off-hub. No skipped tests — drop redundant full re-pin/stress between every child."
 todos:
-  - id: ship-327
-    content: Execute [3.3.27 tip pin sync](3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) — mqtt/fieldbus tip pin or DEFERRED
+  - id: wave-a-pin
+    content: "Wave A — 3.3.26 closeout + 3.3.27 tip pin: one backup/re-pin/fieldbus + ONE full Railway stress (incl. Overview zone_t)"
     status: in_progress
-  - id: ship-328
-    content: Execute [3.3.28 Lab residual](3.3.28_lab_tuners_econ_ahu_residual.plan.md) — ECON/AHU/VAV Lab leftovers
+  - id: wave-b-product
+    content: "Wave B — 3.3.28 Lab + 3.3.29 viewer/UI then ONE combined full Railway stress"
     status: pending
-  - id: ship-329
-    content: Execute [3.3.29 viewer/UI](3.3.29_viewer_login_and_ui_scope.plan.md) — viewer login + building scope
-    status: pending
-  - id: ship-330
-    content: Execute [3.3.30 isolated ZAP](3.3.30_isolated_zap_af_auth.plan.md) — authenticated ZAP AF + OpenAPI
-    status: pending
-  - id: ship-331
-    content: Execute [3.3.31 MQTTS](3.3.31_mqtts_transport_isolation.plan.md) — disposable MQTTS ACL/QoS/freshness
-    status: pending
-  - id: ship-332
-    content: Execute [3.3.32 restore/perf](3.3.32_durability_restore_perf.plan.md) — Gate 18 restore + perf budgets
+  - id: wave-c-isolated
+    content: "Wave C — 3.3.30 ZAP + 3.3.31 MQTTS + 3.3.32 restore: isolated primary; Railway smoke at end"
     status: pending
 isProject: false
 ---
 
-# Open-FDD nightly bug train master (3.3.27+)
+# Open-FDD nightly bug train master (3.3.27+) — optimized
 
-**Not a VERSION bump itself.** Sequential program: open **one child plan at a time**; mark the matching TODO done only when that child’s BUG_REPORT verdict is CLOSED or DEFERRED with reason.
+**Not a VERSION bump itself.** Child plans stay the concern backlog. **Stop** full backup → re-pin → `run_railway_hub_stress.sh` after every tiny rev.
 
-**Gate:** Finish current closeout first — Verdict 3.3.26 / tip pin (`readme_and_nightly_trains` Cursor plan). Do not start 3.3.27 until then.
+**Honesty:** every concern still gets evidence. Drop only **duplicate full Railway matrices** when images/topology did not change.
 
-**Mirrors:** GitHub is source of truth here; Cursor copies under `~/.cursor/plans/`. Index: [`README.md`](README.md) · handoff: [`../recovery/AI_CONTEXT_HANDOFF.md`](../recovery/AI_CONTEXT_HANDOFF.md).
+**Gate:** Wave A tip pin before Wave B. Do not merge docs mid-Publish.
 
-## Children in order (TODOs)
+## Waves
 
-| Order | Rev | TODO | Child plan | One concern |
-|-------|-----|------|------------|-------------|
-| 1 | 3.3.27 | `ship-327` | [`3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md`](3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) | Tip mqtt/fieldbus pin (or honest BLOCKED) |
-| 2 | 3.3.28 | `ship-328` | [`3.3.28_lab_tuners_econ_ahu_residual.plan.md`](3.3.28_lab_tuners_econ_ahu_residual.plan.md) | Lab ECON/AHU/VAV residual |
-| 3 | 3.3.29 | `ship-329` | [`3.3.29_viewer_login_and_ui_scope.plan.md`](3.3.29_viewer_login_and_ui_scope.plan.md) | Viewer login + building UI scope |
-| 4 | 3.3.30 | `ship-330` | [`3.3.30_isolated_zap_af_auth.plan.md`](3.3.30_isolated_zap_af_auth.plan.md) | Isolated authenticated ZAP AF |
-| 5 | 3.3.31 | `ship-331` | [`3.3.31_mqtts_transport_isolation.plan.md`](3.3.31_mqtts_transport_isolation.plan.md) | Disposable MQTTS isolation |
-| 6 | 3.3.32 | `ship-332` | [`3.3.32_durability_restore_perf.plan.md`](3.3.32_durability_restore_perf.plan.md) | Restore + bounded perf |
+| Wave | Children | Stress |
+|------|----------|--------|
+| **A — tip pin** | 3.3.26 closeout + [`3.3.27`](3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) | **One full** Railway + Overview `zone_t` |
+| **B — product** | [`3.3.28`](3.3.28_lab_tuners_econ_ahu_residual.plan.md) + [`3.3.29`](3.3.29_viewer_login_and_ui_scope.plan.md) | Ship 1–2 PRs → **one** tip → **one full** stress |
+| **C — isolated** | [`3.3.30`](3.3.30_isolated_zap_af_auth.plan.md) + [`3.3.31`](3.3.31_mqtts_transport_isolation.plan.md) + [`3.3.32`](3.3.32_durability_restore_perf.plan.md) | Isolated suites primary; end with **Railway smoke** (full only if images changed) |
 
 ```mermaid
 flowchart LR
-  c326[Verdict_3_3_26]
-  c327[3_3_27_tip_pin]
-  c328[3_3_28_Lab]
-  c329[3_3_29_viewer]
-  c330[3_3_30_ZAP]
-  c331[3_3_31_MQTTS]
-  c332[3_3_32_restore]
-  c326 --> c327 --> c328 --> c329 --> c330 --> c331 --> c332
+  waveA[WaveA_tip_pin_one_full_stress]
+  waveB[WaveB_Lab_plus_viewer_one_full_stress]
+  waveC[WaveC_isolated_suites_plus_smoke]
+  waveA --> waveB --> waveC
 ```
 
-## Shared loop (every child)
+## Stress tiers
 
-```text
-hygiene START → VERSION bump → one concern → one PR
-  → squash-merge → wait GHCR sha-<7>
-  → Railway backup → re-pin → x86 fieldbus
-  → run_railway_hub_stress.sh LAST → BUG_REPORT → hygiene END
-```
+| Tier | When | What |
+|------|------|------|
+| **Full Railway** | Wave A; Wave B tip; image/topology change | Full `run_railway_hub_stress.sh` → `fully_qualified` + Overview |
+| **Railway smoke** | Wave C end; docs-only | Hub health + edges + Overview Zone Other/`zone_t` (+ light ZAP); skip full CSV/synth59/B100/Creekside/MCP re-run unless images moved |
+| **Isolated** | 330/331/332 primary | Disposable ZAP AF, MQTTS ACL/QoS, restore-to-empty — never claim PASS from live Railway alone |
 
-### Stress MUST validate MQTTS → Overview charts
+### Overview charts (full + smoke)
 
-Beyond `00_hub_health_edges` (`has_telemetry:true`), every Railway field stress on this train must prove the **UI can chart live bench data** from the MQTTS pipeline:
+Hosted-weather AV **9101** → role **`zone_t`** → **Zone Other** charts populated (not empty + rising `ingest_ok`). Evidence in BUG_REPORT or DEFERRED with operator-browser reason.
 
-| Check | Expected |
-|-------|----------|
-| Field source | bensbench x86 fieldbus → Railway MQTTS; hosted-weather AV **9101** loopback (no Pi) |
-| Edge | expected edge (often `pi-1` / site `bldg2`) `has_telemetry:true` |
-| Role model | live tag normalized to SQL role **`zone_t`** (`zonetemp` → `zone_t`) |
-| Overview | **Zone Other** / MQTT generic zone monitoring shell populates — not empty charts with rising `ingest_ok` |
-| Evidence | API series/overview sample + artifact path in BUG_REPORT; **DEFERRED** only with operator-browser reason |
+## Dropped as silly
 
-Do **not** claim CLOSED if edges ingest but Overview/Zone Other charts stay empty for the mapped `zone_t` stream.
+- Full matrix after every child when tip unchanged
+- Isolated proof via live Railway
+- Docs merges that cancel fieldbus Publish
+- Extra VERSION for pin-only if Wave A already closed that tip under 3.3.26
 
-Locked: Railway hub + bensbench x86 fieldbus; low-RAM (no local docker build); no Pi / no live OT DoS. Ops: [`../PATCH_CYCLE.md`](../PATCH_CYCLE.md) · [`../STRESS_CLOSEOUT.md`](../STRESS_CLOSEOUT.md) · [`../BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../BUG_REPORT_OT_MODBUS_HAYSTACK.md).
-
-Predecessor: [`openfdd_patch_series_3.3.21_to_3.3.26_program.plan.md`](openfdd_patch_series_3.3.21_to_3.3.26_program.plan.md) (CLOSED when 3.3.26 verdict lands).
+Ops: [`../PATCH_CYCLE.md`](../PATCH_CYCLE.md) · [`../STRESS_CLOSEOUT.md`](../STRESS_CLOSEOUT.md) · [`../BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../BUG_REPORT_OT_MODBUS_HAYSTACK.md).
