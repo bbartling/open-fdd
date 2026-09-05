@@ -22,7 +22,7 @@ base AS (
     CAST(CASE
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN fan > 0.01 AND mat IS NOT NULL AND rat IS NOT NULL AND oa_t IS NOT NULL
-       AND ABS(rat - oa_t) > 2.2
+       AND ABS(rat - oa_t) > {{OAT_RAT_DELTA_MIN}}
        AND ((mat - rat) / NULLIF(oa_t - rat, 0)) * 100.0 < {{OA_MIN_PCT}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h

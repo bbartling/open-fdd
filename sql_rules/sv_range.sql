@@ -32,8 +32,8 @@ base AS (
       WHEN chw_return_t IS NOT NULL AND (chw_return_t < 30.0 * {{RANGE_SCALE_TEMPERATURE}} OR chw_return_t > 90.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
       WHEN hw_supply_t IS NOT NULL AND (hw_supply_t < 40.0 * {{RANGE_SCALE_TEMPERATURE}} OR hw_supply_t > 220.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
       WHEN hw_return_t IS NOT NULL AND (hw_return_t < 40.0 * {{RANGE_SCALE_TEMPERATURE}} OR hw_return_t > 220.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
-      WHEN oa_h IS NOT NULL AND (oa_h < 0.0 OR oa_h > 100.0) THEN 1
-      WHEN duct_static IS NOT NULL AND (duct_static < -1.0 OR duct_static > 8.0) THEN 1
+      WHEN oa_h IS NOT NULL AND (oa_h < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR oa_h > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
+      WHEN duct_static IS NOT NULL AND (duct_static < -1.0 * {{RANGE_SCALE_PRESSURE}} OR duct_static > 8.0 * {{RANGE_SCALE_PRESSURE}}) THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h
