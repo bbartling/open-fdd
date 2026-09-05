@@ -13,7 +13,8 @@ pub mod session;
 pub mod tuning;
 
 pub use historian::{
-    new_historian_session, register_historian_dataset, HistorianDatasetKind, HistorianRegistration,
+    new_historian_session, register_historian_building, register_historian_dataset,
+    HistorianDatasetKind, HistorianRegistration,
 };
 pub use object_store::{
     refresh_s3_scope_index_from_env, register_configured_historian,

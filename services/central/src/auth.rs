@@ -95,6 +95,9 @@ pub struct AuthConfig {
     /// Optional agent password for FDD AI assistance (`username=agent` → operator JWT).
     /// Prefer this on Railway over sharing the admin password with MCP hosts.
     pub agent_password: Option<String>,
+    /// Optional viewer password (`username=viewer` → viewer JWT, read-only RBAC).
+    /// Deployment-wide — not tenant isolation. Unset → viewer password login disabled.
+    pub viewer_password: Option<String>,
 }
 
 pub fn is_loopback_bind(host: &str) -> bool {
@@ -160,6 +163,9 @@ impl AuthConfig {
         let agent_password = std::env::var("OPENFDD_AGENT_PASSWORD")
             .ok()
             .filter(|s| !s.trim().is_empty());
+        let viewer_password = std::env::var("OPENFDD_VIEWER_PASSWORD")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
         if secret.is_none() {
             warn!("auth_enabled=false (OPENFDD_JWT_SECRET unset) — open mode is loopback-only");
         } else {
@@ -177,11 +183,17 @@ impl AuthConfig {
                     "OPENFDD_AGENT_PASSWORD unset — Railway/MCP agents should use a dedicated agent password (username=agent), not admin"
                 );
             }
+            if viewer_password.is_none() {
+                warn!(
+                    "OPENFDD_VIEWER_PASSWORD unset — viewer password login disabled (RBAC role still mintable via JWT)"
+                );
+            }
         }
         Self {
             secret,
             admin_password,
             agent_password,
+            viewer_password,
         }
     }
 
@@ -214,6 +226,7 @@ impl AuthConfig {
     /// Validate username/password for UI / agent login.
     /// - `admin` + `OPENFDD_ADMIN_PASSWORD` → Admin
     /// - `agent` + `OPENFDD_AGENT_PASSWORD` → Operator (FDD AI assistance / MCP)
+    /// - `viewer` + `OPENFDD_VIEWER_PASSWORD` → Viewer (read-only; deployment-wide)
     pub fn authenticate_password(
         &self,
         username: &str,
@@ -238,6 +251,15 @@ impl AuthConfig {
                 return Err("invalid credentials".into());
             }
             return Ok(("agent".into(), Role::Operator));
+        }
+        if user.eq_ignore_ascii_case("viewer") {
+            let expected = self.viewer_password.as_ref().ok_or_else(|| {
+                "viewer login not configured (set OPENFDD_VIEWER_PASSWORD)".to_string()
+            })?;
+            if !constant_time_eq(expected.as_bytes(), password.as_bytes()) {
+                return Err("invalid credentials".into());
+            }
+            return Ok(("viewer".into(), Role::Viewer));
         }
         Err("invalid credentials".into())
     }
@@ -313,6 +335,7 @@ mod tests {
             secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
             admin_password: None,
             agent_password: None,
+            viewer_password: None,
         };
         let claims = JwtClaims {
             sub: "operator".into(),
@@ -337,6 +360,7 @@ mod tests {
             secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
             admin_password: None,
             agent_password: None,
+            viewer_password: None,
         };
         let claims = JwtClaims {
             sub: "x".into(),
@@ -394,6 +418,7 @@ mod tests {
             secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
             admin_password: Some("admin-pw".into()),
             agent_password: Some("agent-pw".into()),
+            viewer_password: Some("viewer-pw".into()),
         };
         let (sub, role) = cfg.authenticate_password("agent", "agent-pw").unwrap();
         assert_eq!(sub, "agent");
@@ -403,6 +428,10 @@ mod tests {
         let (admin_sub, admin_role) = cfg.authenticate_password("admin", "admin-pw").unwrap();
         assert_eq!(admin_sub, "admin");
         assert_eq!(admin_role, Role::Admin);
+        let (viewer_sub, viewer_role) = cfg.authenticate_password("viewer", "viewer-pw").unwrap();
+        assert_eq!(viewer_sub, "viewer");
+        assert_eq!(viewer_role, Role::Viewer);
+        assert!(cfg.authenticate_password("viewer", "admin-pw").is_err());
     }
 
     #[test]
@@ -411,7 +440,9 @@ mod tests {
             secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
             admin_password: Some("admin-pw".into()),
             agent_password: None,
+            viewer_password: None,
         };
         assert!(cfg.authenticate_password("agent", "anything").is_err());
+        assert!(cfg.authenticate_password("viewer", "anything").is_err());
     }
 }

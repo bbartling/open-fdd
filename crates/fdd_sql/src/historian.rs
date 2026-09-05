@@ -96,6 +96,72 @@ pub async fn register_parquet_tree(ctx: &SessionContext, parquet_root: &Path) ->
     Ok(1)
 }
 
+/// Register historian rows for a single `building_id` (OFDD-070 site scope).
+///
+/// Prefers canonical live layout:
+/// `history/building_id=<id>/equipment_id=…/year=…/month=…`
+/// then falls back to legacy package sidecars `building=<id>/`.
+pub async fn register_historian_building(
+    ctx: &SessionContext,
+    storage_root: &Path,
+    building_id: &str,
+) -> Result<HistorianRegistration> {
+    let bid = building_id.trim();
+    if bid.is_empty()
+        || bid.contains('/')
+        || bid.contains('\\')
+        || bid.contains("..")
+        || bid.contains('\0')
+        || bid.contains('=')
+    {
+        bail!("unsafe building_id for historian scope");
+    }
+
+    let canonical = storage_root
+        .join("history")
+        .join(format!("building_id={bid}"));
+    if contains_parquet(&canonical) {
+        register_canonical_building_history(ctx, &canonical).await?;
+        return Ok(HistorianRegistration {
+            kind: HistorianDatasetKind::CanonicalHive,
+            root: canonical.to_string_lossy().to_string(),
+        });
+    }
+
+    let legacy = storage_root.join(format!("building={bid}"));
+    if contains_parquet(&legacy) {
+        register_legacy_history(ctx, &legacy).await?;
+        return Ok(HistorianRegistration {
+            kind: HistorianDatasetKind::LegacySidecar,
+            root: legacy.to_string_lossy().to_string(),
+        });
+    }
+
+    bail!(
+        "no Parquet history for building_id={bid} under {}",
+        storage_root.display()
+    )
+}
+
+async fn register_canonical_building_history(
+    ctx: &SessionContext,
+    building_history_root: &Path,
+) -> Result<()> {
+    // Root is already `…/history/building_id=<id>/`; remaining Hive cols are
+    // equipment_id / year / month (building_id is fixed by the path).
+    let options = ParquetReadOptions::new()
+        .table_partition_cols(vec![
+            ("equipment_id".to_string(), DataType::Utf8),
+            ("year".to_string(), DataType::Utf8),
+            ("month".to_string(), DataType::Utf8),
+        ])
+        .parquet_pruning(true);
+    let root = building_history_root.to_string_lossy().to_string();
+    ctx.register_parquet("history", root.as_str(), options)
+        .await
+        .with_context(|| format!("register canonical building history from {root}"))
+}
+
 async fn register_canonical_history(ctx: &SessionContext, history_root: &Path) -> Result<()> {
     // Keep all Hive partition columns as strings. In DataFusion 43, zero-padded
     // path values such as `month=08` are represented reliably as Utf8 and prune
@@ -263,6 +329,50 @@ mod tests {
         assert!(schema.field_with_unqualified_name("equipment_id").is_ok());
         assert!(schema.field_with_unqualified_name("year").is_ok());
         assert!(schema.field_with_unqualified_name("month").is_ok());
+    }
+
+
+    #[tokio::test]
+    async fn register_historian_building_scopes_canonical_hive() {
+        let tmp = TempDir::new().unwrap();
+        let writer = ParquetPartWriter::new(LocalStorage::new(tmp.path()));
+        writer
+            .write_history_batch(
+                "bldg2",
+                "bldg2-zone-loopback",
+                &canonical_batch_with_zone(
+                    "bldg2-zone-loopback",
+                    "2026-09-05T18:00:00Z",
+                    55.0,
+                    76.0,
+                ),
+            )
+            .unwrap();
+        writer
+            .write_history_batch(
+                "BUILDING_100",
+                "AHU_1",
+                &canonical_batch("AHU_1", "2026-09-05T18:00:00Z", 57.0),
+            )
+            .unwrap();
+
+        let ctx = SessionContext::new();
+        let reg = register_historian_building(&ctx, tmp.path(), "bldg2")
+            .await
+            .unwrap();
+        assert_eq!(reg.kind, HistorianDatasetKind::CanonicalHive);
+
+        let batches = ctx
+            .sql(
+                "SELECT equipment_id, zone_t FROM history ORDER BY equipment_id",
+            )
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+        let rows: usize = batches.iter().map(|b| b.num_rows()).sum();
+        assert_eq!(rows, 1, "scoped register must not leak BUILDING_100");
     }
 
     #[tokio::test]

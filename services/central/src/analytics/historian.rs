@@ -116,10 +116,10 @@ fn safe_building_segment(building_id: Option<&str>) -> Option<String> {
 
 /// Register `history` for an optional `building_id` scope (OFDD-070).
 ///
-/// When `building_id` is set and `building={id}/` exists under the parquet root,
-/// only that site's parquet is registered (mirrors the edge FDD registry Hive
-/// layout `building={id}/equipment={eq}/history.parquet`). Otherwise the whole
-/// tree is registered. Returns `Ok(false)` when nothing usable is present.
+/// When `building_id` is set, prefers canonical live Hive
+/// `history/building_id={id}/`, then legacy package sidecars `building={id}/`.
+/// Does **not** fall back to the whole tree (that would mix other buildings).
+/// Returns `Ok(false)` when nothing usable is present.
 pub async fn try_register_history_scoped(
     ctx: &SessionContext,
     building_id: Option<&str>,
@@ -128,27 +128,26 @@ pub async fn try_register_history_scoped(
     if !root.is_dir() {
         return Ok(false);
     }
-    let scoped = match safe_building_segment(building_id) {
-        Some(bid) => {
-            let dir = root.join(format!("building={bid}"));
-            if dir.is_dir() {
-                Some(dir)
-            } else {
-                // Requested site has no parquet yet — do not silently fall back to
-                // the whole tree (that would mix other buildings into the scope).
-                tracing::debug!(building = %bid, "no building-scoped parquet; historian scope empty");
-                return Ok(false);
+    match safe_building_segment(building_id) {
+        Some(bid) => match fdd_sql::register_historian_building(ctx, &root, &bid).await {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                tracing::debug!(
+                    error = %e,
+                    building = %bid,
+                    root = %root.display(),
+                    "no building-scoped parquet; historian scope empty"
+                );
+                Ok(false)
             }
-        }
-        None => None,
-    };
-    let target = scoped.as_deref().unwrap_or(&root);
-    match register_parquet_tree(ctx, target).await {
-        Ok(_) => Ok(true),
-        Err(e) => {
-            tracing::debug!(error = %e, root = %target.display(), "historian parquet register skipped");
-            Ok(false)
-        }
+        },
+        None => match register_parquet_tree(ctx, &root).await {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                tracing::debug!(error = %e, root = %root.display(), "historian parquet register skipped");
+                Ok(false)
+            }
+        },
     }
 }
 
