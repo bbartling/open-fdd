@@ -21,7 +21,7 @@ nav_order: 2
 | # | Path | Why |
 |---|------|-----|
 | 1 | [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../BUG_REPORT_OT_MODBUS_HAYSTACK.md) | Living verdicts + Upcoming trains |
-| 2 | [`patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md`](../patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md) | **Active** program index (3.3.27+) |
+| 2 | [`patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md`](../patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md) | **Active** master — TODOs `ship-327`…`ship-332` link each child in order |
 | 3 | Active child under [`patch_trains/`](../patch_trains/) | One concern per nightly |
 | 4 | [`scripts/qualification/README.md`](../../../scripts/qualification/README.md) | Stress entry; cite `fully_qualified` |
 | 5 | [`STRESS_CLOSEOUT.md`](../STRESS_CLOSEOUT.md) · [`PATCH_CYCLE.md`](../PATCH_CYCLE.md) | Handbook + rev template |
