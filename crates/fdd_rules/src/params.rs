@@ -36,6 +36,12 @@ pub fn substitute_sql(sql: &str, params: &HashMap<String, String>) -> String {
         ("DUCT_HIGH_MARGIN", "0.25"),
         ("PRESSURE_ON_MIN", "0.2"),
         ("ALWAYS_ON_PCT", "0.95"),
+        // Wave B / 3.3.28 Lab residual thresholds (registry defaults)
+        ("CLG_OPEN_MIN", "0.01"),
+        ("HTG_OPEN_MIN", "0.01"),
+        ("FLOW_BIAS_CFM", "50"),
+        ("DAMPER_CLOSED_MAX", "0.10"),
+        ("LOAD_SAT_HI", "0.5"),
     ] {
         params.entry(k.into()).or_insert_with(|| v.into());
     }

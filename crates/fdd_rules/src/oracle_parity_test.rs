@@ -228,6 +228,7 @@ timestamp_utc,web_oat,web_dp,oa_d,clg_col
                 ("ECON3_DB_MAX", "72"),
                 ("ECON3_DP_MAX", "60"),
                 ("ECON3_DAMPER_HI", "0.9"),
+                ("CLG_OPEN_MIN", "0.01"),
             ],
         )
         .await;
@@ -286,7 +287,7 @@ timestamp_utc,preheat,sat,oat,htg
             "econ5_preheat_over.sql",
             300.0,
             600,
-            &[("PREHEAT_OVER_F", "2.2")],
+            &[("PREHEAT_OVER_F", "2.2"), ("HTG_OPEN_MIN", "0.01")],
         )
         .await;
 
@@ -396,6 +397,7 @@ timestamp_utc,web_oat,web_dp,oa_d,clg_col
                 ("ECON7_DB_MAX", "72"),
                 ("ECON7_DP_MAX", "60"),
                 ("ECON7_DAMPER_MIN", "0.5"),
+                ("CLG_OPEN_MIN", "0.05"),
             ],
         )
         .await;
@@ -2156,6 +2158,7 @@ timestamp_utc,oa_d,clg_col
                 ("ECON3_DB_MAX", "72"),
                 ("ECON3_DP_MAX", "60"),
                 ("ECON3_DAMPER_HI", "0.9"),
+                ("CLG_OPEN_MIN", "0.01"),
             ],
         )
         .await;
@@ -2265,6 +2268,7 @@ timestamp_utc,oa_d,clg_col
                 ("ECON7_DB_MAX", "72"),
                 ("ECON7_DP_MAX", "60"),
                 ("ECON7_DAMPER_MIN", "0.5"),
+                ("CLG_OPEN_MIN", "0.05"),
             ],
         )
         .await;
