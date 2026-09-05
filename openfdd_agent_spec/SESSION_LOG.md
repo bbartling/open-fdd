@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-09-05 — 3.3.25 SV/ECON Lab tuners CLOSED (partial wave)
+
+- **Merge:** #844 → `e78a6089`; VERSION **3.3.25**; health **`3.3.25+e78a608934ed`** (`sha-e78a608` central/web).
+- Stress `reports/nightly-ot-bench_20260905T052208Z/` PASS; ZAP `reports/zap-railway_20260905T052244Z/`.
+- Residual ECON/AHU/VAV Lab gaps + gate trio → **3.3.26**. mqtt/fieldbus tip sync still DEFERRED.
+
 ## 2026-09-05 — 3.3.24 GL36 Lab tuners CLOSED
 
 - **Merge:** #842 → `72b22995`; VERSION **3.3.24**; health **`3.3.24+72b2299541e9`** (central/web `sha-72b2299`).
