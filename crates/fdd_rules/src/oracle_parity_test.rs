@@ -528,7 +528,11 @@ timestamp_utc,oat_col
             "sv_range.sql",
             300.0,
             600,
-            &[("RANGE_SCALE_TEMPERATURE", "1")],
+            &[
+                ("RANGE_SCALE_TEMPERATURE", "1"),
+                ("RANGE_SCALE_HUMIDITY", "1"),
+                ("RANGE_SCALE_PRESSURE", "1"),
+            ],
         )
         .await;
 

@@ -77,6 +77,7 @@ mod tests {
         let mut params = rule_params(300.0, 600);
         // Registry default for the ECON-4 tunable (min OA fraction, percent).
         params.insert("OA_MIN_PCT".into(), "21".into());
+        params.insert("OAT_RAT_DELTA_MIN".into(), "2.2".into());
         let sql = substitute_sql(&raw_sql, &params);
         let result = run_sql(&ctx, &sql).await.unwrap();
 
