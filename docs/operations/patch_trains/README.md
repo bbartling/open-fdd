@@ -2,19 +2,19 @@
 
 These Markdown files are **copies** of Cursor plans under `~/.cursor/plans/` so a dead laptop does not lose the program. **GitHub is source of truth** — edit here first, then mirror to `~/.cursor/plans/`.
 
-## Active — nightly bug train 3.3.27+
+## Active — nightly bug train 3.3.27+ (optimized waves)
 
-Execute **in order** (one child at a time). Master TODOs: `ship-327` … `ship-332`.
+Full Railway stress **only** on image-shipping waves (A tip pin, B product tip). Wave C = isolated suites + Railway smoke. See master.
 
-| Order | File | Rev / concern |
-|------:|------|---------------|
-| — | [openfdd_nightly_bug_train_3.3.27_plus_program.plan.md](openfdd_nightly_bug_train_3.3.27_plus_program.plan.md) | **Master** program index |
-| 1 | [3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md](3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) | Tip mqtt/fieldbus pin |
-| 2 | [3.3.28_lab_tuners_econ_ahu_residual.plan.md](3.3.28_lab_tuners_econ_ahu_residual.plan.md) | Lab ECON/AHU residual |
-| 3 | [3.3.29_viewer_login_and_ui_scope.plan.md](3.3.29_viewer_login_and_ui_scope.plan.md) | Viewer + UI scope |
-| 4 | [3.3.30_isolated_zap_af_auth.plan.md](3.3.30_isolated_zap_af_auth.plan.md) | Isolated ZAP AF |
-| 5 | [3.3.31_mqtts_transport_isolation.plan.md](3.3.31_mqtts_transport_isolation.plan.md) | MQTTS isolation |
-| 6 | [3.3.32_durability_restore_perf.plan.md](3.3.32_durability_restore_perf.plan.md) | Restore + perf |
+| Wave | File | Rev / concern |
+|------|------|---------------|
+| — | [openfdd_nightly_bug_train_3.3.27_plus_program.plan.md](openfdd_nightly_bug_train_3.3.27_plus_program.plan.md) | **Master** (waves A/B/C) |
+| A | [3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md](3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) | Tip mqtt/fieldbus pin |
+| B | [3.3.28_lab_tuners_econ_ahu_residual.plan.md](3.3.28_lab_tuners_econ_ahu_residual.plan.md) | Lab ECON/AHU residual |
+| B | [3.3.29_viewer_login_and_ui_scope.plan.md](3.3.29_viewer_login_and_ui_scope.plan.md) | Viewer + UI scope |
+| C | [3.3.30_isolated_zap_af_auth.plan.md](3.3.30_isolated_zap_af_auth.plan.md) | Isolated ZAP AF |
+| C | [3.3.31_mqtts_transport_isolation.plan.md](3.3.31_mqtts_transport_isolation.plan.md) | MQTTS isolation |
+| C | [3.3.32_durability_restore_perf.plan.md](3.3.32_durability_restore_perf.plan.md) | Restore + perf |
 
 ## Predecessor — 3.3.21→3.3.26 (CLOSED after 3.3.26 verdict)
 
