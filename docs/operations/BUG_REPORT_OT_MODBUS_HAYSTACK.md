@@ -1,6 +1,6 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-05 (Wave A — 3.3.26 closeout + tip pin **IN PROGRESS**)  
+**Date:** 2026-09-05 (3.3.26 stress **CLOSED**; Wave A tip mqtt/fieldbus + Overview MQTT **OPEN**)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in stress)  
 **Tip / pin (Wave A):** `c354ea91` · VERSION **3.3.26** · health **`3.3.26+c354ea915865`** · GHCR central/web/mcp **`sha-c354ea9`** · mqtt/fieldbus still **`sha-b3004aa`** until Publish `#33978234108` finishes (hybrid — track below)  
 **Last CLOSED tip:** `e78a6089` · **`sha-e78a608`** · **`3.3.25+e78a608934ed`**  
@@ -44,8 +44,8 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 | PR squash-merge | [x] | [x] | [x] #847 · README #848 |
 | GHCR full stack tip | [~] hybrid | [~] hybrid | [~] central/web/mcp `sha-c354ea9`; mqtt/fieldbus **waiting** |
 | Railway backup + re-pin | [x] | [x] | [x] backup `171439Z`; central+web re-pin `sha-c354ea9` |
-| Stress CSV + ZAP + Overview | [x] | [x] | [~] running `reports/nightly-ot-bench_20260905T181633Z/` |
-| Verdict | [x] | [x] | pending |
+| Stress CSV + ZAP + Overview | [x] | [x] | [x] full matrix PASS; Overview MQTT **OPEN** #851 |
+| Verdict | [x] | [x] | [x] CLOSED w/ OPEN follow-ups |
 
 Do **not** reopen #763 / #805 for depth. Do **not** put Pis back on the closeout path.
 
@@ -53,18 +53,22 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
 
-## Verdict — 3.3.26 qualification harness (2026-09-05) — IN PROGRESS
+## Verdict — 3.3.26 qualification harness (2026-09-05) — CLOSED (with OPEN follow-ups)
 
 | Check | Evidence |
 |-------|----------|
-| Product merge | #847 → `13ef8549` then docs #848/`849` → tip `c354ea91`; VERSION **3.3.26** |
-| Health | **`3.3.26+c354ea915865`** after central+web re-pin |
-| GHCR | central/web/mcp **`sha-c354ea9`**; mqtt/fieldbus Publish `#33978234108` still on fieldbus build |
+| Product merge | #847 → `13ef8549`; docs #848/#849 → tip `c354ea91`; VERSION **3.3.26** |
+| Health | **`3.3.26+c354ea915865`** (central+web **`sha-c354ea9`**) |
+| GHCR | central/web/mcp **`sha-c354ea9`**; mqtt/fieldbus tip sync still **OPEN** — Publish `#33978234108` / hybrid **`sha-b3004aa`** (Wave A / 3.3.27 pin) |
 | Backup | `~/openfdd-backups/railway/20260905T171439Z/` |
-| Field | `sha-b3004aa` hybrid; edges `pi-1`/`bldg2` `has_telemetry:true` |
-| STRESS | **RUNNING** — `reports/nightly-ot-bench_20260905T181633Z/` |
-| Overview MQTT charts | **OPEN** — see **railway-mqtt-overview-empty** above |
+| Field | hybrid `sha-b3004aa`; edges `pi-1`/`bldg2` `has_telemetry:true` |
+| STRESS | **PASS** `fully_qualified=true` — `reports/nightly-ot-bench_20260905T181633Z/` (gates 00–08 PASS) |
+| ZAP | **PASS** — public baseline High=0 (`ACCEPT_ZAP_MEDIUM=1`) |
+| Auth matrix / MCP | **PASS** |
+| Overview MQTT `zone_t` charts | **OPEN** — [#851](https://github.com/bbartling/open-fdd/issues/851) / **railway-mqtt-overview-empty** (not silent skip) |
 | Path B Lab gate trio | **DEFERRED** (per 3.3.26 plan) |
+
+**Series 3.3.21→3.3.26:** product+qual harness **CLOSED** for 3.3.26 stress. Tip mqtt/fieldbus same-sha and Overview MQTT charts remain **OPEN** for Wave A/B.
 
 ## Verdict — 3.3.25 SV/ECON Lab tuners (2026-09-05) — CLOSED
 
