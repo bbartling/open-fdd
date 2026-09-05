@@ -43,6 +43,7 @@ retest. Do not confuse those with this engineering OS.
 
 ## AI agent quick rules (read first)
 
+0. **Low-RAM bensbench / machine port:** One agent only (no duplicate Task/subagents on the same train). Never local `docker build` of central/web/fieldbus. After ZAP/stress, `docker rm -f` leftover zap/MCP disposable containers — keep only needed fieldbus. Push often. Portable brain: [`docs/operations/recovery/AI_CONTEXT_HANDOFF.md`](../docs/operations/recovery/AI_CONTEXT_HANDOFF.md). Active nightlies: [`docs/operations/patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md`](../docs/operations/patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md).
 1. Product FDD + Overview analytics = **DataFusion SQL** on GHCR. Never silent pandas fallback in central.
 2. Pandas oracle stays forever on **PyPI** + cookbooks + vibe19 — never delete the pandas cookbook because production uses SQL.
 3. Never delete the SQL cookbook because pandas remains the oracle.
