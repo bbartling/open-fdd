@@ -1,0 +1,30 @@
+---
+# Open-FDD isolated ZAP Automation Framework plan (Wave C / 3.3.30).
+# Target must be a disposable CSV stack (central). Never point at live Railway OT.
+# Auth is exercised by the runner (admin login JWT) before this plan; AF focuses on
+# OpenAPI import + passive scan so CI stays deterministic without fragile JSON-auth plugins.
+env:
+  contexts:
+    - name: openfdd-disposable
+      urls:
+        - "${OPENFDD_ZAP_TARGET}"
+      includePaths:
+        - "${OPENFDD_ZAP_TARGET}.*"
+  parameters:
+    failOnError: false
+    failOnWarning: false
+    progressToStdout: true
+jobs:
+  - type: openapi
+    parameters:
+      apiFile: /zap/wrk/openapi.yaml
+      targetUrl: "${OPENFDD_ZAP_TARGET}"
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: /zap/wrk
+      reportFile: zap-af-report
+      reportTitle: Open-FDD isolated ZAP AF

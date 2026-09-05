@@ -1,0 +1,8 @@
+{
+  "suite": "bounded_perf_baseline_v1",
+  "notes": "Loose disposable-central budgets for Wave C; tighten after first CI green week.",
+  "budgets_ms": {
+    "/api/health": { "p50": 500, "p95": 2000 },
+    "/api/datasets": { "p50": 1500, "p95": 5000 }
+  }
+}

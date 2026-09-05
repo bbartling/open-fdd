@@ -29,6 +29,10 @@
 | `zap_baseline_verdict.py` | Parse ZAP JSON; High always fails; Medium explicit |
 | `auth_role_matrix.sh` | anon/admin/operator(/viewer) REST checks |
 | `railway_mcp_accuracy.sh` | MCP↔REST on Railway HTTPS; no local central fallback |
+| `run_wave_c_isolated.sh` | Wave C entry: MQTTS isolation + restore-to-empty + ZAP AF |
+| `run_isolated_zap_af.sh` | Disposable authenticated ZAP AF + OpenAPI (pinned digest) |
+| `restore_to_empty.sh` | Backup → empty volume restore + bounded API budgets |
+| `../integration/mqtts_transport_isolation.sh` | Disposable MQTTS cert/ACL/QoS/reconnect |
 
 ## Example env
 
@@ -42,14 +46,22 @@ export EXPECTED_EDGE_ID=pi-1      # optional; else any has_telemetry
 ./scripts/nightly-ot-bench/run_railway_hub_stress.sh
 ```
 
+## Wave C isolated (pull GHCR only)
+
+```bash
+export OPENFDD_IMAGE_TAG=sha-<7>   # e.g. sha-10d1ec5
+./scripts/qualification/run_wave_c_isolated.sh
+# or workflow: .github/workflows/wave-c-isolated.yml
+```
+
+Field Railway closeout stays public `zap-baseline`. Gate 18 same-volume recreate remains separate from `restore_to_empty.sh`.
+
 ## Remaining blockers (honest)
 
 | Blocker | Tier |
 |---------|------|
-| Authenticated ZAP Automation Framework + OpenAPI crawl | isolated candidate (not live OT) |
-| MQTTS cert/ACL/QoS matrix on disposable broker | isolated |
-| Gate 18 true backup→empty volume restore | isolated |
-| Viewer password identity on Railway | product (RBAC exists; login is admin/agent only) |
+| Viewer password path in `auth_role_matrix.sh` (hub password login exists) | soft / optional |
 | Active payload scans / OT write tests | **never** on live hub by default |
+| Tightening bounded-perf baselines after CI green week | isolated |
 
 Public claim only after verified evidence: discoverable REST/MCP with automated consistency and permission checks — **not** blanket security certification.
