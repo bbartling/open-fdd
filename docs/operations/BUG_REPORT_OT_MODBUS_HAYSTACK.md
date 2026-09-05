@@ -52,17 +52,18 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
 
-## Verdict — Wave C isolated harness (2026-09-05) — PENDING smoke
+## Verdict — Wave C isolated harness (2026-09-05) — CLOSED
 
 | Check | Evidence |
 |-------|----------|
-| VERSION | unchanged **3.3.28** (harness/docs only; no GHCR retarget) |
-| 3.3.30 ZAP AF | **PASS** disposable central — OpenAPI import + passive; High=0; scanner `ghcr.io/zaproxy/zaproxy@sha256:781a2bda…`; local `reports/waveC_zap_af_local2/` |
-| 3.3.31 MQTTS | **PASS** allow / cross-site deny (no delivery) / foreign CA fail / QoS1 / reconnect — `reports/waveC_mqtts_isolation_local/` |
-| 3.3.32 restore+perf | **PASS** backup→empty volume markers + bounded `/api/health`+`/api/datasets` budgets — `reports/waveC_restore_empty_local/` |
-| Entry | `scripts/qualification/run_wave_c_isolated.sh` · workflow `wave-c-isolated.yml` |
-| Railway smoke | **pending** after merge (health + fieldbus + edges + Overview `zone_t`) |
-| Field public ZAP | unchanged — still public baseline only on live hub |
+| Merge | #854 → `5e9c3c28`; VERSION unchanged **3.3.28** (harness/docs; no GHCR retarget / no tip re-pin) |
+| 3.3.30 ZAP AF | **PASS** CI `isolated` + local — OpenAPI+passive; High=0; pinned `zaproxy@sha256:781a2bda…` |
+| 3.3.31 MQTTS | **PASS** allow / cross-site deny / foreign CA / QoS1 / reconnect |
+| 3.3.32 restore+perf | **PASS** backup→empty volume + bounded API budgets |
+| Entry | `run_wave_c_isolated.sh` · `wave-c-isolated.yml` · `railway_smoke_wave_c.sh` |
+| Railway smoke | **PASS** `reports/waveC_railway_smoke_final/` — `3.3.28+10d1ec569e83`; `pi-1`/`bldg2`; `bldg2-zone-loopback` + `zone-air-temp`; Zone Other rows=7 |
+| Product tip | remains **`sha-10d1ec5`** (Wave B); no full matrix (images/topology unchanged) |
+| Field public ZAP | unchanged — public baseline only on live hub |
 
 ## Verdict — Wave B / 3.3.28 (2026-09-05) — CLOSED
 
