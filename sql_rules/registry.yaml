@@ -372,6 +372,25 @@ rules:
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
+    parameters:
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC3
     equipment_kinds: [ahu]
@@ -386,6 +405,34 @@ rules:
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
+    parameters:
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      fan_on_min:
+        label: Fan ON fraction threshold
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC7
     equipment_kinds: [ahu]
@@ -443,6 +490,52 @@ rules:
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
+    parameters:
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      delta_supply_fan:
+        label: Supply-fan delta (GL36 0.55 °F)
+        default: 0.55
+        min: 0.0
+        max: 5.0
+        step: 0.05
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_SUPPLY_FAN
+      econ_min_pos:
+        label: Economizer OA damper minimum (fraction)
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_MIN_POS
+      clg_inactive_max:
+        label: Cooling valve inactive max (fraction)
+        default: 0.1
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_INACTIVE_MAX
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC9
     equipment_kinds: [ahu]
@@ -457,6 +550,52 @@ rules:
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
+    parameters:
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      delta_supply_fan:
+        label: Supply-fan delta (GL36 0.55 °F)
+        default: 0.55
+        min: 0.0
+        max: 5.0
+        step: 0.05
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_SUPPLY_FAN
+      econ_min_pos:
+        label: Economizer OA damper minimum (fraction)
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_MIN_POS
+      clg_inactive_max:
+        label: Cooling valve inactive max (fraction)
+        default: 0.1
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_INACTIVE_MAX
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC10
     equipment_kinds: [ahu]
@@ -471,6 +610,43 @@ rules:
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
+    parameters:
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      clg_on_min:
+        label: Cooling valve ON minimum (fraction)
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_ON_MIN
+      oa_damper_econ_high:
+        label: Economizer OA damper high (fraction)
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: OA_DAMPER_ECON_HIGH
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC11
     equipment_kinds: [ahu]
@@ -485,6 +661,52 @@ rules:
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
+    parameters:
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      delta_supply_fan:
+        label: Supply-fan delta (GL36 0.55 °F)
+        default: 0.55
+        min: 0.0
+        max: 5.0
+        step: 0.05
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_SUPPLY_FAN
+      clg_on_min:
+        label: Cooling valve ON minimum (fraction)
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_ON_MIN
+      oa_damper_econ_high:
+        label: Economizer OA damper high (fraction)
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: OA_DAMPER_ECON_HIGH
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC12
     equipment_kinds: [ahu]
@@ -499,6 +721,61 @@ rules:
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
+    parameters:
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      delta_supply_fan:
+        label: Supply-fan delta (GL36 0.55 °F)
+        default: 0.55
+        min: 0.0
+        max: 5.0
+        step: 0.05
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_SUPPLY_FAN
+      clg_on_min:
+        label: Cooling valve ON minimum (fraction)
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_ON_MIN
+      econ_min_pos:
+        label: Economizer OA damper minimum (fraction)
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_MIN_POS
+      oa_damper_econ_high:
+        label: Economizer OA damper high (fraction)
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: OA_DAMPER_ECON_HIGH
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: ECON-1
     equipment_kinds: [ahu]
@@ -927,6 +1204,15 @@ rules:
         unit: frac
         frontend_control: slider
         sql_placeholder: HTG_ON_MIN
+      delta_supply_fan:
+        label: Supply-fan delta (GL36 0.55 °F)
+        default: 0.55
+        min: 0.0
+        max: 5.0
+        step: 0.05
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_SUPPLY_FAN
 
   - rule_id: FC6
     equipment_kinds: [ahu]

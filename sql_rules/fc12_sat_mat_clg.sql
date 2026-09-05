@@ -23,9 +23,9 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
-      WHEN sat IS NOT NULL AND mat IS NOT NULL AND clg_valve_pct > 0.01
-       AND (sat - 1.15 - 0.55) > (mat + 1.15)
-       AND (oa_damper_pct <= 0.05 OR oa_damper_pct > 0.9)
+      WHEN sat IS NOT NULL AND mat IS NOT NULL AND clg_valve_pct > {{CLG_ON_MIN}}
+       AND (sat - {{MIX_TOL}} - {{DELTA_SUPPLY_FAN}}) > (mat + {{MIX_TOL}})
+       AND (oa_damper_pct <= {{ECON_MIN_POS}} OR oa_damper_pct > {{OA_DAMPER_ECON_HIGH}})
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),

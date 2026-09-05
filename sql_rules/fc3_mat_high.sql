@@ -21,9 +21,9 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
-      WHEN fan > 0.01 AND mat IS NOT NULL AND oa_t IS NOT NULL AND rat IS NOT NULL
-       AND (mat - 1.15) > (rat + 1.15)
-       AND (mat - 1.15) > (oa_t + 1.15)
+      WHEN fan > {{FAN_ON_MIN}} AND mat IS NOT NULL AND oa_t IS NOT NULL AND rat IS NOT NULL
+       AND (mat - {{MIX_TOL}}) > (rat + {{MIX_TOL}})
+       AND (mat - {{MIX_TOL}}) > (oa_t + {{MIX_TOL}})
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),

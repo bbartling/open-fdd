@@ -22,7 +22,7 @@ base AS (
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN sat IS NULL OR mat IS NULL OR htg IS NULL OR fan IS NULL THEN 0
       WHEN fan >= 0.05 AND htg > {{HTG_ON_MIN}}
-       AND (sat + {{MIX_TOL}}) <= (mat - {{MIX_TOL}} + 0.55) THEN 1
+       AND (sat + {{MIX_TOL}}) <= (mat - {{MIX_TOL}} + {{DELTA_SUPPLY_FAN}}) THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

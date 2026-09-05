@@ -24,8 +24,8 @@ base AS (
     CAST(CASE
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN oa_t IS NOT NULL AND sat_sp IS NOT NULL
-       AND clg_valve_pct > 0.01 AND oa_damper_pct > 0.9
-       AND (oa_t + 1.15) < (sat_sp - 0.55 - 1.15)
+       AND clg_valve_pct > {{CLG_ON_MIN}} AND oa_damper_pct > {{OA_DAMPER_ECON_HIGH}}
+       AND (oa_t + {{MIX_TOL}}) < (sat_sp - {{DELTA_SUPPLY_FAN}} - {{MIX_TOL}})
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),
