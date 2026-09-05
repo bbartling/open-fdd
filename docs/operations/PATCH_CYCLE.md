@@ -25,6 +25,8 @@ Qualification entry (tiers + manifest): [`scripts/qualification/README.md`](../.
 | Pure evidence / BUG_REPORT after publish | No bump |
 | PyPI `open-fdd` | Do **not** bump unless the Python package changed |
 
+Always keep the README tip line in sync: `Version **3.3.N** on tip · PyPI **x.y.z**` must match `VERSION` and the current PyPI release whenever either changes (same PR as the bump when possible).
+
 After publish, pin **`sha-<7>`**. Health must read `3.3.N+<fullsha-prefix>`.
 
 ## Cursor plan YAML (paste + fill N)
