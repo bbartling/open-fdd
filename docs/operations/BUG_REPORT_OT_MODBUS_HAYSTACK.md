@@ -1,6 +1,6 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-05 (Wave A tip **CLOSED**; Wave B 3.3.28 **CLOSED**; Wave C isolated harness **in PR**)  
+**Date:** 2026-09-05 (Wave A tip **CLOSED**; Wave B 3.3.28 **CLOSED**; Wave C isolated **CLOSED**)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in stress)  
 **Tip / pin (Wave B product):** `10d1ec56` · VERSION **3.3.28** · health **`3.3.28+10d1ec569e83`** · GHCR **central/web/mcp/mqtt/fieldbus `sha-10d1ec5`**  
 **Last CLOSED tip:** `10d1ec56` · **`sha-10d1ec5`** · **`3.3.28+10d1ec569e83`**  
@@ -15,7 +15,7 @@
 |----|--------|---------|----------|------|
 | **railway-ui-fdd-stale** | **DEFERRED** → UX | Building filter / scoped FDD UX across sites | BUG_REPORT prior | Soft-OPEN; not a stress-harness gate |
 | **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` → `username=viewer` JWT | Railway var set; login probe PASS | Optional: teach `auth_role_matrix.sh` password path |
-| **wave-c-railway-smoke** | **PASS** (local) | End Wave C with Railway smoke (health/edges/`zone_t`) | `reports/waveC_railway_smoke_final/` | Cite in Verdict after #854 merge |
+| **wave-c-railway-smoke** | **CLOSED** | End Wave C with Railway smoke (health/edges/`zone_t`) | `reports/waveC_railway_smoke_final/` · #854 | Program wrap |
 
 ## Next patch cycle (copy into `.cursor/plans/patch_cycle_3.3.N_<slug>.plan.md`)
 
@@ -30,7 +30,7 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 |------------|--------------|---------|--------|
 | **Wave A** | closeout + [`3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md`](patch_trains/3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) | Tip pin + one full stress | **CLOSED** |
 | **Wave B** | [`3.3.28`](patch_trains/3.3.28_lab_tuners_econ_ahu_residual.plan.md) + [`3.3.29`](patch_trains/3.3.29_viewer_login_and_ui_scope.plan.md) | Lab + viewer + #851 historian scope | **CLOSED** — #852 · tip `sha-10d1ec5` · stress PASS · #851 CLOSED · docs #853 |
-| **Wave C** | [`3.3.30`](patch_trains/3.3.30_isolated_zap_af_auth.plan.md)–[`3.3.32`](patch_trains/3.3.32_durability_restore_perf.plan.md) | Isolated ZAP/MQTTS/restore + smoke | **in progress** — harness local PASS; Railway smoke pending |
+| **Wave C** | [`3.3.30`](patch_trains/3.3.30_isolated_zap_af_auth.plan.md)–[`3.3.32`](patch_trains/3.3.32_durability_restore_perf.plan.md) | Isolated ZAP/MQTTS/restore + smoke | **CLOSED** — #854 · CI isolated PASS · Railway smoke PASS · tip stays `sha-10d1ec5` |
 | 3.3.21–3.3.26 | prior patch_trains children | — | **CLOSED** |
 
 **Tuner reference:** Vibe19 UI ~414 vs Lab ~184 — JSON snapshots in [`recovery/`](recovery/). Goal = phased SQL-honest Lab expansion — **not** a hard 414.
@@ -52,17 +52,18 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
 
-## Verdict — Wave C isolated harness (2026-09-05) — PENDING smoke
+## Verdict — Wave C isolated harness (2026-09-05) — CLOSED
 
 | Check | Evidence |
 |-------|----------|
-| VERSION | unchanged **3.3.28** (harness/docs only; no GHCR retarget) |
-| 3.3.30 ZAP AF | **PASS** disposable central — OpenAPI import + passive; High=0; scanner `ghcr.io/zaproxy/zaproxy@sha256:781a2bda…`; local `reports/waveC_zap_af_local2/` |
-| 3.3.31 MQTTS | **PASS** allow / cross-site deny (no delivery) / foreign CA fail / QoS1 / reconnect — `reports/waveC_mqtts_isolation_local/` |
-| 3.3.32 restore+perf | **PASS** backup→empty volume markers + bounded `/api/health`+`/api/datasets` budgets — `reports/waveC_restore_empty_local/` |
-| Entry | `scripts/qualification/run_wave_c_isolated.sh` · workflow `wave-c-isolated.yml` |
-| Railway smoke | **pending** after merge (health + fieldbus + edges + Overview `zone_t`) |
-| Field public ZAP | unchanged — still public baseline only on live hub |
+| Merge | #854 → `5e9c3c28`; VERSION unchanged **3.3.28** (harness/docs; no GHCR retarget / no tip re-pin) |
+| 3.3.30 ZAP AF | **PASS** CI `isolated` + local — OpenAPI+passive; High=0; pinned `zaproxy@sha256:781a2bda…` |
+| 3.3.31 MQTTS | **PASS** allow / cross-site deny / foreign CA / QoS1 / reconnect |
+| 3.3.32 restore+perf | **PASS** backup→empty volume + bounded API budgets |
+| Entry | `run_wave_c_isolated.sh` · `wave-c-isolated.yml` · `railway_smoke_wave_c.sh` |
+| Railway smoke | **PASS** `reports/waveC_railway_smoke_final/` — `3.3.28+10d1ec569e83`; `pi-1`/`bldg2`; `bldg2-zone-loopback` + `zone-air-temp`; Zone Other rows=7 |
+| Product tip | remains **`sha-10d1ec5`** (Wave B); no full matrix (images/topology unchanged) |
+| Field public ZAP | unchanged — public baseline only on live hub |
 
 ## Verdict — Wave B / 3.3.28 (2026-09-05) — CLOSED
 
