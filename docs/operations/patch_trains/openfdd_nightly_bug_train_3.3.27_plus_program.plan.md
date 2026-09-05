@@ -63,6 +63,20 @@ hygiene START → VERSION bump → one concern → one PR
   → run_railway_hub_stress.sh LAST → BUG_REPORT → hygiene END
 ```
 
+### Stress MUST validate MQTTS → Overview charts
+
+Beyond `00_hub_health_edges` (`has_telemetry:true`), every Railway field stress on this train must prove the **UI can chart live bench data** from the MQTTS pipeline:
+
+| Check | Expected |
+|-------|----------|
+| Field source | bensbench x86 fieldbus → Railway MQTTS; hosted-weather AV **9101** loopback (no Pi) |
+| Edge | expected edge (often `pi-1` / site `bldg2`) `has_telemetry:true` |
+| Role model | live tag normalized to SQL role **`zone_t`** (`zonetemp` → `zone_t`) |
+| Overview | **Zone Other** / MQTT generic zone monitoring shell populates — not empty charts with rising `ingest_ok` |
+| Evidence | API series/overview sample + artifact path in BUG_REPORT; **DEFERRED** only with operator-browser reason |
+
+Do **not** claim CLOSED if edges ingest but Overview/Zone Other charts stay empty for the mapped `zone_t` stream.
+
 Locked: Railway hub + bensbench x86 fieldbus; low-RAM (no local docker build); no Pi / no live OT DoS. Ops: [`../PATCH_CYCLE.md`](../PATCH_CYCLE.md) · [`../STRESS_CLOSEOUT.md`](../STRESS_CLOSEOUT.md) · [`../BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../BUG_REPORT_OT_MODBUS_HAYSTACK.md).
 
 Predecessor: [`openfdd_patch_series_3.3.21_to_3.3.26_program.plan.md`](openfdd_patch_series_3.3.21_to_3.3.26_program.plan.md) (CLOSED when 3.3.26 verdict lands).

@@ -45,6 +45,7 @@ Low-RAM: never local `docker build`; no local central/web/mqtt on the closeout p
 | # | Name | Command / artifact | Pass |
 |---|------|--------------------|------|
 | 0 | Hub + field + edges | gate `00_hub_health_edges` | Railway health `3.3.N+…`; fieldbus `:8081`; expected edge (or any) `has_telemetry:true` — **strict** probe chain |
+| 0b | MQTTS → Overview charts | API overview/series + SPA Zone Other | Hosted-weather AV **9101** → role **`zone_t`**; **Zone Other** / MQTT generic zone charts populated (not empty with rising `ingest_ok`). Artifact or **DEFERRED** w/ operator-browser reason |
 | 1 | Synthetic-59 | `--api-base` Railway | **59/59** (registry coverage reported separately when available) |
 | 2 | Gate 17 | `RUN_SYNTH59_HEALTH_MATRIX=1` against Railway | health matrix + overview |
 | 3 | B100 | `RAILWAY_ONLY=1` B100 spot | FC1 / runtime / series on Railway |
