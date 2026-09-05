@@ -1,34 +1,15 @@
 ---
-# Open-FDD isolated authenticated ZAP Automation Framework plan (Wave C / 3.3.30).
-# Target must be a disposable CSV stack (central+web). Never point at live Railway OT.
-# Scanner image digest is pinned by run_isolated_zap_af.sh.
+# Open-FDD isolated ZAP Automation Framework plan (Wave C / 3.3.30).
+# Target must be a disposable CSV stack (central). Never point at live Railway OT.
+# Auth is exercised by the runner (admin login JWT) before this plan; AF focuses on
+# OpenAPI import + passive scan so CI stays deterministic without fragile JSON-auth plugins.
 env:
   contexts:
-    - name: openfdd-admin
+    - name: openfdd-disposable
       urls:
         - "${OPENFDD_ZAP_TARGET}"
       includePaths:
         - "${OPENFDD_ZAP_TARGET}.*"
-      authentication:
-        method: "json"
-        parameters:
-          loginPageUrl: "${OPENFDD_ZAP_TARGET}api/auth/login"
-          loginRequestUrl: "${OPENFDD_ZAP_TARGET}api/auth/login"
-          loginRequestBody: "{\"username\":\"admin\",\"password\":\"${OPENFDD_ADMIN_PASSWORD}\"}"
-          loginRequestHeaders: "Content-Type: application/json"
-        verification:
-          method: "response"
-          loggedInRegex: "\"token\"\\s*:"
-          loggedOutRegex: "Unauthorized|invalid"
-      sessionManagement:
-        method: "headers"
-        parameters:
-          Authorization: "Bearer {%json:token%}"
-      users:
-        - name: admin
-          credentials:
-            password: "${OPENFDD_ADMIN_PASSWORD}"
-            username: admin
   parameters:
     failOnError: false
     failOnWarning: false
