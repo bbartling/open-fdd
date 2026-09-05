@@ -36,17 +36,9 @@ jobs:
           DISPATCH_TAG: ${{ inputs.image_tag }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           GH_TOKEN: ${{ github.token }}
+          FALLBACK_TAG: sha-10d1ec5
         run: |
           set -euo pipefail
-          resolve_newest_common() {
-            python3 scripts/ghcr_newest_by_created.py --json openfdd-central openfdd-mqtt openfdd-fieldbus \
-              | jq -r '
-                [.[0].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $a |
-                [.[1].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $b |
-                [.[2].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $c |
-                [$a[] as $t | select(($b | index($t)) != null and ($c | index($t)) != null) | $t][0] // empty
-              '
-          }
           tag_exists() {
             local t="$1" code
             code="$(curl -sS -o /dev/null -w '%{http_code}' \
@@ -61,12 +53,12 @@ jobs:
             [[ "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
             tag="sha-${PR_BASE_SHA:0:7}"
             if ! tag_exists "$tag"; then
-              echo "base tip $tag not published yet; falling back to newest common sha-*" >&2
-              tag="$(resolve_newest_common)"
+              echo "base tip $tag not published; trying Wave B product fallback $FALLBACK_TAG" >&2
+              tag="$FALLBACK_TAG"
             fi
           fi
-          if [[ ! "$tag" =~ ^sha-[0-9a-f]{7}$ ]]; then
-            echo "invalid tag: $tag" >&2
+          if [[ ! "$tag" =~ ^sha-[0-9a-f]{7}$ ]] || ! tag_exists "$tag"; then
+            echo "no usable published mqtt tip (tried $tag)" >&2
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
