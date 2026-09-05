@@ -59,7 +59,7 @@ describe("AppShell layout parity", () => {
     vi.clearAllMocks();
   });
 
-  it("renders main section order, brand, and Rule tuning", async () => {
+  it("renders main section order, brand, and Lab rule thresholds", async () => {
     render(
       <MemoryRouter>
         <AppShell title="Home" caption="Parity shell">
@@ -77,7 +77,7 @@ describe("AppShell layout parity", () => {
     expect(screen.getByTestId("sidebar-building-data")).toBeTruthy();
     expect(screen.getByText("Building data")).toBeTruthy();
     expect(screen.getByTestId("sidebar-rule-tuning")).toBeTruthy();
-    expect(screen.getByText("Rule tuning")).toBeTruthy();
+    expect(screen.getByText("Lab · rule thresholds")).toBeTruthy();
     expect(screen.getByTestId("page-caption").textContent).toBe("Parity shell");
 
     const tabs = screen.getByTestId("section-tabs");
