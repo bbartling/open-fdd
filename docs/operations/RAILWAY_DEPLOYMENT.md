@@ -209,12 +209,13 @@ Store these only in Railway **Variables / Secrets**. Never commit them, never pa
 | --- | --- | --- | --- |
 | `admin` | `OPENFDD_ADMIN_PASSWORD` | admin | Browser UI, mint agent tokens, edge kits |
 | `agent` | `OPENFDD_AGENT_PASSWORD` | operator | Cursor / MCP / REST FDD assistance (local AI → cloud central) |
+| `viewer` | `OPENFDD_VIEWER_PASSWORD` | viewer | Read-only browser/API (deployment-wide; not tenant isolation) |
 
 Prefer **`agent`** for remote AI assistance. Do not share the admin password with MCP hosts. Do not treat Railway’s built-in assistant as the FDD/HVAC agent.
 
 ### Secure agent auth on Railway (Cursor / MCP)
 
-1. Set `OPENFDD_JWT_SECRET`, `OPENFDD_ADMIN_PASSWORD`, and `OPENFDD_AGENT_PASSWORD` on **central**.
+1. Set `OPENFDD_JWT_SECRET`, `OPENFDD_ADMIN_PASSWORD`, and `OPENFDD_AGENT_PASSWORD` on **central**. Optionally set `OPENFDD_VIEWER_PASSWORD` for read-only `viewer` login.
 2. Keep central (and MCP) on Railway **private networking** — only `openfdd-web` gets a public domain.
 3. Mint a short-lived operator JWT (do not log the token):
 

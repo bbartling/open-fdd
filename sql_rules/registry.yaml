@@ -1525,6 +1525,15 @@ rules:
         unit: frac
         frontend_control: slider
         sql_placeholder: ECON3_DAMPER_HI
+      clg_open_min:
+        label: Cooling valve open minimum
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_OPEN_MIN
 
   - rule_id: ECON-5
     equipment_kinds: [ahu]
@@ -1558,6 +1567,15 @@ rules:
         unit: degF
         frontend_control: slider
         sql_placeholder: PREHEAT_OVER_F
+      htg_open_min:
+        label: Heating valve open minimum
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: HTG_OPEN_MIN
 
   - rule_id: ECON-6
     equipment_kinds: [ahu]
@@ -1660,6 +1678,15 @@ rules:
         unit: frac
         frontend_control: slider
         sql_placeholder: ECON7_DAMPER_MIN
+      clg_open_min:
+        label: Cooling valve open minimum
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_OPEN_MIN
 
   - rule_id: MECH-OAT-1
     equipment_kinds: [ahu, chiller, heatpump]
@@ -1959,6 +1986,24 @@ rules:
         unit: sec
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
+      flow_bias_cfm:
+        label: Airflow bias threshold
+        default: 50.0
+        min: 10.0
+        max: 200.0
+        step: 5.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FLOW_BIAS_CFM
+      damper_closed_max:
+        label: Damper closed maximum
+        default: 0.10
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: DAMPER_CLOSED_MAX
 
   - rule_id: VAV-6
     equipment_kinds: [vav]
@@ -2247,6 +2292,15 @@ rules:
         unit: sec
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
+      load_sat_hi:
+        label: Load satisfaction high (no-load fault)
+        default: 0.5
+        min: 0.0
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: LOAD_SAT_HI
 
   - rule_id: CHW-1
     equipment_kinds: [chiller]

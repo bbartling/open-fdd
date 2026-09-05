@@ -24,7 +24,7 @@ base AS (
     CAST(CASE
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN preheat_leave_t IS NULL OR sat_sp IS NULL OR oa_t IS NULL THEN 0
-      WHEN htg > 0.01 AND (
+      WHEN htg > {{HTG_OPEN_MIN}} AND (
         (oa_t > sat_sp AND preheat_leave_t - oa_t > {{PREHEAT_OVER_F}})
         OR (oa_t < sat_sp AND preheat_leave_t - sat_sp > {{PREHEAT_OVER_F}})
       ) THEN 1

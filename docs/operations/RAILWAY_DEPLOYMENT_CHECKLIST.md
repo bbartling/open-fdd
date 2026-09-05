@@ -39,6 +39,7 @@ Deploy **three** Railway services from GHCR, in order:
    - `OPENFDD_JWT_SECRET` (≥32 random chars)
    - `OPENFDD_ADMIN_PASSWORD` — **human browser UI only**
    - `OPENFDD_AGENT_PASSWORD` — **external FDD AI / MCP only** (distinct from admin)
+   - `OPENFDD_VIEWER_PASSWORD` — **optional** read-only UI/API (`username=viewer`; deployment-wide)
 4. Prefer historian via `OPENFDD_STORAGE_URL=file:///workspace/openfdd` (or Railway bucket `s3://…` per [historian-s3.md](historian-s3.md)). `OPENFDD_PARQUET_ROOT` is a legacy alias — avoid for new deploys.
 5. Set `OPENFDD_WORKSPACE=/workspace`, `OPENFDD_REACT_UI=1`, `OPENFDD_UI_GENERATION_DEFAULT=react`.
 6. Deploy **central → wait `/api/health` 200 → mqtt → web**.
@@ -54,6 +55,7 @@ Deploy **three** Railway services from GHCR, in order:
 |-----|----------|----------------|-----|
 | Human operator | `admin` | `OPENFDD_ADMIN_PASSWORD` | Browser SPA login, mint edge kits, mint agent tokens |
 | External AI (Cursor / Claude / Codex / OpenClaw) | `agent` | `OPENFDD_AGENT_PASSWORD` → operator JWT | MCP (`OPENFDD_MCP_TOKEN`) or JWT REST |
+| Read-only viewer | `viewer` | `OPENFDD_VIEWER_PASSWORD` → viewer JWT | SPA/API read; **not** tenant isolation |
 | Short-lived AI session | operator JWT | Admin `POST /api/auth/agent-token` | Prefer over long-lived agent password in MCP config |
 
 **Rules for any AI:**

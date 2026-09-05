@@ -83,7 +83,7 @@ pub fn haystack_point_to_role(point: &str) -> String {
         "discharge-air-temp-sp" => "sat_sp".into(),
         "mixed-air-temp" => "mat".into(),
         "return-air-temp" => "rat".into(),
-        "outside-air-temp" | "bas-outside-air-temp" => "oa_t".into(),
+        "outside-air-temp" | "outside-air-temperature" | "bas-outside-air-temp" => "oa_t".into(),
         "outside-air-humidity" => "oa_h".into(),
         "outside-air-damper" => "oa_damper_pct".into(),
         "cooling-valve" => "clg_valve_pct".into(),
@@ -144,9 +144,12 @@ pub fn haystack_point_to_role(point: &str) -> String {
 /// Mirrors Python ``cookbook_engine.ROLE_CANDIDATES`` RDF role aliases.
 pub fn normalize_role(role: &str) -> String {
     match role.trim().to_lowercase().as_str() {
-        "oat" | "outside_air_temp" | "outside_air_temp_f" | "weather_oat" | "oa_temp" => {
-            "oa_t".into()
-        }
+        "oat"
+        | "outside_air_temp"
+        | "outside_air_temperature"
+        | "outside_air_temp_f"
+        | "weather_oat"
+        | "oa_temp" => "oa_t".into(),
         "zone_temp" | "zone_temperature" | "space_temp" | "zonetemp" | "zn_t" | "zone_t" => {
             "zone_t".into()
         }
@@ -458,6 +461,7 @@ mod tests {
         assert_eq!(normalize_role("sa_t"), "sat");
         assert_eq!(normalize_role("duct_t"), "sat");
         assert_eq!(normalize_role("outside_air_temp"), "oa_t");
+        assert_eq!(normalize_role("outside_air_temperature"), "oa_t");
         assert_eq!(normalize_role("supply_fan"), "fan_cmd");
         assert_eq!(normalize_role("fan_status"), "fan_status");
         assert_eq!(normalize_role("ra_t"), "rat");
@@ -467,6 +471,7 @@ mod tests {
             haystack_point_to_role("duct-static-pressure"),
             "duct_static"
         );
+        assert_eq!(haystack_point_to_role("outside-air-temperature"), "oa_t");
         assert_eq!(haystack_point_to_role("web-outside-air-temp"), "web_oa_t");
         assert_eq!(haystack_point_to_role("fan_cmd"), "fan_cmd");
     }

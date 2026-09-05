@@ -22,7 +22,7 @@ base AS (
     CAST(CASE
       WHEN COALESCE(fan_on, 0) = 0 THEN 0
       WHEN zone_flow IS NULL OR dmp IS NULL THEN 0
-      WHEN zone_flow > 50.0 AND dmp < 0.10 THEN 1
+      WHEN zone_flow > {{FLOW_BIAS_CFM}} AND dmp < {{DAMPER_CLOSED_MAX}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

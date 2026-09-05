@@ -36,7 +36,7 @@ base AS (
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN web_oa_t IS NULL OR web_oa_dp IS NULL OR oa_d IS NULL OR clg IS NULL THEN 0
       WHEN web_oa_t >= {{ECON3_DB_MIN}} AND web_oa_t < {{ECON3_DB_MAX}} AND web_oa_dp < {{ECON3_DP_MAX}}
-       AND clg > 0.01 AND oa_d < {{ECON3_DAMPER_HI}} THEN 1
+       AND clg > {{CLG_OPEN_MIN}} AND oa_d < {{ECON3_DAMPER_HI}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

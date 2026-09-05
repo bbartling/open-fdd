@@ -45,7 +45,7 @@ base AS (
     CAST(CASE
       WHEN sat_present = 0 THEN 0
       WHEN running IS NULL OR load_sat IS NULL THEN 0
-      WHEN running = 1 AND load_sat > 0.5 THEN 1
+      WHEN running = 1 AND load_sat > {{LOAD_SAT_HI}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM proof
