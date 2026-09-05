@@ -15,7 +15,7 @@
 |----|--------|---------|----------|------|
 | **railway-ui-fdd-stale** | **DEFERRED** → UX | Building filter / scoped FDD UX across sites | BUG_REPORT prior | Soft-OPEN; not a stress-harness gate |
 | **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` → `username=viewer` JWT | Railway var set; login probe PASS | Optional: teach `auth_role_matrix.sh` password path |
-| **wave-c-railway-smoke** | **OPEN** | End Wave C with Railway smoke (health/edges/`zone_t`) | After harness merge | No full matrix unless images/topology moved |
+| **wave-c-railway-smoke** | **PASS** (local) | End Wave C with Railway smoke (health/edges/`zone_t`) | `reports/waveC_railway_smoke_final/` | Cite in Verdict after #854 merge |
 
 ## Next patch cycle (copy into `.cursor/plans/patch_cycle_3.3.N_<slug>.plan.md`)
 
