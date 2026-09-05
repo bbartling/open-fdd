@@ -144,8 +144,12 @@ pub fn haystack_point_to_role(point: &str) -> String {
 /// Mirrors Python ``cookbook_engine.ROLE_CANDIDATES`` RDF role aliases.
 pub fn normalize_role(role: &str) -> String {
     match role.trim().to_lowercase().as_str() {
-        "oat" | "outside_air_temp" | "outside_air_temperature" | "outside_air_temp_f"
-        | "weather_oat" | "oa_temp" => "oa_t".into(),
+        "oat"
+        | "outside_air_temp"
+        | "outside_air_temperature"
+        | "outside_air_temp_f"
+        | "weather_oat"
+        | "oa_temp" => "oa_t".into(),
         "zone_temp" | "zone_temperature" | "space_temp" | "zonetemp" | "zn_t" | "zone_t" => {
             "zone_t".into()
         }

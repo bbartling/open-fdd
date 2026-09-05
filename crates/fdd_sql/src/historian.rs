@@ -331,7 +331,6 @@ mod tests {
         assert!(schema.field_with_unqualified_name("month").is_ok());
     }
 
-
     #[tokio::test]
     async fn register_historian_building_scopes_canonical_hive() {
         let tmp = TempDir::new().unwrap();
@@ -363,9 +362,7 @@ mod tests {
         assert_eq!(reg.kind, HistorianDatasetKind::CanonicalHive);
 
         let batches = ctx
-            .sql(
-                "SELECT equipment_id, zone_t FROM history ORDER BY equipment_id",
-            )
+            .sql("SELECT equipment_id, zone_t FROM history ORDER BY equipment_id")
             .await
             .unwrap()
             .collect()
