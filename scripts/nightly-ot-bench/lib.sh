@@ -54,12 +54,32 @@ load_bench_env() {
   ensure_bench_field_devices
 }
 
-# Restore OT bench field_devices.toml when tip checkout left the committed example
-# (no enabled device 5007). Prefer gitignored .local overlay, else bench example.
+# Restore field_devices.toml for the active stress topology.
+# RAILWAY_ONLY → hosted AV 9101 loopback (no OT LAN / Pi).
+# Local OT bench → gitignored .local overlay, else field_devices.bench.example.toml.
 ensure_bench_field_devices() {
   local dest="$ROOT/config/fieldbus/field_devices.toml"
   local localf="$ROOT/config/fieldbus/field_devices.toml.local"
-  local example="$NIGHTLY_OT_BENCH_DIR/field_devices.bench.example.toml"
+  local railway_ex="$NIGHTLY_OT_BENCH_DIR/field_devices.railway.example.toml"
+  local bench_ex="$NIGHTLY_OT_BENCH_DIR/field_devices.bench.example.toml"
+
+  if [[ "${RAILWAY_ONLY:-0}" == "1" ]]; then
+    if [[ -f "$dest" ]] && grep -qE 'bldg2-zone-loopback|hosted-weather' "$dest" 2>/dev/null \
+      && grep -qE 'device_instance[[:space:]]*=[[:space:]]*599999' "$dest" 2>/dev/null; then
+      return 0
+    fi
+    local src=""
+    if [[ -f "$railway_ex" ]]; then
+      src="$railway_ex"
+    else
+      echo "${DIM:-}ensure_bench_field_devices: no railway example — leave $dest${RST:-}" >&2
+      return 0
+    fi
+    cp "$src" "$dest"
+    echo "${DIM:-}ensure_bench_field_devices: restored $dest from $(basename "$src") (RAILWAY_ONLY)${RST:-}" >&2
+    return 0
+  fi
+
   if [[ -f "$dest" ]] && grep -qE 'BENS-BENCHTEST-BOX|BensFakeAhu' "$dest" 2>/dev/null \
     && grep -qE 'device_instance[[:space:]]*=[[:space:]]*5007' "$dest" 2>/dev/null; then
     return 0
@@ -67,8 +87,8 @@ ensure_bench_field_devices() {
   local src=""
   if [[ -f "$localf" ]]; then
     src="$localf"
-  elif [[ -f "$example" ]]; then
-    src="$example"
+  elif [[ -f "$bench_ex" ]]; then
+    src="$bench_ex"
   else
     echo "${DIM:-}ensure_bench_field_devices: no overlay/example — leave $dest${RST:-}" >&2
     return 0

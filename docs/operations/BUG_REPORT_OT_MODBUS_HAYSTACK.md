@@ -1,21 +1,20 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-05 (3.3.26 stress **CLOSED**; Wave A tip pin **CLOSED**; Wave B 3.3.28 **IN PROGRESS**)  
+**Date:** 2026-09-05 (Wave A tip **CLOSED**; Wave B 3.3.28 **CLOSED**; Wave C next)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in stress)  
-**Tip / pin (Wave A):** `c354ea91` · VERSION **3.3.26** · health **`3.3.26+c354ea915865`** · GHCR **central/web/mcp/mqtt/fieldbus `sha-c354ea9`** (same tip)  
-**Last CLOSED tip:** `c354ea91` · **`sha-c354ea9`** · **`3.3.26+c354ea915865`**  
+**Tip / pin (Wave B):** `10d1ec56` · VERSION **3.3.28** · health **`3.3.28+10d1ec569e83`** · GHCR **central/web/mcp/mqtt/fieldbus `sha-10d1ec5`**  
+**Last CLOSED tip:** `10d1ec56` · **`sha-10d1ec5`** · **`3.3.28+10d1ec569e83`**  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Telemetry = hosted AV `9101` loopback as `bldg2-zone-loopback` / role **`zone_t`** / `equipment_type=zone_other`.  
-**Backup:** `~/openfdd-backups/railway/20260905T171439Z/`  
+**Backup:** `~/openfdd-backups/railway/20260905T195204Z/`  
 **Program:** optimized waves — [`patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md`](patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md) (Cursor: `nightly_3.3.27+_master_4cc5bbd5.plan.md`)  
 **Pis freed (not in stress):** bosspi · BensFakeAhu · Zone1VAV.
 
-## OPEN / tracked bugs (Wave B — push to GH)
+## OPEN / tracked bugs (Wave C)
 
 | ID | Status | Symptom | Evidence | Next |
 |----|--------|---------|----------|------|
-| **railway-mqtt-overview-empty** | **OPEN** [#851](https://github.com/bbartling/open-fdd/issues/851) | Live MQTT `zone_t` OK, but Overview/`sensor-stats` with `building_id=bldg2` empty — analytics scoped to legacy `building=bldg2/` while live writes canonical `history/building_id=bldg2/`. Also OT catalog had timed-out Pis; fixed locally to hosted AV 9101 → `zone_t`. | `reports/waveA_overview_probe_20260905T181432Z/` · `reports/waveB_overview_probe_20260905T185100Z/` · live `edges/pi-1` role=`zone_t` | Wave B product: `register_historian_building` scope + field catalog + Lab/viewer; then tip re-pin + full stress |
-| **qualification-viewer-login** | **IN PROGRESS** (3.3.28) | Viewer RBAC existed; password login was admin/agent only | auth.rs + `OPENFDD_VIEWER_PASSWORD` | Ship in Wave B; set Railway var after merge |
-| **railway-ui-fdd-stale** | **DEFERRED** → UX | Building filter / scoped FDD UX | BUG_REPORT prior | Soft-OPEN; not blocking 3.3.28 tip |
+| **railway-ui-fdd-stale** | **DEFERRED** → UX | Building filter / scoped FDD UX across sites | BUG_REPORT prior | Soft-OPEN; not a stress-harness gate |
+| **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` → `username=viewer` JWT | Railway var set; login probe PASS | Auth matrix still JWT-mint path; password path live on hub |
 
 ## Next patch cycle (copy into `.cursor/plans/patch_cycle_3.3.N_<slug>.plan.md`)
 
@@ -28,30 +27,44 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 
 | Rev / wave | In-repo plan | Concern | Status |
 |------------|--------------|---------|--------|
-| **Wave A** | closeout + [`3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md`](patch_trains/3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) | Tip pin + one full stress | **CLOSED** — tip `sha-c354ea9` all services; stress PASS; Overview #851 carried to Wave B |
-| **Wave B** | [`3.3.28`](patch_trains/3.3.28_lab_tuners_econ_ahu_residual.plan.md) + [`3.3.29`](patch_trains/3.3.29_viewer_login_and_ui_scope.plan.md) | Lab + viewer + #851 historian scope | **IN PROGRESS** |
-| Wave C | [`3.3.30`](patch_trains/3.3.30_isolated_zap_af_auth.plan.md)–[`3.3.32`](patch_trains/3.3.32_durability_restore_perf.plan.md) | Isolated ZAP/MQTTS/restore + smoke | pending |
-| 3.3.21–3.3.25 | prior patch_trains children | — | **CLOSED** |
-| 3.3.26 | [`3.3.26_tuners_gates_residual.plan.md`](patch_trains/3.3.26_tuners_gates_residual.plan.md) | Qual harness + Path B DEFER + wrap | **CLOSED** (matrix PASS; Overview follow-up → #851) |
+| **Wave A** | closeout + [`3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md`](patch_trains/3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) | Tip pin + one full stress | **CLOSED** |
+| **Wave B** | [`3.3.28`](patch_trains/3.3.28_lab_tuners_econ_ahu_residual.plan.md) + [`3.3.29`](patch_trains/3.3.29_viewer_login_and_ui_scope.plan.md) | Lab + viewer + #851 historian scope | **CLOSED** — #852 · tip `sha-10d1ec5` · stress PASS · #851 CLOSED |
+| **Wave C** | [`3.3.30`](patch_trains/3.3.30_isolated_zap_af_auth.plan.md)–[`3.3.32`](patch_trains/3.3.32_durability_restore_perf.plan.md) | Isolated ZAP/MQTTS/restore + smoke | **pending** |
+| 3.3.21–3.3.26 | prior patch_trains children | — | **CLOSED** |
 
 **Tuner reference:** Vibe19 UI ~414 vs Lab ~184 — JSON snapshots in [`recovery/`](recovery/). Goal = phased SQL-honest Lab expansion — **not** a hard 414.
 
 | TODO | 3.3.24 | 3.3.25 | 3.3.26 Wave A | 3.3.28 Wave B |
 |------|--------|--------|---------------|---------------|
-| Hygiene START | [x] | [x] | [x] | [~] |
-| VERSION bump | [x] #842 | [x] #844 | [x] #847 → `3.3.26` | [~] → `3.3.28` |
-| One-concern fix | [x] GL36 | [x] SV-RANGE + ECON-4 | [x] qual harness | [~] #851 scope + Lab + viewer login |
-| PR squash-merge | [x] | [x] | [x] #847 · README #848 · docs #849/#850 | |
-| GHCR full stack tip | [~] hybrid | [~] hybrid | [x] all `sha-c354ea9` | |
-| Railway backup + re-pin | [x] | [x] | [x] backup `171439Z`; tip pin | |
-| Stress CSV + ZAP + Overview | [x] | [x] | [x] full matrix PASS; Overview MQTT **OPEN** #851 | |
-| Verdict | [x] | [x] | [x] CLOSED w/ OPEN follow-ups | |
+| Hygiene START | [x] | [x] | [x] | [x] |
+| VERSION bump | [x] #842 | [x] #844 | [x] #847 → `3.3.26` | [x] #852 → `3.3.28` |
+| One-concern fix | [x] GL36 | [x] SV-RANGE + ECON-4 | [x] qual harness | [x] #851 scope + Lab + viewer |
+| PR squash-merge | [x] | [x] | [x] #847 · README #848 · docs #849/#850 | [x] #852 |
+| GHCR full stack tip | [~] hybrid | [~] hybrid | [x] all `sha-c354ea9` | [x] all `sha-10d1ec5` |
+| Railway backup + re-pin | [x] | [x] | [x] backup `171439Z` | [x] backup `195204Z` |
+| Stress CSV + ZAP + Overview | [x] | [x] | [x] matrix PASS; Overview #851 OPEN | [x] `fully_qualified=true`; Overview #851 CLOSED |
+| Verdict | [x] | [x] | [x] | [x] CLOSED |
 
 Do **not** reopen #763 / #805 for depth. Do **not** put Pis back on the closeout path.
 
 Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live only in session env / gitignored files — **never Discord→git**.
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
+
+## Verdict — Wave B / 3.3.28 (2026-09-05) — CLOSED
+
+| Check | Evidence |
+|-------|----------|
+| Product merge | #852 → `10d1ec56`; VERSION **3.3.28** |
+| Shipped | Canonical historian scope `history/building_id=*`; hosted AV9101→`zone_t` catalog; Lab VAV-5/ECON-3/5/7/CHW-NOLOAD; `OPENFDD_VIEWER_PASSWORD` |
+| Health | **`3.3.28+10d1ec569e83`** |
+| GHCR | central/web/mcp/mqtt/fieldbus **`sha-10d1ec5`** |
+| Backup | `~/openfdd-backups/railway/20260905T195204Z/` |
+| Field | `openfdd_fieldbus_railway_up.sh sha-10d1ec5`; edges `pi-1`/`bldg2`; live role=`zone_t` |
+| STRESS | **PASS** `fully_qualified=true` — `reports/nightly-ot-bench_20260905T220906Z/` (gates 00–08) |
+| Overview MQTT | **CLOSED** [#851](https://github.com/bbartling/open-fdd/issues/851) — `building_id=bldg2` sensor-stats has `zone-air-temp`; Zone Other includes `bldg2-zone-loopback` (`reports/waveB_overview_close_20260905T221400Z/`) |
+| Viewer login | **PASS** — Railway `OPENFDD_VIEWER_PASSWORD` |
+| Ops follow-up | `ensure_bench_field_devices` RAILWAY_ONLY uses `field_devices.railway.example.toml` (do not clobber hosted catalog with OT bench example) |
 
 ## Verdict — Wave A tip pin / 3.3.27 (2026-09-05) — CLOSED (Overview → Wave B)
 
@@ -62,7 +75,7 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 | Field | `openfdd_fieldbus_railway_up.sh sha-c354ea9`; edges `pi-1`/`bldg2` `has_telemetry:true` |
 | STRESS | **PASS** `fully_qualified=true` — `reports/nightly-ot-bench_20260905T181633Z/` |
 | Docs | #849/#850 merged |
-| Overview MQTT `zone_t` | **OPEN** #851 — carried to Wave B (not silent skip) |
+| Overview MQTT `zone_t` | carried to Wave B → **CLOSED** under 3.3.28 |
 
 ## Verdict — 3.3.26 qualification harness (2026-09-05) — CLOSED (with OPEN follow-ups)
 
@@ -76,7 +89,7 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 | STRESS | **PASS** `fully_qualified=true` — `reports/nightly-ot-bench_20260905T181633Z/` (gates 00–08 PASS) |
 | ZAP | **PASS** — public baseline High=0 (`ACCEPT_ZAP_MEDIUM=1`) |
 | Auth matrix / MCP | **PASS** |
-| Overview MQTT `zone_t` charts | **OPEN** — [#851](https://github.com/bbartling/open-fdd/issues/851) / **railway-mqtt-overview-empty** (not silent skip) |
+| Overview MQTT `zone_t` charts | closed under Wave B / #851 |
 | Path B Lab gate trio | **DEFERRED** (per 3.3.26 plan) |
 
 **Series 3.3.21→3.3.26:** product+qual harness **CLOSED** for 3.3.26 stress. Tip mqtt/fieldbus same-sha **CLOSED** on Wave A. Overview MQTT charts remain **OPEN** for Wave B.
