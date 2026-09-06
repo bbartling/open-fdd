@@ -7,7 +7,7 @@
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Telemetry = hosted AV `9101` loopback as `bldg2-zone-loopback` / role **`zone_t`** / `equipment_type=zone_other`.  
 **Backup:** `~/openfdd-backups/railway/20260906T164054Z/` (prior: `20260906T030735Z`)  
 **Program (CLOSED):** [`patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md`](patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md) (Cursor: `nightly_3.3.27+_master_4cc5bbd5.plan.md`)  
-**Active program:** [`patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md`](patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md) (Cursor: `post_3.3.33_soft_open_master_a1b2c3d4.plan.md`) — Waves E→F → **full stress LAST** → optional **Wave G** hybrid AHU/VAV  
+**Active program:** [`patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md`](patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md) (Cursor: `post_3.3.33_soft_open_master_a1b2c3d4.plan.md`) — Waves D/E/F evidence → **full stress LAST** → optional **Wave G** hybrid AHU/VAV  
 **Pis freed (not in stress):** bosspi · BensFakeAhu · Zone1VAV.
 
 ## OPEN / tracked bugs (post-3.3.33)
@@ -15,8 +15,9 @@
 | ID | Status | Symptom | Evidence | Next |
 |----|--------|---------|----------|------|
 | **mqtt-ingest-stall** | **CLOSED** (3.3.34) | Was: flat `ingest_ok` after mqtt bounce until central redeploy | #860 · tip `sha-9aebf42` · smoke `reports/waveD_railway_smoke_20260906T173032Z/` | — |
-| **railway-ui-fdd-stale** | **DEFERRED** → 3.3.35 | Building filter / scoped FDD UX across sites | BUG_REPORT prior | Wave E |
-| **bldg2-overview-signoff** | **DEFERRED** → operator | SPA Overview tables/charts human confirm for `?site=bldg2` | API gate PASS on 3.3.33 | Wave E evidence |
+| **railway-ui-fdd-stale** | **CLOSED** (Wave E) | Was: building filter / scoped FDD UX across sites | Tip `sha-9aebf42`: Overview clears on site change; PlantHealthSections empty shells; equipment=8 / zone-other rows=7 | No VERSION — UX already on tip |
+| **bldg2-overview-signoff** | **DEFERRED** → operator | SPA Overview tables/charts human confirm for `?site=bldg2` | API probe PASS `reports/waveE_overview_probe_20260906T175230Z/` | Operator browser when available |
+| **vibe19-operational-gate-lab** | **DEFERRED** (Wave F) | Fake Lab operational-gate trio without SQL/session binding | Path B refuse — no honest binding | Stay DEFERRED |
 | **hybrid-ml-physics-ahu-vav** | **OPEN** → Wave G | Semantic hybrid ML/Physics Overview column + EnergyPlus calibration export (AHU/VAV first slice) | Mission prompt 2026-09-06; experimental | **After** soft-OPEN closeout — [`openfdd_hybrid_diagnostics_ahu_vav_program.plan.md`](patch_trains/openfdd_hybrid_diagnostics_ahu_vav_program.plan.md) |
 | **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | Was: equipment=0 for MQTT `bldg2` → empty Overview | #856 · probe + stress | — |
 | **mqtt-fieldbus-tip-pin-sync** | **CLOSED** (3.3.34) | Tip pin same-sha after Wave D | All services `sha-9aebf42` | — |
@@ -49,9 +50,9 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 | Rev / wave | In-repo plan | Concern | Status |
 |------------|--------------|---------|--------|
 | **Wave D / 3.3.34** | [`3.3.34_mqtt_ingest_reconnect.plan.md`](patch_trains/3.3.34_mqtt_ingest_reconnect.plan.md) | Central MQTT ingest resilience after mqtt re-pin | **CLOSED** — #860 · tip `sha-9aebf42` · smoke PASS · mqtt bounce self-heal |
-| **Wave E / 3.3.35** | [`3.3.35_overview_ui_fdd_scope.plan.md`](patch_trains/3.3.35_overview_ui_fdd_scope.plan.md) | `railway-ui-fdd-stale` + Overview browser sign-off | **OPEN** — smoke mid-wave |
-| **Wave F / 3.3.36** | [`3.3.36_lab_gate_residual.plan.md`](patch_trains/3.3.36_lab_gate_residual.plan.md) | Honest Lab residual / optional viewer matrix | **OPEN** — isolated + smoke |
-| **Closeout** | parent master | Full Railway matrix on final tip | **OPEN** — **required LAST** before D–F CLOSED |
+| **Wave E / 3.3.35** | [`3.3.35_overview_ui_fdd_scope.plan.md`](patch_trains/3.3.35_overview_ui_fdd_scope.plan.md) | `railway-ui-fdd-stale` + Overview browser sign-off | **CLOSED** (no VERSION) — API probe PASS; browser sign-off **DEFERRED** operator |
+| **Wave F / 3.3.36** | [`3.3.36_lab_gate_residual.plan.md`](patch_trains/3.3.36_lab_gate_residual.plan.md) | Honest Lab residual / optional viewer matrix | **CLOSED** — operational-gate **DEFERRED**; viewer login already CLOSED 3.3.28 |
+| **Closeout** | parent master | Full Railway matrix on final tip | **OPEN** — **required LAST** before soft-OPEN D–F program CLOSED |
 | **Wave G / 3.3.37+** | [`openfdd_hybrid_diagnostics_ahu_vav_program.plan.md`](patch_trains/openfdd_hybrid_diagnostics_ahu_vav_program.plan.md) | Experimental semantic hybrid ML/Physics AHU+VAV slice | **OPEN** — **after** closeout; synthetic gates primary |
 | **3.3.33** | [`3.3.33_mqtt_overview_csv_parity.plan.md`](patch_trains/3.3.33_mqtt_overview_csv_parity.plan.md) | FDD inventory/run/series + buildings list use historian `building_id=` | **CLOSED** — #856 · tip `sha-25826cf` · stress PASS · Overview probe PASS · docs #857 |
 | **Wave A** | closeout + [`3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md`](patch_trains/3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) | Tip pin + one full stress | **CLOSED** |
@@ -91,6 +92,24 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 | Ingest prove | `ingest_ok` **2→5**; mqtt redeploy **without** central redeploy → **6→10** |
 | Smoke | Wave C smoke **PASS** — `reports/waveD_railway_smoke_20260906T173032Z/` |
 | Soft-OPEN | Full matrix still at closeout; Wave E next |
+
+## Verdict — Wave E Overview UI scope (2026-09-06) — CLOSED (no VERSION)
+
+| Check | Evidence |
+|-------|----------|
+| Tip | unchanged `sha-9aebf42` / `3.3.34+9aebf42bf767` |
+| Overview API | equipment `bldg2` **count=8**; zone-other **rows=7** — `reports/waveE_overview_probe_20260906T175230Z/` |
+| Chrome | Building change clears Overview; health matrices render empty shells for missing families |
+| Browser sign-off | **DEFERRED** — operator to confirm SPA `?site=bldg2` visually |
+| Soft-OPEN | No GHCR retarget |
+
+## Verdict — Wave F Lab residual (2026-09-06) — CLOSED (DEFER operational-gate)
+
+| Check | Evidence |
+|-------|----------|
+| vibe19 operational-gate trio | **DEFERRED** — no SQL/session binding; Path B refuse fake sliders |
+| Viewer login | Already **CLOSED** 3.3.28 |
+| VERSION / images | No bump |
 
 ## Verdict — 3.3.33 MQTT Overview = CSV (2026-09-06) — CLOSED
 
