@@ -1455,7 +1455,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn equipment_response_lists_canonical_mqtt_hive() {
         let _env = crate::test_support::workspace_env_lock();
         let tmp = std::env::temp_dir().join(format!(
@@ -1495,6 +1494,7 @@ mod tests {
         assert_eq!(body["equipment"][0]["equipment_id"], "bldg2-zone-loopback");
     }
 
+    #[test]
     fn confirmed_fault_index_reads_building_scoped_results() {
         let _env = crate::test_support::workspace_env_lock();
         let tmp = std::env::temp_dir().join(format!(
