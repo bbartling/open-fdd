@@ -185,6 +185,15 @@ fn spawn_mqtt_ingest_inner(
                     warn!("central mqtt event stream ended; reconnecting");
                     *state.mqtt_publisher.lock().unwrap() = None;
                     state.mqtt_mark_disconnected("MQTT event stream ended; reconnecting");
+                    // Brief backoff before outer-loop connect + re-subscribe.
+                    tokio::select! {
+                        _ = wait_for_shutdown(&mut shutdown) => {
+                            state.mqtt_mark_disconnected("Central shutting down");
+                            drain_live_historian(&mut live_historian);
+                            return;
+                        }
+                        _ = tokio::time::sleep(Duration::from_secs(2)) => {}
+                    }
                 }
                 Err(err) => {
                     warn!(%err, "central mqtt connect failed; retrying");
