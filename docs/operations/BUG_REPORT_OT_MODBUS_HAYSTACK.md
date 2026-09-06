@@ -1,20 +1,20 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-05 (Wave A/B/C **CLOSED**; **3.3.33** MQTT Overview=CSV **IN PROGRESS**)  
+**Date:** 2026-09-06 (Wave A/B/C **CLOSED**; **3.3.33** MQTT Overview=CSV **CLOSED**)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in stress)  
-**Tip / pin (Wave B product):** `10d1ec56` · VERSION **3.3.28** · health **`3.3.28+10d1ec569e83`** · GHCR **central/web/mcp/mqtt/fieldbus `sha-10d1ec5`**  
-**Last CLOSED tip:** `10d1ec56` · **`sha-10d1ec5`** · **`3.3.28+10d1ec569e83`**  
+**Tip / pin (3.3.33):** `25826cf6` · VERSION **3.3.33** · health **`3.3.33+25826cf67999`** · GHCR **central/web/mqtt/fieldbus `sha-25826cf`**  
+**Last CLOSED tip:** `25826cf6` · **`sha-25826cf`** · **`3.3.33+25826cf67999`**  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Telemetry = hosted AV `9101` loopback as `bldg2-zone-loopback` / role **`zone_t`** / `equipment_type=zone_other`.  
 **Backup:** `~/openfdd-backups/railway/20260905T195204Z/`  
 **Program:** optimized waves — [`patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md`](patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md) (Cursor: `nightly_3.3.27+_master_4cc5bbd5.plan.md`)  
 **Pis freed (not in stress):** bosspi · BensFakeAhu · Zone1VAV.
 
-## OPEN / tracked bugs (3.3.33 patch cycle)
+## OPEN / tracked bugs (post-3.3.33)
 
 | ID | Status | Symptom | Evidence | Next |
 |----|--------|---------|----------|------|
-| **mqtt-overview-spa-parity** | **OPEN** → 3.3.33 | MQTT `bldg2` analytics OK but `/api/fdd/equipment?building_id=bldg2` returns **0** → Overview empty CSV hero; AFDD/Plots scoped to legacy `building=` only | Live probe 2026-09-05; BUILDING_100 equipment=49 | Unify `register_historian_building` into FDD equipment/run/series + buildings list union |
 | **railway-ui-fdd-stale** | **DEFERRED** → UX | Building filter / scoped FDD UX across sites | BUG_REPORT prior | Soft-OPEN; picker union helps |
+| **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | Was: equipment=0 for MQTT `bldg2` → empty Overview | #856 · probe + stress | — |
 | **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` → `username=viewer` JWT | Railway var set | Optional auth_matrix password path |
 | **wave-c-railway-smoke** | **CLOSED** | Wave C smoke | `reports/waveC_railway_smoke_final/` · #854 | — |
 
@@ -25,11 +25,11 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 ### Upcoming trains (Cursor plans — optimized waves 2026-09-05)
 
 **Source of truth:** [`patch_trains/`](patch_trains/) · [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md) · [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
-**Active:** [`patch_cycle_3.3.33_mqtt_overview_csv_parity.plan.md`](../../.cursor/plans/patch_cycle_3.3.33_mqtt_overview_csv_parity.plan.md) — MQTTS Overview = CSV Overview; **full Railway stress LAST**.
+**Last closed:** [`patch_cycle_3.3.33_mqtt_overview_csv_parity.plan.md`](../../.cursor/plans/patch_cycle_3.3.33_mqtt_overview_csv_parity.plan.md) — MQTTS Overview = CSV Overview (**CLOSED**).
 
 | Rev / wave | In-repo plan | Concern | Status |
 |------------|--------------|---------|--------|
-| **3.3.33** | MQTT Overview CSV parity | FDD inventory/run/series + buildings list use historian `building_id=` | **IN PROGRESS** |
+| **3.3.33** | [`3.3.33_mqtt_overview_csv_parity.plan.md`](patch_trains/3.3.33_mqtt_overview_csv_parity.plan.md) | FDD inventory/run/series + buildings list use historian `building_id=` | **CLOSED** — #856 · tip `sha-25826cf` · stress PASS · Overview probe PASS |
 | **Wave A** | closeout + [`3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md`](patch_trains/3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) | Tip pin + one full stress | **CLOSED** |
 | **Wave B** | [`3.3.28`](patch_trains/3.3.28_lab_tuners_econ_ahu_residual.plan.md) + [`3.3.29`](patch_trains/3.3.29_viewer_login_and_ui_scope.plan.md) | Lab + viewer + #851 historian scope | **CLOSED** — #852 · tip `sha-10d1ec5` · stress PASS · #851 CLOSED · docs #853 |
 | **Wave C** | [`3.3.30`](patch_trains/3.3.30_isolated_zap_af_auth.plan.md)–[`3.3.32`](patch_trains/3.3.32_durability_restore_perf.plan.md) | Isolated ZAP/MQTTS/restore + smoke | **CLOSED** — #854 · CI isolated PASS · Railway smoke PASS · tip stays `sha-10d1ec5` |
@@ -53,6 +53,24 @@ Do **not** reopen #763 / #805 for depth. Do **not** put Pis back on the closeout
 Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live only in session env / gitignored files — **never Discord→git**.
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
+
+## Verdict — 3.3.33 MQTT Overview = CSV (2026-09-06) — CLOSED
+
+| Check | Evidence |
+|-------|----------|
+| Product merge | #856 → `25826cf6`; VERSION **3.3.33** |
+| Shipped | FDD equipment walks `history/building_id=` + `building=`; run/series use `register_historian_building`; buildings list unions historian sites |
+| Health | **`3.3.33+25826cf67999`** |
+| GHCR | central/web/mqtt/fieldbus **`sha-25826cf`** |
+| Backup | `~/openfdd-backups/railway/20260906T030735Z/` |
+| Field | `openfdd_fieldbus_railway_up.sh sha-25826cf`; edge `pi-1`/`bldg2` `has_telemetry` |
+| Overview SPA gate | **PASS** — `GET /api/fdd/equipment?building_id=bldg2` **count=8** incl. `bldg2-zone-loopback` (`reports/wave333_overview_probe_20260906T031659Z/`) |
+| Buildings picker | **PASS** — `bldg2` listed with CSV packages |
+| Zone Other tables | **PASS** — rows=7; loopback present (tables not hidden) |
+| AFDD | **PASS** — `POST /api/fdd/run` `{building_id:bldg2, rule_ids:[VAV-1,SV-RANGE]}` ok; succeeded=2 |
+| STRESS | **PASS** `fully_qualified=true` — `reports/nightly-ot-bench_20260906T031744Z/` (gates 00–08) |
+| Soft-OPEN | `railway-ui-fdd-stale` remains UX deferral |
+
 
 ## Verdict — Wave C isolated harness (2026-09-05) — CLOSED
 
@@ -391,6 +409,7 @@ Triage as of **3.3.26** (series residual). Prior PASS rows are **not** rewritten
 | **deploy-mqtt-acl-mount** | **CLOSED** | Documented ops note; file-not-dir |
 | **vibe19-operational-gate-lab** | **DEFERRED** → future | No SQL/session binding for `require_operational_gate` / `startup_delay_min` / `minimum_active_coverage_pct` — Path B (fake Lab sliders refused) |
 | **mqtt-fieldbus-tip-pin-sync** | **DEFERRED** → next pin train | Hybrid central/web tip vs older mqtt/fieldbus `sha-*` remains allowed with explicit hybrid note |
+| **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | FDD inventory/run/series historian parity — Overview MQTT=CSV |
 | **isolated-authenticated-zap-af** | **CLOSED** (Wave C harness) | Disposable AF+OpenAPI PASS; field closeout stays public baseline |
 | **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` on Railway; optional matrix password path remains soft |
 
