@@ -1481,7 +1481,10 @@ pub fn list_package_buildings_handler() -> Value {
             if !e.path().is_dir() {
                 continue;
             }
-            if let Some(name) = e.file_name().to_str().and_then(|n| n.strip_prefix("building_id="))
+            if let Some(name) = e
+                .file_name()
+                .to_str()
+                .and_then(|n| n.strip_prefix("building_id="))
             {
                 if !name.is_empty() {
                     buildings.push(name.to_string());
@@ -1494,7 +1497,11 @@ pub fn list_package_buildings_handler() -> Value {
             if !e.path().is_dir() {
                 continue;
             }
-            if let Some(name) = e.file_name().to_str().and_then(|n| n.strip_prefix("building=")) {
+            if let Some(name) = e
+                .file_name()
+                .to_str()
+                .and_then(|n| n.strip_prefix("building="))
+            {
                 if !name.is_empty() {
                     buildings.push(name.to_string());
                 }

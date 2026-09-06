@@ -1455,7 +1455,6 @@ mod tests {
     }
 
     #[test]
-    
     #[test]
     fn equipment_response_lists_canonical_mqtt_hive() {
         let _env = crate::test_support::workspace_env_lock();
