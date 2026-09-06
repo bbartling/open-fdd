@@ -7,7 +7,7 @@
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Telemetry = hosted AV `9101` loopback as `bldg2-zone-loopback` / role **`zone_t`** / `equipment_type=zone_other`.  
 **Backup:** `~/openfdd-backups/railway/20260906T164054Z/` (prior: `20260906T030735Z`)  
 **Program (CLOSED):** [`patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md`](patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md) (Cursor: `nightly_3.3.27+_master_4cc5bbd5.plan.md`)  
-**Active program:** [`patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md`](patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md) (Cursor: `post_3.3.33_soft_open_master_a1b2c3d4.plan.md`) — Waves D/E/F evidence → **full stress LAST** → optional **Wave G** hybrid AHU/VAV  
+**Active program:** soft-OPEN D–F **CLOSED** on tip `sha-9aebf42` — optional **Wave G** hybrid AHU/VAV only with separate auth ([`openfdd_hybrid_diagnostics_ahu_vav_program.plan.md`](patch_trains/openfdd_hybrid_diagnostics_ahu_vav_program.plan.md))  
 **Pis freed (not in stress):** bosspi · BensFakeAhu · Zone1VAV.
 
 ## OPEN / tracked bugs (post-3.3.33)
@@ -52,7 +52,7 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 | **Wave D / 3.3.34** | [`3.3.34_mqtt_ingest_reconnect.plan.md`](patch_trains/3.3.34_mqtt_ingest_reconnect.plan.md) | Central MQTT ingest resilience after mqtt re-pin | **CLOSED** — #860 · tip `sha-9aebf42` · smoke PASS · mqtt bounce self-heal |
 | **Wave E / 3.3.35** | [`3.3.35_overview_ui_fdd_scope.plan.md`](patch_trains/3.3.35_overview_ui_fdd_scope.plan.md) | `railway-ui-fdd-stale` + Overview browser sign-off | **CLOSED** (no VERSION) — API probe PASS; browser sign-off **DEFERRED** operator |
 | **Wave F / 3.3.36** | [`3.3.36_lab_gate_residual.plan.md`](patch_trains/3.3.36_lab_gate_residual.plan.md) | Honest Lab residual / optional viewer matrix | **CLOSED** — operational-gate **DEFERRED**; viewer login already CLOSED 3.3.28 |
-| **Closeout** | parent master | Full Railway matrix on final tip | **OPEN** — **required LAST** before soft-OPEN D–F program CLOSED |
+| **Closeout** | parent master | Full Railway matrix on final tip | **CLOSED** — `fully_qualified=true` `reports/nightly-ot-bench_20260906T190722Z/` |
 | **Wave G / 3.3.37+** | [`openfdd_hybrid_diagnostics_ahu_vav_program.plan.md`](patch_trains/openfdd_hybrid_diagnostics_ahu_vav_program.plan.md) | Experimental semantic hybrid ML/Physics AHU+VAV slice | **OPEN** — **after** closeout; synthetic gates primary |
 | **3.3.33** | [`3.3.33_mqtt_overview_csv_parity.plan.md`](patch_trains/3.3.33_mqtt_overview_csv_parity.plan.md) | FDD inventory/run/series + buildings list use historian `building_id=` | **CLOSED** — #856 · tip `sha-25826cf` · stress PASS · Overview probe PASS · docs #857 |
 | **Wave A** | closeout + [`3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md`](patch_trains/3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) | Tip pin + one full stress | **CLOSED** |
@@ -92,6 +92,16 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 | Ingest prove | `ingest_ok` **2→5**; mqtt redeploy **without** central redeploy → **6→10** |
 | Smoke | Wave C smoke **PASS** — `reports/waveD_railway_smoke_20260906T173032Z/` |
 | Soft-OPEN | Full matrix still at closeout; Wave E next |
+
+## Verdict — Soft-OPEN closeout (2026-09-06) — D–F CLOSED
+
+| Check | Evidence |
+|-------|----------|
+| Tip | `3.3.34+9aebf42bf767` · GHCR `sha-9aebf42` · fieldbus healthy |
+| Full stress | **PASS** `overall.fully_qualified=true` — `reports/nightly-ot-bench_20260906T190722Z/` (gates 00–08) |
+| Overview MQTT | equipment count=8; zone-other rows=7; AFDD run ok — `reports/softopen_closeout_overview_*` |
+| Waves | D (#860) · E (docs/API) · F (DEFER operational-gate) |
+| Wave G | **NOT STARTED** — requires separate authorization |
 
 ## Verdict — Wave E Overview UI scope (2026-09-06) — CLOSED (no VERSION)
 
