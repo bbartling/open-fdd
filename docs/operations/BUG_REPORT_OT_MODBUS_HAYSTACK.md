@@ -1,38 +1,38 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-06 (Wave A/B/C **CLOSED**; **3.3.33** MQTT Overview=CSV **CLOSED**; MQTTS live **healthy after central redeploy**)  
+**Date:** 2026-09-06 (Wave A/B/C **CLOSED**; **3.3.33** MQTT Overview=CSV **CLOSED**; **Wave D / 3.3.34** MQTT ingest reconnect **CLOSED**)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in stress)  
-**Tip / pin (3.3.33):** `25826cf6` · VERSION **3.3.33** · health **`3.3.33+25826cf67999`** · GHCR **central/web/mqtt/fieldbus `sha-25826cf`**  
-**Last CLOSED tip:** `25826cf6` · **`sha-25826cf`** · **`3.3.33+25826cf67999`** · docs merge **`d444b800`** (#857)  
+**Tip / pin (3.3.34):** `9aebf42b` · VERSION **3.3.34** · health **`3.3.34+9aebf42bf767`** · GHCR **central/web/mqtt/fieldbus `sha-9aebf42`**  
+**Last CLOSED tip:** `9aebf42b` · **`sha-9aebf42`** · **`3.3.34+9aebf42bf767`** · product **#860**  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Telemetry = hosted AV `9101` loopback as `bldg2-zone-loopback` / role **`zone_t`** / `equipment_type=zone_other`.  
-**Backup:** `~/openfdd-backups/railway/20260906T030735Z/` (prior: `20260905T195204Z`)  
+**Backup:** `~/openfdd-backups/railway/20260906T164054Z/` (prior: `20260906T030735Z`)  
 **Program (CLOSED):** [`patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md`](patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md) (Cursor: `nightly_3.3.27+_master_4cc5bbd5.plan.md`)  
-**Active program:** [`patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md`](patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md) (Cursor: `post_3.3.33_soft_open_master_a1b2c3d4.plan.md`) — Waves D→E→F → **full stress LAST** → optional **Wave G** hybrid AHU/VAV  
+**Active program:** [`patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md`](patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md) (Cursor: `post_3.3.33_soft_open_master_a1b2c3d4.plan.md`) — Waves E→F → **full stress LAST** → optional **Wave G** hybrid AHU/VAV  
 **Pis freed (not in stress):** bosspi · BensFakeAhu · Zone1VAV.
 
 ## OPEN / tracked bugs (post-3.3.33)
 
 | ID | Status | Symptom | Evidence | Next |
 |----|--------|---------|----------|------|
-| **mqtt-ingest-stall** | **OPEN** → 3.3.34 | After mqtt/central re-pin, `edges:1` + `has_telemetry:true` but **`ingest_ok` flat** until `railway redeploy -s openfdd-central-cQ-F` | 2026-09-06 live: stuck at `ingest_ok=6` ~40m; post-redeploy `1→3` in ~70s | Wave D — auto-reconnect / resilient ingest; do not trust sticky edges alone |
+| **mqtt-ingest-stall** | **CLOSED** (3.3.34) | Was: flat `ingest_ok` after mqtt bounce until central redeploy | #860 · tip `sha-9aebf42` · smoke `reports/waveD_railway_smoke_20260906T173032Z/` | — |
 | **railway-ui-fdd-stale** | **DEFERRED** → 3.3.35 | Building filter / scoped FDD UX across sites | BUG_REPORT prior | Wave E |
 | **bldg2-overview-signoff** | **DEFERRED** → operator | SPA Overview tables/charts human confirm for `?site=bldg2` | API gate PASS on 3.3.33 | Wave E evidence |
 | **hybrid-ml-physics-ahu-vav** | **OPEN** → Wave G | Semantic hybrid ML/Physics Overview column + EnergyPlus calibration export (AHU/VAV first slice) | Mission prompt 2026-09-06; experimental | **After** soft-OPEN closeout — [`openfdd_hybrid_diagnostics_ahu_vav_program.plan.md`](patch_trains/openfdd_hybrid_diagnostics_ahu_vav_program.plan.md) |
 | **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | Was: equipment=0 for MQTT `bldg2` → empty Overview | #856 · probe + stress | — |
-| **mqtt-fieldbus-tip-pin-sync** | **CLOSED** (3.3.33) | Was hybrid mqtt/fieldbus tip | All services `sha-25826cf` | — |
+| **mqtt-fieldbus-tip-pin-sync** | **CLOSED** (3.3.34) | Tip pin same-sha after Wave D | All services `sha-9aebf42` | — |
 | **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` → `username=viewer` JWT | Railway var set | Optional auth_matrix path → Wave F soft |
 | **wave-c-railway-smoke** | **CLOSED** | Wave C smoke | `reports/waveC_railway_smoke_final/` · #854 | — |
 
-### MQTTS pipeline health check (2026-09-06T03:57Z)
+### MQTTS pipeline health check (2026-09-06T17:39Z) — Wave D
 
 | Check | Result |
 |-------|--------|
-| Hub | `3.3.33+25826cf67999` · `edges:1` |
-| Fieldbus | `openfdd-fieldbus:sha-25826cf` healthy · `poll_running` · publish 60s |
+| Hub | `3.3.34+9aebf42bf767` · `edges:1` |
+| Fieldbus | `openfdd-fieldbus:sha-9aebf42` healthy |
 | Edge | `pi-1` / `bldg2` `has_telemetry:true` |
-| Ingest | **Recovered** after central redeploy — `ingest_ok` **1→3** over ~70s (was stalled at 6) |
-| Overview API | `GET /api/fdd/equipment?building_id=bldg2` **count=8** incl. loopback; sensor-stats has `zone-air-temp` |
-| Residual product risk | Central MQTT ingest can stall after mqtt peer bounce without auto-recovery → **mqtt-ingest-stall** |
+| Ingest | **PASS** — `ingest_ok` **2→5** over ~3 min; after **mqtt redeploy** (no central redeploy) **6→10** then smoke at **11** |
+| Smoke | Wave C smoke **PASS** — `reports/waveD_railway_smoke_20260906T173032Z/` |
+| Residual | Overview SPA chrome → Wave E |
 
 ## Next patch cycle (copy into `.cursor/plans/patch_cycle_3.3.N_<slug>.plan.md`)
 
@@ -48,7 +48,7 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 
 | Rev / wave | In-repo plan | Concern | Status |
 |------------|--------------|---------|--------|
-| **Wave D / 3.3.34** | [`3.3.34_mqtt_ingest_reconnect.plan.md`](patch_trains/3.3.34_mqtt_ingest_reconnect.plan.md) | Central MQTT ingest resilience after mqtt re-pin | **OPEN** — smoke mid-wave |
+| **Wave D / 3.3.34** | [`3.3.34_mqtt_ingest_reconnect.plan.md`](patch_trains/3.3.34_mqtt_ingest_reconnect.plan.md) | Central MQTT ingest resilience after mqtt re-pin | **CLOSED** — #860 · tip `sha-9aebf42` · smoke PASS · mqtt bounce self-heal |
 | **Wave E / 3.3.35** | [`3.3.35_overview_ui_fdd_scope.plan.md`](patch_trains/3.3.35_overview_ui_fdd_scope.plan.md) | `railway-ui-fdd-stale` + Overview browser sign-off | **OPEN** — smoke mid-wave |
 | **Wave F / 3.3.36** | [`3.3.36_lab_gate_residual.plan.md`](patch_trains/3.3.36_lab_gate_residual.plan.md) | Honest Lab residual / optional viewer matrix | **OPEN** — isolated + smoke |
 | **Closeout** | parent master | Full Railway matrix on final tip | **OPEN** — **required LAST** before D–F CLOSED |
@@ -77,6 +77,20 @@ Do **not** reopen #763 / #805 for depth. Do **not** put Pis back on the closeout
 Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live only in session env / gitignored files — **never Discord→git**.
 
 **Canonical file:** [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](./BUG_REPORT_OT_MODBUS_HAYSTACK.md)
+
+## Verdict — 3.3.34 MQTT ingest reconnect (2026-09-06) — CLOSED
+
+| Check | Evidence |
+|-------|----------|
+| Product merge | #860 → `9aebf42b`; VERSION **3.3.34** |
+| Fix | `openfdd_mqtt` tears down event stream on poll Err → central re-subscribe |
+| Health | **`3.3.34+9aebf42bf767`** |
+| GHCR | central/web/mqtt/fieldbus **`sha-9aebf42`** |
+| Backup | `~/openfdd-backups/railway/20260906T164054Z/` |
+| Field | `openfdd_fieldbus_railway_up.sh sha-9aebf42` |
+| Ingest prove | `ingest_ok` **2→5**; mqtt redeploy **without** central redeploy → **6→10** |
+| Smoke | Wave C smoke **PASS** — `reports/waveD_railway_smoke_20260906T173032Z/` |
+| Soft-OPEN | Full matrix still at closeout; Wave E next |
 
 ## Verdict — 3.3.33 MQTT Overview = CSV (2026-09-06) — CLOSED
 
