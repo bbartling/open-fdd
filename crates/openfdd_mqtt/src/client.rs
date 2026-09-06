@@ -46,6 +46,10 @@ impl MqttHandle {
 
         let (client, mut eventloop) = AsyncClient::new(opts, 64);
         let (tx, rx) = mpsc::unbounded_channel();
+        // On poll Err, tear down this handle (drop `tx`) so callers re-connect and
+        // re-subscribe. rumqttc may reconnect under the hood without restoring
+        // subscriptions; sleeping here left ingest_ok flat while sticky edges
+        // still reported has_telemetry=true (mqtt-ingest-stall).
         tokio::spawn(async move {
             loop {
                 match eventloop.poll().await {
@@ -56,8 +60,8 @@ impl MqttHandle {
                     }
                     Ok(_) => {}
                     Err(err) => {
-                        warn!(%err, "mqtt eventloop error");
-                        tokio::time::sleep(Duration::from_secs(2)).await;
+                        warn!(%err, "mqtt eventloop error; ending event stream for resubscribe");
+                        break;
                     }
                 }
             }
