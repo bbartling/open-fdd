@@ -2,9 +2,9 @@
 
 These Markdown files are **copies** of Cursor plans under `~/.cursor/plans/` so a dead laptop does not lose the program. **GitHub is source of truth** — edit here first, then mirror to `~/.cursor/plans/`.
 
-## Active — post-3.3.33 soft-OPEN (optimized waves D/E/F)
+## Active — post-3.3.33 soft-OPEN (optimized waves D/E/F + closeout full stress)
 
-Full Railway stress **only** on image-shipping Wave D (ingest). Waves E/F prefer smoke / isolated. See master.
+Mid-wave = smoke / isolated. **ONE full** Railway stress **LAST** at program closeout → BUG_REPORT. See master.
 
 | Wave | File | Rev / concern |
 |------|------|---------------|
