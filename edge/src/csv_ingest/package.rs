@@ -1455,7 +1455,9 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
     })
 }
 
-/// `GET /api/csv/import/package/buildings` — list ingested package building ids.
+/// `GET /api/csv/import/package/buildings` — list ingested package building ids
+/// plus historian sites under the parquet root (canonical MQTT `history/building_id=`
+/// and legacy `building=`), so the sidebar/Overview picker matches Sites (3.3.33).
 pub fn list_package_buildings_handler() -> Value {
     let data_root = workspace_dir().join("data").join("csv_buildings");
     let mut buildings = Vec::new();
@@ -1472,7 +1474,35 @@ pub fn list_package_buildings_handler() -> Value {
             }
         }
     }
+    // Union live / package historian partitions so MQTT sites appear like CSV.
+    let pq = crate::fdd::registry_api::parquet_root();
+    if let Ok(rd) = std::fs::read_dir(pq.join("history")) {
+        for e in rd.flatten() {
+            if !e.path().is_dir() {
+                continue;
+            }
+            if let Some(name) = e.file_name().to_str().and_then(|n| n.strip_prefix("building_id="))
+            {
+                if !name.is_empty() {
+                    buildings.push(name.to_string());
+                }
+            }
+        }
+    }
+    if let Ok(rd) = std::fs::read_dir(&pq) {
+        for e in rd.flatten() {
+            if !e.path().is_dir() {
+                continue;
+            }
+            if let Some(name) = e.file_name().to_str().and_then(|n| n.strip_prefix("building=")) {
+                if !name.is_empty() {
+                    buildings.push(name.to_string());
+                }
+            }
+        }
+    }
     buildings.sort();
+    buildings.dedup();
     json!({
         "ok": true,
         "buildings": buildings,

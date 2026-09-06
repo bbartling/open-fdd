@@ -7,7 +7,9 @@ use fdd_rules::{
     effective_param_strings, load_registry, load_tuning_profiles, read_poll_from_cache,
     rule_params, run_all_rules_with_overrides, substitute_sql, RuleRegistry, RuleSpec, RunOptions,
 };
-use fdd_sql::{register_parquet_tree, register_weather_if_present, run_sql};
+use fdd_sql::{
+    register_historian_building, register_parquet_tree, register_weather_if_present, run_sql,
+};
 use serde_json::{json, Value};
 
 fn sql_rules_dir() -> PathBuf {
@@ -108,7 +110,7 @@ fn apply_session_bag_to_sql_params(
     }
 }
 
-fn parquet_root() -> PathBuf {
+pub(crate) fn parquet_root() -> PathBuf {
     // Match CSV ingest + historian: OPENFDD_STORAGE_URL file root first (#528).
     if let Some(p) = fdd_store::local_file_root_from_env() {
         return p;
@@ -134,6 +136,53 @@ fn parquet_root() -> PathBuf {
         }
     }
     PathBuf::from(".cache/parquet")
+}
+
+fn dir_has_parquet(root: &Path) -> bool {
+    if !root.is_dir() {
+        return false;
+    }
+    walkdir::WalkDir::new(root)
+        .into_iter()
+        .filter_map(Result::ok)
+        .any(|e| {
+            e.file_type().is_file()
+                && e.path()
+                    .extension()
+                    .and_then(|x| x.to_str())
+                    .map(|x| x.eq_ignore_ascii_case("parquet"))
+                    .unwrap_or(false)
+        })
+}
+
+/// True when a building has CSV sidecar and/or canonical MQTT historian parquet.
+fn building_has_history(pq: &Path, bid: &str) -> bool {
+    let canonical = pq.join("history").join(format!("building_id={bid}"));
+    let legacy = pq.join(format!("building={bid}"));
+    dir_has_parquet(&canonical) || dir_has_parquet(&legacy) || legacy.is_dir()
+}
+
+fn collect_equipment_prefix(root: &Path, prefix: &str, ids: &mut Vec<String>) {
+    if !root.is_dir() {
+        return;
+    }
+    for entry in walkdir::WalkDir::new(root)
+        .min_depth(1)
+        .max_depth(4)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_dir())
+    {
+        if let Some(id) = entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.strip_prefix(prefix))
+        {
+            if !id.is_empty() {
+                ids.push(id.to_string());
+            }
+        }
+    }
 }
 
 /// Results directory, optionally scoped to a building so per-site runs do not
@@ -350,31 +399,24 @@ fn rule_applies_to_kind(kinds: &[String], kind: &str) -> bool {
 
 /// `GET /api/fdd/equipment` — equipment present in the parquet cache.
 ///
-/// When `building_id` is set, only `building={id}/` is walked so a site's
-/// equipment list is not polluted by other buildings (or `bench_*`) in the
-/// shared cache.
+/// When `building_id` is set, walk both legacy `building={id}/equipment=*` and
+/// canonical MQTT `history/building_id={id}/equipment_id=*` so Overview / AFDD
+/// see live sites the same as CSV packages (3.3.33).
 pub fn equipment_response(building_id: Option<&str>) -> Value {
     let pq = parquet_root();
-    let root = match building_id.map(str::trim).filter(|s| !s.is_empty()) {
-        Some(bid) => pq.join(format!("building={bid}")),
-        None => pq,
-    };
     let mut ids = Vec::new();
-    if root.is_dir() {
-        for entry in walkdir::WalkDir::new(&root)
-            .min_depth(1)
-            .max_depth(3)
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter(|e| e.file_type().is_dir())
-        {
-            if let Some(id) = entry
-                .file_name()
-                .to_str()
-                .and_then(|name| name.strip_prefix("equipment="))
-            {
-                ids.push(id.to_string());
-            }
+    match building_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(bid) => {
+            collect_equipment_prefix(&pq.join(format!("building={bid}")), "equipment=", &mut ids);
+            collect_equipment_prefix(
+                &pq.join("history").join(format!("building_id={bid}")),
+                "equipment_id=",
+                &mut ids,
+            );
+        }
+        None => {
+            collect_equipment_prefix(&pq, "equipment=", &mut ids);
+            collect_equipment_prefix(&pq.join("history"), "equipment_id=", &mut ids);
         }
     }
     ids.sort();
@@ -523,19 +565,16 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
     }
     let escaped_equipment = equipment_id.replace('\'', "''");
     let pq = parquet_root();
-    // Scope like run_handler: registering the whole parquet root prefers any
-    // nested `history/` (MQTT canonical) and can hide package sidecars such as
-    // `building=BUILDING_100/equipment=AHU_1` — FDD Plots then report every
-    // required role as missing even when the site parquet has them.
-    let (history_root, weather_root): (PathBuf, PathBuf) =
+    // Prefer OFDD-070 registration (canonical history/building_id= then legacy)
+    // so MQTT live sites plot the same as CSV packages (3.3.33).
+    let (storage_root, weather_root, scoped_bid): (PathBuf, PathBuf, Option<String>) =
         match building_id.map(str::trim).filter(|s| !s.is_empty()) {
             Some(bid) => {
-                let scoped = pq.join(format!("building={bid}"));
-                if !scoped.is_dir() {
+                if !building_has_history(&pq, bid) {
                     return json!({
                         "ok": false,
                         "error": format!(
-                            "no parquet for building_id={bid} under {} — ingest that package first",
+                            "no parquet for building_id={bid} under {} — ingest that package or wait for MQTT historian",
                             pq.display()
                         ),
                         "missing_roles": rule.required_roles,
@@ -545,9 +584,9 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                         "rows": [],
                     });
                 }
-                (scoped, pq.clone())
+                (pq.clone(), pq.clone(), Some(bid.to_string()))
             }
-            None => (pq.clone(), pq.clone()),
+            None => (pq.clone(), pq.clone(), None),
         };
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -559,7 +598,11 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
     rt.block_on(async {
         let mut columns = columns;
         let ctx = datafusion::prelude::SessionContext::new();
-        if let Err(e) = register_parquet_tree(&ctx, &history_root).await {
+        if let Some(bid) = scoped_bid.as_deref() {
+            if let Err(e) = register_historian_building(&ctx, &storage_root, bid).await {
+                return json!({"ok": false, "error": e.to_string()});
+            }
+        } else if let Err(e) = register_parquet_tree(&ctx, &storage_root).await {
             return json!({"ok": false, "error": e.to_string()});
         }
         let _ = register_weather_if_present(&ctx, &weather_root).await;
@@ -647,7 +690,7 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                         &reg,
                         rule,
                         equipment_id,
-                        &history_root,
+                        &storage_root,
                         &history_columns,
                         session_bag.as_ref(),
                     )
@@ -1092,8 +1135,9 @@ pub fn roles_response() -> Value {
 /// { "mode": "registry", "rule_ids": ["FC1","VAV-1"], "params": { "FC1": { "confirm_min": 5 } },
 ///   "building_id": "BUILDING_100" }
 /// ```
-/// Omit `rule_ids` to run all. Pass ``building_id`` to scope history to
-/// ``building={id}/`` (avoids bench_* bleed from other packages in the same cache).
+/// Omit `rule_ids` to run all. Pass ``building_id`` to scope history via
+/// ``register_historian_building`` (canonical ``history/building_id=`` then
+/// legacy ``building=``) so MQTT live sites AFDD like CSV packages (3.3.33).
 /// Without parquet cache, returns a clear error.
 pub fn run_registry(payload: &Value) -> Value {
     let pq = parquet_root();
@@ -1114,19 +1158,19 @@ pub fn run_registry(payload: &Value) -> Value {
         .filter(|s| !s.is_empty());
     let (history_root, weather_root): (PathBuf, PathBuf) = match building_id {
         Some(bid) => {
-            let scoped = pq.join(format!("building={bid}"));
-            if !scoped.is_dir() {
+            if !building_has_history(&pq, bid) {
                 return json!({
                     "ok": false,
                     "error": format!(
-                        "no parquet for building_id={bid} under {} — ingest that package first",
+                        "no parquet for building_id={bid} under {} — ingest that package or wait for MQTT historian",
                         pq.display()
                     ),
                     "cache": cache_status(),
                     "building_id": bid,
                 });
             }
-            (scoped, pq.clone())
+            // Pass storage root; runner scopes with register_historian_building.
+            (pq.clone(), pq.clone())
         }
         None => (pq.clone(), pq.clone()),
     };
@@ -1411,6 +1455,47 @@ mod tests {
     }
 
     #[test]
+    
+    #[test]
+    fn equipment_response_lists_canonical_mqtt_hive() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd-equip-mqtt-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let equip = tmp
+            .join("history")
+            .join("building_id=bldg2")
+            .join("equipment_id=bldg2-zone-loopback")
+            .join("year=2026")
+            .join("month=09");
+        std::fs::create_dir_all(&equip).unwrap();
+        std::fs::write(equip.join("part-0.parquet"), b"PAR1").unwrap();
+        let prev = std::env::var("OPENFDD_PARQUET_ROOT").ok();
+        // Clear storage URL so parquet_root uses OPENFDD_PARQUET_ROOT.
+        let prev_storage = std::env::var("OPENFDD_STORAGE_URL").ok();
+        std::env::remove_var("OPENFDD_STORAGE_URL");
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &tmp);
+        let body = equipment_response(Some("bldg2"));
+        match prev {
+            Some(v) => std::env::set_var("OPENFDD_PARQUET_ROOT", v),
+            None => std::env::remove_var("OPENFDD_PARQUET_ROOT"),
+        }
+        match prev_storage {
+            Some(v) => std::env::set_var("OPENFDD_STORAGE_URL", v),
+            None => std::env::remove_var("OPENFDD_STORAGE_URL"),
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+        assert_eq!(body["ok"], true);
+        assert_eq!(body["count"], 1);
+        assert_eq!(body["equipment"][0]["equipment_id"], "bldg2-zone-loopback");
+    }
+
     fn confirmed_fault_index_reads_building_scoped_results() {
         let _env = crate::test_support::workspace_env_lock();
         let tmp = std::env::temp_dir().join(format!(
