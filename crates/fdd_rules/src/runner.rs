@@ -4,7 +4,8 @@ use std::path::Path;
 use anyhow::Result;
 use datafusion::prelude::*;
 use fdd_sql::{
-    register_parquet_tree, register_utility_if_present, register_weather_if_present, run_sql,
+    register_historian_building, register_parquet_tree, register_utility_if_present,
+    register_weather_if_present, run_sql,
 };
 use serde::Serialize;
 
@@ -206,12 +207,17 @@ pub async fn run_all_rules_with_overrides(
     let tuning = load_tuning_profiles(rules_dir)?;
 
     let ctx = SessionContext::new();
-    register_parquet_tree(&ctx, parquet_root).await?;
+    // OFDD-070 / 3.3.33: when building_id is set, prefer canonical
+    // history/building_id=<id>/ then legacy building=<id>/ (same as analytics).
+    // Callers must pass the storage/parquet root — not a pre-scoped building= dir.
+    if let Some(bid) = options.building_id.filter(|s| !s.is_empty()) {
+        register_historian_building(&ctx, parquet_root, bid).await?;
+        register_utility_if_present(&ctx, bid).await?;
+    } else {
+        register_parquet_tree(&ctx, parquet_root).await?;
+    }
     let wx_root = options.weather_root.unwrap_or(parquet_root);
     register_weather_if_present(&ctx, wx_root).await?;
-    if let Some(bid) = options.building_id.filter(|s| !s.is_empty()) {
-        register_utility_if_present(&ctx, bid).await?;
-    }
     if let Some((start_utc, end_utc)) = options.time_window {
         scope_history_to_time_window(&ctx, start_utc, end_utc).await?;
     }
