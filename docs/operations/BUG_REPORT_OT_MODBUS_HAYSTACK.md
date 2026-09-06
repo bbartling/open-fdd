@@ -437,6 +437,7 @@ Triage as of **post-3.3.33** (2026-09-06). Prior PASS rows are **not** rewritten
 | **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | FDD inventory/run/series historian parity — Overview MQTT=CSV |
 | **isolated-authenticated-zap-af** | **CLOSED** (Wave C harness) | Disposable AF+OpenAPI PASS; field closeout stays public baseline |
 | **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` on Railway; optional matrix password path remains soft → Wave F |
+| **hybrid-ml-physics-ahu-vav** | **OPEN** → Wave G (after OT closeout) | Experimental semantic hybrid; AHU+VAV first slice; OT full stress ≠ scientific validation |
 
 ## Series wrap draft — Lab tuners 3.3.21→3.3.26
 
