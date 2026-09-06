@@ -9,12 +9,12 @@
 **Program:** optimized waves — [`patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md`](patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md) (Cursor: `nightly_3.3.27+_master_4cc5bbd5.plan.md`)  
 **Pis freed (not in stress):** bosspi · BensFakeAhu · Zone1VAV.
 
-## OPEN / tracked bugs (3.3.33 patch cycle)
+## OPEN / tracked bugs (post-3.3.33)
 
 | ID | Status | Symptom | Evidence | Next |
 |----|--------|---------|----------|------|
-| **mqtt-overview-spa-parity** | **OPEN** → 3.3.33 | MQTT `bldg2` analytics OK but `/api/fdd/equipment?building_id=bldg2` returns **0** → Overview empty CSV hero; AFDD/Plots scoped to legacy `building=` only | Live probe 2026-09-05; BUILDING_100 equipment=49 | Unify `register_historian_building` into FDD equipment/run/series + buildings list union |
 | **railway-ui-fdd-stale** | **DEFERRED** → UX | Building filter / scoped FDD UX across sites | BUG_REPORT prior | Soft-OPEN; picker union helps |
+| **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | Was: equipment=0 for MQTT `bldg2` → empty Overview | #856 · probe + stress | — |
 | **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` → `username=viewer` JWT | Railway var set | Optional auth_matrix password path |
 | **wave-c-railway-smoke** | **CLOSED** | Wave C smoke | `reports/waveC_railway_smoke_final/` · #854 | — |
 
@@ -25,7 +25,7 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 ### Upcoming trains (Cursor plans — optimized waves 2026-09-05)
 
 **Source of truth:** [`patch_trains/`](patch_trains/) · [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md) · [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
-**Active:** [`patch_cycle_3.3.33_mqtt_overview_csv_parity.plan.md`](../../.cursor/plans/patch_cycle_3.3.33_mqtt_overview_csv_parity.plan.md) — MQTTS Overview = CSV Overview; **full Railway stress LAST**.
+**Last closed:** [`patch_cycle_3.3.33_mqtt_overview_csv_parity.plan.md`](../../.cursor/plans/patch_cycle_3.3.33_mqtt_overview_csv_parity.plan.md) — MQTTS Overview = CSV Overview (**CLOSED**).
 
 | Rev / wave | In-repo plan | Concern | Status |
 |------------|--------------|---------|--------|
