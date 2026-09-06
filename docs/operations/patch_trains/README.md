@@ -2,16 +2,17 @@
 
 These Markdown files are **copies** of Cursor plans under `~/.cursor/plans/` so a dead laptop does not lose the program. **GitHub is source of truth** — edit here first, then mirror to `~/.cursor/plans/`.
 
-## Active — post-3.3.33 soft-OPEN (optimized waves D/E/F + closeout full stress)
+## Active — post-3.3.33 soft-OPEN (D/E/F + closeout) then Wave G hybrid
 
-Mid-wave = smoke / isolated. **ONE full** Railway stress **LAST** at program closeout → BUG_REPORT. See master.
+Mid-wave = smoke / isolated. **ONE full** Railway stress **LAST** at soft-OPEN closeout → BUG_REPORT D–F. **Wave G** = experimental hybrid AHU/VAV (3.3.37+) **after** that closeout.
 
 | Wave | File | Rev / concern |
 |------|------|---------------|
-| — | [openfdd_post_3.3.33_soft_open_program.plan.md](openfdd_post_3.3.33_soft_open_program.plan.md) | **Master** (waves D/E/F) |
+| — | [openfdd_post_3.3.33_soft_open_program.plan.md](openfdd_post_3.3.33_soft_open_program.plan.md) | **Master** (waves D/E/F + closeout + G pointer) |
 | D | [3.3.34_mqtt_ingest_reconnect.plan.md](3.3.34_mqtt_ingest_reconnect.plan.md) | MQTT ingest reconnect |
 | E | [3.3.35_overview_ui_fdd_scope.plan.md](3.3.35_overview_ui_fdd_scope.plan.md) | Overview UI / FDD scope |
 | F | [3.3.36_lab_gate_residual.plan.md](3.3.36_lab_gate_residual.plan.md) | Lab residual (honest only) |
+| G | [openfdd_hybrid_diagnostics_ahu_vav_program.plan.md](openfdd_hybrid_diagnostics_ahu_vav_program.plan.md) | Hybrid ML/Physics AHU+VAV (after closeout) |
 
 ## Predecessor — nightly bug train 3.3.27+ (CLOSED through 3.3.33)
 
