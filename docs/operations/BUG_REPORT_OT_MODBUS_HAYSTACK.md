@@ -7,7 +7,7 @@
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Telemetry = hosted AV `9101` loopback as `bldg2-zone-loopback` / role **`zone_t`** / `equipment_type=zone_other`.  
 **Backup:** `~/openfdd-backups/railway/20260906T030735Z/` (prior: `20260905T195204Z`)  
 **Program (CLOSED):** [`patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md`](patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md) (Cursor: `nightly_3.3.27+_master_4cc5bbd5.plan.md`)  
-**Active program:** [`patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md`](patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md) (Cursor: `post_3.3.33_soft_open_master_a1b2c3d4.plan.md`)  
+**Active program:** [`patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md`](patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md) (Cursor: `post_3.3.33_soft_open_master_a1b2c3d4.plan.md`) — Waves D→E→F → **full stress LAST** → optional **Wave G** hybrid AHU/VAV  
 **Pis freed (not in stress):** bosspi · BensFakeAhu · Zone1VAV.
 
 ## OPEN / tracked bugs (post-3.3.33)
@@ -17,6 +17,7 @@
 | **mqtt-ingest-stall** | **OPEN** → 3.3.34 | After mqtt/central re-pin, `edges:1` + `has_telemetry:true` but **`ingest_ok` flat** until `railway redeploy -s openfdd-central-cQ-F` | 2026-09-06 live: stuck at `ingest_ok=6` ~40m; post-redeploy `1→3` in ~70s | Wave D — auto-reconnect / resilient ingest; do not trust sticky edges alone |
 | **railway-ui-fdd-stale** | **DEFERRED** → 3.3.35 | Building filter / scoped FDD UX across sites | BUG_REPORT prior | Wave E |
 | **bldg2-overview-signoff** | **DEFERRED** → operator | SPA Overview tables/charts human confirm for `?site=bldg2` | API gate PASS on 3.3.33 | Wave E evidence |
+| **hybrid-ml-physics-ahu-vav** | **OPEN** → Wave G | Semantic hybrid ML/Physics Overview column + EnergyPlus calibration export (AHU/VAV first slice) | Mission prompt 2026-09-06; experimental | **After** soft-OPEN closeout — [`openfdd_hybrid_diagnostics_ahu_vav_program.plan.md`](patch_trains/openfdd_hybrid_diagnostics_ahu_vav_program.plan.md) |
 | **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | Was: equipment=0 for MQTT `bldg2` → empty Overview | #856 · probe + stress | — |
 | **mqtt-fieldbus-tip-pin-sync** | **CLOSED** (3.3.33) | Was hybrid mqtt/fieldbus tip | All services `sha-25826cf` | — |
 | **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` → `username=viewer` JWT | Railway var set | Optional auth_matrix path → Wave F soft |
@@ -40,14 +41,18 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 ### Upcoming trains (Cursor plans — optimized waves 2026-09-06)
 
 **Source of truth:** [`patch_trains/`](patch_trains/) · [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md) · [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
-**Active:** [`openfdd_post_3.3.33_soft_open_program.plan.md`](patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md) — Waves D/E/F.  
+**Active:** [`openfdd_post_3.3.33_soft_open_program.plan.md`](patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md) — Waves D/E/F + **closeout full stress**.  
 **Last closed:** [`3.3.33_mqtt_overview_csv_parity.plan.md`](patch_trains/3.3.33_mqtt_overview_csv_parity.plan.md) — MQTTS Overview = CSV Overview (**CLOSED**).
+
+**This round stress rule:** mid-wave = Railway **smoke** / isolated only. **ONE full** `run_railway_hub_stress.sh` at **soft-OPEN closeout** (after F) → BUG_REPORT D–F. **Wave G** (hybrid ML/Physics) starts only after that closeout; G uses synthetic/unit gates — OT full stress does **not** scientifically validate ML.
 
 | Rev / wave | In-repo plan | Concern | Status |
 |------------|--------------|---------|--------|
-| **Wave D / 3.3.34** | [`3.3.34_mqtt_ingest_reconnect.plan.md`](patch_trains/3.3.34_mqtt_ingest_reconnect.plan.md) | Central MQTT ingest resilience after mqtt re-pin | **OPEN** |
-| **Wave E / 3.3.35** | [`3.3.35_overview_ui_fdd_scope.plan.md`](patch_trains/3.3.35_overview_ui_fdd_scope.plan.md) | `railway-ui-fdd-stale` + Overview browser sign-off | **OPEN** |
-| **Wave F / 3.3.36** | [`3.3.36_lab_gate_residual.plan.md`](patch_trains/3.3.36_lab_gate_residual.plan.md) | Honest Lab residual / optional viewer matrix | **OPEN** |
+| **Wave D / 3.3.34** | [`3.3.34_mqtt_ingest_reconnect.plan.md`](patch_trains/3.3.34_mqtt_ingest_reconnect.plan.md) | Central MQTT ingest resilience after mqtt re-pin | **OPEN** — smoke mid-wave |
+| **Wave E / 3.3.35** | [`3.3.35_overview_ui_fdd_scope.plan.md`](patch_trains/3.3.35_overview_ui_fdd_scope.plan.md) | `railway-ui-fdd-stale` + Overview browser sign-off | **OPEN** — smoke mid-wave |
+| **Wave F / 3.3.36** | [`3.3.36_lab_gate_residual.plan.md`](patch_trains/3.3.36_lab_gate_residual.plan.md) | Honest Lab residual / optional viewer matrix | **OPEN** — isolated + smoke |
+| **Closeout** | parent master | Full Railway matrix on final tip | **OPEN** — **required LAST** before D–F CLOSED |
+| **Wave G / 3.3.37+** | [`openfdd_hybrid_diagnostics_ahu_vav_program.plan.md`](patch_trains/openfdd_hybrid_diagnostics_ahu_vav_program.plan.md) | Experimental semantic hybrid ML/Physics AHU+VAV slice | **OPEN** — **after** closeout; synthetic gates primary |
 | **3.3.33** | [`3.3.33_mqtt_overview_csv_parity.plan.md`](patch_trains/3.3.33_mqtt_overview_csv_parity.plan.md) | FDD inventory/run/series + buildings list use historian `building_id=` | **CLOSED** — #856 · tip `sha-25826cf` · stress PASS · Overview probe PASS · docs #857 |
 | **Wave A** | closeout + [`3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md`](patch_trains/3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) | Tip pin + one full stress | **CLOSED** |
 | **Wave B** | [`3.3.28`](patch_trains/3.3.28_lab_tuners_econ_ahu_residual.plan.md) + [`3.3.29`](patch_trains/3.3.29_viewer_login_and_ui_scope.plan.md) | Lab + viewer + #851 historian scope | **CLOSED** — #852 · tip `sha-10d1ec5` · stress PASS · #851 CLOSED · docs #853 |
@@ -432,6 +437,7 @@ Triage as of **post-3.3.33** (2026-09-06). Prior PASS rows are **not** rewritten
 | **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | FDD inventory/run/series historian parity — Overview MQTT=CSV |
 | **isolated-authenticated-zap-af** | **CLOSED** (Wave C harness) | Disposable AF+OpenAPI PASS; field closeout stays public baseline |
 | **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` on Railway; optional matrix password path remains soft → Wave F |
+| **hybrid-ml-physics-ahu-vav** | **OPEN** → Wave G (after OT closeout) | Experimental semantic hybrid; AHU+VAV first slice; OT full stress ≠ scientific validation |
 
 ## Series wrap draft — Lab tuners 3.3.21→3.3.26
 
