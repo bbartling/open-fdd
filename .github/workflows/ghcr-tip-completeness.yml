@@ -1,0 +1,79 @@
+# After Publish Open-FDD stack completes (success or failure), assert tip hub
+# tags exist. Catches the partial-tip failure mode: central/web published but
+# mqtt still missing because fieldbus blocked a serial publish job.
+name: GHCR tip completeness
+
+on:
+  workflow_run:
+    workflows:
+      - Publish Open-FDD stack to GHCR
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Exact tip tag (sha-<7>); empty = origin/master short SHA
+        required: false
+        type: string
+      hub_only:
+        description: Only require central/web/mqtt (skip fieldbus)
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  tip-complete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Resolve tip tag
+        id: tip
+        env:
+          INPUT_TAG: ${{ inputs.image_tag }}
+          PUBLISH_SHA: ${{ github.event.workflow_run.head_sha }}
+          PUBLISH_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          HUB_ONLY_INPUT: ${{ inputs.hub_only }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${INPUT_TAG:-}" ]]; then
+            tag="$INPUT_TAG"
+          elif [[ -n "${PUBLISH_SHA:-}" ]]; then
+            tag="sha-${PUBLISH_SHA:0:7}"
+          else
+            git fetch --depth=1 origin master
+            tag="sha-$(git rev-parse --short=7 origin/master)"
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "Publish conclusion=${PUBLISH_CONCLUSION:-n/a} tip=${tag}"
+
+          hub_only=0
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${HUB_ONLY_INPUT}" == "true" ]]; then
+            hub_only=1
+          fi
+          # After a cancelled/failed Publish, still check hub — partial tags are the bug.
+          if [[ "${PUBLISH_CONCLUSION:-}" == "cancelled" || "${PUBLISH_CONCLUSION:-}" == "failure" ]]; then
+            hub_only=1
+            echo "Publish was ${PUBLISH_CONCLUSION}; enforcing hub-only completeness (central/web/mqtt)."
+          fi
+          echo "hub_only=${hub_only}" >> "$GITHUB_OUTPUT"
+
+      - name: Check GHCR tip stack
+        env:
+          TAG: ${{ steps.tip.outputs.tag }}
+          HUB_ONLY: ${{ steps.tip.outputs.hub_only }}
+        run: |
+          set -euo pipefail
+          chmod +x scripts/check_ghcr_tip_stack.sh
+          if [[ "${HUB_ONLY}" == "1" ]]; then
+            ./scripts/check_ghcr_tip_stack.sh "$TAG" --hub-only
+          else
+            ./scripts/check_ghcr_tip_stack.sh "$TAG"
+          fi

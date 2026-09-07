@@ -1,5 +1,7 @@
-# Publish Open-FDD stack images to GHCR (central, web, fieldbus, mqtt).
+# Publish Open-FDD stack images to GHCR (central, web, mqtt hub + fieldbus).
 # Product UI is openfdd-web (React SPA).
+# Hub images (central/web/mqtt) publish in parallel with multi-arch fieldbus so a
+# slow/hung fieldbus QEMU build cannot block Railway tip re-pin on mqtt.
 # Tag contract:
 # - every publish: immutable sha-<7>
 # - master: moving nightly + rerun-unique immutable run tag
@@ -98,14 +100,13 @@ jobs:
           chmod +x scripts/release/smoke_csv_central_boot.sh
           ./scripts/release/smoke_csv_central_boot.sh
 
-  publish:
+  # Railway hub tip: central + web + mqtt (amd64). Must not wait on multi-arch fieldbus.
+  publish-hub:
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 420
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
-
-      - uses: docker/setup-qemu-action@v3
 
       - uses: docker/setup-buildx-action@v3
 
@@ -169,15 +170,14 @@ jobs:
 
           write_tags central_tags "$CENTRAL_IMAGE"
           write_tags web_tags "$WEB_IMAGE"
-          write_tags fieldbus_tags "$FIELDBUS_IMAGE"
           write_tags mqtt_tags "$MQTT_IMAGE"
 
-          echo "GHCR tag suffixes: ${suffixes[*]}"
+          echo "GHCR hub tag suffixes: ${suffixes[*]}"
 
       - name: Build and push openfdd-central
         uses: docker/build-push-action@v6
         # RocksDB via oxrocksdb + QEMU arm64 exceeds 2h; ship amd64 nightly first for local MQTTS tests.
-        timeout-minutes: 240
+        timeout-minutes: 90
         with:
           context: .
           file: services/central/Dockerfile
@@ -224,28 +224,6 @@ jobs:
         if: steps.vars.outputs.nightly == 'true'
         run: docker buildx imagetools create -t "${{ env.WEB_IMAGE }}:nightly" "${{ env.WEB_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
 
-      - name: Build and push openfdd-fieldbus
-        uses: docker/build-push-action@v6
-        # Pi / arm64 edges (bosspi): multi-arch. Central/web stay amd64-first (RocksDB/QEMU cost).
-        timeout-minutes: 240
-        with:
-          context: .
-          file: services/fieldbus/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.vars.outputs.fieldbus_tags }}
-          labels: |
-            org.opencontainers.image.title=Open-FDD Fieldbus
-            org.opencontainers.image.source=https://github.com/bbartling/open-fdd
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.vars.outputs.version }}
-          cache-from: type=gha,scope=openfdd-fieldbus
-          cache-to: type=gha,mode=max,scope=openfdd-fieldbus
-
-      - name: Tag openfdd-fieldbus nightly
-        if: steps.vars.outputs.nightly == 'true'
-        run: docker buildx imagetools create -t "${{ env.FIELDBUS_IMAGE }}:nightly" "${{ env.FIELDBUS_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
-
       - name: Build and push openfdd-mqtt
         uses: docker/build-push-action@v6
         timeout-minutes: 15
@@ -267,16 +245,15 @@ jobs:
         if: steps.vars.outputs.nightly == 'true'
         run: docker buildx imagetools create -t "${{ env.MQTT_IMAGE }}:nightly" "${{ env.MQTT_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
 
-      - name: Published tags
+      - name: Verify hub tags (central/web/mqtt)
         env:
           TAG_SUFFIXES: ${{ steps.vars.outputs.tag_suffixes }}
         run: |
           set -euo pipefail
-          for img in central web fieldbus mqtt; do
+          for img in central web mqtt; do
             case "$img" in
               central) ref="${{ env.CENTRAL_IMAGE }}" ;;
               web) ref="${{ env.WEB_IMAGE }}" ;;
-              fieldbus) ref="${{ env.FIELDBUS_IMAGE }}" ;;
               mqtt) ref="${{ env.MQTT_IMAGE }}" ;;
             esac
             while IFS= read -r suffix; do
@@ -287,3 +264,101 @@ jobs:
               docker buildx imagetools inspect "${ref}:nightly"
             fi
           done
+
+  # Edge fieldbus: multi-arch (amd64 + arm64). Parallel to hub — must not gate mqtt.
+  publish-fieldbus:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: vars
+        shell: bash
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA::7}"
+          version="$(grep -E '^version = ' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')"
+          suffixes=("sha-${short_sha}")
+          nightly=false
+
+          if [[ "${GITHUB_REF}" == "refs/heads/master" ]]; then
+            nightly=true
+            suffixes+=("${version}-n${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT}")
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            ref_version="${GITHUB_REF_NAME#v}"
+            if [[ "${ref_version}" != "${version}" ]]; then
+              echo "release tag v${ref_version} does not match Cargo.toml version ${version}" >&2
+              exit 1
+            fi
+            suffixes+=("${version}" "${version}-n${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT}")
+          else
+            suffixes+=("candidate-${short_sha}")
+          fi
+
+          echo "short_sha=${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "nightly=${nightly}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "tag_suffixes<<EOF"
+            printf '%s\n' "${suffixes[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "fieldbus_tags<<EOF"
+            for suffix in "${suffixes[@]}"; do
+              echo "${FIELDBUS_IMAGE}:${suffix}"
+            done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "GHCR fieldbus tag suffixes: ${suffixes[*]}"
+
+      - name: Build and push openfdd-fieldbus
+        uses: docker/build-push-action@v6
+        # Pi / arm64 edges (bosspi): multi-arch. Hub images stay amd64-only in publish-hub.
+        timeout-minutes: 240
+        with:
+          context: .
+          file: services/fieldbus/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.vars.outputs.fieldbus_tags }}
+          labels: |
+            org.opencontainers.image.title=Open-FDD Fieldbus
+            org.opencontainers.image.source=https://github.com/bbartling/open-fdd
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.vars.outputs.version }}
+          cache-from: type=gha,scope=openfdd-fieldbus
+          cache-to: type=gha,mode=max,scope=openfdd-fieldbus
+
+      - name: Tag openfdd-fieldbus nightly
+        if: steps.vars.outputs.nightly == 'true'
+        run: docker buildx imagetools create -t "${{ env.FIELDBUS_IMAGE }}:nightly" "${{ env.FIELDBUS_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
+
+      - name: Verify fieldbus tags
+        env:
+          TAG_SUFFIXES: ${{ steps.vars.outputs.tag_suffixes }}
+        run: |
+          set -euo pipefail
+          ref="${{ env.FIELDBUS_IMAGE }}"
+          while IFS= read -r suffix; do
+            [[ -n "$suffix" ]] || continue
+            docker buildx imagetools inspect "${ref}:${suffix}"
+          done <<< "$TAG_SUFFIXES"
+          if [[ "${{ steps.vars.outputs.nightly }}" == "true" ]]; then
+            docker buildx imagetools inspect "${ref}:nightly"
+          fi
