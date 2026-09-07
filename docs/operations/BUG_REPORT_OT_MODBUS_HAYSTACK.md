@@ -49,6 +49,15 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 
 **This round stress rule:** mid-wave = Railway **smoke** / unit. **ONE full** `run_railway_hub_stress.sh` at **Wave G closeout** (gates 00–08, **no `SKIP_ZAP`**) → BUG_REPORT. Tuner reference: Vibe19 **414** vs Lab tip **~217** — close the gap.
 
+**Wave G closeout order (locked — stress AFTER refreshed containers):**
+1. Green CI on product PR → merge to `master`
+2. Wait **Publish Open-FDD stack** → new GHCR `sha-<7>` (central/web/mqtt/fieldbus)
+3. Railway backup → re-pin central → mqtt → web → x86 fieldbus **same sha**
+4. **Then** ONE full `./scripts/nightly-ot-bench/run_railway_hub_stress.sh` (**no `SKIP_ZAP`**)
+5. Document tip / report dir / `fully_qualified` / Lab snapshot in this file → Wave G **CLOSED**
+
+Do **not** run closeout stress on soft-OPEN tip `sha-9aebf42` and call Lab tuners CLOSED — product is not in those images until Publish after merge.
+
 | Rev / wave | In-repo plan | Concern | Status |
 |------------|--------------|---------|--------|
 | **Wave D / 3.3.34** | [`3.3.34_mqtt_ingest_reconnect.plan.md`](patch_trains/3.3.34_mqtt_ingest_reconnect.plan.md) | Central MQTT ingest resilience after mqtt re-pin | **CLOSED** — #860 · tip `sha-9aebf42` · smoke PASS · mqtt bounce self-heal |
@@ -70,11 +79,12 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 
 | Check | Evidence |
 |-------|----------|
-| Product | VERSION **3.3.37** — FC eps/mode_delay/fan_on + SV spike scales + operational-gate trio SQL-bound |
-| Lab sum | **~444** (was ~217; Vibe19 ref 414) |
+| Product | VERSION **3.3.37** — FC eps/mode_delay/fan_on + SV spike scales + operational-gate trio SQL-bound · PR **#864** |
+| Lab sum | **~444** (was ~217; Vibe19 ref 414) · `recovery/lab_tuners_snapshot_post_wave_g.json` |
 | G0 matrix | `recovery/lab_vibe19_tuner_gap_matrix_g0.json` |
 | RCx docs | `docs/RCX_PLOTS_BY_HVAC.md` |
-| Closeout | Pending full Railway+ZAP on tip after GHCR |
+| Stress order | **AFTER** GHCR tip refresh + Railway re-pin — not before (see locked order above) |
+| Closeout | Blocked on #864 CI → merge → Publish → re-pin → full Railway+ZAP |
 
 | TODO | 3.3.24 | 3.3.25 | 3.3.26 Wave A | 3.3.28 Wave B |
 |------|--------|--------|---------------|---------------|
