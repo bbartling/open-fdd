@@ -162,4 +162,4 @@ If Open-FDD saves you time or budget, or helps with BAS/FDD work, you can suppor
 
 MIT — see [LICENSE](LICENSE).
 
-Version **3.3.37** on tip · PyPI **4.4.2**
+Version **3.3.38** on tip · PyPI **4.4.2**

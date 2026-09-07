@@ -2275,9 +2275,13 @@ fn rcx_eq_filter(kinds: &[&str]) -> String {
     for k in kinds {
         let ku = k.to_ascii_uppercase();
         if ku == "VAV" {
+            // Name heuristics for package VAVs PLUS MQTT / Zone Other sites whose
+            // equipment_id does not contain "VAV" (e.g. bldg2-zone-loopback).
+            // Keep id-only predicates so history tables without equipment_type still work.
             parts.push(
                 "(UPPER(equipment_id) LIKE 'VAV%' OR UPPER(equipment_id) LIKE '%/VAV%' \
-                 OR UPPER(equipment_id) LIKE '%VAVH%' OR UPPER(equipment_id) LIKE '%VAVFC%')"
+                 OR UPPER(equipment_id) LIKE '%VAVH%' OR UPPER(equipment_id) LIKE '%VAVFC%' \
+                 OR UPPER(equipment_id) LIKE '%ZONE%' OR UPPER(equipment_id) LIKE '%LOOPBACK%')"
                     .to_string(),
             );
         } else if ku == "CHW" || ku == "CHW_PLANT" {
@@ -2916,6 +2920,19 @@ mod tests {
     /// Serializes tests that mutate the process-global `OPENFDD_PARQUET_ROOT`.
     /// Async-aware so the guard may be held across `.await` (clippy-clean).
     static ENV_LOCK: Mutex<()> = Mutex::const_new(());
+
+    #[test]
+    fn rcx_eq_filter_vav_includes_mqtt_zone_loopback() {
+        let f = rcx_eq_filter(&["VAV"]);
+        assert!(
+            f.contains("%LOOPBACK%"),
+            "MQTT zone loopback must match VAV zone presets: {f}"
+        );
+        assert!(
+            f.contains("%ZONE%"),
+            "zone_* equipment ids must match VAV zone presets: {f}"
+        );
+    }
 
     #[tokio::test]
     async fn runtime_from_history_none_when_no_parquet() {
