@@ -2,9 +2,9 @@
 
 These Markdown files are **copies** of Cursor plans under `~/.cursor/plans/` so a dead laptop does not lose the program. **GitHub is source of truth** — edit here first, then mirror to `~/.cursor/plans/`.
 
-## Active — post-3.3.33 soft-OPEN (D/E/F + closeout) then Wave G hybrid
+## Active — Wave G Lab tuner parity (Vibe19 → production)
 
-Mid-wave = smoke / isolated. **ONE full** Railway stress **LAST** at soft-OPEN closeout → BUG_REPORT D–F. **Wave G** = experimental hybrid AHU/VAV (3.3.37+) **after** that closeout.
+Soft-OPEN D–F **CLOSED**. Active: [`openfdd_lab_tuner_parity_program.plan.md`](openfdd_lab_tuner_parity_program.plan.md) (Cursor: `post_softopen_wave_g_sql_anomaly_master_f7a8b9c0`) — Lab tuners ~217→~414; **low-RAM**; **0 stale PRs / failed Actions**; mid-wave smoke; **ONE full** Railway+ZAP **LAST**. RCx by HVAC: [`RCX_PLOTS_BY_HVAC.md`](../../RCX_PLOTS_BY_HVAC.md). Anomaly **PARKED**; hybrid **ABANDONED**.
 
 | Wave | File | Rev / concern |
 |------|------|---------------|
@@ -12,7 +12,9 @@ Mid-wave = smoke / isolated. **ONE full** Railway stress **LAST** at soft-OPEN c
 | D | [3.3.34_mqtt_ingest_reconnect.plan.md](3.3.34_mqtt_ingest_reconnect.plan.md) | MQTT ingest reconnect |
 | E | [3.3.35_overview_ui_fdd_scope.plan.md](3.3.35_overview_ui_fdd_scope.plan.md) | Overview UI / FDD scope |
 | F | [3.3.36_lab_gate_residual.plan.md](3.3.36_lab_gate_residual.plan.md) | Lab residual (honest only) |
-| G | [openfdd_hybrid_diagnostics_ahu_vav_program.plan.md](openfdd_hybrid_diagnostics_ahu_vav_program.plan.md) | Hybrid ML/Physics AHU+VAV (after closeout) |
+| G | [openfdd_lab_tuner_parity_program.plan.md](openfdd_lab_tuner_parity_program.plan.md) | Lab tuner Vibe19 parity (~217→~414; full Railway+ZAP) |
+| ~~G anomaly~~ | [openfdd_sql_anomaly_screening_program.plan.md](openfdd_sql_anomaly_screening_program.plan.md) | **PARKED** |
+| ~~G hybrid~~ | [openfdd_hybrid_diagnostics_ahu_vav_program.plan.md](openfdd_hybrid_diagnostics_ahu_vav_program.plan.md) | **ABANDONED** |
 
 ## Predecessor — nightly bug train 3.3.27+ (CLOSED through 3.3.33)
 

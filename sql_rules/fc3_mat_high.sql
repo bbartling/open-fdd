@@ -7,9 +7,10 @@ WITH h AS (
     oa_t,
     rat,
     COALESCE(CASE WHEN fan_cmd IS NULL THEN 0.0 WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END, 0.0) AS fan,
-    CASE
+        CASE
+      WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -21,11 +22,23 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
+      WHEN COALESCE(mode_stable, 1) = 0 THEN 0
       WHEN fan > {{FAN_ON_MIN}} AND mat IS NOT NULL AND oa_t IS NOT NULL AND rat IS NOT NULL
        AND (mat - {{MIX_TOL}}) > (rat + {{MIX_TOL}})
        AND (mat - {{MIX_TOL}}) > (oa_t + {{MIX_TOL}})
       THEN 1 ELSE 0 END AS INT) AS raw_fault
+  FROM (
+  SELECT h.*,
+    CASE
+      WHEN COALESCE(fan_on, 1) = 0 THEN 0
+      WHEN SUM(CASE WHEN COALESCE(fan_on, 1) = 0 THEN 1 ELSE 0 END) OVER (
+        PARTITION BY equipment_id ORDER BY timestamp_utc
+        ROWS BETWEEN {{MODE_DELAY_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW
+      ) = 0 THEN 1
+      ELSE 0
+    END AS mode_stable
   FROM h
+) h
 ),
 lagged AS (
   SELECT
@@ -55,8 +68,19 @@ final AS (
     CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
+, cov AS (
+  SELECT equipment_id,
+    100.0 * AVG(CAST(COALESCE(fan_on, 1) AS DOUBLE)) AS cov_pct
+  FROM h
+  GROUP BY equipment_id
+)
 SELECT
-  equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
-FROM final
-GROUP BY equipment_id;
+  f.equipment_id,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+  END AS fault_hours
+FROM final f
+LEFT JOIN cov c ON f.equipment_id = c.equipment_id
+GROUP BY f.equipment_id;

@@ -1,0 +1,936 @@
+{
+  "generated": "2026-09-07",
+  "note": "Open-FDD Lab-facing tuners after Wave G Lab Vibe19 parity (confirm_seconds\u2192confirm_min).",
+  "rule_count": 68,
+  "lab_tuner_sum": 446,
+  "rules": [
+    {
+      "rule_id": "FAN-RUNTIME-HOURS",
+      "lab_n": 1,
+      "lab_keys": [
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-1",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min",
+        "zone_t_hi",
+        "zone_t_lo"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-2",
+      "lab_n": 5,
+      "lab_keys": [
+        "confirm_min",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "setback_hi",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "AVG-ZONE-TEMP",
+      "lab_n": 3,
+      "lab_keys": [
+        "confirm_min",
+        "zone_t_hi",
+        "zone_t_lo"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "ZONE-COMFORT-PCT",
+      "lab_n": 3,
+      "lab_keys": [
+        "confirm_min",
+        "zone_t_hi",
+        "zone_t_lo"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FAULT-ELAPSED-HOURS",
+      "lab_n": 3,
+      "lab_keys": [
+        "confirm_min",
+        "zone_t_hi",
+        "zone_t_lo"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "OAT-METEO",
+      "lab_n": 2,
+      "lab_keys": [
+        "confirm_min",
+        "oat_err"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC13-SAT-HIGH",
+      "lab_n": 11,
+      "lab_keys": [
+        "clg_full_min",
+        "confirm_min",
+        "econ_full_open",
+        "econ_min_pos",
+        "eps_sat",
+        "fan_on_min",
+        "minimum_active_coverage_pct",
+        "mode_delay_min",
+        "oa_damper_econ_low",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": [
+        "FC13"
+      ]
+    },
+    {
+      "rule_id": "ECON-2",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "econ2_damper",
+        "econ2_oat_hi",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC1",
+      "lab_n": 8,
+      "lab_keys": [
+        "confirm_min",
+        "eps_dsp",
+        "eps_vfd_spd",
+        "fan_on_min",
+        "minimum_active_coverage_pct",
+        "mode_delay_min",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC2",
+      "lab_n": 10,
+      "lab_keys": [
+        "confirm_min",
+        "eps_mat",
+        "eps_oat",
+        "eps_rat",
+        "fan_on_min",
+        "minimum_active_coverage_pct",
+        "mix_tol",
+        "mode_delay_min",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC3",
+      "lab_n": 10,
+      "lab_keys": [
+        "confirm_min",
+        "eps_mat",
+        "eps_oat",
+        "eps_rat",
+        "fan_on_min",
+        "minimum_active_coverage_pct",
+        "mix_tol",
+        "mode_delay_min",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC7",
+      "lab_n": 8,
+      "lab_keys": [
+        "confirm_min",
+        "eps_sat",
+        "fan_on_min",
+        "htg_full_min",
+        "minimum_active_coverage_pct",
+        "mode_delay_min",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC8",
+      "lab_n": 13,
+      "lab_keys": [
+        "clg_inactive_max",
+        "confirm_min",
+        "delta_supply_fan",
+        "econ_min_pos",
+        "eps_mat",
+        "eps_sat",
+        "fan_on_min",
+        "minimum_active_coverage_pct",
+        "mix_tol",
+        "mode_delay_min",
+        "require_operational_gate",
+        "startup_delay_min",
+        "supply_tol"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC9",
+      "lab_n": 12,
+      "lab_keys": [
+        "clg_inactive_max",
+        "confirm_min",
+        "delta_supply_fan",
+        "econ_min_pos",
+        "eps_oat",
+        "eps_sat",
+        "fan_on_min",
+        "minimum_active_coverage_pct",
+        "mix_tol",
+        "mode_delay_min",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC10",
+      "lab_n": 11,
+      "lab_keys": [
+        "clg_on_min",
+        "confirm_min",
+        "econ_full_open",
+        "eps_mat",
+        "eps_oat",
+        "fan_on_min",
+        "minimum_active_coverage_pct",
+        "mix_tol",
+        "mode_delay_min",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC11",
+      "lab_n": 12,
+      "lab_keys": [
+        "clg_on_min",
+        "confirm_min",
+        "delta_supply_fan",
+        "econ_full_open",
+        "eps_oat",
+        "eps_sat",
+        "fan_on_min",
+        "minimum_active_coverage_pct",
+        "mix_tol",
+        "mode_delay_min",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC12",
+      "lab_n": 14,
+      "lab_keys": [
+        "clg_on_min",
+        "confirm_min",
+        "delta_supply_fan",
+        "econ_full_open",
+        "econ_min_pos",
+        "eps_mat",
+        "eps_sat",
+        "fan_on_min",
+        "minimum_active_coverage_pct",
+        "mix_tol",
+        "mode_delay_min",
+        "require_operational_gate",
+        "startup_delay_min",
+        "supply_tol"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "ECON-1",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "econ1_damper_max",
+        "econ1_oat_min",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "ECON-4",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "minimum_active_coverage_pct",
+        "oa_min_pct",
+        "oat_rat_delta_min",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "SV-RANGE",
+      "lab_n": 7,
+      "lab_keys": [
+        "confirm_min",
+        "minimum_active_coverage_pct",
+        "range_scale_humidity",
+        "range_scale_pressure",
+        "range_scale_temperature",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "SV-FLATLINE",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "flatline_hours",
+        "flatline_tol",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "SV-SPIKE",
+      "lab_n": 8,
+      "lab_keys": [
+        "confirm_min",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "spike_scale",
+        "spike_scale_humidity",
+        "spike_scale_pressure",
+        "spike_scale_temperature",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "SV-STALE",
+      "lab_n": 3,
+      "lab_keys": [
+        "confirm_min",
+        "stale_hours",
+        "stale_tol"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "SV-RATE",
+      "lab_n": 5,
+      "lab_keys": [
+        "confirm_min",
+        "max_gap_hours",
+        "persistence_min",
+        "sensor_span",
+        "steady_fault_per_hour"
+      ],
+      "aliases": [
+        "SV-SLEW"
+      ]
+    },
+    {
+      "rule_id": "PID-HUNT-1",
+      "lab_n": 11,
+      "lab_keys": [
+        "change_deadband_pct",
+        "confirm_min",
+        "minimum_active_coverage_pct",
+        "minimum_coverage_pct",
+        "minimum_equivalent_cycles",
+        "minimum_reversals",
+        "minimum_span_pct",
+        "require_operational_gate",
+        "startup_delay_min",
+        "total_variation_fault_pct",
+        "window_hours"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC4",
+      "lab_n": 7,
+      "lab_keys": [
+        "confirm_min",
+        "delta_os_max",
+        "fan_on_min",
+        "minimum_active_coverage_pct",
+        "mode_delay_min",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC5",
+      "lab_n": 11,
+      "lab_keys": [
+        "confirm_min",
+        "delta_supply_fan",
+        "eps_mat",
+        "eps_sat",
+        "fan_on_min",
+        "htg_on_min",
+        "minimum_active_coverage_pct",
+        "mix_tol",
+        "mode_delay_min",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC6",
+      "lab_n": 9,
+      "lab_keys": [
+        "confirm_min",
+        "eps_airflow",
+        "fan_on_min",
+        "min_cfm_design",
+        "minimum_active_coverage_pct",
+        "mode_delay_min",
+        "oat_rat_delta_min",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC14",
+      "lab_n": 14,
+      "lab_keys": [
+        "clg_inactive_max",
+        "clg_on_min",
+        "confirm_min",
+        "delta_supply_fan",
+        "econ_min_pos",
+        "eps_ccet",
+        "eps_cclt",
+        "fan_on_min",
+        "htg_on_min",
+        "minimum_active_coverage_pct",
+        "mix_tol",
+        "mode_delay_min",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "FC15",
+      "lab_n": 15,
+      "lab_keys": [
+        "clg_inactive_max",
+        "clg_on_min",
+        "confirm_min",
+        "delta_supply_fan",
+        "econ_full_open",
+        "econ_min_pos",
+        "eps_hcet",
+        "eps_hclt",
+        "fan_on_min",
+        "htg_on_min",
+        "minimum_active_coverage_pct",
+        "mix_tol",
+        "mode_delay_min",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "AHU-SATDEV",
+      "lab_n": 5,
+      "lab_keys": [
+        "confirm_min",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "sat_dev_err",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "AHU-DUCTHI",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "duct_high_margin",
+        "minimum_active_coverage_pct",
+        "pressure_on_min",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "AHU-SIMUL",
+      "lab_n": 5,
+      "lab_keys": [
+        "confirm_min",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min",
+        "valve_open_pct"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "ECON-3",
+      "lab_n": 9,
+      "lab_keys": [
+        "clg_open_min",
+        "confirm_min",
+        "econ3_damper_hi",
+        "econ3_db_max",
+        "econ3_db_min",
+        "econ3_dp_max",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "ECON-5",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "htg_open_min",
+        "minimum_active_coverage_pct",
+        "preheat_over_f",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "ECON-6",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "econ6_damper_max",
+        "econ6_oat_max_f",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "ECON-7",
+      "lab_n": 9,
+      "lab_keys": [
+        "clg_open_min",
+        "confirm_min",
+        "econ7_damper_min",
+        "econ7_db_max",
+        "econ7_db_min",
+        "econ7_dp_max",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "MECH-OAT-1",
+      "lab_n": 2,
+      "lab_keys": [
+        "confirm_min",
+        "mech_oat_max_f"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CMD-1",
+      "lab_n": 1,
+      "lab_keys": [
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "OA-1",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "min_oa_frac",
+        "minimum_active_coverage_pct",
+        "oat_rat_guard",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "DMP-1",
+      "lab_n": 5,
+      "lab_keys": [
+        "confirm_min",
+        "leak_delta",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VLV-1",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "mat_leak_delta",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "sat_err",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-3",
+      "lab_n": 7,
+      "lab_keys": [
+        "confirm_min",
+        "flow_on_min",
+        "minimum_active_coverage_pct",
+        "reheat_oat",
+        "reheat_pct",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-4",
+      "lab_n": 7,
+      "lab_keys": [
+        "confirm_min",
+        "flow_on_min",
+        "full_open_pct",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min",
+        "sustain_hours"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-5",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "damper_closed_max",
+        "flow_bias_cfm",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-6",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "free_cool_oat",
+        "minimum_active_coverage_pct",
+        "reheat_pct",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-REHEAT",
+      "lab_n": 7,
+      "lab_keys": [
+        "confirm_min",
+        "flow_on_min",
+        "min_rise",
+        "minimum_active_coverage_pct",
+        "reheat_cmd",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-AHU-LEAVE",
+      "lab_n": 3,
+      "lab_keys": [
+        "confirm_min",
+        "delta_f",
+        "flow_on_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "VAV-7",
+      "lab_n": 9,
+      "lab_keys": [
+        "confirm_min",
+        "fixed_flow_hours",
+        "fixed_flow_max_std",
+        "fixed_flow_min_mean",
+        "flow_on_min",
+        "high_min_flow_sp",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "RESET-1",
+      "lab_n": 8,
+      "lab_keys": [
+        "confirm_min",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "reset_err_f",
+        "reset_oat_ref",
+        "reset_sat_at_65",
+        "reset_slope",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CHW-NOLOAD-1",
+      "lab_n": 5,
+      "lab_keys": [
+        "confirm_min",
+        "load_sat_hi",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CHW-1",
+      "lab_n": 5,
+      "lab_keys": [
+        "confirm_min",
+        "min_dt",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CHW-2",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "dp_margin",
+        "minimum_active_coverage_pct",
+        "pump_hi",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CHW-3",
+      "lab_n": 5,
+      "lab_keys": [
+        "confirm_min",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "sp_band",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CHW-4",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "flow_hi",
+        "minimum_active_coverage_pct",
+        "pump_hi",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CW-OPT-1",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "cw_approach",
+        "cw_slack",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CW-APR-1",
+      "lab_n": 6,
+      "lab_keys": [
+        "approach_max_f",
+        "confirm_min",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min",
+        "tower_fan_hi"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "CW-FAN-1",
+      "lab_n": 7,
+      "lab_keys": [
+        "confirm_min",
+        "cw_approach",
+        "excess_beyond_approach_f",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min",
+        "tower_fan_hi"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "HP-1",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "min_sat",
+        "minimum_active_coverage_pct",
+        "require_operational_gate",
+        "startup_delay_min",
+        "zone_cold"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "WX-1",
+      "lab_n": 2,
+      "lab_keys": [
+        "confirm_min",
+        "spike_limit"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "TRIM-1",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "duct_hi",
+        "minimum_active_coverage_pct",
+        "request_lo",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "TRIM-3",
+      "lab_n": 6,
+      "lab_keys": [
+        "confirm_min",
+        "hwst_hi",
+        "minimum_active_coverage_pct",
+        "request_lo",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "TRIM-4",
+      "lab_n": 6,
+      "lab_keys": [
+        "chw_lo",
+        "confirm_min",
+        "minimum_active_coverage_pct",
+        "request_lo",
+        "require_operational_gate",
+        "startup_delay_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "SCHED-1",
+      "lab_n": 3,
+      "lab_keys": [
+        "comfort_high_f",
+        "comfort_low_f",
+        "confirm_min"
+      ],
+      "aliases": [
+        "excess_runtime"
+      ]
+    },
+    {
+      "rule_id": "SCHED-247",
+      "lab_n": 2,
+      "lab_keys": [
+        "always_on_pct",
+        "confirm_min"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "UTIL-MONTHLY",
+      "lab_n": 2,
+      "lab_keys": [
+        "confirm_min",
+        "util_pct_err"
+      ],
+      "aliases": []
+    },
+    {
+      "rule_id": "UTIL-INTERVAL",
+      "lab_n": 2,
+      "lab_keys": [
+        "confirm_min",
+        "util_interval_mae"
+      ],
+      "aliases": []
+    }
+  ]
+}
