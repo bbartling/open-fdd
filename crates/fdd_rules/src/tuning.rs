@@ -116,16 +116,22 @@ pub fn assert_sql_placeholders(sql: &str, rule: &RuleSpec) -> Result<()> {
     // `<PREFIX>_HOURS` parameters also expose the derived integer row counts
     // `<PREFIX>_ROWS` / `<PREFIX>_ROWS_PRECEDING` (see params::substitute_sql).
     let derived = rule.parameters.values().flat_map(|p| {
-        p.sql_placeholder
-            .strip_suffix("_HOURS")
-            .map(|prefix| {
-                vec![
-                    format!("{prefix}_ROWS"),
-                    format!("{prefix}_ROWS_PRECEDING"),
-                    format!("{prefix}_MIN_PERIODS"),
-                ]
-            })
-            .unwrap_or_default()
+        let mut keys = Vec::new();
+        if let Some(prefix) = p.sql_placeholder.strip_suffix("_HOURS") {
+            keys.extend([
+                format!("{prefix}_ROWS"),
+                format!("{prefix}_ROWS_PRECEDING"),
+                format!("{prefix}_MIN_PERIODS"),
+            ]);
+        }
+        if p.sql_placeholder == "MODE_DELAY_MIN" || p.sql_placeholder == "STARTUP_DELAY_MIN" {
+            let prefix = p.sql_placeholder.strip_suffix("_MIN").unwrap();
+            keys.extend([
+                format!("{prefix}_ROWS"),
+                format!("{prefix}_ROWS_PRECEDING"),
+            ]);
+        }
+        keys
     });
     let allowed: HashSet<String> = rule
         .parameters
@@ -136,6 +142,15 @@ pub fn assert_sql_placeholders(sql: &str, rule: &RuleSpec) -> Result<()> {
             "POLL_SECONDS".into(),
             "CONFIRM_ROWS".into(),
             "CONFIRM_SECONDS".into(),
+            // Wave G substitutes may inject these even when only MIX_TOL is declared
+            "EPS_MAT".into(),
+            "EPS_OAT".into(),
+            "EPS_RAT".into(),
+            "EPS_SAT".into(),
+            "MODE_DELAY_ROWS".into(),
+            "MODE_DELAY_ROWS_PRECEDING".into(),
+            "STARTUP_DELAY_ROWS".into(),
+            "STARTUP_DELAY_ROWS_PRECEDING".into(),
         ])
         .collect();
     let mut i = 0;

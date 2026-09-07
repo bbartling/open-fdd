@@ -22,8 +22,8 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN sat IS NOT NULL AND sat_sp IS NOT NULL AND fan > 0.01
-       AND sat < sat_sp - {{SAT_ERR}} AND htg_valve_pct >= {{HTG_FULL_MIN}}
+      WHEN sat IS NOT NULL AND sat_sp IS NOT NULL AND fan > {{FAN_ON_MIN}}
+       AND sat < sat_sp - {{EPS_SAT}} AND htg_valve_pct >= {{HTG_FULL_MIN}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),
@@ -55,8 +55,19 @@ final AS (
     CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
+, cov AS (
+  SELECT equipment_id,
+    100.0 * AVG(CAST(COALESCE(fan_on, 1) AS DOUBLE)) AS cov_pct
+  FROM h
+  GROUP BY equipment_id
+)
 SELECT
-  equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
-FROM final
-GROUP BY equipment_id;
+  f.equipment_id,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+  END AS fault_hours
+FROM final f
+LEFT JOIN cov c ON f.equipment_id = c.equipment_id
+GROUP BY f.equipment_id;

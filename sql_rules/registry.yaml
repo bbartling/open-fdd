@@ -28,6 +28,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       zone_t_lo:
         label: Zone low
         default: 70.0
@@ -69,6 +96,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       setback_hi:
         label: Setback high
         default: 68.0
@@ -229,24 +283,87 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      sat_err:
-        label: SAT high error band
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
         default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      eps_sat:
+        label: SAT sensor eps
+        default: 1.15
         min: 0.0
         max: 10.0
         step: 0.25
         unit: degF
         frontend_control: slider
-        sql_placeholder: SAT_ERR
-      clg_valve_min:
-        label: Cooling valve open threshold
-        default: 0.01
+        sql_placeholder: EPS_SAT
+      econ_min_pos:
+        label: Econ damper min pos
+        default: 0.05
         min: 0.0
         max: 0.5
         step: 0.01
         unit: frac
         frontend_control: slider
-        sql_placeholder: CLG_VALVE_MIN
+        sql_placeholder: ECON_MIN_POS
+      econ_full_open:
+        label: Econ damper full-open
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_FULL_OPEN
+      clg_full_min:
+        label: Cooling valve full min
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_FULL_MIN
       oa_damper_econ_low:
         label: OA damper economizer low
         default: 0.05
@@ -256,15 +373,6 @@ rules:
         unit: frac
         frontend_control: slider
         sql_placeholder: OA_DAMPER_ECON_LOW
-      oa_damper_econ_high:
-        label: OA damper economizer high
-        default: 0.9
-        min: 0.5
-        max: 1.0
-        step: 0.01
-        unit: frac
-        frontend_control: slider
-        sql_placeholder: OA_DAMPER_ECON_HIGH
       confirm_seconds:
         label: Confirm time
         default: 600
@@ -289,6 +397,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       econ2_oat_hi:
         label: OAT high cutoff
         default: 63.0
@@ -331,6 +466,51 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
       eps_dsp:
         label: Duct-static error epsDSP (GL36 default 0.1 in.w.c.)
         default: 0.12
@@ -373,6 +553,78 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      eps_rat:
+        label: RAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_RAT
+      eps_oat:
+        label: OAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_OAT
+      eps_mat:
+        label: MAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_MAT
       mix_tol:
         label: Legacy master sensor tolerance (sets all eps values)
         default: 1.15
@@ -406,6 +658,69 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      eps_rat:
+        label: RAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_RAT
+      eps_oat:
+        label: OAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_OAT
+      eps_mat:
+        label: MAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_MAT
       mix_tol:
         label: Legacy master sensor tolerance (sets all eps values)
         default: 1.15
@@ -449,15 +764,60 @@ rules:
     blocker: "htg_valve_pct missing on some AHUs — Python and SQL both skip"
     confirm_seconds: 600
     parameters:
-      sat_err:
-        label: Legacy SAT error (sets epsSAT)
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
         default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      eps_sat:
+        label: SAT sensor eps
+        default: 1.15
         min: 0.0
         max: 10.0
         step: 0.25
         unit: degF
         frontend_control: slider
-        sql_placeholder: SAT_ERR
+        sql_placeholder: EPS_SAT
       htg_full_min:
         label: Full-heating threshold (GL36 99%)
         default: 0.9
@@ -491,6 +851,78 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      supply_tol:
+        label: Supply tol (alias eps_sat)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SUPPLY_TOL
+      eps_sat:
+        label: SAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_SAT
+      eps_mat:
+        label: MAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_MAT
       mix_tol:
         label: Legacy master sensor tolerance (sets all eps values)
         default: 1.15
@@ -551,6 +983,69 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      eps_sat:
+        label: SAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_SAT
+      eps_oat:
+        label: OAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_OAT
       mix_tol:
         label: Legacy master sensor tolerance (sets all eps values)
         default: 1.15
@@ -611,6 +1106,78 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      eps_oat:
+        label: OAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_OAT
+      eps_mat:
+        label: MAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_MAT
+      econ_full_open:
+        label: Econ damper full-open
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_FULL_OPEN
       mix_tol:
         label: Legacy master sensor tolerance (sets all eps values)
         default: 1.15
@@ -629,15 +1196,6 @@ rules:
         unit: frac
         frontend_control: slider
         sql_placeholder: CLG_ON_MIN
-      oa_damper_econ_high:
-        label: Economizer OA damper high (fraction)
-        default: 0.9
-        min: 0.5
-        max: 1.0
-        step: 0.01
-        unit: frac
-        frontend_control: slider
-        sql_placeholder: OA_DAMPER_ECON_HIGH
       confirm_seconds:
         label: Confirm time
         default: 600
@@ -662,6 +1220,78 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      eps_sat:
+        label: SAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_SAT
+      eps_oat:
+        label: OAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_OAT
+      econ_full_open:
+        label: Econ damper full-open
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_FULL_OPEN
       mix_tol:
         label: Legacy master sensor tolerance (sets all eps values)
         default: 1.15
@@ -689,15 +1319,6 @@ rules:
         unit: frac
         frontend_control: slider
         sql_placeholder: CLG_ON_MIN
-      oa_damper_econ_high:
-        label: Economizer OA damper high (fraction)
-        default: 0.9
-        min: 0.5
-        max: 1.0
-        step: 0.01
-        unit: frac
-        frontend_control: slider
-        sql_placeholder: OA_DAMPER_ECON_HIGH
       confirm_seconds:
         label: Confirm time
         default: 600
@@ -722,6 +1343,87 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      supply_tol:
+        label: Supply tol (alias eps_sat)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SUPPLY_TOL
+      eps_sat:
+        label: SAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_SAT
+      eps_mat:
+        label: MAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_MAT
+      econ_full_open:
+        label: Econ damper full-open
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_FULL_OPEN
       mix_tol:
         label: Legacy master sensor tolerance (sets all eps values)
         default: 1.15
@@ -758,15 +1460,6 @@ rules:
         unit: frac
         frontend_control: slider
         sql_placeholder: ECON_MIN_POS
-      oa_damper_econ_high:
-        label: Economizer OA damper high (fraction)
-        default: 0.9
-        min: 0.5
-        max: 1.0
-        step: 0.01
-        unit: frac
-        frontend_control: slider
-        sql_placeholder: OA_DAMPER_ECON_HIGH
       confirm_seconds:
         label: Confirm time
         default: 600
@@ -791,6 +1484,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       econ1_oat_min:
         label: Favorable OAT
         default: 55.0
@@ -824,6 +1544,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       oa_min_pct:
         label: Min OA fraction
         default: 21.0
@@ -869,6 +1616,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -921,6 +1695,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -964,6 +1765,60 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      spike_scale_pressure:
+        label: Spike scale pressure
+        default: 1.0
+        min: 0.25
+        max: 4.0
+        step: 0.25
+        unit: x
+        frontend_control: slider
+        sql_placeholder: SPIKE_SCALE_PRESSURE
+      spike_scale_humidity:
+        label: Spike scale humidity
+        default: 1.0
+        min: 0.25
+        max: 4.0
+        step: 0.25
+        unit: x
+        frontend_control: slider
+        sql_placeholder: SPIKE_SCALE_HUMIDITY
+      spike_scale_temperature:
+        label: Spike scale temperature
+        default: 1.0
+        min: 0.25
+        max: 4.0
+        step: 0.25
+        unit: x
+        frontend_control: slider
+        sql_placeholder: SPIKE_SCALE_TEMPERATURE
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -1042,6 +1897,24 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      sensor_span:
+        label: Sensor span
+        default: 100.0
+        min: 1.0
+        max: 500.0
+        step: 1.0
+        unit: unit
+        frontend_control: slider
+        sql_placeholder: SENSOR_SPAN
+      max_gap_hours:
+        label: Max sample gap
+        default: 1.0
+        min: 0.1
+        max: 12.0
+        step: 0.1
+        unit: h
+        frontend_control: slider
+        sql_placeholder: MAX_GAP_HOURS
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -1084,6 +1957,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 0
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 0.0
@@ -1171,6 +2071,51 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 3600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
       confirm_seconds:
         label: Confirm time
         default: 3600.0
@@ -1204,6 +2149,69 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      eps_sat:
+        label: SAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_SAT
+      eps_mat:
+        label: MAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_MAT
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -1255,6 +2263,69 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      oat_rat_delta_min:
+        label: Min |OAT-RAT|
+        default: 5.0
+        min: 0.0
+        max: 30.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: OAT_RAT_DELTA_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      eps_airflow:
+        label: Airflow fraction eps
+        default: 0.15
+        min: 0.05
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: EPS_AIRFLOW
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -1264,24 +2335,6 @@ rules:
         unit: sec
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
-      airflow_err:
-        label: Airflow error epsF (GL36 default 30%)
-        default: 0.15
-        min: 0.05
-        max: 1.0
-        step: 0.01
-        unit: frac
-        frontend_control: slider
-        sql_placeholder: AIRFLOW_ERR
-      delta_t_min:
-        label: Minimum |OAT-RAT| deltaTmin (GL36 default 10degF)
-        default: 5.0
-        min: 0.0
-        max: 30.0
-        step: 0.5
-        unit: degF
-        frontend_control: slider
-        sql_placeholder: DELTA_T_MIN
       min_cfm_design:
         label: Design minimum outdoor airflow
         default: 5000.0
@@ -1306,6 +2359,114 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      clg_on_min:
+        label: Cooling on min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_ON_MIN
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      htg_on_min:
+        label: Heating on min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: HTG_ON_MIN
+      eps_cclt:
+        label: CHW coil leaving eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_CCLT
+      eps_ccet:
+        label: CHW coil entering eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_CCET
+      econ_min_pos:
+        label: Econ damper min pos
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_MIN_POS
+      delta_supply_fan:
+        label: Supply-fan delta
+        default: 0.55
+        min: 0.0
+        max: 5.0
+        step: 0.05
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_SUPPLY_FAN
+      clg_inactive_max:
+        label: Cooling inactive max
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_INACTIVE_MAX
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -1339,6 +2500,123 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      htg_on_min:
+        label: Heating on min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: HTG_ON_MIN
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      eps_hclt:
+        label: HW coil leaving eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_HCLT
+      eps_hcet:
+        label: HW coil entering eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_HCET
+      econ_min_pos:
+        label: Econ damper min pos
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_MIN_POS
+      econ_full_open:
+        label: Econ damper full-open
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_FULL_OPEN
+      delta_supply_fan:
+        label: Supply-fan delta
+        default: 0.55
+        min: 0.0
+        max: 5.0
+        step: 0.05
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_SUPPLY_FAN
+      clg_on_min:
+        label: Cooling on min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_ON_MIN
+      clg_inactive_max:
+        label: Cooling inactive max
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_INACTIVE_MAX
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -1372,6 +2650,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -1405,6 +2710,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -1447,6 +2779,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -1480,6 +2839,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -1549,6 +2935,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -1591,6 +3004,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -1633,6 +3073,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -1758,6 +3225,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -1800,6 +3294,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -1833,6 +3354,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -1875,6 +3423,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -1926,6 +3501,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -1977,6 +3579,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -2019,6 +3648,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       free_cool_oat:
         label: Free-cool OAT
         default: 65.0
@@ -2061,6 +3717,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -2154,6 +3837,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -2223,6 +3933,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       reset_err_f:
         label: Reset error
         default: 3.0
@@ -2283,6 +4020,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 1800
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 1800.0
@@ -2316,6 +4080,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -2348,6 +4139,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -2389,6 +4207,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -2421,6 +4266,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -2463,6 +4335,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -2505,6 +4404,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -2547,6 +4473,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -2598,6 +4551,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -2672,6 +4652,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 1800
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 1800.0
@@ -2714,6 +4721,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 1800
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 1800.0
@@ -2756,6 +4790,33 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 1800
     parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 1800.0

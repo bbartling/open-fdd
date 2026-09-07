@@ -7,7 +7,7 @@
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Telemetry = hosted AV `9101` loopback as `bldg2-zone-loopback` / role **`zone_t`** / `equipment_type=zone_other`.  
 **Backup:** `~/openfdd-backups/railway/20260906T164054Z/` (prior: `20260906T030735Z`)  
 **Program (CLOSED):** [`patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md`](patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md) (Cursor: `nightly_3.3.27+_master_4cc5bbd5.plan.md`)  
-**Active program:** soft-OPEN D–F **CLOSED** on tip `sha-9aebf42` — optional **Wave G** hybrid AHU/VAV only with separate auth ([`openfdd_hybrid_diagnostics_ahu_vav_program.plan.md`](patch_trains/openfdd_hybrid_diagnostics_ahu_vav_program.plan.md))  
+**Active program:** Wave G **Lab tuner Vibe19 parity** — [`openfdd_lab_tuner_parity_program.plan.md`](patch_trains/openfdd_lab_tuner_parity_program.plan.md) · Cursor `post_softopen_wave_g_sql_anomaly_master_f7a8b9c0` (soft-OPEN D–F **CLOSED**; anomaly **PARKED**; hybrid **ABANDONED**)  
 **Pis freed (not in stress):** bosspi · BensFakeAhu · Zone1VAV.
 
 ## OPEN / tracked bugs (post-3.3.33)
@@ -17,8 +17,10 @@
 | **mqtt-ingest-stall** | **CLOSED** (3.3.34) | Was: flat `ingest_ok` after mqtt bounce until central redeploy | #860 · tip `sha-9aebf42` · smoke `reports/waveD_railway_smoke_20260906T173032Z/` | — |
 | **railway-ui-fdd-stale** | **CLOSED** (Wave E) | Was: building filter / scoped FDD UX across sites | Tip `sha-9aebf42`: Overview clears on site change; PlantHealthSections empty shells; equipment=8 / zone-other rows=7 | No VERSION — UX already on tip |
 | **bldg2-overview-signoff** | **DEFERRED** → operator | SPA Overview tables/charts human confirm for `?site=bldg2` | API probe PASS `reports/waveE_overview_probe_20260906T175230Z/` | Operator browser when available |
-| **vibe19-operational-gate-lab** | **DEFERRED** (Wave F) | Fake Lab operational-gate trio without SQL/session binding | Path B refuse — no honest binding | Stay DEFERRED |
-| **hybrid-ml-physics-ahu-vav** | **OPEN** → Wave G | Semantic hybrid ML/Physics Overview column + EnergyPlus calibration export (AHU/VAV first slice) | Mission prompt 2026-09-06; experimental | **After** soft-OPEN closeout — [`openfdd_hybrid_diagnostics_ahu_vav_program.plan.md`](patch_trains/openfdd_hybrid_diagnostics_ahu_vav_program.plan.md) |
+| **vibe19-operational-gate-lab** | **OPEN** → Wave G / 3.3.39 | Operational-gate trio — implement **real** SQL/session binding (was DEFERRED Path B refuse of fake sliders) | Wave F refuse | [`openfdd_lab_tuner_parity_program.plan.md`](patch_trains/openfdd_lab_tuner_parity_program.plan.md) |
+| **hybrid-ml-physics-ahu-vav** | **ABANDONED** | Was: physics/RCA / ML / E+ hybrid Wave G | Felt bogus 2026-09-07 | Do not implement |
+| **sql-anomaly-screening** | **PARKED** | SQL self/peer anomaly | Lab parity first 2026-09-07 | After Lab ~414 |
+| **lab-tuner-vibe19-parity** | **OPEN** → Wave G | Port Vibe19 robust Lab tuners into production (~217→~414); SQL/session-honest | Tip Lab 217 vs Vibe 414 | [`openfdd_lab_tuner_parity_program.plan.md`](patch_trains/openfdd_lab_tuner_parity_program.plan.md) |
 | **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | Was: equipment=0 for MQTT `bldg2` → empty Overview | #856 · probe + stress | — |
 | **mqtt-fieldbus-tip-pin-sync** | **CLOSED** (3.3.34) | Tip pin same-sha after Wave D | All services `sha-9aebf42` | — |
 | **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` → `username=viewer` JWT | Railway var set | Optional auth_matrix path → Wave F soft |
@@ -42,10 +44,10 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 ### Upcoming trains (Cursor plans — optimized waves 2026-09-06)
 
 **Source of truth:** [`patch_trains/`](patch_trains/) · [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md) · [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
-**Active:** [`openfdd_post_3.3.33_soft_open_program.plan.md`](patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md) — Waves D/E/F + **closeout full stress**.  
-**Last closed:** [`3.3.33_mqtt_overview_csv_parity.plan.md`](patch_trains/3.3.33_mqtt_overview_csv_parity.plan.md) — MQTTS Overview = CSV Overview (**CLOSED**).
+**Active:** [`openfdd_lab_tuner_parity_program.plan.md`](patch_trains/openfdd_lab_tuner_parity_program.plan.md) — Wave G Lab tuners 3.3.37–3.3.40 + **full Railway+ZAP LAST**. Soft-OPEN **CLOSED**. Anomaly **PARKED**. Low-RAM; **0 stale PRs / failed tip Actions**. RCx inventory: [`RCX_PLOTS_BY_HVAC.md`](../RCX_PLOTS_BY_HVAC.md).  
+**Last closed soft-OPEN:** [`openfdd_post_3.3.33_soft_open_program.plan.md`](patch_trains/openfdd_post_3.3.33_soft_open_program.plan.md).
 
-**This round stress rule:** mid-wave = Railway **smoke** / isolated only. **ONE full** `run_railway_hub_stress.sh` at **soft-OPEN closeout** (after F) → BUG_REPORT D–F. **Wave G** (hybrid ML/Physics) starts only after that closeout; G uses synthetic/unit gates — OT full stress does **not** scientifically validate ML.
+**This round stress rule:** mid-wave = Railway **smoke** / unit. **ONE full** `run_railway_hub_stress.sh` at **Wave G closeout** (gates 00–08, **no `SKIP_ZAP`**) → BUG_REPORT. Tuner reference: Vibe19 **414** vs Lab tip **~217** — close the gap.
 
 | Rev / wave | In-repo plan | Concern | Status |
 |------------|--------------|---------|--------|
@@ -53,14 +55,26 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 | **Wave E / 3.3.35** | [`3.3.35_overview_ui_fdd_scope.plan.md`](patch_trains/3.3.35_overview_ui_fdd_scope.plan.md) | `railway-ui-fdd-stale` + Overview browser sign-off | **CLOSED** (no VERSION) — API probe PASS; browser sign-off **DEFERRED** operator |
 | **Wave F / 3.3.36** | [`3.3.36_lab_gate_residual.plan.md`](patch_trains/3.3.36_lab_gate_residual.plan.md) | Honest Lab residual / optional viewer matrix | **CLOSED** — operational-gate **DEFERRED**; viewer login already CLOSED 3.3.28 |
 | **Closeout** | parent master | Full Railway matrix on final tip | **CLOSED** — `fully_qualified=true` `reports/nightly-ot-bench_20260906T190722Z/` |
-| **Wave G / 3.3.37+** | [`openfdd_hybrid_diagnostics_ahu_vav_program.plan.md`](patch_trains/openfdd_hybrid_diagnostics_ahu_vav_program.plan.md) | Experimental semantic hybrid ML/Physics AHU+VAV slice | **OPEN** — **after** closeout; synthetic gates primary |
+| **Wave G / 3.3.37–3.3.40** | [`openfdd_lab_tuner_parity_program.plan.md`](patch_trains/openfdd_lab_tuner_parity_program.plan.md) | Lab tuner Vibe19 parity (~217→~414) | **OPEN** — mid-wave smoke; closeout full matrix **incl. ZAP** |
+| **Wave G anomaly** | [`openfdd_sql_anomaly_screening_program.plan.md`](patch_trains/openfdd_sql_anomaly_screening_program.plan.md) | SQL anomaly | **PARKED** |
+| **Wave G hybrid (old)** | [`openfdd_hybrid_diagnostics_ahu_vav_program.plan.md`](patch_trains/openfdd_hybrid_diagnostics_ahu_vav_program.plan.md) | Physics/RCA | **ABANDONED** |
 | **3.3.33** | [`3.3.33_mqtt_overview_csv_parity.plan.md`](patch_trains/3.3.33_mqtt_overview_csv_parity.plan.md) | FDD inventory/run/series + buildings list use historian `building_id=` | **CLOSED** — #856 · tip `sha-25826cf` · stress PASS · Overview probe PASS · docs #857 |
 | **Wave A** | closeout + [`3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md`](patch_trains/3.3.27_mqtt_fieldbus_tip_pin_sync.plan.md) | Tip pin + one full stress | **CLOSED** |
 | **Wave B** | [`3.3.28`](patch_trains/3.3.28_lab_tuners_econ_ahu_residual.plan.md) + [`3.3.29`](patch_trains/3.3.29_viewer_login_and_ui_scope.plan.md) | Lab + viewer + #851 historian scope | **CLOSED** — #852 · tip `sha-10d1ec5` · stress PASS · #851 CLOSED · docs #853 |
 | **Wave C** | [`3.3.30`](patch_trains/3.3.30_isolated_zap_af_auth.plan.md)–[`3.3.32`](patch_trains/3.3.32_durability_restore_perf.plan.md) | Isolated ZAP/MQTTS/restore + smoke | **CLOSED** — #854 · CI isolated PASS · Railway smoke PASS · tip stays `sha-10d1ec5` |
 | 3.3.21–3.3.26 | prior patch_trains children | — | **CLOSED** |
 
-**Tuner reference:** Vibe19 UI ~414 vs Lab ~184 — JSON snapshots in [`recovery/`](recovery/). Goal = phased SQL-honest Lab expansion — **not** a hard 414.
+**Tuner reference:** Vibe19 UI **~414** vs Lab tip **~444** after Wave G (was ~217) — [`lab_tuners_snapshot_post_wave_g.json`](recovery/lab_tuners_snapshot_post_wave_g.json). G0 matrix: [`recovery/lab_vibe19_tuner_gap_matrix_g0.json`](recovery/lab_vibe19_tuner_gap_matrix_g0.json). RCx: [`RCX_PLOTS_BY_HVAC.md`](../RCX_PLOTS_BY_HVAC.md).
+
+## Verdict — Wave G Lab tuner parity 3.3.37 (in progress)
+
+| Check | Evidence |
+|-------|----------|
+| Product | VERSION **3.3.37** — FC eps/mode_delay/fan_on + SV spike scales + operational-gate trio SQL-bound |
+| Lab sum | **~444** (was ~217; Vibe19 ref 414) |
+| G0 matrix | `recovery/lab_vibe19_tuner_gap_matrix_g0.json` |
+| RCx docs | `docs/RCX_PLOTS_BY_HVAC.md` |
+| Closeout | Pending full Railway+ZAP on tip after GHCR |
 
 | TODO | 3.3.24 | 3.3.25 | 3.3.26 Wave A | 3.3.28 Wave B |
 |------|--------|--------|---------------|---------------|
@@ -101,7 +115,7 @@ Private OT LAN addresses, vendor lake credentials, and tunnel endpoints live onl
 | Full stress | **PASS** `overall.fully_qualified=true` — `reports/nightly-ot-bench_20260906T190722Z/` (gates 00–08) |
 | Overview MQTT | equipment count=8; zone-other rows=7; AFDD run ok — `reports/softopen_closeout_overview_*` |
 | Waves | D (#860) · E (docs/API) · F (DEFER operational-gate) |
-| Wave G | **NOT STARTED** — requires separate authorization |
+| Wave G | **OPEN** — Lab tuner parity (`post_softopen_wave_g_sql_anomaly_master_f7a8b9c0`); anomaly PARKED; hybrid ABANDONED |
 
 ## Verdict — Wave E Overview UI scope (2026-09-06) — CLOSED (no VERSION)
 
@@ -475,12 +489,14 @@ Triage as of **post-3.3.33** (2026-09-06). Prior PASS rows are **not** rewritten
 | **local-parquet-root-split** | **DEFERRED** → lab | Local path split; Railway uses `/workspace/openfdd` |
 | **lake-credential-rotation** | **CLOSED** | Ops hygiene done; session-env only |
 | **deploy-mqtt-acl-mount** | **CLOSED** | Documented ops note; file-not-dir |
-| **vibe19-operational-gate-lab** | **DEFERRED** → Wave F or stay | No SQL/session binding for `require_operational_gate` / `startup_delay_min` / `minimum_active_coverage_pct` — Path B refused |
+| **vibe19-operational-gate-lab** | **OPEN** → Wave G / 3.3.39 | Real SQL/session binding (no fake sliders) |
 | **mqtt-fieldbus-tip-pin-sync** | **CLOSED** (3.3.33) | Tip pin same-sha central/web/mqtt/fieldbus `sha-25826cf` |
 | **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | FDD inventory/run/series historian parity — Overview MQTT=CSV |
 | **isolated-authenticated-zap-af** | **CLOSED** (Wave C harness) | Disposable AF+OpenAPI PASS; field closeout stays public baseline |
 | **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` on Railway; optional matrix password path remains soft → Wave F |
-| **hybrid-ml-physics-ahu-vav** | **OPEN** → Wave G (after OT closeout) | Experimental semantic hybrid; AHU+VAV first slice; OT full stress ≠ scientific validation |
+| **hybrid-ml-physics-ahu-vav** | **ABANDONED** | Replaced by lab-tuner-vibe19-parity |
+| **sql-anomaly-screening** | **PARKED** | After Lab parity |
+| **lab-tuner-vibe19-parity** | **OPEN** → Wave G | Vibe19 Lab tuners → production; full Railway+ZAP |
 
 ## Series wrap draft — Lab tuners 3.3.21→3.3.26
 

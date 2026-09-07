@@ -42,8 +42,61 @@ pub fn substitute_sql(sql: &str, params: &HashMap<String, String>) -> String {
         ("FLOW_BIAS_CFM", "50"),
         ("DAMPER_CLOSED_MAX", "0.10"),
         ("LOAD_SAT_HI", "0.5"),
+        // Wave G Lab tuner parity (Vibe19)
+        ("FAN_ON_MIN", "0.01"),
+        ("EPS_MAT", "1.15"),
+        ("EPS_OAT", "1.15"),
+        ("EPS_RAT", "1.15"),
+        ("EPS_SAT", "1.15"),
+        ("MIX_TOL", "1.15"),
+        ("SUPPLY_TOL", "1.15"),
+        ("MODE_DELAY_MIN", "10"),
+        ("STARTUP_DELAY_MIN", "0"),
+        ("REQUIRE_OPERATIONAL_GATE", "1"),
+        ("MINIMUM_ACTIVE_COVERAGE_PCT", "5"),
+        ("ECON_FULL_OPEN", "0.9"),
+        ("ECON_MIN_POS", "0.05"),
+        ("CLG_INACTIVE_MAX", "0.01"),
+        ("CLG_ON_MIN", "0.01"),
+        ("HTG_ON_MIN", "0.01"),
+        ("DELTA_SUPPLY_FAN", "0.55"),
+        ("EPS_AIRFLOW", "0.15"),
+        ("OAT_RAT_DELTA_MIN", "5"),
+        ("EPS_CCET", "1.15"),
+        ("EPS_CCLT", "1.15"),
+        ("EPS_HCET", "1.15"),
+        ("EPS_HCLT", "1.15"),
+        ("CLG_FULL_MIN", "0.9"),
+        ("SPIKE_SCALE", "1"),
+        ("SPIKE_SCALE_TEMPERATURE", "1"),
+        ("SPIKE_SCALE_HUMIDITY", "1"),
+        ("SPIKE_SCALE_PRESSURE", "1"),
+        ("DESIGN_FLOW", "1000"),
+        ("MAX_GAP_HOURS", "1"),
+        ("SENSOR_SPAN", "100"),
     ] {
         params.entry(k.into()).or_insert_with(|| v.into());
+    }
+    // Legacy mix_tol / supply_tol masters fill per-sensor eps when unset.
+    if let Some(mt) = params.get("MIX_TOL").cloned() {
+        for k in ["EPS_MAT", "EPS_OAT", "EPS_RAT", "EPS_SAT"] {
+            params.entry(k.into()).or_insert_with(|| mt.clone());
+        }
+    }
+    if let Some(st) = params.get("SUPPLY_TOL").cloned() {
+        params.insert("EPS_SAT".into(), st);
+    }
+    // Startup delay raises mode-delay holdoff when larger.
+    let mode = params
+        .get("MODE_DELAY_MIN")
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(0.0);
+    let startup = params
+        .get("STARTUP_DELAY_MIN")
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(0.0);
+    if startup > mode {
+        params.insert("MODE_DELAY_MIN".into(), format_number(startup));
     }
     let derived = derive_window_row_params(&params);
     let mut out = sql.to_string();
@@ -51,6 +104,14 @@ pub fn substitute_sql(sql: &str, params: &HashMap<String, String>) -> String {
         out = out.replace(&format!("{{{{{key}}}}}"), val);
     }
     out
+}
+
+fn format_number(v: f64) -> String {
+    if (v.fract()).abs() < 1e-9 {
+        format!("{:.0}", v)
+    } else {
+        format!("{v}")
+    }
 }
 
 /// Row counts for rolling windows expressed in hours.
@@ -96,6 +157,29 @@ pub fn derive_window_row_params(params: &HashMap<String, String>) -> HashMap<Str
         }
         if !params.contains_key(&min_periods_key) {
             out.insert(min_periods_key, (rows / 2).max(3).to_string());
+        }
+    }
+    // Wave G: MODE_DELAY_MIN / STARTUP_DELAY_MIN (minutes) → *_ROWS / *_ROWS_PRECEDING
+    for key in ["MODE_DELAY_MIN", "STARTUP_DELAY_MIN"] {
+        let Some(minutes) = params.get(key).and_then(|v| v.parse::<f64>().ok()) else {
+            continue;
+        };
+        if !minutes.is_finite() || minutes < 0.0 {
+            continue;
+        }
+        let prefix = key.strip_suffix("_MIN").unwrap();
+        let rows = if minutes <= 0.0 {
+            1_i64
+        } else {
+            ((minutes * 60.0 / poll).ceil() as i64).max(1)
+        };
+        let rows_key = format!("{prefix}_ROWS");
+        let preceding_key = format!("{prefix}_ROWS_PRECEDING");
+        if !params.contains_key(&rows_key) && !out.contains_key(&rows_key) {
+            out.insert(rows_key, rows.to_string());
+        }
+        if !params.contains_key(&preceding_key) && !out.contains_key(&preceding_key) {
+            out.insert(preceding_key, (rows - 1).max(0).to_string());
         }
     }
     out
@@ -204,11 +288,14 @@ mod tests {
     }
 
     #[test]
-    fn window_rows_round_up_and_floor_at_one() {
-        let mut p = rule_params(900.0, 0);
-        p.insert("FLATLINE_HOURS".into(), "0.5".into());
+    fn mode_delay_min_derives_rows() {
+        let mut p = rule_params(300.0, 0);
+        p.insert("MODE_DELAY_MIN".into(), "10".into());
         let d = derive_window_row_params(&p);
-        assert_eq!(d.get("FLATLINE_ROWS"), Some(&"2".to_string()));
-        assert_eq!(d.get("FLATLINE_ROWS_PRECEDING"), Some(&"1".to_string()));
+        assert_eq!(d.get("MODE_DELAY_ROWS"), Some(&"2".to_string())); // 10min / 5min poll
+        assert_eq!(d.get("MODE_DELAY_ROWS_PRECEDING"), Some(&"1".to_string()));
+        let sql = "ROWS BETWEEN {{MODE_DELAY_ROWS_PRECEDING}} PRECEDING";
+        let out = substitute_sql(sql, &p);
+        assert_eq!(out, "ROWS BETWEEN 1 PRECEDING");
     }
 }

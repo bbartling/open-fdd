@@ -2,6 +2,8 @@
 
 Backend Overview health matrices are building-scoped `POST /api/analytics/*` endpoints using the standard analytics request envelope.
 
+**RCx Plotly presets (by HVAC type)** live on **RCx Plots** (`/rcx`), not Overview — see [`RCX_PLOTS_BY_HVAC.md`](RCX_PLOTS_BY_HVAC.md).
+
 ## Matrix endpoints
 
 - `/api/analytics/ahu-temperature-health`

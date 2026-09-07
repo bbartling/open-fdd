@@ -35,13 +35,13 @@ flagged AS (
     timestamp_utc,
     CAST(CASE
       WHEN prev_ts IS NULL THEN 0
-      WHEN CAST(EXTRACT(EPOCH FROM (timestamp_utc - prev_ts)) AS DOUBLE) > {{PERSISTENCE_MIN}} * 60.0 THEN 0
+      WHEN CAST(EXTRACT(EPOCH FROM (timestamp_utc - prev_ts)) AS DOUBLE) > {{MAX_GAP_HOURS}} * 3600.0 THEN 0
       WHEN dt_hours IS NULL OR dt_hours <= 0.0 THEN 0
-      WHEN ABS(d_oa_t) / dt_hours > {{STEADY_FAULT_PER_HOUR}} THEN 1
-      WHEN ABS(d_mat) / dt_hours > {{STEADY_FAULT_PER_HOUR}} THEN 1
-      WHEN ABS(d_zone_t) / dt_hours > {{STEADY_FAULT_PER_HOUR}} THEN 1
-      WHEN ABS(d_rat) / dt_hours > {{STEADY_FAULT_PER_HOUR}} THEN 1
-      WHEN ABS(d_sat) / dt_hours > {{STEADY_FAULT_PER_HOUR}} THEN 1
+      WHEN ABS(d_oa_t) / dt_hours > ({{STEADY_FAULT_PER_HOUR}} * {{SENSOR_SPAN}} / 100.0) THEN 1
+      WHEN ABS(d_mat) / dt_hours > ({{STEADY_FAULT_PER_HOUR}} * {{SENSOR_SPAN}} / 100.0) THEN 1
+      WHEN ABS(d_zone_t) / dt_hours > ({{STEADY_FAULT_PER_HOUR}} * {{SENSOR_SPAN}} / 100.0) THEN 1
+      WHEN ABS(d_rat) / dt_hours > ({{STEADY_FAULT_PER_HOUR}} * {{SENSOR_SPAN}} / 100.0) THEN 1
+      WHEN ABS(d_sat) / dt_hours > ({{STEADY_FAULT_PER_HOUR}} * {{SENSOR_SPAN}} / 100.0) THEN 1
       ELSE 0
     END AS INT) AS over_rate
   FROM rates

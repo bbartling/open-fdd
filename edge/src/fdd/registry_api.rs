@@ -34,10 +34,13 @@ fn alias_ui_param_key<'a>(rule_id: &str, key: &'a str) -> &'a str {
         ("VAV-1", "zone_lo") => "zone_t_lo",
         ("VAV-1", "zone_hi") => "zone_t_hi",
         ("FC1", "duct_static_err") => "eps_dsp",
-        (
-            "SV-SPIKE",
-            "spike_scale_temperature" | "spike_scale_humidity" | "spike_scale_pressure",
-        ) => "spike_scale",
+        ("FC1", "fan_hi") => "eps_vfd_spd",
+        // Vibe19 / package aliases → registry parameter keys
+        (_, "airflow_err") => "eps_airflow",
+        (_, "delta_t_min") => "oat_rat_delta_min",
+        (_, "oa_damper_econ_high") => "econ_full_open",
+        (_, "clg_valve_min") => "clg_full_min",
+        (_, "sat_err") => "eps_sat",
         _ => key,
     }
 }
