@@ -89,7 +89,7 @@ central/web — OOM risk. Ship code via PR → GH Actions →
 docker image prune -f
 docker images 'ghcr.io/bbartling/openfdd-*' --format '{{.Repository}}:{{.Tag}} {{.ID}}' | head
 
-# 2) pull + up (no rebuild)
+# 2) pull + up (no rebuild) — local firewall path only; Railway hub is primary AFDD head-end
 ./scripts/openfdd_stack_pull.sh react   # or react-ot
 ./scripts/openfdd_stack_up.sh react --no-pull
 curl -fsS http://127.0.0.1:8080/api/health
@@ -97,6 +97,9 @@ curl -fsS http://127.0.0.1:8080/api/health
 
 Confirm `/api/health` (or UI generation) reflects the new `+sha`, and that Lab
 params such as FC1 `confirm_min` match the merged tip.
+
+**Always:** one agent; no parallel Vibe13 cargo/Ansible TX with ZAP; prune zap/MCP
+disposables after stress. Wave H dual-track wait filler is OK — not a second Cursor session.
 
 ### Offline WattLab export (not product)
 
@@ -110,7 +113,7 @@ required for health, FDD, or Overview analytics.
 ## Ops patch cycle (Railway hub + qualification — 3.3.20+)
 
 Living log: [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).  
-Active program: [`docs/operations/patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md`](../docs/operations/patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md).  
+Active program: Wave H demo charts / multi-site / UI freshness — Cursor `post_waveg_openfdd_residual_wave_h` (agent rules **51–54**).  
 Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · entry [`scripts/qualification/README.md`](../scripts/qualification/README.md).
 
 | Step | Action |

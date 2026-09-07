@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-09-07 — Wave H plan + agent_spec (demo freshness / multi-site)
+
+- Wave G **CLOSED** on `sha-a40787b` / 3.3.37.
+- Active Cursor plan: `post_waveg_openfdd_residual_wave_h` — MQTT plot parity, bldg2 hygiene, Lakeside+B100+B50 charts, UI demo-freshness (no Run/Update mash), Railway healthy, Vibe13 wait-filler, full stress LAST.
+- `AGENTS.md` rules **0** (low-RAM always + Wave H pointer), **51–54** (demo freshness, multi-site chart bar, MQTT=CSV, keep spec current). `CONTAINER_AGENT.md` active program → Wave H.
+- Product PRs not started this note — planning/spec sync only.
+
 ## 2026-09-05 — 3.3.25 SV/ECON Lab tuners CLOSED (partial wave)
 
 - **Merge:** #844 → `e78a6089`; VERSION **3.3.25**; health **`3.3.25+e78a608934ed`** (`sha-e78a608` central/web).

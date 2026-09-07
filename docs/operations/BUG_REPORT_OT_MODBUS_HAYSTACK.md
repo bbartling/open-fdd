@@ -1,13 +1,14 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-07 (Wave G Lab tuner parity **CLOSED**; soft-OPEN D–F **CLOSED**)  
+**Date:** 2026-09-07 (Wave H **OPEN** — demo charts / multi-site / UI freshness; Wave G Lab tuners **CLOSED**)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in Open-FDD stress)  
 **Tip / pin (3.3.37):** `a40787b4` · VERSION **3.3.37** · health **`3.3.37+a40787b4e033`** · GHCR **central/web/mqtt/fieldbus `sha-a40787b`**  
 **Last CLOSED tip:** `a40787b4` · **`sha-a40787b`** · **`3.3.37+a40787b4e033`** · product **#864**  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Telemetry = hosted AV `9101` loopback as `bldg2-zone-loopback` / role **`zone_t`** / `equipment_type=zone_other`.  
 **Backup:** `~/openfdd-backups/railway/20260907T153333Z/` (prior: `20260906T164054Z`)  
 **Program (CLOSED):** Wave G Lab tuner Vibe19 parity — [`openfdd_lab_tuner_parity_program.plan.md`](patch_trains/openfdd_lab_tuner_parity_program.plan.md) · Cursor `post_softopen_wave_g_sql_anomaly_master_f7a8b9c0`  
-**Active follow-ons:** GHCR publish parallelization **#865**; SQL anomaly **PARKED**; Vibe13 Part B (separate repo)  
+**Active:** Wave H demo charts — Cursor [`post_waveg_openfdd_residual_wave_h`](../../../.cursor/plans/post_waveg_openfdd_residual_wave_h.plan.md) · agent_spec rules 51–54  
+**Wait filler:** Vibe13 Part B (separate repo) during Open-FDD CI/Publish  
 **Pis freed (not in Open-FDD stress):** bosspi · BensFakeAhu · Zone1VAV.
 
 ## OPEN / tracked bugs (post-3.3.33)
@@ -16,16 +17,33 @@
 |----|--------|---------|----------|------|
 | **mqtt-ingest-stall** | **CLOSED** (3.3.34) | Was: flat `ingest_ok` after mqtt bounce until central redeploy | #860 · tip `sha-9aebf42` · smoke `reports/waveD_railway_smoke_20260906T173032Z/` | — |
 | **railway-ui-fdd-stale** | **CLOSED** (Wave E) | Was: building filter / scoped FDD UX across sites | Tip `sha-9aebf42`: Overview clears on site change; PlantHealthSections empty shells; equipment=8 / zone-other rows=7 | No VERSION — UX already on tip |
-| **bldg2-overview-signoff** | **DEFERRED** → operator | SPA Overview tables/charts human confirm for `?site=bldg2` | API probe PASS `reports/waveE_overview_probe_20260906T175230Z/` | Operator browser when available |
+| **bldg2-overview-signoff** | **OPEN** → Wave H | SPA charts still weak; buyer mash Run/Update | Wave H acceptance B/C | H6b demo-fresh + H3 plots |
+| **bldg2-site-hygiene** | **OPEN** → Wave H | Ghost equip under bldg2 (`BensFakeAhu`, `Zone1VAV`, …); “N buildings loaded” | `GET /api/fdd/equipment?building_id=bldg2` count=8; package buildings=5 | H2 purge/filter |
+| **mqtt-inspect-plot-parity** | **OPEN** → Wave H | Inspect feels CSV-only; FDD/RCx empty in UI | FDD series has `zone_t` n=2934 on loopback; RCx `zone_comfort_rank` 0 pts | H3/H4 |
+| **mqtt-zone-t-rcx** | **OPEN** → Wave H | RCx missing equip match — VAV name filter skips `bldg2-zone-loopback` | `rcx_eq_filter` VAV LIKE; loopback is `zone_other` | H4 filter fix |
+| **ui-demo-freshness** | **OPEN** → Wave H | Must mash Run all / Update analytics every visit | Operator 2026-09-07 | H6b |
+| **demo-sites-health** | **OPEN** → Wave H | Lakeside / B100 / B50 charts+data | Package buildings list has all three + synth + bldg2 | H6 |
 | **vibe19-operational-gate-lab** | **CLOSED** (3.3.37 / Wave G) | Operational-gate trio SQL-bound | #864 · tip `sha-a40787b` | — |
 | **hybrid-ml-physics-ahu-vav** | **ABANDONED** | Was: physics/RCA / ML / E+ hybrid Wave G | Felt bogus 2026-09-07 | Do not implement |
-| **sql-anomaly-screening** | **PARKED** | SQL self/peer anomaly | Lab parity first 2026-09-07 | After Lab ~414 |
+| **sql-anomaly-screening** | **PARKED** | SQL self/peer anomaly | Lab parity first 2026-09-07 | After Wave H demo |
 | **lab-tuner-vibe19-parity** | **CLOSED** (3.3.37) | Vibe19 Lab tuners → production (~217→~444) | #864 · stress `reports/nightly-ot-bench_20260907T183808Z/` · `fully_qualified=true` | — |
-| **ghcr-publish-hub-blocked-by-fieldbus** | **OPEN** → **#865** | Serial Publish put mqtt after multi-arch fieldbus; tip looked partial for hours | Wave G closeout wait | Parallel hub/fieldbus + tip completeness gate |
+| **ghcr-publish-hub-blocked-by-fieldbus** | **CLOSED** (#865) | Serial Publish put mqtt after multi-arch fieldbus | Merged 2026-09-07; `check_ghcr_tip_stack.sh sha-a40787b` **PASS** | Tip-completeness workflow live |
 | **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | Was: equipment=0 for MQTT `bldg2` → empty Overview | #856 · probe + stress | — |
 | **mqtt-fieldbus-tip-pin-sync** | **CLOSED** (3.3.34) | Tip pin same-sha after Wave D | All services `sha-9aebf42` | — |
 | **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` → `username=viewer` JWT | Railway var set | Optional auth_matrix path → Wave F soft |
 | **wave-c-railway-smoke** | **CLOSED** | Wave C smoke | `reports/waveC_railway_smoke_final/` · #854 | — |
+
+### Wave H kickoff probe (2026-09-07T20:35Z)
+
+| Check | Result |
+|-------|--------|
+| Hub | `3.3.37+a40787b4e033` · central/mqtt/web **Online** · `sha-a40787b` |
+| Tip gate | `./scripts/check_ghcr_tip_stack.sh sha-a40787b` **PASS** |
+| Ingest | `edges:1` · `ingest_ok` **119+** climbing |
+| Package buildings | `BUILDING_100`, `BUILDING_50`, `LAKESIDE_ES`, `OPENFDD_SYNTHETIC_59_RULE_WEEK_V1`, `bldg2` (5) |
+| bldg2 equip | 8 ids incl. ghosts + `bldg2-zone-loopback` |
+| FDD series loopback | **PASS** — `zone_t` non-null **2934** rows |
+| RCx `zone_comfort_rank` | **FAIL** — 0 points (VAV id-name filter) |
 
 ### MQTTS pipeline health check (2026-09-06T17:39Z) — Wave D
 
