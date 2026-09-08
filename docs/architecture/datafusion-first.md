@@ -6,37 +6,41 @@ nav_order: 10
 
 # DataFusion-first policy
 
-**Status:** target contract (audit 2026-07-25). Implementation deepens in migration PR2+.
+**Status:** **active product contract** (Wave J Stage A, 2026-09-08). Supersedes the 2026-07-25 “target / PR2+” wording below where they conflict.
 
-For tabular building telemetry computation:
+For tabular building telemetry computation in the **product**:
 
-> If the operation can reasonably be expressed as DataFusion SQL, it belongs in DataFusion SQL.
+> If the operation can reasonably be expressed as DataFusion SQL, it belongs in DataFusion SQL in central.
 
-Pandas may remain as:
+## Product (required)
+
+| Layer | Owns |
+|-------|------|
+| Central + `sql_rules/` + DataFusion | FDD, Overview/RCx analytics, exports of computed values |
+| React SPA (`frontend/web`) | Rendering, interaction, presentation-only formatting — **no** engineering recomputation |
+| Mosquitto + fieldbus | Transport / edge ingest |
+
+**Forbidden in product** (any request path, job, export, sidecar, or opt-in flag):
+
+- Python / pandas / Pyodide / WASM Python / subprocess bridges for FDD or analytics
+- Silent pandas FDD fallback when DataFusion fails
+- `OPENFDD_ALLOW_PANDAS_FDD` (retired — must not reappear in product)
+- Millions of raw rows into the browser for client-side downsample before fault math
+- A second React app for WattLab/EnergyPlus (keep Export handoff in the united UI)
+
+## External tooling (allowed outside the product)
 
 | Class | When |
 |-------|------|
-| UI boundary | Tiny final frame for React SPA/Plotly **after** DF aggregation |
-| Test oracle | Independent reference vs SQL (online Pandas cookbook + vibe19 playground) |
-| Non-SQL | ZIP/IO, IDF, DOCX, config parse, Plotly figure build |
-| In-tree catalog | `frontend/web/app/rules/` — **do not delete**; emergency FDD only with `OPENFDD_ALLOW_PANDAS_FDD=1` |
+| PyPI oracle | Independent `open_fdd.rules` / cookbook parity vs SQL |
+| Offline helpers | WattLab/ECM tools consuming authenticated exports like any client |
+| Test harnesses | Python drivers against a Python-free SUT |
 
-## Forbidden
-
-- Silent pandas FDD fallback when DataFusion fails
-- Millions of raw rows into React for Python downsample
-- Downsampling before fault math
-- Vibe-coding away the pandas cookbook because SQL exists
-- A second React app for WattLab/EnergyPlus (keep Export handoff in the united UI)
+Do **not** delete the pandas cookbook because production uses SQL. Do **not** recreate deleted `frontend/web/app/*.py` paths.
 
 ## Production FDD today
 
 Canonical path: `sql_rules/` + `crates/fdd_rules` + `POST /api/fdd/run`.  
-Pandas cookbook only with explicit `OPENFDD_ALLOW_PANDAS_FDD=1`.
+UI: **one** React SPA (`frontend/web` → `openfdd-web`).
 
-UI: **one** React app (`frontend/web`) for vibe19 + WattLab export as the
-**default** product surface. Phase 1 authorizes a React SPA behind a flag
-([ADR-001](adr-001-react-rust-modernization.md)); React remains fallback
-until Phase 2. Deterministic FDD stays DataFusion SQL either way.
-
-See [VIBE19_VIBE20_OPENFDD_AUDIT.md](../migration/VIBE19_VIBE20_OPENFDD_AUDIT.md) · [Rule Cookbook](../rules/cookbook/) · [React/Rust modernization](../migration/react-rust/).
+See SoT: [`openfdd_agent_spec/ARCHITECTURE.md`](../../openfdd_agent_spec/ARCHITECTURE.md) · [ownership inventory](compute_boundary_ownership.yaml) · [Rule Cookbook](../rules/cookbook/).

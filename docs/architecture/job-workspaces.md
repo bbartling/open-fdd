@@ -52,10 +52,10 @@ Telemetry stays in Feather / parquet (site historian). Jobs hold **pointers**, c
 
 | Piece | Path |
 |-------|------|
-| Store (thin client; central SoT when up) | [`frontend/web/app/job_store.py`](../../frontend/web/app/job_store.py) |
+| SPA API client | [`frontend/web/src/api/jobsApi.ts`](../../frontend/web/src/api/jobsApi.ts) |
 | Central API | [`services/central/src/jobs.rs`](../../services/central/src/jobs.rs) |
-| React entry | [`frontend/web/app/ui_jobs.py`](../../frontend/web/app/ui_jobs.py) |
-| Tests | `frontend/web/app/test_job_store.py` |
+| React entry | [`frontend/web/src/pages/JobsPage.tsx`](../../frontend/web/src/pages/JobsPage.tsx) |
+| Historical note | Deleted `frontend/web/app/job_store.py` / `ui_jobs.py` — do not recreate ([ownership](compute_boundary_ownership.md)) |
 
 ## `job.json` (schema_version 1)
 
@@ -102,8 +102,8 @@ Duplicate copies mapping/config/dataset_refs — **not** runs, findings, or repo
 ## WattLab (job-native SoT)
 
 **Production source of truth** is job-native handoffs under `wattlab/handoffs/*.json`
-(central `POST /api/jobs/{id}/wattlab/handoffs`, React helper
-[`ui_wattlab_job.py`](../../frontend/web/app/ui_wattlab_job.py)). Zip dumps from Export
+(central `POST /api/jobs/{id}/wattlab/handoffs`, React
+[`WattLabPage.tsx`](../../frontend/web/src/pages/WattLabPage.tsx)). Zip dumps from Export
 remain **additive** for offline / vibe20 / backup — they do not replace the job
 manifest. External EnergyPlus run metadata (when queued) lands under
 `wattlab/runs/*.json`; central tracks status/artifacts only.
@@ -115,4 +115,5 @@ Metadata writes use temp file + fsync + rename.
 ## Related
 
 - [Milestone A closeout](../migration/MILESTONE_A_CLOSEOUT.md)
-- Pandas inventory (UI lab vs production SQL): [PANDAS_USAGE_INVENTORY.md](PANDAS_USAGE_INVENTORY.md)
+- Compute boundary ownership: [compute_boundary_ownership.md](compute_boundary_ownership.md)
+- Historical pandas inventory tombstone: [PANDAS_USAGE_INVENTORY.md](PANDAS_USAGE_INVENTORY.md)

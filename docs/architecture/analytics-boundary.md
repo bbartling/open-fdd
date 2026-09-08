@@ -6,27 +6,40 @@ nav_order: 12
 
 # Analytics boundary
 
-**Status:** target contract (PR2+). Do not scatter ad-hoc SQL through React.
+**Status:** **active product contract** (Wave J Stage A, 2026-09-08).
 
 ## Boundary
 
 ```text
-React asks → typed service call → DataFusion SQL / views → Arrow → thin UI frame
+React SPA → typed /api/analytics/* → central Rust → DataFusion SQL and/or
+central-analytics-v1 inline Rust → Arrow/JSON → UI render only
 ```
 
-## Domains (planned)
+Do not scatter ad-hoc SQL through React. Do not reintroduce `frontend/web/app/*.py`
+(removed; historical inventory only).
+
+## Domains
 
 runtime · sensor_health · weather · economizer · comfort · airside · hydronic ·
 mechanical_cooling · metering · schedules · equipment · rcx · wattlab_exports
 
-Each domain: typed inputs, params, SQL, Arrow schema, null/unit rules, tests.
+Each domain: typed inputs, params, SQL or documented Rust path, null/unit rules, tests.
+
+## Engine labels (honest)
+
+| Label | Meaning |
+|-------|---------|
+| `datafusion` | Historian / package Parquet via DataFusion SQL |
+| `central-analytics-v1` | Deterministic Rust compute on registered samples (not “secret pandas”) |
+
+An engine label alone is not qualification — dispatch path + plan/fixture evidence required (Wave J J5/J6).
 
 ## Today
 
-- FDD: `crates/fdd_sql` + `fdd_rules` (production)
-- Analytics APIs: `services/central/src/analytics/` + `POST /api/analytics/{runtime,sensor-health,schedule,mechanical-cooling,economizer,rcx/ahu,rcx/vav,metering}`
-  - Engine: `central-analytics-v1` (pure Rust; DataFusion SQL wiring next — see [MILESTONE_C_ANALYTICS_MATRIX](../migration/MILESTONE_C_ANALYTICS_MATRIX.md))
-  - Runtime + economizer: live compute from inline samples/series; other families schema stubs
-- RCx / Overview UI: still largely pandas via `frontend/web/app/analytics.py` + `rcx_plots.py` — migrate per matrix
+- FDD: `sql_rules/` + `crates/fdd_rules` (production)
+- Analytics: `services/central/src/analytics/` + `POST /api/analytics/*`
+- SPA: `frontend/web/src/` (Overview tables, RCx/Inspect Plotly) — **no** local pandas FDD
 
 No arbitrary operator SQL editor. Integrator SQL lab (if any) is separate and gated.
+
+SoT: [`openfdd_agent_spec/ARCHITECTURE.md`](../../openfdd_agent_spec/ARCHITECTURE.md) · [compute_boundary_ownership.yaml](compute_boundary_ownership.yaml).
