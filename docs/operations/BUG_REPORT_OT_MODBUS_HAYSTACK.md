@@ -9,7 +9,8 @@
 **Program (CLOSED):** Wave I — Cursor [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) · agent_spec rules **55–58**  
 **Program (prior CLOSED):** Wave H — Cursor [`post_waveg_openfdd_residual_wave_h`](../../../.cursor/plans/post_waveg_openfdd_residual_wave_h.plan.md)  
 **Stress (Wave I closeout):** `reports/nightly-ot-bench_20260908T182149Z/` · **`fully_qualified=true`** (gates 00–09 incl. ZAP + Wave I MEGAs)  
-**Deferred after Wave I:** [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — Cursor [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md)  
+**Deferred after Wave I:** [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — Cursor [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) (**sequential** vs Wave J — not same train)  
+**Next program (OPEN):** Wave J — Rust/DataFusion boundary repair + qualification (`df-boundary-repair`) — Stage A truth/docs/guards before multivendor rebase  
 **Wait filler:** Vibe13 Part B (separate repo) during Open-FDD CI/Publish  
 **Pis freed (not in Open-FDD stress):** bosspi · BensFakeAhu · Zone1VAV.
 
@@ -24,6 +25,8 @@
 | **weather-local-vs-web-bldg2** | **CLOSED** (3.3.40 / Wave I) | Was: bldg2 bas-vs-web empty | #872 dual OAT catalog; gate09 `bas_vs_web` points>0 | — |
 | **mqtt-bldg2-plot-surface** | **CLOSED** (3.3.40 / Wave I) | Was: MQTT plots empty/wrong roles | Inspect `zone_t` non_null=696; dual OAT live | — |
 | **wave-i-stress-gates** | **CLOSED** (3.3.40 / Wave I) | Was: stress green while basics broken | Gate `09_wave_i_app_test_megas` required; #873 AHU_1 fix | — |
+| **mqtt-monitor-sse-782** | **DEFERRED** (post–Wave I) | Ops MQTT Test Client is 1s poll; no browser→Mosquitto WS | [#782](https://github.com/bbartling/open-fdd/issues/782); Central `GET /api/mqtt/monitor` already works | Cursor [`mqtt_monitor_sse_782`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) — **not** simultaneous with DF mega |
+| **df-boundary-repair** | **OPEN (MEGA)** next program | Stale pandas/UI docs + incomplete Python-absence / DF provenance qualification | 2026-09-08 source review: Dockerfiles Python-free; `datafusion-first.md` / `analytics-boundary.md` contradict ARCHITECTURE; soak accepts engine-label shortcuts | **Wave J** Stage A→B then multivendor rebase — **separate** from #782 |
 | **mqtt-ingest-stall** | **CLOSED** (3.3.34) | Was: flat `ingest_ok` after mqtt bounce until central redeploy | #860 · tip `sha-9aebf42` · smoke `reports/waveD_railway_smoke_20260906T173032Z/` | — |
 | **railway-ui-fdd-stale** | **CLOSED** (Wave E) | Was: building filter / scoped FDD UX across sites | Tip `sha-9aebf42`: Overview clears on site change; PlantHealthSections empty shells; equipment=8 / zone-other rows=7 | No VERSION — UX already on tip |
 | **bldg2-overview-signoff** | **CLOSED** (Wave H) | Was: SPA charts weak; buyer mash Run/Update | #868/#869 · Inspect/RCx points>0; Overview auto-load | — |
@@ -65,7 +68,7 @@
 | Ingest | `edges:1` · `ingest_ok` climbing · dual OAT publishing |
 | Gate 09 | Lakeside FC1 / mapping bldg2 / Inspect `zone_t` / bas-vs-web / B100 span **PASS** |
 | Stress | `reports/nightly-ot-bench_20260908T182149Z/` **`fully_qualified=true`** (00–09) |
-| Deferred | #782 MQTT monitor SSE — after Wave I |
+| Deferred | #782 MQTT monitor SSE — **do not** combine with DF-boundary mega |
 
 ### Wave H kickoff probe (2026-09-07T20:35Z)
 
@@ -97,16 +100,18 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 ### Upcoming trains (Cursor plans — optimized waves 2026-09-06)
 
 **Source of truth:** [`patch_trains/`](patch_trains/) · [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md) · [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
-**Active:** none (Wave I **CLOSED**). Next optional: [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — Cursor [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md). Anomaly **PARKED**.  
-**Last closed:** Wave I [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) · tip `sha-d1312b0` / **#872** · gate fix **#873** · stress `20260908T182149Z`.
+**Active:** **Wave J** Rust/DataFusion boundary repair + qualification (Stage A truth/docs/guards first) — see `df-boundary-repair` row.  
+**Optional small:** [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — Cursor [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md). **Do not** run #782 product coding in parallel with Wave J product/CI (low-RAM one-agent). Interleave only after Stage A docs/guards land, or after Wave J Stage B.  
+**Last closed:** Wave I [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) · tip `sha-d1312b0` / **#872** · gate fix **#873** · stress `20260908T182149Z`. Anomaly **PARKED**.
 
-**This round stress rule:** Wave I I7 complete — do **not** multi-stress “just in case.”
+**This round stress rule:** Wave I I7 complete — do **not** multi-stress “just in case.” Wave J adds digest/Python-absence/numerical gates before promotion.
 
 | Rev / wave | In-repo / Cursor plan | Concern | Status |
 |------------|----------------------|---------|--------|
+| **Wave J / DF boundary** | (create) `df_boundary_repair_qualify` · brief 2026-09-08 | Rust/DF product contract, docs, CI/image gates, numerical soak | **OPEN** Stage A next |
+| **#782 SSE** | [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) | Browser MQTT monitor via Central SSE | **DEFERRED** — sequential, not parallel w/ Wave J coding |
 | **Wave I master** | Cursor [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) | App-test MEGAs + basic functionality | **CLOSED** |
 | **Wave I / I1–I6** | child plans + #872 / #873 | Lakeside / Overview / export / span / dual OAT / gates | **CLOSED** |
-| **#782 SSE** | [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) | Browser MQTT monitor via Central SSE | **DEFERRED** (after Wave I) |
 | **Wave H** | Cursor post_waveg residual H | Demo charts / UI freshness | **CLOSED** |
 | **Wave G / 3.3.37–3.3.40** | [`openfdd_lab_tuner_parity_program.plan.md`](patch_trains/openfdd_lab_tuner_parity_program.plan.md) | Lab tuner Vibe19 parity | **CLOSED** — #864 · tip `sha-a40787b` |
 
