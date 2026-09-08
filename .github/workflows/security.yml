@@ -67,4 +67,5 @@ jobs:
           python3 -m pip install --user PyYAML
           python3 scripts/validate_capabilities_ledger.py
           python3 scripts/phase2_computation_policy_check.py
+          python3 scripts/phase2_computation_policy_check.py --self-test
           python3 scripts/phase2_shadow_compare.py
