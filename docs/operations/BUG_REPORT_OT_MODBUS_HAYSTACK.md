@@ -2,8 +2,8 @@
 
 **Date:** 2026-09-08 (Wave H **CLOSED** — demo charts / multi-site / UI freshness; Wave G Lab tuners **CLOSED**)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in Open-FDD stress)  
-**Tip / pin (3.3.39):** `4a100567` · VERSION **3.3.39** · health **`3.3.39+4a100567dc2b`** · GHCR **central/web/mqtt/fieldbus `sha-4a10056`**  
-**Last CLOSED tip:** `4a100567` · **`sha-4a10056`** · **`3.3.39+4a100567dc2b`** · product **#869** (+ **#868** RCx)  
+**Tip / pin (3.3.39):** `2e136b48` · VERSION **3.3.39** · health **`3.3.39+2e136b482786`** · GHCR **central/web/mqtt/fieldbus `sha-2e136b4`**  
+**Last CLOSED tip:** `2e136b48` · **`sha-2e136b4`** · **`3.3.39+2e136b482786`** · product **#869** (+ **#868** RCx) · docs **#870** VERSION sync  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Telemetry = hosted AV `9101` loopback as `bldg2-zone-loopback` / role **`zone_t`** / `equipment_type=zone_other` (+ `hosted-weather`).  
 **Backup:** `~/openfdd-backups/railway/20260908T0157*` (prior: `20260907T231243Z`)  
 **Program (CLOSED):** Wave H demo charts — Cursor [`post_waveg_openfdd_residual_wave_h`](../../../.cursor/plans/post_waveg_openfdd_residual_wave_h.plan.md) · agent_spec rules 51–54  
@@ -38,9 +38,9 @@
 
 | Check | Result |
 |-------|--------|
-| Hub | `3.3.39+4a100567dc2b` · central/mqtt/web **Online** · `sha-4a10056` |
-| Tip gate | `./scripts/check_ghcr_tip_stack.sh sha-4a10056` **PASS** |
-| Ingest | `edges:1` · `ingest_ok` climbing · fieldbus `sha-4a10056` |
+| Hub | `3.3.39+2e136b482786` · central/mqtt/web **Online** · `sha-2e136b4` |
+| Tip gate | `./scripts/check_ghcr_tip_stack.sh sha-2e136b4` **PASS** |
+| Ingest | `edges:1` · `ingest_ok` climbing · fieldbus `sha-2e136b4` |
 | bldg2 equip | **2** — `bldg2-zone-loopback`, `hosted-weather` |
 | Inspect / RCx | loopback Inspect points>0 · `zone_comfort_rank` includes loopback |
 | Demo sites | Lakeside / B100 / B50 Inspect data visible |
