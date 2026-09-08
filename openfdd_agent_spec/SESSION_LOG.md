@@ -1,5 +1,20 @@
 # Session log
 
+## 2026-09-08 — Wave J master planned (DF-boundary + #875)
+
+- Cursor master: `wave_j_df_boundary_master` — J0 land #874 → J1 Stage A → J2 #875 FC3/VAV-2 → J3/J5 CI+image → J4 Stage B → J6 soak → optional J7 #782 → J8 ONE stress.
+- Wave I master **RETIRED**. #782 remains sequential J7 only.
+- Multivendor Stage C deferred after Wave J.
+
+## 2026-09-08 — Wave I CLOSED (3.3.40 / sha-d1312b0)
+
+- Product **#872** (`d1312b0c`): Lakeside `register_csv`, Overview unfiltered chrome, Data Model JSON export, Inspect span-preserve, MQTT dual OAT catalog, stress gate 09.
+- Harness **#873** (`935e71de`): B100 gate requires `AHU_1` + plot span ≥60d (scripts-only; no re-pin).
+- Railway pin `3.3.40+d1312b0ccb07` · backup `20260908T171523Z` · fieldbus `sha-d1312b0`.
+- Stress `reports/nightly-ot-bench_20260908T182149Z/` **fully_qualified=true** (gates 00–09).
+- #782 MQTT monitor SSE remains **deferred** (plan `mqtt_monitor_sse_782`) — **not** parallel with Wave J DF-boundary coding.
+- Next **OPEN** program: Wave J `df-boundary-repair` (Rust/DataFusion boundary + qualification) — Stage A docs/guards first.
+
 ## 2026-09-08 — Wave I implementation started (3.3.40)
 
 - Product: utility `register_csv` (no SQL `read_csv`); Overview devices chrome padded; Weather section always shown; Data Model historian mapping + Export JSON; Inspect/bas-vs-web span-preserving downsample; fieldbus dual OAT catalog; stress gate `20_wave_i_app_test_megas` / required `09_wave_i_app_test_megas`.

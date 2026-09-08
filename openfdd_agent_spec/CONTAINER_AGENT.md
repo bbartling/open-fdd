@@ -113,7 +113,7 @@ required for health, FDD, or Overview analytics.
 ## Ops patch cycle (Railway hub + qualification — 3.3.20+)
 
 Living log: [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).  
-Active program: Wave I app-test MEGAs / basic functionality — Cursor `wave_i_app_test_mega_master` (agent rules **55–58**; **ONE full stress at I7**).  
+Active program: Wave I **CLOSED** on `sha-d1312b0` / 3.3.40. **Wave J OPEN** — Cursor `wave_j_df_boundary_master` (DF-boundary + #875; #782 = J7 sequential only).  
 Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · entry [`scripts/qualification/README.md`](../scripts/qualification/README.md).
 
 | Step | Action |

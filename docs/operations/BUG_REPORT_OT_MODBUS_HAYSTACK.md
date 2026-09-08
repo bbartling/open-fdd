@@ -1,14 +1,16 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-08 (Wave H **CLOSED**; **Wave I OPEN** — app-test MEGAs / basic functionality)  
+**Date:** 2026-09-08 (Wave I **CLOSED** — app-test MEGAs / basic functionality)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in Open-FDD stress)  
-**Tip / pin (3.3.39):** `2e136b48` · VERSION **3.3.39** · health **`3.3.39+2e136b482786`** · GHCR **central/web/mqtt/fieldbus `sha-2e136b4`**  
-**Last CLOSED tip:** `2e136b48` · **`sha-2e136b4`** · **`3.3.39+2e136b482786`** · product **#869** (+ **#868** RCx) · docs **#870** VERSION sync  
-**Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Telemetry = hosted AV `9101` loopback as `bldg2-zone-loopback` / role **`zone_t`** / `equipment_type=zone_other` (+ `hosted-weather`).  
-**Backup:** `~/openfdd-backups/railway/20260908T0157*` (prior: `20260907T231243Z`)  
-**Program (CLOSED):** Wave H — Cursor [`post_waveg_openfdd_residual_wave_h`](../../../.cursor/plans/post_waveg_openfdd_residual_wave_h.plan.md)  
-**Program (ACTIVE):** Wave I app-test MEGAs — Cursor [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) · agent_spec rules **55–58** · **ONE full stress at I7 only**  
-**Stress (last closed):** `reports/nightly-ot-bench_20260908T021007Z/` · **`fully_qualified=true`**  
+**Tip / pin (3.3.40):** `d1312b0c` · VERSION **3.3.40** · health **`3.3.40+d1312b0ccb07`** · GHCR **central/web/mqtt/fieldbus `sha-d1312b0`**  
+**Last CLOSED tip:** `d1312b0c` · **`sha-d1312b0`** · **`3.3.40+d1312b0ccb07`** · product **#872** · stress gate fix **#873**  
+**Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Dual-publish AV `9101`: `bldg2-zone-loopback` **`zone_t`+`oa_t`**, `hosted-weather` **`web_oa_t`**.  
+**Backup:** `~/openfdd-backups/railway/20260908T171523Z/` (prior: `20260908T0157*`)  
+**Program (CLOSED):** Wave I — Cursor [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) · agent_spec rules **55–58**  
+**Program (prior CLOSED):** Wave H — Cursor [`post_waveg_openfdd_residual_wave_h`](../../../.cursor/plans/post_waveg_openfdd_residual_wave_h.plan.md)  
+**Stress (Wave I closeout):** `reports/nightly-ot-bench_20260908T182149Z/` · **`fully_qualified=true`** (gates 00–09 incl. ZAP + Wave I MEGAs)  
+**Deferred sequential (Wave J J7):** [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — Cursor [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md)  
+**Program (ACTIVE):** Wave J — Cursor [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) (DF-boundary + [#875](https://github.com/bbartling/open-fdd/issues/875) cookbook parity)  
 **Wait filler:** Vibe13 Part B (separate repo) during Open-FDD CI/Publish  
 **Pis freed (not in Open-FDD stress):** bosspi · BensFakeAhu · Zone1VAV.
 
@@ -16,13 +18,16 @@
 
 | ID | Status | Symptom | Evidence | Next |
 |----|--------|---------|----------|------|
-| **lakeside-read-csv-missing** | **OPEN (MEGA)** basic app | LAKESIDE_ES FDD/select → `table function 'read_csv' not found`; Inspect no parquet | 2026-09-08 FC1 `ok:false`; equip list still ~71 | Wave I **I1** [`wave_i_lakeside_read_csv`](../../../.cursor/plans/wave_i_lakeside_read_csv.plan.md) |
-| **overview-tables-unfiltered** | **OPEN (MEGA)** basic app | Overview on MQTT `bldg2` looks table-filtered vs CSV; bottom devices table must never be source-filtered | Operator app-test 2026-09-08 | Wave I **I2** [`wave_i_overview_tables_unfiltered`](../../../.cursor/plans/wave_i_overview_tables_unfiltered.plan.md) |
-| **data-model-json-export** | **OPEN (MEGA)** basic app | Data Model needs working Export JSON for **any** building (MQTT + CSV) | Mapping download often dead when inventory fails on MQTT | Wave I **I3** [`wave_i_data_model_json_export`](../../../.cursor/plans/wave_i_data_model_json_export.plan.md) |
-| **plot-default-full-span-b100** | **OPEN (MEGA)** | B100 plots default ~July only — not full historian span | Operator app-test; newest-`max_points`/`LIMIT` | Wave I **I4** [`wave_i_plot_full_span_b100`](../../../.cursor/plans/wave_i_plot_full_span_b100.plan.md) |
-| **weather-local-vs-web-bldg2** | **OPEN (MEGA)** | bldg2 bas-vs-web empty — catalog zone_t only; OAT null; hosted-weather stale | `bas-vs-web-oat` pts=0; Open-Meteo live on `/weather` but not MQTT roles | Wave I **I5** [`mqtt_dual_oat_wave`](../../../.cursor/plans/mqtt_dual_oat_wave_a209637a.plan.md) |
-| **mqtt-bldg2-plot-surface** | **OPEN (MEGA)** | MQTTS ingest OK but buyer plots look empty/wrong (OAT/plant first) | Inspect `zone_t`~4k live; plant RCx empty expected if honest | Wave I **I5** + Overview I2 |
-| **wave-i-stress-gates** | **OPEN** | Stress can green while basic app broken | Need gates for Lakeside/Overview/export/span/dual-OAT | Wave I **I6** [`wave_i_stress_gates_enhance`](../../../.cursor/plans/wave_i_stress_gates_enhance.plan.md) |
+| **lakeside-read-csv-missing** | **CLOSED** (3.3.40 / Wave I) | Was: LAKESIDE_ES FDD `read_csv not found` | #872 `register_csv`; stress gate09 no `read_csv` | — |
+| **overview-tables-unfiltered** | **CLOSED** (3.3.40 / Wave I) | Was: MQTT Overview looked table-filtered vs CSV | #872 Overview chrome pad + Weather section always render | — |
+| **data-model-json-export** | **CLOSED** (3.3.40 / Wave I) | Was: Export JSON dead for MQTT | #872 historian mapping + Export; mapping `bldg2` equipment=2 | — |
+| **plot-default-full-span-b100** | **CLOSED** (3.3.40 / Wave I) | Was: B100 plots July-only | #872 span-preserving Inspect; gate09 AHU_1 `plot_days=123.4` (#873) | — |
+| **weather-local-vs-web-bldg2** | **CLOSED** (3.3.40 / Wave I) | Was: bldg2 bas-vs-web empty | #872 dual OAT catalog; gate09 `bas_vs_web` points>0 | — |
+| **mqtt-bldg2-plot-surface** | **CLOSED** (3.3.40 / Wave I) | Was: MQTT plots empty/wrong roles | Inspect `zone_t` non_null=696; dual OAT live | — |
+| **wave-i-stress-gates** | **CLOSED** (3.3.40 / Wave I) | Was: stress green while basics broken | Gate `09_wave_i_app_test_megas` required; #873 AHU_1 fix | — |
+| **mqtt-monitor-sse-782** | **DEFERRED** (Wave J **J7**) | Ops MQTT Test Client is 1s poll; no browser→Mosquitto WS | [#782](https://github.com/bbartling/open-fdd/issues/782); Central `GET /api/mqtt/monitor` already works | [`mqtt_monitor_sse_782`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) — sequential after J1/J6; **not** parallel w/ DF coding |
+| **df-boundary-repair** | **OPEN (MEGA)** Wave J | Stale pandas/UI docs + incomplete Python-absence / DF provenance qualification | 2026-09-08 source review; Dockerfiles Python-free; contradictory architecture docs | Master [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) |
+| **cookbook-parity-875** | **OPEN** Wave J **J2** | SQL↔pandas drift: FC3 tol/fan priority; VAV-2 fractional occupancy | [#875](https://github.com/bbartling/open-fdd/issues/875) Trenyx @ c20ab48 | [`wave_j_cookbook_parity_875`](../../../.cursor/plans/wave_j_cookbook_parity_875.plan.md) |
 | **mqtt-ingest-stall** | **CLOSED** (3.3.34) | Was: flat `ingest_ok` after mqtt bounce until central redeploy | #860 · tip `sha-9aebf42` · smoke `reports/waveD_railway_smoke_20260906T173032Z/` | — |
 | **railway-ui-fdd-stale** | **CLOSED** (Wave E) | Was: building filter / scoped FDD UX across sites | Tip `sha-9aebf42`: Overview clears on site change; PlantHealthSections empty shells; equipment=8 / zone-other rows=7 | No VERSION — UX already on tip |
 | **bldg2-overview-signoff** | **CLOSED** (Wave H) | Was: SPA charts weak; buyer mash Run/Update | #868/#869 · Inspect/RCx points>0; Overview auto-load | — |
@@ -52,7 +57,19 @@
 | Inspect / RCx | loopback Inspect points>0 · `zone_comfort_rank` includes loopback |
 | Demo sites | Lakeside / B100 / B50 Inspect data visible |
 | Stress | `reports/nightly-ot-bench_20260908T021007Z/` **`fully_qualified=true`** |
-| H5 bldg2 OAT overlay | **OPEN MEGA** Wave I — was DEFERRED; see `weather-local-vs-web-bldg2` |
+| H5 bldg2 OAT overlay | **CLOSED** Wave I — `weather-local-vs-web-bldg2` |
+
+### Wave I closeout (2026-09-08T18:25Z)
+
+| Check | Result |
+|-------|--------|
+| Hub | `3.3.40+d1312b0ccb07` · central/mqtt/web **Online** · `sha-d1312b0` |
+| Tip gate | GHCR tip completeness **PASS** on `d1312b0c` |
+| Backup / pin | `~/openfdd-backups/railway/20260908T171523Z/` · full-stack + fieldbus `sha-d1312b0` |
+| Ingest | `edges:1` · `ingest_ok` climbing · dual OAT publishing |
+| Gate 09 | Lakeside FC1 / mapping bldg2 / Inspect `zone_t` / bas-vs-web / B100 span **PASS** |
+| Stress | `reports/nightly-ot-bench_20260908T182149Z/` **`fully_qualified=true`** (00–09) |
+| Deferred | #782 MQTT monitor SSE — **do not** combine with DF-boundary mega |
 
 ### Wave H kickoff probe (2026-09-07T20:35Z)
 
@@ -84,20 +101,22 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 ### Upcoming trains (Cursor plans — optimized waves 2026-09-06)
 
 **Source of truth:** [`patch_trains/`](patch_trains/) · [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md) · [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
-**Active:** Wave I app-test MEGAs — Cursor [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) (I1 Lakeside → I2 Overview tables → I3 Data Model export → I4 B100 span → I5 dual OAT → I6 stress gates → **I7 ONE full stress**). Low-RAM; **0 stale PRs / failed tip Actions** each child. Basic app MEGAs must be SPA+API validated — stress alone is not enough.  
-**Last closed:** Wave H [`post_waveg_openfdd_residual_wave_h`](../../../.cursor/plans/post_waveg_openfdd_residual_wave_h.plan.md) · Wave G Lab tuners. Anomaly **PARKED**. #782 SSE **deferred** after Wave I.
+**Active:** Wave J master [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) — J0 land #874 → J1 Stage A docs → J2 [#875](https://github.com/bbartling/open-fdd/issues/875) → J3/J5 CI+image gates → J4 Stage B gaps → J6 soak → optional J7 [#782](https://github.com/bbartling/open-fdd/issues/782) → **J8 ONE full stress**. Low-RAM one agent; #782 never parallel with J1–J6 coding.  
+**Last closed:** Wave I (RETIRED plan [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md)) · tip `sha-d1312b0` / **#872** · gate fix **#873** · stress `20260908T182149Z`. Anomaly **PARKED**. Multivendor Stage C **deferred after Wave J**.
 
-**This round stress rule:** mid-wave = Railway **smoke** / unit. **ONE full** `run_railway_hub_stress.sh` at **Wave I I7 closeout** (enhanced I6 gates, **no `SKIP_ZAP`**) → BUG_REPORT. Do **not** multi-stress between children.
+**This round stress rule:** mid-wave = smoke only. **ONE full** `run_railway_hub_stress.sh` at **Wave J J8** (keep gate 09; add DF gates when ready; **no `SKIP_ZAP`**).
 
 | Rev / wave | In-repo / Cursor plan | Concern | Status |
 |------------|----------------------|---------|--------|
-| **Wave I master** | Cursor [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) | App-test MEGAs + basic functionality | **OPEN** |
-| **Wave I / I1** | [`wave_i_lakeside_read_csv`](../../../.cursor/plans/wave_i_lakeside_read_csv.plan.md) | Lakeside `read_csv` | **OPEN** |
-| **Wave I / I2** | [`wave_i_overview_tables_unfiltered`](../../../.cursor/plans/wave_i_overview_tables_unfiltered.plan.md) | Overview tables MQTT=CSV | **OPEN** |
-| **Wave I / I3** | [`wave_i_data_model_json_export`](../../../.cursor/plans/wave_i_data_model_json_export.plan.md) | Data Model JSON export | **OPEN** |
-| **Wave I / I4** | [`wave_i_plot_full_span_b100`](../../../.cursor/plans/wave_i_plot_full_span_b100.plan.md) | B100 full date span | **OPEN** |
-| **Wave I / I5** | [`mqtt_dual_oat_wave`](../../../.cursor/plans/mqtt_dual_oat_wave_a209637a.plan.md) | MQTT dual OAT + plot surface | **OPEN** |
-| **Wave I / I6** | [`wave_i_stress_gates_enhance`](../../../.cursor/plans/wave_i_stress_gates_enhance.plan.md) | Stress gates for MEGAs | **OPEN** |
+| **Wave J master** | [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) | DF-boundary + #875 + optional #782 | **OPEN** |
+| **Wave J / J0** | [`wave_j0_land_wave_i_closeout_docs`](../../../.cursor/plans/wave_j0_land_wave_i_closeout_docs.plan.md) | Land #874 | **OPEN** |
+| **Wave J / J1** | [`wave_j_a_truth_docs_guards`](../../../.cursor/plans/wave_j_a_truth_docs_guards.plan.md) | Stage A truth/docs | **OPEN** |
+| **Wave J / J2** | [`wave_j_cookbook_parity_875`](../../../.cursor/plans/wave_j_cookbook_parity_875.plan.md) | #875 FC3 + VAV-2 parity | **OPEN** |
+| **Wave J / J3+J5** | [`wave_j_ci_image_gates`](../../../.cursor/plans/wave_j_ci_image_gates.plan.md) | Policy CI + image Python-absence | **OPEN** |
+| **Wave J / J4** | [`wave_j_b_close_python_gaps`](../../../.cursor/plans/wave_j_b_close_python_gaps.plan.md) | Stage B close gaps | **OPEN** |
+| **Wave J / J6** | [`wave_j_numerical_soak_harden`](../../../.cursor/plans/wave_j_numerical_soak_harden.plan.md) | Soak provenance | **OPEN** |
+| **Wave J / J7** | [`mqtt_monitor_sse_782`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) | #782 Central SSE | **DEFERRED** sequential |
+| **Wave I master** | [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) | App-test MEGAs | **RETIRED / CLOSED** |
 | **Wave H** | Cursor post_waveg residual H | Demo charts / UI freshness | **CLOSED** |
 | **Wave G / 3.3.37–3.3.40** | [`openfdd_lab_tuner_parity_program.plan.md`](patch_trains/openfdd_lab_tuner_parity_program.plan.md) | Lab tuner Vibe19 parity | **CLOSED** — #864 · tip `sha-a40787b` |
 
