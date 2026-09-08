@@ -113,7 +113,7 @@ required for health, FDD, or Overview analytics.
 ## Ops patch cycle (Railway hub + qualification — 3.3.20+)
 
 Living log: [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).  
-Active program: Wave I **CLOSED** on `sha-d1312b0` / 3.3.40. **Wave J OPEN** — Rust/DataFusion boundary repair + qualification (Stage A first). #782 SSE = sequential optional; not parallel with Wave J product/CI.  
+Active program: Wave I **CLOSED** on `sha-d1312b0` / 3.3.40. **Wave J OPEN** — Cursor `wave_j_df_boundary_master` (DF-boundary + #875; #782 = J7 sequential only).  
 Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · entry [`scripts/qualification/README.md`](../scripts/qualification/README.md).
 
 | Step | Action |
