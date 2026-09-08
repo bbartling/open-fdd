@@ -192,20 +192,8 @@ describe("OverviewPopulated metric isolation", () => {
     fetchCentralOverview.mockResolvedValue(emptyOverview);
   });
 
-  it("does not auto-run analytics; Update analytics loads charts and keeps mapping rows/span", async () => {
+  it("auto-loads analytics on site select (demo freshness); keeps mapping rows/span", async () => {
     renderOverview();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("overview-idle-hint")).toBeTruthy();
-      expect(screen.getByTestId("overview-rule-count").textContent).toContain("59");
-    });
-    expect(screen.getByTestId("overview-rule-caption").textContent).toMatch(
-      /\+4 SQL rollups/,
-    );
-
-    fireEvent.click(
-      screen.getByTestId("overview-refresh").querySelector("button")!,
-    );
 
     await waitFor(() => {
       expect(fetchCentralOverview).toHaveBeenCalled();
@@ -213,6 +201,10 @@ describe("OverviewPopulated metric isolation", () => {
         "35536",
       );
     });
+    expect(screen.getByTestId("overview-rule-count").textContent).toContain("59");
+    expect(screen.getByTestId("overview-rule-caption").textContent).toMatch(
+      /\+4 SQL rollups/,
+    );
     expect(screen.getByTestId("overview-kind").textContent).toMatch(/ahu/i);
     expect(screen.getByTestId("overview-kind").textContent).not.toMatch(/AHU/);
     expect(screen.getByTestId("overview-start").textContent).toContain(
@@ -226,9 +218,6 @@ describe("OverviewPopulated metric isolation", () => {
 
   it("has tables and health matrices, not Overview Plotly hosts", async () => {
     renderOverview();
-    fireEvent.click(
-      screen.getByTestId("overview-refresh").querySelector("button")!,
-    );
     await waitFor(() => {
       expect(screen.getByTestId("overview-charts-ready")).toBeTruthy();
     });
@@ -261,16 +250,8 @@ describe("OverviewPopulated metric isolation", () => {
     expect(screen.getByTestId("overview-devices-by-type")).toBeTruthy();
   });
 
-  it("shows readiness Idle then Needs Run all rules after analytics without FDD", async () => {
+  it("shows readiness Needs Run all rules after auto-loaded analytics without FDD", async () => {
     renderOverview();
-    await waitFor(() => {
-      expect(screen.getByTestId("overview-readiness-label").textContent).toBe(
-        "Idle",
-      );
-    });
-    fireEvent.click(
-      screen.getByTestId("overview-refresh").querySelector("button")!,
-    );
     await waitFor(() => {
       expect(screen.getByTestId("overview-readiness-label").textContent).toMatch(
         /Needs Run all rules/,
@@ -290,9 +271,6 @@ describe("OverviewPopulated metric isolation", () => {
       })),
     );
     renderOverview();
-    fireEvent.click(
-      screen.getByTestId("overview-refresh").querySelector("button")!,
-    );
     await waitFor(() => {
       expect(screen.getByTestId("overview-charts-ready")).toBeTruthy();
     });

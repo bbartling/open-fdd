@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-09-08 — Wave H 3.3.39 (H5 MQTT OAT + H6b Overview auto-fresh)
+
+- `bas_vs_web` accepts MQTT raw `outside_air_temperature` as BAS OAT; weather-split via `%WEATHER%` equipment ids.
+- Overview auto-loads analytics on site select + soft refresh on tab focus (no constant Update analytics mash).
+- Tip re-pin + full stress still required for Wave H CLOSED.
+
 ## 2026-09-07 — Wave H plan + agent_spec (demo freshness / multi-site)
 
 - Wave G **CLOSED** on `sha-a40787b` / 3.3.37.

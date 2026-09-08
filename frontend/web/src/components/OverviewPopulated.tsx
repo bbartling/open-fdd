@@ -277,6 +277,24 @@ export function OverviewPopulated({
   }, [buildingId, equipment]);
 
   useEffect(() => {
+    if (!buildingId) return;
+    // Demo freshness (Wave H / 3.3.39): auto-load last Overview analytics on
+    // site select — do not require mashing "Update analytics" every visit.
+    void refreshOverview();
+  }, [buildingId, refreshOverview]);
+
+  useEffect(() => {
+    if (!buildingId) return;
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        void refreshOverview();
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [buildingId, refreshOverview]);
+
+  useEffect(() => {
     return () => {
       overviewAbort.current?.abort();
     };
