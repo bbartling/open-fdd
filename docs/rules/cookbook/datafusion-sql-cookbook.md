@@ -6,7 +6,7 @@ nav_order: 1
 
 # DataFusion SQL FDD Cookbook
 
-Open-FDD executes production fault detection as **DataFusion SQL** against Apache Arrow / parquet historian tables via the canonical registry [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) (**66** entries = 62 diagnostic twins + 4 SQL analytics). Operator path: React **Run Rules** → `POST /api/fdd/run` (`mode=registry`). Integrators may also exercise rules through the registry APIs — raw arbitrary SQL is rejected.
+Open-FDD executes production fault detection as **DataFusion SQL** against Apache Arrow / parquet historian tables via the canonical registry [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) (**68** entries = 62 diagnostic twins + 4 SQL analytics + 2 UTIL). Operator path: React **Run Rules** → `POST /api/fdd/run` (`mode=registry`). Integrators may also exercise rules through the registry APIs — raw arbitrary SQL is rejected.
 
 **Pandas mirror:** the [Pandas cookbook](pandas-cookbook.html) documents the **62**-rule PyPI oracle (`open_fdd.rules`). Do **not** treat “62” as the production registry size. See [parity matrix](parity-matrix.html) and the [generated parity report](generated-parity-report.html).
 

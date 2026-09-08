@@ -2276,4 +2276,168 @@ timestamp_utc,oa_d,clg_col
         let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
         assert_hours_close(got, expected, "ECON-7 weather join");
     }
+
+    #[tokio::test]
+    async fn fc3_eps_envelope_matches_pandas_confirm() {
+        // mat - eps_mat > max(rat + eps_rat, oat + eps_oat); eps=1.15.
+        // rat=70, oat=50 → max side 71.15; mat=80 → fault; mat=70 → clear.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_FC3");
+        std::fs::create_dir_all(&building).unwrap();
+        let rows = "\
+timestamp_utc,mat_col,oat_col,rat_col,fan_st
+2026-01-01T00:00:00Z,70,50,70,1
+2026-01-01T00:05:00Z,70,50,70,1
+2026-01-01T00:10:00Z,80,50,70,1
+2026-01-01T00:15:00Z,80,50,70,1
+2026-01-01T00:20:00Z,80,50,70,1
+2026-01-01T00:25:00Z,70,50,70,1
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "mat_col",
+                    role: "mat",
+                },
+                RoleCol {
+                    csv_col: "oat_col",
+                    role: "oa_t",
+                },
+                RoleCol {
+                    csv_col: "rat_col",
+                    role: "rat",
+                },
+                RoleCol {
+                    csv_col: "fan_st",
+                    role: "fan_status",
+                },
+            ],
+            rows,
+        );
+        let got = run_rule_fault_hours(
+            &building,
+            "fc3_mat_high.sql",
+            300.0,
+            600,
+            &[
+                ("EPS_MAT", "1.15"),
+                ("EPS_RAT", "1.15"),
+                ("EPS_OAT", "1.15"),
+                ("MODE_DELAY_MIN", "0"),
+                ("REQUIRE_OPERATIONAL_GATE", "0"),
+                ("FAN_ON_MIN", "0.01"),
+            ],
+        )
+        .await;
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "FC3 EPS envelope SQL");
+    }
+
+    #[tokio::test]
+    async fn fc3_fan_status_overrides_cmd() {
+        // fan_status=0 with fan_cmd=1 must not fault (SQL + pandas #875 contract).
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_FC3_FAN");
+        std::fs::create_dir_all(&building).unwrap();
+        let rows = "\
+timestamp_utc,mat_col,oat_col,rat_col,fan_st,fan_cmd
+2026-01-01T00:00:00Z,80,50,70,0,1
+2026-01-01T00:05:00Z,80,50,70,0,1
+2026-01-01T00:10:00Z,80,50,70,0,1
+2026-01-01T00:15:00Z,80,50,70,0,1
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "mat_col",
+                    role: "mat",
+                },
+                RoleCol {
+                    csv_col: "oat_col",
+                    role: "oa_t",
+                },
+                RoleCol {
+                    csv_col: "rat_col",
+                    role: "rat",
+                },
+                RoleCol {
+                    csv_col: "fan_st",
+                    role: "fan_status",
+                },
+                RoleCol {
+                    csv_col: "fan_cmd",
+                    role: "fan_cmd",
+                },
+            ],
+            rows,
+        );
+        let got = run_rule_fault_hours(
+            &building,
+            "fc3_mat_high.sql",
+            300.0,
+            600,
+            &[
+                ("EPS_MAT", "1.15"),
+                ("EPS_RAT", "1.15"),
+                ("EPS_OAT", "1.15"),
+                ("MODE_DELAY_MIN", "0"),
+                ("REQUIRE_OPERATIONAL_GATE", "1"),
+                ("MINIMUM_ACTIVE_COVERAGE_PCT", "0"),
+                ("FAN_ON_MIN", "0.01"),
+            ],
+        )
+        .await;
+        assert_hours_close(got, 0.0, "FC3 fan_status priority");
+    }
+
+    #[tokio::test]
+    async fn vav2_fractional_occ_mode_matches_pandas() {
+        // occ_mode=0.03 is unoccupied (≤0.05) like SCHED-1 / pandas _unoccupied_mask.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_VAV2");
+        std::fs::create_dir_all(&building).unwrap();
+        let rows = "\
+timestamp_utc,zone_col,occ_col
+2026-01-01T00:00:00Z,72,1
+2026-01-01T00:05:00Z,72,1
+2026-01-01T00:10:00Z,72,0.03
+2026-01-01T00:15:00Z,72,0.03
+2026-01-01T00:20:00Z,72,0.03
+2026-01-01T00:25:00Z,72,1
+";
+        write_equipment_fixture(
+            &building,
+            "VAV_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "zone_col",
+                    role: "zone_t",
+                },
+                RoleCol {
+                    csv_col: "occ_col",
+                    role: "occ_mode",
+                },
+            ],
+            rows,
+        );
+        let got = run_rule_fault_hours(
+            &building,
+            "vav2_night_setback.sql",
+            300.0,
+            600,
+            &[("SETBACK_HI", "68")],
+        )
+        .await;
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "VAV-2 fractional occ_mode SQL");
+    }
 }

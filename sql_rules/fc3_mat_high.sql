@@ -23,9 +23,8 @@ base AS (
     CAST(CASE
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN COALESCE(mode_stable, 1) = 0 THEN 0
-      WHEN fan > {{FAN_ON_MIN}} AND mat IS NOT NULL AND oa_t IS NOT NULL AND rat IS NOT NULL
-       AND (mat - {{MIX_TOL}}) > (rat + {{MIX_TOL}})
-       AND (mat - {{MIX_TOL}}) > (oa_t + {{MIX_TOL}})
+      WHEN mat IS NOT NULL AND oa_t IS NOT NULL AND rat IS NOT NULL
+       AND (mat - {{EPS_MAT}}) > (CASE WHEN rat > oa_t THEN rat + {{EPS_RAT}} ELSE oa_t + {{EPS_OAT}} END)
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM (
   SELECT h.*,

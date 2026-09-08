@@ -8,8 +8,14 @@ WITH h AS (
     occ_mode,
     CAST(CASE
       WHEN occ_mode IS NULL THEN 0
-      WHEN LOWER(trim(CAST(occ_mode AS VARCHAR))) IN
-        ('unoccupied','unocc','off','false','night','standby','setback','0','0.0','no')
+      WHEN (
+        LOWER(trim(CAST(occ_mode AS VARCHAR))) IN
+          ('unoccupied','unocc','off','false','night','standby','setback','0','0.0','no')
+        OR (
+          try_cast(trim(CAST(occ_mode AS VARCHAR)) AS DOUBLE) IS NOT NULL
+          AND try_cast(trim(CAST(occ_mode AS VARCHAR)) AS DOUBLE) <= 0.05
+        )
+      )
        AND zone_t IS NOT NULL AND zone_t > {{SETBACK_HI}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault

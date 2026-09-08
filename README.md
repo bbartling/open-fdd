@@ -48,7 +48,7 @@ Deploy locally or as a cloud hub and pull building data over MQTTS, APIs, or fil
 
 ## Install / run
 
-**FDD Rule Cookbook** — **62** public rules / **66** SQL registry ids: [datafusion-sql-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/datafusion-sql-cookbook.html) · [pandas-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html) · [PyPI open-fdd](https://pypi.org/project/open-fdd/)
+**FDD Rule Cookbook** — **62** public rules / **68** SQL registry ids: [datafusion-sql-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/datafusion-sql-cookbook.html) · [pandas-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html) · [PyPI open-fdd](https://pypi.org/project/open-fdd/)
 
 ### GHCR images
 

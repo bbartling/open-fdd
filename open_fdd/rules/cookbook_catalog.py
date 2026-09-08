@@ -580,10 +580,11 @@ def _gl36_fault(raw: pd.Series, d: pd.DataFrame, p: dict, poll: float) -> pd.Ser
 
 
 def _fan(d: pd.DataFrame) -> pd.Series:
-    if "fan-cmd" in d.columns:
-        return norm_cmd(d["fan-cmd"]).fillna(0)
+    # Match production SQL (fan_status then fan_cmd) — Wave J / #875.
     if "fan-status" in d.columns:
         return as_bool(d["fan-status"]).astype(float)
+    if "fan-cmd" in d.columns:
+        return norm_cmd(d["fan-cmd"]).fillna(0)
     return pd.Series(1.0, index=d.index)
 
 
