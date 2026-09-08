@@ -194,16 +194,36 @@ export function OverviewPopulated({
       : spanHoursBetween(firstTs, lastTs);
 
   const devicesByType = useMemo(() => {
-    if (overview?.devices_by_type?.length) {
-      return overview.devices_by_type.map((r) => ({
-        equipment_type: r.type,
-        count: r.count,
-      }));
-    }
+    const CHROME_TYPES = [
+      "AHU",
+      "VAV",
+      "PLANT",
+      "HEAT_PUMP",
+      "WEATHER",
+      "Zone Other",
+      "VRF",
+      "GENERAL",
+    ];
     const map = new Map<string, number>();
-    for (const e of equipment) {
-      const t = String(e.equipment_type || "unknown");
-      map.set(t, (map.get(t) ?? 0) + 1);
+    for (const t of CHROME_TYPES) map.set(t, 0);
+    const raw = overview?.devices_by_type?.length
+      ? overview.devices_by_type.map((r) => ({
+          equipment_type: String(r.type || "unknown"),
+          count: Number(r.count) || 0,
+        }))
+      : (() => {
+          const m = new Map<string, number>();
+          for (const e of equipment) {
+            const t = String(e.equipment_type || "unknown");
+            m.set(t, (m.get(t) ?? 0) + 1);
+          }
+          return [...m.entries()].map(([equipment_type, count]) => ({
+            equipment_type,
+            count,
+          }));
+        })();
+    for (const row of raw) {
+      map.set(row.equipment_type, row.count);
     }
     return [...map.entries()]
       .map(([equipment_type, count]) => ({ equipment_type, count }))

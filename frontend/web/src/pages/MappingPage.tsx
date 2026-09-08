@@ -171,7 +171,7 @@ export function MappingPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `mapping_manifest_${inventory.building_id ?? "unknown"}.json`;
+    a.download = `data_model_${inventory.building_id ?? buildingId ?? "unknown"}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -424,10 +424,10 @@ export function MappingPage() {
               />
               <Button
                 id="map-download-manifest"
-                label="Download mapping manifest"
+                label="Export data model JSON"
                 variant="secondary"
                 onClick={onDownloadManifest}
-                disabled={!inventory}
+                disabled={!inventory?.ok && !(inventory?.equipment?.length)}
                 testId="map-download-manifest"
               />
             </div>

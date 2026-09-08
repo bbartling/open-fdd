@@ -99,7 +99,7 @@ Confirm `/api/health` (or UI generation) reflects the new `+sha`, and that Lab
 params such as FC1 `confirm_min` match the merged tip.
 
 **Always:** one agent; no parallel Vibe13 cargo/Ansible TX with ZAP; prune zap/MCP
-disposables after stress. Wave H dual-track wait filler is OK — not a second Cursor session.
+disposables after stress. Wave I wait filler (Vibe13) is OK — not a second Cursor session on the same train.
 
 ### Offline WattLab export (not product)
 
@@ -113,7 +113,7 @@ required for health, FDD, or Overview analytics.
 ## Ops patch cycle (Railway hub + qualification — 3.3.20+)
 
 Living log: [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).  
-Active program: Wave H demo charts / multi-site / UI freshness — Cursor `post_waveg_openfdd_residual_wave_h` (agent rules **51–54**).  
+Active program: Wave I app-test MEGAs / basic functionality — Cursor `wave_i_app_test_mega_master` (agent rules **55–58**; **ONE full stress at I7**).  
 Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · entry [`scripts/qualification/README.md`](../scripts/qualification/README.md).
 
 | Step | Action |

@@ -38,7 +38,7 @@ export function WeatherHealthSection({
   const [note, setNote] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!buildingId || !families.hasWeather) {
+    if (!buildingId) {
       setRows([]);
       return;
     }
@@ -47,6 +47,14 @@ export function WeatherHealthSection({
     setErr(null);
     void (async () => {
       try {
+        if (!families.hasWeather) {
+          if (!cancelled) {
+            setRows([]);
+            setNote("No weather equipment in this data model — empty shell (MQTT=CSV chrome).");
+            setLoading(false);
+          }
+          return;
+        }
         const [fddRows, bas] = await Promise.all([
           getFddResults(buildingId).catch(() => [] as Array<Record<string, unknown>>),
           postBasVsWebOat({ building_id: buildingId, max_points: 4000, dt_min_f: 10 }),
@@ -142,8 +150,6 @@ export function WeatherHealthSection({
     };
   }, [buildingId, refreshToken, families.hasWeather]);
 
-  if (!families.hasWeather) return null;
-
   return (
     <section className="overview-section" data-testid="overview-weather-health">
       <h3>Weather sensors — web vs local</h3>
@@ -167,23 +173,21 @@ export function WeatherHealthSection({
           {note}
         </p>
       ) : null}
-      {rows.length ? (
-        <DataTable
-          id="weather-health-table"
-          label="Weather sensor health"
-          columns={[
-            { key: "point", header: "point" },
-            { key: "local_tag", header: "local tag" },
-            { key: "web_tag", header: "web tag" },
-            { key: "rule_id", header: "cookbook rule" },
-            { key: "fault", header: "fault" },
-            { key: "fault_h", header: "fault_h" },
-            { key: "total_fault_h", header: "total fault_h" },
-          ]}
-          rows={rows as Array<Record<string, string | number>>}
-          testId="weather-health-table"
-        />
-      ) : null}
+      <DataTable
+        id="weather-health-table"
+        label="Weather sensor health"
+        columns={[
+          { key: "point", header: "point" },
+          { key: "local_tag", header: "local tag" },
+          { key: "web_tag", header: "web tag" },
+          { key: "rule_id", header: "cookbook rule" },
+          { key: "fault", header: "fault" },
+          { key: "fault_h", header: "fault_h" },
+          { key: "total_fault_h", header: "total fault_h" },
+        ]}
+        rows={rows as Array<Record<string, string | number>>}
+        testId="weather-health-table"
+      />
     </section>
   );
 }

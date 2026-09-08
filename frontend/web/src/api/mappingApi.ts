@@ -45,6 +45,7 @@ export interface PackageMappingResponse {
   equipment?: MappingEquipment[];
   session_role_map?: Record<string, Record<string, string>>;
   validation?: MappingValidation;
+  warnings?: string[];
 }
 
 export interface PackageBuildingsResponse {
@@ -195,22 +196,24 @@ export function invertRolesToSessionMap(
   return out;
 }
 
-/** Build a downloadable mapping/validation manifest (client-side JSON). */
+/** Build a downloadable data-model JSON (client-side). */
 export function buildMappingManifest(
   inventory: PackageMappingResponse,
 ): string {
   return JSON.stringify(
     {
-      schema: "openfdd_mapping_manifest_v1",
+      schema: "openfdd_data_model_v1",
       generated_at: new Date().toISOString(),
       building_id: inventory.building_id,
       unit_system: inventory.unit_system,
       validation: inventory.validation,
+      warnings: inventory.warnings ?? [],
       equipment: (inventory.equipment ?? []).map((eq) => ({
         equipment_id: eq.equipment_id,
         equipment_type: eq.equipment_type,
         parent_ahu: eq.parent_ahu ?? null,
         roles: eq.roles ?? {},
+        columns: eq.columns ?? [],
         unmapped_columns: eq.unmapped_columns ?? [],
         ambiguous_roles: eq.ambiguous_roles ?? {},
         blockers: eq.blockers ?? [],
