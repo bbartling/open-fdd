@@ -3188,7 +3188,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-central"
-version = "3.3.38"
+version = "3.3.39"
 dependencies = [
  "anyhow",
  "axum",
@@ -3228,7 +3228,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-fieldbus"
-version = "3.3.38"
+version = "3.3.39"
 dependencies = [
  "axum",
  "bacnet-client",

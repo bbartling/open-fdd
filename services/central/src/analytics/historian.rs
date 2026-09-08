@@ -445,6 +445,14 @@ fn web_oat_col(cols: &HashSet<String>) -> Option<&'static str> {
     .find(|&c| cols.contains(c))
 }
 
+/// BAS / local OAT column — cookbook `oa_t` plus MQTT raw aliases that never
+/// went through package `normalize_role` renaming (Wave H bldg2 hive parquet).
+fn bas_oat_col(cols: &HashSet<String>) -> Option<&'static str> {
+    ["oa_t", "outside_air_temp", "outside_air_temperature"]
+        .into_iter()
+        .find(|&c| cols.contains(c))
+}
+
 /// Prefer web/meteo OAT for weekly plant avg-while-on (vibe19 `prefer_web_oat`).
 fn weekly_oat_col(cols: &HashSet<String>) -> Option<&'static str> {
     mech_oat_col(cols)
@@ -1981,11 +1989,7 @@ pub async fn bas_vs_web_from_history(
     let Some(ts_col) = pick_ts_col(&cols) else {
         return Ok(None);
     };
-    let Some(bas) = (if cols.contains("oa_t") {
-        Some("oa_t")
-    } else {
-        None
-    }) else {
+    let Some(bas) = bas_oat_col(&cols) else {
         return Ok(None);
     };
     let web_col = web_oat_col(&cols);
@@ -3721,6 +3725,64 @@ mod tests {
         assert!(env.points[0].get("oat_f").is_some());
         assert!(env.points[0].get("y_f").is_some());
         assert_eq!(env.engine, DF_ENGINE);
+    }
+
+    #[test]
+    fn bas_oat_col_accepts_mqtt_outside_air_temperature() {
+        let mut cols = HashSet::new();
+        cols.insert("outside_air_temperature".into());
+        cols.insert("zone_t".into());
+        assert_eq!(bas_oat_col(&cols), Some("outside_air_temperature"));
+        cols.insert("oa_t".into());
+        assert_eq!(bas_oat_col(&cols), Some("oa_t"));
+    }
+
+    #[tokio::test]
+    async fn bas_vs_web_mqtt_outside_air_weather_split() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("bldg2_mqtt_oat");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+
+        let zone = building.join("bldg2-zone-loopback");
+        std::fs::create_dir_all(&zone).unwrap();
+        std::fs::write(
+            zone.join("columns.csv"),
+            "col,point_role\noutside_air_temperature,outside_air_temperature\nzone_t,zone_t\n",
+        )
+        .unwrap();
+        let mut zf = std::fs::File::create(zone.join("history_wide.csv")).unwrap();
+        writeln!(zf, "timestamp_utc,outside_air_temperature,zone_t").unwrap();
+        writeln!(zf, "2026-09-07T00:00:00Z,70,72").unwrap();
+        writeln!(zf, "2026-09-07T00:05:00Z,71,72").unwrap();
+        writeln!(zf, "2026-09-07T00:10:00Z,72,73").unwrap();
+
+        let wx = building.join("hosted-weather");
+        std::fs::create_dir_all(&wx).unwrap();
+        std::fs::write(
+            wx.join("columns.csv"),
+            "col,point_role\noutside_air_temperature,outside_air_temperature\n",
+        )
+        .unwrap();
+        let mut wf = std::fs::File::create(wx.join("history_wide.csv")).unwrap();
+        writeln!(wf, "timestamp_utc,outside_air_temperature").unwrap();
+        writeln!(wf, "2026-09-07T00:00:00Z,68").unwrap();
+        writeln!(wf, "2026-09-07T00:05:00Z,69").unwrap();
+        writeln!(wf, "2026-09-07T00:10:00Z,70").unwrap();
+
+        let parquet = tmp.path().join("parquet_mqtt_oat");
+        fdd_store::ingest_building(tmp.path(), "bldg2_mqtt_oat", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = bas_vs_web_from_history(None, 500, Some("bldg2_mqtt_oat"))
+            .await
+            .unwrap()
+            .expect("MQTT outside_air_temperature weather-split should yield points");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(!env.points.is_empty());
+        assert!(env.rows.iter().any(|r| r["kind"] == "delta_hist"));
     }
 
     #[tokio::test]
