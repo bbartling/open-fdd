@@ -116,7 +116,7 @@ describe("mappingApi", () => {
       ],
     });
     const body = JSON.parse(json);
-    expect(body.schema).toBe("openfdd_mapping_manifest_v1");
+    expect(body.schema).toBe("openfdd_data_model_v1");
     expect(body.equipment[0].parent_ahu).toBe("AHU_1");
   });
 });

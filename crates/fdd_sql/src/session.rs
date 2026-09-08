@@ -52,9 +52,13 @@ pub async fn register_utility_if_present(ctx: &SessionContext, building_id: &str
         // DataFusion product sessions do not ship the SQL `read_csv` table
         // function — use the typed register_csv API (Wave I lakeside-read-csv).
         let path_str = path.to_string_lossy().replace('\\', "/");
-        ctx.register_csv(table, path_str.as_str(), CsvReadOptions::new().has_header(true))
-            .await
-            .with_context(|| format!("register_csv {table} from {path_str}"))?;
+        ctx.register_csv(
+            table,
+            path_str.as_str(),
+            CsvReadOptions::new().has_header(true),
+        )
+        .await
+        .with_context(|| format!("register_csv {table} from {path_str}"))?;
         Ok(ctx.table(table).await.is_ok())
     }
 
@@ -307,7 +311,6 @@ fn format_cell(col: &datafusion::arrow::array::ArrayRef, idx: usize) -> serde_js
         }
     }
 }
-
 
 #[cfg(test)]
 mod utility_csv_tests {
