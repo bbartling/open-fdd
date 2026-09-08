@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-09-08 — Wave J master planned (DF-boundary + #875)
+
+- Cursor master: `wave_j_df_boundary_master` — J0 land #874 → J1 Stage A → J2 #875 FC3/VAV-2 → J3/J5 CI+image → J4 Stage B → J6 soak → optional J7 #782 → J8 ONE stress.
+- Wave I master **RETIRED**. #782 remains sequential J7 only.
+- Multivendor Stage C deferred after Wave J.
+
 ## 2026-09-08 — Wave I CLOSED (3.3.40 / sha-d1312b0)
 
 - Product **#872** (`d1312b0c`): Lakeside `register_csv`, Overview unfiltered chrome, Data Model JSON export, Inspect span-preserve, MQTT dual OAT catalog, stress gate 09.

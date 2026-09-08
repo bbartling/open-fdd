@@ -104,7 +104,7 @@ retest. Do not confuse those with this engineering OS.
 57. **MQTT dual OAT:** Live fieldbus Open-Meteo must publish into historian as concurrent BAS `oa_t` + web `web_oa_t` (catalog dual-publish on railway loopback). Empty `bas-vs-web-oat` on bldg2 while `/weather` is live is a **P0 MEGA**, not DEFERRED demo fluff.
 58. **Wave I stress:** Mid-wave = smoke only. **ONE** `run_railway_hub_stress.sh` at master I7 after enhanced gates (I6). No duplicate full stresses between children unless a mega cannot be proven without a new tip pin.
 
-**Current ops pin (2026-09-08):** VERSION **3.3.40** · tip **`sha-d1312b0`** · health **`3.3.40+d1312b0ccb07`** · Wave I **CLOSED**. **Wave J OPEN** (DF boundary repair/qualify — Stage A next). #782 SSE deferred sequential (not parallel w/ Wave J). Low-RAM always (rule 0).
+**Current ops pin (2026-09-08):** VERSION **3.3.40** · tip **`sha-d1312b0`** · health **`3.3.40+d1312b0ccb07`** · Wave I **CLOSED**. **Wave J OPEN** — master [`wave_j_df_boundary_master`](../../.cursor/plans/wave_j_df_boundary_master.plan.md) (DF-boundary + #875; #782=J7 sequential). #782 SSE deferred sequential (not parallel w/ Wave J). Low-RAM always (rule 0).
 
 ---
 
