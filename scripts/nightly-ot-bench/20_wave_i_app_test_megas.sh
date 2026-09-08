@@ -76,36 +76,36 @@ else
   record bas_vs_web_bldg2 0 "points=0"
 fi
 
-# 5) B100 inspect — plotted span vs coverage (even downsample)
-body="$(cpost /api/analytics/inspect '{"building_id":"BUILDING_100","max_points":2000}')"
+# 5) B100 inspect — span-preserving downsample (equipment_id required; AHU_1).
+# Require multi-month plot span so ORDER BY…LIMIT July-only truncation fails the gate.
+# (coverage first/last currently mirror plotted points — do not treat them as historian truth.)
+body="$(cpost /api/analytics/inspect '{"building_id":"BUILDING_100","equipment_ids":["AHU_1"],"max_points":2000}')"
 echo "$body" >"$ART/wave_i_inspect_b100.json"
-span_ok="$(echo "$body" | python3 -c '
+eval "$(echo "$body" | python3 -c '
 import json,sys
 from datetime import datetime
 a=(json.load(sys.stdin).get("analytics") or {})
-cov=a.get("coverage") or {}
 pts=a.get("points") or []
 def parse(s):
   if not s: return None
   s=str(s).replace("Z","+00:00")
   try: return datetime.fromisoformat(s)
   except Exception: return None
-cf,cl=parse(cov.get("first_timestamp")),parse(cov.get("last_timestamp"))
-if not pts or not cf or not cl:
-  print(0); raise SystemExit
 ts=[parse(p.get("timestamp_utc")) for p in pts]
 ts=[t for t in ts if t]
 if len(ts)<2:
-  print(0); raise SystemExit
-pf,pl=min(ts),max(ts)
-cov_days=(cl-cf).total_seconds()/86400.0
-plot_days=(pl-pf).total_seconds()/86400.0
-print(1 if cov_days < 14 or plot_days >= 0.5 * cov_days else 0)
+  print("span_ok=0")
+  print("plot_detail=points=0")
+  raise SystemExit
+days=(max(ts)-min(ts)).total_seconds()/86400.0
+# BUILDING_100 package spans ~Mar–Jul; July-only truncation is ~<=35d.
+print(f"span_ok={1 if days >= 60.0 else 0}")
+print(f"plot_detail=points={len(ts)}_plot_days={days:.1f}")
 ')"
 if [[ "${span_ok:-0}" == "1" ]]; then
-  record b100_plot_span 1 "ok"
+  record b100_plot_span 1 "${plot_detail:-ok}"
 else
-  record b100_plot_span 0 "plot span << coverage"
+  record b100_plot_span 0 "${plot_detail:-plot span too short}"
 fi
 
 jq -n --argjson fail "$FAIL" '{gate:"20_wave_i_app_test_megas", fail:$fail}' \
