@@ -1,11 +1,25 @@
 # Session log
 
+## 2026-09-08 — Wave I implementation started (3.3.40)
+
+- Product: utility `register_csv` (no SQL `read_csv`); Overview devices chrome padded; Weather section always shown; Data Model historian mapping + Export JSON; Inspect/bas-vs-web span-preserving downsample; fieldbus dual OAT catalog; stress gate `20_wave_i_app_test_megas` / required `09_wave_i_app_test_megas`.
+- VERSION **3.3.40**. Docs/spec Wave I MEGAs already in BUG_REPORT + rules 55–58.
+- Closeout: tip Publish → Railway re-pin + fieldbus → ONE `run_railway_hub_stress.sh`.
+
+## 2026-09-08 — Wave I master planned (app-test MEGAs / basic app)
+
+- Master Cursor: `wave_i_app_test_mega_master` — order I1 Lakeside `read_csv` → I2 Overview tables unfiltered → I3 Data Model JSON export → I4 B100 full span → I5 MQTT dual OAT → I6 stress gates → **I7 ONE full stress**.
+- Basic app MEGAs are **non-negotiable** (rules 55–58): SPA+API prove required; stress alone insufficient.
+- BUG_REPORT OPEN MEGAs: `lakeside-read-csv-missing`, `overview-tables-unfiltered`, `data-model-json-export`, `plot-default-full-span-b100`, `weather-local-vs-web-bldg2`, `mqtt-bldg2-plot-surface`, `wave-i-stress-gates`.
+- #782 SSE deferred after Wave I. Tip remains `sha-2e136b4` / 3.3.39 until product PRs start.
+- Product coding HOLD until operator unlocks.
+
 ## 2026-09-08 — Wave H CLOSED (3.3.39 / sha-4a10056)
 
 - Product **#868** (RCx ZONE/LOOPBACK) + **#869** (bas OAT alias + Overview auto-fresh).
 - Workspace `Cargo.toml` version sync fix (VERSION was 3.3.39 while workspace stayed 3.3.38 → Rust Stack CI fail).
 - Railway pin `3.3.39+4a100567dc2b` · tip `sha-4a10056` · stress `reports/nightly-ot-bench_20260908T021007Z/` **fully_qualified=true**.
-- H5 bldg2 local-vs-web OAT **DEFERRED** (no concurrent non-null OAT streams on railway loopback catalog).
+- H5 bldg2 local-vs-web OAT was DEFERRED → **promoted OPEN MEGA** under Wave I.
 - MQTT fieldbus stay-up on tip until next intentional re-pin.
 
 ## 2026-09-08 — Wave H 3.3.39 (H5 MQTT OAT + H6b Overview auto-fresh)

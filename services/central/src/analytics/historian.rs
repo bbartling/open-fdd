@@ -2015,16 +2015,29 @@ web_by_ts AS (
   FROM history
   WHERE {web} IS NOT NULL
   GROUP BY {ts_col}
+),
+joined AS (
+  SELECT
+    CAST(b.ts AS VARCHAR) AS timestamp_utc,
+    'site' AS equipment_id,
+    b.bas_oat_f,
+    w.web_oat_f,
+    (b.bas_oat_f - w.web_oat_f) AS delta_f,
+    ROW_NUMBER() OVER (ORDER BY b.ts) AS _rn,
+    COUNT(*) OVER () AS _cnt
+  FROM bas_by_ts b
+  INNER JOIN web_by_ts w ON b.ts = w.ts
 )
-SELECT
-  CAST(b.ts AS VARCHAR) AS timestamp_utc,
-  'site' AS equipment_id,
-  b.bas_oat_f,
-  w.web_oat_f,
-  (b.bas_oat_f - w.web_oat_f) AS delta_f
-FROM bas_by_ts b
-INNER JOIN web_by_ts w ON b.ts = w.ts
-ORDER BY b.ts
+SELECT timestamp_utc, equipment_id, bas_oat_f, web_oat_f, delta_f
+FROM joined
+WHERE _rn = 1
+   OR _rn = _cnt
+   OR (_rn % (CASE
+        WHEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT) > 1
+        THEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT)
+        ELSE 1
+      END)) = 0
+ORDER BY timestamp_utc
 LIMIT {limit}
 "#
             ),
@@ -2047,16 +2060,29 @@ web_by_ts AS (
   WHERE {bas} IS NOT NULL
     AND UPPER(CAST(equipment_id AS VARCHAR)) LIKE '%WEATHER%'
   GROUP BY {ts_col}
+),
+joined AS (
+  SELECT
+    CAST(b.ts AS VARCHAR) AS timestamp_utc,
+    'site' AS equipment_id,
+    b.bas_oat_f,
+    w.web_oat_f,
+    (b.bas_oat_f - w.web_oat_f) AS delta_f,
+    ROW_NUMBER() OVER (ORDER BY b.ts) AS _rn,
+    COUNT(*) OVER () AS _cnt
+  FROM bas_by_ts b
+  INNER JOIN web_by_ts w ON b.ts = w.ts
 )
-SELECT
-  CAST(b.ts AS VARCHAR) AS timestamp_utc,
-  'site' AS equipment_id,
-  b.bas_oat_f,
-  w.web_oat_f,
-  (b.bas_oat_f - w.web_oat_f) AS delta_f
-FROM bas_by_ts b
-INNER JOIN web_by_ts w ON b.ts = w.ts
-ORDER BY b.ts
+SELECT timestamp_utc, equipment_id, bas_oat_f, web_oat_f, delta_f
+FROM joined
+WHERE _rn = 1
+   OR _rn = _cnt
+   OR (_rn % (CASE
+        WHEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT) > 1
+        THEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT)
+        ELSE 1
+      END)) = 0
+ORDER BY timestamp_utc
 LIMIT {limit}
 "#
             ),
@@ -2217,14 +2243,28 @@ pub async fn inspect_from_history(
         .collect::<Vec<_>>()
         .join(", ");
     let eq_lit = eq.replace('\'', "''");
+    // Span-preserving downsample (Wave I plot-default-full-span): keep first/last
+    // + evenly spaced rows across full coverage — not ORDER BY … LIMIT prefix.
     let sql = format!(
         r#"
-SELECT
-  CAST({ts_col} AS VARCHAR) AS timestamp_utc,
-  {proj}
-FROM history
-WHERE equipment_id = '{eq_lit}'
-ORDER BY {ts_col}
+SELECT timestamp_utc, {proj}
+FROM (
+  SELECT
+    CAST({ts_col} AS VARCHAR) AS timestamp_utc,
+    {proj},
+    ROW_NUMBER() OVER (ORDER BY {ts_col}) AS _rn,
+    COUNT(*) OVER () AS _cnt
+  FROM history
+  WHERE equipment_id = '{eq_lit}'
+)
+WHERE _rn = 1
+   OR _rn = _cnt
+   OR (_rn % (CASE
+        WHEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT) > 1
+        THEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT)
+        ELSE 1
+      END)) = 0
+ORDER BY timestamp_utc
 LIMIT {limit}
 "#
     );

@@ -1298,11 +1298,8 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
     let data_root = workspace_dir().join("data").join("csv_buildings");
     let building_root = data_root.join(&building_id);
     if !building_root.is_dir() {
-        return json!({
-            "ok": false,
-            "error": format!("building {building_id:?} not found under {}", data_root.display()),
-            "hint": "upload an openfdd_package_v1 zip first",
-        });
+        // MQTT / historian-only sites (e.g. bldg2) have no csv_buildings tree.
+        return mapping_from_historian_equipment(&building_id, equipment_id);
     }
 
     let all_ids = list_equipment_ids(&building_root);
@@ -1451,6 +1448,98 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
             "blocker_count": blocker_count,
             "warning_count": warning_count,
             "equipment_count": equipment.len(),
+        },
+    })
+}
+
+/// Historian-only / MQTT data model for Data Model export when no csv_buildings tree.
+fn mapping_from_historian_equipment(building_id: &str, equipment_id: Option<&str>) -> Value {
+    let inv = crate::fdd::registry_api::equipment_response(Some(building_id));
+    let mut all: Vec<Value> = inv
+        .get("equipment")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if all.is_empty() {
+        return json!({
+            "ok": false,
+            "error": format!(
+                "building {building_id:?} not found under csv_buildings and no historian equipment"
+            ),
+            "hint": "upload an openfdd_package_v1 zip or wait for MQTT ingest",
+            "building_id": building_id,
+        });
+    }
+    if let Some(eq) = equipment_id.map(str::trim).filter(|s| !s.is_empty()) {
+        match validate_id(eq) {
+            Ok(id) => {
+                all.retain(|row| {
+                    row.get("equipment_id").and_then(Value::as_str) == Some(id.as_str())
+                });
+                if all.is_empty() {
+                    return json!({
+                        "ok": false,
+                        "error": format!("equipment {id:?} not found under historian building {building_id}"),
+                        "building_id": building_id,
+                    });
+                }
+            }
+            Err(e) => return json!({"ok": false, "error": format!("equipment_id: {e}")}),
+        }
+    }
+    let session = crate::fdd::session_config::get_session_config();
+    let unit_system = session
+        .get("config")
+        .and_then(|c| c.get("unit_system"))
+        .cloned()
+        .unwrap_or(json!("imperial"));
+    let session_role_map = session
+        .get("config")
+        .and_then(|c| c.get("role_map"))
+        .cloned()
+        .unwrap_or(json!({}));
+    let equipment: Vec<Value> = all
+        .into_iter()
+        .map(|row| {
+            let eq_id = row
+                .get("equipment_id")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+                .to_string();
+            let eq_type = row
+                .get("equipment_type")
+                .cloned()
+                .unwrap_or(json!("GENERAL"));
+            json!({
+                "equipment_id": eq_id,
+                "equipment_type": eq_type,
+                "parent_ahu": Value::Null,
+                "ok": true,
+                "columns": [],
+                "roles": {},
+                "unmapped_columns": [],
+                "ambiguous_roles": {},
+                "blockers": [],
+                "warnings": [
+                    "MQTT/historian data model — no columns.csv; roles empty until mapped"
+                ],
+                "sampling": Value::Null,
+            })
+        })
+        .collect();
+    let n = equipment.len();
+    json!({
+        "ok": true,
+        "building_id": building_id,
+        "unit_system": unit_system,
+        "equipment_ids": equipment.iter().filter_map(|e| e.get("equipment_id").and_then(Value::as_str).map(str::to_string)).collect::<Vec<_>>(),
+        "equipment": equipment,
+        "session_role_map": session_role_map,
+        "warnings": ["historian-backed mapping (no csv_buildings package tree)"],
+        "validation": {
+            "blocker_count": 0,
+            "warning_count": n,
+            "equipment_count": n,
         },
     })
 }

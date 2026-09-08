@@ -49,13 +49,12 @@ pub async fn register_utility_if_present(ctx: &SessionContext, building_id: &str
         if !path.is_file() {
             return Ok(false);
         }
+        // DataFusion product sessions do not ship the SQL `read_csv` table
+        // function — use the typed register_csv API (Wave I lakeside-read-csv).
         let path_str = path.to_string_lossy().replace('\\', "/");
-        let sql = format!(
-            "CREATE OR REPLACE VIEW {table} AS \
-             SELECT * FROM read_csv('{path_str}', header=true)"
-        );
-        let df = ctx.sql(&sql).await?;
-        let _ = df.collect().await;
+        ctx.register_csv(table, path_str.as_str(), CsvReadOptions::new().has_header(true))
+            .await
+            .with_context(|| format!("register_csv {table} from {path_str}"))?;
         Ok(ctx.table(table).await.is_ok())
     }
 
@@ -306,5 +305,31 @@ fn format_cell(col: &datafusion::arrow::array::ArrayRef, idx: usize) -> serde_js
             // Last resort: avoid Arrow Debug dumps (e.g. PrimitiveArray<…>) in JSON.
             serde_json::Value::Null
         }
+    }
+}
+
+
+#[cfg(test)]
+mod utility_csv_tests {
+    use super::*;
+    use std::io::Write;
+
+    #[tokio::test]
+    async fn register_utility_csv_without_read_csv_sql() {
+        let tmp = tempfile::tempdir().unwrap();
+        let util = tmp
+            .path()
+            .join("data/csv_buildings/TEST_BLDG/utilities/electric");
+        std::fs::create_dir_all(&util).unwrap();
+        let mut f = std::fs::File::create(util.join("monthly_bills.csv")).unwrap();
+        writeln!(f, "account,billing_period,kwh,demand_kw").unwrap();
+        writeln!(f, "a1,2026-01,100,10").unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", tmp.path());
+        let ctx = SessionContext::new();
+        let ok = register_utility_if_present(&ctx, "TEST_BLDG")
+            .await
+            .expect("register utility");
+        assert!(ok);
+        assert!(ctx.table("utility_monthly").await.is_ok());
     }
 }
