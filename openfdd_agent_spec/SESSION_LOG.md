@@ -6,7 +6,8 @@
 - Harness **#873** (`935e71de`): B100 gate requires `AHU_1` + plot span ≥60d (scripts-only; no re-pin).
 - Railway pin `3.3.40+d1312b0ccb07` · backup `20260908T171523Z` · fieldbus `sha-d1312b0`.
 - Stress `reports/nightly-ot-bench_20260908T182149Z/` **fully_qualified=true** (gates 00–09).
-- #782 MQTT monitor SSE remains **deferred** (plan `mqtt_monitor_sse_782`).
+- #782 MQTT monitor SSE remains **deferred** (plan `mqtt_monitor_sse_782`) — **not** parallel with Wave J DF-boundary coding.
+- Next **OPEN** program: Wave J `df-boundary-repair` (Rust/DataFusion boundary + qualification) — Stage A docs/guards first.
 
 ## 2026-09-08 — Wave I implementation started (3.3.40)
 
