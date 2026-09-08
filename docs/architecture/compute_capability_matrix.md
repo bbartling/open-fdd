@@ -11,3 +11,7 @@ Machine-readable companion: evidence for J4/J6. Not a pass/fail gate by itself.
 | PyPI cookbook | `open_fdd.rules` | pandas | External oracle only |
 
 **J4 triage (tip sample):** no product Python in central/web images found in Stage A inventory → prefer waive with evidence unless J5 image smoke finds otherwise.
+
+## J4 Stage B waive (2026-09-08)
+
+Tip inventory (`compute_boundary_ownership.yaml`) found **no** product Python runtime in central/web/mqtt/fieldbus sources or compose. Production analytics callers use `/api/analytics/*` (Rust). **Waive Stage B migration** — no product rewrite. Revisit only if J5 tip-image smoke finds a Python footprint.
