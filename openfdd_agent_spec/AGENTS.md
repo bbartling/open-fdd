@@ -100,7 +100,7 @@ retest. Do not confuse those with this engineering OS.
 53. **MQTT = CSV data model:** MQTTS historian paths use the same `history/building_id=<site>/…` shape as packages. Inspect must pick MQTT equipment (not CSV-only). Roles normalize to columns (`zone_t`, etc.). RCx/FDD plots share the CSV codepath.
 54. **Keep this spec current:** any PR that changes demo freshness, site catalog scoping, Inspect/MQTT plots, or Railway closeout workflow updates this file + [`SESSION_LOG.md`](SESSION_LOG.md) in the same train (H0 or the product PR).
 
-**Current ops pin (2026-09-08):** VERSION **3.3.39** · tip **`sha-4a10056`** · Wave H **CLOSED** (stress `nightly-ot-bench_20260908T021007Z` fully_qualified). Residual: **weather-local-vs-web-bldg2** DEFERRED. Low-RAM always (rule 0).
+**Current ops pin (2026-09-08):** VERSION **3.3.39** · tip **`sha-2e136b4`** · Wave H **CLOSED** (stress `nightly-ot-bench_20260908T021007Z` fully_qualified). Residual: **weather-local-vs-web-bldg2** DEFERRED. Low-RAM always (rule 0).
 
 ---
 
