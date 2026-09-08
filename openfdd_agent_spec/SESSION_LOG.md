@@ -1,5 +1,13 @@
 # Session log
 
+## 2026-09-08 — Wave I CLOSED (3.3.40 / sha-d1312b0)
+
+- Product **#872** (`d1312b0c`): Lakeside `register_csv`, Overview unfiltered chrome, Data Model JSON export, Inspect span-preserve, MQTT dual OAT catalog, stress gate 09.
+- Harness **#873** (`935e71de`): B100 gate requires `AHU_1` + plot span ≥60d (scripts-only; no re-pin).
+- Railway pin `3.3.40+d1312b0ccb07` · backup `20260908T171523Z` · fieldbus `sha-d1312b0`.
+- Stress `reports/nightly-ot-bench_20260908T182149Z/` **fully_qualified=true** (gates 00–09).
+- #782 MQTT monitor SSE remains **deferred** (plan `mqtt_monitor_sse_782`).
+
 ## 2026-09-08 — Wave I implementation started (3.3.40)
 
 - Product: utility `register_csv` (no SQL `read_csv`); Overview devices chrome padded; Weather section always shown; Data Model historian mapping + Export JSON; Inspect/bas-vs-web span-preserving downsample; fieldbus dual OAT catalog; stress gate `20_wave_i_app_test_megas` / required `09_wave_i_app_test_megas`.

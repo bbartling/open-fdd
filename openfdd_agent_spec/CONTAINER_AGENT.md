@@ -113,7 +113,7 @@ required for health, FDD, or Overview analytics.
 ## Ops patch cycle (Railway hub + qualification — 3.3.20+)
 
 Living log: [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).  
-Active program: Wave I app-test MEGAs / basic functionality — Cursor `wave_i_app_test_mega_master` (agent rules **55–58**; **ONE full stress at I7**).  
+Active program: Wave I **CLOSED** on `sha-d1312b0` / 3.3.40 (agent rules **55–58** remain law). Next optional: #782 MQTT monitor SSE (`mqtt_monitor_sse_782`).  
 Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · entry [`scripts/qualification/README.md`](../scripts/qualification/README.md).
 
 | Step | Action |
