@@ -1,5 +1,13 @@
 # Session log
 
+## 2026-09-08 — Wave H CLOSED (3.3.39 / sha-4a10056)
+
+- Product **#868** (RCx ZONE/LOOPBACK) + **#869** (bas OAT alias + Overview auto-fresh).
+- Workspace `Cargo.toml` version sync fix (VERSION was 3.3.39 while workspace stayed 3.3.38 → Rust Stack CI fail).
+- Railway pin `3.3.39+4a100567dc2b` · tip `sha-4a10056` · stress `reports/nightly-ot-bench_20260908T021007Z/` **fully_qualified=true**.
+- H5 bldg2 local-vs-web OAT **DEFERRED** (no concurrent non-null OAT streams on railway loopback catalog).
+- MQTT fieldbus stay-up on tip until next intentional re-pin.
+
 ## 2026-09-08 — Wave H 3.3.39 (H5 MQTT OAT + H6b Overview auto-fresh)
 
 - `bas_vs_web` accepts MQTT raw `outside_air_temperature` as BAS OAT; weather-split via `%WEATHER%` equipment ids.
