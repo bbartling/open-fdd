@@ -125,9 +125,13 @@ def assert_runtime(base: str, token: str, building: str, checks: list[dict]) -> 
     engine = str(env.get("engine") or "")
     qv = str(env.get("query_version") or "")
     rows = list(env.get("rows") or env.get("equipment") or [])
+    # Wave J: engine label alone is insufficient — require non-empty query_version
+    # and an honest DF / central-analytics engine (no label-only shortcut).
+    engine_l = engine.lower()
+    honest = ("datafusion" in engine_l) or ("central-analytics" in engine_l)
     check(
         "runtime_envelope",
-        bool(env) and ("datafusion" in engine.lower() or qv.startswith("runtime")),
+        bool(env) and honest and bool(qv),
         f"engine={engine!r} query_version={qv!r} n_rows={len(rows)}",
         checks,
     )
@@ -202,9 +206,12 @@ def assert_mech_cooling(
     engine = str(env.get("engine") or "")
     rows = list(env.get("rows") or env.get("equipment") or [])
     oat_bins = [r for r in rows if str(r.get("kind") or "") == "oat_bin"]
+    # Wave J: OAT-bin presence alone is not provenance — require honest engine.
+    engine_l = engine.lower()
+    honest = ("datafusion" in engine_l) or ("central-analytics" in engine_l)
     check(
         "mech_envelope",
-        bool(env) and ("datafusion" in engine.lower() or len(oat_bins) > 0),
+        bool(env) and honest and len(oat_bins) >= 1,
         f"engine={engine!r} n_oat_bins={len(oat_bins)}",
         checks,
     )
