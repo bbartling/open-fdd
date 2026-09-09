@@ -113,7 +113,7 @@ required for health, FDD, or Overview analytics.
 ## Ops patch cycle (Railway hub + qualification — 3.3.20+)
 
 Living log: [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).  
-Active program: Wave I **CLOSED** on `sha-d1312b0` / 3.3.40. **Wave J OPEN** — Cursor `wave_j_df_boundary_master` (DF-boundary + #875; #782 = J7 sequential only).  
+Active program: Wave J **CLOSED** on `sha-c1b1aa5` / 3.3.41. #782 SSE deferred. Multivendor Stage C deferred.
 Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · entry [`scripts/qualification/README.md`](../scripts/qualification/README.md).
 
 | Step | Action |
