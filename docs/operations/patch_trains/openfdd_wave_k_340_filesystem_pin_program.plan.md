@@ -91,6 +91,18 @@ Add/require gate in `run_railway_hub_stress.sh` (keep Wave I gate 09). **#782** 
 - Multivendor MFA Stage C product (scaffolded in ADR only)
 - PARKED anomaly / ABANDONED hybrid / mass Dependabot
 
+## Parallel agent lab (does **not** block 3.4.0)
+
+**Typst RCx lab report (VAV AHU)** — engineer screening PDF from live DataFusion
+Overview / RCx / FDD series (UI Plotly palette, Overview tables, per-AHU **FC1** +
+**ECON-*** / **AHU-SATDEV** with `confirmed_fault` overlay). Skill:
+[`openfdd_agent_spec/skills/openfdd-typst-rcx-report/SKILL.md`](../../../openfdd_agent_spec/skills/openfdd-typst-rcx-report/SKILL.md).
+Not `rust-text-pdf`; never blocks K7.
+
+**OPEN plot-span debt (ship in tip):** BUG_REPORT `fdd-series-recent-only`,
+`econ-points-prefix-limit`, `rcx-oat-scatter-cap` — patches on working tree in
+`edge/src/fdd/registry_api.rs` + `services/central/src/analytics/historian.rs`.
+
 ## Order
 
 ```mermaid

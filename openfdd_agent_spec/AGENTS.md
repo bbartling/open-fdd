@@ -150,6 +150,7 @@ Nested instructions may specialize but never contradict a higher authority.
 | [`openfdd-railway-cli`](skills/openfdd-railway-cli/SKILL.md) | Railway CLI auth / tip re-pin |
 | [`openfdd-stress-closeout`](skills/openfdd-stress-closeout/SKILL.md) | Stress LAST / Railway CSV + ZAP / BUG_REPORT |
 | [`openfdd-ecm-engineering`](skills/openfdd-ecm-engineering/SKILL.md) | ECM math library |
+| [`openfdd-typst-rcx-report`](skills/openfdd-typst-rcx-report/SKILL.md) | VAV AHU Typst RCx lab PDF (Overview + FC1/ECON overlays) |
 | [`openfdd-milestone-a-pr`](skills/openfdd-milestone-a-pr/SKILL.md) | Milestone A PR loop |
 | [`data-modeling`](skills/data-modeling/SKILL.md) | Package layout, utilities/, equipType, export bundle |
 
