@@ -2,15 +2,16 @@
 
 **Date:** 2026-09-09 (Wave J **CLOSED** — DF-boundary + cookbook parity)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in Open-FDD stress)  
-**Tip / pin (3.3.41):** `c1b1aa52` · VERSION **3.3.41** · health **`3.3.41+c1b1aa52806b`** · GHCR **central/web/mqtt/fieldbus `sha-c1b1aa5`**  
-**Last CLOSED tip:** `c1b1aa52` · **`sha-c1b1aa5`** · **`3.3.41+c1b1aa52806b`** · product **#877** · CI/gates **#878** · docs Stage A **#876**  
+**Tip / pin (ops):** `cee2f4ec` · VERSION **3.3.41** (K5 → 3.4.0 next) · health **`3.3.41+cee2f4ec6c65`** · GHCR **central/web/mqtt/fieldbus `sha-cee2f4e`**  
+**Last CLOSED tip (Wave J):** `c1b1aa52` · **`sha-c1b1aa5`** · **`3.3.41+c1b1aa52806b`** · product **#877** · CI/gates **#878** · docs Stage A **#876**  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Dual-publish AV `9101`: `bldg2-zone-loopback` **`zone_t`+`oa_t`**, `hosted-weather` **`web_oa_t`**.  
-**Backup:** `~/openfdd-backups/railway/20260909T135419Z/` (pre–K1 tip re-pin; prior Wave J: `20260909T002816Z/`)  
+**Backup:** `~/openfdd-backups/railway/20260909T203549Z/` (pre–K1b plot-span tip re-pin; prior `20260909T194731Z/` / Wave J `20260909T002816Z/`)  
 **Program (CLOSED):** Wave J — Cursor [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) · ownership inventory + #875 FC3/VAV-2 + policy/image Python-absence + soak provenance  
 **Program (prior CLOSED):** Wave I — Cursor [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) · tip `sha-d1312b0` / 3.3.40  
 **Stress (Wave J closeout):** `reports/nightly-ot-bench_20260909T010712Z/` · **`fully_qualified=true`** (gates 00–09 incl. ZAP + MCP + Wave I MEGAs)  
 **Deferred (not Wave J):** [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — Cursor [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) (optional Wave K K4)  
-**K1:** MEGAs **#884 MERGED** (`5aed663c`) — tip Publish in progress for `sha-5aed663`; Railway still on `sha-c1b1aa5` until re-pin. Docs K2/K3 → **#885**.
+**K1:** MEGAs **#884 MERGED** (`5aed663c`) — hub lived on `sha-5aed663` until K1b. Docs K2/K3 → **#885**.  
+**K1b:** Plot-span **#886 MERGED** (`cee2f4ec`) — GHCR tip **PASS** · Railway hub+fieldbus re-pin **`sha-cee2f4e`** · smoke 2026-09-09T20:42Z (FC1 series = Inspect Mar→Jul; econ points Mar→Jul; OAT scatter max_points 20k)  
 **Program (ACTIVE):** Wave K — **3.4.0 filesystem-historian pin** · Cursor [`wave_k_340_filesystem_pin_master`](../../../.cursor/plans/wave_k_340_filesystem_pin_master.plan.md) · repo [`openfdd_wave_k_340_filesystem_pin_program.plan.md`](patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md) · MEGAs + stress gates + Phase-0 multi-client ADR  
 **Next mega (AFTER 3.4.0 pin):** Wave L — **multi-client shared hosting 3.5.x** (tenant-partitioned Parquet + control plane; **not** Postgres time-series) · Cursor [`wave_l_shared_db_mega_master`](../../../.cursor/plans/wave_l_shared_db_mega_master.plan.md) · repo [`openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md)  
 **Wait filler:** Vibe13 Part B (separate repo) during Open-FDD CI/Publish  
@@ -20,12 +21,12 @@
 
 | ID | Status | Symptom | Evidence | Next |
 |----|--------|---------|----------|------|
-| **sensor-faults-matrix** | **OPEN** (Wave K) | Lakeside Overview Sensor faults empty (`matched_equipment_count=0`) while HP sensors exist; only FC1 FDD rows, no SV-* | Probe 2026-09-09: `sensor-faults` matched=0; `hp-health` matched=67; FDD results SV=0 | K1 — historian equipment discovery + matrix rows; stress gate |
-| **mqtt-bacnet-quad-points** | **OPEN** (Wave K) | Dual-publish AV 9101 collapses to one role (delta id omits `point_name`); zone_t stopped ~Sep 8; humidity missing; need zone_t+oa_t+humidity+web_oa_t | Inspect: Sep5–7 `zone_t` only; Sep9 `oa_t` only; never both on same row | K1 — fieldbus delta id + catalog 9102; Railway CLI re-pin fieldbus; stress gate |
-| **data-model-all-sites** | **OPEN** (Wave K) | MQTT mapping warns roles empty (no columns.csv); wrong-site equipment → not found; Data Model ≠ Haystack browse | `mapping?building_id=bldg2` columns=[]; cross-site eq fails closed poorly in UI | K1 — historian Parquet roles + Mapping UX; stress gate |
-| **fdd-series-recent-only** | **OPEN** (Wave K) | `GET /api/fdd/series` uses `ORDER BY timestamp DESC LIMIT 5000` → FC1/ECON/SATDEV Plots & lab PDF fault lane only cover ~last 2 weeks, not full Mar→Jul historian | Probe 2026-09-09 BUILDING_100: series span `2026-06-30→07-17`; Inspect span-preserving `2026-03-16→07-17` | Patch `edge/src/fdd/registry_api.rs` span-preserving 8k downsample (working tree); tip Publish → re-pin → smoke; stress: B100 FC1 series first_ts ≈ mapping first_ts |
-| **econ-points-prefix-limit** | **OPEN** (Wave K) | Historian economizer plot points `ORDER BY … LIMIT N` (not span-preserving) → Overview/RCx econ temps truncate early window | Probe: `economizer` points ended ~Apr 23 at max_points=8000 while history runs to Jul 17 | Patch `historian::economizer_from_history` ranked/sampled CTE (working tree); tip → smoke |
-| **rcx-oat-scatter-cap** | **OPEN** (Wave K) | `rcx_oat_scatter_from_history` clamp 12k → HW/CHW/SAT scatters miss late-season OAT | Probe: `hw_reset_scatter` ended ~Apr 26 at 12k pts | Raise clamp to 20k (working tree); tip → smoke |
+| **sensor-faults-matrix** | **OPEN** (Wave K) | Lakeside Overview Sensor faults empty (`matched_equipment_count=0`) while HP sensors exist; only FC1 FDD rows, no SV-* | Probe 2026-09-09: `sensor-faults` matched=0; `hp-health` matched=67; FDD results SV=0 | K1 product in #884 — prove on tip via stress gate 10 |
+| **mqtt-bacnet-quad-points** | **OPEN** (Wave K) | Dual-publish AV 9101 collapses to one role (delta id omits `point_name`); zone_t stopped ~Sep 8; humidity missing; need zone_t+oa_t+humidity+web_oa_t | Inspect: Sep5–7 `zone_t` only; Sep9 `oa_t` only; never both on same row | K1 product in #884 + fieldbus `sha-cee2f4e` — prove via stress gate 10 |
+| **data-model-all-sites** | **OPEN** (Wave K) | MQTT mapping warns roles empty (no columns.csv); wrong-site equipment → not found; Data Model ≠ Haystack browse | `mapping?building_id=bldg2` columns=[]; cross-site eq fails closed poorly in UI | K1 product in #884 — prove via stress gate 10 |
+| **fdd-series-recent-only** | **CLOSED** (K1b / #886 / `sha-cee2f4e`) | Was: `GET /api/fdd/series` recent-only DESC LIMIT | Smoke 2026-09-09: AHU_1 FC1 series n=7109 span `2026-03-16→07-17` matches Inspect | — |
+| **econ-points-prefix-limit** | **CLOSED** (K1b / #886 / `sha-cee2f4e`) | Was: economizer points prefix LIMIT truncated early window | Smoke: `POST /api/analytics/economizer` n=8000 span `2026-03-16→07-17` | — |
+| **rcx-oat-scatter-cap** | **CLOSED** (K1b / #886 / `sha-cee2f4e`) | Was: OAT scatter clamp 12k ended ~Apr | Smoke: `hw_reset_scatter` max_points=20000 → n=20000 (was 12k) | — |
 | **lakeside-read-csv-missing** | **CLOSED** (3.3.40 / Wave I) | Was: LAKESIDE_ES FDD `read_csv not found` | #872 `register_csv`; stress gate09 no `read_csv` | — |
 | **overview-tables-unfiltered** | **CLOSED** (3.3.40 / Wave I) | Was: MQTT Overview looked table-filtered vs CSV | #872 Overview chrome pad + Weather section always render | — |
 | **data-model-json-export** | **CLOSED** (3.3.40 / Wave I) | Was: Export JSON dead for MQTT | #872 historian mapping + Export; mapping `bldg2` equipment=2 | — |

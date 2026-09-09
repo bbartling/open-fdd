@@ -1,25 +1,28 @@
 ---
 name: Wave K 3.4.0 filesystem pin
-overview: "Wave K — pin 3.4.0 as last qualified single-tenant Parquet/DataFusion historian baseline. Fix MEGAs + stress gates. Phase-0 ADR for Wave L multi-client shared hosting (tenant-partitioned Parquet + control-plane store — NOT Postgres time-series). Low-RAM: tip Publish → Railway CLI backup/re-pin → soak → smoke between builds; ONE full stress at closeout. Log all pins/stress in BUG_REPORT."
+overview: "ACTIVE — Wave K pins 3.4.0. K1 MEGA tip live on Railway (sha-5aed663). K1b=#886 plot-span (CI in flight). K2/K3 #885 MERGED. Wave L QUEUED. ONE full stress at K6."
 todos:
   - id: k0-hygiene
-    content: K0 — GH hygiene (merge #883 or supersede; 0 PRs/stale branches; tip Actions green; ops pin sha-c1b1aa5 until product tip)
-    status: pending
+    content: K0 — GH hygiene (#883 merged)
+    status: completed
   - id: k0b-bug-report-open
-    content: K0b — BUG_REPORT Active→Wave K; OPEN rows sensor-faults / mqtt-quad / data-model; Next→Wave L multi-client hosting
-    status: pending
+    content: K0b — BUG_REPORT Active→Wave K; OPEN MEGA rows
+    status: completed
   - id: k1-megas-product
-    content: K1 — MEGAs (sensor-faults matrix, MQTT zone_t+oa_t+humidity+web_oa_t, Data Model) + stress gate script
-    status: pending
+    content: K1 — MEGAs #884 MERGED; tip+Railway sha-5aed663 DONE
+    status: completed
   - id: k1-build-loop
-    content: K1 loop — merge → GHCR tip → Railway CLI backup → hub+fieldbus re-pin → soak → smoke → BUG_REPORT
-    status: pending
+    content: K1 loop — MEGA tip re-pin DONE; plot-span tip pending #886
+    status: completed
+  - id: k1b-plot-span
+    content: K1b — #886 plot-span → green → merge → tip → Railway re-pin
+    status: in_progress
   - id: k2-historian-freeze-docs
-    content: K2 — Freeze historian contract (Parquet paths, backup/restore, volume rules; no silent format change)
-    status: pending
+    content: K2 — Historian freeze docs (#885 MERGED)
+    status: completed
   - id: k3-multitenant-adr-phase0
-    content: K3 — Wave L Phase-0 ADR + authz matrix + threat model + inventory (design only; feeds Wave L)
-    status: pending
+    content: K3 — Wave L Phase-0 ADR (#885 MERGED)
+    status: completed
   - id: k4-residual-782
     content: K4 — #782 SSE ship or PARK (never block 3.4.0)
     status: pending
@@ -27,20 +30,20 @@ todos:
     content: K5 — VERSION 3.3.41 → 3.4.0 + Cargo pins
     status: pending
   - id: k6-stress-340
-    content: K6 — Railway CLI backup+re-pin → ONE full run_railway_hub_stress.sh (no SKIP_ZAP) → fully_qualified
+    content: K6 — ONE full run_railway_hub_stress.sh (gates 00–10) → fully_qualified
     status: pending
   - id: k7-bug-report-closed
     content: K7 — BUG_REPORT 3.4.0 PINNED; unlock Wave L product coding
     status: pending
   - id: deferred-wave-l
-    content: Wave L multi-client shared hosting — AFTER 3.4.0 pin (see wave_l_shared_db_mega_master)
+    content: Wave L multi-client shared hosting — AFTER 3.4.0 pin
     status: pending
 isProject: false
 ---
 
 # Wave K — 3.4.0 filesystem-historian pin (master)
 
-**Active** after Wave J **CLOSED** (`sha-c1b1aa5` / 3.3.41 · stress `20260909T010712Z`).
+**Active.** Ops Railway hub **`sha-5aed663`** / 3.3.41. K2/K3 docs **#885 MERGED**. Next tip: **[#886](https://github.com/bbartling/open-fdd/pull/886)** plot-span. Cursor live board: `~/.cursor/plans/wave_k_340_filesystem_pin_master.plan.md`.
 
 **Why 3.4.0:** Last fully qualified **single-tenant Parquet + DataFusion** product line before Wave L **multi-client shared hosting**. Freeze the historian contract so Wave L partitions storage — it does **not** replace Parquet with Postgres time-series.
 
@@ -99,9 +102,9 @@ Overview / RCx / FDD series (UI Plotly palette, Overview tables, per-AHU **FC1**
 [`openfdd_agent_spec/skills/openfdd-typst-rcx-report/SKILL.md`](../../../openfdd_agent_spec/skills/openfdd-typst-rcx-report/SKILL.md).
 Not `rust-text-pdf`; never blocks K7.
 
-**OPEN plot-span debt (ship in tip):** BUG_REPORT `fdd-series-recent-only`,
-`econ-points-prefix-limit`, `rcx-oat-scatter-cap` — patches on working tree in
-`edge/src/fdd/registry_api.rs` + `services/central/src/analytics/historian.rs`.
+**OPEN plot-span debt (K1b tip):** BUG_REPORT `fdd-series-recent-only`,
+`econ-points-prefix-limit`, `rcx-oat-scatter-cap` — [#886](https://github.com/bbartling/open-fdd/pull/886)
+(`edge/src/fdd/registry_api.rs` + `services/central/src/analytics/historian.rs`).
 
 ## Order
 
