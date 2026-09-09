@@ -656,9 +656,8 @@ pub async fn spawn_if_configured(
                     let object_instance = v.get("object_instance")?.as_u64()? as u32;
                     // Include point_name so dual-publish of the same BACnet object
                     // (e.g. AV 9101 → zone_t + oa_t) is not collapsed by delta filter.
-                    let id = format!(
-                        "bacnet:{device}:{object_type}:{object_instance}:{point_name}"
-                    );
+                    let id =
+                        format!("bacnet:{device}:{object_type}:{object_instance}:{point_name}");
                     let value = telemetry_point_value(&v);
                     let quality = if v.get("error").map(|e| e.is_null()).unwrap_or(true) {
                         Quality::Good
