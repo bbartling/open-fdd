@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-09-09 — Wave K K5 VERSION 3.4.0
+
+- Workspace `VERSION` + Cargo pins **3.3.41 → 3.4.0** (edge/central/fieldbus/contracts/mqtt + lock).
+- Ops remain on `sha-cee2f4e` / health `3.3.41+cee2f4ec6c65` until tip Publish + Railway re-pin.
+- Hygiene clean before bump: 0 open PRs, remote only `master`, BACnet+Publish tip `sha-42bd272` green.
+- Unit/CI tests are **not** sufficient for Wave K CLOSE — K6 ONE full `run_railway_hub_stress.sh` (gates 00–10) still required for MEGA gate 10.
+
 ## 2026-09-09 — Wave K / L program opened (3.4.0 pin → 3.5 shared DB)
 
 - Wave J closeout docs **#882** merged; Dependabot #880/#881 closed for hygiene; only `master` branch.

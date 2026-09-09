@@ -2,7 +2,8 @@
 
 **Date:** 2026-09-09 (Wave J **CLOSED** — DF-boundary + cookbook parity)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in Open-FDD stress)  
-**Tip / pin (ops):** `cee2f4ec` · VERSION **3.3.41** (K5 → 3.4.0 next) · health **`3.3.41+cee2f4ec6c65`** · GHCR **central/web/mqtt/fieldbus `sha-cee2f4e`**  
+**Tip / pin (ops):** `cee2f4ec` · health **`3.3.41+cee2f4ec6c65`** · GHCR **`sha-cee2f4e`** until K5 tip re-pin · workspace **VERSION 3.4.0** (K5 bump)  
+
 **Last CLOSED tip (Wave J):** `c1b1aa52` · **`sha-c1b1aa5`** · **`3.3.41+c1b1aa52806b`** · product **#877** · CI/gates **#878** · docs Stage A **#876**  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Dual-publish AV `9101`: `bldg2-zone-loopback` **`zone_t`+`oa_t`**, `hosted-weather` **`web_oa_t`**.  
 **Backup:** `~/openfdd-backups/railway/20260909T203549Z/` (pre–K1b plot-span tip re-pin; prior `20260909T194731Z/` / Wave J `20260909T002816Z/`)  
