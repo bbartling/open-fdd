@@ -1627,6 +1627,57 @@ WITH base AS (
     CASE WHEN ({on_sql}) THEN 1 ELSE 0 END AS fan_on_i
   FROM history
   WHERE equipment_id IS NOT NULL{eq_filter}
+),
+fan_pts AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    oat_f,
+    rat_f,
+    mat_f,
+    sat_f,
+    damper_fb_pct,
+    (oat_f - rat_f) AS delta_or_f,
+    (mat_f - rat_f) AS delta_mr_f,
+    CASE
+      WHEN damper_fb_pct IS NOT NULL AND oat_f IS NOT NULL AND rat_f IS NOT NULL THEN
+        mat_f - (rat_f + (damper_fb_pct / 100.0) * (oat_f - rat_f))
+      ELSE NULL
+    END AS mat_resid_f,
+    CASE
+      WHEN oat_f IS NOT NULL AND rat_f IS NOT NULL AND ABS(oat_f - rat_f) >= {dt_min}
+      THEN 1 ELSE 0
+    END AS identifiable_i
+  FROM base
+  WHERE fan_on_i = 1
+    AND oat_f IS NOT NULL AND rat_f IS NOT NULL AND mat_f IS NOT NULL
+),
+ranked AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    oat_f,
+    rat_f,
+    mat_f,
+    sat_f,
+    damper_fb_pct,
+    delta_or_f,
+    delta_mr_f,
+    mat_resid_f,
+    identifiable_i,
+    ROW_NUMBER() OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS _rn,
+    COUNT(*) OVER (PARTITION BY equipment_id) AS _cnt
+  FROM fan_pts
+),
+sampled AS (
+  SELECT * FROM ranked
+  WHERE _rn = 1
+     OR _rn = _cnt
+     OR (_rn % (CASE
+          WHEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT) > 1
+          THEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT)
+          ELSE 1
+        END)) = 0
 )
 SELECT
   equipment_id,
@@ -1636,21 +1687,12 @@ SELECT
   mat_f,
   sat_f,
   damper_fb_pct,
-  (oat_f - rat_f) AS delta_or_f,
-  (mat_f - rat_f) AS delta_mr_f,
-  CASE
-    WHEN damper_fb_pct IS NOT NULL AND oat_f IS NOT NULL AND rat_f IS NOT NULL THEN
-      mat_f - (rat_f + (damper_fb_pct / 100.0) * (oat_f - rat_f))
-    ELSE NULL
-  END AS mat_resid_f,
-  CASE
-    WHEN oat_f IS NOT NULL AND rat_f IS NOT NULL AND ABS(oat_f - rat_f) >= {dt_min}
-    THEN 1 ELSE 0
-  END AS identifiable_i
-FROM base
-WHERE fan_on_i = 1
-  AND oat_f IS NOT NULL AND rat_f IS NOT NULL AND mat_f IS NOT NULL
-ORDER BY identifiable_i DESC, timestamp_utc
+  delta_or_f,
+  delta_mr_f,
+  mat_resid_f,
+  identifiable_i
+FROM sampled
+ORDER BY equipment_id, timestamp_utc
 LIMIT {limit}
 "#
     );
@@ -2535,7 +2577,7 @@ pub async fn rcx_oat_scatter_from_history(
     let eq_filter = rcx_eq_filter(eq_kinds);
     // Prefixed for JOIN aliases (history AS h).
     let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
-    let limit = max_points.clamp(200, 12000);
+    let limit = max_points.clamp(200, 20000);
     let dry_sel = if dry_ref.is_some() {
         ", d.dry_f AS dry_bulb_f".to_string()
     } else {

@@ -657,12 +657,36 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                 "roles": [],
             });
         }
-        // Latest N samples (DESC then re-ASC) so Plots show the recent fault window,
-        // not the oldest 5000 rows of a multi-month historian.
+        // Span-preserving downsample (Inspect / RCx parity): first + last + evenly
+        // spaced rows across the full historian window — not DESC LIMIT (recent-only).
+        const SERIES_MAX_POINTS: usize = 8000;
+        let limit = SERIES_MAX_POINTS;
         let sql = format!(
-            "SELECT * FROM (SELECT timestamp_utc, equipment_id, {} FROM history WHERE equipment_id = '{}' ORDER BY timestamp_utc DESC LIMIT 5000) AS recent ORDER BY timestamp_utc",
-            columns.join(", "),
-            escaped_equipment
+            r#"
+SELECT timestamp_utc, equipment_id, {cols}
+FROM (
+  SELECT
+    CAST(timestamp_utc AS VARCHAR) AS timestamp_utc,
+    equipment_id,
+    {cols},
+    ROW_NUMBER() OVER (ORDER BY timestamp_utc) AS _rn,
+    COUNT(*) OVER () AS _cnt
+  FROM history
+  WHERE equipment_id = '{eq}'
+)
+WHERE _rn = 1
+   OR _rn = _cnt
+   OR (_rn % (CASE
+        WHEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT) > 1
+        THEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT)
+        ELSE 1
+      END)) = 0
+ORDER BY timestamp_utc
+LIMIT {limit}
+"#,
+            cols = columns.join(", "),
+            eq = escaped_equipment,
+            limit = limit,
         );
         match run_sql(&ctx, &sql).await {
             Ok(mut result) => {
@@ -736,8 +760,8 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                     "rule_id": rule.rule_id,
                     "roles": columns,
                     "rows": result.rows,
-                    "downsampled": result.row_count >= 5000,
-                    "max_points": 5000,
+                    "downsampled": result.row_count >= SERIES_MAX_POINTS,
+                    "max_points": SERIES_MAX_POINTS,
                     "has_confirmed_fault": confirmed_true_hits > 0,
                     "fault_overlay_source": overlay_source,
                     "fault_overlay_hits": overlay_hits,
