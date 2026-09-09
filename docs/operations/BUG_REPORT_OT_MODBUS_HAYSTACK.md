@@ -1,16 +1,16 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-08 (Wave I **CLOSED** — app-test MEGAs / basic functionality)  
+**Date:** 2026-09-09 (Wave J **CLOSED** — DF-boundary + cookbook parity)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in Open-FDD stress)  
-**Tip / pin (3.3.40):** `d1312b0c` · VERSION **3.3.40** · health **`3.3.40+d1312b0ccb07`** · GHCR **central/web/mqtt/fieldbus `sha-d1312b0`**  
-**Last CLOSED tip:** `d1312b0c` · **`sha-d1312b0`** · **`3.3.40+d1312b0ccb07`** · product **#872** · stress gate fix **#873**  
+**Tip / pin (3.3.41):** `c1b1aa52` · VERSION **3.3.41** · health **`3.3.41+c1b1aa52806b`** · GHCR **central/web/mqtt/fieldbus `sha-c1b1aa5`**  
+**Last CLOSED tip:** `c1b1aa52` · **`sha-c1b1aa5`** · **`3.3.41+c1b1aa52806b`** · product **#877** · CI/gates **#878** · docs Stage A **#876**  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Dual-publish AV `9101`: `bldg2-zone-loopback` **`zone_t`+`oa_t`**, `hosted-weather` **`web_oa_t`**.  
-**Backup:** `~/openfdd-backups/railway/20260908T171523Z/` (prior: `20260908T0157*`)  
-**Program (CLOSED):** Wave I — Cursor [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) · agent_spec rules **55–58**  
-**Program (prior CLOSED):** Wave H — Cursor [`post_waveg_openfdd_residual_wave_h`](../../../.cursor/plans/post_waveg_openfdd_residual_wave_h.plan.md)  
-**Stress (Wave I closeout):** `reports/nightly-ot-bench_20260908T182149Z/` · **`fully_qualified=true`** (gates 00–09 incl. ZAP + Wave I MEGAs)  
-**Deferred sequential (Wave J J7):** [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — Cursor [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md)  
-**Program (ACTIVE):** Wave J — Cursor [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) (DF-boundary + [#875](https://github.com/bbartling/open-fdd/issues/875) cookbook parity)  
+**Backup:** `~/openfdd-backups/railway/20260909T002816Z/` (prior Wave I: `20260908T171523Z/`)  
+**Program (CLOSED):** Wave J — Cursor [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) · ownership inventory + #875 FC3/VAV-2 + policy/image Python-absence + soak provenance  
+**Program (prior CLOSED):** Wave I — Cursor [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) · tip `sha-d1312b0` / 3.3.40  
+**Stress (Wave J closeout):** `reports/nightly-ot-bench_20260909T010712Z/` · **`fully_qualified=true`** (gates 00–09 incl. ZAP + MCP + Wave I MEGAs)  
+**Deferred (not Wave J):** [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — Cursor [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) (commented deferred on issue)  
+**Next:** Multivendor Stage C **deferred** (identity/MFA/tenant) — after Wave J; anomaly **PARKED**  
 **Wait filler:** Vibe13 Part B (separate repo) during Open-FDD CI/Publish  
 **Pis freed (not in Open-FDD stress):** bosspi · BensFakeAhu · Zone1VAV.
 
@@ -25,9 +25,9 @@
 | **weather-local-vs-web-bldg2** | **CLOSED** (3.3.40 / Wave I) | Was: bldg2 bas-vs-web empty | #872 dual OAT catalog; gate09 `bas_vs_web` points>0 | — |
 | **mqtt-bldg2-plot-surface** | **CLOSED** (3.3.40 / Wave I) | Was: MQTT plots empty/wrong roles | Inspect `zone_t` non_null=696; dual OAT live | — |
 | **wave-i-stress-gates** | **CLOSED** (3.3.40 / Wave I) | Was: stress green while basics broken | Gate `09_wave_i_app_test_megas` required; #873 AHU_1 fix | — |
-| **mqtt-monitor-sse-782** | **DEFERRED** (Wave J **J7**) | Ops MQTT Test Client is 1s poll; no browser→Mosquitto WS | [#782](https://github.com/bbartling/open-fdd/issues/782); Central `GET /api/mqtt/monitor` already works | [`mqtt_monitor_sse_782`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) — sequential after J1/J6; **not** parallel w/ DF coding |
-| **df-boundary-repair** | **OPEN (MEGA)** Wave J | Stale pandas/UI docs + incomplete Python-absence / DF provenance qualification | 2026-09-08 source review; Dockerfiles Python-free; contradictory architecture docs | Master [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) |
-| **cookbook-parity-875** | **OPEN** Wave J **J2** | SQL↔pandas drift: FC3 tol/fan priority; VAV-2 fractional occupancy | [#875](https://github.com/bbartling/open-fdd/issues/875) Trenyx @ c20ab48 | [`wave_j_cookbook_parity_875`](../../../.cursor/plans/wave_j_cookbook_parity_875.plan.md) |
+| **mqtt-monitor-sse-782** | **DEFERRED** (post–Wave J) | Ops MQTT Test Client is 1s poll; no browser→Mosquitto WS | [#782](https://github.com/bbartling/open-fdd/issues/782); Central `GET /api/mqtt/monitor` already works | [`mqtt_monitor_sse_782`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) — **not** claimed done by Wave J |
+| **df-boundary-repair** | **CLOSED** (Wave J / 3.3.41) | Was: stale pandas/UI docs + incomplete Python-absence / DF provenance | #876 Stage A · #878 policy+image+soak · tip Python-absence PASS | — |
+| **cookbook-parity-875** | **CLOSED** (3.3.41 / #877) | Was: FC3 tol/fan priority; VAV-2 fractional occupancy | #877 · #875 closed · oracle_parity FC3/VAV-2 | — |
 | **mqtt-ingest-stall** | **CLOSED** (3.3.34) | Was: flat `ingest_ok` after mqtt bounce until central redeploy | #860 · tip `sha-9aebf42` · smoke `reports/waveD_railway_smoke_20260906T173032Z/` | — |
 | **railway-ui-fdd-stale** | **CLOSED** (Wave E) | Was: building filter / scoped FDD UX across sites | Tip `sha-9aebf42`: Overview clears on site change; PlantHealthSections empty shells; equipment=8 / zone-other rows=7 | No VERSION — UX already on tip |
 | **bldg2-overview-signoff** | **CLOSED** (Wave H) | Was: SPA charts weak; buyer mash Run/Update | #868/#869 · Inspect/RCx points>0; Overview auto-load | — |
@@ -71,6 +71,18 @@
 | Stress | `reports/nightly-ot-bench_20260908T182149Z/` **`fully_qualified=true`** (00–09) |
 | Deferred | #782 MQTT monitor SSE — **do not** combine with DF-boundary mega |
 
+### Wave J closeout (2026-09-09T01:10Z)
+
+| Check | Result |
+|-------|--------|
+| Hub | `3.3.41+c1b1aa52806b` · central/mqtt/web **Online** · `sha-c1b1aa5` |
+| Tip gate | `./scripts/check_ghcr_tip_stack.sh sha-c1b1aa5` **PASS** · GHCR tip completeness Actions **PASS** |
+| Python-absence | `./scripts/check_ghcr_tip_python_absence.sh sha-c1b1aa5` **PASS** (central/web/mqtt/fieldbus) |
+| Backup / pin | `~/openfdd-backups/railway/20260909T002816Z/` · hub + fieldbus `sha-c1b1aa5` |
+| Landed | #876 Stage A docs · #877 FC3/VAV-2 (3.3.41) · #878 policy+image+soak · J4 waive · #782 deferred |
+| Stress | `reports/nightly-ot-bench_20260909T010712Z/` **`fully_qualified=true`** (00–09) |
+| Note | First stress attempt failed gate 08 when sticky `.env` `OPENFDD_IMAGE_TAG` clobbered MCP pin — fixed in `load_bench_env` |
+
 ### Wave H kickoff probe (2026-09-07T20:35Z)
 
 | Check | Result |
@@ -101,21 +113,15 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 ### Upcoming trains (Cursor plans — optimized waves 2026-09-06)
 
 **Source of truth:** [`patch_trains/`](patch_trains/) · [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md) · [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
-**Active:** Wave J master [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) — J0 land #874 → J1 Stage A docs → J2 [#875](https://github.com/bbartling/open-fdd/issues/875) → J3/J5 CI+image gates → J4 Stage B gaps → J6 soak → optional J7 [#782](https://github.com/bbartling/open-fdd/issues/782) → **J8 ONE full stress**. Low-RAM one agent; #782 never parallel with J1–J6 coding.  
-**Last closed:** Wave I (RETIRED plan [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md)) · tip `sha-d1312b0` / **#872** · gate fix **#873** · stress `20260908T182149Z`. Anomaly **PARKED**. Multivendor Stage C **deferred after Wave J**.
+**Active:** none (Wave J **CLOSED**). Next: Multivendor Stage C (deferred) or #782 SSE when scheduled.  
+**Last closed:** Wave J (RETIRED plan [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md)) · tip `sha-c1b1aa5` / **3.3.41** · stress `20260909T010712Z`. Anomaly **PARKED**. #782 **DEFERRED**.
 
-**This round stress rule:** mid-wave = smoke only. **ONE full** `run_railway_hub_stress.sh` at **Wave J J8** (keep gate 09; add DF gates when ready; **no `SKIP_ZAP`**).
+**This round stress rule:** mid-wave = smoke only. Full `run_railway_hub_stress.sh` only at program closeout (**no `SKIP_ZAP`**).
 
 | Rev / wave | In-repo / Cursor plan | Concern | Status |
 |------------|----------------------|---------|--------|
-| **Wave J master** | [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) | DF-boundary + #875 + optional #782 | **OPEN** |
-| **Wave J / J0** | [`wave_j0_land_wave_i_closeout_docs`](../../../.cursor/plans/wave_j0_land_wave_i_closeout_docs.plan.md) | Land #874 | **OPEN** |
-| **Wave J / J1** | [`wave_j_a_truth_docs_guards`](../../../.cursor/plans/wave_j_a_truth_docs_guards.plan.md) | Stage A truth/docs | **OPEN** |
-| **Wave J / J2** | [`wave_j_cookbook_parity_875`](../../../.cursor/plans/wave_j_cookbook_parity_875.plan.md) | #875 FC3 + VAV-2 parity | **OPEN** |
-| **Wave J / J3+J5** | [`wave_j_ci_image_gates`](../../../.cursor/plans/wave_j_ci_image_gates.plan.md) | Policy CI + image Python-absence | **OPEN** |
-| **Wave J / J4** | [`wave_j_b_close_python_gaps`](../../../.cursor/plans/wave_j_b_close_python_gaps.plan.md) | Stage B close gaps | **OPEN** |
-| **Wave J / J6** | [`wave_j_numerical_soak_harden`](../../../.cursor/plans/wave_j_numerical_soak_harden.plan.md) | Soak provenance | **OPEN** |
-| **Wave J / J7** | [`mqtt_monitor_sse_782`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) | #782 Central SSE | **DEFERRED** sequential |
+| **Wave J master** | [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) | DF-boundary + #875 + optional #782 | **RETIRED / CLOSED** |
+| **Wave J / J0–J8** | children under `.cursor/plans/wave_j_*` | docs → #875 → CI/image → soak → stress | **CLOSED** (J7 #782 deferred) |
 | **Wave I master** | [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) | App-test MEGAs | **RETIRED / CLOSED** |
 | **Wave H** | Cursor post_waveg residual H | Demo charts / UI freshness | **CLOSED** |
 | **Wave G / 3.3.37–3.3.40** | [`openfdd_lab_tuner_parity_program.plan.md`](patch_trains/openfdd_lab_tuner_parity_program.plan.md) | Lab tuner Vibe19 parity | **CLOSED** — #864 · tip `sha-a40787b` |

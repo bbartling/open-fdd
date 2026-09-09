@@ -14,6 +14,9 @@ load_bench_env() {
   local saved_api="${OPENFDD_API_BASE:-}"
   local saved_base="${BASE:-}"
   local saved_central="${CENTRAL_BASE:-}"
+  # Railway field stress: sticky local .env must not clobber tip pin / MCP image.
+  local saved_image_tag="${OPENFDD_IMAGE_TAG:-}"
+  local saved_mcp_image="${OPENFDD_MCP_IMAGE:-}"
   if [[ -f "$ROOT/.env" ]]; then
     # shellcheck disable=SC1091
     set -a && source "$ROOT/.env" && set +a
@@ -34,6 +37,7 @@ load_bench_env() {
     [[ -n "$saved_api" ]] && export OPENFDD_API_BASE="$saved_api"
     [[ -n "$saved_base" ]] && export BASE="$saved_base"
     [[ -n "$saved_central" ]] && CENTRAL_BASE="$saved_central"
+    [[ -n "$saved_image_tag" ]] && export OPENFDD_IMAGE_TAG="$saved_image_tag"
   fi
 
   FIELDBUS_BASE="${FIELDBUS_BASE:-http://127.0.0.1:8081}"
@@ -51,6 +55,10 @@ load_bench_env() {
   # shellcheck source=scripts/openfdd_stack_lib.sh
   source "$ROOT/scripts/openfdd_stack_lib.sh"
   openfdd_stack_export_image_env
+  # Restore explicit MCP pin after stack export (which derives from IMAGE_TAG).
+  if [[ "$railway_only" == "1" && -n "$saved_mcp_image" ]]; then
+    export OPENFDD_MCP_IMAGE="$saved_mcp_image"
+  fi
   ensure_bench_field_devices
 }
 

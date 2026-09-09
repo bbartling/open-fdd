@@ -1,5 +1,15 @@
 # Session log
 
+## 2026-09-09 — Wave J CLOSED (3.3.41 / sha-c1b1aa5)
+
+- Stage A docs **#876**; FC3/VAV-2 cookbook parity **#877** (3.3.41); policy+tip Python-absence+soak **#878**; J4 Stage B **waived** (no product Python).
+- #875 closed; #782 **deferred** (issue comment) — not claimed done by Wave J.
+- Railway backup `20260909T002816Z` · hub+fieldbus pin `sha-c1b1aa5` · health `3.3.41+c1b1aa52806b`.
+- Tip Python-absence PASS; GHCR tip completeness Actions PASS.
+- Stress `reports/nightly-ot-bench_20260909T010712Z/` **fully_qualified=true** (gates 00–09).
+- Harness: `load_bench_env` preserves `OPENFDD_IMAGE_TAG` / `OPENFDD_MCP_IMAGE` under `RAILWAY_ONLY=1` (sticky `.env` no longer clobbers tip MCP).
+- Wave J master **RETIRED**. Next: Multivendor Stage C (deferred) or #782 when scheduled.
+
 ## 2026-09-08 — Wave J master planned (DF-boundary + #875)
 
 - Cursor master: `wave_j_df_boundary_master` — J0 land #874 → J1 Stage A → J2 #875 FC3/VAV-2 → J3/J5 CI+image → J4 Stage B → J6 soak → optional J7 #782 → J8 ONE stress.
