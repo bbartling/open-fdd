@@ -71,6 +71,9 @@ services:
       OPENFDD_MQTT_CERT_PEM: /mqtt/edge.cert.pem
       OPENFDD_MQTT_KEY_PEM: /mqtt/edge.key.pem
       OPENFDD_MQTT_SPOOL_DIR: /spool
+      # CI-only: deterministic waits (product Railway / OT floor stays 60s).
+      OPENFDD_FIELDBUS_POLL_INTERVAL_SECS: "5"
+      OPENFDD_MQTT_PUBLISH_INTERVAL_SECS: "5"
     volumes:
       - ../tests/integration/bacpypes3/fieldbus:/app/config:ro
       - ${OPENFDD_BACNET_MQTT_CERT_DIR}/edge:/mqtt:ro

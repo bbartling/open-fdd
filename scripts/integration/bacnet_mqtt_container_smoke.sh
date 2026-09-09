@@ -203,7 +203,7 @@ while true; do
       .last_telemetry.site_id == "ci" and
       .last_telemetry.edge_id == "fieldbus-1" and
       (.last_telemetry.points | any(
-        .id == "bacnet:3456:analog-value:1" and
+        ((.id | tostring) | startswith("bacnet:3456:analog-value:1")) and
         .tags.building_id == "BUILDING_CI"
       ))
     ' >/dev/null && edge_ok=1 || true
