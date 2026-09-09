@@ -626,8 +626,7 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                 .required_roles
                 .iter()
                 .filter(|role| {
-                    role.chars()
-                        .all(|c| c.is_ascii_alphanumeric() || c == '_')
+                    role.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
                         && !history_columns.contains(&role.to_ascii_lowercase())
                 })
                 .cloned()
