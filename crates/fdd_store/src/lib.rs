@@ -43,4 +43,7 @@ pub use migration_exec::{
 pub use parquet_parts::{
     CompletePartPublisher, ParquetPart, ParquetPartWriter, DEFAULT_ROW_GROUP_ROWS,
 };
-pub use stats::{local_historian_stats, local_historian_stats_from_config, HistorianStats};
+pub use stats::{
+    local_historian_stats, local_historian_stats_from_config, peek_equipment_history_columns,
+    HistorianStats,
+};

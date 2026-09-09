@@ -57,7 +57,7 @@ export function MappingPage() {
     const list = inventory?.equipment ?? [];
     if (!list.length) return null;
     if (equipmentId) {
-      return list.find((e) => e.equipment_id === equipmentId) ?? list[0];
+      return list.find((e) => e.equipment_id === equipmentId) ?? null;
     }
     return list[0];
   }, [inventory, equipmentId]);
@@ -79,19 +79,33 @@ export function MappingPage() {
     setLoading(true);
     setError(null);
     try {
-      const [inv, sess] = await Promise.all([
-        getPackageMapping(buildingId, equipmentId || undefined),
+      // Load site inventory first; only request a specific equipment once it
+      // belongs to this building (avoids cross-site sticky ?eq= errors).
+      const [invAll, sess] = await Promise.all([
+        getPackageMapping(buildingId),
         getSessionConfig(),
       ]);
+      const ids = invAll.equipment_ids ?? [];
+      let inv = invAll;
+      let eqId = equipmentId;
+      if (eqId && !ids.includes(eqId)) {
+        setQuery({ equipment: "" }, true);
+        eqId = "";
+        setError(
+          `Equipment "${equipmentId}" is not in site ${buildingId} — cleared selection.`,
+        );
+      } else if (eqId) {
+        inv = await getPackageMapping(buildingId, eqId);
+      }
       setInventory(inv);
       setSessionConfig(sess.config ?? null);
       const eq =
-        (equipmentId
-          ? inv.equipment?.find((e) => e.equipment_id === equipmentId)
+        (eqId
+          ? inv.equipment?.find((e) => e.equipment_id === eqId)
           : inv.equipment?.[0]) ?? null;
       setDraftRoles({ ...(eq?.roles ?? {}) });
       setDirty(false);
-      if (eq && !equipmentId) {
+      if (eq && !eqId) {
         setQuery({ equipment: eq.equipment_id }, true);
       }
     } catch (err) {
@@ -225,9 +239,11 @@ export function MappingPage() {
       <div className="page-placeholder" data-testid="mapping-page">
         <h2>Role mapping</h2>
         <p>
-          Map CSV columns to cookbook roles for the selected building and equipment.
-          Blank roles stay blank — no guessed fills. Use the Active site / equipment
-          selectors (or URL <code>?site=</code> / <code>?eq=</code>).
+          Map CSV / historian columns to cookbook roles for the selected building
+          and equipment. This tab is <strong>column ↔ role</strong> mapping (package{" "}
+          <code>columns.csv</code> or MQTT Parquet columns) — not live Haystack point
+          browse. Blank roles stay blank — no guessed fills. Use Active site /
+          equipment selectors (or URL <code>?site=</code> / <code>?eq=</code>).
         </p>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>

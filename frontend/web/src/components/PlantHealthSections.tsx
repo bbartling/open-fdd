@@ -285,7 +285,7 @@ export function PlantHealthSections({
           { key: "spike", ruleId: "SV-SPIKE" },
           { key: "stale", ruleId: "SV-STALE" },
         ]}
-        emptyMessage="No sensor faults in window"
+        emptyMessage="No equipment with sensor history in this site yet"
         renderEmptyTable
         pendingFlags={pendingFlags}
       />

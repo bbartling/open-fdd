@@ -444,8 +444,8 @@ const SENSOR_SPEC: MatrixSpec = MatrixSpec {
     query_version: QV_SENSOR_FAULTS,
     schema: SCHEMA_SENSOR_FAULTS,
     flags: SENSOR_FLAGS,
-    notes: "Sensor validation faults only; clean results intentionally return rows: [].",
-    faults_only: true,
+    notes: "Sensor validation matrix across historian equipment; flags unknown until SV rules run.",
+    faults_only: false,
 };
 const PID_SPEC: MatrixSpec = MatrixSpec {
     scope: EquipmentScope::AnyFdd,
@@ -694,6 +694,27 @@ fn spec_rule_ids(spec: &MatrixSpec) -> BTreeSet<&'static str> {
     ids
 }
 
+async fn historian_equipment_ids(bid: &str) -> Result<Vec<String>> {
+    let ctx = SessionContext::new();
+    if !try_register_history_scoped(&ctx, Some(bid)).await? {
+        return Ok(Vec::new());
+    }
+    let result = run_sql(
+        &ctx,
+        "SELECT equipment_id FROM history GROUP BY equipment_id ORDER BY equipment_id",
+    )
+    .await?;
+    Ok(result
+        .rows
+        .into_iter()
+        .filter_map(|row| {
+            row.get("equipment_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .collect())
+}
+
 async fn equipment_ids_for_spec(
     bid: &str,
     spec: &MatrixSpec,
@@ -701,6 +722,12 @@ async fn equipment_ids_for_spec(
 ) -> Result<Vec<String>> {
     match spec.scope {
         EquipmentScope::AnyFdd => {
+            // Prefer historian equipment so Overview matrices render before SV/FDD
+            // results exist (flags stay Unknown / pending until Run all rules).
+            let hist = historian_equipment_ids(bid).await?;
+            if !hist.is_empty() {
+                return Ok(hist);
+            }
             let rule_ids = spec_rule_ids(spec);
             let mut ids: Vec<String> = index
                 .iter()
@@ -711,26 +738,7 @@ async fn equipment_ids_for_spec(
             ids.dedup();
             Ok(ids)
         }
-        EquipmentScope::Family(_) => {
-            let ctx = SessionContext::new();
-            if !try_register_history_scoped(&ctx, Some(bid)).await? {
-                return Ok(Vec::new());
-            }
-            let result = run_sql(
-                &ctx,
-                "SELECT equipment_id FROM history GROUP BY equipment_id ORDER BY equipment_id",
-            )
-            .await?;
-            Ok(result
-                .rows
-                .into_iter()
-                .filter_map(|row| {
-                    row.get("equipment_id")
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                })
-                .collect())
-        }
+        EquipmentScope::Family(_) => historian_equipment_ids(bid).await,
     }
 }
 
