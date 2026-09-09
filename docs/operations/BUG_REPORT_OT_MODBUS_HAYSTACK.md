@@ -9,8 +9,9 @@
 **Program (CLOSED):** Wave J — Cursor [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) · ownership inventory + #875 FC3/VAV-2 + policy/image Python-absence + soak provenance  
 **Program (prior CLOSED):** Wave I — Cursor [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) · tip `sha-d1312b0` / 3.3.40  
 **Stress (Wave J closeout):** `reports/nightly-ot-bench_20260909T010712Z/` · **`fully_qualified=true`** (gates 00–09 incl. ZAP + MCP + Wave I MEGAs)  
-**Deferred (not Wave J):** [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — Cursor [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) (commented deferred on issue)  
-**Next:** Multivendor Stage C **deferred** (identity/MFA/tenant) — after Wave J; anomaly **PARKED**  
+**Deferred (not Wave J):** [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — Cursor [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) (optional Wave K K4)  
+**Program (ACTIVE):** Wave K — **3.4.0 filesystem-historian pin** · Cursor [`wave_k_340_filesystem_pin_master`](../../../.cursor/plans/wave_k_340_filesystem_pin_master.plan.md) · repo [`openfdd_wave_k_340_filesystem_pin_program.plan.md`](patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md)  
+**Next mega (AFTER 3.4.0 pin):** Wave L — **shared DB 3.5.x** · Cursor [`wave_l_shared_db_mega_master`](../../../.cursor/plans/wave_l_shared_db_mega_master.plan.md) · repo [`openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md)  
 **Wait filler:** Vibe13 Part B (separate repo) during Open-FDD CI/Publish  
 **Pis freed (not in Open-FDD stress):** bosspi · BensFakeAhu · Zone1VAV.
 
@@ -113,15 +114,16 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 ### Upcoming trains (Cursor plans — optimized waves 2026-09-06)
 
 **Source of truth:** [`patch_trains/`](patch_trains/) · [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md) · [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
-**Active:** none (Wave J **CLOSED**). Next: Multivendor Stage C (deferred) or #782 SSE when scheduled.  
-**Last closed:** Wave J (RETIRED plan [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md)) · tip `sha-c1b1aa5` / **3.3.41** · stress `20260909T010712Z`. Anomaly **PARKED**. #782 **DEFERRED**.
+**Active:** Wave K master [`wave_k_340_filesystem_pin_master`](../../../.cursor/plans/wave_k_340_filesystem_pin_master.plan.md) — pin **3.4.0** filesystem historian + shared-DB ADR; then Wave L **3.5** shared DB ASAP.  
+**Last closed:** Wave J (RETIRED [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md)) · tip `sha-c1b1aa5` / **3.3.41** · stress `20260909T010712Z` · closeout docs **#882**. Anomaly **PARKED**. #782 optional K4. Multivendor Stage C **after** Wave L.
 
-**This round stress rule:** mid-wave = smoke only. Full `run_railway_hub_stress.sh` only at program closeout (**no `SKIP_ZAP`**).
+**This round stress rule:** mid-wave = smoke only. Full `run_railway_hub_stress.sh` at **Wave K K5** (3.4.0 pin) and again at Wave L shippable pins (**no `SKIP_ZAP`**).
 
 | Rev / wave | In-repo / Cursor plan | Concern | Status |
 |------------|----------------------|---------|--------|
-| **Wave J master** | [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) | DF-boundary + #875 + optional #782 | **RETIRED / CLOSED** |
-| **Wave J / J0–J8** | children under `.cursor/plans/wave_j_*` | docs → #875 → CI/image → soak → stress | **CLOSED** (J7 #782 deferred) |
+| **Wave K master** | [`openfdd_wave_k_340_filesystem_pin_program.plan.md`](patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md) | **3.4.0 pin** + historian freeze + shared-DB ADR | **OPEN** |
+| **Wave L master** | [`openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md) | **3.5.x shared DB** mega | **QUEUED** (after K) |
+| **Wave J master** | [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) | DF-boundary + #875 | **RETIRED / CLOSED** |
 | **Wave I master** | [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) | App-test MEGAs | **RETIRED / CLOSED** |
 | **Wave H** | Cursor post_waveg residual H | Demo charts / UI freshness | **CLOSED** |
 | **Wave G / 3.3.37–3.3.40** | [`openfdd_lab_tuner_parity_program.plan.md`](patch_trains/openfdd_lab_tuner_parity_program.plan.md) | Lab tuner Vibe19 parity | **CLOSED** — #864 · tip `sha-a40787b` |

@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-09-09 — Wave K / L program opened (3.4.0 pin → 3.5 shared DB)
+
+- Wave J closeout docs **#882** merged; Dependabot #880/#881 closed for hygiene; only `master` branch.
+- Active: Wave K `wave_k_340_filesystem_pin_master` — VERSION **3.4.0** filesystem-historian pin + shared-DB ADR.
+- Queued: Wave L `wave_l_shared_db_mega_master` — shared Postgres (default) dual-write/cutover **3.5.x** ASAP after pin.
+- Ops product pin remains `sha-c1b1aa5` / 3.3.41 until Wave K ships 3.4.0.
+
 ## 2026-09-09 — Wave J CLOSED (3.3.41 / sha-c1b1aa5)
 
 - Stage A docs **#876**; FC3/VAV-2 cookbook parity **#877** (3.3.41); policy+tip Python-absence+soak **#878**; J4 Stage B **waived** (no product Python).
