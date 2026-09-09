@@ -5,11 +5,12 @@
 **Tip / pin (3.3.41):** `c1b1aa52` · VERSION **3.3.41** · health **`3.3.41+c1b1aa52806b`** · GHCR **central/web/mqtt/fieldbus `sha-c1b1aa5`**  
 **Last CLOSED tip:** `c1b1aa52` · **`sha-c1b1aa5`** · **`3.3.41+c1b1aa52806b`** · product **#877** · CI/gates **#878** · docs Stage A **#876**  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Dual-publish AV `9101`: `bldg2-zone-loopback` **`zone_t`+`oa_t`**, `hosted-weather` **`web_oa_t`**.  
-**Backup:** `~/openfdd-backups/railway/20260909T002816Z/` (prior Wave I: `20260908T171523Z/`)  
+**Backup:** `~/openfdd-backups/railway/20260909T135419Z/` (pre–K1 tip re-pin; prior Wave J: `20260909T002816Z/`)  
 **Program (CLOSED):** Wave J — Cursor [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) · ownership inventory + #875 FC3/VAV-2 + policy/image Python-absence + soak provenance  
 **Program (prior CLOSED):** Wave I — Cursor [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) · tip `sha-d1312b0` / 3.3.40  
 **Stress (Wave J closeout):** `reports/nightly-ot-bench_20260909T010712Z/` · **`fully_qualified=true`** (gates 00–09 incl. ZAP + MCP + Wave I MEGAs)  
 **Deferred (not Wave J):** [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — Cursor [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) (optional Wave K K4)  
+**K1:** MEGAs **#884 MERGED** (`5aed663c`) — tip Publish in progress for `sha-5aed663`; Railway still on `sha-c1b1aa5` until re-pin. Docs K2/K3 → **#885**.
 **Program (ACTIVE):** Wave K — **3.4.0 filesystem-historian pin** · Cursor [`wave_k_340_filesystem_pin_master`](../../../.cursor/plans/wave_k_340_filesystem_pin_master.plan.md) · repo [`openfdd_wave_k_340_filesystem_pin_program.plan.md`](patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md) · MEGAs + stress gates + Phase-0 multi-client ADR  
 **Next mega (AFTER 3.4.0 pin):** Wave L — **multi-client shared hosting 3.5.x** (tenant-partitioned Parquet + control plane; **not** Postgres time-series) · Cursor [`wave_l_shared_db_mega_master`](../../../.cursor/plans/wave_l_shared_db_mega_master.plan.md) · repo [`openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md)  
 **Wait filler:** Vibe13 Part B (separate repo) during Open-FDD CI/Publish  
