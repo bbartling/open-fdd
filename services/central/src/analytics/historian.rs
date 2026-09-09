@@ -25,6 +25,7 @@ const NUMERIC_ROLE_COLS: &[&str] = &[
     "mat",
     "sat",
     "zone_t",
+    "zone_rh",
     "zone_flow",
     "fan_cmd",
     "fan_status",

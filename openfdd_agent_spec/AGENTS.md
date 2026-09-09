@@ -43,7 +43,7 @@ retest. Do not confuse those with this engineering OS.
 
 ## AI agent quick rules (read first)
 
-0. **Low-RAM bensbench / machine port (always):** One agent only (no duplicate Task/subagents on the same train). Never local `docker build` of central/web/mqtt/fieldbus. Pull GHCR `sha-*` only; prune old images before pull. After ZAP/stress, `docker rm -f` leftover zap/MCP disposable containers — keep only needed fieldbus. Never run Vibe13 `cargo`/Ansible TX in parallel with Open-FDD ZAP/docker. Push often. Portable brain: [`docs/operations/recovery/AI_CONTEXT_HANDOFF.md`](../docs/operations/recovery/AI_CONTEXT_HANDOFF.md). **Wave J CLOSED** (`sha-c1b1aa5` / 3.3.41). **Wave K OPEN** — pin **3.4.0** filesystem historian then Wave L **3.5** shared DB. Handbook: [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md) · [`PATCH_CYCLE.md`](../docs/operations/PATCH_CYCLE.md).
+0. **Low-RAM bensbench / machine port (always):** One agent only (no duplicate Task/subagents on the same train). Never local `docker build` of central/web/mqtt/fieldbus. Pull GHCR `sha-*` only; prune old images before pull. After ZAP/stress, `docker rm -f` leftover zap/MCP disposable containers — keep only needed fieldbus. Never run Vibe13 `cargo`/Ansible TX in parallel with Open-FDD ZAP/docker. Push often. Portable brain: [`docs/operations/recovery/AI_CONTEXT_HANDOFF.md`](../docs/operations/recovery/AI_CONTEXT_HANDOFF.md). **Wave J CLOSED** (`sha-c1b1aa5` / 3.3.41). **Wave K OPEN** — pin **3.4.0** Parquet historian + MEGAs + Phase-0 multi-client ADR; then Wave L **3.5 multi-client shared hosting** (tenant-partitioned Parquet + control plane — **not** Postgres time-series). Handbook: [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md) · [`PATCH_CYCLE.md`](../docs/operations/PATCH_CYCLE.md).
 1. Product FDD + Overview analytics = **DataFusion SQL** on GHCR. Never silent pandas fallback in central.
 2. Pandas oracle stays forever on **PyPI** + cookbooks + vibe19 — never delete the pandas cookbook because production uses SQL.
 3. Never delete the SQL cookbook because pandas remains the oracle.
@@ -104,7 +104,7 @@ retest. Do not confuse those with this engineering OS.
 57. **MQTT dual OAT:** Live fieldbus Open-Meteo must publish into historian as concurrent BAS `oa_t` + web `web_oa_t` (catalog dual-publish on railway loopback). Empty `bas-vs-web-oat` on bldg2 while `/weather` is live is a **P0 MEGA**, not DEFERRED demo fluff.
 58. **Wave I stress:** Mid-wave = smoke only. **ONE** `run_railway_hub_stress.sh` at master I7 after enhanced gates (I6). No duplicate full stresses between children unless a mega cannot be proven without a new tip pin.
 
-**Current ops pin (2026-09-09):** VERSION **3.3.41** · product tip **`sha-c1b1aa5`** · health **`3.3.41+c1b1aa52806b`** · Wave J **CLOSED**. **Wave K OPEN** — 3.4.0 filesystem pin → Wave L 3.5 shared DB. #782 optional K4. Low-RAM always (rule 0).
+**Current ops pin (2026-09-09):** VERSION **3.3.41** · product tip **`sha-c1b1aa5`** · health **`3.3.41+c1b1aa52806b`** · Wave J **CLOSED**. **Wave K OPEN** — 3.4.0 pin → Wave L 3.5 multi-client shared hosting. #782 optional K4. Low-RAM always (rule 0).
 
 ---
 

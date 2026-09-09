@@ -654,7 +654,10 @@ pub async fn spawn_if_configured(
                     }
                     let object_type = v.get("object_type")?.as_str()?.replace('_', "-");
                     let object_instance = v.get("object_instance")?.as_u64()? as u32;
-                    let id = format!("bacnet:{device}:{object_type}:{object_instance}");
+                    // Include point_name so dual-publish of the same BACnet object
+                    // (e.g. AV 9101 → zone_t + oa_t) is not collapsed by delta filter.
+                    let id =
+                        format!("bacnet:{device}:{object_type}:{object_instance}:{point_name}");
                     let value = telemetry_point_value(&v);
                     let quality = if v.get("error").map(|e| e.is_null()).unwrap_or(true) {
                         Quality::Good
@@ -788,6 +791,28 @@ mod tests {
         assert_eq!(dev, 100);
         assert_eq!(ot, "analog-value");
         assert_eq!(inst, 5);
+    }
+
+    #[test]
+    fn delta_filter_keeps_dual_roles_on_same_bacnet_object() {
+        let mut last = HashMap::new();
+        let mk = |id: &str, val: f64| TelemetryPoint {
+            id: id.to_string(),
+            display_name: None,
+            kind: Some(ValueKind::Number),
+            value: serde_json::json!(val),
+            unit: None,
+            quality: Quality::Good,
+            tags: serde_json::Map::new(),
+        };
+        let zone = "bacnet:599999:analog-value:9101:zone-air-temp";
+        let oa = "bacnet:599999:analog-value:9101:outside-air-temperature";
+        let out = apply_delta_filter(vec![mk(zone, 72.0), mk(oa, 72.0)], &mut last);
+        assert_eq!(out.len(), 2, "same AV value must publish both roles");
+        let again = apply_delta_filter(vec![mk(zone, 72.0), mk(oa, 72.0)], &mut last);
+        assert!(again.is_empty(), "unchanged values still delta-suppressed");
+        let bumped = apply_delta_filter(vec![mk(zone, 73.0), mk(oa, 73.0)], &mut last);
+        assert_eq!(bumped.len(), 2);
     }
 
     #[test]

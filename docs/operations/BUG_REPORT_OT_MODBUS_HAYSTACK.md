@@ -10,8 +10,8 @@
 **Program (prior CLOSED):** Wave I — Cursor [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) · tip `sha-d1312b0` / 3.3.40  
 **Stress (Wave J closeout):** `reports/nightly-ot-bench_20260909T010712Z/` · **`fully_qualified=true`** (gates 00–09 incl. ZAP + MCP + Wave I MEGAs)  
 **Deferred (not Wave J):** [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — Cursor [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) (optional Wave K K4)  
-**Program (ACTIVE):** Wave K — **3.4.0 filesystem-historian pin** · Cursor [`wave_k_340_filesystem_pin_master`](../../../.cursor/plans/wave_k_340_filesystem_pin_master.plan.md) · repo [`openfdd_wave_k_340_filesystem_pin_program.plan.md`](patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md)  
-**Next mega (AFTER 3.4.0 pin):** Wave L — **shared DB 3.5.x** · Cursor [`wave_l_shared_db_mega_master`](../../../.cursor/plans/wave_l_shared_db_mega_master.plan.md) · repo [`openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md)  
+**Program (ACTIVE):** Wave K — **3.4.0 filesystem-historian pin** · Cursor [`wave_k_340_filesystem_pin_master`](../../../.cursor/plans/wave_k_340_filesystem_pin_master.plan.md) · repo [`openfdd_wave_k_340_filesystem_pin_program.plan.md`](patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md) · MEGAs + stress gates + Phase-0 multi-client ADR  
+**Next mega (AFTER 3.4.0 pin):** Wave L — **multi-client shared hosting 3.5.x** (tenant-partitioned Parquet + control plane; **not** Postgres time-series) · Cursor [`wave_l_shared_db_mega_master`](../../../.cursor/plans/wave_l_shared_db_mega_master.plan.md) · repo [`openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md)  
 **Wait filler:** Vibe13 Part B (separate repo) during Open-FDD CI/Publish  
 **Pis freed (not in Open-FDD stress):** bosspi · BensFakeAhu · Zone1VAV.
 
@@ -19,6 +19,9 @@
 
 | ID | Status | Symptom | Evidence | Next |
 |----|--------|---------|----------|------|
+| **sensor-faults-matrix** | **OPEN** (Wave K) | Lakeside Overview Sensor faults empty (`matched_equipment_count=0`) while HP sensors exist; only FC1 FDD rows, no SV-* | Probe 2026-09-09: `sensor-faults` matched=0; `hp-health` matched=67; FDD results SV=0 | K1 — historian equipment discovery + matrix rows; stress gate |
+| **mqtt-bacnet-quad-points** | **OPEN** (Wave K) | Dual-publish AV 9101 collapses to one role (delta id omits `point_name`); zone_t stopped ~Sep 8; humidity missing; need zone_t+oa_t+humidity+web_oa_t | Inspect: Sep5–7 `zone_t` only; Sep9 `oa_t` only; never both on same row | K1 — fieldbus delta id + catalog 9102; Railway CLI re-pin fieldbus; stress gate |
+| **data-model-all-sites** | **OPEN** (Wave K) | MQTT mapping warns roles empty (no columns.csv); wrong-site equipment → not found; Data Model ≠ Haystack browse | `mapping?building_id=bldg2` columns=[]; cross-site eq fails closed poorly in UI | K1 — historian Parquet roles + Mapping UX; stress gate |
 | **lakeside-read-csv-missing** | **CLOSED** (3.3.40 / Wave I) | Was: LAKESIDE_ES FDD `read_csv not found` | #872 `register_csv`; stress gate09 no `read_csv` | — |
 | **overview-tables-unfiltered** | **CLOSED** (3.3.40 / Wave I) | Was: MQTT Overview looked table-filtered vs CSV | #872 Overview chrome pad + Weather section always render | — |
 | **data-model-json-export** | **CLOSED** (3.3.40 / Wave I) | Was: Export JSON dead for MQTT | #872 historian mapping + Export; mapping `bldg2` equipment=2 | — |
@@ -114,15 +117,15 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 ### Upcoming trains (Cursor plans — optimized waves 2026-09-06)
 
 **Source of truth:** [`patch_trains/`](patch_trains/) · [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md) · [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
-**Active:** Wave K master [`wave_k_340_filesystem_pin_master`](../../../.cursor/plans/wave_k_340_filesystem_pin_master.plan.md) — pin **3.4.0** filesystem historian + shared-DB ADR; then Wave L **3.5** shared DB ASAP.  
-**Last closed:** Wave J (RETIRED [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md)) · tip `sha-c1b1aa5` / **3.3.41** · stress `20260909T010712Z` · closeout docs **#882**. Anomaly **PARKED**. #782 optional K4. Multivendor Stage C **after** Wave L.
+**Active:** Wave K master [`wave_k_340_filesystem_pin_master`](../../../.cursor/plans/wave_k_340_filesystem_pin_master.plan.md) — pin **3.4.0** Parquet historian + MEGAs + Phase-0 multi-client ADR; then Wave L **3.5** multi-client shared hosting.  
+**Last closed:** Wave J (RETIRED [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md)) · tip `sha-c1b1aa5` / **3.3.41** · stress `20260909T010712Z` · closeout docs **#882**. Anomaly **PARKED**. #782 optional K4. Stage C **after** Wave L baseline.
 
-**This round stress rule:** mid-wave = smoke only. Full `run_railway_hub_stress.sh` at **Wave K K5** (3.4.0 pin) and again at Wave L shippable pins (**no `SKIP_ZAP`**).
+**This round stress rule:** mid-wave = smoke only (Railway CLI tip re-pin + soak). Full `run_railway_hub_stress.sh` at **Wave K K6** (3.4.0 pin) and again at Wave L shippable pins (**no `SKIP_ZAP`**).
 
 | Rev / wave | In-repo / Cursor plan | Concern | Status |
 |------------|----------------------|---------|--------|
-| **Wave K master** | [`openfdd_wave_k_340_filesystem_pin_program.plan.md`](patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md) | **3.4.0 pin** + historian freeze + shared-DB ADR | **OPEN** |
-| **Wave L master** | [`openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md) | **3.5.x shared DB** mega | **QUEUED** (after K) |
+| **Wave K master** | [`openfdd_wave_k_340_filesystem_pin_program.plan.md`](patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md) | **3.4.0 pin** + MEGAs + historian freeze + Phase-0 ADR | **OPEN** |
+| **Wave L master** | [`openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md) | **3.5.x multi-client shared hosting** (tenant Parquet + control plane) | **QUEUED** (after K) |
 | **Wave J master** | [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) | DF-boundary + #875 | **RETIRED / CLOSED** |
 | **Wave I master** | [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) | App-test MEGAs | **RETIRED / CLOSED** |
 | **Wave H** | Cursor post_waveg residual H | Demo charts / UI freshness | **CLOSED** |

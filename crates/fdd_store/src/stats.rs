@@ -124,6 +124,69 @@ pub fn local_historian_stats_from_config(config: &HistorianConfig) -> Result<His
     local_historian_stats(&LocalStorage::new(root), config.target_file_mb)
 }
 
+/// Footer-only peek of Parquet column names for one equipment partition tree.
+/// Used by Data Model MQTT/historian mapping when no columns.csv exists.
+pub fn peek_equipment_history_columns(
+    storage_root: &Path,
+    building_id: &str,
+    equipment_id: &str,
+) -> Vec<String> {
+    let Ok(building) = crate::historian::safe_partition_value(building_id, "building_id") else {
+        return Vec::new();
+    };
+    let Ok(equipment) = crate::historian::safe_partition_value(equipment_id, "equipment_id") else {
+        return Vec::new();
+    };
+    let prefix = Path::new("history")
+        .join(format!("building_id={building}"))
+        .join(format!("equipment_id={equipment}"));
+    let abs = storage_root.join(&prefix);
+    if !abs.is_dir() {
+        return Vec::new();
+    }
+    let mut names = BTreeSet::new();
+    let mut stack = vec![abs];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in rd.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.extension().and_then(|e| e.to_str()) != Some("parquet") {
+                continue;
+            }
+            let Ok(file) = fs::File::open(&path) else {
+                continue;
+            };
+            let Ok(builder) = ParquetRecordBatchReaderBuilder::try_new(file) else {
+                continue;
+            };
+            for field in builder.schema().fields() {
+                let name = field.name();
+                if name == "timestamp_utc"
+                    || name == "building_id"
+                    || name == "equipment_id"
+                    || name == "month"
+                    || name == "year"
+                {
+                    continue;
+                }
+                names.insert(name.to_string());
+            }
+            // One readable part is enough for the Data Model role list.
+            break;
+        }
+        if !names.is_empty() {
+            break;
+        }
+    }
+    names.into_iter().collect()
+}
+
 #[derive(Debug, Clone, Copy)]
 struct CanonicalHistoryIdentity<'a> {
     building: &'a str,

@@ -1510,24 +1510,57 @@ fn mapping_from_historian_equipment(building_id: &str, equipment_id: Option<&str
                 .get("equipment_type")
                 .cloned()
                 .unwrap_or(json!("GENERAL"));
+            let pq = crate::fdd::registry_api::parquet_root();
+            let cols = fdd_store::peek_equipment_history_columns(&pq, building_id, &eq_id);
+            let mut roles = serde_json::Map::new();
+            let column_rows: Vec<Value> = cols
+                .iter()
+                .map(|col| {
+                    // MQTT/historian wide Parquet already uses cookbook role names as columns.
+                    roles.insert(col.clone(), json!(col));
+                    json!({
+                        "column": col,
+                        "role": col,
+                        "status": "mapped",
+                    })
+                })
+                .collect();
+            let warnings = if column_rows.is_empty() {
+                vec![
+                    "MQTT/historian data model — no Parquet columns discovered yet; roles empty until telemetry arrives"
+                        .to_string(),
+                ]
+            } else {
+                vec![
+                    "MQTT/historian data model — roles inferred from Parquet columns (not CSV columns.csv / not live Haystack browse)"
+                        .to_string(),
+                ]
+            };
             json!({
                 "equipment_id": eq_id,
                 "equipment_type": eq_type,
                 "parent_ahu": Value::Null,
                 "ok": true,
-                "columns": [],
-                "roles": {},
+                "columns": column_rows,
+                "roles": Value::Object(roles),
                 "unmapped_columns": [],
                 "ambiguous_roles": {},
                 "blockers": [],
-                "warnings": [
-                    "MQTT/historian data model — no columns.csv; roles empty until mapped"
-                ],
+                "warnings": warnings,
                 "sampling": Value::Null,
             })
         })
         .collect();
     let n = equipment.len();
+    let warning_count: usize = equipment
+        .iter()
+        .map(|e| {
+            e.get("warnings")
+                .and_then(Value::as_array)
+                .map(|a| a.len())
+                .unwrap_or(0)
+        })
+        .sum();
     json!({
         "ok": true,
         "building_id": building_id,
@@ -1538,7 +1571,7 @@ fn mapping_from_historian_equipment(building_id: &str, equipment_id: Option<&str
         "warnings": ["historian-backed mapping (no csv_buildings package tree)"],
         "validation": {
             "blocker_count": 0,
-            "warning_count": n,
+            "warning_count": warning_count,
             "equipment_count": n,
         },
     })
