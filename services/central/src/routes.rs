@@ -357,9 +357,8 @@ pub async fn list_tenants(
         .auth
         .user_from_headers(&headers)
         .unwrap_or_else(|_| auth::AuthUser::dev_anonymous());
-    let ctx = crate::tenant::TenantContext::resolve(&user, &plane).unwrap_or_else(|_| {
-        crate::tenant::TenantContext::single_tenant_passthrough(&user)
-    });
+    let ctx = crate::tenant::TenantContext::resolve(&user, &plane)
+        .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&user));
     // Keep gate 11 fail-closed on mode: never advertise ON until operator enable.
     let multi_tenant = crate::tenant::multi_tenant_enabled();
     let buildings_visible: Vec<String> = plane
