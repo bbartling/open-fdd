@@ -362,6 +362,12 @@ pub async fn list_tenants(
     });
     // Keep gate 11 fail-closed on mode: never advertise ON until operator enable.
     let multi_tenant = crate::tenant::multi_tenant_enabled();
+    let buildings_visible: Vec<String> = plane
+        .all_building_ids()
+        .into_iter()
+        .filter(|b| ctx.allow_building(b))
+        .collect();
+    let _ = buildings_visible; // reserved for L2 scoped listings; keeps fail-closed gate live
     Json(crate::tenant::TenantsListResponse {
         ok: true,
         multi_tenant,
