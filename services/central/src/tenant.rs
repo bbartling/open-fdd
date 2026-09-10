@@ -96,10 +96,9 @@ impl TenantContext {
         if !self.multi_tenant {
             return Ok(base.to_path_buf());
         }
-        let tid = self
-            .tenant_id
-            .as_deref()
-            .ok_or_else(|| "multi-tenant historian root requires an active tenant_id".to_string())?;
+        let tid = self.tenant_id.as_deref().ok_or_else(|| {
+            "multi-tenant historian root requires an active tenant_id".to_string()
+        })?;
         fdd_store::tenant_storage_root(base, Some(tid)).map_err(|e| e.to_string())
     }
 
@@ -108,10 +107,9 @@ impl TenantContext {
         if !self.multi_tenant {
             return Ok(String::new());
         }
-        let tid = self
-            .tenant_id
-            .as_deref()
-            .ok_or_else(|| "multi-tenant historian prefix requires an active tenant_id".to_string())?;
+        let tid = self.tenant_id.as_deref().ok_or_else(|| {
+            "multi-tenant historian prefix requires an active tenant_id".to_string()
+        })?;
         fdd_store::tenant_storage_prefix(Some(tid)).map_err(|e| e.to_string())
     }
 }

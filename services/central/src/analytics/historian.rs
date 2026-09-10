@@ -61,7 +61,7 @@ const NUMERIC_ROLE_COLS: &[&str] = &[
 /// Resolve Parquet historian root — same env fallbacks as edge FDD registry.
 ///
 /// Wave L: when `OPENFDD_MULTI_TENANT` is ON, callers that have a
-/// `TenantContext` must use `TenantContext::historian_root` / 
+/// `TenantContext` must use `TenantContext::historian_root` /
 /// [`parquet_root_for_context`] instead of this hub-wide helper. Mode OFF
 /// (default) leaves this path unchanged for single-tenant hubs.
 pub fn parquet_root() -> PathBuf {
