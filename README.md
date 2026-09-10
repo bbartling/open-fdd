@@ -20,7 +20,7 @@
     <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
   </a>
   <a href="https://bbartling.github.io/open-fdd/rules/cookbook/">
-    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-62%20rules%20SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — DataFusion SQL + Pandas">
+    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-62%20%2F%2066%20SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — datafusion-sql-cookbook · pandas-cookbook">
   </a>
   <a href="https://pypi.org/project/open-fdd/">
     <img src="https://img.shields.io/pypi/v/open-fdd?style=for-the-badge&label=PyPI&color=3775A9" alt="Open-FDD on PyPI">
@@ -40,8 +40,6 @@
 Open-FDD is a free, open-source building-to-cloud pipeline for HVAC analytics and fault detection. The same stack runs on-premises or in the cloud: high-performance Apache Arrow storage and Apache DataFusion SQL, a Rust central service, React operator UI, Mosquitto MQTTS ingest, and fieldbus edge agents for BACnet, Modbus, and Haystack — plus REST APIs and CSV/zip import when you are not on live OT.
 
 Deploy locally or as a cloud hub and pull building data over MQTTS, APIs, or files. Today’s product is SQL-based FDD and RCx on that Arrow/DataFusion engine; the roadmap is ML and clustering on the same foundation.
-
-**FDD Rule Cookbook** — **62** public rules / **66** SQL registry ids: [datafusion-sql-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/datafusion-sql-cookbook.html) · [pandas-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html)
 
 ---
 
