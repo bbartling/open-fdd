@@ -346,12 +346,26 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
     tag = "central",
     responses((status = 200, description = "Tenant control-plane listing", body = crate::tenant::TenantsListResponse))
 )]
-pub async fn list_tenants() -> Json<crate::tenant::TenantsListResponse> {
+pub async fn list_tenants(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Json<crate::tenant::TenantsListResponse> {
     let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
     let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
+    // Public route: prefer JWT membership when present; otherwise anonymous passthrough.
+    let user = state
+        .auth
+        .user_from_headers(&headers)
+        .unwrap_or_else(|_| auth::AuthUser::dev_anonymous());
+    let ctx = crate::tenant::TenantContext::resolve(&user, &plane).unwrap_or_else(|_| {
+        crate::tenant::TenantContext::single_tenant_passthrough(&user)
+    });
+    // Keep gate 11 fail-closed on mode: never advertise ON until operator enable.
+    let multi_tenant = crate::tenant::multi_tenant_enabled();
     Json(crate::tenant::TenantsListResponse {
         ok: true,
-        multi_tenant: crate::tenant::multi_tenant_enabled(),
+        multi_tenant,
+        active_tenant_id: ctx.tenant_id,
         tenants: plane.tenants,
     })
 }
