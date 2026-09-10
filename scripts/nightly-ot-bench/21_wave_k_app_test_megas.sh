@@ -45,15 +45,16 @@ fi
 # 2) MQTT quad — recent loopback has zone_t + oa_t + zone_rh; hosted-weather web_oa_t
 body="$(cpost /api/analytics/inspect '{"building_id":"bldg2","equipment_ids":["bldg2-zone-loopback"],"max_points":200}')"
 echo "$body" >"$ART/wave_k_inspect_loopback.json"
+# Single-quoted python -c: use "…" for JSON keys (\" breaks under bash $'…' / eval).
 eval "$(echo "$body" | python3 -c '
 import json,sys
 a=(json.load(sys.stdin).get("analytics") or {})
 pts=a.get("points") or []
 def n(k): return sum(1 for p in pts if p.get(k) is not None)
-print(f"zt={n(\"zone_t\")}")
-print(f"oa={n(\"oa_t\")}")
-print(f"rh={n(\"zone_rh\")}")
-print(f"n={len(pts)}")
+print("zt=%d" % n("zone_t"))
+print("oa=%d" % n("oa_t"))
+print("rh=%d" % n("zone_rh"))
+print("n=%d" % len(pts))
 ')"
 if [[ "${zt:-0}" -gt 0 && "${oa:-0}" -gt 0 ]]; then
   record mqtt_zone_and_oa 1 "zone_t=$zt oa_t=$oa n=$n"
@@ -95,7 +96,8 @@ fi
 
 body="$(cget "/api/csv/import/package/mapping?building_id=BUILDING_100&equipment_id=bldg2-zone-loopback")"
 echo "$body" >"$ART/wave_k_mapping_cross_site.json"
-ok_cross="$(echo "$body" | jq -r '.ok // true')"
+# jq `false // true` yields true — do not use // for boolean .ok
+ok_cross="$(echo "$body" | jq -r '.ok')"
 err_cross="$(echo "$body" | jq -r '.error // empty')"
 if [[ "$ok_cross" == "false" && -n "$err_cross" ]]; then
   record mapping_cross_site 1 "fail_closed"
