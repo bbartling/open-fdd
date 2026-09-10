@@ -193,15 +193,25 @@ pub struct TenantsListResponse {
 mod tests {
     use super::*;
     use crate::auth::{AuthUser, Role};
+    use std::sync::{Mutex, MutexGuard};
+
+    /// Serialize env mutations — `OPENFDD_MULTI_TENANT` is process-global.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn lock_env() -> MutexGuard<'static, ()> {
+        ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
 
     #[test]
     fn multi_tenant_flag_defaults_off() {
+        let _g = lock_env();
         std::env::remove_var("OPENFDD_MULTI_TENANT");
         assert!(!multi_tenant_enabled());
     }
 
     #[test]
     fn multi_tenant_flag_on() {
+        let _g = lock_env();
         std::env::set_var("OPENFDD_MULTI_TENANT", "1");
         assert!(multi_tenant_enabled());
         std::env::remove_var("OPENFDD_MULTI_TENANT");
@@ -209,6 +219,7 @@ mod tests {
 
     #[test]
     fn resolve_off_is_legacy_passthrough() {
+        let _g = lock_env();
         std::env::remove_var("OPENFDD_MULTI_TENANT");
         let user = AuthUser {
             sub: "admin".into(),
@@ -224,6 +235,7 @@ mod tests {
 
     #[test]
     fn resolve_on_without_membership_fails_closed() {
+        let _g = lock_env();
         std::env::set_var("OPENFDD_MULTI_TENANT", "true");
         let user = AuthUser {
             sub: "operator".into(),
@@ -238,6 +250,7 @@ mod tests {
 
     #[test]
     fn resolve_on_scopes_buildings() {
+        let _g = lock_env();
         std::env::set_var("OPENFDD_MULTI_TENANT", "on");
         let user = AuthUser {
             sub: "eng".into(),
@@ -260,6 +273,7 @@ mod tests {
 
     #[test]
     fn historian_root_off_is_hub_base() {
+        let _g = lock_env();
         std::env::remove_var("OPENFDD_MULTI_TENANT");
         let user = AuthUser {
             sub: "admin".into(),
@@ -275,6 +289,7 @@ mod tests {
 
     #[test]
     fn historian_root_on_partitions_by_tenant() {
+        let _g = lock_env();
         std::env::set_var("OPENFDD_MULTI_TENANT", "1");
         let user = AuthUser {
             sub: "eng".into(),
