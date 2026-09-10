@@ -44,11 +44,8 @@ Deploy locally or as a cloud hub and pull building data over MQTTS, APIs, or fil
 ---
 
 
-## Install / run
+## Install / run GHCR images
 
-**FDD Rule Cookbook** — **62** public rules / **68** SQL registry ids: [datafusion-sql-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/datafusion-sql-cookbook.html) · [pandas-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html) · [PyPI open-fdd](https://pypi.org/project/open-fdd/)
-
-### GHCR images
 
 | Image | Role |
 |-------|------|
@@ -77,7 +74,7 @@ Update a running stack (pull, backup, rollback if health fails):
 ./scripts/openfdd_maint_update_resume.sh react nightly
 ```
 
-AI agent assistance: [AGENTS.md](https://github.com/bbartling/open-fdd/blob/master/AGENTS.md).
+AI Agent assistance : [AGENTS.md](https://github.com/bbartling/open-fdd/blob/master/AGENTS.md).
 
 
 ## PyPI package
