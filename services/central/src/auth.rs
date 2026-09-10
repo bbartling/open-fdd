@@ -70,12 +70,16 @@ pub struct JwtClaims {
     pub exp: i64,
     #[serde(default)]
     pub iat: i64,
+    /// Wave L — tenant memberships when multi-tenant mode is on (empty = hub-wide admin or single-tenant).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tenant_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct AuthUser {
     pub sub: String,
     pub role: Role,
+    pub tenant_ids: Vec<String>,
 }
 
 impl AuthUser {
@@ -83,6 +87,7 @@ impl AuthUser {
         Self {
             sub: "dev".into(),
             role: Role::Admin,
+            tenant_ids: vec![],
         }
     }
 }
@@ -214,6 +219,7 @@ impl AuthConfig {
             role: role.as_str().to_string(),
             exp: now + ttl_secs.max(60),
             iat: now,
+            tenant_ids: vec![],
         };
         encode(
             &Header::default(),
@@ -287,6 +293,7 @@ impl AuthConfig {
         Ok(AuthUser {
             sub: data.claims.sub,
             role,
+            tenant_ids: data.claims.tenant_ids,
         })
     }
 
@@ -342,6 +349,7 @@ mod tests {
             role: "operator".into(),
             exp: chrono::Utc::now().timestamp() + 3600,
             iat: chrono::Utc::now().timestamp(),
+            tenant_ids: vec![],
         };
         let token = encode(
             &Header::default(),
@@ -367,6 +375,7 @@ mod tests {
             role: "integrator".into(),
             exp: chrono::Utc::now().timestamp() + 3600,
             iat: chrono::Utc::now().timestamp(),
+            tenant_ids: vec![],
         };
         let token = encode(
             &Header::default(),

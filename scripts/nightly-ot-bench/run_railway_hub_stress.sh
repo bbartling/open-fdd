@@ -67,7 +67,8 @@ python3 "$MANIFEST_PY" create \
   --required 07_auth_role_matrix \
   --required 08_mcp_accuracy \
   --required 09_wave_i_app_test_megas \
-  --required 10_wave_k_app_test_megas
+  --required 10_wave_k_app_test_megas \
+  --required 11_wave_l_tenant_mode
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"
@@ -217,6 +218,10 @@ run_gate "09_wave_i_app_test_megas" "09 Wave I app-test MEGAs" \
 # --- 10 Wave K app-test MEGAs (sensor-faults + MQTT quad + data-model) ---
 run_gate "10_wave_k_app_test_megas" "10 Wave K app-test MEGAs" \
   "$DIR/21_wave_k_app_test_megas.sh"
+
+# --- 11 Wave L tenant mode (multi_tenant OFF + legacy control plane) ---
+run_gate "11_wave_l_tenant_mode" "11 Wave L tenant mode OFF" \
+  bash "$DIR/22_wave_l_tenant_mode.sh"
 
 # Finalize — SUMMARY generated from recorded gates only
 set +e

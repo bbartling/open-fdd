@@ -41,7 +41,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         // Shell strip + building summary are intentionally public (UI before login).
         .route("/api/health/stack", get(health_stack))
         .route("/api/building/snapshot", get(building_snapshot))
-        .route("/api/dashboard/summary", get(dashboard_summary));
+        .route("/api/dashboard/summary", get(dashboard_summary))
+        .route("/api/tenants", get(list_tenants));
 
     // Admin-gated agent token mint lives on the authenticated router below.
 
@@ -334,6 +335,43 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
         ingest_ok: *state.ingest_ok.lock().unwrap(),
         ingest_dup: *state.ingest_dup.lock().unwrap(),
         ingest_reject: *state.ingest_reject.lock().unwrap(),
+        multi_tenant: crate::tenant::multi_tenant_enabled(),
+    })
+}
+
+/// Wave L — list tenants from file control plane (legacy singleton when mode OFF).
+#[utoipa::path(
+    get,
+    path = "/api/tenants",
+    tag = "central",
+    responses((status = 200, description = "Tenant control-plane listing", body = crate::tenant::TenantsListResponse))
+)]
+pub async fn list_tenants(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Json<crate::tenant::TenantsListResponse> {
+    let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+    let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
+    // Public route: prefer JWT membership when present; otherwise anonymous passthrough.
+    let user = state
+        .auth
+        .user_from_headers(&headers)
+        .unwrap_or_else(|_| auth::AuthUser::dev_anonymous());
+    let ctx = crate::tenant::TenantContext::resolve(&user, &plane)
+        .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&user));
+    // Keep gate 11 fail-closed on mode: never advertise ON until operator enable.
+    let multi_tenant = crate::tenant::multi_tenant_enabled();
+    let buildings_visible: Vec<String> = plane
+        .all_building_ids()
+        .into_iter()
+        .filter(|b| ctx.allow_building(b))
+        .collect();
+    Json(crate::tenant::TenantsListResponse {
+        ok: true,
+        multi_tenant,
+        active_tenant_id: ctx.tenant_id,
+        buildings_visible,
+        tenants: plane.tenants,
     })
 }
 

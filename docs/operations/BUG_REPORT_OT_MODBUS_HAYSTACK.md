@@ -1,19 +1,22 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-10 (Wave K **3.4.0 PINNED**)  
+**Date:** 2026-09-10 (Wave L **L1** in progress · Wave K **3.4.0** rollback pin)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in Open-FDD stress)  
-**Tip / pin (ops):** `9c3e8b1c` · VERSION **3.4.0** · health **`3.4.0+9c3e8b1c30c1`** · GHCR **central/web/mqtt/fieldbus `sha-9c3e8b1`** · **3.4.0 PINNED**  
+**Tip / pin (ops):** `9c3e8b1c` · VERSION **3.4.0** · health **`3.4.0+9c3e8b1c30c1`** · GHCR **central/web/mqtt/fieldbus `sha-9c3e8b1`** · rollback until L1 tip  
+**Product tip (Wave L):** VERSION **3.5.0** on branch (L1) — not Railway-pinned until tip Publish + smoke  
+**Last CLOSED tip (Wave K):** `9c3e8b1c` · **`sha-9c3e8b1`** · **`3.4.0+9c3e8b1c30c1`** · MEGAs stress `20260910T021557Z` · docs **#890**  
 **Last CLOSED tip (Wave J):** `c1b1aa52` · **`sha-c1b1aa5`** · **`3.3.41+c1b1aa52806b`** · product **#877** · CI/gates **#878** · docs Stage A **#876**  
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Dual-publish AV `9101`: `bldg2-zone-loopback` **`zone_t`+`oa_t`**, `hosted-weather` **`web_oa_t`**.  
 **Backup:** `~/openfdd-backups/railway/20260910T020319Z/` (pre–K5 tip re-pin; prior K1b `20260909T203549Z/`)  
+**Program (ACTIVE):** Wave L — **multi-client shared hosting 3.5.x** (tenant-partitioned Parquet + control plane; **not** Postgres time-series) · Cursor [`wave_l_shared_db_mega_master`](../../../.cursor/plans/wave_l_shared_db_mega_master.plan.md) · repo [`openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md)  
 **Program (CLOSED):** Wave K — **3.4.0 filesystem-historian pin** · tip `sha-9c3e8b1` · stress `reports/nightly-ot-bench_20260910T021557Z/` **`fully_qualified=true`** (gates 00–10) · harness fix **#889** · Cursor [`wave_k_340_filesystem_pin_master`](../../../.cursor/plans/wave_k_340_filesystem_pin_master.plan.md)  
 **Program (prior CLOSED):** Wave J — Cursor [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) · tip `sha-c1b1aa5` / 3.3.41  
 **Program (prior CLOSED):** Wave I — Cursor [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) · tip `sha-d1312b0` / 3.3.40  
 **Stress (Wave K closeout):** `reports/nightly-ot-bench_20260910T021557Z/` · **`fully_qualified=true`** (gates 00–10 incl. ZAP + MCP + Wave I + Wave K MEGAs)  
-**Deferred:** [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — Cursor [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) (optional; never blocked 3.4.0)  
+**Stress (Wave L):** mid-wave = **smoke + gate 11** only; **ONE enhanced full stress at L8** (00–11+, no `SKIP_ZAP`) → BUG_REPORT **3.5.x PINNED**  
+**Deferred:** [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — Cursor [`mqtt_monitor_sse_782.plan.md`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) (optional; never blocks Wave L)  
 **K1:** MEGAs **#884 MERGED** (`5aed663c`). Docs K2/K3 → **#885**.  
 **K1b:** Plot-span **#886 MERGED** (`cee2f4ec`) — smoke on `sha-cee2f4e`.  
-**Program (ACTIVE):** Wave L — **multi-client shared hosting 3.5.x** (tenant-partitioned Parquet + control plane; **not** Postgres time-series) · Cursor [`wave_l_shared_db_mega_master`](../../../.cursor/plans/wave_l_shared_db_mega_master.plan.md) · repo [`openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md)  
 **Wait filler:** Vibe13 Part B (separate repo) during Open-FDD CI/Publish  
 **Pis freed (not in Open-FDD stress):** bosspi · BensFakeAhu · Zone1VAV.
 
@@ -48,6 +51,7 @@
 | **vibe19-operational-gate-lab** | **CLOSED** (3.3.37 / Wave G) | Operational-gate trio SQL-bound | #864 · tip `sha-a40787b` | — |
 | **hybrid-ml-physics-ahu-vav** | **ABANDONED** | Was: physics/RCA / ML / E+ hybrid Wave G | Felt bogus 2026-09-07 | Do not implement |
 | **sql-anomaly-screening** | **PARKED** | SQL self/peer anomaly | Lab parity first 2026-09-07 | After Wave H demo |
+| **wave-l-l1-tenant-context** | **OPEN** (Wave L / 3.5.0) | Control plane + `TenantContext` + `OPENFDD_MULTI_TENANT` OFF; health/tenants echo; gate 11 | L1 PR + tip smoke (not L8 PINNED) | Merge → tip → Railway smoke + gate 11 |
 | **lab-tuner-vibe19-parity** | **CLOSED** (3.3.37) | Vibe19 Lab tuners → production (~217→~444) | #864 · stress `reports/nightly-ot-bench_20260907T183808Z/` · `fully_qualified=true` | — |
 | **ghcr-publish-hub-blocked-by-fieldbus** | **CLOSED** (#865) | Serial Publish put mqtt after multi-arch fieldbus | Merged 2026-09-07; tip-completeness workflow live | — |
 | **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | Was: equipment=0 for MQTT `bldg2` → empty Overview | #856 · probe + stress | — |
@@ -122,19 +126,21 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 ### Upcoming trains (Cursor plans — optimized waves 2026-09-06)
 
 **Source of truth:** [`patch_trains/`](patch_trains/) · [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md) · [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
-**Active:** Wave K master [`wave_k_340_filesystem_pin_master`](../../../.cursor/plans/wave_k_340_filesystem_pin_master.plan.md) — pin **3.4.0** Parquet historian + MEGAs + Phase-0 multi-client ADR; then Wave L **3.5** multi-client shared hosting.  
-**Last closed:** Wave J (RETIRED [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md)) · tip `sha-c1b1aa5` / **3.3.41** · stress `20260909T010712Z` · closeout docs **#882**. Anomaly **PARKED**. #782 optional K4. Stage C **after** Wave L baseline.
+**Active:** Wave L master [`wave_l_shared_db_mega_master`](../../../.cursor/plans/wave_l_shared_db_mega_master.plan.md) — **3.5.x multi-client shared hosting** (tenant Parquet + control plane; **not** Postgres TS).  
+**Last closed:** Wave K (RETIRED [`wave_k_340_filesystem_pin_master`](../../../.cursor/plans/wave_k_340_filesystem_pin_master.plan.md)) · tip `sha-9c3e8b1` / **3.4.0** · stress `20260910T021557Z` · closeout docs **#890**. #782 optional SSE. Anomaly **PARKED**. Stage C **after** Wave L baseline.
 
-**This round stress rule:** mid-wave = smoke only (Railway CLI tip re-pin + soak). Full `run_railway_hub_stress.sh` at **Wave K K6** (3.4.0 pin) and again at Wave L shippable pins (**no `SKIP_ZAP`**).
+**This round stress rule:** mid-wave = smoke only (Railway CLI tip re-pin + soak). Full `run_railway_hub_stress.sh` at Wave L shippable pins (**L8**, **no `SKIP_ZAP`**); keep Wave K gate **10** green.
 
 | Rev / wave | In-repo / Cursor plan | Concern | Status |
 |------------|----------------------|---------|--------|
-| **Wave K master** | [`openfdd_wave_k_340_filesystem_pin_program.plan.md`](patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md) | **3.4.0 pin** + MEGAs + historian freeze + Phase-0 ADR | **OPEN** |
-| **Wave L master** | [`openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md) | **3.5.x multi-client shared hosting** (tenant Parquet + control plane) | **QUEUED** (after K) |
+| **Wave L master** | [`openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md) | **3.5.x multi-client shared hosting** (tenant Parquet + control plane) | **ACTIVE** (L1 · VERSION 3.5.0 · mode OFF) |
+| **Wave K master** | [`openfdd_wave_k_340_filesystem_pin_program.plan.md`](patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md) | **3.4.0 pin** + MEGAs + historian freeze + Phase-0 ADR | **CLOSED / PINNED** |
 | **Wave J master** | [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) | DF-boundary + #875 | **RETIRED / CLOSED** |
 | **Wave I master** | [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) | App-test MEGAs | **RETIRED / CLOSED** |
 | **Wave H** | Cursor post_waveg residual H | Demo charts / UI freshness | **CLOSED** |
 | **Wave G / 3.3.37–3.3.40** | [`openfdd_lab_tuner_parity_program.plan.md`](patch_trains/openfdd_lab_tuner_parity_program.plan.md) | Lab tuner Vibe19 parity | **CLOSED** — #864 · tip `sha-a40787b` |
+| **#782 SSE** | [`mqtt_monitor_sse_782`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) | MQTT monitor SSE | **DEFERRED** (not Wave L) |
+| **sql-anomaly** | — | SQL self/peer anomaly | **PARKED** (not Wave L) |
 
 **Tuner reference:** Vibe19 UI **~414** vs Lab tip **~444** after Wave G (was ~217) — [`lab_tuners_snapshot_post_wave_g.json`](recovery/lab_tuners_snapshot_post_wave_g.json). G0 matrix: [`recovery/lab_vibe19_tuner_gap_matrix_g0.json`](recovery/lab_vibe19_tuner_gap_matrix_g0.json). RCx: [`RCX_PLOTS_BY_HVAC.md`](../RCX_PLOTS_BY_HVAC.md).
 

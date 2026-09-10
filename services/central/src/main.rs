@@ -19,6 +19,7 @@ mod mqtt_monitor;
 mod openapi;
 mod routes;
 mod state;
+mod tenant;
 mod vibe21;
 mod wattlab_dump;
 

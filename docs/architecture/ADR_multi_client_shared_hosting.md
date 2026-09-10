@@ -6,7 +6,7 @@ nav_order: 12
 
 # ADR — Multi-client shared hosting (Wave L Phase 0)
 
-- **Status:** Proposed (Wave K **K3** / Wave L **Phase 0**)
+- **Status:** Accepted for Wave L Phase 1 scaffolding (mode **OFF** by default; Tier-2 enablement still gated)
 - **Date:** 2026-09-09
 - **Program:** Wave L `3.5.x` — shared Railway hub for many engineering firms
 - **Depends on:** Wave K **3.4.0 PINNED** before product coding; this ADR may land as design-only K3 meanwhile
