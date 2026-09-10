@@ -1,5 +1,16 @@
 # Session log
 
+## 2026-09-10 — README + agent-spec tooling / Wave L context
+
+- README revised (Install/run + PyPI blurb; Support section); spelling-only fix (`AI agent assistance:`).
+- `openfdd_agent_spec` refreshed: Wave L L1 LIVE pin (`sha-a11b6cb` / 3.5.0), rules 39–40 / 50 / 59–60 tooling map, Railway CLI skill (backup → re-pin → fieldbus script; mid-wave gates 11–12).
+
+## 2026-09-10 — Wave L L1 LIVE (3.5.0 / sha-a11b6cb)
+
+- Product #891 TenantContext + mode OFF; tip `sha-a11b6cb`; health `3.5.0+a11b6cb181fc`; gate 11 PASS; backup `20260910T161828Z`.
+- Hygiene: 0 open PRs / only `master`. Rollback Wave K `sha-9c3e8b1` / 3.4.0.
+- Next: L2 tenant Parquet roots (3.5.1) + gate 12.
+
 ## 2026-09-10 — Wave K 3.4.0 PINNED
 
 - Tip `sha-9c3e8b1` / health `3.4.0+9c3e8b1c30c1` LIVE (K5 #888).

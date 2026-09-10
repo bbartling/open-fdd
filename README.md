@@ -20,7 +20,7 @@
     <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
   </a>
   <a href="https://bbartling.github.io/open-fdd/rules/cookbook/">
-    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-62%20rules%20SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — DataFusion SQL + Pandas">
+    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-62%20%2F%2066%20SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — datafusion-sql-cookbook · pandas-cookbook">
   </a>
   <a href="https://pypi.org/project/open-fdd/">
     <img src="https://img.shields.io/pypi/v/open-fdd?style=for-the-badge&label=PyPI&color=3775A9" alt="Open-FDD on PyPI">
@@ -43,14 +43,8 @@ Deploy locally or as a cloud hub and pull building data over MQTTS, APIs, or fil
 
 ---
 
-<details>
-<summary>Install / run</summary>
 
-## Install / run
-
-**FDD Rule Cookbook** — **62** public rules / **68** SQL registry ids: [datafusion-sql-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/datafusion-sql-cookbook.html) · [pandas-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html) · [PyPI open-fdd](https://pypi.org/project/open-fdd/)
-
-### GHCR images
+## Install / run GHCR images
 
 | Image | Role |
 |-------|------|
@@ -79,25 +73,8 @@ Update a running stack (pull, backup, rollback if health fails):
 ./scripts/openfdd_maint_update_resume.sh react nightly
 ```
 
-UI `http://127.0.0.1:3000` · API `http://127.0.0.1:8080` · [build recipes](docs/operations/build-recipes.md)
+AI Agent assistance : [AGENTS.md](https://github.com/bbartling/open-fdd/blob/master/AGENTS.md).
 
-### MCP
-
-Open-FDD does **not** ship an embedded AI chatbot. External agents connect via MCP or REST — see [external agents](docs/examples/external-agents.md).
-
-```bash
-docker run -i --rm --network host \
-  -e OPENFDD_API_BASE=http://127.0.0.1:8080 \
-  -e OPENFDD_MCP_TOKEN="$TOKEN" \
-  ghcr.io/bbartling/openfdd-mcp:nightly
-```
-
-Tool list: [mcp/README.md](mcp/README.md).
-
-</details>
-
-<details>
-<summary>PyPI package</summary>
 
 ## PyPI package
 
@@ -105,49 +82,14 @@ Tool list: [mcp/README.md](mcp/README.md).
 pip install open-fdd
 ```
 
-Library for notebooks and ECM helpers — not the operator stack. See [PyPI](https://pypi.org/project/open-fdd/) and [docs](https://bbartling.github.io/open-fdd/).
+This is a library of rule-based FDD equations built with Pandas that serves as a reference implementation for the Open-FDD platform, which uses Apache DataFusion and SQL for production rules. It also includes tooling for AI agents to assist with engineering calculations, EnergyPlus modeling, Open-FDD stress testing, and more. Future capabilities include report writing and daily HVAC-fault email alerts—yet to be tested with Grok, OpenClaw, or the AI agent tooling of your choice.
 
-</details>
-
-<details>
-<summary>Develop</summary>
-
-## Develop
-
-```bash
-git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
-./scripts/openfdd_stack_up.sh react --build
-cd frontend/web && npm ci && npm run dev
-```
-
-Rust: `cargo test --workspace`
-
-</details>
-
-<details>
-<summary>Releases</summary>
-
-## Releases
-
-GHCR images build on every `master` merge. Set **`OPENFDD_IMAGE_TAG=nightly`** (or `sha-<7>` to pin). Beta/stable are not published yet — [release policy](https://bbartling.github.io/open-fdd/operations/release-channels.html).
-
-Intended for **LAN / VPN / OT networks**, not public internet hosting. The Railway field lab is experimental (see status blurb above).
-
-</details>
-
-<details>
-<summary>Security</summary>
-
-## Security
-
-Do **not** report vulnerabilities through public GitHub issues or discussions. Use [GitHub Private Vulnerability Reporting](https://github.com/bbartling/open-fdd/security/advisories/new). See [SECURITY.md](SECURITY.md) for what to include and how to redact sensitive OT/deployment evidence.
-
-</details>
 
 <details>
 <summary>💛 Support This Work</summary>
 
-If Open-FDD saves you time or budget, or helps with BAS/FDD work, you can support continued open-source development through PayPal. Your contribution directly helps fund the monthly time and labor required to keep the project moving forward. Your support is greatly appreciated.
+Support for Open-FDD directly funds the monthly time and labor required to keep the project moving forward, along with professional application-security testing to keep it strong, robust, free, and secure. Your support is greatly appreciated.
+
 
 <p align="center">
   <a href="https://paypal.me/benbartling20/25"><img src="https://img.shields.io/badge/Donate-$25-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate $25 via PayPal"></a>

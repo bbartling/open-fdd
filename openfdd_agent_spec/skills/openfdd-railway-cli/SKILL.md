@@ -14,16 +14,17 @@ Checklist: [`RAILWAY_DEPLOYMENT_CHECKLIST.md`](../../../docs/operations/RAILWAY_
 
 **Not Open-FDD MCP.** Railway CLI / Railway’s optional MCP manage cloud deploys. HVAC FDD tools stay in [`mcp/`](../../../mcp/) (`openfdd-mcp` + agent JWT to private central).
 
-## Verified host state (bensbench, 2026-09-03)
+## Verified host state (bensbench, 2026-09-10)
 
 | Item | Value |
 | --- | --- |
 | Package | `@railway/cli` via `npm i -g @railway/cli` |
 | Auth | **`railway login`** (browser) — verified; optional `RAILWAY_TOKEN` in `~/.config/railway/bensbench.env` |
 | Link | `~/open-fdd` → project **`gleaming-cooperation`**, env **`production`** |
-| **Product hub pin** | Bump each cycle — health must match pinned `sha-<7>` (`3.3.N+…`) |
-| Stress closeout | After re-pin — [`STRESS_CLOSEOUT.md`](../../../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md) |
+| **Product hub pin** | **`sha-a11b6cb`** / VERSION **3.5.0** / health **`3.5.0+a11b6cb181fc`** · `multi_tenant=false` (Wave L L1). Rollback **`sha-9c3e8b1`** / **3.4.0**. |
+| Stress closeout | Mid-wave = smoke + gates **11–12**. Full stress at Wave L **L8** / shippable pins — [`STRESS_CLOSEOUT.md`](../../../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md) |
 | Local firewall hub | HTTP only — [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md) |
+| Fieldbus | **Not** a Railway service — bensbench x86 via `./scripts/openfdd_fieldbus_railway_up.sh sha-<7>` |
 
 ### Live services (names matter for CLI)
 
@@ -35,7 +36,15 @@ Checklist: [`RAILWAY_DEPLOYMENT_CHECKLIST.md`](../../../docs/operations/RAILWAY_
 
 Always `railway status` / `railway service list` before re-pin — do **not** assume the central service is literally named `openfdd-central`.
 
-Post-auth snapshot (pre tip re-pin): mqtt Online on `sha-3395551`; web **Crashed** with `invalid port in resolver "fd12::10"` (needs tip `openfdd-web:sha-9667888` + `OPENFDD_NGINX_RESOLVER=auto`).
+## Tooling map (do not confuse)
+
+| Need | Tool |
+| --- | --- |
+| Publish / tip images | GitHub Actions `Publish Open-FDD stack to GHCR` + `./scripts/check_ghcr_tip_stack.sh` |
+| Backup + re-pin hub | **This skill** (Railway CLI) |
+| Edge → MQTTS | `./scripts/openfdd_fieldbus_railway_up.sh` on bensbench |
+| FDD / analytics for Cursor/Codex | [`mcp/`](../../../mcp/) `openfdd-mcp` + agent JWT — **not** Railway MCP |
+| Local CSV lab | `./scripts/openfdd_stack_up.sh react` (firewall HTTP) |
 
 ## Patch train (x86 fieldbus → Railway + stress LAST)
 
@@ -77,12 +86,16 @@ railway status >/dev/null 2>&1 || railway link
 # Expect: gleaming-cooperation / production
 
 # 4) Re-pin tip — use REAL service names from status
-SHA=sha-<7>   # tip pin. Health must match THIS tag (3.3.N+…).
-CENTRAL_SVC=openfdd-central-cQ-F   # confirm via railway status
+SHA=sha-<7>   # tip pin. Health must match THIS tag (3.5.x+… on Wave L).
+CENTRAL_SVC=openfdd-central-cQ-F   # confirm via railway status / service list
+
+# Backup FIRST (hard gate)
+./scripts/railway_central_workspace_backup.sh
 
 railway service source connect --service "$CENTRAL_SVC" \
   --image "ghcr.io/bbartling/openfdd-central:${SHA}"
 # wait private /api/health 200 — then mqtt → web
+# Prefer: railway ssh -s "$CENTRAL_SVC" -- sh -lc 'curl -sf http://127.0.0.1:8080/api/health'
 
 railway service source connect --service openfdd-mqtt \
   --image "ghcr.io/bbartling/openfdd-mqtt:${SHA}"
@@ -93,9 +106,14 @@ railway variable set OPENFDD_PARQUET_ROOT=/workspace/openfdd --service "$CENTRAL
 railway service source connect --service openfdd-web \
   --image "ghcr.io/bbartling/openfdd-web:${SHA}"
 # If ingest_ok stuck at 0 after mqtt re-pin: railway redeploy -s "$CENTRAL_SVC" -y
+
+# Fieldbus is local on bensbench (not a Railway service):
+./scripts/openfdd_fieldbus_railway_up.sh "$SHA"
 ```
 
-Smoke: public SPA + `https://<web>/api/health`. Sidebar / `/api/health` version must match the **pinned** SHA (`3.3.19+15baccf…` for `sha-15baccf`).
+Smoke: public SPA + `https://<web>/api/health` (and `/api/tenants` — Wave L: `multi_tenant=false`, empty `historian_prefix` when OFF). Version must match the **pinned** SHA (`3.5.0+a11b6cb…` for `sha-a11b6cb`).
+
+**Wave L mid-wave:** gates **11** + **12** only (`22_wave_l_tenant_mode.sh`, `23_wave_l_parquet_isolation.sh`). Full `run_railway_hub_stress.sh` at **L8**.
 
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS only. Raspberry Pis are out of stress. See [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md).
 
