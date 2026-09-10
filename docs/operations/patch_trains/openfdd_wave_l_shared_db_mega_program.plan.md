@@ -1,6 +1,6 @@
 ---
 name: Wave L multi-client shared hosting
-overview: "ACTIVE — Wave L 3.5.x. Low-RAM GH loop; every PR Actions green + 0 stale PRs/branches; BUG_REPORT live log. L1 control plane OFF next. L8 = enhanced full stress (00–11+) + BUG_REPORT 3.5.x PINNED."
+overview: "ACTIVE — Wave L 3.5.x. L1 LIVE sha-a11b6cb / 3.5.0 mode OFF. Low-RAM GH loop; Actions green + 0 stale PRs/branches. L2 next. L8 = enhanced full stress (00–11+) + BUG_REPORT 3.5.x PINNED."
 todos:
   - id: l0-wait-k-pin
     content: L0 — Wave K 3.4.0 PINNED (sha-9c3e8b1 / stress 20260910T021557Z) — UNBLOCKED
@@ -12,7 +12,7 @@ todos:
     content: L0c — Low-RAM + GH hygiene law locked in plan (Actions green; 0 stale PRs/branches)
     status: completed
   - id: l1-control-plane
-    content: L1 — TenantContext + flag OFF + control plane stub + gate 11 + VERSION 3.5.0 + smoke
+    content: L1 — #891 MERGED; tip sha-a11b6cb; gate 11 PASS; mode OFF LIVE
     status: completed
   - id: l2-parquet-isolation
     content: L2 — Tenant Parquet roots + DF providers (no shared-table WHERE)
@@ -59,9 +59,9 @@ isProject: false
 | **Program** | **ACTIVE** — Wave L **3.5.x** |
 | **Gate L0** | **DONE** — Wave K **3.4.0 PINNED** |
 | **Phase-0 ADR** | **DONE** (#885) — `docs/architecture/ADR_multi_client_shared_hosting.md` |
-| **BUG_REPORT product OPEN** | **None** (Wave K MEGAs CLOSED) |
-| **Ops pin** | **`sha-9c3e8b1`** / `3.4.0+9c3e8b1c30c1` (rollback until L1 tip) |
-| **Step** | **L2** next — L1 LIVE `sha-a11b6cb` / 3.5.0 mode OFF |
+| **BUG_REPORT product OPEN** | **None** (L1 CLOSED; Wave K MEGAs CLOSED) |
+| **Ops pin** | **`sha-a11b6cb`** / `3.5.0+a11b6cb181fc` · `multi_tenant=false` (rollback `sha-9c3e8b1`) |
+| **Step** | **L2** — Tenant Parquet roots + DF providers |
 
 ### BUG_REPORT carry-in
 
@@ -79,7 +79,7 @@ isProject: false
 [x] Phase-0 ADR (#885)
 [x] L1  Control plane OFF + TenantContext + gate 11 (#891 / sha-a11b6cb)
 [ ] L2  Tenant Parquet + DF   ← YOU ARE HERE
-[ ] L2–L7 …
+[ ] L3–L7 …
 [ ] L8  ENHANCED full stress + BUG_REPORT 3.5.x PINNED
 ```
 
