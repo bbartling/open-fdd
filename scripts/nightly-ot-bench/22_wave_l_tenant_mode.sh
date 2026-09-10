@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gate 22 — Wave L tenant mode / control plane smoke (mode OFF until Tier-2).
+# Gate 22 - Wave L tenant mode / control plane smoke (mode OFF until Tier-2).
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091

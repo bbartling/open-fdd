@@ -1,8 +1,8 @@
-//! Wave L Phase 1  multi-tenant mode flag + TenantContext + file control plane.
+//! Wave L Phase 1 - multi-tenant mode flag + TenantContext + file control plane.
 //!
 //! Default: **OFF** (`OPENFDD_MULTI_TENANT` unset/0/false). Single-tenant hub
 //! semantics unchanged. When ON (lab only until Tier-2), building access must
-//! resolve through membership  fail closed.
+//! resolve through membership - fail closed.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -12,7 +12,7 @@ use utoipa::ToSchema;
 
 use crate::auth::{AuthUser, Role};
 
-/// Env flag  multi-tenant shared-hosting mode. Default off.
+/// Env flag - multi-tenant shared-hosting mode. Default off.
 pub fn multi_tenant_enabled() -> bool {
     match std::env::var("OPENFDD_MULTI_TENANT") {
         Ok(v) => matches!(
@@ -39,7 +39,7 @@ pub struct TenantContext {
 }
 
 impl TenantContext {
-    /// Single-tenant / flag-OFF passthrough — preserves today's hub semantics.
+    /// Single-tenant / flag-OFF passthrough - preserves today's hub semantics.
     pub fn single_tenant_passthrough(user: &AuthUser) -> Self {
         Self {
             tenant_id: Some("legacy".into()),
@@ -114,7 +114,10 @@ impl ControlPlane {
     }
 
     pub fn path_under_workspace(workspace: &Path) -> PathBuf {
-        workspace.join("openfdd").join("control_plane").join("tenants.json")
+        workspace
+            .join("openfdd")
+            .join("control_plane")
+            .join("tenants.json")
     }
 
     pub fn load_or_legacy(workspace: &Path) -> Self {
