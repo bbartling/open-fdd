@@ -367,11 +367,11 @@ pub async fn list_tenants(
         .into_iter()
         .filter(|b| ctx.allow_building(b))
         .collect();
-    let _ = buildings_visible; // reserved for L2 scoped listings; keeps fail-closed gate live
     Json(crate::tenant::TenantsListResponse {
         ok: true,
         multi_tenant,
         active_tenant_id: ctx.tenant_id,
+        buildings_visible,
         tenants: plane.tenants,
     })
 }

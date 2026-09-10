@@ -154,6 +154,9 @@ pub struct TenantsListResponse {
     /// Active tenant from [`TenantContext::resolve`] (legacy when mode OFF).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_tenant_id: Option<String>,
+    /// Buildings allowed for the resolved context (empty = hub-wide / no plane buildings).
+    #[serde(default)]
+    pub buildings_visible: Vec<String>,
     pub tenants: Vec<TenantRecord>,
 }
 
