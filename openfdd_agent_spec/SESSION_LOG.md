@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-09-10 — Wave L L2 LIVE (3.5.1 / sha-2dea571)
+
+- Product #894 tenant Parquet roots + gate 12; tip `sha-2dea571`; health `3.5.1+2dea571cea05`; gates **11+12 PASS**; backup `20260910T230450Z`.
+- Closed junk external #896 (SECURITY_ADVISORY.md only — not #752). Hygiene: 0 open PRs / only `master`.
+- Next: L3 MQTTS namespace + ACL + identity provenance.
+
 ## 2026-09-10 — README + agent-spec tooling / Wave L context
 
 - README revised (Install/run + PyPI blurb; Support section); spelling-only fix (`AI agent assistance:`).

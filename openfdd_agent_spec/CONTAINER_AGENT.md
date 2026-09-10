@@ -113,7 +113,7 @@ required for health, FDD, or Overview analytics.
 ## Ops patch cycle (Railway hub + qualification — 3.3.20+)
 
 Living log: [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).  
-Active program: Wave L **ACTIVE** — multi-client shared hosting **3.5.x** (L1 LIVE on `sha-a11b6cb` / mode OFF; L2 Parquet roots next). Wave K **CLOSED / PINNED** on `sha-9c3e8b1` / 3.4.0. Cursor: [`wave_l_shared_db_mega_master`](../../.cursor/plans/wave_l_shared_db_mega_master.plan.md).
+Active program: Wave L **ACTIVE** — multi-client shared hosting **3.5.x** (L2 LIVE on `sha-2dea571` / 3.5.1 / mode OFF; L3 MQTTS next). Wave K **CLOSED / PINNED** on `sha-9c3e8b1` / 3.4.0. Cursor: [`wave_l_shared_db_mega_master`](../../.cursor/plans/wave_l_shared_db_mega_master.plan.md).
 Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · entry [`scripts/qualification/README.md`](../scripts/qualification/README.md).
 
 | Step | Action |
