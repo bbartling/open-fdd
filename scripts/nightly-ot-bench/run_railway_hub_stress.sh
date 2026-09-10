@@ -68,7 +68,8 @@ python3 "$MANIFEST_PY" create \
   --required 08_mcp_accuracy \
   --required 09_wave_i_app_test_megas \
   --required 10_wave_k_app_test_megas \
-  --required 11_wave_l_tenant_mode
+  --required 11_wave_l_tenant_mode \
+  --required 12_wave_l_parquet_isolation
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"
@@ -222,6 +223,10 @@ run_gate "10_wave_k_app_test_megas" "10 Wave K app-test MEGAs" \
 # --- 11 Wave L tenant mode (multi_tenant OFF + legacy control plane) ---
 run_gate "11_wave_l_tenant_mode" "11 Wave L tenant mode OFF" \
   bash "$DIR/22_wave_l_tenant_mode.sh"
+
+# --- 12 Wave L Parquet tenant-root isolation (mode OFF = hub root) ---
+run_gate "12_wave_l_parquet_isolation" "12 Wave L Parquet isolation OFF" \
+  bash "$DIR/23_wave_l_parquet_isolation.sh"
 
 # Finalize — SUMMARY generated from recorded gates only
 set +e

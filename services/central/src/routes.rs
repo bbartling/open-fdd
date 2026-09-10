@@ -366,11 +366,13 @@ pub async fn list_tenants(
         .into_iter()
         .filter(|b| ctx.allow_building(b))
         .collect();
+    let historian_prefix = ctx.historian_prefix().unwrap_or_default();
     Json(crate::tenant::TenantsListResponse {
         ok: true,
         multi_tenant,
         active_tenant_id: ctx.tenant_id,
         buildings_visible,
+        historian_prefix,
         tenants: plane.tenants,
     })
 }

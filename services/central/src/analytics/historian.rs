@@ -59,7 +59,22 @@ const NUMERIC_ROLE_COLS: &[&str] = &[
 ];
 
 /// Resolve Parquet historian root — same env fallbacks as edge FDD registry.
+///
+/// Wave L: hub-wide / unscoped paths go through a mode-OFF passthrough so the
+/// root stays the hub base. Request-scoped analytics with a real
+/// [`crate::tenant::TenantContext`] must call [`parquet_root_for_context`].
 pub fn parquet_root() -> PathBuf {
+    let passthrough = crate::tenant::TenantContext {
+        tenant_id: Some("legacy".into()),
+        building_ids: vec![],
+        hub_admin: true,
+        multi_tenant: false,
+    };
+    parquet_root_for_context(&passthrough).unwrap_or_else(|_| parquet_root_base())
+}
+
+/// Hub storage root (never tenant-prefixed). Prefer [`parquet_root`] when mode OFF.
+pub fn parquet_root_base() -> PathBuf {
     if let Some(p) = fdd_store::local_file_root_from_env() {
         return p;
     }
@@ -79,6 +94,13 @@ pub fn parquet_root() -> PathBuf {
         }
     }
     PathBuf::from(".cache/parquet")
+}
+
+/// Tenant-scoped Parquet root for DataFusion registration / writes.
+///
+/// Mode OFF → same as [`parquet_root`]. Mode ON → `{base}/tenants/{tid}`.
+pub fn parquet_root_for_context(ctx: &crate::tenant::TenantContext) -> Result<PathBuf, String> {
+    ctx.historian_root(&parquet_root_base())
 }
 
 fn session_is_metric() -> bool {

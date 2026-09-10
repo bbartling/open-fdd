@@ -222,6 +222,31 @@ pub fn safe_partition_value(value: &str, field: &str) -> Result<String> {
     Ok(value.to_string())
 }
 
+/// Wave L — resolve a tenant-partitioned historian root.
+///
+/// - `tenant_id = None` → return `base` unchanged (single-tenant / flag OFF).
+/// - `tenant_id = Some(tid)` → `{base}/tenants/{tid}` with the same relative
+///   Hive layout underneath (`history/building_id=…`, …).
+///
+/// Isolation is **path / provider scoping**, not `WHERE tenant_id` over a shared
+/// registered mega-table. Rejects unsafe tenant ids (same rules as Hive segments).
+pub fn tenant_storage_root(base: &Path, tenant_id: Option<&str>) -> Result<PathBuf> {
+    let Some(raw) = tenant_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(base.to_path_buf());
+    };
+    let tid = safe_partition_value(raw, "tenant_id")?;
+    Ok(base.join("tenants").join(tid))
+}
+
+/// Relative historian prefix under a storage root (empty when single-tenant root).
+pub fn tenant_storage_prefix(tenant_id: Option<&str>) -> Result<String> {
+    let Some(raw) = tenant_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(String::new());
+    };
+    let tid = safe_partition_value(raw, "tenant_id")?;
+    Ok(format!("tenants/{tid}"))
+}
+
 fn validate_segment(value: &str, field: &str) -> Result<()> {
     if value.contains('/')
         || value.contains('\\')
@@ -448,6 +473,32 @@ mod tests {
         assert!(history_partition_path("../secret", "AHU_1", ts).is_err());
         assert!(history_partition_path("B1", "AHU/../../x", ts).is_err());
         assert!(history_partition_path("B=1", "AHU_1", ts).is_err());
+    }
+
+    #[test]
+    fn tenant_storage_root_off_is_identity() {
+        let base = PathBuf::from("/workspace/openfdd");
+        assert_eq!(tenant_storage_root(&base, None).unwrap(), base);
+        assert_eq!(tenant_storage_root(&base, Some("")).unwrap(), base);
+        assert_eq!(tenant_storage_prefix(None).unwrap(), "");
+    }
+
+    #[test]
+    fn tenant_storage_root_partitions_and_isolates() {
+        let base = PathBuf::from("/workspace/openfdd");
+        let a = tenant_storage_root(&base, Some("acme")).unwrap();
+        let b = tenant_storage_root(&base, Some("beta")).unwrap();
+        assert_eq!(a, PathBuf::from("/workspace/openfdd/tenants/acme"));
+        assert_eq!(b, PathBuf::from("/workspace/openfdd/tenants/beta"));
+        assert_ne!(a, b);
+        assert_eq!(tenant_storage_prefix(Some("acme")).unwrap(), "tenants/acme");
+        // Hive under tenant root stays relative to that root:
+        let ts = Utc.with_ymd_and_hms(2026, 9, 10, 0, 0, 0).unwrap();
+        let rel = history_partition_path("bldg2", "loopback", ts).unwrap();
+        assert!(a.join(&rel).starts_with(&a));
+        assert!(!a.join(&rel).starts_with(&b));
+        assert!(tenant_storage_root(&base, Some("../x")).is_err());
+        assert!(tenant_storage_root(&base, Some("a=b")).is_err());
     }
 
     #[test]
