@@ -41,6 +41,8 @@ Open-FDD is a free, open-source building-to-cloud pipeline for HVAC analytics an
 
 Deploy locally or as a cloud hub and pull building data over MQTTS, APIs, or files. Today’s product is SQL-based FDD and RCx on that Arrow/DataFusion engine; the roadmap is ML and clustering on the same foundation.
 
+**FDD Rule Cookbook** — **62** public rules / **66** SQL registry ids: [datafusion-sql-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/datafusion-sql-cookbook.html) · [pandas-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html)
+
 ---
 
 
