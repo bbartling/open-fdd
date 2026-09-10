@@ -1,5 +1,13 @@
 # Session log
 
+## 2026-09-10 — Wave K 3.4.0 PINNED
+
+- Tip `sha-9c3e8b1` / health `3.4.0+9c3e8b1c30c1` LIVE (K5 #888).
+- First K6 run `20260910T020938Z` failed gate 10 on harness quoting/`jq false // true` only; product MEGAs already green.
+- Harness fix #889; re-run `20260910T021557Z` **`fully_qualified=true`** (gates 00–10).
+- Unit/CI alone were **not** sufficient — gate 10 required live Railway.
+- Next: Wave L multi-client shared hosting coding unlocked.
+
 ## 2026-09-09 — Wave K K5 VERSION 3.4.0
 
 - Workspace `VERSION` + Cargo pins **3.3.41 → 3.4.0** (edge/central/fieldbus/contracts/mqtt + lock).
