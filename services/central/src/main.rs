@@ -21,6 +21,7 @@ mod routes;
 mod state;
 mod vibe21;
 mod wattlab_dump;
+mod tenant;
 
 use std::net::SocketAddr;
 use std::sync::Arc;

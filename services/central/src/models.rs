@@ -14,6 +14,9 @@ pub struct OkHealthResponse {
     pub ingest_ok: u64,
     pub ingest_dup: u64,
     pub ingest_reject: u64,
+    /// Wave L — multi-tenant shared-hosting mode (default false / OFF).
+    #[serde(default)]
+    pub multi_tenant: bool,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
