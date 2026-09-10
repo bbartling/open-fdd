@@ -151,6 +151,9 @@ impl ControlPlane {
 pub struct TenantsListResponse {
     pub ok: bool,
     pub multi_tenant: bool,
+    /// Active tenant from [`TenantContext::resolve`] (legacy when mode OFF).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_tenant_id: Option<String>,
     pub tenants: Vec<TenantRecord>,
 }
 
