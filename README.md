@@ -46,7 +46,6 @@ Deploy locally or as a cloud hub and pull building data over MQTTS, APIs, or fil
 
 ## Install / run GHCR images
 
-
 | Image | Role |
 |-------|------|
 | [`ghcr.io/bbartling/openfdd-central`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-central) | MQTTS ingest, Feather historian, DataFusion FDD, REST `/api` |
