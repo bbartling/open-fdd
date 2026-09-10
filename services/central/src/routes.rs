@@ -371,6 +371,7 @@ pub async fn list_tenants(
         multi_tenant,
         active_tenant_id: ctx.tenant_id,
         buildings_visible,
+        historian_prefix: ctx.historian_prefix().unwrap_or_default(),
         tenants: plane.tenants,
     })
 }

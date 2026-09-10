@@ -86,6 +86,34 @@ impl TenantContext {
         }
         self.building_ids.iter().any(|b| b == building_id)
     }
+
+    /// Resolve Parquet historian root for this context.
+    ///
+    /// Mode OFF ? `base` unchanged (today's single-hub layout).
+    /// Mode ON ? `{base}/tenants/{tenant_id}` (hub_admin without a selected
+    /// tenant must pass an explicit tid; otherwise fail closed).
+    pub fn historian_root(&self, base: &std::path::Path) -> Result<std::path::PathBuf, String> {
+        if !self.multi_tenant {
+            return Ok(base.to_path_buf());
+        }
+        let tid = self
+            .tenant_id
+            .as_deref()
+            .ok_or_else(|| "multi-tenant historian root requires an active tenant_id".to_string())?;
+        fdd_store::tenant_storage_root(base, Some(tid)).map_err(|e| e.to_string())
+    }
+
+    /// Relative prefix under the hub storage root (empty when mode OFF).
+    pub fn historian_prefix(&self) -> Result<String, String> {
+        if !self.multi_tenant {
+            return Ok(String::new());
+        }
+        let tid = self
+            .tenant_id
+            .as_deref()
+            .ok_or_else(|| "multi-tenant historian prefix requires an active tenant_id".to_string())?;
+        fdd_store::tenant_storage_prefix(Some(tid)).map_err(|e| e.to_string())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -157,6 +185,9 @@ pub struct TenantsListResponse {
     /// Buildings allowed for the resolved context (empty = hub-wide / no plane buildings).
     #[serde(default)]
     pub buildings_visible: Vec<String>,
+    /// Relative historian prefix under the hub Parquet root (empty when mode OFF).
+    #[serde(default)]
+    pub historian_prefix: String,
     pub tenants: Vec<TenantRecord>,
 }
 
@@ -226,6 +257,46 @@ mod tests {
         assert!(ctx.multi_tenant);
         assert!(ctx.allow_building("bldg2"));
         assert!(!ctx.allow_building("BUILDING_100"));
+        std::env::remove_var("OPENFDD_MULTI_TENANT");
+    }
+
+    #[test]
+    fn historian_root_off_is_hub_base() {
+        std::env::remove_var("OPENFDD_MULTI_TENANT");
+        let user = AuthUser {
+            sub: "admin".into(),
+            role: Role::Admin,
+            tenant_ids: vec![],
+        };
+        let plane = ControlPlane::legacy_default();
+        let ctx = TenantContext::resolve(&user, &plane).expect("resolve");
+        let base = std::path::Path::new("/workspace/openfdd");
+        assert_eq!(ctx.historian_root(base).unwrap(), base);
+        assert_eq!(ctx.historian_prefix().unwrap(), "");
+    }
+
+    #[test]
+    fn historian_root_on_partitions_by_tenant() {
+        std::env::set_var("OPENFDD_MULTI_TENANT", "1");
+        let user = AuthUser {
+            sub: "eng".into(),
+            role: Role::Operator,
+            tenant_ids: vec!["acme".into()],
+        };
+        let plane = ControlPlane {
+            tenants: vec![TenantRecord {
+                id: "acme".into(),
+                name: "Acme".into(),
+                building_ids: vec!["bldg2".into()],
+            }],
+        };
+        let ctx = TenantContext::resolve(&user, &plane).expect("resolve");
+        let base = std::path::Path::new("/workspace/openfdd");
+        assert_eq!(
+            ctx.historian_root(base).unwrap(),
+            base.join("tenants").join("acme")
+        );
+        assert_eq!(ctx.historian_prefix().unwrap(), "tenants/acme");
         std::env::remove_var("OPENFDD_MULTI_TENANT");
     }
 }

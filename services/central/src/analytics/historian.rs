@@ -59,7 +59,17 @@ const NUMERIC_ROLE_COLS: &[&str] = &[
 ];
 
 /// Resolve Parquet historian root — same env fallbacks as edge FDD registry.
+///
+/// Wave L: when `OPENFDD_MULTI_TENANT` is ON, callers that have a
+/// `TenantContext` must use `TenantContext::historian_root` / 
+/// [`parquet_root_for_context`] instead of this hub-wide helper. Mode OFF
+/// (default) leaves this path unchanged for single-tenant hubs.
 pub fn parquet_root() -> PathBuf {
+    parquet_root_base()
+}
+
+/// Hub storage root (never tenant-prefixed). Prefer [`parquet_root`] when mode OFF.
+pub fn parquet_root_base() -> PathBuf {
     if let Some(p) = fdd_store::local_file_root_from_env() {
         return p;
     }
@@ -79,6 +89,13 @@ pub fn parquet_root() -> PathBuf {
         }
     }
     PathBuf::from(".cache/parquet")
+}
+
+/// Tenant-scoped Parquet root for DataFusion registration / writes.
+///
+/// Mode OFF → same as [`parquet_root`]. Mode ON → `{base}/tenants/{tid}`.
+pub fn parquet_root_for_context(ctx: &crate::tenant::TenantContext) -> Result<PathBuf, String> {
+    ctx.historian_root(&parquet_root_base())
 }
 
 fn session_is_metric() -> bool {

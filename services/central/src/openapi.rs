@@ -360,7 +360,7 @@ mod live_routes {
     modifiers(&SecurityAddon),
     info(
         title = "Open-FDD Central API",
-        version = "3.5.0",
+        version = "3.5.1",
         description = "Open-FDD Central control plane — MQTTS ingest, edge shadow, commands, and FDD.\n\n\
             **Auth:** set `OPENFDD_JWT_SECRET` to require `Authorization: Bearer <JWT>` on all `/api/*` routes \
             except liveness, login, and non-sensitive capabilities. Open mode is **loopback-only**. \
