@@ -13,7 +13,7 @@ todos:
     status: completed
   - id: l1-control-plane
     content: L1 — TenantContext + flag OFF + control plane stub + gate 11 + VERSION 3.5.0 + smoke
-    status: in_progress
+    status: completed
   - id: l2-parquet-isolation
     content: L2 — Tenant Parquet roots + DF providers (no shared-table WHERE)
     status: pending
@@ -61,7 +61,7 @@ isProject: false
 | **Phase-0 ADR** | **DONE** (#885) — `docs/architecture/ADR_multi_client_shared_hosting.md` |
 | **BUG_REPORT product OPEN** | **None** (Wave K MEGAs CLOSED) |
 | **Ops pin** | **`sha-9c3e8b1`** / `3.4.0+9c3e8b1c30c1` (rollback until L1 tip) |
-| **Step** | **L1** — control plane + `TenantContext`; **mode OFF** |
+| **Step** | **L2** next — L1 LIVE `sha-a11b6cb` / 3.5.0 mode OFF |
 
 ### BUG_REPORT carry-in
 
@@ -77,7 +77,8 @@ isProject: false
 ```text
 [x] L0 / L0b / L0c  pin + BUG_REPORT carry + hygiene law
 [x] Phase-0 ADR (#885)
-[ ] L1  Control plane OFF + TenantContext + gate 11   ← YOU ARE HERE
+[x] L1  Control plane OFF + TenantContext + gate 11 (#891 / sha-a11b6cb)
+[ ] L2  Tenant Parquet + DF   ← YOU ARE HERE
 [ ] L2–L7 …
 [ ] L8  ENHANCED full stress + BUG_REPORT 3.5.x PINNED
 ```
