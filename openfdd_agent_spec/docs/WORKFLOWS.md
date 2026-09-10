@@ -21,14 +21,9 @@ Actual workflow files under `.github/workflows/` (open-fdd). Re-list with
 
 Low-RAM hosts: **never** local `docker build` of stack images. Wait for GHCR publish, prune, pull `sha-*`, `openfdd_stack_up.sh --no-pull`.
 
-**Ops closeout:** after tip publish + re-pin, stress LAST — [`docs/operations/STRESS_CLOSEOUT.md`](../../docs/operations/STRESS_CLOSEOUT.md). Local hub HTTP only — [`docs/operations/LOCAL_DEPLOYMENT.md`](../../docs/operations/LOCAL_DEPLOYMENT.md).
+**Railway ops (bensbench):** use **Railway CLI** for backup + hub re-pin — skill [`../skills/openfdd-railway-cli/SKILL.md`](../skills/openfdd-railway-cli/SKILL.md) · [`RAILWAY_DEPLOYMENT.md`](../../docs/operations/RAILWAY_DEPLOYMENT.md). Tip gate: `./scripts/check_ghcr_tip_stack.sh`. Do not confuse Railway CLI/MCP with `openfdd-mcp` FDD tools.
 
-## Playground (reference)
-
-| Workflow | Role |
-| --- | --- |
-| `vibe19-ghcr.yml` | vibe19 image |
-| `vibe20-ghcr.yml` | vibe20 image |
+**Ops closeout:** after tip publish + re-pin, stress LAST (Wave L: mid-wave smoke + gates 11–12; full stress at L8) — [`docs/operations/STRESS_CLOSEOUT.md`](../../docs/operations/STRESS_CLOSEOUT.md). Local hub HTTP only — [`docs/operations/LOCAL_DEPLOYMENT.md`](../../docs/operations/LOCAL_DEPLOYMENT.md).
 
 ## Agent commands
 
@@ -37,4 +32,7 @@ gh workflow list --repo bbartling/open-fdd
 gh pr checks --watch
 gh run list --branch master --limit 20
 gh run view <id> --log-failed
+./scripts/check_ghcr_tip_stack.sh sha-<7>
+railway whoami && railway service list
+./scripts/railway_central_workspace_backup.sh
 ```

@@ -113,7 +113,7 @@ required for health, FDD, or Overview analytics.
 ## Ops patch cycle (Railway hub + qualification — 3.3.20+)
 
 Living log: [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).  
-Active program: Wave K **OPEN** — pin `3.4.0` filesystem historian ([`wave_k_340_filesystem_pin_master`](../../.cursor/plans/wave_k_340_filesystem_pin_master.plan.md)); then Wave L **3.5** shared DB. Wave J CLOSED on `sha-c1b1aa5` / 3.3.41.
+Active program: Wave L **ACTIVE** — multi-client shared hosting **3.5.x** (L1 LIVE on `sha-a11b6cb` / mode OFF; L2 Parquet roots next). Wave K **CLOSED / PINNED** on `sha-9c3e8b1` / 3.4.0. Cursor: [`wave_l_shared_db_mega_master`](../../.cursor/plans/wave_l_shared_db_mega_master.plan.md).
 Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · entry [`scripts/qualification/README.md`](../scripts/qualification/README.md).
 
 | Step | Action |
@@ -121,10 +121,11 @@ Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRES
 | Discover | Soft-OPEN / DEFERRED rows + child plan one-concern |
 | Fix | One PR; VERSION bump when shipping stack images |
 | Publish | Wait GHCR Publish green on merge sha |
-| Re-pin | Railway central → mqtt → web; `./scripts/openfdd_fieldbus_railway_up.sh sha-*` |
-| Stress LAST | `OPENFDD_MCP_IMAGE=…:sha-* ./scripts/nightly-ot-bench/run_railway_hub_stress.sh` |
+| Tip gate | `./scripts/check_ghcr_tip_stack.sh sha-<7>` (product tip; docs-tip incompleteness may be noise) |
+| Re-pin | **Railway CLI** backup → central → mqtt → web; `./scripts/openfdd_fieldbus_railway_up.sh sha-*` |
+| Smoke | Mid-wave: health + gates **11–12**. Ship/L8: full stress |
 | Cleanup | `docker rm -f` zap-* / openfdd-mcp-railway-* leftovers (low-RAM) |
-| Close | BUG_REPORT Verdict + cite `qualification_manifest.json` `fully_qualified` |
+| Close | BUG_REPORT + hygiene (0 open PRs / only `master`) |
 
 **Stress tiers (do not conflate):**
 
