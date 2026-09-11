@@ -93,7 +93,7 @@ Open-FDD is a **generic** DataFusion consumer. Charts / FDD / RCx / motors / mix
 | Mixing / economizer | fan on + OA + RA + MA | Copy site-global OA onto AHUs in the zip |
 | VAV / zone | `zone-air-temp`, actual CFM, damper, reheat | Stamp `equipType: vav` |
 | BAS vs web OAT | `outside-air-temp` + `{building}/weather/` `web-outside-air-temp` | Job lat/lon in preprocess; `prefer_web_oat` |
-| Typing | `equipType` / `equipment_type` | `rtu`→AHU; `heatPump`→HP; UV/FCU air-side→ahu; chillers→chwPlant |
+| Typing | `equipType` / `equipment_type` | `rtu`→AHU; `heatPump`→HP; **UV→CV AHU**; **FCU/standalone DDC→ZONE**; chillers→chwPlant |
 
 Aliases: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](docs/migration/vibe19/ROLE_MAPPING_PARITY.md). Full brief: [`docs/agent/PACKAGE_AUTHORING.md`](docs/agent/PACKAGE_AUTHORING.md).
 
@@ -173,3 +173,5 @@ For library/migration/PR missions (Milestone A), start at [openfdd_agent_spec/AG
 ### Stamped equipment type precedence
 
 Package ingest persists `equipType` / `equipment_type`; recognized stamps win over folder/id heuristics in inventory and plant-health grouping. Opaque BAS ids are supported (`AC_1` + `equipType: ahu` → AHU). Vendor/campus aliases remain preprocess concerns and must not be hard-coded into product Rust.
+
+ZONE = FCU (valve PID) or standalone DDC monitor (`fcu` / `zone_other`); UV = CV AHU (`unitVentilator`). Detail: [`docs/modeling/zone-terminals.md`](docs/modeling/zone-terminals.md).

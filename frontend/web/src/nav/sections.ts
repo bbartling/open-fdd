@@ -25,6 +25,5 @@ export const SIDEBAR_NAV = [
   { to: "/reports", label: "FDD Plots", short: "P", testId: "nav-reports" },
   { to: "/metering", label: "Metering", short: "E", testId: "nav-metering" },
   { to: "/export", label: "Dump", short: "X", testId: "nav-export" },
-  { to: "/twin", label: "Twin", short: "T", testId: "nav-twin" },
   { to: "/operations", label: "Operations", short: "O", testId: "nav-operations" },
 ] as const;

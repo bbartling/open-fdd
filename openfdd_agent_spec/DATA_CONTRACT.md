@@ -138,7 +138,8 @@ Seed lane: `POST /api/csv/import/package`. Layout (generic `AHU_1` / `VAV_1` / `
 ```
 
 - `timestamp_utc` RFC3339 UTC (`Z` or `+00:00`).
-- Stamp `equipType` (`ahu` `vav` `chwPlant` `boiler` `heatPump` `weather`). `rtu`→AHU; `heatPump`→HP; UV/FCU air-side→ahu; chillers→chwPlant.
+- Stamp `equipType` (`ahu` `vav` `chwPlant` `boiler` `heatPump` `weather` `zone_other` / `fcu`). `rtu`→AHU; `heatPump`→HP; **unit ventilator / UV → CV AHU** (`ahu`); chillers→chwPlant.
+- **ZONE control** (not AHU): fan-coil (`fcu`) with valve PID hunting **or** standalone DDC zone monitor — both get schedule/comfort gate + zone sensor fault equations. See [`docs/modeling/zone-terminals.md`](../docs/modeling/zone-terminals.md).
 - Sibling JSON `points` keys are Haystack names; ingest translates via `haystack_point_to_role` (`discharge-air-temp` → `sat`). Alias table: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](../docs/migration/vibe19/ROLE_MAPPING_PARITY.md). Authoring: [`docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md).
 - **Compact map is normative.** Rich MCP mapping-evidence shapes (`column`/`role`/`confidence`/PROVISIONAL) are SCAFFOLD — see [`docs/modeling/package-schema.md`](../docs/modeling/package-schema.md).
 - Empty Overview / RCx / Inspect = missing roles in the zip. Importable ≠ FDD-ready ([`docs/modeling/rule-readiness.md`](../docs/modeling/rule-readiness.md)).
@@ -157,3 +158,14 @@ Phase 2 consolidates into shared contracts.
 ## Equipment type precedence
 
 `equipType` / `equipment_type` is durable package metadata. When present and recognized, it is authoritative for Open-FDD equipment classification; generic equipment-id heuristics are fallback only. `AC_1 + equipType: ahu` must classify as AHU. Keep vendor/campus naming remaps in preprocessors rather than product code.
+
+**ZONE vs AHU (do not drift):**
+
+| Stamp | Kind | Notes |
+|-------|------|-------|
+| `fcu` / `fanCoil` / `zone_other` / `zone` / `standalone_ddc` | `zone_other` | ZONE control — valve PID FCU **or** standalone DDC monitor; comfort + zone sensor FDD |
+| `vav` | `vav` | Zone terminal with airflow/damper; same comfort gate for zone-temp rules |
+| `unitVentilator` / `uv` / `cv_ahu` | `ahu` | Unit ventilator = **CV AHU** (same thing) |
+| `ahu` / `rtu` / `mau` / `doas` | `ahu` | Air handler family |
+
+Never stamp FCU/standalone zone DDC as `ahu`. Never stamp UV as ZONE.

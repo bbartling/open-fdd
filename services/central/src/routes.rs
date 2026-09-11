@@ -2569,6 +2569,7 @@ async fn analytics_rcx_preset(Json(req): Json<AnalyticsRequest>) -> Json<Value> 
         })),
     )
     .ok();
+    let mut hard_fail = false;
     let env =
         match analytics::rcx_presets::run_preset(building_id.as_deref(), &preset_id, max_points)
             .await
@@ -2583,6 +2584,7 @@ async fn analytics_rcx_preset(Json(req): Json<AnalyticsRequest>) -> Json<Value> 
                 analytics::DF_ENGINE,
             ),
             Err(e) => {
+                hard_fail = true;
                 tracing::warn!(error = %e, preset = %preset_id, "rcx preset failed");
                 analytics::envelope(
                     "rcx-preset-v1",
@@ -2593,22 +2595,13 @@ async fn analytics_rcx_preset(Json(req): Json<AnalyticsRequest>) -> Json<Value> 
         };
     let analytics_json = env.to_json();
     if let Some(ref aid) = action_id {
+        // Soft empty / missing-column warnings are not Action ❌ — only hard Err.
         let warnings = analytics_json
             .get("warnings")
             .and_then(|v| v.as_array())
             .map(|a| a.len())
             .unwrap_or(0);
-        let status = if warnings > 0
-            && analytics_json
-                .get("rows")
-                .and_then(|r| r.as_array())
-                .map(|a| a.is_empty())
-                .unwrap_or(true)
-        {
-            "fail"
-        } else {
-            "ok"
-        };
+        let status = if hard_fail { "fail" } else { "ok" };
         let _ = actions::finish_action(
             aid,
             status,

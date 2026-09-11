@@ -1,41 +1,13 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { WattLabPage } from "./WattLabPage";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ExportPage } from "./WattLabPage";
 
 vi.mock("../api/jobsApi", () => ({
-  listJobs: vi.fn(async () => [
-    {
-      schema_version: 1,
-      job_id: "job-1",
-      job_name: "Alpha",
-      site_id: "BUILDING_100",
-      status: "active",
-      archived: false,
-      created_at: "",
-      updated_at: "",
-      tags: [],
-      meta_revision: "rev-1",
-      revisions: {},
-    },
-  ]),
-  createJob: vi.fn(),
-}));
-
-vi.mock("../api/mappingApi", () => ({
-  listPackageBuildings: vi.fn(async () => ["BUILDING_100"]),
-  getSessionConfig: vi.fn(async () => ({
-    ok: true,
-    config: { schema_version: "openfdd_session_v1", params: {} },
-  })),
-  putSessionConfig: vi.fn(async () => ({ ok: true })),
-}));
-
-vi.mock("../api/reportsApi", () => ({
-  createWattlabHandoff: vi.fn(async () => ({
-    handoff_id: "handoff-9",
-    job_id: "job-1",
-    portable_zip_uri: "workspace://exports/demo.zip",
+  listJobs: vi.fn(async () => []),
+  createJob: vi.fn(async () => ({
+    job_id: "job-new",
+    job_name: "E+ dump",
   })),
 }));
 
@@ -45,88 +17,57 @@ vi.mock("../api/exportApi", () => ({
     job_id: "job-1",
     building_id: "BUILDING_100",
     profile: "summary",
-    filename: "openfdd_engineering_BUILDING_100_summary.zip",
+    filename: "BUILDING_100_summary.zip",
     download_url: "/api/jobs/job-1/exports/export-1/download",
   })),
   downloadExport: vi.fn(async () => undefined),
 }));
 
-vi.mock("../api/fddApi", () => ({
-  listFddRules: vi.fn(async () => []),
-  getFddRuleParams: vi.fn(async () => ({ ok: true, params: {} })),
+vi.mock("../session", () => ({
+  useSessionQuery: () => ({
+    query: { jobId: "job-1", siteId: "BUILDING_100" },
+    setQuery: vi.fn(),
+  }),
 }));
 
-vi.mock("../api/uploadApi", () => ({ uploadPackage: vi.fn() }));
-
-import { createWattlabHandoff } from "../api/reportsApi";
-import { createExport, downloadExport } from "../api/exportApi";
-
-describe("WattLabPage handoff", () => {
+describe("ExportPage / Dump", () => {
   beforeEach(() => {
-    vi.mocked(createWattlabHandoff).mockClear();
-    vi.mocked(createExport).mockClear();
-    vi.mocked(downloadExport).mockClear();
+    vi.clearAllMocks();
   });
 
-  it("renders one Dump page without Export multi-page radio", async () => {
+  it("shows a single Dump button with no Related links or profile radios", async () => {
     render(
-      <MemoryRouter initialEntries={["/wattlab?job=job-1"]}>
-        <WattLabPage />
+      <MemoryRouter initialEntries={["/export?job=job-1&site=BUILDING_100"]}>
+        <ExportPage />
       </MemoryRouter>,
     );
     await waitFor(() => screen.getByTestId("wattlab-page"));
-    expect(screen.getByRole("heading", { name: "Dump" })).toBeTruthy();
-    expect(screen.queryByTestId("wattlab-page-radio")).toBeNull();
-    expect(screen.getByTestId("dump-related-links").textContent).toMatch(
-      /Upload/,
-    );
+    expect(screen.queryByTestId("dump-related-links")).toBeNull();
+    expect(screen.queryByTestId("wattlab-profile")).toBeNull();
+    expect(screen.queryByTestId("wattlab-handoff")).toBeNull();
+    expect(screen.getByTestId("wattlab-build-dump")).toBeTruthy();
   });
 
-  it("creates a handoff for ?job=", async () => {
-    render(
-      <MemoryRouter initialEntries={["/wattlab?job=job-1"]}>
-        <WattLabPage />
-      </MemoryRouter>,
-    );
-    await waitFor(() => screen.getByTestId("wattlab-handoff"));
-    fireEvent.click(
-      screen.getByTestId("wattlab-handoff").querySelector("button")!,
-    );
-    await waitFor(() => {
-      expect(createWattlabHandoff).toHaveBeenCalledWith(
-        "job-1",
-        expect.objectContaining({
-          portable_zip_uri: expect.any(String),
-          wattlab_studio_page: "Dump",
-        }),
-      );
-      expect(screen.getByTestId("wattlab-notice").textContent).toMatch(
-        /handoff-9/,
-      );
-    });
-  });
-
-  it("builds a dump for the selected site", async () => {
+  it("builds and downloads one summary dump", async () => {
+    const { createExport, downloadExport } = await import("../api/exportApi");
     render(
       <MemoryRouter
-        initialEntries={["/wattlab?job=job-1&site=BUILDING_100"]}
+        initialEntries={["/export?job=job-1&site=BUILDING_100"]}
       >
-        <WattLabPage />
+        <ExportPage />
       </MemoryRouter>,
     );
-
     await waitFor(() => screen.getByTestId("wattlab-build-dump"));
     fireEvent.click(
       screen.getByTestId("wattlab-build-dump").querySelector("button")!,
     );
-
     await waitFor(() => {
       expect(createExport).toHaveBeenCalledWith(
         "job-1",
         "BUILDING_100",
         "summary",
       );
-      expect(screen.getByTestId("wattlab-dump-meta")).toBeTruthy();
+      expect(downloadExport).toHaveBeenCalled();
     });
   });
 });

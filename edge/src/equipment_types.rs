@@ -23,19 +23,29 @@ fn normalized_token(raw: &str) -> String {
 /// not in Open-FDD product code.
 pub fn canonical_kind(raw: &str) -> Option<&'static str> {
     match normalized_token(raw).as_str() {
+        // Unit ventilator = constant-volume AHU (same family as CV AHU).
         "ahu"
         | "airhandler"
         | "airhandlingunit"
         | "rtu"
         | "mau"
         | "doas"
-        | "fcu"
         | "cvahu"
         | "vavahu"
+        | "unitventilator"
+        | "uv"
         | "erv"
         | "energyrecoveryventilator" => Some("ahu"),
         "vav" | "zoneterminal" => Some("vav"),
-        "zoneother" => Some("zone_other"),
+        // ZONE control: FCU (valve PID) + standalone DDC monitors — not AHU.
+        "zoneother"
+        | "zone"
+        | "fcu"
+        | "fancoil"
+        | "fancoilunit"
+        | "standaloneddc"
+        | "ddczone"
+        | "zoneddc" => Some("zone_other"),
         "vrf" => Some("vrf"),
         "chiller" | "chwplant" | "chilledwaterplant" => Some("chiller"),
         "coolingtower" | "tower" => Some("cooling_tower"),
@@ -79,9 +89,11 @@ pub fn kind_for(equipment_id: &str, stamped_type: Option<&str>) -> &'static str 
 pub fn api_equipment_type_for(equipment_id: &str, stamped_type: Option<&str>) -> &'static str {
     if let Some(raw) = stamped_type {
         match normalized_token(raw).as_str() {
-            "zoneother" | "zone_other" => return "Zone Other",
-            "cvahu" | "cv_ahu" => return "CV AHU",
-            "vavahu" | "vav_ahu" => return "VAV AHU",
+            "zoneother" | "zone" => return "Zone Other",
+            "fcu" | "fancoil" | "fancoilunit" => return "FCU",
+            "standaloneddc" | "ddczone" | "zoneddc" => return "Zone DDC",
+            "cvahu" | "unitventilator" | "uv" => return "CV AHU",
+            "vavahu" => return "VAV AHU",
             "erv" | "energyrecoveryventilator" => return "ERV",
             "vrf" => return "VRF",
             _ => {}
@@ -185,6 +197,29 @@ mod tests {
         );
         assert_eq!(api_equipment_type_for("AC_1", Some("cv_ahu")), "CV AHU");
         assert_eq!(api_equipment_type_for("AC_2", Some("vrf")), "VRF");
+    }
+
+    #[test]
+    fn fcu_and_standalone_ddc_are_zone_not_ahu() {
+        assert_eq!(canonical_kind("fcu"), Some("zone_other"));
+        assert_eq!(canonical_kind("fanCoil"), Some("zone_other"));
+        assert_eq!(canonical_kind("standalone_ddc"), Some("zone_other"));
+        assert_eq!(api_equipment_type_for("FCU_1", Some("fcu")), "FCU");
+        assert_eq!(
+            api_equipment_type_for("ZONE_MON_1", Some("standalone_ddc")),
+            "Zone DDC"
+        );
+        assert_ne!(kind_for("FCU_1", Some("fcu")), "ahu");
+    }
+
+    #[test]
+    fn unit_ventilator_is_cv_ahu() {
+        assert_eq!(canonical_kind("unitVentilator"), Some("ahu"));
+        assert_eq!(canonical_kind("uv"), Some("ahu"));
+        assert_eq!(
+            api_equipment_type_for("UV_1", Some("unitVentilator")),
+            "CV AHU"
+        );
     }
 
     #[test]

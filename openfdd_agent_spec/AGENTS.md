@@ -159,3 +159,5 @@ Nested instructions may specialize but never contradict a higher authority.
 ### Equipment typing contract
 
 Package `equipType` / `equipment_type` stamps are persisted and preferred over id heuristics. Opaque ids are valid (`AC_1` + `equipType: ahu`). Never solve a site-specific naming problem by hard-coding a vendor, campus, or building into product code.
+
+**ZONE control** = fan-coil (`fcu`, valve PID hunting) **or** standalone DDC zone monitor — both get Overview schedule/comfort + zone sensor fault equations (`equipType: zone_other` / `fcu` / `zone`). **Unit ventilator** = CV AHU (`unitVentilator` / `uv` / `cv_ahu`) — same as constant-volume AHU, **not** ZONE. Detail: [`docs/modeling/zone-terminals.md`](../docs/modeling/zone-terminals.md) · [`DATA_CONTRACT.md`](DATA_CONTRACT.md).

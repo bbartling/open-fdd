@@ -16,6 +16,7 @@ Modeling (agent context, docs-only expansions):
 
 - [`docs/modeling/package-schema.md`](../../../docs/modeling/package-schema.md) — compact ingest map vs SCAFFOLD evidence
 - [`docs/modeling/heat-pump-buildings.md`](../../../docs/modeling/heat-pump-buildings.md) — WSHP topology + role tiers
+- [`docs/modeling/zone-terminals.md`](../../../docs/modeling/zone-terminals.md) — ZONE = FCU \| standalone DDC; UV = CV AHU
 - [`docs/modeling/rule-readiness.md`](../../../docs/modeling/rule-readiness.md) — runnable / not_runnable / unknown
 
 ## When to use
@@ -28,7 +29,7 @@ Modeling (agent context, docs-only expansions):
 ## Rules
 
 1. Empty analytics = **missing roles in the zip**, not a broken FDD engine. Map in preprocess. A parseable ZIP is **not** commissioning-grade FDD.
-2. Stamp `equipType` (`ahu` `vav` `chwPlant` `boiler` `heatPump` `weather`). `rtu`→AHU; `heatPump`→HP; UV/FCU air-side→ahu; chillers→chwPlant. Do **not** stamp a source-water / geo loop as `chwPlant` just to light CHW analytics.
+2. Stamp `equipType` (`ahu` `vav` `chwPlant` `boiler` `heatPump` `weather` `zone_other`/`fcu`). `rtu`→AHU; `heatPump`→HP; **UV / unit ventilator → CV AHU**; chillers→chwPlant. **FCU and standalone zone DDC → ZONE** (`zone_other`/`fcu`) — comfort gate + zone sensor fault equations; **not** AHU. See zone-terminals doc. Do **not** stamp a source-water / geo loop as `chwPlant` just to light CHW analytics.
 3. **Shipped ingest** = compact sibling JSON: `equipType` + `points: { haystack-name: csv-header }`. Rich `column`/`role`/`unit`/`confidence` / PROVISIONAL maps in the MCP package-mapping role pack are **SCAFFOLD** — not the live importer.
 4. Haystack names in `points` translate via `haystack_point_to_role`. Do not invent a second product vocabulary.
 5. Motor ≠ compressor ≠ valve. Status/cmd before amps. Never CHW pump or `clg_valve_pct` as compressor proof. Never motor hours from leave temp. Never infer compressor from fan status; never invent mode/setpoint columns.

@@ -115,7 +115,7 @@ describe("ReportsPage FDD Plots", () => {
     expect(screen.queryByTestId("plots-building-select")).toBeNull();
     expect(screen.getByTestId("locked-site").textContent).toMatch(/zip:B1/);
     expect(screen.getByTestId("plots-device-type")).toBeTruthy();
-    expect(screen.getByTestId("plots-status-filter")).toBeTruthy();
+    expect(screen.queryByTestId("plots-status-filter")).toBeNull();
   });
 
   it("auto-loads series and puts confirmed_fault on the bottom lane", async () => {

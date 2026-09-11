@@ -24,6 +24,7 @@ in the package**, not a broken engine. See
 |-------|---------|
 | [Package schema](package-schema.html) | Compact ingest maps vs rich (SCAFFOLD) evidence |
 | [Heat-pump buildings](heat-pump-buildings.html) | WSHP topology, role tiers, anti-patterns |
+| [Zone terminals / FCU / UV](zone-terminals.html) | ZONE = FCU or standalone DDC; UV = CV AHU |
 | [Rule readiness](rule-readiness.html) | Runnable / missing / not applicable |
 | [Haystack model](haystack-model.html) | Sites, equipment, points, RDF APIs |
 | [Assignments](assignments.html) | Bind drivers → Haystack → FDD |

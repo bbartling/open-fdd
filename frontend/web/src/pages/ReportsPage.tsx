@@ -9,7 +9,6 @@ import {
   Expander,
   InlineAlert,
   PlotlyHost,
-  RadioGroup,
   Select,
 } from "../components/widgets";
 import { useSessionQuery } from "../session";
@@ -32,9 +31,7 @@ import {
   sensorHealthHeatmap,
 } from "../api/vibeCharts";
 import {
-  fddStatusBucket,
   preferredPlotRuleId,
-  type FddStatusFilter,
 } from "../lib/fddPlotStatus";
 
 export const SQL_ANALYTICS_RULE_IDS = new Set([
@@ -43,14 +40,6 @@ export const SQL_ANALYTICS_RULE_IDS = new Set([
   "ZONE-COMFORT-PCT",
   "FAULT-ELAPSED-HOURS",
 ]);
-
-const STATUS_FILTERS: FddStatusFilter[] = [
-  "All",
-  "FAULT",
-  "PASS",
-  "SKIPPED",
-  "Not run",
-];
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -97,7 +86,6 @@ export function ReportsPage() {
     Array<{ equipment_id: string; equipment_type: string }>
   >([]);
   const [deviceType, setDeviceType] = useState("All");
-  const [statusFilter, setStatusFilter] = useState<FddStatusFilter>("All");
   const [results, setResults] = useState<FddResultRow[]>([]);
 
   const [figure, setFigure] = useState<PlotlyFigure | null>(null);
@@ -212,10 +200,9 @@ export function ReportsPage() {
       if (mappedRoles.size > 0 && required.some((role) => !mappedRoles.has(role))) {
         return false;
       }
-      if (statusFilter === "All") return true;
-      return fddStatusBucket(statusByRule.get(r.rule_id)) === statusFilter;
+      return true;
     });
-  }, [rules, mappedRoles, statusFilter, statusByRule]);
+  }, [rules, mappedRoles]);
 
   const ruleOptions = useMemo(
     () => [
@@ -346,7 +333,7 @@ export function ReportsPage() {
     try {
       const env = await postSensorHealth({
         building_id: buildingId,
-        equipment_ids: equipmentId ? [equipmentId] : undefined,
+        // Site-wide so weather web_oa_t stays visible beside AHU oa_t.
       });
       const rows = (env.rows?.length ? env.rows : env.equipment) ?? [];
       const normalized = rows.map((r) => ({
@@ -382,7 +369,7 @@ export function ReportsPage() {
     } finally {
       setSensorLoading(false);
     }
-  }, [buildingId, equipmentId]);
+  }, [buildingId]);
 
   const loadSensorFaultChart = useCallback(async () => {
     if (!buildingId || !sensorKey.includes("::")) {
@@ -424,9 +411,18 @@ export function ReportsPage() {
   }, [buildingId, sensorKey]);
 
   const sensorKeyOptions = useMemo(() => {
+    const roleHint = (role: string): string => {
+      if (role === "web_oa_t" || role.startsWith("web_")) {
+        return " (web)";
+      }
+      if (role === "oa_t") {
+        return " (BAS / local)";
+      }
+      return "";
+    };
     const opts = sensorRows.map((r) => ({
       value: `${r.equipment_id}::${r.role}`,
-      label: `${r.equipment_id} · ${r.role}${
+      label: `${r.equipment_id} · ${r.role}${roleHint(String(r.role))}${
         r.flatline_flag ? " (flatline)" : ""
       }`,
     }));
@@ -533,15 +529,6 @@ export function ReportsPage() {
               testId="plots-rule-select"
             />
           </div>
-
-          <RadioGroup
-            id="plots-status"
-            label="Result status (outcomes only — thresholds stay in Lab)"
-            value={statusFilter}
-            options={STATUS_FILTERS.map((s) => ({ value: s, label: s }))}
-            onChange={(v) => setStatusFilter(v as FddStatusFilter)}
-            testId="plots-status-filter"
-          />
 
           <PlotlyHost
             id="fdd-series"
