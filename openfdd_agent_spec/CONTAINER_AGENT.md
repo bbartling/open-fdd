@@ -113,7 +113,7 @@ required for health, FDD, or Overview analytics.
 ## Ops patch cycle (Railway hub + qualification — 3.3.20+)
 
 Living log: [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).  
-Active program: Wave L **ACTIVE** — multi-client shared hosting **3.5.x** (L2 LIVE on `sha-af08ac7` / 3.5.1 / mode OFF; L3 MQTTS next). Wave K **CLOSED / PINNED** on `sha-9c3e8b1` / 3.4.0. Cursor: [`wave_l_shared_db_mega_master`](../../.cursor/plans/wave_l_shared_db_mega_master.plan.md).
+Active program: Wave L **ACTIVE** — multi-client shared hosting **3.5.x** (L3 LIVE on `sha-be65366` / 3.5.2 / mode OFF; L4 Tenant UI next). Wave K **CLOSED / PINNED** on `sha-9c3e8b1` / 3.4.0. Cursor: [`wave_l_shared_db_mega_master`](../../.cursor/plans/wave_l_shared_db_mega_master.plan.md).
 Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · entry [`scripts/qualification/README.md`](../scripts/qualification/README.md).
 
 | Step | Action |
@@ -123,7 +123,7 @@ Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRES
 | Publish | Wait GHCR Publish green on merge sha |
 | Tip gate | `./scripts/check_ghcr_tip_stack.sh sha-<7>` (product tip; docs-tip incompleteness may be noise) |
 | Re-pin | **Railway CLI** backup → central → mqtt → web; `./scripts/openfdd_fieldbus_railway_up.sh sha-*` |
-| Smoke | Mid-wave: health + gates **11–12**. Ship/L8: full stress |
+| Smoke | Mid-wave: health + gates **11–13**. Ship/L8: full stress |
 | Cleanup | `docker rm -f` zap-* / openfdd-mcp-railway-* leftovers (low-RAM) |
 | Close | BUG_REPORT + hygiene (0 open PRs / only `master`) |
 

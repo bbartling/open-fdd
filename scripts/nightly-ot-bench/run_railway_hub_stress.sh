@@ -69,7 +69,8 @@ python3 "$MANIFEST_PY" create \
   --required 09_wave_i_app_test_megas \
   --required 10_wave_k_app_test_megas \
   --required 11_wave_l_tenant_mode \
-  --required 12_wave_l_parquet_isolation
+  --required 12_wave_l_parquet_isolation \
+  --required 13_wave_l_mqtts_namespace
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"

@@ -23,7 +23,7 @@ Low-RAM hosts: **never** local `docker build` of stack images. Wait for GHCR pub
 
 **Railway ops (bensbench):** use **Railway CLI** for backup + hub re-pin — skill [`../skills/openfdd-railway-cli/SKILL.md`](../skills/openfdd-railway-cli/SKILL.md) · [`RAILWAY_DEPLOYMENT.md`](../../docs/operations/RAILWAY_DEPLOYMENT.md). Tip gate: `./scripts/check_ghcr_tip_stack.sh`. Do not confuse Railway CLI/MCP with `openfdd-mcp` FDD tools.
 
-**Ops closeout:** after tip publish + re-pin, stress LAST (Wave L: mid-wave smoke + gates 11–12; full stress at L8) — [`docs/operations/STRESS_CLOSEOUT.md`](../../docs/operations/STRESS_CLOSEOUT.md). Local hub HTTP only — [`docs/operations/LOCAL_DEPLOYMENT.md`](../../docs/operations/LOCAL_DEPLOYMENT.md).
+**Ops closeout:** after tip publish + re-pin, stress LAST (Wave L: mid-wave smoke + gates 11–13; full stress at L8) — [`docs/operations/STRESS_CLOSEOUT.md`](../../docs/operations/STRESS_CLOSEOUT.md). Local hub HTTP only — [`docs/operations/LOCAL_DEPLOYMENT.md`](../../docs/operations/LOCAL_DEPLOYMENT.md).
 
 ## Agent commands
 
