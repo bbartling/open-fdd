@@ -7,6 +7,7 @@ use utoipa::OpenApi;
 
 use crate::auth::{JwtClaims, Role};
 use crate::models::*;
+use crate::tenant_budget::{TenantBudgetConfig, TenantBudgetsResponse};
 use openfdd_contracts::{CommandAck, CommandEnvelope, TelemetryEnvelope};
 
 /// Doc-only OpenAPI path descriptors (OFDD-071).
@@ -281,6 +282,7 @@ mod live_routes {
         crate::routes::health,
         crate::routes::list_tenants,
         crate::routes::select_tenant,
+        crate::routes::list_tenant_budgets,
         crate::routes::list_edges,
         crate::routes::get_edge,
         crate::routes::get_edge_discovery,
@@ -359,11 +361,13 @@ mod live_routes {
         AuthAgentTokenRequest,
         TenantSelectRequest,
         TenantSelectResponse,
+        TenantBudgetConfig,
+        TenantBudgetsResponse,
     )),
     modifiers(&SecurityAddon),
     info(
         title = "Open-FDD Central API",
-        version = "3.5.3",
+        version = "3.5.4",
         description = "Open-FDD Central control plane — MQTTS ingest, edge shadow, commands, and FDD.\n\n\
             **Auth:** set `OPENFDD_JWT_SECRET` to require `Authorization: Bearer <JWT>` on all `/api/*` routes \
             except liveness, login, and non-sensitive capabilities. Open mode is **loopback-only**. \
@@ -371,6 +375,7 @@ mod live_routes {
             JWT is not multi-building tenancy.\n\n\
             **Wave L:** `OPENFDD_MULTI_TENANT` defaults **OFF**. Health/tenants/`/api/auth/me` echo `multi_tenant=false` \
             and `active_tenant_id=legacy`. `POST /api/tenants/select` is a no-op for `legacy` while OFF. \
+            Per-tenant budgets (`OPENFDD_TENANT_BUDGETS`) stay disabled unless multi-tenant mode is ON. \
             JWT `tenant_ids` + select remint are for Tier-2 lab enablement (single domain first).\n\n\
             **Logins:** `admin` + `OPENFDD_ADMIN_PASSWORD` → admin JWT; `agent` + `OPENFDD_AGENT_PASSWORD` → operator JWT \
             (preferred for Railway MCP / Cursor). Admins may also `POST /api/auth/agent-token` for short-lived operator JWTs.\n\n\

@@ -71,7 +71,8 @@ python3 "$MANIFEST_PY" create \
   --required 11_wave_l_tenant_mode \
   --required 12_wave_l_parquet_isolation \
   --required 13_wave_l_mqtts_namespace \
-  --required 14_wave_l_tenant_ui_session
+  --required 14_wave_l_tenant_ui_session \
+  --required 15_wave_l_tenant_budgets
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"
@@ -237,6 +238,10 @@ run_gate "13_wave_l_mqtts_namespace" "13 Wave L MQTTS namespace OFF" \
 # --- 14 Wave L tenant UI/session (mode OFF = legacy single domain) ---
 run_gate "14_wave_l_tenant_ui_session" "14 Wave L tenant UI/session OFF" \
   bash "$DIR/25_wave_l_tenant_ui_session.sh"
+
+# --- 15 Wave L tenant budgets (mode OFF = disabled) ---
+run_gate "15_wave_l_tenant_budgets" "15 Wave L tenant budgets OFF" \
+  bash "$DIR/26_wave_l_tenant_budgets.sh"
 
 # Finalize — SUMMARY generated from recorded gates only
 set +e
