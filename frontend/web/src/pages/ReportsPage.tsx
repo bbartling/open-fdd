@@ -5,6 +5,7 @@ import { ruleLabelStandard, mergeRuleDescriptionsFromApi } from "../lib/ruleLabe
 import { RULES_UPDATED_EVENT } from "../components/RuleTuningPanel";
 import {
   Button,
+  Checkbox,
   DataTable,
   Expander,
   InlineAlert,
@@ -43,6 +44,44 @@ export const SQL_ANALYTICS_RULE_IDS = new Set([
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+const ZONE_COMFORT_GATE_KEY = "openfdd.ui.zone_comfort_fdd_gate.v1";
+
+function loadZoneComfortGateDefault(): boolean {
+  try {
+    const raw = localStorage.getItem(ZONE_COMFORT_GATE_KEY);
+    if (raw === null) return true;
+    return raw === "1" || raw === "true";
+  } catch {
+    return true;
+  }
+}
+
+/** Match historian / SCHED-1 occupied mask (numeric + string tokens). */
+function rowIsOccupied(row: Record<string, unknown>): boolean {
+  const v = row.occ_mode ?? row.occupied;
+  if (v == null || v === "") return false;
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v > 0.05;
+  const s = String(v).trim().toLowerCase();
+  if (s === "" || s === "null") return false;
+  const asNum = Number(s);
+  if (!Number.isNaN(asNum)) return asNum > 0.05;
+  return ["1", "true", "occupied", "occ", "yes", "on"].includes(s);
+}
+
+function isZoneTempRule(
+  ruleId: string,
+  rules: FddRuleSummary[],
+): boolean {
+  if (!ruleId) return false;
+  const id = ruleId.toUpperCase();
+  if (id.startsWith("VAV-") || id.startsWith("ZONE") || id === "SCHED-1") {
+    return true;
+  }
+  const rule = rules.find((r) => r.rule_id === ruleId);
+  return (rule?.required_roles ?? []).includes("zone_t");
 }
 
 function lastYAxisTitle(fig: PlotlyFigure | null): string {
@@ -87,6 +126,9 @@ export function ReportsPage() {
   >([]);
   const [deviceType, setDeviceType] = useState("All");
   const [results, setResults] = useState<FddResultRow[]>([]);
+  const [applyZoneComfortGate, setApplyZoneComfortGate] = useState(
+    loadZoneComfortGateDefault,
+  );
 
   const [figure, setFigure] = useState<PlotlyFigure | null>(null);
   const [loading, setLoading] = useState(false);
@@ -253,7 +295,12 @@ export function ReportsPage() {
     try {
       const series = await getFddSeries(equipmentId, ruleId, buildingId || undefined);
       const roles = series.roles ?? [];
-      const rows = (series.rows ?? []) as Array<Record<string, unknown>>;
+      let rows = (series.rows ?? []) as Array<Record<string, unknown>>;
+      const zoneRule = isZoneTempRule(ruleId, rules);
+      const gateOn = zoneRule && applyZoneComfortGate;
+      if (gateOn && rows.some((r) => "occ_mode" in r || "occupied" in r)) {
+        rows = rows.filter(rowIsOccupied);
+      }
       const fault = rows.map((r) => {
         const v = r.confirmed_fault ?? r.fault;
         if (v === true || v === 1 || v === "1" || v === "true") return 1;
@@ -279,6 +326,15 @@ export function ReportsPage() {
         Number(resultRow?.fault_hours ?? 0) > 0;
       if (!fig) {
         setError("No plottable series for this equipment/rule.");
+      } else if (
+        gateOn &&
+        rows.length === 0 &&
+        (series.rows?.length ?? 0) > 0
+      ) {
+        setNoFaultIsError(false);
+        setNoFaultBanner(
+          "Zone comfort gate removed all samples (unoccupied). Uncheck the gate or widen Overview schedule.",
+        );
       } else if (!hasFaultOverlay && resultExists) {
         setNoFaultIsError(true);
         setNoFaultBanner(
@@ -301,7 +357,7 @@ export function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [buildingId, equipmentId, ruleId, results]);
+  }, [buildingId, equipmentId, ruleId, results, rules, applyZoneComfortGate]);
 
   useEffect(() => {
     if (!buildingId || !equipmentId || !ruleId) return;
@@ -529,6 +585,27 @@ export function ReportsPage() {
               testId="plots-rule-select"
             />
           </div>
+
+          {isZoneTempRule(ruleId, rules) ? (
+            <Checkbox
+              id="plots-zone-comfort-gate"
+              label="Apply Building schedule & zone comfort (Overview FDD starting point)"
+              description="Default on for zone-temp rules (VAV / ZONE / FCU). Filters plot samples to occupied hours via occ_mode. Uncheck for full series."
+              checked={applyZoneComfortGate}
+              onChange={(checked) => {
+                setApplyZoneComfortGate(checked);
+                try {
+                  localStorage.setItem(
+                    ZONE_COMFORT_GATE_KEY,
+                    checked ? "1" : "0",
+                  );
+                } catch {
+                  /* ignore */
+                }
+              }}
+              testId="plots-zone-comfort-gate"
+            />
+          ) : null}
 
           <PlotlyHost
             id="fdd-series"

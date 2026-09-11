@@ -373,6 +373,8 @@ pub async fn create_export(
     let filename = format!("openfdd_engineering_{building_id}_{profile}.zip");
     let zip_path = root.join(&filename);
     let size_bytes = zip_tree(&staging, &zip_path, "")?;
+    // Drop staging tree immediately — only the zip (+ metadata) remain until download.
+    let _ = fs::remove_dir_all(&staging);
 
     let artifact = ExportArtifact {
         export_id: export_id.clone(),
@@ -401,5 +403,7 @@ pub fn load_export(job_id: &str, export_id: &str) -> Result<(ExportArtifact, Vec
         serde_json::from_str(&metadata).map_err(|e| JobError::Io(e.to_string()))?;
     let bytes = fs::read(root.join(&artifact.filename))
         .map_err(|_| JobError::NotFound(format!("export zip not found: {export_id}")))?;
+    // One-shot download: remove the export dir so nothing stays cached on disk.
+    let _ = fs::remove_dir_all(&root);
     Ok((artifact, bytes))
 }

@@ -78,7 +78,8 @@ export function ExportPage() {
           <h3>EnergyPlus agent dump</h3>
           <p>
             Builds an <code>openfdd_engineering_bundle_v1</code> ZIP from the
-            active site package and downloads it. No other dump modes.
+            active site package and downloads it (one-shot — not retained on
+            disk after download). No other dump modes.
           </p>
           <div className="oracle-sidebar__btn-row">
             <Button
