@@ -22,7 +22,7 @@ Stamp as **ZONE** (`equipType: zone_other`, `zone`, `fcu`, `fanCoil`, or standal
 Both shapes:
 
 1. Get Overview **Building schedule & zone comfort (FDD starting point)** when the zone-temp comfort gate is ON (default).
-2. Run the **zone sensor-value fault equation** set (temperature performance, sensor health, related ZONE category rules) — not AHU economizer / SAT-reset plant rules.
+2. Run the **zone sensor-value fault equation** set (temperature performance, sensor health, related ZONE category rules) -- not AHU economizer / SAT-reset plant rules.
 
 Do **not** stamp FCU or standalone zone DDC as `ahu`.
 
@@ -30,7 +30,7 @@ VAV boxes remain `equipType: vav` (zone terminals with airflow/damper). They sha
 
 ## Unit ventilator = CV AHU
 
-A **unit ventilator (UV)** is an **air-handling unit, constant volume** — same family as CV AHU.
+A **unit ventilator (UV)** is an **air-handling unit, constant volume** -- same family as CV AHU.
 
 | Stamp | Canonical kind | Display |
 |-------|----------------|---------|
@@ -38,7 +38,7 @@ A **unit ventilator (UV)** is an **air-handling unit, constant volume** — same f
 | `cv_ahu` / `cvahu` | `ahu` | CV AHU |
 | `ahu` / `rtu` / `mau` / `doas` | `ahu` | AHU (or subtype label) |
 
-UV is **not** ZONE. Do not put UV on the ZONE comfort path just because it serves one room — use AHU constant-volume / air-handler rules and roles (`sat`, fans, OA/RA/MA when present).
+UV is **not** ZONE. Do not put UV on the ZONE comfort path just because it serves one room -- use AHU constant-volume / air-handler rules and roles (`sat`, fans, OA/RA/MA when present).
 
 ## Stamp cheat sheet
 
