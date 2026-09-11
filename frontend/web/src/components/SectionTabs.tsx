@@ -14,7 +14,7 @@ function resolveActiveId(
   override?: string,
 ): string | null {
   if (override) return override;
-  if (pathname.startsWith("/wattlab") || pathname.startsWith("/twin")) {
+  if (pathname.startsWith("/wattlab") || pathname.startsWith("/export")) {
     return "wattlab";
   }
   if (pathname.startsWith("/inspect")) return "inspect";

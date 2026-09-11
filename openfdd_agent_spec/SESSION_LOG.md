@@ -1,3 +1,9 @@
+## 2026-09-11 — ZONE/FCU/UV data-model + agent_spec sync (plan parallel)
+
+- Doctrine: **ZONE** = FCU (valve PID) **or** standalone DDC monitor (comfort + zone sensor FDD); **UV** = CV AHU (not ZONE).
+- Docs: `docs/modeling/zone-terminals.md`; `DATA_CONTRACT` / package-mapping / `AGENTS.md` typing; `equipment_types.rs` (`fcu`→zone_other, `unitVentilator`→ahu).
+- Tracked in Wave L Cursor plan parallel UX/data-model (does **not** redirect L5 #903).
+
 ## 2026-09-11 — Wave L L4 LIVE (3.5.3 / sha-d67d27b)
 
 - Product #901 tenant UI/session (`/api/auth/me` + `/api/tenants/select` + SPA chrome) + gate 14; tip `sha-d67d27b`; health `3.5.3+d67d27b9e791`.

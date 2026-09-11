@@ -31,6 +31,7 @@ Authoritative ingest: [`edge/src/csv_ingest/package.rs`](../../../edge/src/csv_i
 
 - Stamp `equipType` / `equipment_type` in package maps — preferred over id heuristics.
 - Opaque ids are valid (`AC_1` + `equipType: ahu`).
+- **ZONE** = FCU (`fcu`, valve PID) or standalone DDC (`zone_other`) — comfort + zone sensor FDD. **UV** = CV AHU (`unitVentilator`). See [`docs/modeling/zone-terminals.md`](../../../docs/modeling/zone-terminals.md).
 - Meters: `equipType: meter` with roles `kwh`, `electric_kw` for `SV-*` and `UTIL-*` rules.
 
 ## Utility FDD rules
