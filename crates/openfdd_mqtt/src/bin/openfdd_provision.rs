@@ -52,6 +52,7 @@ fn main() -> anyhow::Result<()> {
                 broker_host,
                 broker_port,
                 ca_dir,
+                tenant_id: None,
             })?;
             println!("kit_dir={}", result.kit_dir.display());
             println!("edge_config={}", result.edge_config.display());

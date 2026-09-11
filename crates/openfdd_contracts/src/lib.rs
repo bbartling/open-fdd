@@ -8,7 +8,7 @@ pub use command::{CommandAck, CommandEnvelope, CommandStatus};
 pub use envelope::{
     Protocol, Quality, SchemaVersion, TelemetryEnvelope, TelemetryPoint, ValueKind,
 };
-pub use topics::{TopicBuilder, TopicKind};
+pub use topics::{parse_topic, payload_matches_topic, TopicBuilder, TopicIdentity, TopicKind};
 
 /// Current wire schema string carried in every envelope.
 pub const SCHEMA_V1: &str = "openfdd.mqtt.telemetry.v1";

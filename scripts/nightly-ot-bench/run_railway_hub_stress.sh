@@ -228,6 +228,10 @@ run_gate "11_wave_l_tenant_mode" "11 Wave L tenant mode OFF" \
 run_gate "12_wave_l_parquet_isolation" "12 Wave L Parquet isolation OFF" \
   bash "$DIR/23_wave_l_parquet_isolation.sh"
 
+# --- 13 Wave L MQTTS namespace (mode OFF = legacy sites/… topics) ---
+run_gate "13_wave_l_mqtts_namespace" "13 Wave L MQTTS namespace OFF" \
+  bash "$DIR/24_wave_l_mqtts_namespace.sh"
+
 # Finalize — SUMMARY generated from recorded gates only
 set +e
 python3 "$MANIFEST_PY" finalize --manifest "$MANIFEST" --summary-md "$ART/SUMMARY.md"

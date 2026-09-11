@@ -4,7 +4,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use openfdd_contracts::TelemetryEnvelope;
+use openfdd_contracts::{
+    parse_topic, payload_matches_topic, TelemetryEnvelope, TopicIdentity, TopicKind,
+};
 use openfdd_mqtt::{MqttConfig, MqttHandle};
 use rumqttc::Incoming;
 use tokio::sync::watch;
@@ -13,24 +15,7 @@ use tracing::{debug, info, warn};
 
 use crate::live_historian::LiveHistorian;
 use crate::state::AppState;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TopicKind {
-    Telemetry,
-    Metadata,
-    Discovery,
-    Status,
-    Acks,
-    Unknown,
-}
-
-#[derive(Debug)]
-struct ParsedTopic {
-    site_id: String,
-    edge_id: String,
-    kind: TopicKind,
-    protocol: Option<String>,
-}
+use crate::tenant::multi_tenant_enabled;
 
 fn redact_payload(payload: &[u8]) -> String {
     if payload.is_empty() {
@@ -41,6 +26,28 @@ fn redact_payload(payload: &[u8]) -> String {
         Ok(_) => format!("<redacted utf8 payload: {} bytes>", payload.len()),
         Err(_) => format!("<redacted binary payload: {} bytes>", payload.len()),
     }
+}
+
+fn subscribe_topics(site: &str, edge: &str) -> Vec<String> {
+    let base = format!("openfdd/v1/sites/{site}/edges/{edge}");
+    let mut topics = vec![
+        format!("{base}/telemetry/#"),
+        format!("{base}/metadata/#"),
+        format!("{base}/discovery/#"),
+        format!("{base}/status"),
+        format!("{base}/acks/#"),
+    ];
+    // Wave L L3: when multi-tenant mode is ON, also subscribe the ADR namespace.
+    if multi_tenant_enabled() {
+        topics.extend([
+            "openfdd/v1/tenants/+/buildings/+/edges/+/telemetry/#".into(),
+            "openfdd/v1/tenants/+/buildings/+/edges/+/metadata/#".into(),
+            "openfdd/v1/tenants/+/buildings/+/edges/+/discovery/#".into(),
+            "openfdd/v1/tenants/+/buildings/+/edges/+/status".into(),
+            "openfdd/v1/tenants/+/buildings/+/edges/+/acks/#".into(),
+        ]);
+    }
+    topics
 }
 
 pub fn spawn_mqtt_ingest_with_shutdown(
@@ -116,14 +123,7 @@ fn spawn_mqtt_ingest_inner(
             };
             match connection {
                 Ok(handle) => {
-                    let base = format!("openfdd/v1/sites/{site}/edges/{edge}");
-                    let topics = [
-                        format!("{base}/telemetry/#"),
-                        format!("{base}/metadata/#"),
-                        format!("{base}/discovery/#"),
-                        format!("{base}/status"),
-                        format!("{base}/acks/#"),
-                    ];
+                    let topics = subscribe_topics(&site, &edge);
                     for topic in &topics {
                         if let Err(err) = handle.subscribe(topic).await {
                             warn!(%err, topic, "subscribe failed");
@@ -131,10 +131,13 @@ fn spawn_mqtt_ingest_inner(
                         }
                     }
 
-                    state.mqtt_mark_connected(cfg.client_id.clone(), topics.to_vec());
+                    state.mqtt_mark_connected(cfg.client_id.clone(), topics.clone());
                     let (publisher, mut events) = handle.split();
                     state.set_mqtt_publisher(publisher);
-                    info!("central MQTT ingest connected; publisher ready for commands");
+                    info!(
+                        multi_tenant = multi_tenant_enabled(),
+                        "central MQTT ingest connected; publisher ready for commands"
+                    );
 
                     loop {
                         tokio::select! {
@@ -242,33 +245,6 @@ fn drain_live_historian(live_historian: &mut Option<LiveHistorian>) {
     }
 }
 
-fn parse_topic(topic: &str) -> Option<ParsedTopic> {
-    let parts: Vec<&str> = topic.split('/').collect();
-    if parts.len() < 6 {
-        return None;
-    }
-    if parts[0] != "openfdd" || parts[1] != "v1" || parts[2] != "sites" || parts[4] != "edges" {
-        return None;
-    }
-    let site_id = parts[3].to_string();
-    let edge_id = parts[5].to_string();
-    let kind = match parts.get(6).copied() {
-        Some("telemetry") => TopicKind::Telemetry,
-        Some("metadata") => TopicKind::Metadata,
-        Some("discovery") => TopicKind::Discovery,
-        Some("status") if parts.len() == 7 => TopicKind::Status,
-        Some("acks") => TopicKind::Acks,
-        _ => TopicKind::Unknown,
-    };
-    let protocol = parts.get(7).map(|s| s.to_string());
-    Some(ParsedTopic {
-        site_id,
-        edge_id,
-        kind,
-        protocol,
-    })
-}
-
 fn handle_payload(
     state: &AppState,
     live_historian: Option<&mut LiveHistorian>,
@@ -280,14 +256,18 @@ fn handle_payload(
         return;
     };
 
-    match parsed.kind {
-        TopicKind::Telemetry => handle_telemetry(
+    // Mode ON: require tenant-scoped topics so payload labels cannot spoof another firm.
+    if multi_tenant_enabled() && !parsed.is_tenant_scoped() {
+        record_reject(
             state,
-            live_historian,
-            &parsed.site_id,
-            &parsed.edge_id,
             payload,
-        ),
+            "multi-tenant mode requires openfdd/v1/tenants/{tid}/buildings/{bid}/edges/{eid}/… topics",
+        );
+        return;
+    }
+
+    match parsed.kind {
+        TopicKind::Telemetry => handle_telemetry(state, live_historian, &parsed, payload),
         TopicKind::Metadata => {
             if let Ok(value) = serde_json::from_slice(payload) {
                 store_shadow_payload(state, &parsed.edge_id, |shadow| {
@@ -318,7 +298,7 @@ fn handle_payload(
             }
         }
         TopicKind::Acks => handle_ack(state, payload),
-        TopicKind::Unknown => handle_untyped_payload(state, payload),
+        TopicKind::Commands => {}
     }
 }
 
@@ -335,8 +315,7 @@ fn store_shadow_payload(
 fn handle_telemetry(
     state: &AppState,
     live_historian: Option<&mut LiveHistorian>,
-    topic_site: &str,
-    topic_edge: &str,
+    topic: &TopicIdentity,
     payload: &[u8],
 ) {
     match serde_json::from_slice::<TelemetryEnvelope>(payload) {
@@ -345,13 +324,16 @@ fn handle_telemetry(
                 record_reject(state, payload, &err);
                 return;
             }
-            if env.site_id != topic_site || env.edge_id != topic_edge {
+            if !payload_matches_topic(topic, &env.site_id, &env.edge_id) {
                 record_reject(
                     state,
                     payload,
                     &format!(
                         "envelope site/edge ({}/{}) does not match topic ({}/{})",
-                        env.site_id, env.edge_id, topic_site, topic_edge
+                        env.site_id,
+                        env.edge_id,
+                        topic.site_id(),
+                        topic.edge_id
                     ),
                 );
                 return;
@@ -438,10 +420,19 @@ mod tests {
     #[test]
     fn parse_telemetry_topic() {
         let p = parse_topic("openfdd/v1/sites/lab/edges/pi-1/telemetry/bacnet").unwrap();
-        assert_eq!(p.site_id, "lab");
+        assert_eq!(p.building_id, "lab");
         assert_eq!(p.edge_id, "pi-1");
         assert_eq!(p.kind, TopicKind::Telemetry);
         assert_eq!(p.protocol.as_deref(), Some("bacnet"));
+    }
+
+    #[test]
+    fn parse_tenant_telemetry_topic() {
+        let p = parse_topic("openfdd/v1/tenants/acme/buildings/bldg2/edges/pi-1/telemetry/bacnet")
+            .unwrap();
+        assert_eq!(p.tenant_id.as_deref(), Some("acme"));
+        assert_eq!(p.building_id, "bldg2");
+        assert!(p.is_tenant_scoped());
     }
 
     #[test]
