@@ -1,3 +1,9 @@
+## 2026-09-11 — Wave L L4 LIVE (3.5.3 / sha-d67d27b)
+
+- Product #901 tenant UI/session (`/api/auth/me` + `/api/tenants/select` + SPA chrome) + gate 14; tip `sha-d67d27b`; health `3.5.3+d67d27b9e791`.
+- Backup `20260911T123823Z`; hub+fieldbus re-pin; gates **11–14 PASS** (`/tmp/wave_l_l4_smoke_20260911T124238Z/`).
+- Mode OFF; `active_tenant_id=legacy`; `capabilities.tenant_session=true`. Next: L5 per-tenant budgets.
+
 ## 2026-09-11 — Wave L L3 LIVE (3.5.2 / sha-be65366)
 
 - Product #899 MQTTS `TopicBuilder` / `parse_topic` + ingest identity + gate 13; tip `sha-be65366`; health `3.5.2+be65366316bb`.
