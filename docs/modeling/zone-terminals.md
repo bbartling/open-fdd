@@ -8,7 +8,7 @@ permalink: /modeling/zone-terminals/
 
 # Zone terminals, FCU, and unit ventilators
 
-Open-FDD **ZONE** is a **control definition**, not “VAV boxes only.”
+Open-FDD **ZONE** is a **control definition**, not "VAV boxes only."
 
 ## ZONE control (comfort + sensor FDD)
 

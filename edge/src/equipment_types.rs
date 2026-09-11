@@ -38,13 +38,7 @@ pub fn canonical_kind(raw: &str) -> Option<&'static str> {
         | "energyrecoveryventilator" => Some("ahu"),
         "vav" | "zoneterminal" => Some("vav"),
         // ZONE control: FCU (valve PID) + standalone DDC monitors — not AHU.
-        "zoneother"
-        | "zone"
-        | "fcu"
-        | "fancoil"
-        | "fancoilunit"
-        | "standaloneddc"
-        | "ddczone"
+        "zoneother" | "zone" | "fcu" | "fancoil" | "fancoilunit" | "standaloneddc" | "ddczone"
         | "zoneddc" => Some("zone_other"),
         "vrf" => Some("vrf"),
         "chiller" | "chwplant" | "chilledwaterplant" => Some("chiller"),
