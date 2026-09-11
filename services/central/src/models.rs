@@ -195,6 +195,16 @@ pub struct AuthMeResponse {
     pub username: String,
     pub role: String,
     pub auth_required: bool,
+    /// Echo of `OPENFDD_MULTI_TENANT` (false until operator enable after Tier-2).
+    pub multi_tenant: bool,
+    /// Active tenant from TenantContext (`legacy` when mode OFF).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_tenant_id: Option<String>,
+    /// Membership claims from JWT (empty when mode OFF / hub passwords).
+    #[serde(default)]
+    pub tenant_ids: Vec<String>,
+    /// Hub admin may cross tenants when mode is on.
+    pub hub_admin: bool,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -211,6 +221,30 @@ pub struct AuthLoginResponse {
     pub token_type: String,
     pub role: String,
     pub subject: String,
+    /// Echo of multi-tenant mode at login time.
+    pub multi_tenant: bool,
+    /// Active tenant for this session (`legacy` when mode OFF).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_tenant_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct TenantSelectRequest {
+    pub tenant_id: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TenantSelectResponse {
+    pub ok: bool,
+    pub multi_tenant: bool,
+    pub active_tenant_id: String,
+    /// New JWT when mode ON and selection changes membership claims; absent when OFF no-op.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }

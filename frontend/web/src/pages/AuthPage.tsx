@@ -8,6 +8,7 @@ import {
   setStoredToken,
   type AuthMe,
 } from "../api/authApi";
+import { setStoredActiveTenant } from "../api/tenantApi";
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -66,6 +67,7 @@ export function AuthPage() {
     setNotice(null);
     try {
       const res = await login(username, password);
+      if (res.active_tenant_id) setStoredActiveTenant(res.active_tenant_id);
       setNotice(`Signed in as ${res.subject}`);
       await refresh();
       navigate(returnTo, { replace: true });
@@ -115,6 +117,13 @@ export function AuthPage() {
               <div>
                 <dt>Role</dt>
                 <dd data-testid="auth-role">{me?.role ?? "—"}</dd>
+              </div>
+              <div>
+                <dt>Tenant</dt>
+                <dd data-testid="auth-tenant">
+                  {me?.active_tenant_id ?? "legacy"}
+                  {me?.multi_tenant ? "" : " (single-hub)"}
+                </dd>
               </div>
             </dl>
             <div className="auth-screen__actions">

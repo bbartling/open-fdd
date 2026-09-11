@@ -25,7 +25,8 @@ use crate::models::{
     AgentTool, AgentToolsResponse, AuthAgentTokenRequest, AuthLoginRequest, AuthLoginResponse,
     AuthMeResponse, AuthStatusResponse, CommandAckResponse, EdgeDetailResponse,
     EdgePayloadResponse, EdgesListResponse, FddRunRequest, FddStatusResponse, IngestStatsResponse,
-    IssueCommandRequest, IssueCommandResponse, OkHealthResponse,
+    IssueCommandRequest, IssueCommandResponse, OkHealthResponse, TenantSelectRequest,
+    TenantSelectResponse,
 };
 use crate::state::{AppState, PendingCommand};
 use crate::wattlab_dump;
@@ -42,7 +43,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/health/stack", get(health_stack))
         .route("/api/building/snapshot", get(building_snapshot))
         .route("/api/dashboard/summary", get(dashboard_summary))
-        .route("/api/tenants", get(list_tenants));
+        .route("/api/tenants", get(list_tenants))
+        .route("/api/tenants/select", post(select_tenant));
 
     // Admin-gated agent token mint lives on the authenticated router below.
 
@@ -377,6 +379,95 @@ pub async fn list_tenants(
     })
 }
 
+/// Wave L L4 — select active tenant for the browser session (single domain).
+/// Mode OFF: no-op echo of `legacy` (no token rotation). Mode ON: membership-gated JWT remint.
+#[utoipa::path(
+    post,
+    path = "/api/tenants/select",
+    tag = "central",
+    request_body = TenantSelectRequest,
+    responses(
+        (status = 200, description = "Active tenant selection", body = TenantSelectResponse),
+        (status = 401, description = "Auth required when mode ON"),
+        (status = 403, description = "Tenant not in membership")
+    )
+)]
+pub async fn select_tenant(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<TenantSelectRequest>,
+) -> Result<Json<TenantSelectResponse>, (StatusCode, Json<Value>)> {
+    let tid = body.tenant_id.trim().to_string();
+    if tid.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "tenant_id required"})),
+        ));
+    }
+    let multi_tenant = crate::tenant::multi_tenant_enabled();
+    if !multi_tenant {
+        // OFF-safe: single-hub semantics — selection is a no-op for `legacy` only.
+        if tid != "legacy" {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "ok": false,
+                    "error": "multi-tenant mode is off; only tenant_id=legacy is valid"
+                })),
+            ));
+        }
+        return Ok(Json(TenantSelectResponse {
+            ok: true,
+            multi_tenant: false,
+            active_tenant_id: "legacy".into(),
+            token: None,
+            access_token: None,
+            error: None,
+        }));
+    }
+
+    let user = state.auth.user_from_headers(&headers).map_err(|detail| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": detail})),
+        )
+    })?;
+    let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+    let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
+    let hub_admin = matches!(user.role, auth::Role::Admin) && user.tenant_ids.is_empty();
+    if hub_admin {
+        if !plane.tenants.iter().any(|t| t.id == tid) {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({"ok": false, "error": "unknown tenant_id"})),
+            ));
+        }
+    } else if !user.tenant_ids.iter().any(|t| t == &tid) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "tenant not in membership"})),
+        ));
+    }
+
+    let token = state
+        .auth
+        .issue_token_with_tenants(&user.sub, user.role, 8 * 3600, std::slice::from_ref(&tid))
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": "token mint failed"})),
+            )
+        })?;
+    Ok(Json(TenantSelectResponse {
+        ok: true,
+        multi_tenant: true,
+        active_tenant_id: tid,
+        token: Some(token.clone()),
+        access_token: Some(token),
+        error: None,
+    }))
+}
+
 /// Feature advertisement for UI capability gates and MCP accuracy checks.
 pub async fn capabilities() -> Json<Value> {
     Json(json!({
@@ -401,7 +492,8 @@ pub async fn capabilities() -> Json<Value> {
             "analytics": true,
             "jobs": true,
             "react_ui": std::env::var("OPENFDD_REACT_UI").ok().as_deref() == Some("1"),
-            "ui_generation_routing": true
+            "ui_generation_routing": true,
+            "tenant_session": true
         }
     }))
 }
@@ -431,12 +523,24 @@ pub async fn auth_me(
     headers: axum::http::HeaderMap,
 ) -> Result<Json<AuthMeResponse>, (axum::http::StatusCode, Json<Value>)> {
     match state.auth.user_from_headers(&headers) {
-        Ok(user) => Ok(Json(AuthMeResponse {
-            ok: true,
-            username: user.sub,
-            role: user.role.as_str().into(),
-            auth_required: state.auth.required(),
-        })),
+        Ok(user) => {
+            let workspace =
+                std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+            let plane =
+                crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
+            let ctx = crate::tenant::TenantContext::resolve(&user, &plane)
+                .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&user));
+            Ok(Json(AuthMeResponse {
+                ok: true,
+                username: user.sub,
+                role: user.role.as_str().into(),
+                auth_required: state.auth.required(),
+                multi_tenant: crate::tenant::multi_tenant_enabled(),
+                active_tenant_id: ctx.tenant_id,
+                tenant_ids: user.tenant_ids,
+                hub_admin: ctx.hub_admin,
+            }))
+        }
         Err(detail) => Err((
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"ok": false, "error": detail})),
@@ -501,6 +605,8 @@ pub async fn auth_login(
             token_type: "Bearer".into(),
             role: "admin".into(),
             subject: "dev".into(),
+            multi_tenant: crate::tenant::multi_tenant_enabled(),
+            active_tenant_id: Some("legacy".into()),
             error: None,
         }));
     }
@@ -532,6 +638,15 @@ pub async fn auth_login(
             Json(json!({"ok": false, "error": "login failed"})),
         )
     })?;
+    let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+    let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
+    let auth_user = auth::AuthUser {
+        sub: sub.clone(),
+        role,
+        tenant_ids: vec![],
+    };
+    let ctx = crate::tenant::TenantContext::resolve(&auth_user, &plane)
+        .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&auth_user));
     open_fdd_edge_prototype::auth::audit::log_event(
         "login_success",
         json!({
@@ -539,6 +654,7 @@ pub async fn auth_login(
             "role": role.as_str(),
             "ip": ip,
             "request_id": request_id,
+            "active_tenant_id": ctx.tenant_id,
         }),
     );
     Ok(Json(AuthLoginResponse {
@@ -548,6 +664,8 @@ pub async fn auth_login(
         token_type: "Bearer".into(),
         role: role.as_str().into(),
         subject: sub,
+        multi_tenant: crate::tenant::multi_tenant_enabled(),
+        active_tenant_id: ctx.tenant_id,
         error: None,
     }))
 }
@@ -611,6 +729,8 @@ pub async fn auth_agent_token(
         token_type: "Bearer".into(),
         role: auth::Role::Operator.as_str().into(),
         subject: "agent".into(),
+        multi_tenant: crate::tenant::multi_tenant_enabled(),
+        active_tenant_id: Some("legacy".into()),
         error: None,
     }))
 }

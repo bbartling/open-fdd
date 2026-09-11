@@ -47,6 +47,10 @@ describe("AuthPage", () => {
       username: "admin",
       role: "admin",
       auth_required: true,
+      multi_tenant: false,
+      active_tenant_id: "legacy",
+      tenant_ids: [],
+      hub_admin: true,
     });
 
     render(
