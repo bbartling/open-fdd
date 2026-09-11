@@ -1,6 +1,6 @@
 ---
 name: Wave L multi-client shared hosting
-overview: "ACTIVE — Wave L 3.5.x. L4 LIVE ops sha-d67d27b / 3.5.3. L5 next (budgets). Low-RAM; Actions green; 0 stale after merge. L8 = enhanced stress + 3.5.x PINNED."
+overview: "ACTIVE — Wave L 3.5.x. L5 LIVE ops sha-ecd97a4 / 3.5.5. L6 next. Low-RAM; Actions green; 0 stale after merge. L8 = enhanced stress + 3.5.x PINNED."
 todos:
   - id: l0-wait-k-pin
     content: L0 — Wave K 3.4.0 PINNED (sha-9c3e8b1 / stress 20260910T021557Z) — UNBLOCKED

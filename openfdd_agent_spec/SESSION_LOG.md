@@ -1,3 +1,9 @@
+## 2026-09-11 — Wave L L5 LIVE (3.5.5 / sha-ecd97a4)
+
+- Product #903 budgets (3.5.4) + #904 UX/Dump/Twin/ZONE-UV (3.5.5); tip `sha-ecd97a4`; health `3.5.5+ecd97a473405`.
+- Backup `20260911T172130Z`; hub+fieldbus re-pin; gates **11–15 PASS** (`/tmp/wave_l_l5_smoke_20260911T172505Z/`).
+- Mode OFF; budgets disabled; `active_tenant_id=legacy`. Gate15 harness: do not use jq `false // true`. Next: L6.
+
 ## 2026-09-11 — ZONE/FCU/UV data-model + agent_spec sync (plan parallel)
 
 - Doctrine: **ZONE** = FCU (valve PID) **or** standalone DDC monitor (comfort + zone sensor FDD); **UV** = CV AHU (not ZONE).

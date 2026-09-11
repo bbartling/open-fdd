@@ -29,9 +29,9 @@ fi
 budgets="$(curl -sS --max-time 30 "${CENTRAL_AUTH_HDR[@]+"${CENTRAL_AUTH_HDR[@]}"}" \
   "$CENTRAL_BASE/api/tenants/budgets")"
 echo "$budgets" | tee "$ART/wave_l_l5_budgets.json" >/dev/null
-ok="$(echo "$budgets" | jq -r '.ok // false')"
-enabled="$(echo "$budgets" | jq -r '.budgets.enabled // true')"
-mt2="$(echo "$budgets" | jq -r '.multi_tenant // false')"
+ok="$(echo "$budgets" | jq -r '.ok')"
+enabled="$(echo "$budgets" | jq -r '.budgets.enabled')"
+mt2="$(echo "$budgets" | jq -r '.multi_tenant')"
 echo "budgets ok=$ok enabled=$enabled multi_tenant=$mt2" | tee -a "$LOG"
 
 if [[ "$ok" != "true" || "$enabled" != "false" || "$mt2" == "true" ]]; then
@@ -42,7 +42,7 @@ fi
 caps="$(curl -sS --max-time 30 "${CENTRAL_AUTH_HDR[@]+"${CENTRAL_AUTH_HDR[@]}"}" \
   "$CENTRAL_BASE/api/capabilities")"
 echo "$caps" | tee "$ART/wave_l_l5_capabilities.json" >/dev/null
-tb="$(echo "$caps" | jq -r '.capabilities.tenant_budgets // true')"
+tb="$(echo "$caps" | jq -r '.capabilities.tenant_budgets')"
 echo "capabilities.tenant_budgets=$tb" | tee -a "$LOG"
 if [[ "$tb" != "false" ]]; then
   echo "FAIL: expected capabilities.tenant_budgets=false while mode OFF" | tee -a "$LOG"
