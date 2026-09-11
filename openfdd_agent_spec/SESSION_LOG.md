@@ -1,3 +1,9 @@
+## 2026-09-11 — Wave L L5 LIVE ops tip (3.5.5 / sha-c5b3ccc)
+
+- Docs/harness #905 tip `sha-c5b3ccc`; health `3.5.5+c5b3ccc947c8`; backup `20260911T185021Z`.
+- Hub+fieldbus re-pin; gates **11–15 PASS** (`/tmp/wave_l_l5c_smoke_20260911T185328Z/`). Mode OFF; budgets disabled.
+- Prior product tip `sha-ecd97a4` (#904). Next: L6.
+
 ## 2026-09-11 — Wave L L5 LIVE (3.5.5 / sha-ecd97a4)
 
 - Product #903 budgets (3.5.4) + #904 UX/Dump/Twin/ZONE-UV (3.5.5); tip `sha-ecd97a4`; health `3.5.5+ecd97a473405`.
