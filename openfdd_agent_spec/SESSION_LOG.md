@@ -1,3 +1,9 @@
+## 2026-09-11 — Wave L L3 LIVE (3.5.2 / sha-be65366)
+
+- Product #899 MQTTS `TopicBuilder` / `parse_topic` + ingest identity + gate 13; tip `sha-be65366`; health `3.5.2+be65366316bb`.
+- Backup `20260911T030541Z`; hub+fieldbus re-pin; gates **11+12+13 PASS** (`/tmp/wave_l_l3_smoke_20260911T032648Z/`).
+- Mode OFF; legacy `sites/…` MQTT path still ingesting. Next: L4 Tenant UI/session (single domain).
+
 ## 2026-09-11 — L2 tip re-pin sha-af08ac7 (flake-fix #897)
 
 - Merged #897 (L2 closeout docs + tenant ENV_LOCK flake fix). Tip `sha-af08ac7` / health `3.5.1+af08ac7b9889`.

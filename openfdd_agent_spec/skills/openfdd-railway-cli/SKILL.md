@@ -14,15 +14,15 @@ Checklist: [`RAILWAY_DEPLOYMENT_CHECKLIST.md`](../../../docs/operations/RAILWAY_
 
 **Not Open-FDD MCP.** Railway CLI / Railway’s optional MCP manage cloud deploys. HVAC FDD tools stay in [`mcp/`](../../../mcp/) (`openfdd-mcp` + agent JWT to private central).
 
-## Verified host state (bensbench, 2026-09-10)
+## Verified host state (bensbench, 2026-09-11)
 
 | Item | Value |
 | --- | --- |
 | Package | `@railway/cli` via `npm i -g @railway/cli` |
 | Auth | **`railway login`** (browser) — verified; optional `RAILWAY_TOKEN` in `~/.config/railway/bensbench.env` |
 | Link | `~/open-fdd` → project **`gleaming-cooperation`**, env **`production`** |
-| **Product hub pin** | **`sha-af08ac7`** / VERSION **3.5.1** / health **`3.5.1+af08ac7b9889`** · `multi_tenant=false` · empty `historian_prefix` (Wave L L2). Rollback **`sha-9c3e8b1`** / **3.4.0** (Wave K); prior L1 **`sha-a11b6cb`** / **3.5.0**. |
-| Stress closeout | Mid-wave = smoke + gates **11–12**. Full stress at Wave L **L8** / shippable pins — [`STRESS_CLOSEOUT.md`](../../../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md) |
+| **Product hub pin** | **`sha-be65366`** / VERSION **3.5.2** / health **`3.5.2+be65366316bb`** · `multi_tenant=false` · empty `historian_prefix` (Wave L L3). Rollback **`sha-9c3e8b1`** / **3.4.0** (Wave K); prior L2 **`sha-af08ac7`** / **3.5.1**. |
+| Stress closeout | Mid-wave = smoke + gates **11–13**. Full stress at Wave L **L8** / shippable pins — [`STRESS_CLOSEOUT.md`](../../../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md) |
 | Local firewall hub | HTTP only — [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md) |
 | Fieldbus | **Not** a Railway service — bensbench x86 via `./scripts/openfdd_fieldbus_railway_up.sh sha-<7>` |
 
@@ -111,9 +111,9 @@ railway service source connect --service openfdd-web \
 ./scripts/openfdd_fieldbus_railway_up.sh "$SHA"
 ```
 
-Smoke: public SPA + `https://<web>/api/health` (and `/api/tenants` — Wave L: `multi_tenant=false`, empty `historian_prefix` when OFF). Version must match the **pinned** SHA (`3.5.1+af08ac7…` for `sha-af08ac7`).
+Smoke: public SPA + `https://<web>/api/health` (and `/api/tenants` — Wave L: `multi_tenant=false`, empty `historian_prefix` when OFF). Version must match the **pinned** SHA (`3.5.2+be65366…` for `sha-be65366`).
 
-**Wave L mid-wave:** gates **11** + **12** only (`22_wave_l_tenant_mode.sh`, `23_wave_l_parquet_isolation.sh`). Full `run_railway_hub_stress.sh` at **L8**.
+**Wave L mid-wave:** gates **11** + **12** + **13** (`22_wave_l_tenant_mode.sh`, `23_wave_l_parquet_isolation.sh`, `24_wave_l_mqtts_namespace.sh`). Full `run_railway_hub_stress.sh` at **L8**.
 
 **Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS only. Raspberry Pis are out of stress. See [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md).
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gate 24 — Wave L MQTTS namespace / identity provenance smoke (mode OFF).
+# Gate 24 - Wave L MQTTS namespace / identity provenance smoke (mode OFF).
 # Asserts multi_tenant=false and live MQTT still ingesting on legacy site topics.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,10 +39,10 @@ if [[ "$ingest" -lt 1 ]]; then
   exit 1
 fi
 
-# Contract smoke: OFF path must keep openfdd/v1/sites/… (tenant path is lab-only until ON).
+# Contract smoke: OFF path must keep openfdd/v1/sites/â€¦ (tenant path is lab-only until ON).
 if ! echo "$ver" | rg -q '^3\.5\.'; then
   echo "WARN: version $ver not in 3.5.x line (continuing)" | tee -a "$LOG"
 fi
 
-ok "Wave L MQTTS namespace OFF (legacy sites/… + identity provenance helpers) PASS"
+ok "Wave L MQTTS namespace OFF (legacy sites/â€¦ + identity provenance helpers) PASS"
 exit 0
