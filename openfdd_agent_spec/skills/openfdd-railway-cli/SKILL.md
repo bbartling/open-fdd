@@ -21,8 +21,8 @@ Checklist: [`RAILWAY_DEPLOYMENT_CHECKLIST.md`](../../../docs/operations/RAILWAY_
 | Package | `@railway/cli` via `npm i -g @railway/cli` |
 | Auth | **`railway login`** (browser) — verified; optional `RAILWAY_TOKEN` in `~/.config/railway/bensbench.env` |
 | Link | `~/open-fdd` → project **`gleaming-cooperation`**, env **`production`** |
-| **Product hub pin** | **`sha-d67d27b`** / VERSION **3.5.3** / health **`3.5.3+d67d27b9e791`** · `multi_tenant=false` · `active_tenant_id=legacy` (Wave L L4). Rollback **`sha-9c3e8b1`** / **3.4.0** (Wave K); prior L3 **`sha-be65366`** / **3.5.2**. |
-| Stress closeout | Mid-wave = smoke + gates **11–14**. Full stress at Wave L **L8** / shippable pins — [`STRESS_CLOSEOUT.md`](../../../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md) |
+| **Product hub pin** | **`sha-ecd97a4`** / VERSION **3.5.5** / health **`3.5.5+ecd97a473405`** · `multi_tenant=false` · `active_tenant_id=legacy` · `tenant_budgets=false` (Wave L L5). Rollback **`sha-9c3e8b1`** / **3.4.0** (Wave K); prior L4 **`sha-d67d27b`** / **3.5.3**. |
+| Stress closeout | Mid-wave = smoke + gates **11–15**. Full stress at Wave L **L8** / shippable pins — [`STRESS_CLOSEOUT.md`](../../../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md) |
 | Local firewall hub | HTTP only — [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md) |
 | Fieldbus | **Not** a Railway service — bensbench x86 via `./scripts/openfdd_fieldbus_railway_up.sh sha-<7>` |
 
