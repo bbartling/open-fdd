@@ -1,3 +1,9 @@
+## 2026-09-11 — L2 tip re-pin sha-af08ac7 (flake-fix #897)
+
+- Merged #897 (L2 closeout docs + tenant ENV_LOCK flake fix). Tip `sha-af08ac7` / health `3.5.1+af08ac7b9889`.
+- Backup `20260911T004519Z`; hub+fieldbus re-pin; gates 11+12 PASS (`/tmp/wave_l_l2b_smoke_20260911T005453Z/`).
+- Next: L3 MQTTS namespace + ACL.
+
 # Session log
 
 ## 2026-09-10 — Wave L L2 LIVE (3.5.1 / sha-2dea571)

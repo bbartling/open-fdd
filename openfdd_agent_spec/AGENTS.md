@@ -106,7 +106,7 @@ retest. Do not confuse those with this engineering OS.
 59. **Wave L multi-tenant (mode OFF until Tier-2):** `OPENFDD_MULTI_TENANT` defaults OFF. L1: `TenantContext` + `/api/tenants` + gate 11. L2: tenant Parquet roots via `fdd_store::tenant_storage_root` / `TenantContext::historian_root` (hub root when OFF; `{base}/tenants/{tid}` when ON) + gate 12. Isolation = **path-scoped DF providers**, never shared mega-table + `WHERE tenant_id`. ADR: [`docs/architecture/ADR_multi_client_shared_hosting.md`](../docs/architecture/ADR_multi_client_shared_hosting.md).
 60. **Agent tooling map (use the right tool):** GHCR Publish / tip gate = GitHub Actions + `scripts/check_ghcr_tip_stack.sh`. Hub re-pin / backup / ssh health = **Railway CLI** (rule 39). Local lab stack = `openfdd_stack_*.sh` (HTTP firewall only). FDD/analytics for AI hosts = **`openfdd-mcp`** + agent JWT — not Railway MCP. Stress = `scripts/nightly-ot-bench/`. Typst RCx PDFs = [`skills/openfdd-typst-rcx-report`](skills/openfdd-typst-rcx-report/SKILL.md). Hygiene every merge: **0 open PRs**, remote **only `master`**, tip Actions green (ignore cancelled docs-tip Publish noise).
 
-**Current ops pin (2026-09-10):** VERSION **3.5.1** · tip **`sha-2dea571`** · health **`3.5.1+2dea571cea05`** · `multi_tenant=false` · Wave L **L2 LIVE**. Rollback: Wave K **`sha-9c3e8b1`** / **3.4.0**. Low-RAM always (rule 0).
+**Current ops pin (2026-09-10):** VERSION **3.5.1** · tip **`sha-af08ac7`** · health **`3.5.1+af08ac7b9889`** · `multi_tenant=false` · Wave L **L2 LIVE**. Rollback: Wave K **`sha-9c3e8b1`** / **3.4.0**. Low-RAM always (rule 0).
 
 ---
 
