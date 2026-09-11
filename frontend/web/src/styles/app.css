@@ -153,11 +153,25 @@ body {
   text-overflow: ellipsis;
 }
 
+.app-sidebar__tenant {
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 0.1rem;
+}
+
 .app-shell--sidebar-collapsed .app-sidebar__brand {
   display: none;
 }
 
 .app-shell--sidebar-collapsed .app-sidebar__revision {
+  display: block;
+}
+
+.app-shell--sidebar-collapsed .app-sidebar__tenant {
   display: block;
 }
 

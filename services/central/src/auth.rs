@@ -208,6 +208,17 @@ impl AuthConfig {
 
     /// Mint a JWT for username/role. Requires `OPENFDD_JWT_SECRET`.
     pub fn issue_token(&self, sub: &str, role: Role, ttl_secs: i64) -> Result<String, String> {
+        self.issue_token_with_tenants(sub, role, ttl_secs, &[])
+    }
+
+    /// Mint a JWT with optional tenant membership claims (Wave L L4+).
+    pub fn issue_token_with_tenants(
+        &self,
+        sub: &str,
+        role: Role,
+        ttl_secs: i64,
+        tenant_ids: &[String],
+    ) -> Result<String, String> {
         use jsonwebtoken::{encode, EncodingKey, Header};
         let secret = self
             .secret
@@ -219,7 +230,7 @@ impl AuthConfig {
             role: role.as_str().to_string(),
             exp: now + ttl_secs.max(60),
             iat: now,
-            tenant_ids: vec![],
+            tenant_ids: tenant_ids.to_vec(),
         };
         encode(
             &Header::default(),

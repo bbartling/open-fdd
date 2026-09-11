@@ -280,6 +280,7 @@ mod live_routes {
     paths(
         crate::routes::health,
         crate::routes::list_tenants,
+        crate::routes::select_tenant,
         crate::routes::list_edges,
         crate::routes::get_edge,
         crate::routes::get_edge_discovery,
@@ -356,18 +357,21 @@ mod live_routes {
         AuthLoginRequest,
         AuthLoginResponse,
         AuthAgentTokenRequest,
+        TenantSelectRequest,
+        TenantSelectResponse,
     )),
     modifiers(&SecurityAddon),
     info(
         title = "Open-FDD Central API",
-        version = "3.5.2",
+        version = "3.5.3",
         description = "Open-FDD Central control plane — MQTTS ingest, edge shadow, commands, and FDD.\n\n\
             **Auth:** set `OPENFDD_JWT_SECRET` to require `Authorization: Bearer <JWT>` on all `/api/*` routes \
             except liveness, login, and non-sensitive capabilities. Open mode is **loopback-only**. \
             Binding a non-loopback address without a strong JWT secret and admin password **fails closed**. \
             JWT is not multi-building tenancy.\n\n\
-            **Wave L:** `OPENFDD_MULTI_TENANT` defaults **OFF**. Health/tenants echo `multi_tenant=false`; \
-            optional JWT `tenant_ids` are reserved for Tier-2 lab enablement.\n\n\
+            **Wave L:** `OPENFDD_MULTI_TENANT` defaults **OFF**. Health/tenants/`/api/auth/me` echo `multi_tenant=false` \
+            and `active_tenant_id=legacy`. `POST /api/tenants/select` is a no-op for `legacy` while OFF. \
+            JWT `tenant_ids` + select remint are for Tier-2 lab enablement (single domain first).\n\n\
             **Logins:** `admin` + `OPENFDD_ADMIN_PASSWORD` → admin JWT; `agent` + `OPENFDD_AGENT_PASSWORD` → operator JWT \
             (preferred for Railway MCP / Cursor). Admins may also `POST /api/auth/agent-token` for short-lived operator JWTs.\n\n\
             **Claims:** `sub` (subject), `role` one of `viewer`, `operator`, `admin`. \

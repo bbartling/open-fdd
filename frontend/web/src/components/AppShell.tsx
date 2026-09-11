@@ -5,6 +5,11 @@ import { OracleSidebar } from "./OracleSidebar";
 import { SIDEBAR_NAV } from "../nav/sections";
 import { hrefWithSession } from "../session/sessionQuery";
 import { apiFetch } from "../api/client";
+import {
+  getStoredActiveTenant,
+  setStoredActiveTenant,
+  type TenantsListResponse,
+} from "../api/tenantApi";
 
 function shortRevision(version: string): { full: string; display: string; collapsed: string } {
   const raw = version.trim();
@@ -63,6 +68,9 @@ export function AppShell({
     display: string;
     collapsed: string;
   } | null>(null);
+  const [tenantLabel, setTenantLabel] = useState<string | null>(() => {
+    return getStoredActiveTenant();
+  });
   const location = useLocation();
 
   const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -168,6 +176,16 @@ export function AppShell({
           /* keep brand-only */
         }
       });
+    void apiFetch<TenantsListResponse>("/api/tenants")
+      .then((t) => {
+        if (cancelled) return;
+        const id = (t.active_tenant_id || "legacy").trim();
+        setTenantLabel(id);
+        setStoredActiveTenant(id);
+      })
+      .catch(() => {
+        /* keep stored / null */
+      });
     return () => {
       cancelled = true;
     };
@@ -195,6 +213,15 @@ export function AppShell({
                 title={revision.full}
               >
                 {collapsed ? revision.collapsed : revision.display}
+              </div>
+            ) : null}
+            {tenantLabel ? (
+              <div
+                className="app-sidebar__tenant"
+                data-testid="app-tenant"
+                title={`Active tenant: ${tenantLabel}`}
+              >
+                {collapsed ? tenantLabel.slice(0, 3) : `tenant:${tenantLabel}`}
               </div>
             ) : null}
           </div>

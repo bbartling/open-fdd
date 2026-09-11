@@ -14,6 +14,10 @@ export interface AuthMe {
   username: string;
   role: string;
   auth_required: boolean;
+  multi_tenant?: boolean;
+  active_tenant_id?: string | null;
+  tenant_ids?: string[];
+  hub_admin?: boolean;
 }
 
 export interface AuthLoginResponse {
@@ -23,6 +27,8 @@ export interface AuthLoginResponse {
   token_type: string;
   role: string;
   subject: string;
+  multi_tenant?: boolean;
+  active_tenant_id?: string | null;
   error?: string | null;
 }
 

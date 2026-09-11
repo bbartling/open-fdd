@@ -9,6 +9,14 @@ vi.mock("../api/client", () => ({
     if (path === "/api/health") {
       return { ok: true, version: "3.3.2+abcdef123456", service: "openfdd-central" };
     }
+    if (path === "/api/tenants") {
+      return {
+        ok: true,
+        multi_tenant: false,
+        active_tenant_id: "legacy",
+        tenants: [{ id: "legacy", name: "Legacy single-hub tenant" }],
+      };
+    }
     return {};
   }),
 }));
@@ -71,6 +79,8 @@ describe("AppShell layout parity", () => {
     expect(screen.getByText("Open-FDD")).toBeTruthy();
     expect(await screen.findByTestId("app-revision")).toBeTruthy();
     expect(screen.getByTestId("app-revision").textContent).toBe("3.3.2+abcdef1");
+    expect(await screen.findByTestId("app-tenant")).toBeTruthy();
+    expect(screen.getByTestId("app-tenant").textContent).toContain("legacy");
     expect(screen.getByTestId("sidebar-sites")).toBeTruthy();
     expect(screen.queryByTestId("nav-sites")).toBeNull();
     expect(screen.getAllByText("Sites").length).toBeGreaterThanOrEqual(1);
