@@ -1,4 +1,5 @@
 # Example ACL — replace with generated mosquitto.acl from openfdd-provision.
+# Legacy (mode OFF):
 # user edge:local:fieldbus-1
 # topic write openfdd/v1/sites/local/edges/fieldbus-1/#
 # topic read openfdd/v1/sites/local/edges/fieldbus-1/commands/#
@@ -6,3 +7,8 @@
 # user central:local
 # topic read openfdd/v1/sites/local/#
 # topic write openfdd/v1/sites/local/edges/+/commands/#
+#
+# Wave L tenant namespace (mode ON) — TopicBuilder::with_tenant:
+# user edge:acme:bldg2:fieldbus-1
+# topic write openfdd/v1/tenants/acme/buildings/bldg2/edges/fieldbus-1/#
+# topic read openfdd/v1/tenants/acme/buildings/bldg2/edges/fieldbus-1/commands/#

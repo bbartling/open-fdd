@@ -125,6 +125,7 @@ async fn create_edge_kit(
             broker_host,
             broker_port,
             ca_dir: ca_override,
+            tenant_id: None,
         })
         .map_err(|e| e.to_string())?;
         // Keep tmp alive until zip bytes are fully owned.

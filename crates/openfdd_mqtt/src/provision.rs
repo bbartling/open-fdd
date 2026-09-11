@@ -18,6 +18,8 @@ pub struct ProvisionRequest {
     pub broker_port: u16,
     /// Prefer an existing CA directory containing `ca.pem` + `ca.key.pem`.
     pub ca_dir: Option<PathBuf>,
+    /// Wave L: when set, ACL/topics use `tenants/{tid}/buildings/{site}/edges/{edge}`.
+    pub tenant_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -108,13 +110,18 @@ pub fn provision_edge_kit(req: &ProvisionRequest) -> anyhow::Result<ProvisionRes
         &central_key_path,
     )?;
 
-    let topics = TopicBuilder::new(&req.site_id, &req.edge_id);
+    let topics = match req.tenant_id.as_deref() {
+        Some(tid) => TopicBuilder::with_tenant(tid, &req.site_id, &req.edge_id),
+        None => TopicBuilder::new(&req.site_id, &req.edge_id),
+    };
     let (edge_pub, edge_sub) = topics.edge_acl_patterns();
     let (central_pub, central_sub) = topics.central_acl_patterns();
 
     let edge_cfg = serde_json::json!({
         "site_id": req.site_id,
         "edge_id": req.edge_id,
+        "tenant_id": req.tenant_id,
+        "topic_base": topics.base(),
         "broker_host": req.broker_host,
         "broker_port": req.broker_port,
         "ca_pem": "ca.pem",
@@ -238,6 +245,7 @@ mod tests {
             broker_host: "mqtt.example.com".into(),
             broker_port: 8883,
             ca_dir: None,
+            tenant_id: None,
         })
         .unwrap();
         assert_eq!(filename, "lab__fieldbus-1.zip");
