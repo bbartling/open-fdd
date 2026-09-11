@@ -121,7 +121,9 @@ impl TenantBudgetTracker {
         }
         let now = Instant::now();
         let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let entry = map.entry((tenant_id.to_string(), kind.as_str())).or_default();
+        let entry = map
+            .entry((tenant_id.to_string(), kind.as_str()))
+            .or_default();
         let n = entry.count(window, now);
         if n as u32 >= limit {
             return Err(format!(

@@ -1241,11 +1241,9 @@ pub async fn fdd_run(
     headers: HeaderMap,
     Json(body): Json<FddRunRequest>,
 ) -> Json<Value> {
-    if let Err(err) = enforce_tenant_budget(
-        &state,
-        &headers,
-        crate::tenant_budget::BudgetKind::FddRun,
-    ) {
+    if let Err(err) =
+        enforce_tenant_budget(&state, &headers, crate::tenant_budget::BudgetKind::FddRun)
+    {
         return Json(json!({
             "ok": false,
             "error": err,
