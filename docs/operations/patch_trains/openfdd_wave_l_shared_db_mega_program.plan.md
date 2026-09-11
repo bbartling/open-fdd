@@ -1,6 +1,6 @@
 ---
 name: Wave L multi-client shared hosting
-overview: "ACTIVE — Wave L 3.5.x. L3 LIVE ops sha-be65366 / 3.5.2. L4 next (Tenant UI/session). Low-RAM; Actions green; 0 stale after merge. L8 = enhanced stress + 3.5.x PINNED."
+overview: "ACTIVE — Wave L 3.5.x. L4 LIVE ops sha-d67d27b / 3.5.3. L5 next (budgets). Low-RAM; Actions green; 0 stale after merge. L8 = enhanced stress + 3.5.x PINNED."
 todos:
   - id: l0-wait-k-pin
     content: L0 — Wave K 3.4.0 PINNED (sha-9c3e8b1 / stress 20260910T021557Z) — UNBLOCKED
@@ -21,8 +21,8 @@ todos:
     content: L3 — #899 MERGED; tip sha-be65366; gates 11+12+13 PASS; mode OFF LIVE
     status: completed
   - id: l4-ui-domains
-    content: L4 — Tenant UI/session; single domain first
-    status: pending
+    content: L4 — #901 MERGED; tip sha-d67d27b; gates 11–14 PASS; mode OFF LIVE
+    status: completed
   - id: l5-budgets
     content: L5 — Per-tenant budgets + noisy-neighbor lab notes
     status: pending
@@ -33,7 +33,7 @@ todos:
     content: L7 — Legacy-tenant migrate dry-run + operator checklist
     status: pending
   - id: l8-stress-pin
-    content: L8 — ENHANCED full stress (00–13+ A↔B) + BUG_REPORT 3.5.x PINNED; mode OFF
+    content: L8 — ENHANCED full stress (00–14+ A↔B) + BUG_REPORT 3.5.x PINNED; mode OFF
     status: pending
   - id: deferred-stage-c
     content: IdP/MFA/dedicated SKUs — after shared-hosting baseline
@@ -61,8 +61,9 @@ isProject: false
 | **L1** | **DONE** — #891 · tip **`sha-a11b6cb`** · health **`3.5.0+a11b6cb181fc`** · gate 11 PASS · `multi_tenant=false` |
 | **L2** | **DONE** — #894 product **`sha-2dea571`** · ops tip **`sha-af08ac7`** (#897 flake-fix) · health **`3.5.1+af08ac7b9889`** · gates **11+12 PASS** |
 | **L3** | **DONE** — #899 · tip **`sha-be65366`** · health **`3.5.2+be65366316bb`** · gates **11+12+13 PASS** · `multi_tenant=false` |
-| **Ops pin** | **`sha-be65366`** (rollback **`sha-9c3e8b1`** / 3.4.0; prior L2 **`sha-af08ac7`**) |
-| **Step** | **L4** — Tenant UI/session (single domain first) |
+| **L4** | **DONE** — #901 · tip **`sha-d67d27b`** · health **`3.5.3+d67d27b9e791`** · gates **11–14 PASS** · `multi_tenant=false` · `active_tenant_id=legacy` |
+| **Ops pin** | **`sha-d67d27b`** (rollback **`sha-9c3e8b1`** / 3.4.0; prior L3 **`sha-be65366`**) |
+| **Step** | **L5** — Per-tenant budgets + noisy-neighbor lab notes |
 
 ### Progress board
 
@@ -71,9 +72,10 @@ isProject: false
 [x] Phase-0 ADR (#885)
 [x] L1  Control plane OFF + TenantContext + gate 11 (#891 / sha-a11b6cb)
 [x] L2  Tenant Parquet + DF + gate 12 (#894 / ops sha-af08ac7)
-[x] L3  MQTTS namespace + ACL (#899 / sha-be65366)   ← DONE
-[ ] L4  Tenant UI/session   ← YOU ARE HERE
-[ ] L5–L7 …
+[x] L3  MQTTS namespace + ACL (#899 / sha-be65366)
+[x] L4  Tenant UI/session (#901 / sha-d67d27b)   ← DONE
+[ ] L5  Per-tenant budgets   ← YOU ARE HERE
+[ ] L6–L7 …
 [ ] L8  ENHANCED full stress + BUG_REPORT 3.5.x PINNED
 ```
 
@@ -88,9 +90,9 @@ isProject: false
 | Between tips | tip Publish → tip gate → backup → Railway re-pin hub+fieldbus → soak → **smoke** → **BUG_REPORT** |
 | GH Actions | Every product PR: wait checks **green** before merge. No merge on red. |
 | Branches / PRs | After merge: **0 open PRs**, remote **only `master`**, delete merged local branches. |
-| Full stress | **Not** every tip. Mid-wave = smoke (+ gates **11–13**). **ONE enhanced full stress at L8**. |
+| Full stress | **Not** every tip. Mid-wave = smoke (+ gates **11–14**). **ONE enhanced full stress at L8**. |
 | Tip noise | Cancelled/incomplete Publish on non-tip SHAs is noise — judge **latest tip** checks only. Early tip-completeness red before Publish completes is noise. |
-| Logging | Every pin/smoke/stress/migrate → [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../BUG_REPORT_OT_MODBUS_HAYSTACK.md). Mid-wave: tip/smoke + gates 11–13; **PINNED only at L8**. |
+| Logging | Every pin/smoke/stress/migrate → [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../BUG_REPORT_OT_MODBUS_HAYSTACK.md). Mid-wave: tip/smoke + gates 11–14; **PINNED only at L8**. |
 
 ### Qual tiers
 
@@ -114,6 +116,7 @@ isProject: false
    - **11** Wave L tenant mode / control-plane smoke (`multi_tenant=false` until operator enable)
    - **12** Parquet isolation
    - **13** MQTTS namespace
+   - **14** Tenant UI/session
    - **12+** (from L6) synthetic **A↔B** isolation when mode exercised in lab
 5. `qualification_manifest` → **`fully_qualified=true`**
 6. Update BUG_REPORT: tip/pin, stress path, MEGA/isolation rows, **3.5.x PINNED**, Next = Stage C deferred
@@ -150,10 +153,10 @@ control plane (tenants/users/memberships/buildings)
 | **1** | **3.5.0** | Control plane + TenantContext; **OFF** | **DONE** smoke + gate 11 |
 | **2** | **3.5.1** | Tenant Parquet + DF | **DONE** smoke + gates 11–12 |
 | **3** | **3.5.2** | MQTTS ACL | **DONE** smoke + gates 11–13 |
-| 4 | 3.5.3 | UI membership | smoke |
+| **4** | **3.5.3** | UI membership | **DONE** smoke + gates 11–14 |
 | 5 | 3.5.4 | Budgets | lab notes |
 | 6 | 3.5.5 | ZAP/AF + isolation harness | Tier-2 |
-| 7–8 | 3.5.x | Migrate dry-run + **L8 enhanced** | full 00–13+ |
+| 7–8 | 3.5.x | Migrate dry-run + **L8 enhanced** | full 00–14+ |
 
 ## Out of scope
 
