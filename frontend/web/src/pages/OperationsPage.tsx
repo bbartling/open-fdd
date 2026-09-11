@@ -528,22 +528,39 @@ function MqttPanel() {
   const [error, setError] = useState<string | null>(null);
   const filterOk = useMemo(() => validTopicFilter(topicFilter), [topicFilter]);
 
-  const refresh = useCallback(async () => {
-    try {
-      const next = await apiFetch<MqttMonitorSnapshot>("/api/mqtt/monitor");
-      setSnapshot(next);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, []);
-
   useEffect(() => {
     if (!listening || paused) return undefined;
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 1000);
-    return () => window.clearInterval(timer);
-  }, [listening, paused, refresh]);
+
+    let active = true;
+    let timer: ReturnType<typeof window.setTimeout> | undefined;
+    const controller = new AbortController();
+
+    const poll = async () => {
+      try {
+        const next = await apiFetch<MqttMonitorSnapshot>("/api/mqtt/monitor", {
+          signal: controller.signal,
+        });
+        if (active) {
+          setSnapshot(next);
+          setError(null);
+        }
+      } catch (err) {
+        if (active) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        // Delay from settlement: never overlap monitor requests.
+        if (active) timer = window.setTimeout(() => void poll(), 1000);
+      }
+    };
+
+    void poll();
+    return () => {
+      active = false;
+      controller.abort();
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [listening, paused]);
 
   const messages = useMemo(() => {
     const cutoff = clearedAt ?? Number.NEGATIVE_INFINITY;
