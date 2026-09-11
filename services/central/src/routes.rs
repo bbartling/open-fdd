@@ -451,7 +451,7 @@ pub async fn select_tenant(
 
     let token = state
         .auth
-        .issue_token_with_tenants(&user.sub, user.role, 8 * 3600, &[tid.clone()])
+        .issue_token_with_tenants(&user.sub, user.role, 8 * 3600, std::slice::from_ref(&tid))
         .map_err(|_| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
