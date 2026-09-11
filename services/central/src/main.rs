@@ -20,6 +20,7 @@ mod openapi;
 mod routes;
 mod state;
 mod tenant;
+mod tenant_budget;
 mod vibe21;
 mod wattlab_dump;
 

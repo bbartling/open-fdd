@@ -44,7 +44,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/building/snapshot", get(building_snapshot))
         .route("/api/dashboard/summary", get(dashboard_summary))
         .route("/api/tenants", get(list_tenants))
-        .route("/api/tenants/select", post(select_tenant));
+        .route("/api/tenants/select", post(select_tenant))
+        .route("/api/tenants/budgets", get(list_tenant_budgets));
 
     // Admin-gated agent token mint lives on the authenticated router below.
 
@@ -468,6 +469,55 @@ pub async fn select_tenant(
     }))
 }
 
+fn resolve_request_tenant(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> (Option<String>, crate::tenant_budget::TenantBudgetConfig) {
+    let cfg = crate::tenant_budget::TenantBudgetConfig::from_env();
+    let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+    let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
+    let user = state
+        .auth
+        .user_from_headers(headers)
+        .unwrap_or_else(|_| auth::AuthUser::dev_anonymous());
+    let ctx = crate::tenant::TenantContext::resolve(&user, &plane)
+        .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&user));
+    (ctx.tenant_id, cfg)
+}
+
+fn enforce_tenant_budget(
+    state: &AppState,
+    headers: &HeaderMap,
+    kind: crate::tenant_budget::BudgetKind,
+) -> Result<(), String> {
+    let (tenant_id, cfg) = resolve_request_tenant(state, headers);
+    if !cfg.enabled {
+        return Ok(());
+    }
+    let tid = tenant_id.as_deref().unwrap_or("legacy");
+    state.tenant_budgets.check_and_record(&cfg, tid, kind)
+}
+
+/// Wave L L5 — echo tenant budget config (disabled while mode OFF).
+#[utoipa::path(
+    get,
+    path = "/api/tenants/budgets",
+    tag = "central",
+    responses((status = 200, description = "Tenant budget policy", body = crate::tenant_budget::TenantBudgetsResponse))
+)]
+pub async fn list_tenant_budgets(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Json<crate::tenant_budget::TenantBudgetsResponse> {
+    let (active_tenant_id, budgets) = resolve_request_tenant(&state, &headers);
+    Json(crate::tenant_budget::TenantBudgetsResponse {
+        ok: true,
+        multi_tenant: crate::tenant::multi_tenant_enabled(),
+        budgets,
+        active_tenant_id,
+    })
+}
+
 /// Feature advertisement for UI capability gates and MCP accuracy checks.
 pub async fn capabilities() -> Json<Value> {
     Json(json!({
@@ -493,7 +543,8 @@ pub async fn capabilities() -> Json<Value> {
             "jobs": true,
             "react_ui": std::env::var("OPENFDD_REACT_UI").ok().as_deref() == Some("1"),
             "ui_generation_routing": true,
-            "tenant_session": true
+            "tenant_session": true,
+            "tenant_budgets": crate::tenant_budget::tenant_budgets_enabled()
         }
     }))
 }
@@ -1185,7 +1236,20 @@ pub async fn agent_tools() -> Json<AgentToolsResponse> {
     request_body = FddRunRequest,
     responses((status = 200, description = "FDD registry or ad-hoc SQL run result", body = Object))
 )]
-pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
+pub async fn fdd_run(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<FddRunRequest>,
+) -> Json<Value> {
+    if let Err(err) =
+        enforce_tenant_budget(&state, &headers, crate::tenant_budget::BudgetKind::FddRun)
+    {
+        return Json(json!({
+            "ok": false,
+            "error": err,
+            "budget_exceeded": true
+        }));
+    }
     let has_sql = body.sql.as_ref().is_some_and(|s| !s.trim().is_empty());
     if has_sql {
         return Json(json!({
@@ -1923,8 +1987,20 @@ async fn jobs_list(
 }
 
 async fn jobs_create(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(body): Json<CreateJobBody>,
 ) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
+    if let Err(err) = enforce_tenant_budget(
+        &state,
+        &headers,
+        crate::tenant_budget::BudgetKind::JobCreate,
+    ) {
+        return Err((
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({"ok": false, "error": err, "budget_exceeded": true})),
+        ));
+    }
     // OFDD-076b: building_id → site_id when site_id absent; also fill building_name.
     let building_id = body
         .building_id

@@ -12,6 +12,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use crate::auth::AuthConfig;
+use crate::tenant_budget::TenantBudgetTracker;
 
 const MQTT_MONITOR_CAPACITY: usize = 100;
 const MQTT_PREVIEW_BYTES: usize = 4096;
@@ -97,6 +98,8 @@ pub struct AppState {
     mqtt_monitor: Mutex<MqttMonitorState>,
     /// Login failures keyed by ip+username (generic throttle; no secrets).
     pub login_failures: Mutex<HashMap<String, (u32, std::time::Instant)>>,
+    /// Wave L L5 — per-tenant sliding-window budgets (noop when disabled).
+    pub tenant_budgets: TenantBudgetTracker,
 }
 
 impl AppState {
@@ -114,6 +117,7 @@ impl AppState {
             mqtt_publisher: Mutex::new(None),
             mqtt_monitor: Mutex::new(MqttMonitorState::default()),
             login_failures: Mutex::new(HashMap::new()),
+            tenant_budgets: TenantBudgetTracker::new(),
         }
     }
 
