@@ -528,9 +528,8 @@ pub async fn auth_me(
                 std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
             let plane =
                 crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
-            let ctx = crate::tenant::TenantContext::resolve(&user, &plane).unwrap_or_else(|_| {
-                crate::tenant::TenantContext::single_tenant_passthrough(&user)
-            });
+            let ctx = crate::tenant::TenantContext::resolve(&user, &plane)
+                .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&user));
             Ok(Json(AuthMeResponse {
                 ok: true,
                 username: user.sub,
