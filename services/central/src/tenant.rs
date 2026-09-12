@@ -193,14 +193,7 @@ pub struct TenantsListResponse {
 mod tests {
     use super::*;
     use crate::auth::{AuthUser, Role};
-    use std::sync::{Mutex, MutexGuard};
-
-    /// Serialize env mutations — `OPENFDD_MULTI_TENANT` is process-global.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-    fn lock_env() -> MutexGuard<'static, ()> {
-        ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
-    }
+    use crate::test_env_lock::lock_env;
 
     #[test]
     fn multi_tenant_flag_defaults_off() {
