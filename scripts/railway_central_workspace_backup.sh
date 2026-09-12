@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Export Railway central /workspace (and optional mqtt certs) before re-pin.
 # Requires: railway CLI linked to gleaming-cooperation / production.
-# Secrets stay in the tarball on local disk — never commit backups.
+# Secrets stay in the tarball on local disk - never commit backups.
 #
 # Wave M D5: fail hard on tar errors (no concatenated/partial fallback stream).
 set -euo pipefail
@@ -23,9 +23,9 @@ echo "=== inventory central /workspace (sample) ==="
 railway ssh -s "$CENTRAL_SVC" -- sh -lc 'ls -la /workspace 2>/dev/null; du -sh /workspace /workspace/openfdd /workspace/mqtt 2>/dev/null || true' \
   | tee "$OUT_ROOT/central-workspace-inventory.txt"
 
-echo "=== tar central /workspace → local (authoritative trees only) ==="
+echo "=== tar central /workspace -> local (authoritative trees only) ==="
 # Prefer openfdd + mqtt trees. If either is missing, fail (do NOT fall back to
-# piping a second tar into the same file — that concatenates garbage).
+# piping a second tar into the same file - that concatenates garbage).
 TMP_TAR="$OUT_ROOT/central-workspace.tgz.partial"
 rm -f "$TMP_TAR" "$OUT_ROOT/central-workspace.tgz"
 set +e
@@ -81,9 +81,9 @@ Railway hub backup $UTC
 central service: $CENTRAL_SVC
 mqtt service: $MQTT_SVC
 Contents: openfdd + mqtt trees under /workspace (no concat fallback).
-Restore (data only — never auto-overwrite newer telemetry without operator review):
+Restore (data only - never auto-overwrite newer telemetry without operator review):
   railway ssh -s $CENTRAL_SVC -- sh -lc 'cd /workspace && tar -xzf -' < central-workspace.tgz
-Code/config rollback is separate from data restore — see docs/operations/backup-update-restore.md
+Code/config rollback is separate from data restore - see docs/operations/backup-update-restore.md
 Never commit this directory. Never delete the Railway volume for an upgrade.
 EOF
 

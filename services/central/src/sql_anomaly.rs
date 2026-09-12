@@ -1,4 +1,4 @@
-//! Wave M M2 — SQL anomaly screening (lab-safe flag).
+//! Wave M M2 - SQL anomaly screening (lab-safe flag).
 //!
 //! Disabled by default. Enable only with OPENFDD_SQL_ANOMALY_SCREENING=1 on
 //! isolated/lab candidates. Never enable unbounded against live OT hubs.
@@ -54,7 +54,7 @@ async fn status(
         "ok": true,
         "enabled": true,
         "mode": "lab",
-        "note": "Wave M M2 lab-safe surface; full self/peer anomaly execution remains gated — no OT DoS",
+        "note": "Wave M M2 lab-safe surface; full self/peer anomaly execution remains gated - no OT DoS",
         "endpoints": {
             "status": "/api/analytics/sql-anomaly/status"
         }

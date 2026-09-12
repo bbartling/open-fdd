@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Wave M gate 12 ù AFDD flood (budgeted, isolated-candidate default).
+# Wave M gate 12 - AFDD flood (budgeted, isolated-candidate default).
 # Enhance don't butcher: fixed fixture expectations; budgets FAIL not silent trim.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -104,7 +104,7 @@ report["ok"] = not reasons
 report["fail_reasons"] = reasons
 open(out, "w").write(json.dumps(report, indent=2) + "\n")
 lines = [
-    f"# AFDD flood ù {'PASS' if report['ok'] else 'FAIL'}",
+    f"# AFDD flood - {'PASS' if report['ok'] else 'FAIL'}",
     "",
     f"- Fixture: `{fixture}` building `{building}`",
     f"- Elapsed: {elapsed:.1f}s (budget {max_wall}s)",

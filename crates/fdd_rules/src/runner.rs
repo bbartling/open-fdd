@@ -29,7 +29,7 @@ pub struct RuleRunReport {
     pub rules_succeeded: usize,
     pub rules_failed: usize,
     /// Rules skipped because required roles/columns (or the weather table) were
-    /// absent — a pandas-style skip, not a hard failure (OFDD-066/068).
+    /// absent - a pandas-style skip, not a hard failure (OFDD-066/068).
     #[serde(default)]
     pub rules_skipped: usize,
     pub poll_seconds: f64,
@@ -51,7 +51,7 @@ fn is_missing_schema_error(msg: &str) -> bool {
         || (m.contains("weather") && m.contains("not found"))
 }
 
-/// Wave M D2 — atomic publish so readers never observe truncated JSON.
+/// Wave M D2 - atomic publish so readers never observe truncated JSON.
 fn write_json_atomic(out_path: &Path, body: &serde_json::Value) -> std::io::Result<()> {
     if let Some(parent) = out_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -221,7 +221,7 @@ pub async fn run_all_rules_with_overrides(
     let ctx = SessionContext::new();
     // OFDD-070 / 3.3.33: when building_id is set, prefer canonical
     // history/building_id=<id>/ then legacy building=<id>/ (same as analytics).
-    // Callers must pass the storage/parquet root — not a pre-scoped building= dir.
+    // Callers must pass the storage/parquet root - not a pre-scoped building= dir.
     if let Some(bid) = options.building_id.filter(|s| !s.is_empty()) {
         register_historian_building(&ctx, parquet_root, bid).await?;
         register_utility_if_present(&ctx, bid).await?;
@@ -379,10 +379,7 @@ pub async fn run_all_rules_with_overrides(
         );
         match run_sql(&ctx, &sql).await {
             Ok(result) => {
-                write_json_atomic(
-                    &out_path,
-                    &serde_json::json!({"rows": result.rows}),
-                )?;
+                write_json_atomic(&out_path, &serde_json::json!({"rows": result.rows}))?;
                 timings.push(RuleTiming {
                     rule_id: rule.rule_id.clone(),
                     row_count: result.row_count,
@@ -395,7 +392,7 @@ pub async fn run_all_rules_with_overrides(
             Err(e) => {
                 let msg = e.to_string();
                 if is_missing_schema_error(&msg) {
-                    // Schema/weather miss classified at runtime → skip, not fail
+                    // Schema/weather miss classified at runtime -> skip, not fail
                     // (OFDD-066/068). Keeps Liberty runs at rules_failed == 0.
                     let note = format!("schema miss: {msg}");
                     let _ = write_skip_marker(&out_path, &rule.required_roles, &note);
@@ -486,7 +483,7 @@ mod time_window_tests {
             .downcast_ref::<datafusion::arrow::array::Int64Array>()
             .unwrap()
             .value(0);
-        // [11:00, 13:00) → 11:00 and 12:00
+        // [11:00, 13:00) -> 11:00 and 12:00
         assert_eq!(c, 2);
     }
 }

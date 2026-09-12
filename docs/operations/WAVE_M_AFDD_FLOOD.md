@@ -1,4 +1,4 @@
-# Wave M — AFDD flood gate (community how-to)
+# Wave M - AFDD flood gate (community how-to)
 
 Budgeted multi-rule AFDD load/correctness gate for enhanced qualification (M5 gate 12 / stress gate 19).
 
@@ -8,7 +8,7 @@ Budgeted multi-rule AFDD load/correctness gate for enhanced qualification (M5 ga
 - **Standalone script** refuses live Railway unless `OPENFDD_AFDD_FLOOD_ALLOW_LIVE=1`
 - **`run_railway_hub_stress.sh`** sets ALLOW_LIVE=1 because that parent script is already an authorized ops window (same class as ZAP)
 
-## Budgets (FAIL if exceeded — do not silent-trim)
+## Budgets (FAIL if exceeded - do not silent-trim)
 
 | Budget | Env | Default |
 |--------|-----|---------|
@@ -41,4 +41,4 @@ Artifacts: `2N_wave_m_afdd_flood.json` + `.md` under the artifact dir.
 
 ## Honesty
 
-Flood must go through durable AFDD (`/api/afdd/scheduler/run-now`) with `/api/fdd/run` fallback — not browser mash. Partial/fail rules fail the gate.
+Flood must go through durable AFDD (`/api/afdd/scheduler/run-now`) with `/api/fdd/run` fallback - not browser mash. Partial/fail rules fail the gate.

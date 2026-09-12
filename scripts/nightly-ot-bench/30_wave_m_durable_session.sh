@@ -74,7 +74,7 @@ report["gates"]["gate2_tenants"] = {
     "multi_tenant": tenants.get("multi_tenant"),
 }
 
-# Gate 3: stale session contract — /api/auth/me with garbage token must 401 without killing hub
+# Gate 3: stale session contract - /api/auth/me with garbage token must 401 without killing hub
 st, me = http("GET", "/api/auth/me", token="stale.invalid.token")
 report["gates"]["gate3_stale_token"] = {
     "status": st,

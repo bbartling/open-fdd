@@ -1,4 +1,4 @@
-//! Wave M D2 ù fail readiness when authoritative storage is ephemeral in prod.
+//! Wave M D2 - fail readiness when authoritative storage is ephemeral in prod.
 
 use std::path::{Path, PathBuf};
 

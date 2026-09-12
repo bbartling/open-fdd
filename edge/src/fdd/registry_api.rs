@@ -1,4 +1,4 @@
-//! Registry-backed FDD API — loads `sql_rules/registry.yaml` via `fdd_rules`.
+//! Registry-backed FDD API - loads `sql_rules/registry.yaml` via `fdd_rules`.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -35,7 +35,7 @@ fn alias_ui_param_key<'a>(rule_id: &str, key: &'a str) -> &'a str {
         ("VAV-1", "zone_hi") => "zone_t_hi",
         ("FC1", "duct_static_err") => "eps_dsp",
         ("FC1", "fan_hi") => "eps_vfd_spd",
-        // Vibe19 / package aliases → registry parameter keys
+        // Vibe19 / package aliases -> registry parameter keys
         (_, "airflow_err") => "eps_airflow",
         (_, "delta_t_min") => "oat_rat_delta_min",
         (_, "oa_damper_econ_high") => "econ_full_open",
@@ -188,7 +188,7 @@ fn collect_equipment_prefix(root: &Path, prefix: &str, ids: &mut Vec<String>) {
     }
 }
 
-/// Wave M D2 — authoritative rule results live under parquet/workspace volume
+/// Wave M D2 - authoritative rule results live under parquet/workspace volume
 /// by default (not WORKDIR `.cache`). Override with `OPENFDD_RULE_RESULTS_DIR`.
 fn rule_results_base() -> PathBuf {
     if let Ok(p) = std::env::var("OPENFDD_RULE_RESULTS_DIR") {
@@ -217,12 +217,12 @@ fn rule_results_base() -> PathBuf {
             return PathBuf::from(trimmed).join("openfdd").join("rule_results");
         }
     }
-    // Local/dev fallback only — central readiness fails this path in prod.
+    // Local/dev fallback only - central readiness fails this path in prod.
     PathBuf::from(".cache/rule_results")
 }
 
 /// Results directory, optionally scoped to a building so per-site runs do not
-/// overwrite each other. `None` → `<base>`; `Some(id)` → `<base>/building={id}/`.
+/// overwrite each other. `None` -> `<base>`; `Some(id)` -> `<base>/building={id}/`.
 fn results_dir(building_id: Option<&str>) -> PathBuf {
     let base = rule_results_base();
     match building_id.map(str::trim).filter(|s| !s.is_empty()) {
@@ -320,7 +320,7 @@ fn rule_summary(rule: &RuleSpec) -> Value {
     })
 }
 
-/// `GET /api/fdd/rules` — full registry catalog.
+/// `GET /api/fdd/rules` - full registry catalog.
 pub fn list_registry_rules() -> Value {
     match load_reg() {
         Ok(reg) => {
@@ -336,7 +336,7 @@ pub fn list_registry_rules() -> Value {
     }
 }
 
-/// `GET /api/fdd/rules/{id}/params` — tuning schema for one rule.
+/// `GET /api/fdd/rules/{id}/params` - tuning schema for one rule.
 pub fn rule_params_response(rule_id: &str) -> Value {
     match load_reg() {
         Ok(reg) => match reg.rules.iter().find(|r| r.rule_id == rule_id) {
@@ -353,7 +353,7 @@ pub fn rule_params_response(rule_id: &str) -> Value {
     }
 }
 
-/// `GET /api/fdd/cache/status` — parquet ingest / results status.
+/// `GET /api/fdd/cache/status` - parquet ingest / results status.
 pub fn cache_status() -> Value {
     let pq = parquet_root();
     let results = results_dir(None);
@@ -429,7 +429,7 @@ fn rule_applies_to_kind(kinds: &[String], kind: &str) -> bool {
     kinds.iter().any(|k| k.eq_ignore_ascii_case(kind))
 }
 
-/// `GET /api/fdd/equipment` — equipment present in the parquet cache.
+/// `GET /api/fdd/equipment` - equipment present in the parquet cache.
 ///
 /// When `building_id` is set, walk both legacy `building={id}/equipment=*` and
 /// canonical MQTT `history/building_id={id}/equipment_id=*` so Overview / AFDD
@@ -464,7 +464,7 @@ pub fn equipment_response(building_id: Option<&str>) -> Value {
     json!({"ok": true, "count": equipment.len(), "equipment": equipment})
 }
 
-/// `GET /api/fdd/results` — normalized rows from the most recent registry run.
+/// `GET /api/fdd/results` - normalized rows from the most recent registry run.
 ///
 /// `building_id` reads from the site-scoped results dir so two buildings' runs
 /// do not clobber one another.
@@ -559,7 +559,7 @@ pub fn results_response(building_id: Option<&str>) -> Value {
     json!({"ok": true, "count": rows.len(), "results": rows})
 }
 
-/// Roles used for FDD Plots series SELECT (required ∪ optional, SQL-safe).
+/// Roles used for FDD Plots series SELECT (required - optional, SQL-safe).
 ///
 /// Portable rules keep `required_roles` empty and put sensors in
 /// `optional_roles`; Plots still need those columns or the UI shows
@@ -606,7 +606,7 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                     return json!({
                         "ok": false,
                         "error": format!(
-                            "no parquet for building_id={bid} under {} — ingest that package or wait for MQTT historian",
+                            "no parquet for building_id={bid} under {} - ingest that package or wait for MQTT historian",
                             pq.display()
                         ),
                         "missing_roles": rule.required_roles,
@@ -686,7 +686,7 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
             });
         }
         // Span-preserving downsample (Inspect / RCx parity): first + last + evenly
-        // spaced rows across the full historian window — not DESC LIMIT (recent-only).
+        // spaced rows across the full historian window - not DESC LIMIT (recent-only).
         const SERIES_MAX_POINTS: usize = 8000;
         let limit = SERIES_MAX_POINTS;
         let sql = format!(
@@ -719,7 +719,7 @@ LIMIT {limit}
         match run_sql(&ctx, &sql).await {
             Ok(mut result) => {
                 // Overlay confirmed_fault for the FDD Plots swim lane (vibe19).
-                // Registry JSON is equipment-level fault_hours only — when that
+                // Registry JSON is equipment-level fault_hours only - when that
                 // index is empty, re-run the rule SQL rewritten to a per-timestamp
                 // confirmed series and join onto history rows.
                 // When Lab session_config has overrides (e.g. confirm_min), always
@@ -854,7 +854,7 @@ fn normalize_ts_keys(raw: &str) -> Vec<String> {
             push_unique(&mut keys, stripped.to_string());
             push_unique(&mut keys, format!("{stripped}Z"));
         } else if k.len() >= 19 && !k.contains('Z') && !k.contains('+') {
-            // No zone suffix — add Z (date dashes are fine; `+` marks offsets).
+            // No zone suffix - add Z (date dashes are fine; `+` marks offsets).
             push_unique(&mut keys, format!("{k}Z"));
         }
     }
@@ -873,7 +873,7 @@ fn normalize_ts_keys(raw: &str) -> Vec<String> {
     keys
 }
 
-/// Rewrite aggregated cookbook SQL (`final` ← `ranked` → `fault_hours`) into a
+/// Rewrite aggregated cookbook SQL (`final` <- `ranked` -> `fault_hours`) into a
 /// per-timestamp `confirmed_fault` series for one equipment (FDD Plots overlay).
 ///
 /// Registry runs persist equipment-level `fault_hours` only; Plots need the
@@ -1064,7 +1064,7 @@ fn lookup_fault_flag(map: &HashMap<String, bool>, ts: &str) -> Option<bool> {
     None
 }
 
-/// Map RFC3339 (or raw) timestamp → confirmed_fault bool from last rule result JSON.
+/// Map RFC3339 (or raw) timestamp -> confirmed_fault bool from last rule result JSON.
 fn load_confirmed_fault_index(
     equipment_id: &str,
     rule_id: &str,
@@ -1145,7 +1145,7 @@ fn load_confirmed_fault_index(
     out
 }
 
-/// `GET /api/fdd/roles` — role map file if present.
+/// `GET /api/fdd/roles` - role map file if present.
 pub fn roles_response() -> Value {
     let candidates = [
         PathBuf::from("configs/role_map.json"),
@@ -1184,7 +1184,7 @@ pub fn roles_response() -> Value {
     })
 }
 
-/// `POST /api/fdd/run` body for registry engine (typed params only — no raw SQL).
+/// `POST /api/fdd/run` body for registry engine (typed params only - no raw SQL).
 ///
 /// ```json
 /// { "mode": "registry", "rule_ids": ["FC1","VAV-1"], "params": { "FC1": { "confirm_min": 5 } },
@@ -1200,7 +1200,7 @@ pub fn run_registry(payload: &Value) -> Value {
         return json!({
             "ok": false,
             "error": format!(
-                "parquet cache missing at {} — set OPENFDD_PARQUET_ROOT or ingest a building package first",
+                "parquet cache missing at {} - set OPENFDD_PARQUET_ROOT or ingest a building package first",
                 pq.display()
             ),
             "cache": cache_status(),
@@ -1217,7 +1217,7 @@ pub fn run_registry(payload: &Value) -> Value {
                 return json!({
                     "ok": false,
                     "error": format!(
-                        "no parquet for building_id={bid} under {} — ingest that package or wait for MQTT historian",
+                        "no parquet for building_id={bid} under {} - ingest that package or wait for MQTT historian",
                         pq.display()
                     ),
                     "cache": cache_status(),
@@ -1286,7 +1286,7 @@ pub fn run_registry(payload: &Value) -> Value {
                     let Some(mut number) = value.as_f64() else {
                         continue;
                     };
-                    // FC1 legacy fan_hi (fan-on frac) → eps_vfd_spd = 1 - fan_hi
+                    // FC1 legacy fan_hi (fan-on frac) -> eps_vfd_spd = 1 - fan_hi
                     let mut mapped = alias_ui_param_key(&rule.rule_id, key).to_string();
                     if rule.rule_id == "FC1" && key == "fan_hi" {
                         if p.get("eps_vfd_spd").and_then(|v| v.as_f64()).is_some() {
@@ -1401,7 +1401,7 @@ pub fn run_registry(payload: &Value) -> Value {
     }
 }
 
-/// Preview substituted SQL for a rule (integrator lab only — not operator UI).
+/// Preview substituted SQL for a rule (integrator lab only - not operator UI).
 pub fn preview_sql(rule_id: &str, overrides: &Value) -> Value {
     let reg = match load_reg() {
         Ok(r) => r,

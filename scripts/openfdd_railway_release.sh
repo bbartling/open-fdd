@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Wave M D5 — one dependable Railway release orchestrator (agents + humans).
+# Wave M D5 - one dependable Railway release orchestrator (agents + humans).
 #
 # Dry-run / preflight by default. Mutation requires OPENFDD_RELEASE_EXECUTE=1.
 # Never prints tokens, PEMs, or full Railway variable dumps.
@@ -126,18 +126,18 @@ data.update({
 p.write_text(json.dumps(data, indent=2) + "\n")
 print(json.dumps(data, indent=2))
 PY
-  echo "DRY-RUN complete — no Railway mutation. Manifest: $MANIFEST"
+  echo "DRY-RUN complete - no Railway mutation. Manifest: $MANIFEST"
   exit 0
 fi
 
 echo "=== EXECUTE: re-pin services to $TAG (bounded timeout ${TIMEOUT_SECS}s) ==="
-# Explicit image identity — agents must not improvise ad-hoc railway sequences.
+# Explicit image identity - agents must not improvise ad-hoc railway sequences.
 # Prefer existing ops pin scripts when present; otherwise document BLOCKED.
 if [[ -x "$ROOT/scripts/railway_repin_hub.sh" ]]; then
   timeout "$TIMEOUT_SECS" env OPENFDD_IMAGE_TAG="$TAG" "$ROOT/scripts/railway_repin_hub.sh" \
     || fail "repin timed out or failed"
 else
-  fail "OPENFDD_RELEASE_EXECUTE=1 but scripts/railway_repin_hub.sh missing — refuse improvised pin"
+  fail "OPENFDD_RELEASE_EXECUTE=1 but scripts/railway_repin_hub.sh missing - refuse improvised pin"
 fi
 
 echo "=== post-rollout verify (central / web / broker health surfaces) ==="
@@ -183,5 +183,5 @@ path.write_text(json.dumps(data, indent=2) + "\n")
 print(json.dumps(data, indent=2))
 PY
 
-echo "RELEASE OK — manifest $MANIFEST"
+echo "RELEASE OK - manifest $MANIFEST"
 echo "Reminder: code/config rollback != data restore. See backup-update-restore.md"

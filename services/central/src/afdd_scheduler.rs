@@ -248,7 +248,7 @@ impl AfddSchedulerRuntime {
             .map(str::to_string)
             .filter(|value| !value.is_empty());
         let rules_failed = result.get("rules_failed").and_then(Value::as_u64);
-        // Partial success: registry ok but some rules failed — do not advance checkpoint.
+        // Partial success: registry ok but some rules failed - do not advance checkpoint.
         let advance_checkpoint = ok && rules_failed.unwrap_or(0) == 0;
         let status = if !ok {
             "failed"

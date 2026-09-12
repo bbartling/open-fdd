@@ -1,4 +1,4 @@
-# ADR — Stage C IdP / MFA / SKU (Wave M M4 late-gated)
+# ADR - Stage C IdP / MFA / SKU (Wave M M4 late-gated)
 
 **Status:** Accepted as late-gated scaffold (not implemented on prod).  
 **Date:** 2026-09-12
@@ -11,7 +11,7 @@ Wave L shipped multi-client shared hosting with `multi_tenant=false` on the prod
 
 1. Keep production `multi_tenant=false` until this ADR's checklist is complete.
 2. Lab MT enable uses [`WAVE_M_LAB_MULTI_TENANT_CHECKLIST.md`](../operations/WAVE_M_LAB_MULTI_TENANT_CHECKLIST.md) only.
-3. Implement IdP/MFA/SKU as follow-on PRs (PR-I…PR-M) — do not block Track D durable-results work.
+3. Implement IdP/MFA/SKU as follow-on PRs (PR-I-PR-M) - do not block Track D durable-results work.
 
 ## Checklist before prod MT ON
 
