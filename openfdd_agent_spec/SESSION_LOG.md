@@ -1,3 +1,9 @@
+## 2026-09-12 — Wave L L6+L7 (3.5.6) A/B isolation + legacy migrate dry-run
+
+- L6: Tier-2 A/B harness (`wave_l_ab_isolation_harness.sh`) + gate 16 + tip digest scan; disposable ZAP AF pins `OPENFDD_MULTI_TENANT=0`.
+- L7: `wave_l_legacy_migrate_dry_run.sh` + `WAVE_L_LEGACY_MIGRATE_CHECKLIST.md` + gate 17 (APPLY refused on HTTPS).
+- Stress wiring: required gates 16+17 in `run_railway_hub_stress.sh`. Next: tip → re-pin → L8 enhanced stress → PINNED.
+
 ## 2026-09-11 — Wave L L5 LIVE ops tip (3.5.5 / sha-c5b3ccc)
 
 - Docs/harness #905 tip `sha-c5b3ccc`; health `3.5.5+c5b3ccc947c8`; backup `20260911T185021Z`.

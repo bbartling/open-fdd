@@ -72,7 +72,9 @@ python3 "$MANIFEST_PY" create \
   --required 12_wave_l_parquet_isolation \
   --required 13_wave_l_mqtts_namespace \
   --required 14_wave_l_tenant_ui_session \
-  --required 15_wave_l_tenant_budgets
+  --required 15_wave_l_tenant_budgets \
+  --required 16_wave_l_ab_isolation \
+  --required 17_wave_l_legacy_migrate_dry_run
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"
@@ -242,6 +244,14 @@ run_gate "14_wave_l_tenant_ui_session" "14 Wave L tenant UI/session OFF" \
 # --- 15 Wave L tenant budgets (mode OFF = disabled) ---
 run_gate "15_wave_l_tenant_budgets" "15 Wave L tenant budgets OFF" \
   bash "$DIR/26_wave_l_tenant_budgets.sh"
+
+# --- 16 Wave L A↔B isolation harness + tip digest (Tier-2 lab; mode OFF on field) ---
+run_gate "16_wave_l_ab_isolation" "16 Wave L A↔B isolation harness" \
+  bash "$DIR/27_wave_l_ab_isolation.sh"
+
+# --- 17 Wave L legacy migrate dry-run (inventory only; no writes) ---
+run_gate "17_wave_l_legacy_migrate_dry_run" "17 Wave L legacy migrate dry-run" \
+  bash "$DIR/28_wave_l_legacy_migrate_dry_run.sh"
 
 # Finalize — SUMMARY generated from recorded gates only
 set +e
