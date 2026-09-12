@@ -1,6 +1,6 @@
 ---
 name: Wave L multi-client shared hosting
-overview: "ACTIVE — Wave L L5 LIVE. Ops tip sha-c5b3ccc / 3.5.5. Gates 11–15 PASS. Hygiene: 0 open PRs / only master. Next: L6."
+overview: "CLOSED / PINNED — Wave L 3.5.6. Ops tip sha-e80237c. Stress 20260912T033836Z fully_qualified=true. Mode OFF. Deferred: Stage C / #782 / sql-anomaly."
 todos:
   - id: l0-wait-k-pin
     content: L0 — Wave K 3.4.0 PINNED (sha-9c3e8b1 / stress 20260910T021557Z) — UNBLOCKED
@@ -27,14 +27,14 @@ todos:
     content: "L5 DONE — #903+#904+#905; tip sha-c5b3ccc / 3.5.5; gates 11–15 PASS; mode OFF LIVE"
     status: completed
   - id: l6-qual-hardening
-    content: L6 — ZAP/AF fixes + A↔B isolation harness + digest scans
-    status: pending
+    content: "L6 DONE — #908 A/B harness + tip digest; gate 16"
+    status: completed
   - id: l7-migrate-handoff
-    content: L7 — Legacy-tenant migrate dry-run + operator checklist
-    status: pending
+    content: "L7 DONE — #908 legacy migrate dry-run + checklist; gate 17"
+    status: completed
   - id: l8-stress-pin
-    content: L8 — ENHANCED full stress (00–14+ A↔B) + BUG_REPORT 3.5.x PINNED; mode OFF
-    status: pending
+    content: "L8 DONE — sha-e80237c / 3.5.6 PINNED; stress 20260912T033836Z fully_qualified=true"
+    status: completed
   - id: deferred-stage-c
     content: IdP/MFA/dedicated SKUs — after shared-hosting baseline
     status: pending

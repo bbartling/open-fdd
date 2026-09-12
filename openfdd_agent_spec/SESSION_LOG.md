@@ -1,3 +1,9 @@
+## 2026-09-12 — Wave L 3.5.6 PINNED (L6–L8 closeout / sha-e80237c)
+
+- L6/L7 #908 + fieldbus flake #909; tip `sha-e80237c`; health `3.5.6+e80237c0e758`.
+- Backup `20260912T031216Z`; hub+fieldbus re-pin; smoke gates **11–17 PASS**; stress `reports/nightly-ot-bench_20260912T033836Z/` **`fully_qualified=true`** (00–17, no SKIP_ZAP).
+- Mode OFF. Wave L CLOSED. Deferred: Stage C · #782 · sql-anomaly.
+
 ## 2026-09-12 — Wave L L6+L7 (3.5.6) A/B isolation + legacy migrate dry-run
 
 - L6: Tier-2 A/B harness (`wave_l_ab_isolation_harness.sh`) + gate 16 + tip digest scan; disposable ZAP AF pins `OPENFDD_MULTI_TENANT=0`.
