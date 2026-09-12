@@ -71,11 +71,7 @@ pub fn assert_authoritative_storage() -> Result<()> {
                 results.display()
             );
         }
-        let Some(root) = parquet.or_else(|| {
-            workspace
-                .as_ref()
-                .map(|w| w.join("openfdd"))
-        }) else {
+        let Some(root) = parquet.or_else(|| workspace.as_ref().map(|w| w.join("openfdd"))) else {
             bail!(
                 "OPENFDD_REQUIRE_DURABLE_STORAGE / Railway requires \
                  OPENFDD_PARQUET_ROOT or OPENFDD_WORKSPACE"
@@ -94,7 +90,10 @@ pub fn assert_authoritative_storage() -> Result<()> {
         // Prove writability without leaving debris.
         let probe = results.join(".openfdd_storage_probe");
         std::fs::write(&probe, b"ok").with_context(|| {
-            format!("authoritative storage not writable at {}", results.display())
+            format!(
+                "authoritative storage not writable at {}",
+                results.display()
+            )
         })?;
         let _ = std::fs::remove_file(&probe);
     } else {
@@ -119,7 +118,9 @@ mod tests {
     fn ephemeral_detection() {
         assert!(looks_ephemeral(Path::new(".cache/rule_results")));
         assert!(looks_ephemeral(Path::new("/app/.cache/x")));
-        assert!(!looks_ephemeral(Path::new("/workspace/openfdd/rule_results")));
+        assert!(!looks_ephemeral(Path::new(
+            "/workspace/openfdd/rule_results"
+        )));
     }
 
     #[test]

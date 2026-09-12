@@ -25,11 +25,11 @@ use fdd_store::{
     AfddOperatorSchedule, AfddSchedulerCheckpoint, AFDD_SCHEDULER_CHECKPOINT_PATH,
     AFDD_SCHEDULER_RUNTIME_CONFIG_PATH, OPERATOR_INTERVAL_MINUTES, OPERATOR_LOOKBACK_DAYS,
 };
-use uuid::Uuid;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 use crate::auth;
 use crate::canonical_state::CanonicalStateStore;
