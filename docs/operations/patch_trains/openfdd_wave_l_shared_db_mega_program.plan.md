@@ -1,6 +1,6 @@
 ---
 name: Wave L multi-client shared hosting
-overview: "CLOSED / PINNED — Wave L 3.5.6. Ops tip sha-e80237c. Stress 20260912T033836Z fully_qualified=true. Mode OFF. Deferred: Stage C / #782 / sql-anomaly."
+overview: "CLOSED / PINNED — Wave L 3.5.6. Ops tip sha-e80237c. Stress 20260912T033836Z fully_qualified=true. Mode OFF. SQL PARKED; Stage C/#782 out-of-Wave-L."
 todos:
   - id: l0-wait-k-pin
     content: L0 — Wave K 3.4.0 PINNED (sha-9c3e8b1 / stress 20260910T021557Z) — UNBLOCKED
