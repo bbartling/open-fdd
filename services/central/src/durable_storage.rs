@@ -34,7 +34,7 @@ pub fn resolve_rule_results_base() -> PathBuf {
     if let Some(root) = env_path("OPENFDD_PARQUET_ROOT") {
         return root.join("rule_results");
     }
-    if let Some(url) = std::env::var("OPENFDD_STORAGE_URL").ok() {
+    if let Ok(url) = std::env::var("OPENFDD_STORAGE_URL") {
         if let Some(path) = url.strip_prefix("file://") {
             let trimmed = path.trim();
             if !trimmed.is_empty() {
