@@ -1,43 +1,23 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-12 (Wave M **ACTIVE** · Wave L **3.5.6 PINNED** held · mode OFF)  
-**Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in Open-FDD stress)  
-**Tip / pin (ops):** `e80237c0` · VERSION **3.5.6** · health **`3.5.6+e80237c0e758`** · GHCR **central/web/mqtt/fieldbus `sha-e80237c`** · `multi_tenant=false` · `historian_prefix=""` · `active_tenant_id=legacy` · `tenant_budgets=false`  
-**Docs tip (post-pin; ops held):** `3cc96ddf` · **`sha-3cc96dd`** · Wave M M0 **#917** · product tip advances with **3.5.7** Wave M durable PR (ops held until re-pin) · prior `#916`/`sha-6987ef9` — **do not re-pin Railway** for docs-only tips  
+**Date:** 2026-09-12 (Wave M **OPS PINNED 3.5.7** · M5 stress **PARTIAL** on Mint · mode OFF)  
+**Platform:** Railway hub + Mint OptiPlex ops host (no Raspberry Pi in Open-FDD stress; fieldbus kit **missing** on Mint)  
+**Tip / pin (ops):** `0bfcd81b` · VERSION **3.5.7** · health **`3.5.7+0bfcd81b949f`** · GHCR **central/web/mqtt/fieldbus `sha-0bfcd81`** · `multi_tenant=false` · `historian_prefix=""` · `active_tenant_id=legacy` · `tenant_budgets=false` · `OPENFDD_RULE_RESULTS_DIR=/workspace/openfdd/rule_results`  
+**Prior ops pin (Wave L):** `e80237c0` · **`sha-e80237c`** · **`3.5.6+e80237c0e758`** · stress `20260912T033836Z` **`fully_qualified=true`**  
 **Rollback pin (Wave K):** `9c3e8b1c` · **`sha-9c3e8b1`** · **`3.4.0+9c3e8b1c30c1`** · MEGAs stress `20260910T021557Z` · docs **#890**  
-**Prior Wave L tip (L5 ops):** `c5b3ccc9` · **`sha-c5b3ccc`** · **`3.5.5+c5b3ccc947c8`** · docs **#906**  
-**Prior Wave L tip (L5 product):** `ecd97a47` · **`sha-ecd97a4`** · **`3.5.5+ecd97a473405`** · product **#904** · docs **#905**  
-**Prior Wave L tip (L4):** `d67d27b9` · **`sha-d67d27b`** · **`3.5.3+d67d27b9e791`** · product **#901** · docs **#902**  
-**Prior Wave L tip (L3):** `be653663` · **`sha-be65366`** · **`3.5.2+be65366316bb`** · product **#899** · docs **#900**  
-**Prior Wave L tip (L2 ops):** `af08ac7b` · **`sha-af08ac7`** · **`3.5.1+af08ac7b9889`** · product **#894** · flake-fix **#897**  
-**Prior Wave L tip (L1):** `a11b6cb1` · **`sha-a11b6cb`** · **`3.5.0+a11b6cb181fc`** · product **#891**  
-**Last CLOSED tip (Wave J):** `c1b1aa52` · **`sha-c1b1aa5`** · **`3.3.41+c1b1aa52806b`** · product **#877** · CI/gates **#878** · docs Stage A **#876**  
-**Field:** bensbench x86 `openfdd-fieldbus` → Railway MQTTS (`bldg2` / client `pi-1` kit). Dual-publish AV `9101`: `bldg2-zone-loopback` **`zone_t`+`oa_t`**, `hosted-weather` **`web_oa_t`**.  
-**Backup:** `~/openfdd-backups/railway/20260912T031216Z/` (pre–`sha-e80237c` L8 re-pin; L5c `20260911T185021Z/`; product L5 `20260911T172130Z/`; L4 `20260911T123823Z/`; L3 `20260911T030541Z/`; L2b `20260911T004519Z/`; L2 product `20260910T230450Z/`; L1 `20260910T161828Z/`)  
-**Program (CLOSED / PINNED):** Wave L — **multi-client shared hosting 3.5.6** (tenant-partitioned Parquet + control plane; **not** Postgres time-series) · tip `sha-e80237c` · stress `reports/nightly-ot-bench_20260912T033836Z/` **`fully_qualified=true`** (gates 00–17) · Cursor [`wave_l_shared_db_mega_master`](../../../.cursor/plans/wave_l_shared_db_mega_master.plan.md) · repo [`openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md)  
-**Program (CLOSED):** Wave K — **3.4.0 filesystem-historian pin** · tip `sha-9c3e8b1` · stress `reports/nightly-ot-bench_20260910T021557Z/` **`fully_qualified=true`** (gates 00–10) · harness fix **#889** · Cursor [`wave_k_340_filesystem_pin_master`](../../../.cursor/plans/wave_k_340_filesystem_pin_master.plan.md)  
-**Program (prior CLOSED):** Wave J — Cursor [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) · tip `sha-c1b1aa5` / 3.3.41  
-**Program (prior CLOSED):** Wave I — Cursor [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) · tip `sha-d1312b0` / 3.3.40  
-**Stress (Wave K closeout):** `reports/nightly-ot-bench_20260910T021557Z/` · **`fully_qualified=true`** (gates 00–10 incl. ZAP + MCP + Wave I + Wave K MEGAs)  
-**Stress (Wave L L8 closeout):** `reports/nightly-ot-bench_20260912T033836Z/` · **`fully_qualified=true`** (gates **00–17** incl. ZAP + MCP + Wave I/K + Wave L 11–17; **no `SKIP_ZAP`**) · candidate health `3.5.6+e80237c0e758` · mode OFF  
-**L8 smoke (pre-stress):** gates **11–17 PASS** · `/tmp/wave_l_l8_smoke_20260912T033741Z/` · health `3.5.6+e80237c0e758` · fieldbus `sha-e80237c`  
-**L5 smoke:** gates **11+12+13+14+15 PASS** · `/tmp/wave_l_l5c_smoke_20260911T185328Z/` (ops `sha-c5b3ccc`) · prior product smoke `/tmp/wave_l_l5_smoke_20260911T172505Z/` (`sha-ecd97a4`) · health `3.5.5+c5b3ccc947c8` · `multi_tenant=false` · `active_tenant_id=legacy` · `tenant_budgets=false` · fieldbus `sha-c5b3ccc`  
-**L4 smoke:** gates **11+12+13+14 PASS** · `/tmp/wave_l_l4_smoke_20260911T124238Z/` · health `3.5.3+d67d27b9e791` · `multi_tenant=false` · `active_tenant_id=legacy` · `tenant_session=true` · fieldbus `sha-d67d27b`  
-**L3 smoke:** gates **11+12+13 PASS** · `/tmp/wave_l_l3_smoke_20260911T032648Z/` · health `3.5.2+be65366316bb` · `multi_tenant=false` · ingest_ok soak · fieldbus `sha-be65366`  
-**L2 smoke:** gates **11+12 PASS** · `/tmp/wave_l_l2_smoke_20260910T230823Z/` (product `sha-2dea571`) · re-pin smoke `/tmp/wave_l_l2b_smoke_20260911T005453Z/` · health `3.5.1+af08ac7b9889` · `multi_tenant=false` · empty `historian_prefix` · ingest_ok soak  
-**L1 smoke:** gate 11 PASS · `/tmp/wave_l_l1_smoke_20260910T165010Z/` · health `3.5.0+a11b6cb181fc`  
-**Deferred (Wave L carry → Wave M):** Stage C IdP/MFA (M4 late) · [#782](https://github.com/bbartling/open-fdd/issues/782) → **M1** · sql-anomaly → **M2** · AFDD flood → **M5 gate 12**  
-**Plan TODOs:** Wave L CLOSED; Wave M **ACTIVE** — Track D durable results + residuals M1–M4 + enhanced M5  
-**K1:** MEGAs **#884 MERGED** (`5aed663c`). Docs K2/K3 → **#885**.  
-**K1b:** Plot-span **#886 MERGED** (`cee2f4ec`) — smoke on `sha-cee2f4e`.  
-**L1:** TenantContext **#891 MERGED** (`a11b6cb1`) — VERSION **3.5.0** · mode OFF  
-**L2:** Tenant Parquet roots **#894 MERGED** (`2dea571c`) — VERSION **3.5.1** · mode OFF · gate 12  
-**L3:** MQTTS namespace + ACL + identity **#899 MERGED** (`be653663`) — VERSION **3.5.2** · mode OFF · gate 13  
-**L4:** Tenant UI/session **#901 MERGED** (`d67d27b9`) — VERSION **3.5.3** · mode OFF · gate 14  
-**L5:** Per-tenant budgets **#903 MERGED** (`581edf3e` / 3.5.4) + product UX **#904 MERGED** (`ecd97a47` / 3.5.5) + docs/harness **#905 MERGED** (`c5b3ccc9`) · mode OFF · gate 15  
-**L6+L7:** A/B isolation + tip digest + legacy migrate dry-run **#908 MERGED** (`1d15d423` / 3.5.6) + fieldbus env-lock flake **#909 MERGED** (`e80237c0` / **3.5.6 PINNED**) · gates 16–17  
-**L8 docs:** BUG_REPORT PINNED **#910** · plan-mirror **#911+#912** · docs tip **#913+#914** · tenant ENV_LOCK flake fix **#915** — ops tip remains **`sha-e80237c`**  
-**Wait filler:** Vibe13 Part B (separate repo) during Open-FDD CI/Publish  
+**Product:** Wave M durable results + SSE + release **#918 MERGED** (`0bfcd81b` / **3.5.7**) · GHCR Publish green · tip stack complete  
+**Release:** `~/openfdd-releases/20260912T211258Z/` · orchestrator `openfdd_railway_release.sh` (hub-only tip check via `OPENFDD_RELEASE_HUB_ONLY=1` when fieldbus lags) · backup pre-pin retained under releases tree  
+**Field:** **DEFERRED on Mint** — `deploy/mqtt/kits/bldg2__pi-1/` absent; hub `edges:0` / `ingest_ok:0` until kit restore + `openfdd_fieldbus_railway_up.sh sha-0bfcd81`  
+**Backup (Wave L retained):** `~/openfdd-backups/railway/20260912T031216Z/` (pre–`sha-e80237c` L8)  
+**Program (OPS PINNED / M5 PARTIAL):** Wave M — durable rule results on volume + JWT SSE + release orchestrator · tip `sha-0bfcd81` · durable session gate **PASS** · enhanced stress `reports/nightly-ot-bench_20260912T231928Z/` **`fully_qualified=false`** (Mint bench gaps — see Soft-OPEN) · Cursor [`wave_m_mint_finish_16d1a0ef`](../../../.cursor/plans/wave_m_mint_finish_16d1a0ef.plan.md) · repo [`openfdd_wave_m_residual_mega_program.plan.md`](patch_trains/openfdd_wave_m_residual_mega_program.plan.md)  
+**Program (CLOSED / PINNED):** Wave L — **multi-client shared hosting 3.5.6** · tip `sha-e80237c` · stress `20260912T033836Z` **`fully_qualified=true`** (gates 00–17)  
+**Program (CLOSED):** Wave K — **3.4.0 filesystem-historian pin** · tip `sha-9c3e8b1` · stress `20260910T021557Z` **`fully_qualified=true`**  
+**Stress (Wave L L8 closeout):** `reports/nightly-ot-bench_20260912T033836Z/` · **`fully_qualified=true`** (gates **00–17**; **no `SKIP_ZAP`**) · candidate health `3.5.6+e80237c0e758` · mode OFF  
+**Stress (Wave M M5 Mint attempt):** `reports/nightly-ot-bench_20260912T231928Z/` · **`fully_qualified=false`** · PASS: 03–05, 07, 09–12, 14–18 (incl. **18 durable session**) · FAIL/ERROR: 00 edges, 01 synth59 fixtures, 02 gate17, 06 ZAP (docker.sock), 08 MCP (docker.sock), 13 MQTTS edges=0, 19 AFDD flood  
+**Deferred:** Stage C IdP/MFA (M4 late) · Mint fieldbus kit + docker group session + synthetic-59 zip stage → re-run M5 until `fully_qualified=true`  
+**Plan TODOs:** Track D + M1–M3 **landed in 3.5.7**; M4 late; M5 **partial** (do **not** claim full pin until Mint stress green or bensbench re-run)  
+**M1:** #782 SSE **CLOSED** in product (JWT `GET /api/mqtt/monitor/stream`) — close GitHub issue on docs PR  
+**Wait filler:** none  
 **Pis freed (not in Open-FDD stress):** bosspi · BensFakeAhu · Zone1VAV.
 
 ## OPEN / tracked bugs (post-3.3.33)
@@ -57,7 +37,7 @@
 | **weather-local-vs-web-bldg2** | **CLOSED** (3.3.40 / Wave I) | Was: bldg2 bas-vs-web empty | #872 dual OAT catalog; gate09 `bas_vs_web` points>0 | — |
 | **mqtt-bldg2-plot-surface** | **CLOSED** (3.3.40 / Wave I) | Was: MQTT plots empty/wrong roles | Inspect `zone_t` non_null=696; dual OAT live | — |
 | **wave-i-stress-gates** | **CLOSED** (3.3.40 / Wave I) | Was: stress green while basics broken | Gate `09_wave_i_app_test_megas` required; #873 AHU_1 fix | — |
-| **mqtt-monitor-sse-782** | **CLOSED** (Wave M M1 / 3.5.7) | JWT `GET /api/mqtt/monitor/stream` SSE + Ops EventSource with 1s poll fallback; no browser→Mosquitto WS | [#782](https://github.com/bbartling/open-fdd/issues/782) | — |
+| **mqtt-monitor-sse-782** | **CLOSED** (Wave M M1 / 3.5.7 / `sha-0bfcd81`) | JWT `GET /api/mqtt/monitor/stream` SSE + Ops EventSource with 1s poll fallback; no browser→Mosquitto WS | #918 · [#782](https://github.com/bbartling/open-fdd/issues/782) | close GitHub issue |
 | **df-boundary-repair** | **CLOSED** (Wave J / 3.3.41) | Was: stale pandas/UI docs + incomplete Python-absence / DF provenance | #876 Stage A · #878 policy+image+soak · tip Python-absence PASS | — |
 | **cookbook-parity-875** | **CLOSED** (3.3.41 / #877) | Was: FC3 tol/fan priority; VAV-2 fractional occupancy | #877 · #875 closed · oracle_parity FC3/VAV-2 | — |
 | **mqtt-ingest-stall** | **CLOSED** (3.3.34) | Was: flat `ingest_ok` after mqtt bounce until central redeploy | #860 · tip `sha-9aebf42` · smoke `reports/waveD_railway_smoke_20260906T173032Z/` | — |
@@ -70,7 +50,9 @@
 | **demo-sites-health** | **CLOSED** (Wave H) | Lakeside / B100 / B50 charts+data | Inspect pts: Lakeside HP 8000 / B100 8000 / B50 136; stress Creekside+B100 PASS | Superseded residual → Wave I Lakeside `read_csv` MEGA |
 | **vibe19-operational-gate-lab** | **CLOSED** (3.3.37 / Wave G) | Operational-gate trio SQL-bound | #864 · tip `sha-a40787b` | — |
 | **hybrid-ml-physics-ahu-vav** | **ABANDONED** | Was: physics/RCA / ML / E+ hybrid Wave G | Felt bogus 2026-09-07 | Do not implement |
-| **sql-anomaly-screening** | **LIVE-lab** (Wave M M2 / 3.5.7) | Lab-safe `OPENFDD_SQL_ANOMALY_SCREENING=1` + `/api/analytics/sql-anomaly/status`; default OFF | flag gated | expand self/peer rules later |
+| **sql-anomaly-screening** | **LIVE-lab** (Wave M M2 / 3.5.7 / `sha-0bfcd81`) | Lab-safe `OPENFDD_SQL_ANOMALY_SCREENING=1` + `/api/analytics/sql-anomaly/status`; default OFF | #918 | expand self/peer rules later |
+| **wave-m-durable-results** | **OPS PINNED** (Wave M Track D / 3.5.7 / `sha-0bfcd81`) | Volume `OPENFDD_RULE_RESULTS_DIR`; ephemeral `/app/.cache` rejected in prod; release orchestrator; gate 18 durable session **PASS** | #918 · stress `20260912T231928Z` gate18 · release `20260912T211258Z` | M5 full qualify (Mint bench) |
+| **wave-m-m5-mint-bench** | **OPEN** (Mint M5 residual) | Enhanced stress not `fully_qualified` on Mint OptiPlex | Fail: 00/01/02/06/08/13/19 — no `bldg2__pi-1` kit; no synth59 zip; docker.sock group; AFDD flood | Restore kit + `newgrp docker` + `synthetic_59_stage.py` → re-run `run_railway_hub_stress.sh` |
 | **wave-l-l1-tenant-context** | **CLOSED** (Wave L L1 / 3.5.0 / `sha-a11b6cb`) | Control plane + `TenantContext` + mode OFF; health/tenants; gate 11 | #891 · tip smoke `/tmp/wave_l_l1_smoke_20260910T165010Z/` · `multi_tenant=false` | L2 Parquet isolation |
 | **wave-l-l2-parquet-roots** | **CLOSED** (Wave L L2 / 3.5.1 / `sha-2dea571` product · ops tip `sha-af08ac7`) | Tenant-partitioned Parquet roots + DF path scoping; gate 12; mode OFF = hub root | #894 · smoke `/tmp/wave_l_l2_smoke_20260910T230823Z/` + `/tmp/wave_l_l2b_smoke_20260911T005453Z/` · gates 11+12 PASS · flake-fix #897 | L3 MQTTS isolation |
 | **wave-l-l3-mqtts-namespace** | **CLOSED** (Wave L L3 / 3.5.2 / `sha-be65366`) | MQTTS `TopicBuilder` / `parse_topic` + ingest identity provenance; gate 13; mode OFF = legacy `sites/…` | #899 · smoke `/tmp/wave_l_l3_smoke_20260911T032648Z/` · gates 11+12+13 PASS · backup `20260911T030541Z` | L4 Tenant UI/session |
@@ -594,7 +576,7 @@ Triage refreshed **2026-09-12** for Wave M kickoff. Historical Wave D–G items 
 |----|-------------|-------|
 | **mqtt-ingest-stall** | **CLOSED** (3.3.34 / Wave D) | #860 · tip `sha-9aebf42` · smoke `reports/waveD_railway_smoke_20260906T173032Z/` |
 | **bldg2-overview-signoff** | **CLOSED** (Wave H) | #868/#869 · Inspect/RCx points>0; Overview auto-load |
-| **railway-f1-stress** | **CLOSED** (B100) / **DEFERRED** (B50) / **IN Wave M M5** (AFDD flood gate 12) | B100 PASS retained; B50 package still deferred; AFDD flood required at M5 (budgeted, isolated-candidate default) |
+| **railway-f1-stress** | **CLOSED** (B100) / **DEFERRED** (B50) / **OPEN Mint** (AFDD flood gate 19) | B100 PASS retained; Mint M5 gate19 FAIL — see `wave-m-m5-mint-bench` |
 | **weather-legitimacy-chicago** | **DEFERRED** | Full soak optional; short soak historically green |
 | **railway-ui-fdd-stale** | **CLOSED** (Wave E / tip UX) | Building-scoped FDD chrome on tip |
 | **local-parquet-root-split** | **CLOSED** (Wave M D2 / 3.5.7) | Rule results under parquet/workspace; readiness fails ephemeral prod paths |
@@ -608,8 +590,9 @@ Triage refreshed **2026-09-12** for Wave M kickoff. Historical Wave D–G items 
 | **hybrid-ml-physics-ahu-vav** | **ABANDONED** | Replaced by lab-tuner-vibe19-parity |
 | **sql-anomaly-screening** | **LIVE-lab** (Wave M M2 / 3.5.7) | Lab flag + status API |
 | **lab-tuner-vibe19-parity** | **CLOSED** (3.3.37 / Wave G) | #864 · tip `sha-a40787b` · stress `20260907T183808Z` |
-| **mqtt-monitor-sse-782** | **CLOSED** (Wave M M1 / 3.5.7) | Central JWT SSE; no browser→Mosquitto WS |
-| **wave-m-durable-results** | **IN 3.5.7** (Wave M Track D) | Persistence + auto-results + release orchestrator; M5 stress pending |
+| **mqtt-monitor-sse-782** | **CLOSED** (Wave M M1 / 3.5.7 / `sha-0bfcd81`) | Central JWT SSE; no browser→Mosquitto WS; close #782 |
+| **wave-m-durable-results** | **OPS PINNED** (Wave M Track D / 3.5.7) | Persistence + auto-results + release orchestrator; gate18 PASS; M5 Mint partial |
+| **wave-m-m5-mint-bench** | **OPEN** | Fieldbus kit + docker.sock + synth59 fixtures + AFDD flood re-run |
 
 
 ## Series wrap draft — Lab tuners 3.3.21→3.3.26

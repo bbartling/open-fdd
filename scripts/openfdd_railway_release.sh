@@ -68,7 +68,12 @@ echo "$UTC $$ $TAG" >"$LOCK_FILE"
 trap 'rm -f "$LOCK_FILE"; rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
 
 echo "=== tip completeness (GHCR) ==="
-./scripts/check_ghcr_tip_stack.sh "$TAG" | redact || fail "GHCR tip stack check failed for $TAG"
+TIP_ARGS=("$TAG")
+if [[ "${OPENFDD_RELEASE_HUB_ONLY:-0}" == "1" ]]; then
+  TIP_ARGS+=(--hub-only)
+  echo "(hub-only: central/web/mqtt — fieldbus optional for Railway hub pin)"
+fi
+./scripts/check_ghcr_tip_stack.sh "${TIP_ARGS[@]}" | redact || fail "GHCR tip stack check failed for $TAG"
 
 CENTRAL_DIGEST="$(
   python3 - <<PY

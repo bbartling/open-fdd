@@ -1,3 +1,10 @@
+## 2026-09-12 — Wave M 3.5.7 OPS PINNED (Mint closeout / sha-0bfcd81)
+
+- Product #918 squash-merged (`0bfcd81b`); GHCR tip complete central/web/mqtt/fieldbus `sha-0bfcd81`.
+- Railway re-pin via `openfdd_railway_release.sh` + `OPENFDD_RELEASE_HUB_ONLY=1` (fieldbus published after hub); health `3.5.7+0bfcd81b949f`; `OPENFDD_RULE_RESULTS_DIR=/workspace/openfdd/rule_results`.
+- Gate **18 durable session PASS**; enhanced stress `reports/nightly-ot-bench_20260912T231928Z/` **`fully_qualified=false`** (no Mint fieldbus kit; synth59 fixtures missing; docker.sock for ZAP/MCP; AFDD flood FAIL). Soft-OPEN: `wave-m-m5-mint-bench`.
+- Close #782 (SSE shipped). Do not claim Wave M M5 fully_qualified until Mint/bensbench re-run green.
+
 ## 2026-09-12 — Wave L 3.5.6 PINNED (L6–L8 closeout / sha-e80237c)
 
 - L6/L7 #908 + fieldbus flake #909; tip `sha-e80237c`; health `3.5.6+e80237c0e758`.
