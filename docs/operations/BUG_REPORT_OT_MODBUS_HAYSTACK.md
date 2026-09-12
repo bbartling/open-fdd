@@ -1,8 +1,9 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-12 (Wave L **3.5.6 PINNED** · mode OFF · L8 closeout)  
+**Date:** 2026-09-12 (Wave L **3.5.6 PINNED** · mode OFF · L8 closeout · plan TODOs closed except SQL PARKED)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in Open-FDD stress)  
 **Tip / pin (ops):** `e80237c0` · VERSION **3.5.6** · health **`3.5.6+e80237c0e758`** · GHCR **central/web/mqtt/fieldbus `sha-e80237c`** · `multi_tenant=false` · `historian_prefix=""` · `active_tenant_id=legacy` · `tenant_budgets=false`  
+**Docs tip (post-pin; ops held):** `d01957d9` · **`sha-d01957d`** · BUG_REPORT/#910 · plan-mirror/#911 · TODOs sync (this PR) — **do not re-pin Railway** for docs-only tips  
 **Rollback pin (Wave K):** `9c3e8b1c` · **`sha-9c3e8b1`** · **`3.4.0+9c3e8b1c30c1`** · MEGAs stress `20260910T021557Z` · docs **#890**  
 **Prior Wave L tip (L5 ops):** `c5b3ccc9` · **`sha-c5b3ccc`** · **`3.5.5+c5b3ccc947c8`** · docs **#906**  
 **Prior Wave L tip (L5 product):** `ecd97a47` · **`sha-ecd97a4`** · **`3.5.5+ecd97a473405`** · product **#904** · docs **#905**  
@@ -25,7 +26,8 @@
 **L3 smoke:** gates **11+12+13 PASS** · `/tmp/wave_l_l3_smoke_20260911T032648Z/` · health `3.5.2+be65366316bb` · `multi_tenant=false` · ingest_ok soak · fieldbus `sha-be65366`  
 **L2 smoke:** gates **11+12 PASS** · `/tmp/wave_l_l2_smoke_20260910T230823Z/` (product `sha-2dea571`) · re-pin smoke `/tmp/wave_l_l2b_smoke_20260911T005453Z/` · health `3.5.1+af08ac7b9889` · `multi_tenant=false` · empty `historian_prefix` · ingest_ok soak  
 **L1 smoke:** gate 11 PASS · `/tmp/wave_l_l1_smoke_20260910T165010Z/` · health `3.5.0+a11b6cb181fc`  
-**Deferred (not Wave L):** [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE · sql-anomaly PARKED · Stage C IdP/MFA/dedicated SKUs  
+**Deferred (not Wave L):** Stage C IdP/MFA/dedicated SKUs · [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — **cancelled as Wave L TODOs** (track separately) · sql-anomaly **PARKED** (optional; skipped this closeout)  
+**Plan TODOs:** L0–L8 + hygiene + UX/DM **completed**; Stage C / #782 **cancelled**; sql-anomaly **cancelled/PARKED** — Cursor SoT + repo mirror aligned  
 **K1:** MEGAs **#884 MERGED** (`5aed663c`). Docs K2/K3 → **#885**.  
 **K1b:** Plot-span **#886 MERGED** (`cee2f4ec`) — smoke on `sha-cee2f4e`.  
 **L1:** TenantContext **#891 MERGED** (`a11b6cb1`) — VERSION **3.5.0** · mode OFF  
@@ -34,6 +36,7 @@
 **L4:** Tenant UI/session **#901 MERGED** (`d67d27b9`) — VERSION **3.5.3** · mode OFF · gate 14  
 **L5:** Per-tenant budgets **#903 MERGED** (`581edf3e` / 3.5.4) + product UX **#904 MERGED** (`ecd97a47` / 3.5.5) + docs/harness **#905 MERGED** (`c5b3ccc9`) · mode OFF · gate 15  
 **L6+L7:** A/B isolation + tip digest + legacy migrate dry-run **#908 MERGED** (`1d15d423` / 3.5.6) + fieldbus env-lock flake **#909 MERGED** (`e80237c0` / **3.5.6 PINNED**) · gates 16–17  
+**L8 docs:** BUG_REPORT PINNED **#910** · plan-mirror overview **#911** · plan TODO/body sync (this PR) — ops tip remains **`sha-e80237c`**  
 **Wait filler:** Vibe13 Part B (separate repo) during Open-FDD CI/Publish  
 **Pis freed (not in Open-FDD stress):** bosspi · BensFakeAhu · Zone1VAV.
 
@@ -75,7 +78,7 @@
 | **wave-l-l5-tenant-budgets** | **CLOSED** (Wave L L5 / 3.5.5 / `sha-c5b3ccc`) | Per-tenant budgets OFF-safe (#903) + product UX Dump/Twin/OAT/zone comfort (#904) + docs/harness (#905); gate 15 | #903 · #904 · #905 · smoke `/tmp/wave_l_l5c_smoke_20260911T185328Z/` · gates 11–15 PASS · backup `20260911T185021Z` · gate15 jq `false//` harness fix | L6 qual hardening |
 | **wave-l-l6-ab-isolation** | **CLOSED** (Wave L L6 / 3.5.6 / `sha-e80237c`) | Tier-2 A/B path+MQTT harness + tip digest scan + ZAP AF mode-OFF; gate 16 | #908 · #909 · smoke `/tmp/wave_l_l8_smoke_20260912T033741Z/` · stress gate 16 PASS | L7 migrate |
 | **wave-l-l7-legacy-migrate** | **CLOSED** (Wave L L7 / 3.5.6 / `sha-e80237c`) | Legacy-tenant migrate dry-run + operator checklist; APPLY refused on HTTPS; gate 17 | #908 · checklist `WAVE_L_LEGACY_MIGRATE_CHECKLIST.md` · stress gate 17 PASS | L8 pin |
-| **wave-l-l8-pin** | **CLOSED** (Wave L L8 / **3.5.6 PINNED** / `sha-e80237c`) | Enhanced full stress gates 00–17; `fully_qualified=true`; mode OFF | stress `reports/nightly-ot-bench_20260912T033836Z/` · backup `20260912T031216Z` · no `SKIP_ZAP` | Stage C deferred |
+| **wave-l-l8-pin** | **CLOSED** (Wave L L8 / **3.5.6 PINNED** / `sha-e80237c`) | Enhanced full stress gates 00–17; `fully_qualified=true`; mode OFF; plan TODOs closed except SQL PARKED | stress `reports/nightly-ot-bench_20260912T033836Z/` · backup `20260912T031216Z` · no `SKIP_ZAP` · docs #910+#911 | — (outside Wave L) |
 | **lab-tuner-vibe19-parity** | **CLOSED** (3.3.37) | Vibe19 Lab tuners → production (~217→~444) | #864 · stress `reports/nightly-ot-bench_20260907T183808Z/` · `fully_qualified=true` | — |
 | **ghcr-publish-hub-blocked-by-fieldbus** | **CLOSED** (#865) | Serial Publish put mqtt after multi-arch fieldbus | Merged 2026-09-07; tip-completeness workflow live | — |
 | **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | Was: equipment=0 for MQTT `bldg2` → empty Overview | #856 · probe + stress | — |
@@ -150,8 +153,8 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 ### Upcoming trains (Cursor plans — optimized waves 2026-09-06)
 
 **Source of truth:** [`patch_trains/`](patch_trains/) · [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md) · [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
-**Active:** none (Wave L **CLOSED / PINNED**). Next deferred: Stage C IdP/MFA/dedicated SKUs; optional #782 SSE; sql-anomaly PARKED.  
-**Last closed:** Wave L [`wave_l_shared_db_mega_master`](../../../.cursor/plans/wave_l_shared_db_mega_master.plan.md) · tip `sha-e80237c` / **3.5.6** · stress `20260912T033836Z` **`fully_qualified=true`**. Prior Wave K tip `sha-9c3e8b1` / **3.4.0**.
+**Active:** none (Wave L **CLOSED / PINNED**). Wave L plan TODOs done except optional sql-anomaly **PARKED**. Stage C / #782 **out of Wave L** (cancelled TODOs).  
+**Last closed:** Wave L [`wave_l_shared_db_mega_master`](../../../.cursor/plans/wave_l_shared_db_mega_master.plan.md) · ops tip `sha-e80237c` / **3.5.6** · stress `20260912T033836Z` **`fully_qualified=true`**. Prior Wave K tip `sha-9c3e8b1` / **3.4.0**.
 
 **This round stress rule:** Wave L L8 complete — cite `reports/nightly-ot-bench_20260912T033836Z/` only for 3.5.6 PINNED claims.
 

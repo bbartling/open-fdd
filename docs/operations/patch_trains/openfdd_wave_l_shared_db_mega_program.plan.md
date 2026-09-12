@@ -36,14 +36,14 @@ todos:
     content: "L8 DONE — sha-e80237c / 3.5.6 PINNED; stress 20260912T033836Z fully_qualified=true"
     status: completed
   - id: deferred-stage-c
-    content: IdP/MFA/dedicated SKUs — after shared-hosting baseline
-    status: pending
+    content: "OUT OF WAVE L — IdP/MFA/dedicated SKUs (Stage C); track separately after baseline"
+    status: cancelled
   - id: deferred-782-sse
-    content: Optional #782 MQTT monitor SSE — separate plan; never blocks Wave L
-    status: pending
+    content: "OUT OF WAVE L — #782 MQTT monitor SSE; separate plan only"
+    status: cancelled
   - id: deferred-sql-anomaly
-    content: sql-anomaly-screening PARKED — not Wave L shared-hosting
-    status: pending
+    content: "PARKED — sql-anomaly-screening (optional; not Wave L)"
+    status: cancelled
 isProject: false
 ---
 
@@ -51,20 +51,21 @@ isProject: false
 
 **Cursor SoT:** [`wave_l_shared_db_mega_master.plan.md`](../../../../.cursor/plans/wave_l_shared_db_mega_master.plan.md)
 
-## Where we are (2026-09-11) — **ACTIVE**
+## Where we are (2026-09-12) — **CLOSED / PINNED**
 
 | Item | State |
 |------|--------|
-| **Program** | **ACTIVE** — Wave L **3.5.x** |
+| **Program** | **CLOSED / PINNED** — Wave L **3.5.6** |
 | **Gate L0** | **DONE** — Wave K **3.4.0 PINNED** (`sha-9c3e8b1`) |
 | **Phase-0 ADR** | **DONE** (#885) — `docs/architecture/ADR_multi_client_shared_hosting.md` |
-| **L1** | **DONE** — #891 · tip **`sha-a11b6cb`** · health **`3.5.0+a11b6cb181fc`** · gate 11 PASS · `multi_tenant=false` |
-| **L2** | **DONE** — #894 product **`sha-2dea571`** · ops tip **`sha-af08ac7`** (#897 flake-fix) · health **`3.5.1+af08ac7b9889`** · gates **11+12 PASS** |
-| **L3** | **DONE** — #899 · tip **`sha-be65366`** · health **`3.5.2+be65366316bb`** · gates **11+12+13 PASS** · `multi_tenant=false` |
-| **L4** | **DONE** — #901 · tip **`sha-d67d27b`** · health **`3.5.3+d67d27b9e791`** · gates **11–14 PASS** · `multi_tenant=false` · `active_tenant_id=legacy` |
-| **L5** | **DONE / LIVE** — #903+#904+#905 · tip **`sha-c5b3ccc`** / **3.5.5** · health **`3.5.5+c5b3ccc947c8`** · gates **11–15 PASS** · `multi_tenant=false` · `tenant_budgets=false` |
-| **Ops pin** | **LIVE** **`sha-c5b3ccc`** / **3.5.5** · rollback Wave K **`sha-9c3e8b1`** / **3.4.0** |
-| **Step** | **Next: L6** — ZAP/AF + A↔B isolation harness + digest scans |
+| **L1–L5** | **DONE** — #891→#905 · prior ops tip **`sha-c5b3ccc`** / **3.5.5** · gates **11–15** |
+| **L6** | **DONE** — #908 A/B isolation + tip digest + ZAP AF OFF · gate **16** |
+| **L7** | **DONE** — #908 legacy migrate dry-run + checklist · gate **17** |
+| **L8** | **DONE** — #909+#910 · tip **`sha-e80237c`** / **3.5.6** · stress **`20260912T033836Z`** **`fully_qualified=true`** |
+| **Ops pin** | **LIVE** **`sha-e80237c`** / **3.5.6** · health **`3.5.6+e80237c0e758`** · rollback Wave K **`sha-9c3e8b1`** / **3.4.0** |
+| **Mode** | **`multi_tenant=false`** until operator checklist |
+| **Hygiene** | **0** open PRs · only `master` · tip Actions green (ops held at `sha-e80237c`; docs tip may advance) |
+| **Next** | Outside Wave L only (Stage C / #782 cancelled; sql-anomaly PARKED) |
 
 ### Progress board
 
@@ -75,10 +76,11 @@ isProject: false
 [x] L2  Tenant Parquet + DF + gate 12 (#894 / ops sha-af08ac7)
 [x] L3  MQTTS namespace + ACL (#899 / sha-be65366)
 [x] L4  Tenant UI/session (#901 / sha-d67d27b)
-[x] L5  Budgets + UX/DM + docs (#903+#904+#905 / sha-c5b3ccc) — LIVE
-[ ] L6  ZAP/AF + A↔B isolation harness + digest scans  ← YOU ARE HERE
-[ ] L7  Legacy migrate dry-run + operator checklist
-[ ] L8  ENHANCED full stress + BUG_REPORT 3.5.x PINNED
+[x] L5  Budgets + UX/DM + docs (#903+#904+#905 / sha-c5b3ccc)
+[x] L6  ZAP/AF + A↔B isolation harness + digest scans (#908)
+[x] L7  Legacy migrate dry-run + operator checklist (#908)
+[x] L8  ENHANCED full stress + BUG_REPORT 3.5.6 PINNED  ← DONE
+[-] Stage C / #782 / sql-anomaly — not Wave L (cancelled / PARKED)
 ```
 
 ---
@@ -158,8 +160,9 @@ control plane (tenants/users/memberships/buildings)
 | **3** | **3.5.2** | MQTTS ACL | **DONE** smoke + gates 11–13 |
 | **4** | **3.5.3** | UI membership | **DONE** smoke + gates 11–14 |
 | **5** | **3.5.4–3.5.5** | Budgets + UX/DM + docs (#903–#905) | **DONE** smoke + gates 11–15 (`sha-c5b3ccc`) |
-| **6** | **3.5.x** | ZAP/AF + isolation harness | Tier-2 (next) |
-| 7–8 | 3.5.x | Migrate dry-run + **L8 enhanced** | full 00–15+ |
+| **6** | **3.5.6** | ZAP/AF + A/B isolation harness (#908) | **DONE** gate 16 |
+| **7** | **3.5.6** | Legacy migrate dry-run + checklist (#908) | **DONE** gate 17 |
+| **8** | **3.5.6** | Enhanced L8 stress + BUG_REPORT PINNED (#909–#910) | **DONE** 00–17 `fully_qualified=true` (`sha-e80237c`) |
 
 ## Out of scope
 
