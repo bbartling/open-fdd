@@ -312,4 +312,51 @@ mod tests {
         assert_eq!(ctx.historian_prefix().unwrap(), "tenants/acme");
         std::env::remove_var("OPENFDD_MULTI_TENANT");
     }
+
+    /// Wave L L6 — synthetic Tenant A↔B: identical building labels must not cross roots.
+    #[test]
+    fn ab_isolation_buildings_and_roots() {
+        let _g = lock_env();
+        std::env::set_var("OPENFDD_MULTI_TENANT", "1");
+        let plane = ControlPlane {
+            tenants: vec![
+                TenantRecord {
+                    id: "tenant_a".into(),
+                    name: "Firm A".into(),
+                    building_ids: vec!["site_x".into()],
+                },
+                TenantRecord {
+                    id: "tenant_b".into(),
+                    name: "Firm B".into(),
+                    building_ids: vec!["site_x".into()],
+                },
+            ],
+        };
+        let user_a = AuthUser {
+            sub: "a".into(),
+            role: Role::Operator,
+            tenant_ids: vec!["tenant_a".into()],
+        };
+        let user_b = AuthUser {
+            sub: "b".into(),
+            role: Role::Operator,
+            tenant_ids: vec!["tenant_b".into()],
+        };
+        let ctx_a = TenantContext::resolve(&user_a, &plane).expect("a");
+        let ctx_b = TenantContext::resolve(&user_b, &plane).expect("b");
+        assert!(ctx_a.allow_building("site_x"));
+        assert!(ctx_b.allow_building("site_x"));
+        // Membership is per-tenant; foreign tenant_id is not in either context.
+        assert_eq!(ctx_a.tenant_id.as_deref(), Some("tenant_a"));
+        assert_eq!(ctx_b.tenant_id.as_deref(), Some("tenant_b"));
+        let base = std::path::Path::new("/workspace/openfdd");
+        let root_a = ctx_a.historian_root(base).unwrap();
+        let root_b = ctx_b.historian_root(base).unwrap();
+        assert_ne!(root_a, root_b);
+        assert!(root_a.ends_with("tenants/tenant_a"));
+        assert!(root_b.ends_with("tenants/tenant_b"));
+        assert!(!root_a.starts_with(&root_b));
+        assert!(!root_b.starts_with(&root_a));
+        std::env::remove_var("OPENFDD_MULTI_TENANT");
+    }
 }

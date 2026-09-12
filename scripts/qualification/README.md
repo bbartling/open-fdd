@@ -30,7 +30,10 @@
 | `auth_role_matrix.sh` | anon/admin/operator(/viewer) REST checks |
 | `railway_mcp_accuracy.sh` | MCP↔REST on Railway HTTPS; no local central fallback |
 | `run_wave_c_isolated.sh` | Wave C entry: MQTTS isolation + restore-to-empty + ZAP AF |
-| `run_isolated_zap_af.sh` | Disposable authenticated ZAP AF + OpenAPI (pinned digest) |
+| `run_isolated_zap_af.sh` | Disposable authenticated ZAP AF + OpenAPI (pinned digest); Wave L keeps `OPENFDD_MULTI_TENANT=0` |
+| `wave_l_ab_isolation_harness.sh` | Tier-2 synthetic Tenant A↔B path + MQTT namespace self-test (no live OT) |
+| `wave_l_tip_digest_scan.sh` | Same-sha tip completeness (+ python-absence) |
+| `../ops/wave_l_legacy_migrate_dry_run.sh` | L7 legacy-tenant inventory dry-run (refuses APPLY on HTTPS) |
 | `restore_to_empty.sh` | Backup → empty volume restore + bounded API budgets |
 | `../integration/mqtts_transport_isolation.sh` | Disposable MQTTS cert/ACL/QoS/reconnect |
 

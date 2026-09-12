@@ -250,4 +250,30 @@ mod tests {
         assert!(!payload_matches_topic(&id, "other", "pi-1"));
         assert!(!payload_matches_topic(&id, "bldg2", "other"));
     }
+
+    /// Wave L L6 — Tenant A MQTT ACL patterns must not authorize Tenant B topics.
+    #[test]
+    fn ab_mqtt_acl_namespace_isolation() {
+        let a = TopicBuilder::with_tenant("tenant_a", "site_x", "edge1");
+        let b = TopicBuilder::with_tenant("tenant_b", "site_x", "edge1");
+        let (a_pub, a_sub) = a.edge_acl_patterns();
+        let (b_pub, b_sub) = b.edge_acl_patterns();
+        let a_tel = a.topic(TopicKind::Telemetry, Some(Protocol::Bacnet));
+        let b_tel = b.topic(TopicKind::Telemetry, Some(Protocol::Bacnet));
+        assert_ne!(a_tel, b_tel);
+        assert!(a_tel.contains("/tenants/tenant_a/"));
+        assert!(b_tel.contains("/tenants/tenant_b/"));
+        // Identical building/edge labels still live under distinct tenant prefixes.
+        assert!(!a_tel.contains("/tenants/tenant_b/"));
+        assert!(!b_tel.contains("/tenants/tenant_a/"));
+        assert!(a_pub[0].contains("tenant_a"));
+        assert!(b_pub[0].contains("tenant_b"));
+        assert_ne!(a_pub[0], b_pub[0]);
+        assert_ne!(a_sub[0], b_sub[0]);
+        let parsed_a = parse_topic(&a_tel).unwrap();
+        let parsed_b = parse_topic(&b_tel).unwrap();
+        assert_eq!(parsed_a.tenant_id.as_deref(), Some("tenant_a"));
+        assert_eq!(parsed_b.tenant_id.as_deref(), Some("tenant_b"));
+        assert_eq!(parsed_a.building_id, parsed_b.building_id);
+    }
 }
