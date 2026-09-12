@@ -24,13 +24,13 @@ railway ssh -s "$CENTRAL_SVC" -- sh -lc 'ls -la /workspace 2>/dev/null; du -sh /
   | tee "$OUT_ROOT/central-workspace-inventory.txt"
 
 echo "=== tar central /workspace -> local (authoritative trees only) ==="
-# Prefer openfdd + mqtt trees. If either is missing, fail (do NOT fall back to
-# piping a second tar into the same file - that concatenates garbage).
+# Prefer openfdd + mqtt + data (session_config). If openfdd missing, fail (do NOT
+# fall back to piping a second tar into the same file - that concatenates garbage).
 TMP_TAR="$OUT_ROOT/central-workspace.tgz.partial"
 rm -f "$TMP_TAR" "$OUT_ROOT/central-workspace.tgz"
 set +e
 railway ssh -s "$CENTRAL_SVC" -- sh -lc \
-  'set -e; test -d /workspace/openfdd; tar -C /workspace -czf - --exclude=".cache/*" openfdd mqtt' \
+  'set -e; test -d /workspace/openfdd; tar -C /workspace -czf - --exclude=".cache/*" openfdd mqtt data' \
   >"$TMP_TAR"
 TAR_RC=$?
 set -e
@@ -45,15 +45,31 @@ if [[ "$BYTES" -lt "$MIN_BYTES" ]]; then
   rm -f "$TMP_TAR"
   exit 1
 fi
-# Basic gzip magic check
+# Validate gzip + required members before reporting success.
 python3 - <<'PY' "$TMP_TAR"
-import sys
+import sys, tarfile
 path = sys.argv[1]
 with open(path, "rb") as f:
     magic = f.read(2)
 if magic != b"\x1f\x8b":
     raise SystemExit(f"ERROR: not a gzip stream: {path}")
-print("gzip magic OK")
+required = {"openfdd/"}
+found = set()
+with tarfile.open(path, "r:gz") as tf:
+    names = tf.getnames()
+    if not names:
+        raise SystemExit("ERROR: backup archive has no members")
+    for name in names:
+        if name == "openfdd" or name.startswith("openfdd/"):
+            found.add("openfdd/")
+        if name == "mqtt" or name.startswith("mqtt/"):
+            found.add("mqtt/")
+        if name == "data" or name.startswith("data/"):
+            found.add("data/")
+missing = sorted(required - found)
+if missing:
+    raise SystemExit(f"ERROR: backup missing required members: {missing}")
+print(f"gzip+tar OK members={len(names)} found={sorted(found)}")
 PY
 mv "$TMP_TAR" "$OUT_ROOT/central-workspace.tgz"
 
@@ -80,7 +96,7 @@ cat > "$OUT_ROOT/README.txt" <<EOF
 Railway hub backup $UTC
 central service: $CENTRAL_SVC
 mqtt service: $MQTT_SVC
-Contents: openfdd + mqtt trees under /workspace (no concat fallback).
+Contents: openfdd + mqtt + data trees under /workspace (no concat fallback).
 Restore (data only - never auto-overwrite newer telemetry without operator review):
   railway ssh -s $CENTRAL_SVC -- sh -lc 'cd /workspace && tar -xzf -' < central-workspace.tgz
 Code/config rollback is separate from data restore - see docs/operations/backup-update-restore.md

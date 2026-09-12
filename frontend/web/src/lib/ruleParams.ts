@@ -1,6 +1,8 @@
 /** Shared rule-tuning params (Vibe19 session_config ↔ OpenFDD Lab/Overview). */
 
 export const RULE_PARAMS_STORAGE_KEY = "openfdd.ui.rule_params";
+/** Set after a one-shot copy of the legacy global bag into a building-scoped key. */
+export const RULE_PARAMS_LEGACY_MIGRATED_KEY = "openfdd.ui.rule_params.__legacy_migrated";
 export const SESSION_SCHEMA = "openfdd_session_v1";
 
 export type RuleParamMap = Record<string, Record<string, number>>;
@@ -11,16 +13,26 @@ function scopedKey(buildingId?: string | null): string {
   return `${RULE_PARAMS_STORAGE_KEY}.building=${encodeURIComponent(bid)}`;
 }
 
-/** Migrate legacy global key into the first scoped building bag once. */
+/**
+ * Migrate legacy global key into the first scoped building bag once.
+ * Removes the legacy key so later buildings do not inherit the same overrides.
+ */
 function migrateLegacyIfNeeded(buildingId?: string | null): void {
   const bid = (buildingId ?? "").trim();
   if (!bid) return;
   try {
-    const scoped = scopedKey(bid);
-    if (localStorage.getItem(scoped)) return;
+    if (localStorage.getItem(RULE_PARAMS_LEGACY_MIGRATED_KEY) === "1") return;
     const legacy = localStorage.getItem(RULE_PARAMS_STORAGE_KEY);
-    if (!legacy) return;
-    localStorage.setItem(scoped, legacy);
+    if (!legacy) {
+      localStorage.setItem(RULE_PARAMS_LEGACY_MIGRATED_KEY, "1");
+      return;
+    }
+    const scoped = scopedKey(bid);
+    if (!localStorage.getItem(scoped)) {
+      localStorage.setItem(scoped, legacy);
+    }
+    localStorage.removeItem(RULE_PARAMS_STORAGE_KEY);
+    localStorage.setItem(RULE_PARAMS_LEGACY_MIGRATED_KEY, "1");
   } catch {
     /* ignore */
   }

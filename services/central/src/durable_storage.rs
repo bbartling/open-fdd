@@ -50,10 +50,11 @@ pub fn resolve_rule_results_base() -> PathBuf {
 
 fn looks_ephemeral(path: &Path) -> bool {
     let s = path.to_string_lossy();
-    s.contains(".cache")
-        || s.starts_with("/app/")
-        || s == "/app"
-        || (!path.is_absolute() && s.starts_with(".cache"))
+    // Relative paths are never durable in prod (cwd may be WORKDIR /app).
+    if !path.is_absolute() {
+        return true;
+    }
+    s.contains(".cache") || s.starts_with("/app/") || s == "/app"
 }
 
 /// Validate authoritative local storage before accepting traffic.
@@ -117,6 +118,7 @@ mod tests {
     #[test]
     fn ephemeral_detection() {
         assert!(looks_ephemeral(Path::new(".cache/rule_results")));
+        assert!(looks_ephemeral(Path::new("data")));
         assert!(looks_ephemeral(Path::new("/app/.cache/x")));
         assert!(!looks_ephemeral(Path::new(
             "/workspace/openfdd/rule_results"

@@ -59,11 +59,13 @@ command -v railway >/dev/null || fail "railway CLI required"
 command -v jq >/dev/null || fail "jq required"
 railway whoami >/dev/null || fail "railway whoami failed"
 
-if [[ -e "$LOCK_FILE" ]]; then
-  fail "deployment lock exists: $LOCK_FILE (another release in progress?)"
+# Atomic lock: mkdir fails if another release holds the lock (no TOCTOU race).
+LOCK_DIR="${LOCK_FILE}.d"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  fail "deployment lock exists: $LOCK_DIR (another release in progress?)"
 fi
 echo "$UTC $$ $TAG" >"$LOCK_FILE"
-trap 'rm -f "$LOCK_FILE"' EXIT
+trap 'rm -f "$LOCK_FILE"; rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
 
 echo "=== tip completeness (GHCR) ==="
 ./scripts/check_ghcr_tip_stack.sh "$TAG" | redact || fail "GHCR tip stack check failed for $TAG"
@@ -143,16 +145,22 @@ fi
 echo "=== post-rollout verify (central / web / broker health surfaces) ==="
 DEADLINE=$((SECONDS + 180))
 NEW_VERSION=""
+HEALTH_OK=""
 while (( SECONDS < DEADLINE )); do
   HEALTH_JSON="$(curl -sf --max-time 20 "$HUB_BASE/api/health" || true)"
-  NEW_VERSION="$(echo "${HEALTH_JSON:-}" | jq -r '.version // empty' 2>/dev/null || true)"
-  if [[ -n "$NEW_VERSION" && "$NEW_VERSION" == *"$SHORT_SHA"* ]]; then
-    break
+  if [[ -n "$HEALTH_JSON" ]]; then
+    HEALTH_OK="$(echo "$HEALTH_JSON" | jq -r 'if .ok == true then "1" else "" end' 2>/dev/null || true)"
+    NEW_VERSION="$(echo "$HEALTH_JSON" | jq -r '.version // empty' 2>/dev/null || true)"
+    if [[ "$HEALTH_OK" == "1" && -n "$NEW_VERSION" && "$NEW_VERSION" == *"$SHORT_SHA"* ]]; then
+      break
+    fi
   fi
+  NEW_VERSION=""
+  HEALTH_OK=""
   sleep 5
 done
-[[ -n "$NEW_VERSION" && "$NEW_VERSION" == *"$SHORT_SHA"* ]] \
-  || fail "post-rollout health version mismatch (got '$NEW_VERSION', want *$SHORT_SHA*)"
+[[ "$HEALTH_OK" == "1" && -n "$NEW_VERSION" && "$NEW_VERSION" == *"$SHORT_SHA"* ]] \
+  || fail "post-rollout health failed (ok='$HEALTH_OK' version='$NEW_VERSION', want ok=true + *$SHORT_SHA*)"
 
 # Structured compare (not SHA-OR-semver regex)
 python3 - <<PY

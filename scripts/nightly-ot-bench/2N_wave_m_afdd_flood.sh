@@ -60,17 +60,34 @@ if admin_pass:
 
 t0 = time.time()
 # Prefer durable AFDD run-now (scheduler path) over browser mash.
+# Include fixture identity for evidence; only fall back on HTTP 404 (route missing).
+payload = {"building_id": building, "fixture": fixture}
 try:
-    st, body = http("POST", "/api/afdd/scheduler/run-now", token=token, body={"building_id": building}, timeout=max_wall)
-except Exception as e:
-    # Fallback: registry run all (still server-side, not browser-driven recompute-on-open)
-    try:
-        st, body = http("POST", "/api/fdd/run", token=token, body={"mode": "registry", "building_id": building}, timeout=max_wall)
-    except Exception as e2:
-        report["error"] = f"flood invoke failed: {e}; fallback: {e2}"
+    st, body = http("POST", "/api/afdd/scheduler/run-now", token=token, body=payload, timeout=max_wall)
+except urllib.error.HTTPError as e:
+    if e.code != 404:
+        report["error"] = f"flood scheduler invoke failed HTTP {e.code}: {e.reason}"
         open(out, "w").write(json.dumps(report, indent=2))
         open(summary, "w").write(f"# AFDD flood FAIL\n\n{report['error']}\n")
         raise SystemExit(1)
+    try:
+        st, body = http(
+            "POST",
+            "/api/fdd/run",
+            token=token,
+            body={"mode": "registry", "building_id": building, "fixture": fixture},
+            timeout=max_wall,
+        )
+    except Exception as e2:
+        report["error"] = f"flood invoke failed: scheduler 404; fallback: {e2}"
+        open(out, "w").write(json.dumps(report, indent=2))
+        open(summary, "w").write(f"# AFDD flood FAIL\n\n{report['error']}\n")
+        raise SystemExit(1)
+except Exception as e:
+    report["error"] = f"flood scheduler invoke failed: {e}"
+    open(out, "w").write(json.dumps(report, indent=2))
+    open(summary, "w").write(f"# AFDD flood FAIL\n\n{report['error']}\n")
+    raise SystemExit(1)
 
 elapsed = time.time() - t0
 rules_run = int(body.get("rules_run") or body.get("rules_succeeded") or 0)

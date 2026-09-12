@@ -153,9 +153,6 @@ impl AfddSchedulerRuntime {
     }
 
     fn record_cycle(&self, record: AfddCycleRecord) {
-        if let Err(error) = self.persist_run_record(&record) {
-            warn!(%error, run_id = %record.run_id, "failed to persist AFDD run metadata");
-        }
         let mut status = self.status.lock().unwrap();
         status.last_error = record.error.clone();
         status.recent_cycles.push_front(record);
@@ -278,6 +275,9 @@ impl AfddSchedulerRuntime {
             rules_skipped: result.get("rules_skipped").and_then(Value::as_u64),
         };
 
+        // Persist run metadata before advancing the success checkpoint so a
+        // failed write cannot leave an advanced watermark without a run record.
+        self.persist_run_record(&record)?;
         if advance_checkpoint {
             self.persist_checkpoint(&AfddSchedulerCheckpoint {
                 last_completed_at_utc: record.finished_at_utc,
