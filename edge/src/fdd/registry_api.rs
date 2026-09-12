@@ -188,14 +188,43 @@ fn collect_equipment_prefix(root: &Path, prefix: &str, ids: &mut Vec<String>) {
     }
 }
 
+/// Wave M D2 — authoritative rule results live under parquet/workspace volume
+/// by default (not WORKDIR `.cache`). Override with `OPENFDD_RULE_RESULTS_DIR`.
+fn rule_results_base() -> PathBuf {
+    if let Ok(p) = std::env::var("OPENFDD_RULE_RESULTS_DIR") {
+        let trimmed = p.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+    if let Ok(root) = std::env::var("OPENFDD_PARQUET_ROOT") {
+        let trimmed = root.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed).join("rule_results");
+        }
+    }
+    if let Ok(url) = std::env::var("OPENFDD_STORAGE_URL") {
+        if let Some(path) = url.strip_prefix("file://") {
+            let trimmed = path.trim();
+            if !trimmed.is_empty() {
+                return PathBuf::from(trimmed).join("rule_results");
+            }
+        }
+    }
+    if let Ok(ws) = std::env::var("OPENFDD_WORKSPACE") {
+        let trimmed = ws.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed).join("openfdd").join("rule_results");
+        }
+    }
+    // Local/dev fallback only — central readiness fails this path in prod.
+    PathBuf::from(".cache/rule_results")
+}
+
 /// Results directory, optionally scoped to a building so per-site runs do not
-/// overwrite each other. `None` → `.cache/rule_results`; `Some(id)` →
-/// `.cache/rule_results/building={id}/`.
+/// overwrite each other. `None` → `<base>`; `Some(id)` → `<base>/building={id}/`.
 fn results_dir(building_id: Option<&str>) -> PathBuf {
-    let base = match std::env::var("OPENFDD_RULE_RESULTS_DIR") {
-        Ok(p) => PathBuf::from(p),
-        Err(_) => PathBuf::from(".cache/rule_results"),
-    };
+    let base = rule_results_base();
     match building_id.map(str::trim).filter(|s| !s.is_empty()) {
         Some(bid) => base.join(format!("building={bid}")),
         None => base,

@@ -5,9 +5,31 @@ export const SESSION_SCHEMA = "openfdd_session_v1";
 
 export type RuleParamMap = Record<string, Record<string, number>>;
 
-export function loadLocalRuleParams(): RuleParamMap {
+function scopedKey(buildingId?: string | null): string {
+  const bid = (buildingId ?? "").trim();
+  if (!bid) return RULE_PARAMS_STORAGE_KEY;
+  return `${RULE_PARAMS_STORAGE_KEY}.building=${encodeURIComponent(bid)}`;
+}
+
+/** Migrate legacy global key into the first scoped building bag once. */
+function migrateLegacyIfNeeded(buildingId?: string | null): void {
+  const bid = (buildingId ?? "").trim();
+  if (!bid) return;
   try {
-    const raw = localStorage.getItem(RULE_PARAMS_STORAGE_KEY);
+    const scoped = scopedKey(bid);
+    if (localStorage.getItem(scoped)) return;
+    const legacy = localStorage.getItem(RULE_PARAMS_STORAGE_KEY);
+    if (!legacy) return;
+    localStorage.setItem(scoped, legacy);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadLocalRuleParams(buildingId?: string | null): RuleParamMap {
+  migrateLegacyIfNeeded(buildingId);
+  try {
+    const raw = localStorage.getItem(scopedKey(buildingId));
     if (!raw) return {};
     const parsed = JSON.parse(raw) as RuleParamMap;
     return parsed && typeof parsed === "object" ? parsed : {};
@@ -16,9 +38,12 @@ export function loadLocalRuleParams(): RuleParamMap {
   }
 }
 
-export function saveLocalRuleParams(map: RuleParamMap): void {
+export function saveLocalRuleParams(
+  map: RuleParamMap,
+  buildingId?: string | null,
+): void {
   try {
-    localStorage.setItem(RULE_PARAMS_STORAGE_KEY, JSON.stringify(map));
+    localStorage.setItem(scopedKey(buildingId), JSON.stringify(map));
   } catch {
     /* ignore */
   }
@@ -68,14 +93,15 @@ export function mergeRuleParams(base: RuleParamMap, overlay: RuleParamMap): Rule
 
 /**
  * Effective tuning for FDD runs: package/session_config first (Vibe19 parity),
- * then browser local overrides from Lab sliders.
+ * then browser local overrides from Lab sliders (scoped by building when set).
  */
 export function effectiveRunParams(
   sessionParams: Record<string, unknown> | null | undefined,
   localOverrides?: RuleParamMap,
+  buildingId?: string | null,
 ): RuleParamMap {
   return mergeRuleParams(
     numericParamsFromSession(sessionParams),
-    localOverrides ?? loadLocalRuleParams(),
+    localOverrides ?? loadLocalRuleParams(buildingId),
   );
 }

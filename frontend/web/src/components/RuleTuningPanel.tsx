@@ -198,7 +198,9 @@ export function RuleTuningPanel() {
   const [family, setFamily] = useState<string>("(all)");
   const familyDefaulted = useRef(false);
   const [opsGate, setOpsGate] = useState(true);
-  const [params, setParams] = useState<RuleParamMap>(loadLocalRuleParams);
+  const [params, setParams] = useState<RuleParamMap>(() =>
+    loadLocalRuleParams(buildingId),
+  );
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [runMsg, setRunMsg] = useState<string | null>(null);
   const [runErr, setRunErr] = useState<string | null>(null);
@@ -238,15 +240,18 @@ export function RuleTuningPanel() {
         }
       });
     // Seed Lab sliders from persisted session_config (package / Vibe19 parity),
-    // then apply any local browser overrides on top.
+    // then apply any local browser overrides on top (scoped by building).
+    setParams(loadLocalRuleParams(buildingId));
     void getSessionConfig()
       .then((body) => {
         if (cancelled) return;
         const merged = effectiveRunParams(
           body.config?.params as Record<string, unknown>,
+          loadLocalRuleParams(buildingId),
+          buildingId,
         );
         setParams(merged);
-        saveLocalRuleParams(merged);
+        saveLocalRuleParams(merged, buildingId);
       })
       .catch(() => {
         /* keep localStorage seed */
@@ -255,7 +260,7 @@ export function RuleTuningPanel() {
       cancelled = true;
       if (persistTimer.current) clearTimeout(persistTimer.current);
     };
-  }, []);
+  }, [buildingId]);
 
   const families = useMemo(() => {
     const s = new Set(rules.map((r) => familyOf(r.rule_id)));
@@ -313,12 +318,12 @@ export function RuleTuningPanel() {
           ...prev,
           [ruleId]: { ...(prev[ruleId] ?? {}), [key]: value },
         };
-        saveLocalRuleParams(next);
+        saveLocalRuleParams(next, buildingId);
         schedulePersist(next);
         return next;
       });
     },
-    [schedulePersist],
+    [schedulePersist, buildingId],
   );
 
   const emitUpdated = (detail: Record<string, unknown>) => {
@@ -368,7 +373,7 @@ export function RuleTuningPanel() {
 
   const reset = () => {
     setParams({});
-    saveLocalRuleParams({});
+    saveLocalRuleParams({}, buildingId);
     if (persistTimer.current) clearTimeout(persistTimer.current);
     void persistSession({});
   };

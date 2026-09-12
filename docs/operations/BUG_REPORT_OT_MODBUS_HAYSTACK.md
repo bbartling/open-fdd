@@ -3,7 +3,7 @@
 **Date:** 2026-09-12 (Wave M **ACTIVE** · Wave L **3.5.6 PINNED** held · mode OFF)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in Open-FDD stress)  
 **Tip / pin (ops):** `e80237c0` · VERSION **3.5.6** · health **`3.5.6+e80237c0e758`** · GHCR **central/web/mqtt/fieldbus `sha-e80237c`** · `multi_tenant=false` · `historian_prefix=""` · `active_tenant_id=legacy` · `tenant_budgets=false`  
-**Docs tip (post-pin; ops held):** `2fdc7770` · **`sha-2fdc777`** · Wave M M0 hygiene (this PR) · prior `#916`/`sha-6987ef9` · ENV_LOCK **#915** — **do not re-pin Railway** for docs-only tips  
+**Docs tip (post-pin; ops held):** `3cc96ddf` · **`sha-3cc96dd`** · Wave M M0 **#917** · product tip advances with **3.5.7** Wave M durable PR (ops held until re-pin) · prior `#916`/`sha-6987ef9` — **do not re-pin Railway** for docs-only tips  
 **Rollback pin (Wave K):** `9c3e8b1c` · **`sha-9c3e8b1`** · **`3.4.0+9c3e8b1c30c1`** · MEGAs stress `20260910T021557Z` · docs **#890**  
 **Prior Wave L tip (L5 ops):** `c5b3ccc9` · **`sha-c5b3ccc`** · **`3.5.5+c5b3ccc947c8`** · docs **#906**  
 **Prior Wave L tip (L5 product):** `ecd97a47` · **`sha-ecd97a4`** · **`3.5.5+ecd97a473405`** · product **#904** · docs **#905**  
@@ -57,7 +57,7 @@
 | **weather-local-vs-web-bldg2** | **CLOSED** (3.3.40 / Wave I) | Was: bldg2 bas-vs-web empty | #872 dual OAT catalog; gate09 `bas_vs_web` points>0 | — |
 | **mqtt-bldg2-plot-surface** | **CLOSED** (3.3.40 / Wave I) | Was: MQTT plots empty/wrong roles | Inspect `zone_t` non_null=696; dual OAT live | — |
 | **wave-i-stress-gates** | **CLOSED** (3.3.40 / Wave I) | Was: stress green while basics broken | Gate `09_wave_i_app_test_megas` required; #873 AHU_1 fix | — |
-| **mqtt-monitor-sse-782** | **IN Wave M M1** | Ops MQTT Test Client is 1s poll; no browser→Mosquitto WS | [#782](https://github.com/bbartling/open-fdd/issues/782); Central `GET /api/mqtt/monitor` already works | Wave M M1 — Central JWT SSE |
+| **mqtt-monitor-sse-782** | **CLOSED** (Wave M M1 / 3.5.7) | JWT `GET /api/mqtt/monitor/stream` SSE + Ops EventSource with 1s poll fallback; no browser→Mosquitto WS | [#782](https://github.com/bbartling/open-fdd/issues/782) | — |
 | **df-boundary-repair** | **CLOSED** (Wave J / 3.3.41) | Was: stale pandas/UI docs + incomplete Python-absence / DF provenance | #876 Stage A · #878 policy+image+soak · tip Python-absence PASS | — |
 | **cookbook-parity-875** | **CLOSED** (3.3.41 / #877) | Was: FC3 tol/fan priority; VAV-2 fractional occupancy | #877 · #875 closed · oracle_parity FC3/VAV-2 | — |
 | **mqtt-ingest-stall** | **CLOSED** (3.3.34) | Was: flat `ingest_ok` after mqtt bounce until central redeploy | #860 · tip `sha-9aebf42` · smoke `reports/waveD_railway_smoke_20260906T173032Z/` | — |
@@ -70,7 +70,7 @@
 | **demo-sites-health** | **CLOSED** (Wave H) | Lakeside / B100 / B50 charts+data | Inspect pts: Lakeside HP 8000 / B100 8000 / B50 136; stress Creekside+B100 PASS | Superseded residual → Wave I Lakeside `read_csv` MEGA |
 | **vibe19-operational-gate-lab** | **CLOSED** (3.3.37 / Wave G) | Operational-gate trio SQL-bound | #864 · tip `sha-a40787b` | — |
 | **hybrid-ml-physics-ahu-vav** | **ABANDONED** | Was: physics/RCA / ML / E+ hybrid Wave G | Felt bogus 2026-09-07 | Do not implement |
-| **sql-anomaly-screening** | **IN Wave M M2** | SQL self/peer anomaly | Was PARKED after Lab parity | Wave M M2 lab-safe flag |
+| **sql-anomaly-screening** | **LIVE-lab** (Wave M M2 / 3.5.7) | Lab-safe `OPENFDD_SQL_ANOMALY_SCREENING=1` + `/api/analytics/sql-anomaly/status`; default OFF | flag gated | expand self/peer rules later |
 | **wave-l-l1-tenant-context** | **CLOSED** (Wave L L1 / 3.5.0 / `sha-a11b6cb`) | Control plane + `TenantContext` + mode OFF; health/tenants; gate 11 | #891 · tip smoke `/tmp/wave_l_l1_smoke_20260910T165010Z/` · `multi_tenant=false` | L2 Parquet isolation |
 | **wave-l-l2-parquet-roots** | **CLOSED** (Wave L L2 / 3.5.1 / `sha-2dea571` product · ops tip `sha-af08ac7`) | Tenant-partitioned Parquet roots + DF path scoping; gate 12; mode OFF = hub root | #894 · smoke `/tmp/wave_l_l2_smoke_20260910T230823Z/` + `/tmp/wave_l_l2b_smoke_20260911T005453Z/` · gates 11+12 PASS · flake-fix #897 | L3 MQTTS isolation |
 | **wave-l-l3-mqtts-namespace** | **CLOSED** (Wave L L3 / 3.5.2 / `sha-be65366`) | MQTTS `TopicBuilder` / `parse_topic` + ingest identity provenance; gate 13; mode OFF = legacy `sites/…` | #899 · smoke `/tmp/wave_l_l3_smoke_20260911T032648Z/` · gates 11+12+13 PASS · backup `20260911T030541Z` | L4 Tenant UI/session |
@@ -167,8 +167,8 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 | **Wave I master** | [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) | App-test MEGAs | **RETIRED / CLOSED** |
 | **Wave H** | Cursor post_waveg residual H | Demo charts / UI freshness | **CLOSED** |
 | **Wave G / 3.3.37–3.3.40** | [`openfdd_lab_tuner_parity_program.plan.md`](patch_trains/openfdd_lab_tuner_parity_program.plan.md) | Lab tuner Vibe19 parity | **CLOSED** — #864 · tip `sha-a40787b` |
-| **#782 SSE** | [`mqtt_monitor_sse_782`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) | MQTT monitor SSE | **IN Wave M M1** |
-| **sql-anomaly** | Wave M M2 | SQL self/peer anomaly | **IN Wave M M2** (was PARKED) |
+| **#782 SSE** | [`mqtt_monitor_sse_782`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) | MQTT monitor SSE | **CLOSED** (3.5.7) |
+| **sql-anomaly** | Wave M M2 | SQL self/peer anomaly | **LIVE-lab** (3.5.7 flag) |
 
 **Tuner reference:** Vibe19 UI **~414** vs Lab tip **~444** after Wave G (was ~217) — [`lab_tuners_snapshot_post_wave_g.json`](recovery/lab_tuners_snapshot_post_wave_g.json). G0 matrix: [`recovery/lab_vibe19_tuner_gap_matrix_g0.json`](recovery/lab_vibe19_tuner_gap_matrix_g0.json). RCx: [`RCX_PLOTS_BY_HVAC.md`](../RCX_PLOTS_BY_HVAC.md).
 
@@ -597,7 +597,7 @@ Triage refreshed **2026-09-12** for Wave M kickoff. Historical Wave D–G items 
 | **railway-f1-stress** | **CLOSED** (B100) / **DEFERRED** (B50) / **IN Wave M M5** (AFDD flood gate 12) | B100 PASS retained; B50 package still deferred; AFDD flood required at M5 (budgeted, isolated-candidate default) |
 | **weather-legitimacy-chicago** | **DEFERRED** | Full soak optional; short soak historically green |
 | **railway-ui-fdd-stale** | **CLOSED** (Wave E / tip UX) | Building-scoped FDD chrome on tip |
-| **local-parquet-root-split** | **DEFERRED** → Wave M D2 | Local path split; Railway `/workspace/openfdd` — durable-state inventory |
+| **local-parquet-root-split** | **CLOSED** (Wave M D2 / 3.5.7) | Rule results under parquet/workspace; readiness fails ephemeral prod paths |
 | **lake-credential-rotation** | **CLOSED** | Ops hygiene; session-env only |
 | **deploy-mqtt-acl-mount** | **CLOSED** | Documented ops note; file-not-dir |
 | **vibe19-operational-gate-lab** | **CLOSED** (3.3.37 / Wave G / #864) | Real SQL/session binding |
@@ -606,10 +606,10 @@ Triage refreshed **2026-09-12** for Wave M kickoff. Historical Wave D–G items 
 | **isolated-authenticated-zap-af** | **CLOSED** (Wave C harness) | Disposable AF+OpenAPI; field closeout public baseline |
 | **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` on Railway |
 | **hybrid-ml-physics-ahu-vav** | **ABANDONED** | Replaced by lab-tuner-vibe19-parity |
-| **sql-anomaly-screening** | **IN Wave M M2** | Was PARKED; unpark under Wave M |
+| **sql-anomaly-screening** | **LIVE-lab** (Wave M M2 / 3.5.7) | Lab flag + status API |
 | **lab-tuner-vibe19-parity** | **CLOSED** (3.3.37 / Wave G) | #864 · tip `sha-a40787b` · stress `20260907T183808Z` |
-| **mqtt-monitor-sse-782** | **IN Wave M M1** | Central JWT SSE; no browser→Mosquitto WS |
-| **wave-m-durable-results** | **ACTIVE** (Wave M Track D) | Persistence + auto-results + release orchestrator |
+| **mqtt-monitor-sse-782** | **CLOSED** (Wave M M1 / 3.5.7) | Central JWT SSE; no browser→Mosquitto WS |
+| **wave-m-durable-results** | **IN 3.5.7** (Wave M Track D) | Persistence + auto-results + release orchestrator; M5 stress pending |
 
 
 ## Series wrap draft — Lab tuners 3.3.21→3.3.26

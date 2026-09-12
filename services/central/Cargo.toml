@@ -1,6 +1,6 @@
 [package]
 name = "openfdd-central"
-version = "3.5.6"
+version = "3.5.7"
 edition = "2021"
 license = "MIT"
 description = "Open-FDD Central — MQTTS ingest, canonical Parquet historian, FDD, JWT REST + OpenAPI"
@@ -39,6 +39,7 @@ hex = "0.4"
 utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
 anyhow = "1"
+futures-util = "0.3"
 csv = { workspace = true }
 dashmap = "6"
 tempfile = "3"

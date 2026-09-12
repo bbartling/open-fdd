@@ -7,6 +7,7 @@ mod auth;
 mod canonical_state;
 mod contract;
 mod cutover;
+mod durable_storage;
 mod engineering_bundle;
 mod eplus_runner;
 mod fuel;
@@ -18,6 +19,7 @@ mod models;
 mod mqtt_monitor;
 mod openapi;
 mod routes;
+mod sql_anomaly;
 mod state;
 mod tenant;
 mod tenant_budget;
@@ -41,6 +43,8 @@ use tracing::{info, warn};
 async fn main() -> anyhow::Result<()> {
     logging::init_tracing("info,openfdd_central=info,security_audit=info");
 
+    durable_storage::assert_authoritative_storage()?;
+
     initialize_s3_scope_index().await?;
 
     let state = Arc::new(AppState::new());
@@ -62,6 +66,7 @@ async fn main() -> anyhow::Result<()> {
             Arc::clone(&afdd_runtime),
         ))
         .merge(mqtt_monitor::router(Arc::clone(&state)))
+        .merge(sql_anomaly::router(Arc::clone(&state)))
         .merge(cutover::router())
         .merge(vibe21::router())
         .merge(openapi::router())

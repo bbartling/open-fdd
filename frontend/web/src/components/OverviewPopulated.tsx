@@ -442,7 +442,8 @@ export function OverviewPopulated({
       const prev = await getSessionConfig().catch(() => null);
       const params = effectiveRunParams(
         prev?.config?.params as Record<string, unknown> | undefined,
-        loadLocalRuleParams(),
+        loadLocalRuleParams(buildingId),
+        buildingId,
       );
       await putSessionConfig({
         ...(prev?.config ?? {}),

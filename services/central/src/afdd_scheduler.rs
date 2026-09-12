@@ -25,6 +25,7 @@ use fdd_store::{
     AfddOperatorSchedule, AfddSchedulerCheckpoint, AFDD_SCHEDULER_CHECKPOINT_PATH,
     AFDD_SCHEDULER_RUNTIME_CONFIG_PATH, OPERATOR_INTERVAL_MINUTES, OPERATOR_LOOKBACK_DAYS,
 };
+use uuid::Uuid;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::Mutex as AsyncMutex;
@@ -36,6 +37,7 @@ use crate::state::AppState;
 
 const LATEST_TELEMETRY_WATERMARK_PATH: &str = "state/live-historian/latest-telemetry.json";
 const MAX_RECENT_CYCLES: usize = 50;
+const AFDD_RUNS_PREFIX: &str = "state/afdd/runs";
 
 #[derive(Debug, Deserialize)]
 struct LatestTelemetryWatermark {
@@ -44,8 +46,10 @@ struct LatestTelemetryWatermark {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AfddCycleRecord {
+    pub run_id: String,
     pub scope: String,
     pub trigger: String,
+    pub status: String,
     pub started_at_utc: DateTime<Utc>,
     pub finished_at_utc: DateTime<Utc>,
     pub start_utc: DateTime<Utc>,
@@ -149,10 +153,21 @@ impl AfddSchedulerRuntime {
     }
 
     fn record_cycle(&self, record: AfddCycleRecord) {
+        if let Err(error) = self.persist_run_record(&record) {
+            warn!(%error, run_id = %record.run_id, "failed to persist AFDD run metadata");
+        }
         let mut status = self.status.lock().unwrap();
         status.last_error = record.error.clone();
         status.recent_cycles.push_front(record);
         status.recent_cycles.truncate(MAX_RECENT_CYCLES);
+    }
+
+    fn persist_run_record(&self, record: &AfddCycleRecord) -> Result<()> {
+        let relative = Path::new(AFDD_RUNS_PREFIX).join(format!("{}.json", record.run_id));
+        let bytes = serde_json::to_vec_pretty(record)?;
+        self.store
+            .write(&relative, &bytes)
+            .context("persist AFDD run metadata")
     }
 
     fn scope_lock(&self, scope: &str) -> Arc<AsyncMutex<()>> {
@@ -206,6 +221,7 @@ impl AfddSchedulerRuntime {
         };
 
         let started_at_utc = Utc::now();
+        let run_id = Uuid::new_v4().to_string();
         let payload = json!({
             "mode": "registry",
             "building_id": if scope == "all" { Value::Null } else { json!(scope) },
@@ -213,6 +229,7 @@ impl AfddSchedulerRuntime {
             "end_utc": window.end_utc.to_rfc3339(),
             "afdd_trigger": trigger,
             "afdd_catch_up": window.catch_up,
+            "afdd_run_id": run_id,
             "params": {}
         });
 
@@ -230,9 +247,21 @@ impl AfddSchedulerRuntime {
             .and_then(Value::as_str)
             .map(str::to_string)
             .filter(|value| !value.is_empty());
+        let rules_failed = result.get("rules_failed").and_then(Value::as_u64);
+        // Partial success: registry ok but some rules failed — do not advance checkpoint.
+        let advance_checkpoint = ok && rules_failed.unwrap_or(0) == 0;
+        let status = if !ok {
+            "failed"
+        } else if rules_failed.unwrap_or(0) > 0 {
+            "partial"
+        } else {
+            "completed"
+        };
         let record = AfddCycleRecord {
+            run_id,
             scope: scope.to_string(),
             trigger: trigger.to_string(),
+            status: status.to_string(),
             started_at_utc,
             finished_at_utc: Utc::now(),
             start_utc: window.start_utc,
@@ -245,11 +274,11 @@ impl AfddSchedulerRuntime {
                 error.or_else(|| Some("AFDD registry cycle failed".into()))
             },
             rules_succeeded: result.get("rules_succeeded").and_then(Value::as_u64),
-            rules_failed: result.get("rules_failed").and_then(Value::as_u64),
+            rules_failed,
             rules_skipped: result.get("rules_skipped").and_then(Value::as_u64),
         };
 
-        if ok {
+        if advance_checkpoint {
             self.persist_checkpoint(&AfddSchedulerCheckpoint {
                 last_completed_at_utc: record.finished_at_utc,
                 analyzed_through_utc: record.end_utc,

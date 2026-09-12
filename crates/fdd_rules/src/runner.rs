@@ -51,6 +51,18 @@ fn is_missing_schema_error(msg: &str) -> bool {
         || (m.contains("weather") && m.contains("not found"))
 }
 
+/// Wave M D2 — atomic publish so readers never observe truncated JSON.
+fn write_json_atomic(out_path: &Path, body: &serde_json::Value) -> std::io::Result<()> {
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let bytes = serde_json::to_vec_pretty(body)?;
+    let tmp = out_path.with_extension("json.tmp");
+    std::fs::write(&tmp, &bytes)?;
+    std::fs::rename(&tmp, out_path)?;
+    Ok(())
+}
+
 /// Write a pandas-shaped SKIPPED_MISSING_ROLES marker for a rule that could not
 /// run because required roles/columns were absent.
 fn write_skip_marker(out_path: &Path, missing_roles: &[String], note: &str) -> std::io::Result<()> {
@@ -64,7 +76,7 @@ fn write_skip_marker(out_path: &Path, missing_roles: &[String], note: &str) -> s
         "missing_roles": missing_roles,
         "skipped": true,
     });
-    std::fs::write(out_path, serde_json::to_string_pretty(&body)?)
+    write_json_atomic(out_path, &body)
 }
 
 /// Inject NULL columns for optional roles missing from history via a WITH CTE
@@ -367,9 +379,9 @@ pub async fn run_all_rules_with_overrides(
         );
         match run_sql(&ctx, &sql).await {
             Ok(result) => {
-                std::fs::write(
+                write_json_atomic(
                     &out_path,
-                    serde_json::to_string_pretty(&serde_json::json!({"rows": result.rows}))?,
+                    &serde_json::json!({"rows": result.rows}),
                 )?;
                 timings.push(RuleTiming {
                     rule_id: rule.rule_id.clone(),
@@ -397,7 +409,7 @@ pub async fn run_all_rules_with_overrides(
                     rules_skipped += 1;
                 } else {
                     let err_body = serde_json::json!({"rows": [], "error": msg});
-                    let _ = std::fs::write(&out_path, serde_json::to_string_pretty(&err_body)?);
+                    let _ = write_json_atomic(&out_path, &err_body);
                     timings.push(RuleTiming {
                         rule_id: rule.rule_id.clone(),
                         row_count: 0,

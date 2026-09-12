@@ -74,7 +74,9 @@ python3 "$MANIFEST_PY" create \
   --required 14_wave_l_tenant_ui_session \
   --required 15_wave_l_tenant_budgets \
   --required 16_wave_l_ab_isolation \
-  --required 17_wave_l_legacy_migrate_dry_run
+  --required 17_wave_l_legacy_migrate_dry_run \
+  --required 18_wave_m_durable_session \
+  --required 19_wave_m_afdd_flood
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"
@@ -252,6 +254,29 @@ run_gate "16_wave_l_ab_isolation" "16 Wave L A↔B isolation harness" \
 # --- 17 Wave L legacy migrate dry-run (inventory only; no writes) ---
 run_gate "17_wave_l_legacy_migrate_dry_run" "17 Wave L legacy migrate dry-run" \
   bash "$DIR/28_wave_l_legacy_migrate_dry_run.sh"
+
+# --- 18 Wave M durable session / read-path honesty (gates 1-3) ---
+run_gate "18_wave_m_durable_session" "18 Wave M durable session" \
+  bash "$DIR/30_wave_m_durable_session.sh"
+
+# --- 19 Wave M AFDD flood gate 12 (isolated default; live needs ALLOW_LIVE=1) ---
+# Parent railway stress is an authorized ops window (same class as ZAP) — default ALLOW_LIVE=1 here.
+set +e
+OPENFDD_AFDD_FLOOD_ALLOW_LIVE="${OPENFDD_AFDD_FLOOD_ALLOW_LIVE:-1}" \
+  bash "$DIR/2N_wave_m_afdd_flood.sh" 2>&1 | tee "$ART/19_wave_m_afdd_flood.log"
+FLOOD_RC=${PIPESTATUS[0]}
+set -e
+if [[ "$FLOOD_RC" -eq 0 ]]; then
+  record_gate "19_wave_m_afdd_flood" PASS "19 Wave M AFDD flood" "" \
+    "$ART/19_wave_m_afdd_flood.log" "$ART/2N_wave_m_afdd_flood.json"
+elif [[ "$FLOOD_RC" -eq 2 ]]; then
+  record_gate "19_wave_m_afdd_flood" BLOCKED "19 Wave M AFDD flood" \
+    "isolated-candidate default; set OPENFDD_AFDD_FLOOD_ALLOW_LIVE=1 for authorized live window" \
+    "$ART/19_wave_m_afdd_flood.log" "$ART/2N_wave_m_afdd_flood.json"
+else
+  record_gate "19_wave_m_afdd_flood" FAIL "19 Wave M AFDD flood" "exit=$FLOOD_RC" \
+    "$ART/19_wave_m_afdd_flood.log" "$ART/2N_wave_m_afdd_flood.json"
+fi
 
 # Finalize — SUMMARY generated from recorded gates only
 set +e

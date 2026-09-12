@@ -1432,3 +1432,6 @@ body {
 .sites-ingest-select {
   min-width: 7rem;
 }
+
+/* Wave M D4 update banner */
+.app-shell__update-banner{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;padding:.5rem .75rem;border-bottom:1px solid #334155;font-size:.875rem;}
