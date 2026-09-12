@@ -1,34 +1,101 @@
 //! Read-only MQTT observation API + operator edge-kit download (H9 / AWS-style kits).
+//! Wave M M1: JWT SSE at GET /api/mqtt/monitor/stream (EventSource-friendly query token).
 
-use std::path::PathBuf;
-use std::sync::Arc;
-
-use axum::extract::{Extension, State};
+use axum::extract::{Extension, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware;
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use futures_util::stream::{self, Stream};
 use openfdd_mqtt::{provision_edge_kit_zip, ProvisionRequest};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::convert::Infallible;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
 use tempfile::TempDir;
 
 use crate::auth::{self, AuthUser};
 use crate::state::{AppState, MqttMonitorSnapshot};
 
+#[derive(Debug, Deserialize, Default)]
+struct StreamAuthQuery {
+    /// EventSource cannot set Authorization; accept short-lived JWT here only.
+    #[serde(default)]
+    access_token: Option<String>,
+}
+
 pub fn router(state: Arc<AppState>) -> Router {
-    Router::new()
+    let authed = Router::new()
         .route("/api/mqtt/monitor", get(snapshot))
         .route("/api/mqtt/edge-kits", post(create_edge_kit))
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
             auth::jwt_middleware,
-        ))
+        ));
+
+    Router::new()
+        .route("/api/mqtt/monitor/stream", get(monitor_stream))
+        .merge(authed)
         .with_state(state)
 }
 
 async fn snapshot(State(state): State<Arc<AppState>>) -> Json<MqttMonitorSnapshot> {
     Json(state.mqtt_monitor_snapshot())
+}
+
+fn authorize_monitor(
+    state: &AppState,
+    headers: &HeaderMap,
+    query: &StreamAuthQuery,
+) -> Result<AuthUser, (StatusCode, Json<Value>)> {
+    if let Ok(user) = state.auth.user_from_headers(headers) {
+        return Ok(user);
+    }
+    if let Some(token) = query
+        .access_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    {
+        return state.auth.verify_bearer(token).map_err(|detail| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"ok": false, "error": detail})),
+            )
+        });
+    }
+    Err((
+        StatusCode::UNAUTHORIZED,
+        Json(json!({
+            "ok": false,
+            "error": "Authorization: Bearer <token> or access_token query required"
+        })),
+    ))
+}
+
+async fn monitor_stream(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(query): Query<StreamAuthQuery>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, (StatusCode, Json<Value>)> {
+    let _user = authorize_monitor(&state, &headers, &query)?;
+    let stream = stream::unfold((state, true), |(state, first)| async move {
+        if !first {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+        let snap = state.mqtt_monitor_snapshot();
+        let data = serde_json::to_string(&snap).unwrap_or_else(|_| "{}".into());
+        let event = Event::default().event("mqtt").data(data);
+        Some((Ok::<_, Infallible>(event), (state, false)))
+    });
+    Ok(Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .interval(Duration::from_secs(15))
+            .text("ping"),
+    ))
 }
 
 #[derive(Debug, Deserialize)]

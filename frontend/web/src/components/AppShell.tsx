@@ -68,6 +68,7 @@ export function AppShell({
     display: string;
     collapsed: string;
   } | null>(null);
+  const [updateAvailable, setUpdateAvailable] = useState<string | null>(null);
   const [tenantLabel, setTenantLabel] = useState<string | null>(() => {
     return getStoredActiveTenant();
   });
@@ -153,29 +154,57 @@ export function AppShell({
 
   useEffect(() => {
     let cancelled = false;
-    void apiFetch<{ version?: string }>("/api/health")
-      .then((h) => {
-        if (cancelled) return;
-        const v = String(h.version ?? "").trim();
-        if (v) setRevision(shortRevision(v));
-      })
-      .catch(async () => {
-        try {
-          const r = await fetch("/version.json");
-          if (!r.ok) return;
-          const j = (await r.json()) as {
-            version?: string;
-            git?: string;
-            git_sha?: string;
-          };
-          if (cancelled) return;
-          const sha = String(j.git ?? j.git_sha ?? "").trim();
-          const ver = String(j.version ?? "openfdd-web").trim();
-          setRevision(shortRevision(sha ? `${ver}+${sha}` : ver));
-        } catch {
-          /* keep brand-only */
+    const reloadKey = "openfdd.ui.version_reload_at";
+    void (async () => {
+      let centralVer = "";
+      try {
+        const h = await apiFetch<{ version?: string }>("/api/health");
+        centralVer = String(h.version ?? "").trim();
+        if (!cancelled && centralVer) setRevision(shortRevision(centralVer));
+      } catch {
+        /* fall through to web version.json */
+      }
+      try {
+        const r = await fetch(`/version.json?t=${Date.now()}`, {
+          cache: "no-store",
+        });
+        if (!r.ok) return;
+        const j = (await r.json()) as {
+          version?: string;
+          git?: string;
+          git_sha?: string;
+        };
+        const sha = String(j.git ?? j.git_sha ?? "").trim();
+        const ver = String(j.version ?? "").trim();
+        const webLabel = sha ? `${ver}+${sha}` : ver;
+        if (!cancelled && !centralVer && webLabel) {
+          setRevision(shortRevision(webLabel));
         }
-      });
+        // Controlled update UX: when web assets and central disagree, offer reload
+        // with backoff so unsaved edits are not loop-reloaded.
+        if (!cancelled && centralVer && webLabel) {
+          const centralSha = centralVer.includes("+")
+            ? centralVer.slice(centralVer.indexOf("+") + 1).slice(0, 7)
+            : "";
+          const webSha = sha.slice(0, 7);
+          if (centralSha && webSha && centralSha !== webSha) {
+            setUpdateAvailable(
+              `UI ${webSha} vs central ${centralSha} — reload when ready`,
+            );
+            try {
+              const last = Number(sessionStorage.getItem(reloadKey) || "0");
+              if (Date.now() - last > 5 * 60_000) {
+                // Soft notice only — never auto-reload in a loop.
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      } catch {
+        /* keep brand-only */
+      }
+    })();
     void apiFetch<TenantsListResponse>("/api/tenants")
       .then((t) => {
         if (cancelled) return;
@@ -202,6 +231,39 @@ export function AppShell({
       data-sidebar-collapsed={collapsed ? "true" : "false"}
       style={{ ["--sidebar-width" as any]: `${sidebarWidthPx}px` }}
     >
+      {updateAvailable ? (
+        <div
+          className="app-shell__update-banner"
+          data-testid="app-update-banner"
+          role="status"
+        >
+          <span>{updateAvailable}</span>
+          <button
+            type="button"
+            className="button button--small"
+            onClick={() => {
+              try {
+                sessionStorage.setItem(
+                  "openfdd.ui.version_reload_at",
+                  String(Date.now()),
+                );
+              } catch {
+                /* ignore */
+              }
+              window.location.reload();
+            }}
+          >
+            Reload UI
+          </button>
+          <button
+            type="button"
+            className="button button--small button--ghost"
+            onClick={() => setUpdateAvailable(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
       <aside className="app-sidebar" aria-label="Sites and controls">
         <div className="app-sidebar__brand-row">
           <div className="app-sidebar__brand-block">

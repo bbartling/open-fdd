@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getStoredToken } from "../api/authApi";
 import { apiFetch, apiFetchBlob } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { Button } from "../components/widgets";
@@ -540,9 +541,46 @@ function MqttPanel() {
 
   useEffect(() => {
     if (!listening || paused) return undefined;
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 1000);
-    return () => window.clearInterval(timer);
+    let closed = false;
+    let pollTimer: number | undefined;
+    let es: EventSource | null = null;
+
+    const startPoll = () => {
+      if (pollTimer != null) return;
+      void refresh();
+      pollTimer = window.setInterval(() => void refresh(), 1000);
+    };
+
+    try {
+      const token = getStoredToken();
+      const qs = token
+        ? `?access_token=${encodeURIComponent(token)}`
+        : "";
+      es = new EventSource(`/api/mqtt/monitor/stream${qs}`);
+      es.addEventListener("mqtt", (ev) => {
+        if (closed) return;
+        try {
+          const data = JSON.parse((ev as MessageEvent).data) as MqttMonitorSnapshot;
+          setSnapshot(data);
+          setError(null);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      });
+      es.onerror = () => {
+        es?.close();
+        es = null;
+        if (!closed) startPoll();
+      };
+    } catch {
+      startPoll();
+    }
+
+    return () => {
+      closed = true;
+      es?.close();
+      if (pollTimer != null) window.clearInterval(pollTimer);
+    };
   }, [listening, paused, refresh]);
 
   const messages = useMemo(() => {

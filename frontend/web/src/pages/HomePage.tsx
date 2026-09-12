@@ -63,19 +63,38 @@ export function HomePage() {
         getUiGeneration().catch(() => null),
         // Open mode allows these without a browser token; AuthGate blocks when
         // auth_required and there is no session.
-        listPackageBuildings().catch(() => [] as string[]),
-        listFddEquipment(buildingId || undefined).catch(
-          () => [] as FddEquipmentItem[],
+        listPackageBuildings().then(
+          (b) => ({ ok: true as const, buildings: b }),
+          (err) => ({
+            ok: false as const,
+            error: err instanceof Error ? err.message : String(err),
+            buildings: [] as string[],
+          }),
+        ),
+        listFddEquipment(buildingId || undefined).then(
+          (eq) => ({ ok: true as const, equipment: eq }),
+          (err) => ({
+            ok: false as const,
+            error: err instanceof Error ? err.message : String(err),
+            equipment: [] as FddEquipmentItem[],
+          }),
         ),
       ]);
-      const inventory = inventoryWithoutWeather(eq);
+      const inventoryErrors: string[] = [];
+      if (!blds.ok) inventoryErrors.push(`buildings: ${blds.error}`);
+      if (!eq.ok) inventoryErrors.push(`equipment: ${eq.error}`);
+      if (inventoryErrors.length) {
+        setError(inventoryErrors.join("; "));
+      }
+      const buildingList = blds.buildings;
+      const inventory = inventoryWithoutWeather(eq.equipment);
       setContractVersion(caps.contract.contract_version);
       setReactUi(Boolean(caps.capabilities?.react_ui));
       setUiGeneration(gen?.generation ?? null);
-      setBuildings(blds);
+      setBuildings(buildingList);
       setEquipment(inventory);
-      if (!buildingId && blds[0]) {
-        setQuery({ siteId: blds[0] }, true);
+      if (!buildingId && buildingList[0]) {
+        setQuery({ siteId: buildingList[0] }, true);
       }
       if (buildingId && !equipmentId && inventory[0]) {
         setQuery({ equipment: String(inventory[0].equipment_id) }, true);

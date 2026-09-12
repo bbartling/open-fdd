@@ -89,6 +89,20 @@ cd ~/open-fdd
 # writes ~/openfdd-backups/railway/<UTC>/{central-workspace.tgz,mqtt-certs.tgz,README.txt}
 ```
 
+Wave M D5: backup **fails closed** if the authoritative `openfdd`(+`mqtt`) tar fails — no concatenated `tar .` fallback into the same file.
+
+### One release command (Wave M D5)
+
+```bash
+# Dry-run / preflight (backup + GHCR tip check; no pin mutation)
+./scripts/openfdd_railway_release.sh
+
+# Execute only after dry-run OK and explicit authorization:
+OPENFDD_RELEASE_EXECUTE=1 ./scripts/openfdd_railway_release.sh
+```
+
+**Rollback** (re-pin previous `sha-*`) is separate from **data restore** (unpack backup). Never auto-overwrite newer telemetry with an older backup during failed-deploy recovery.
+
 Optional: `OPENFDD_BACKUP_MQTT_CERTS=0` to skip mqtt certs volume.
 
 ### Re-pin after backup

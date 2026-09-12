@@ -1,5 +1,9 @@
 import type { ApiErrorEnvelope } from "./contract";
 import { newRequestId } from "./requestId";
+import {
+  getSessionGeneration,
+  TOKEN_KEY,
+} from "./authApi";
 
 const REQUEST_ID_HEADER = "x-request-id";
 
@@ -54,14 +58,33 @@ function buildUrl(path: string): string {
   return base ? `${base}${normalized}` : normalized;
 }
 
+/** Clear auth only when this request still owns the current session generation. */
+function clearAuthIfCurrentSession(requestGen: number): void {
+  try {
+    if (getSessionGeneration() !== requestGen) return;
+    sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function redirectToAuth(): void {
+  if (typeof window === "undefined") return;
+  const here = `${window.location.pathname}${window.location.search}`;
+  if (!here.startsWith("/auth") && !here.startsWith("/login")) {
+    window.location.assign(`/auth?from=${encodeURIComponent(here)}`);
+  }
+}
+
 export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
   const requestId = newRequestId();
+  const requestGen = getSessionGeneration();
   let authHeader: Record<string, string> = {};
   try {
-    const token = sessionStorage.getItem("openfdd.auth.token");
+    const token = sessionStorage.getItem(TOKEN_KEY);
     if (token) authHeader = { Authorization: `Bearer ${token}` };
   } catch {
     // ignore
@@ -84,6 +107,7 @@ export async function apiFetch<T>(
     // Skip global 401 redirect when the caller already aborted (navigated away
     // while Overview analytics were still in flight) — otherwise a late 401
     // clears the session and kicks the user to /auth from Actions.
+    // Wave M D4: also ignore 401 if session generation advanced (re-login).
     const aborted = Boolean(init?.signal?.aborted);
     if (
       res.status === 401 &&
@@ -92,16 +116,9 @@ export async function apiFetch<T>(
       !path.includes("/auth/login") &&
       !path.includes("/auth/status")
     ) {
-      try {
-        sessionStorage.removeItem("openfdd.auth.token");
-      } catch {
-        // ignore
-      }
-      const here = `${window.location.pathname}${window.location.search}`;
-      if (!here.startsWith("/auth") && !here.startsWith("/login")) {
-        window.location.assign(
-          `/auth?from=${encodeURIComponent(here)}`,
-        );
+      clearAuthIfCurrentSession(requestGen);
+      if (getSessionGeneration() === requestGen) {
+        redirectToAuth();
       }
     }
     const envelope = parseErrorEnvelope(text);
@@ -140,9 +157,10 @@ export async function apiFetchBlob(
   init?: RequestInit,
 ): Promise<{ blob: Blob; filename: string | null }> {
   const requestId = newRequestId();
+  const requestGen = getSessionGeneration();
   let authHeader: Record<string, string> = {};
   try {
-    const token = sessionStorage.getItem("openfdd.auth.token");
+    const token = sessionStorage.getItem(TOKEN_KEY);
     if (token) authHeader = { Authorization: `Bearer ${token}` };
   } catch {
     // ignore
@@ -161,19 +179,16 @@ export async function apiFetchBlob(
 
   if (!res.ok) {
     const text = await res.text();
+    const aborted = Boolean(init?.signal?.aborted);
     if (
       res.status === 401 &&
+      !aborted &&
       typeof window !== "undefined" &&
       !path.includes("/auth/login")
     ) {
-      try {
-        sessionStorage.removeItem("openfdd.auth.token");
-      } catch {
-        // ignore
-      }
-      const here = `${window.location.pathname}${window.location.search}`;
-      if (!here.startsWith("/auth") && !here.startsWith("/login")) {
-        window.location.assign(`/auth?from=${encodeURIComponent(here)}`);
+      clearAuthIfCurrentSession(requestGen);
+      if (getSessionGeneration() === requestGen) {
+        redirectToAuth();
       }
     }
     const envelope = parseErrorEnvelope(text);
@@ -200,9 +215,12 @@ export async function apiFetchBlob(
     });
   }
 
-  const disposition = res.headers.get("content-disposition") ?? "";
-  const match = /filename="([^"]+)"/i.exec(disposition);
-  const filename = match?.[1] ?? null;
   const blob = await res.blob();
+  const disposition = res.headers.get("content-disposition");
+  let filename: string | null = null;
+  if (disposition) {
+    const match = /filename="?([^";]+)"?/i.exec(disposition);
+    if (match) filename = match[1];
+  }
   return { blob, filename };
 }

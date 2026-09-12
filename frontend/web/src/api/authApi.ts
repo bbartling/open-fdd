@@ -1,6 +1,7 @@
 import { apiFetch } from "./client";
 
-const TOKEN_KEY = "openfdd.auth.token";
+export const TOKEN_KEY = "openfdd.auth.token";
+export const SESSION_GEN_KEY = "openfdd.auth.session_gen";
 
 export interface AuthStatus {
   ok: boolean;
@@ -32,6 +33,27 @@ export interface AuthLoginResponse {
   error?: string | null;
 }
 
+export function getSessionGeneration(): number {
+  try {
+    const raw = sessionStorage.getItem(SESSION_GEN_KEY);
+    const n = raw ? Number(raw) : 0;
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Bump on login / token replace so late 401s from older requests cannot clear the new session. */
+export function bumpSessionGeneration(): number {
+  const next = Date.now();
+  try {
+    sessionStorage.setItem(SESSION_GEN_KEY, String(next));
+  } catch {
+    // ignore
+  }
+  return next;
+}
+
 export function getStoredToken(): string | null {
   try {
     return sessionStorage.getItem(TOKEN_KEY);
@@ -42,8 +64,12 @@ export function getStoredToken(): string | null {
 
 export function setStoredToken(token: string | null): void {
   try {
-    if (!token) sessionStorage.removeItem(TOKEN_KEY);
-    else sessionStorage.setItem(TOKEN_KEY, token);
+    if (!token) {
+      sessionStorage.removeItem(TOKEN_KEY);
+      return;
+    }
+    bumpSessionGeneration();
+    sessionStorage.setItem(TOKEN_KEY, token);
   } catch {
     // ignore
   }
@@ -73,4 +99,9 @@ export async function login(
 
 export function logout(): void {
   setStoredToken(null);
+  try {
+    sessionStorage.removeItem(SESSION_GEN_KEY);
+  } catch {
+    // ignore
+  }
 }
