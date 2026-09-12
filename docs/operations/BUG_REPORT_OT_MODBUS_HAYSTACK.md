@@ -3,7 +3,7 @@
 **Date:** 2026-09-12 (Wave L **3.5.6 PINNED** · mode OFF · L8 closeout · plan TODOs closed except SQL PARKED)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in Open-FDD stress)  
 **Tip / pin (ops):** `e80237c0` · VERSION **3.5.6** · health **`3.5.6+e80237c0e758`** · GHCR **central/web/mqtt/fieldbus `sha-e80237c`** · `multi_tenant=false` · `historian_prefix=""` · `active_tenant_id=legacy` · `tenant_budgets=false`  
-**Docs tip (post-pin; ops held):** `d01957d9` · **`sha-d01957d`** · BUG_REPORT/#910 · plan-mirror/#911 · TODOs sync (this PR) — **do not re-pin Railway** for docs-only tips  
+**Docs tip (post-pin; ops held):** `d01957d9` · **`sha-d01957d`** · BUG_REPORT/#910 · plan-mirror/#911 · TODOs sync **#912** — **do not re-pin Railway** for docs-only tips  
 **Rollback pin (Wave K):** `9c3e8b1c` · **`sha-9c3e8b1`** · **`3.4.0+9c3e8b1c30c1`** · MEGAs stress `20260910T021557Z` · docs **#890**  
 **Prior Wave L tip (L5 ops):** `c5b3ccc9` · **`sha-c5b3ccc`** · **`3.5.5+c5b3ccc947c8`** · docs **#906**  
 **Prior Wave L tip (L5 product):** `ecd97a47` · **`sha-ecd97a4`** · **`3.5.5+ecd97a473405`** · product **#904** · docs **#905**  
