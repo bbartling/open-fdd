@@ -955,6 +955,7 @@ mod tests {
 
     #[test]
     fn load_objects_csv_contains_weather_points() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_var("OPENFDD_FIELDBUS_CONFIG_DIR", repo_config_dir());
         let rows = load_objects_csv(None).expect("objects.csv");
         let names: HashMap<_, _> = rows.iter().map(|r| (r.name.as_str(), r)).collect();
@@ -966,10 +967,12 @@ mod tests {
         assert!(names["outside-air-temperature"]
             .description
             .contains("Open-Meteo"));
+        std::env::remove_var("OPENFDD_FIELDBUS_CONFIG_DIR");
     }
 
     #[test]
     fn point_names_lowercase_hyphenated() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_var("OPENFDD_FIELDBUS_CONFIG_DIR", repo_config_dir());
         for row in load_objects_csv(None).expect("objects.csv") {
             let ok = row
@@ -981,10 +984,12 @@ mod tests {
                 && !row.name.contains("--");
             assert!(ok, "{} is not lowercase-hyphenated", row.name);
         }
+        std::env::remove_var("OPENFDD_FIELDBUS_CONFIG_DIR");
     }
 
     #[test]
     fn weather_and_fault_points_not_commandable() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_var("OPENFDD_FIELDBUS_CONFIG_DIR", repo_config_dir());
         let rows: HashMap<_, _> = load_objects_csv(None)
             .expect("objects.csv")
@@ -1004,10 +1009,12 @@ mod tests {
         ] {
             assert!(!rows[name].commandable, "{name} should not be commandable");
         }
+        std::env::remove_var("OPENFDD_FIELDBUS_CONFIG_DIR");
     }
 
     #[test]
     fn weather_instances_match_openfdd() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_var("OPENFDD_FIELDBUS_CONFIG_DIR", repo_config_dir());
         let rows: HashMap<_, _> = load_objects_csv(None)
             .expect("objects.csv")
@@ -1018,6 +1025,7 @@ mod tests {
         assert_eq!(rows["outside-air-humidity"].instance, 9102);
         assert_eq!(rows["outside-air-dewpoint"].instance, 9103);
         assert_eq!(rows["weather-last-updated"].instance, 9107);
+        std::env::remove_var("OPENFDD_FIELDBUS_CONFIG_DIR");
     }
 
     #[test]
@@ -1093,10 +1101,18 @@ mod tests {
         }
         std::env::set_var("OPENFDD_FIELDBUS_POLL_INTERVAL_SECS", "12.5");
         std::env::set_var("OPENFDD_FIELDBUS_DEV_FAST_POLL", "1");
-        assert!((load_settings().poll.interval_secs - 12.5).abs() < f64::EPSILON);
+        let fast = load_settings().poll.interval_secs;
+        assert!(
+            (fast - 12.5).abs() < 1e-9,
+            "expected 12.5 with DEV_FAST_POLL=1, got {fast}"
+        );
         std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
         std::env::set_var("OPENFDD_FIELDBUS_POLL_INTERVAL_SECS", "12.5");
-        assert!((load_settings().poll.interval_secs - 60.0).abs() < f64::EPSILON);
+        let floored = load_settings().poll.interval_secs;
+        assert!(
+            (floored - 60.0).abs() < 1e-9,
+            "expected 60.0 prod floor without DEV_FAST_POLL, got {floored}"
+        );
         std::env::remove_var("OPENFDD_FIELDBUS_CONFIG_DIR");
         std::env::remove_var("OPENFDD_FIELDBUS_POLL_INTERVAL_SECS");
         std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
@@ -1105,8 +1121,13 @@ mod tests {
 
     #[test]
     fn bacnet_port_defaults_and_overrides() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::remove_var("OPENFDD_FIELDBUS_BACNET_PORT");
         std::env::remove_var("RUSTY_GATEWAY_BACNET_PORT");
+        // Avoid poll-floor races from sibling tests that touch DEV_FAST_POLL.
+        std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
+        std::env::remove_var("OPENFDD_FIELDBUS_POLL_INTERVAL_SECS");
+        std::env::remove_var("RUSTY_GATEWAY_POLL_INTERVAL_SECS");
         let s = load_settings();
         assert_eq!(s.bacnet_server.port, 47808);
         assert_eq!(s.bacnet_client.whois_bind_port, 0);
@@ -1125,6 +1146,7 @@ mod tests {
 
     #[test]
     fn git_sha_from_env() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_var("OPENFDD_FIELDBUS_GIT_SHA", "deadbeef");
         assert_eq!(git_sha(), "deadbeef");
         std::env::remove_var("OPENFDD_FIELDBUS_GIT_SHA");
@@ -1150,6 +1172,7 @@ mod tests {
 
     #[test]
     fn load_rest_devices_repo_example() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_var("OPENFDD_FIELDBUS_CONFIG_DIR", repo_config_dir());
         let devices = load_rest_devices(None, &RestSettings::default()).expect("rest_devices");
         assert_eq!(devices.len(), 1);
@@ -1163,6 +1186,7 @@ mod tests {
         assert_eq!(d.points[0].point_name, "CHW-ST");
         assert_eq!(d.points[0].select, "$.value");
         assert_eq!(d.writes.len(), 1);
+        std::env::remove_var("OPENFDD_FIELDBUS_CONFIG_DIR");
         assert!(
             !d.writes[0].enabled,
             "shipped write binding must stay disabled"
