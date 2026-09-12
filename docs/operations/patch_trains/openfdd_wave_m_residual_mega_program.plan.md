@@ -47,7 +47,7 @@ isProject: false
 | Item | State |
 |------|--------|
 | **Program** | **ACTIVE** - Wave M durable results + residuals |
-| **Prior** | Wave L **CLOSED / PINNED** 3.5.6 · ops `sha-e80237c` · stress `20260912T033836Z` |
+| **Prior** | Wave L **CLOSED / PINNED** 3.5.6 | ops `sha-e80237c` | stress `20260912T033836Z` |
 | **Mode** | `multi_tenant=false` in prod until Stage C checklist |
 | **Step** | Track D (D1->D5) then residuals M1-M4; **ONE** enhanced stress at M5 |
 
@@ -73,4 +73,4 @@ Deploy a qualified update, reopen a job, see correct latest completed analytics/
 
 ## Out of scope
 
-Browser->Mosquitto WS · unbounded live-hub DoS · BUILDING_50 package · zero-downtime promise · K8s without need · Python in product runtime
+Browser->Mosquitto WS | unbounded live-hub DoS | BUILDING_50 package | zero-downtime promise | K8s without need | Python in product runtime

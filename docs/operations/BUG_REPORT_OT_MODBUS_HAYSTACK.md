@@ -26,8 +26,8 @@
 **L3 smoke:** gates **11+12+13 PASS** · `/tmp/wave_l_l3_smoke_20260911T032648Z/` · health `3.5.2+be65366316bb` · `multi_tenant=false` · ingest_ok soak · fieldbus `sha-be65366`  
 **L2 smoke:** gates **11+12 PASS** · `/tmp/wave_l_l2_smoke_20260910T230823Z/` (product `sha-2dea571`) · re-pin smoke `/tmp/wave_l_l2b_smoke_20260911T005453Z/` · health `3.5.1+af08ac7b9889` · `multi_tenant=false` · empty `historian_prefix` · ingest_ok soak  
 **L1 smoke:** gate 11 PASS · `/tmp/wave_l_l1_smoke_20260910T165010Z/` · health `3.5.0+a11b6cb181fc`  
-**Deferred (not Wave L):** Stage C IdP/MFA/dedicated SKUs · [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — **cancelled as Wave L TODOs** (track separately) · sql-anomaly **PARKED** (optional; skipped this closeout)  
-**Plan TODOs:** L0–L8 + hygiene + UX/DM **completed**; Stage C / #782 **cancelled**; sql-anomaly **cancelled/PARKED** — Cursor SoT + repo mirror aligned  
+**Deferred (Wave L carry → Wave M):** Stage C IdP/MFA (M4 late) · [#782](https://github.com/bbartling/open-fdd/issues/782) → **M1** · sql-anomaly → **M2** · AFDD flood → **M5 gate 12**  
+**Plan TODOs:** Wave L CLOSED; Wave M **ACTIVE** — Track D durable results + residuals M1–M4 + enhanced M5  
 **K1:** MEGAs **#884 MERGED** (`5aed663c`). Docs K2/K3 → **#885**.  
 **K1b:** Plot-span **#886 MERGED** (`cee2f4ec`) — smoke on `sha-cee2f4e`.  
 **L1:** TenantContext **#891 MERGED** (`a11b6cb1`) — VERSION **3.5.0** · mode OFF  
@@ -57,7 +57,7 @@
 | **weather-local-vs-web-bldg2** | **CLOSED** (3.3.40 / Wave I) | Was: bldg2 bas-vs-web empty | #872 dual OAT catalog; gate09 `bas_vs_web` points>0 | — |
 | **mqtt-bldg2-plot-surface** | **CLOSED** (3.3.40 / Wave I) | Was: MQTT plots empty/wrong roles | Inspect `zone_t` non_null=696; dual OAT live | — |
 | **wave-i-stress-gates** | **CLOSED** (3.3.40 / Wave I) | Was: stress green while basics broken | Gate `09_wave_i_app_test_megas` required; #873 AHU_1 fix | — |
-| **mqtt-monitor-sse-782** | **DEFERRED** (post–Wave J) | Ops MQTT Test Client is 1s poll; no browser→Mosquitto WS | [#782](https://github.com/bbartling/open-fdd/issues/782); Central `GET /api/mqtt/monitor` already works | [`mqtt_monitor_sse_782`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) — **not** claimed done by Wave J |
+| **mqtt-monitor-sse-782** | **IN Wave M M1** | Ops MQTT Test Client is 1s poll; no browser→Mosquitto WS | [#782](https://github.com/bbartling/open-fdd/issues/782); Central `GET /api/mqtt/monitor` already works | Wave M M1 — Central JWT SSE |
 | **df-boundary-repair** | **CLOSED** (Wave J / 3.3.41) | Was: stale pandas/UI docs + incomplete Python-absence / DF provenance | #876 Stage A · #878 policy+image+soak · tip Python-absence PASS | — |
 | **cookbook-parity-875** | **CLOSED** (3.3.41 / #877) | Was: FC3 tol/fan priority; VAV-2 fractional occupancy | #877 · #875 closed · oracle_parity FC3/VAV-2 | — |
 | **mqtt-ingest-stall** | **CLOSED** (3.3.34) | Was: flat `ingest_ok` after mqtt bounce until central redeploy | #860 · tip `sha-9aebf42` · smoke `reports/waveD_railway_smoke_20260906T173032Z/` | — |
@@ -70,7 +70,7 @@
 | **demo-sites-health** | **CLOSED** (Wave H) | Lakeside / B100 / B50 charts+data | Inspect pts: Lakeside HP 8000 / B100 8000 / B50 136; stress Creekside+B100 PASS | Superseded residual → Wave I Lakeside `read_csv` MEGA |
 | **vibe19-operational-gate-lab** | **CLOSED** (3.3.37 / Wave G) | Operational-gate trio SQL-bound | #864 · tip `sha-a40787b` | — |
 | **hybrid-ml-physics-ahu-vav** | **ABANDONED** | Was: physics/RCA / ML / E+ hybrid Wave G | Felt bogus 2026-09-07 | Do not implement |
-| **sql-anomaly-screening** | **PARKED** | SQL self/peer anomaly | Lab parity first 2026-09-07 | After Wave H demo |
+| **sql-anomaly-screening** | **IN Wave M M2** | SQL self/peer anomaly | Was PARKED after Lab parity | Wave M M2 lab-safe flag |
 | **wave-l-l1-tenant-context** | **CLOSED** (Wave L L1 / 3.5.0 / `sha-a11b6cb`) | Control plane + `TenantContext` + mode OFF; health/tenants; gate 11 | #891 · tip smoke `/tmp/wave_l_l1_smoke_20260910T165010Z/` · `multi_tenant=false` | L2 Parquet isolation |
 | **wave-l-l2-parquet-roots** | **CLOSED** (Wave L L2 / 3.5.1 / `sha-2dea571` product · ops tip `sha-af08ac7`) | Tenant-partitioned Parquet roots + DF path scoping; gate 12; mode OFF = hub root | #894 · smoke `/tmp/wave_l_l2_smoke_20260910T230823Z/` + `/tmp/wave_l_l2b_smoke_20260911T005453Z/` · gates 11+12 PASS · flake-fix #897 | L3 MQTTS isolation |
 | **wave-l-l3-mqtts-namespace** | **CLOSED** (Wave L L3 / 3.5.2 / `sha-be65366`) | MQTTS `TopicBuilder` / `parse_topic` + ingest identity provenance; gate 13; mode OFF = legacy `sites/…` | #899 · smoke `/tmp/wave_l_l3_smoke_20260911T032648Z/` · gates 11+12+13 PASS · backup `20260911T030541Z` | L4 Tenant UI/session |
