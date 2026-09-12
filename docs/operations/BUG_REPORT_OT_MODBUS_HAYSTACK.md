@@ -1,9 +1,9 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
-**Date:** 2026-09-12 (Wave L **3.5.6 PINNED** · mode OFF · L8 closeout · plan TODOs closed except SQL PARKED)  
+**Date:** 2026-09-12 (Wave M **ACTIVE** · Wave L **3.5.6 PINNED** held · mode OFF)  
 **Platform:** Railway hub + bensbench **x86 fieldbus only** (no Raspberry Pi in Open-FDD stress)  
 **Tip / pin (ops):** `e80237c0` · VERSION **3.5.6** · health **`3.5.6+e80237c0e758`** · GHCR **central/web/mqtt/fieldbus `sha-e80237c`** · `multi_tenant=false` · `historian_prefix=""` · `active_tenant_id=legacy` · `tenant_budgets=false`  
-**Docs tip (post-pin; ops held):** `6987ef95` · **`sha-6987ef9`** · tenant ENV_LOCK **#915** (prior docs `sha-c191114` / #912–#914; `sha-d01957d` / #910+#911) — **do not re-pin Railway** for docs-only tips  
+**Docs tip (post-pin; ops held):** `2fdc7770` · **`sha-2fdc777`** · Wave M M0 hygiene (this PR) · prior `#916`/`sha-6987ef9` · ENV_LOCK **#915** — **do not re-pin Railway** for docs-only tips  
 **Rollback pin (Wave K):** `9c3e8b1c` · **`sha-9c3e8b1`** · **`3.4.0+9c3e8b1c30c1`** · MEGAs stress `20260910T021557Z` · docs **#890**  
 **Prior Wave L tip (L5 ops):** `c5b3ccc9` · **`sha-c5b3ccc`** · **`3.5.5+c5b3ccc947c8`** · docs **#906**  
 **Prior Wave L tip (L5 product):** `ecd97a47` · **`sha-ecd97a4`** · **`3.5.5+ecd97a473405`** · product **#904** · docs **#905**  
@@ -26,8 +26,8 @@
 **L3 smoke:** gates **11+12+13 PASS** · `/tmp/wave_l_l3_smoke_20260911T032648Z/` · health `3.5.2+be65366316bb` · `multi_tenant=false` · ingest_ok soak · fieldbus `sha-be65366`  
 **L2 smoke:** gates **11+12 PASS** · `/tmp/wave_l_l2_smoke_20260910T230823Z/` (product `sha-2dea571`) · re-pin smoke `/tmp/wave_l_l2b_smoke_20260911T005453Z/` · health `3.5.1+af08ac7b9889` · `multi_tenant=false` · empty `historian_prefix` · ingest_ok soak  
 **L1 smoke:** gate 11 PASS · `/tmp/wave_l_l1_smoke_20260910T165010Z/` · health `3.5.0+a11b6cb181fc`  
-**Deferred (not Wave L):** Stage C IdP/MFA/dedicated SKUs · [#782](https://github.com/bbartling/open-fdd/issues/782) MQTT monitor SSE — **cancelled as Wave L TODOs** (track separately) · sql-anomaly **PARKED** (optional; skipped this closeout)  
-**Plan TODOs:** L0–L8 + hygiene + UX/DM **completed**; Stage C / #782 **cancelled**; sql-anomaly **cancelled/PARKED** — Cursor SoT + repo mirror aligned  
+**Deferred (Wave L carry → Wave M):** Stage C IdP/MFA (M4 late) · [#782](https://github.com/bbartling/open-fdd/issues/782) → **M1** · sql-anomaly → **M2** · AFDD flood → **M5 gate 12**  
+**Plan TODOs:** Wave L CLOSED; Wave M **ACTIVE** — Track D durable results + residuals M1–M4 + enhanced M5  
 **K1:** MEGAs **#884 MERGED** (`5aed663c`). Docs K2/K3 → **#885**.  
 **K1b:** Plot-span **#886 MERGED** (`cee2f4ec`) — smoke on `sha-cee2f4e`.  
 **L1:** TenantContext **#891 MERGED** (`a11b6cb1`) — VERSION **3.5.0** · mode OFF  
@@ -57,7 +57,7 @@
 | **weather-local-vs-web-bldg2** | **CLOSED** (3.3.40 / Wave I) | Was: bldg2 bas-vs-web empty | #872 dual OAT catalog; gate09 `bas_vs_web` points>0 | — |
 | **mqtt-bldg2-plot-surface** | **CLOSED** (3.3.40 / Wave I) | Was: MQTT plots empty/wrong roles | Inspect `zone_t` non_null=696; dual OAT live | — |
 | **wave-i-stress-gates** | **CLOSED** (3.3.40 / Wave I) | Was: stress green while basics broken | Gate `09_wave_i_app_test_megas` required; #873 AHU_1 fix | — |
-| **mqtt-monitor-sse-782** | **DEFERRED** (post–Wave J) | Ops MQTT Test Client is 1s poll; no browser→Mosquitto WS | [#782](https://github.com/bbartling/open-fdd/issues/782); Central `GET /api/mqtt/monitor` already works | [`mqtt_monitor_sse_782`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) — **not** claimed done by Wave J |
+| **mqtt-monitor-sse-782** | **IN Wave M M1** | Ops MQTT Test Client is 1s poll; no browser→Mosquitto WS | [#782](https://github.com/bbartling/open-fdd/issues/782); Central `GET /api/mqtt/monitor` already works | Wave M M1 — Central JWT SSE |
 | **df-boundary-repair** | **CLOSED** (Wave J / 3.3.41) | Was: stale pandas/UI docs + incomplete Python-absence / DF provenance | #876 Stage A · #878 policy+image+soak · tip Python-absence PASS | — |
 | **cookbook-parity-875** | **CLOSED** (3.3.41 / #877) | Was: FC3 tol/fan priority; VAV-2 fractional occupancy | #877 · #875 closed · oracle_parity FC3/VAV-2 | — |
 | **mqtt-ingest-stall** | **CLOSED** (3.3.34) | Was: flat `ingest_ok` after mqtt bounce until central redeploy | #860 · tip `sha-9aebf42` · smoke `reports/waveD_railway_smoke_20260906T173032Z/` | — |
@@ -70,7 +70,7 @@
 | **demo-sites-health** | **CLOSED** (Wave H) | Lakeside / B100 / B50 charts+data | Inspect pts: Lakeside HP 8000 / B100 8000 / B50 136; stress Creekside+B100 PASS | Superseded residual → Wave I Lakeside `read_csv` MEGA |
 | **vibe19-operational-gate-lab** | **CLOSED** (3.3.37 / Wave G) | Operational-gate trio SQL-bound | #864 · tip `sha-a40787b` | — |
 | **hybrid-ml-physics-ahu-vav** | **ABANDONED** | Was: physics/RCA / ML / E+ hybrid Wave G | Felt bogus 2026-09-07 | Do not implement |
-| **sql-anomaly-screening** | **PARKED** | SQL self/peer anomaly | Lab parity first 2026-09-07 | After Wave H demo |
+| **sql-anomaly-screening** | **IN Wave M M2** | SQL self/peer anomaly | Was PARKED after Lab parity | Wave M M2 lab-safe flag |
 | **wave-l-l1-tenant-context** | **CLOSED** (Wave L L1 / 3.5.0 / `sha-a11b6cb`) | Control plane + `TenantContext` + mode OFF; health/tenants; gate 11 | #891 · tip smoke `/tmp/wave_l_l1_smoke_20260910T165010Z/` · `multi_tenant=false` | L2 Parquet isolation |
 | **wave-l-l2-parquet-roots** | **CLOSED** (Wave L L2 / 3.5.1 / `sha-2dea571` product · ops tip `sha-af08ac7`) | Tenant-partitioned Parquet roots + DF path scoping; gate 12; mode OFF = hub root | #894 · smoke `/tmp/wave_l_l2_smoke_20260910T230823Z/` + `/tmp/wave_l_l2b_smoke_20260911T005453Z/` · gates 11+12 PASS · flake-fix #897 | L3 MQTTS isolation |
 | **wave-l-l3-mqtts-namespace** | **CLOSED** (Wave L L3 / 3.5.2 / `sha-be65366`) | MQTTS `TopicBuilder` / `parse_topic` + ingest identity provenance; gate 13; mode OFF = legacy `sites/…` | #899 · smoke `/tmp/wave_l_l3_smoke_20260911T032648Z/` · gates 11+12+13 PASS · backup `20260911T030541Z` | L4 Tenant UI/session |
@@ -153,21 +153,22 @@ Template + commands: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Check boxes as you go. 
 ### Upcoming trains (Cursor plans — optimized waves 2026-09-06)
 
 **Source of truth:** [`patch_trains/`](patch_trains/) · [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md) · [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
-**Active:** none (Wave L **CLOSED / PINNED**). Wave L plan TODOs done except optional sql-anomaly **PARKED**. Stage C / #782 **out of Wave L** (cancelled TODOs).  
+**Active:** Wave M — durable results + residuals ([`wave_m_residual_mega_0c09093d`](../../../.cursor/plans/wave_m_residual_mega_0c09093d.plan.md) · repo [`openfdd_wave_m_residual_mega_program.plan.md`](patch_trains/openfdd_wave_m_residual_mega_program.plan.md)). Prod `multi_tenant=false` until Stage C checklist.  
 **Last closed:** Wave L [`wave_l_shared_db_mega_master`](../../../.cursor/plans/wave_l_shared_db_mega_master.plan.md) · ops tip `sha-e80237c` / **3.5.6** · stress `20260912T033836Z` **`fully_qualified=true`**. Prior Wave K tip `sha-9c3e8b1` / **3.4.0**.
 
-**This round stress rule:** Wave L L8 complete — cite `reports/nightly-ot-bench_20260912T033836Z/` only for 3.5.6 PINNED claims.
+**This round stress rule:** Mid-wave = smoke. **ONE** enhanced full stress at Wave M M5 (Wave L 00–17 + durable gates 1–12 incl. AFDD flood). Cite Wave L `20260912T033836Z` only for 3.5.6 PINNED claims until M5 lands.
 
 | Rev / wave | In-repo / Cursor plan | Concern | Status |
 |------------|----------------------|---------|--------|
+| **Wave M master** | [`openfdd_wave_m_residual_mega_program.plan.md`](patch_trains/openfdd_wave_m_residual_mega_program.plan.md) | Durable results + release + residuals + enhanced stress | **ACTIVE** |
 | **Wave L master** | [`openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md) | **3.5.x multi-client shared hosting** (tenant Parquet + control plane) | **CLOSED / PINNED** (`sha-e80237c` / 3.5.6; stress `20260912T033836Z`) |
 | **Wave K master** | [`openfdd_wave_k_340_filesystem_pin_program.plan.md`](patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md) | **3.4.0 pin** + MEGAs + historian freeze + Phase-0 ADR | **CLOSED / PINNED** |
 | **Wave J master** | [`wave_j_df_boundary_master`](../../../.cursor/plans/wave_j_df_boundary_master.plan.md) | DF-boundary + #875 | **RETIRED / CLOSED** |
 | **Wave I master** | [`wave_i_app_test_mega_master`](../../../.cursor/plans/wave_i_app_test_mega_master.plan.md) | App-test MEGAs | **RETIRED / CLOSED** |
 | **Wave H** | Cursor post_waveg residual H | Demo charts / UI freshness | **CLOSED** |
 | **Wave G / 3.3.37–3.3.40** | [`openfdd_lab_tuner_parity_program.plan.md`](patch_trains/openfdd_lab_tuner_parity_program.plan.md) | Lab tuner Vibe19 parity | **CLOSED** — #864 · tip `sha-a40787b` |
-| **#782 SSE** | [`mqtt_monitor_sse_782`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) | MQTT monitor SSE | **DEFERRED** (not Wave L) |
-| **sql-anomaly** | — | SQL self/peer anomaly | **PARKED** (not Wave L) |
+| **#782 SSE** | [`mqtt_monitor_sse_782`](../../../.cursor/plans/mqtt_monitor_sse_782.plan.md) | MQTT monitor SSE | **IN Wave M M1** |
+| **sql-anomaly** | Wave M M2 | SQL self/peer anomaly | **IN Wave M M2** (was PARKED) |
 
 **Tuner reference:** Vibe19 UI **~414** vs Lab tip **~444** after Wave G (was ~217) — [`lab_tuners_snapshot_post_wave_g.json`](recovery/lab_tuners_snapshot_post_wave_g.json). G0 matrix: [`recovery/lab_vibe19_tuner_gap_matrix_g0.json`](recovery/lab_vibe19_tuner_gap_matrix_g0.json). RCx: [`RCX_PLOTS_BY_HVAC.md`](../RCX_PLOTS_BY_HVAC.md).
 
@@ -587,26 +588,29 @@ Script: `scripts/nightly-ot-bench/18_volume_restore_smoke.sh`
 
 ## Soft-OPEN / follow-up
 
-Triage as of **post-3.3.33** (2026-09-06). Prior PASS rows are **not** rewritten as enhanced-suite evidence.
+Triage refreshed **2026-09-12** for Wave M kickoff. Historical Wave D–G items below are dispositioned against later CLOSED evidence (do not treat as current OPEN bugs).
 
 | ID | Disposition | Notes |
 |----|-------------|-------|
-| **mqtt-ingest-stall** | **OPEN** → Wave D / 3.3.34 | Sticky `has_telemetry` while `ingest_ok` flat after mqtt peer bounce; ops recovery = central redeploy |
-| **bldg2-overview-signoff** | **DEFERRED** → Wave E | SPA Zone Other shells still need human confirm; API gate already PASS |
-| **railway-f1-stress** | **CLOSED** (B100) / **DEFERRED** (B50/AFDD) | B100 PASS retained; B50 package + AFDD flood still operator-skip |
-| **weather-legitimacy-chicago** | **DEFERRED** → tier-C | Full soak optional; short soak already green historically |
-| **railway-ui-fdd-stale** | **DEFERRED** → Wave E / 3.3.35 | Building-scoped FDD chrome; not a stress-harness gate alone |
-| **local-parquet-root-split** | **DEFERRED** → lab | Local path split; Railway uses `/workspace/openfdd` |
-| **lake-credential-rotation** | **CLOSED** | Ops hygiene done; session-env only |
+| **mqtt-ingest-stall** | **CLOSED** (3.3.34 / Wave D) | #860 · tip `sha-9aebf42` · smoke `reports/waveD_railway_smoke_20260906T173032Z/` |
+| **bldg2-overview-signoff** | **CLOSED** (Wave H) | #868/#869 · Inspect/RCx points>0; Overview auto-load |
+| **railway-f1-stress** | **CLOSED** (B100) / **DEFERRED** (B50) / **IN Wave M M5** (AFDD flood gate 12) | B100 PASS retained; B50 package still deferred; AFDD flood required at M5 (budgeted, isolated-candidate default) |
+| **weather-legitimacy-chicago** | **DEFERRED** | Full soak optional; short soak historically green |
+| **railway-ui-fdd-stale** | **CLOSED** (Wave E / tip UX) | Building-scoped FDD chrome on tip |
+| **local-parquet-root-split** | **DEFERRED** → Wave M D2 | Local path split; Railway `/workspace/openfdd` — durable-state inventory |
+| **lake-credential-rotation** | **CLOSED** | Ops hygiene; session-env only |
 | **deploy-mqtt-acl-mount** | **CLOSED** | Documented ops note; file-not-dir |
-| **vibe19-operational-gate-lab** | **OPEN** → Wave G / 3.3.39 | Real SQL/session binding (no fake sliders) |
-| **mqtt-fieldbus-tip-pin-sync** | **CLOSED** (3.3.33) | Tip pin same-sha central/web/mqtt/fieldbus `sha-25826cf` |
-| **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | FDD inventory/run/series historian parity — Overview MQTT=CSV |
-| **isolated-authenticated-zap-af** | **CLOSED** (Wave C harness) | Disposable AF+OpenAPI PASS; field closeout stays public baseline |
-| **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` on Railway; optional matrix password path remains soft → Wave F |
+| **vibe19-operational-gate-lab** | **CLOSED** (3.3.37 / Wave G / #864) | Real SQL/session binding |
+| **mqtt-fieldbus-tip-pin-sync** | **CLOSED** (3.3.33+) | Same-sha tip pin law retained |
+| **mqtt-overview-spa-parity** | **CLOSED** (3.3.33) | Overview MQTT=CSV historian parity |
+| **isolated-authenticated-zap-af** | **CLOSED** (Wave C harness) | Disposable AF+OpenAPI; field closeout public baseline |
+| **qualification-viewer-login** | **CLOSED** (3.3.28) | `OPENFDD_VIEWER_PASSWORD` on Railway |
 | **hybrid-ml-physics-ahu-vav** | **ABANDONED** | Replaced by lab-tuner-vibe19-parity |
-| **sql-anomaly-screening** | **PARKED** | After Lab parity |
-| **lab-tuner-vibe19-parity** | **OPEN** → Wave G | Vibe19 Lab tuners → production; full Railway+ZAP |
+| **sql-anomaly-screening** | **IN Wave M M2** | Was PARKED; unpark under Wave M |
+| **lab-tuner-vibe19-parity** | **CLOSED** (3.3.37 / Wave G) | #864 · tip `sha-a40787b` · stress `20260907T183808Z` |
+| **mqtt-monitor-sse-782** | **IN Wave M M1** | Central JWT SSE; no browser→Mosquitto WS |
+| **wave-m-durable-results** | **ACTIVE** (Wave M Track D) | Persistence + auto-results + release orchestrator |
+
 
 ## Series wrap draft — Lab tuners 3.3.21→3.3.26
 
