@@ -149,12 +149,7 @@ pub struct TenantBudgetsResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Mutex, MutexGuard};
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-    fn lock_env() -> MutexGuard<'static, ()> {
-        ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
-    }
+    use crate::test_env_lock::lock_env;
 
     #[test]
     fn budgets_disabled_when_multi_tenant_off() {

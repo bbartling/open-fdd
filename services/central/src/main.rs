@@ -21,6 +21,8 @@ mod routes;
 mod state;
 mod tenant;
 mod tenant_budget;
+#[cfg(test)]
+mod test_env_lock;
 mod vibe21;
 mod wattlab_dump;
 
