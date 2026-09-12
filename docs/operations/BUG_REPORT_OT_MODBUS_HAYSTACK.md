@@ -36,7 +36,7 @@
 **L4:** Tenant UI/session **#901 MERGED** (`d67d27b9`) — VERSION **3.5.3** · mode OFF · gate 14  
 **L5:** Per-tenant budgets **#903 MERGED** (`581edf3e` / 3.5.4) + product UX **#904 MERGED** (`ecd97a47` / 3.5.5) + docs/harness **#905 MERGED** (`c5b3ccc9`) · mode OFF · gate 15  
 **L6+L7:** A/B isolation + tip digest + legacy migrate dry-run **#908 MERGED** (`1d15d423` / 3.5.6) + fieldbus env-lock flake **#909 MERGED** (`e80237c0` / **3.5.6 PINNED**) · gates 16–17  
-**L8 docs:** BUG_REPORT PINNED **#910** · plan-mirror overview **#911** · plan TODO/body sync (this PR) — ops tip remains **`sha-e80237c`**  
+**L8 docs:** BUG_REPORT PINNED **#910** · plan-mirror overview **#911** · plan TODO/body sync **#912** — ops tip remains **`sha-e80237c`**  
 **Wait filler:** Vibe13 Part B (separate repo) during Open-FDD CI/Publish  
 **Pis freed (not in Open-FDD stress):** bosspi · BensFakeAhu · Zone1VAV.
 
