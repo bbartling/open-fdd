@@ -106,6 +106,9 @@ pub struct CreateEdgeKitRequest {
     pub broker_host: Option<String>,
     #[serde(default)]
     pub broker_port: Option<u16>,
+    /// Wave N: when set, kit ACL/topics use `tenants/{tid}/buildings/{site}/…`.
+    #[serde(default)]
+    pub tenant_id: Option<String>,
 }
 
 fn mqtt_ca_dir() -> PathBuf {
@@ -172,6 +175,12 @@ async fn create_edge_kit(
         .map(str::to_string)
         .unwrap_or_else(default_broker_host);
     let broker_port = body.broker_port.unwrap_or_else(default_broker_port);
+    let tenant_id = body
+        .tenant_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
     let ca_dir = mqtt_ca_dir();
 
     let result = tokio::task::spawn_blocking(move || {
@@ -192,7 +201,7 @@ async fn create_edge_kit(
             broker_host,
             broker_port,
             ca_dir: ca_override,
-            tenant_id: None,
+            tenant_id,
         })
         .map_err(|e| e.to_string())?;
         // Keep tmp alive until zip bytes are fully owned.
