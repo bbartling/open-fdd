@@ -373,12 +373,10 @@ pub async fn list_tenants(
     let tenants = if !multi_tenant || ctx.hub_admin {
         plane.tenants
     } else {
-        let allowed: std::collections::HashSet<&str> = user
-            .tenant_ids
-            .iter()
-            .map(String::as_str)
-            .collect();
-        plane.tenants
+        let allowed: std::collections::HashSet<&str> =
+            user.tenant_ids.iter().map(String::as_str).collect();
+        plane
+            .tenants
             .into_iter()
             .filter(|t| allowed.contains(t.id.as_str()))
             .collect()

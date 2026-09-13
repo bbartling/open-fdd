@@ -48,7 +48,11 @@ impl UserStore {
     }
 
     /// Authenticate a control-plane user. Returns (subject, role, tenant_ids).
-    pub fn authenticate(&self, username: &str, password: &str) -> Option<(String, Role, Vec<String>)> {
+    pub fn authenticate(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Option<(String, Role, Vec<String>)> {
         let want = username.trim();
         if want.is_empty() {
             return None;
