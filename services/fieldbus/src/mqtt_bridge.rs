@@ -594,9 +594,7 @@ pub async fn spawn_if_configured(
     // Wave N: when OPENFDD_TENANT_ID is set, emit tenants/{tid}/buildings/{bid}/… topics
     // required by central MT-ON ingest. Building defaults to SITE_ID when unset.
     let topics = if let Some(tid) = tenant_id.as_ref() {
-        let bid = building_id
-            .clone()
-            .unwrap_or_else(|| site_id.clone());
+        let bid = building_id.clone().unwrap_or_else(|| site_id.clone());
         TopicBuilder::with_tenant(tid.clone(), bid, edge_id.clone())
     } else {
         TopicBuilder::new(site_id.clone(), edge_id.clone())
