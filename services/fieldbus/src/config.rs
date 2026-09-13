@@ -764,15 +764,8 @@ pub fn load_settings() -> Settings {
     s
 }
 
-fn dev_fast_poll_enabled() -> bool {
-    // Wave N: no production/dev escape hatch for sub-300s polling (protect MS/TP + MQTTS).
-    // Unit tests may still set interval via Settings mutation before finalize.
-    false
-}
-
 /// Wave N: always lock poll (+ MQTT publish default) to FIXED_POLL_INTERVAL_SECS.
 pub(crate) fn finalize_poll_interval(s: &mut Settings) {
-    let _ = dev_fast_poll_enabled();
     s.poll.interval_secs = FIXED_POLL_INTERVAL_SECS;
 }
 

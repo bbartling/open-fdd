@@ -37,10 +37,6 @@ fn env_flag(name: &str) -> bool {
     )
 }
 
-fn dev_fast_poll_enabled() -> bool {
-    false
-}
-
 fn mqtt_cell_mode() -> bool {
     env_flag("OPENFDD_MQTT_CELL_MODE")
 }
