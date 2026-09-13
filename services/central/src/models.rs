@@ -187,6 +187,9 @@ pub struct AuthAgentTokenRequest {
     /// Token lifetime in seconds (clamped 60..=86400). Default 3600.
     #[serde(default)]
     pub ttl_secs: Option<i64>,
+    /// Optional tenant scope for Wave N MT hubs (empty = legacy / hub-wide operator).
+    #[serde(default)]
+    pub tenant_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]

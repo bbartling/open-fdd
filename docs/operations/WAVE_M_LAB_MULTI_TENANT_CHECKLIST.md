@@ -4,9 +4,10 @@ Prod stays `multi_tenant=false` until Stage C checklist (M4). This document is t
 
 ## Refuse silent prod enable
 
-- Do **not** set `OPENFDD_MULTI_TENANT=1` (or equivalent) on the Railway production hub without Stage C sign-off.
-- Health must continue to report `"multi_tenant": false` on prod until then.
+- Do **not** set `OPENFDD_MULTI_TENANT=1` on the Railway production hub without Stage C sign-off **or** an explicit Wave N early-MT waiver recorded in [`BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md`](BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md).
+- Without that waiver, health must report `"multi_tenant": false` on prod.
 - Lab / compose / disposable Railway candidates may enable MT for isolation gates.
+- Wave N (2026-09-13): early prod enable authorized; gate = ACL + audit + MQTTS continuity stress (IdP/MFA still Soft-OPEN).
 
 ## Lab enable steps
 

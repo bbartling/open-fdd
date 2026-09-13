@@ -37,10 +37,6 @@ fn env_flag(name: &str) -> bool {
     )
 }
 
-fn dev_fast_poll_enabled() -> bool {
-    env_flag("OPENFDD_FIELDBUS_DEV_FAST_POLL")
-}
-
 fn mqtt_cell_mode() -> bool {
     env_flag("OPENFDD_MQTT_CELL_MODE")
 }
@@ -50,17 +46,9 @@ fn mqtt_delta_enabled() -> bool {
 }
 
 fn mqtt_publish_interval_secs(settings: &Settings) -> f64 {
-    const PROD_MIN: f64 = 60.0;
-    let default = settings.poll.interval_secs;
-    let raw = std::env::var("OPENFDD_MQTT_PUBLISH_INTERVAL_SECS")
-        .ok()
-        .and_then(|s| s.parse::<f64>().ok())
-        .unwrap_or(default);
-    if dev_fast_poll_enabled() {
-        raw.max(5.0)
-    } else {
-        raw.max(PROD_MIN)
-    }
+    // Wave N: publish cadence matches fixed 300s poll (ignore env overrides).
+    let _ = settings;
+    crate::config::FIXED_POLL_INTERVAL_SECS
 }
 
 /// Site-wide and per-equipment `equipType` stamps for canonical historian typing.
@@ -777,12 +765,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn mqtt_publish_interval_respects_prod_floor() {
+    fn mqtt_publish_interval_fixed_300() {
         let mut s = Settings::default();
         s.poll.interval_secs = 30.0;
-        std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
-        std::env::remove_var("OPENFDD_MQTT_PUBLISH_INTERVAL_SECS");
-        assert!((mqtt_publish_interval_secs(&s) - 60.0).abs() < f64::EPSILON);
+        assert!((mqtt_publish_interval_secs(&s) - 300.0).abs() < f64::EPSILON);
     }
 
     #[test]

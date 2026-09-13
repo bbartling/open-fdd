@@ -370,13 +370,24 @@ pub async fn list_tenants(
         .filter(|b| ctx.allow_building(b))
         .collect();
     let historian_prefix = ctx.historian_prefix().unwrap_or_default();
+    let tenants = if !multi_tenant || ctx.hub_admin {
+        plane.tenants
+    } else {
+        let allowed: std::collections::HashSet<&str> =
+            user.tenant_ids.iter().map(String::as_str).collect();
+        plane
+            .tenants
+            .into_iter()
+            .filter(|t| allowed.contains(t.id.as_str()))
+            .collect()
+    };
     Json(crate::tenant::TenantsListResponse {
         ok: true,
         multi_tenant,
         active_tenant_id: ctx.tenant_id,
         buildings_visible,
         historian_prefix,
-        tenants: plane.tenants,
+        tenants,
     })
 }
 
@@ -438,12 +449,37 @@ pub async fn select_tenant(
     let hub_admin = matches!(user.role, auth::Role::Admin) && user.tenant_ids.is_empty();
     if hub_admin {
         if !plane.tenants.iter().any(|t| t.id == tid) {
+            open_fdd_edge_prototype::auth::audit::log_event(
+                "tenant_select_denied",
+                json!({
+                    "username": user.sub,
+                    "tenant_id": tid,
+                    "reason": "unknown_tenant",
+                }),
+            );
             return Err((
                 StatusCode::FORBIDDEN,
                 Json(json!({"ok": false, "error": "unknown tenant_id"})),
             ));
         }
     } else if !user.tenant_ids.iter().any(|t| t == &tid) {
+        open_fdd_edge_prototype::auth::audit::log_event(
+            "tenant_select_denied",
+            json!({
+                "username": user.sub,
+                "tenant_id": tid,
+                "reason": "not_in_membership",
+                "membership": user.tenant_ids,
+            }),
+        );
+        open_fdd_edge_prototype::auth::audit::log_event(
+            "tenant_access_denied",
+            json!({
+                "username": user.sub,
+                "tenant_id": tid,
+                "surface": "tenants/select",
+            }),
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(json!({"ok": false, "error": "tenant not in membership"})),
@@ -459,6 +495,14 @@ pub async fn select_tenant(
                 Json(json!({"ok": false, "error": "token mint failed"})),
             )
         })?;
+    open_fdd_edge_prototype::auth::audit::log_event(
+        "tenant_select",
+        json!({
+            "username": user.sub,
+            "tenant_id": tid,
+            "hub_admin": hub_admin,
+        }),
+    );
     Ok(Json(TenantSelectResponse {
         ok: true,
         multi_tenant: true,
@@ -661,7 +705,7 @@ pub async fn auth_login(
             error: None,
         }));
     }
-    let (sub, role) = match state
+    let (sub, role, tenant_ids) = match state
         .auth
         .authenticate_password(&body.username, &body.password)
     {
@@ -683,18 +727,21 @@ pub async fn auth_login(
         }
     };
     state.login_record_success(&throttle_key);
-    let token = state.auth.issue_token(&sub, role, 8 * 3600).map_err(|_| {
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": "login failed"})),
-        )
-    })?;
+    let token = state
+        .auth
+        .issue_token_with_tenants(&sub, role, 8 * 3600, &tenant_ids)
+        .map_err(|_| {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": "login failed"})),
+            )
+        })?;
     let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
     let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
     let auth_user = auth::AuthUser {
         sub: sub.clone(),
         role,
-        tenant_ids: vec![],
+        tenant_ids: tenant_ids.clone(),
     };
     let ctx = crate::tenant::TenantContext::resolve(&auth_user, &plane)
         .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&auth_user));
@@ -706,6 +753,8 @@ pub async fn auth_login(
             "ip": ip,
             "request_id": request_id,
             "active_tenant_id": ctx.tenant_id,
+            "tenant_ids": tenant_ids,
+            "hub_admin": ctx.hub_admin,
         }),
     );
     Ok(Json(AuthLoginResponse {
@@ -755,9 +804,20 @@ pub async fn auth_agent_token(
         ));
     }
     let ttl = body.ttl_secs.unwrap_or(3600).clamp(60, 86_400);
+    let tenant_ids: Vec<String> = body
+        .tenant_id
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .map(|s| vec![s])
+        .unwrap_or_default();
+    let active_tenant_id = tenant_ids
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "legacy".into());
     let token = state
         .auth
-        .issue_token("agent", auth::Role::Operator, ttl)
+        .issue_token_with_tenants("agent", auth::Role::Operator, ttl, &tenant_ids)
         .map_err(|_| {
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -771,6 +831,8 @@ pub async fn auth_agent_token(
             "role": "operator",
             "ttl_secs": ttl,
             "request_id": request_id,
+            "tenant_ids": tenant_ids,
+            "active_tenant_id": active_tenant_id,
         }),
     );
     Ok(Json(AuthLoginResponse {
@@ -781,7 +843,7 @@ pub async fn auth_agent_token(
         role: auth::Role::Operator.as_str().into(),
         subject: "agent".into(),
         multi_tenant: crate::tenant::multi_tenant_enabled(),
-        active_tenant_id: Some("legacy".into()),
+        active_tenant_id: Some(active_tenant_id),
         error: None,
     }))
 }
@@ -1556,8 +1618,16 @@ pub async fn csv_import_package(headers: HeaderMap, body: Bytes) -> Json<Value> 
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package import task: {e}")}));
+    let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+    open_fdd_edge_prototype::auth::audit::log_event(
+        "package_import",
+        json!({
+            "ok": ok,
+            "building_id": result.get("building_id"),
+            "surface": "csv/import/package",
+        }),
+    );
     if let Some(ref aid) = action_id {
-        let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
         let status = if ok { "ok" } else { "fail" };
         let building_id = result.get("building_id").cloned().unwrap_or(Value::Null);
         let detail = json!({

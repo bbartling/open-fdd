@@ -249,11 +249,14 @@ pub struct PollSettings {
     pub health_roles_only: bool,
 }
 
+/// Wave N: fixed HVAC health / FDD poll interval (seconds). Not operator-adjustable.
+pub const FIXED_POLL_INTERVAL_SECS: f64 = 300.0;
+
 impl Default for PollSettings {
     fn default() -> Self {
         Self {
             enabled: true,
-            interval_secs: 300.0,
+            interval_secs: FIXED_POLL_INTERVAL_SECS,
             startup_delay_secs: 5.0,
             max_samples: 5000,
             health_roles_only: false,
@@ -659,8 +662,8 @@ pub fn load_settings() -> Settings {
         if let Some(v) = p.enabled {
             s.poll.enabled = v;
         }
-        if let Some(v) = p.interval_secs {
-            s.poll.interval_secs = v;
+        if let Some(_v) = p.interval_secs {
+            // Wave N: TOML [poll].interval_secs ignored; fixed at FIXED_POLL_INTERVAL_SECS.
         }
         if let Some(v) = p.startup_delay_secs {
             s.poll.startup_delay_secs = v;
@@ -719,14 +722,9 @@ pub fn load_settings() -> Settings {
     ]) {
         s.poll.enabled = env_bool(Some(&v), s.poll.enabled);
     }
-    if let Some(v) = env_first(&[
-        "OPENFDD_FIELDBUS_POLL_INTERVAL_SECS",
-        "RUSTY_GATEWAY_POLL_INTERVAL_SECS",
-    ]) {
-        if let Ok(secs) = v.parse() {
-            s.poll.interval_secs = secs;
-        }
-    }
+    // Wave N: ignore OPENFDD_FIELDBUS_POLL_INTERVAL_SECS / TOML overrides — fixed 300s.
+    // Health-role subset remains the bandwidth throttle (not a faster poll).
+
     if let Some(v) = env_first(&["HAYSTACK_BASE_URL", "OPENFDD_HAYSTACK_BASE_URL"]) {
         s.haystack.base_url = v;
     }
@@ -766,22 +764,9 @@ pub fn load_settings() -> Settings {
     s
 }
 
-fn dev_fast_poll_enabled() -> bool {
-    env_bool(
-        env_first(&["OPENFDD_FIELDBUS_DEV_FAST_POLL"]).as_deref(),
-        false,
-    )
-}
-
-/// Production floor: never poll faster than 60s unless dev/test escape hatch is set.
+/// Wave N: always lock poll (+ MQTT publish default) to FIXED_POLL_INTERVAL_SECS.
 pub(crate) fn finalize_poll_interval(s: &mut Settings) {
-    const PROD_MIN_POLL_SECS: f64 = 60.0;
-    if dev_fast_poll_enabled() {
-        return;
-    }
-    if s.poll.interval_secs < PROD_MIN_POLL_SECS {
-        s.poll.interval_secs = PROD_MIN_POLL_SECS;
-    }
+    s.poll.interval_secs = FIXED_POLL_INTERVAL_SECS;
 }
 
 pub fn load_objects_csv(path: Option<&Path>) -> Result<Vec<HostedObjectRow>, String> {
@@ -1056,29 +1041,16 @@ mod tests {
     }
 
     #[test]
-    fn poll_interval_prod_floor_is_60_without_dev_fast_poll() {
+    fn poll_interval_finalize_locks_to_300() {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
         let mut s = Settings::default();
         s.poll.interval_secs = 12.5;
         finalize_poll_interval(&mut s);
-        assert!((s.poll.interval_secs - 60.0).abs() < f64::EPSILON);
+        assert!((s.poll.interval_secs - FIXED_POLL_INTERVAL_SECS).abs() < f64::EPSILON);
     }
 
     #[test]
-    fn poll_interval_dev_fast_poll_skips_prod_floor() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
-        std::env::set_var("OPENFDD_FIELDBUS_DEV_FAST_POLL", "1");
-        let mut s = Settings::default();
-        s.poll.interval_secs = 12.5;
-        finalize_poll_interval(&mut s);
-        assert!((s.poll.interval_secs - 12.5).abs() < f64::EPSILON);
-        std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
-    }
-
-    #[test]
-    fn poll_interval_env_override_through_load_settings() {
+    fn poll_interval_env_override_ignored_through_load_settings() {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1088,7 +1060,7 @@ mod tests {
         std::fs::create_dir_all(&tmp).expect("temp config dir");
         std::fs::write(
             tmp.join("gateway.toml"),
-            "[bacnet_server]\ndevice_instance = 599999\n",
+            "[bacnet_server]\ndevice_instance = 599999\n[poll]\ninterval_secs = 12.5\n",
         )
         .expect("write gateway.toml");
         std::env::set_var("OPENFDD_FIELDBUS_CONFIG_DIR", &tmp);
@@ -1101,17 +1073,10 @@ mod tests {
         }
         std::env::set_var("OPENFDD_FIELDBUS_POLL_INTERVAL_SECS", "12.5");
         std::env::set_var("OPENFDD_FIELDBUS_DEV_FAST_POLL", "1");
-        let fast = load_settings().poll.interval_secs;
+        let locked = load_settings().poll.interval_secs;
         assert!(
-            (fast - 12.5).abs() < 1e-9,
-            "expected 12.5 with DEV_FAST_POLL=1, got {fast}"
-        );
-        std::env::remove_var("OPENFDD_FIELDBUS_DEV_FAST_POLL");
-        std::env::set_var("OPENFDD_FIELDBUS_POLL_INTERVAL_SECS", "12.5");
-        let floored = load_settings().poll.interval_secs;
-        assert!(
-            (floored - 60.0).abs() < 1e-9,
-            "expected 60.0 prod floor without DEV_FAST_POLL, got {floored}"
+            (locked - FIXED_POLL_INTERVAL_SECS).abs() < 1e-9,
+            "expected fixed 300s, got {locked}"
         );
         std::env::remove_var("OPENFDD_FIELDBUS_CONFIG_DIR");
         std::env::remove_var("OPENFDD_FIELDBUS_POLL_INTERVAL_SECS");

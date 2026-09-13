@@ -30,7 +30,7 @@
 | `auth_role_matrix.sh` | anon/admin/operator(/viewer) REST checks |
 | `railway_mcp_accuracy.sh` | MCP↔REST on Railway HTTPS; no local central fallback |
 | `run_wave_c_isolated.sh` | Wave C entry: MQTTS isolation + restore-to-empty + ZAP AF |
-| `run_isolated_zap_af.sh` | Disposable authenticated ZAP AF + OpenAPI (pinned digest); Wave L keeps `OPENFDD_MULTI_TENANT=0` |
+| `run_isolated_zap_af.sh` | Disposable authenticated ZAP AF + OpenAPI (pinned digest). Default `OPENFDD_MULTI_TENANT=0`. Wave N: `OPENFDD_MULTI_TENANT=1` seeds acme/building_100/lakeside_sd tenants on the disposable volume. **Never** activeScan live Railway OT. |
 | `wave_l_ab_isolation_harness.sh` | Tier-2 synthetic Tenant A↔B path + MQTT namespace self-test (no live OT) |
 | `wave_l_tip_digest_scan.sh` | Same-sha tip completeness (+ python-absence) |
 | `../ops/wave_l_legacy_migrate_dry_run.sh` | L7 legacy-tenant inventory dry-run (refuses APPLY on HTTPS) |

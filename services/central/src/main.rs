@@ -25,6 +25,7 @@ mod tenant;
 mod tenant_budget;
 #[cfg(test)]
 mod test_env_lock;
+mod user_store;
 mod vibe21;
 mod wattlab_dump;
 

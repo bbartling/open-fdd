@@ -116,7 +116,7 @@ Aliases: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](docs/migration/vibe19/
 
 Railway is an **experimental cloud path**, not a replacement for the LAN/VPN/OT deployment contract or a claim of production public-internet hardening.
 
-**Agent ops (bensbench):** use the **Railway CLI** for backup + hub tip re-pin — [`openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md`](openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md) · [`docs/operations/RAILWAY_DEPLOYMENT.md`](docs/operations/RAILWAY_DEPLOYMENT.md). Do **not** confuse Railway CLI / Railway MCP with **`openfdd-mcp`** FDD tools. Current product pin: **`sha-e80237c`** / **3.5.6** (Wave L PINNED, `multi_tenant=false`); rollback **`sha-9c3e8b1`** / **3.4.0**.
+**Agent ops (bensbench):** use the **Railway CLI** for backup + hub tip re-pin — [`openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md`](openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md) · [`docs/operations/RAILWAY_DEPLOYMENT.md`](docs/operations/RAILWAY_DEPLOYMENT.md). Do **not** confuse Railway CLI / Railway MCP with **`openfdd-mcp`** FDD tools. Current product pin: **`sha-0bfcd81`** / **3.5.7** (Wave M OPS PINNED, `multi_tenant=false`; M5 Mint stress partial); rollback **`sha-e80237c`** / **3.5.6** (Wave L) or **`sha-9c3e8b1`** / **3.4.0** (Wave K).
 
 - **CSV-only lab:** `openfdd-central` + `openfdd-web`.
 - **Cloud MQTTS hub (preferred when live OT is the goal):** `openfdd-central` + `openfdd-web` + **`openfdd-mqtt`** on Railway private networking; keep **`openfdd-fieldbus` on-prem** publishing MQTTS into the cloud broker. MQTTS is the point of the hub — do not leave mqtt off by default for live sites.
@@ -140,7 +140,7 @@ A Railway one-click template should eventually encode **central → mqtt → web
 - **Never** local `docker build` / heavy Rust compile for stack images. Ship via PR → GH Actions → GHCR `nightly` / `sha-*`.
 - Before pulling new images: prune unused/old digests first, then `./scripts/openfdd_stack_pull.sh …` and `./scripts/openfdd_stack_up.sh … --no-pull`.
 - DataFusion: `OPENFDD_QUERY_MEMORY_MB=256` (or 512) + `OPENFDD_DATAFUSION_SPILL_DIR` — see [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md).
-- BACnet OT on cell edges: default **300 s** poll/publish, **60 s** floor, poll ~**30%** health points only — [`docs/operations/BACNET_OT_POLICY.md`](docs/operations/BACNET_OT_POLICY.md). Hard BACnet debug: [`docs/mcp-agents/companion-rusty-bacnet-mcp.md`](docs/mcp-agents/companion-rusty-bacnet-mcp.md).
+- BACnet OT on cell edges: **fixed 300 s** poll/publish (compiled into fieldbus; not adjustable), poll ~**30%** health points only — [`docs/operations/BACNET_OT_POLICY.md`](docs/operations/BACNET_OT_POLICY.md). **`openfdd-fieldbus` never on Railway/cloud.** Hard BACnet debug: [`docs/mcp-agents/companion-rusty-bacnet-mcp.md`](docs/mcp-agents/companion-rusty-bacnet-mcp.md).
 - Who-Is / discovery: fieldbus binds **`0.0.0.0`** + hosted BACnet/IP port (`whois_bind_port = 0` → `bacnet_server.port`, `SO_REUSEADDR`) so directed-broadcast I-Am is receivable (#526); do not use the unicast `OPENFDD_FIELDBUS_BIND` address for discovery. Unicast reads stay ephemeral — see [`services/fieldbus/AGENTS.md`](services/fieldbus/AGENTS.md).
 - **Pi / arm64 edges:** pull multi-arch `openfdd-fieldbus` (`linux/arm64`); do **not** run central/web soak on Pi 3 (~905 MiB) — fieldbus-only.
 - Details: [`openfdd_agent_spec/CONTAINER_AGENT.md`](openfdd_agent_spec/CONTAINER_AGENT.md).

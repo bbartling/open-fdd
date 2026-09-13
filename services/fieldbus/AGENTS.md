@@ -2,6 +2,13 @@
 
 This file is **durable project context**. Do not remove or bypass these rules when refactoring.
 
+## Wave N OT contract (mandatory)
+
+1. **Never deploy `openfdd-fieldbus` on Railway or any public-cloud host.** OT-LAN / VPN edge only. Cloud hub receives MQTTS; it does not run BACnet.
+2. **Poll and MQTT publish are fixed at 300 seconds** (`FIXED_POLL_INTERVAL_SECS`). Do not reintroduce adjustable poll env/TOML knobs for production.
+3. Prefer **`OPENFDD_POLL_HEALTH_ONLY=1`** (~30% health/cookbook roles) on live MS/TP sites — throttle by point count, not by faster polling.
+4. Private site inventories (ACME, etc.) stay **off GitHub**; refresh tooling stays under gitignored paths.
+
 ## Hosted BACnet device (device 599999 / OpenFDD)
 
 The gateway hosts a BACnet/IP server on UDP **47808** (configurable via `OPENFDD_FIELDBUS_BACNET_PORT`).

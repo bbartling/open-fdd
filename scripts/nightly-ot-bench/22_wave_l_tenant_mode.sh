@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Gate 22 - Wave L tenant mode / control plane smoke (mode OFF until Tier-2).
+# Gate 22 - Wave L/N tenant mode / control plane smoke.
+# Mode OFF: legacy singleton. Mode ON (Wave N): expect acme + building_100 + lakeside_sd.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -21,21 +22,33 @@ mt="$(echo "$health" | jq -r '.multi_tenant // false')"
 ver="$(echo "$health" | jq -r '.version // empty')"
 echo "health multi_tenant=$mt version=$ver" | tee -a "$LOG"
 
-if [[ "$mt" == "true" ]]; then
-  echo "FAIL: multi_tenant must be false until operator enables after Tier-2" | tee -a "$LOG"
-  exit 1
-fi
-
 tenants="$(curl -sS --max-time 30 "${CENTRAL_AUTH_HDR[@]+"${CENTRAL_AUTH_HDR[@]}"}" \
   "$CENTRAL_BASE/api/tenants")"
 echo "$tenants" | tee "$ART/wave_l_tenants.json" >/dev/null
 ok="$(echo "$tenants" | jq -r '.ok // false')"
 mt2="$(echo "$tenants" | jq -r '.multi_tenant // false')"
 n="$(echo "$tenants" | jq -r '(.tenants // []) | length')"
-legacy="$(echo "$tenants" | jq -r '[.tenants[]? | select(.id=="legacy")] | length')"
-echo "tenants ok=$ok multi_tenant=$mt2 n=$n legacy=$legacy" | tee -a "$LOG"
+echo "tenants ok=$ok multi_tenant=$mt2 n=$n" | tee -a "$LOG"
 
-if [[ "$ok" != "true" || "$mt2" == "true" || "$n" -lt 1 || "$legacy" -lt 1 ]]; then
+if [[ "$ok" != "true" ]]; then
+  echo "FAIL: /api/tenants ok!=true" | tee -a "$LOG"
+  exit 1
+fi
+
+if [[ "$mt" == "true" || "$mt2" == "true" ]]; then
+  # Wave N MT ON path
+  for tid in acme building_100 lakeside_sd; do
+    if ! echo "$tenants" | jq -e --arg t "$tid" '[.tenants[]?.id] | index($t)' >/dev/null; then
+      echo "FAIL: MT ON missing tenant $tid" | tee -a "$LOG"
+      exit 1
+    fi
+  done
+  ok "Wave N tenant mode ON + acme/building_100/lakeside_sd PASS"
+  exit 0
+fi
+
+legacy="$(echo "$tenants" | jq -r '[.tenants[]? | select(.id=="legacy")] | length')"
+if [[ "$n" -lt 1 || "$legacy" -lt 1 ]]; then
   echo "FAIL: expected legacy control-plane listing with multi_tenant=false" | tee -a "$LOG"
   exit 1
 fi
