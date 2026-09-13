@@ -21,6 +21,8 @@ Open-FDD documentation is built with [Jekyll](https://jekyllrb.com/) and the [Ju
 
 On each push that touches `docs/**` or the workflow file, CI runs `bundle exec jekyll build` and publishes the `_site` artifact with `deploy-pages`.
 
+Math (ECM calcs): `docs/_includes/head_custom.html` loads **MathJax 3** so `$$...$$` formulas render on Pages (see [`ECM_ENGINEERING_MATH.md`](ECM_ENGINEERING_MATH.md)).
+
 ## Local preview
 
 Requires Ruby 3.2+ and Bundler:

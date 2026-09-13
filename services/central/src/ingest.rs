@@ -411,6 +411,13 @@ fn record_reject(state: &AppState, payload: &[u8], error: &str) {
         "error": error,
         "raw": redact_payload(payload),
     }));
+    open_fdd_edge_prototype::auth::audit::log_event(
+        "mqtt_ingest_reject",
+        serde_json::json!({
+            "reason": error,
+            // Never include raw payload bytes in audit.
+        }),
+    );
 }
 
 #[cfg(test)]

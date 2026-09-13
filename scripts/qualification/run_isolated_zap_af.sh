@@ -56,9 +56,21 @@ docker run -d --name "$CTR" --network "$NET" --network-alias central \
   -e OPENFDD_ADMIN_PASSWORD="$ADMIN_PASS" \
   -e OPENFDD_ALLOW_OPEN_BIND=1 \
   -e OPENFDD_REACT_UI=1 \
-  -e OPENFDD_MULTI_TENANT=0 \
+  -e OPENFDD_MULTI_TENANT="${OPENFDD_MULTI_TENANT:-0}" \
   -v "${VOL}:/workspace" \
   "$CENTRAL_IMAGE" >/dev/null
+
+# Wave N: optional MT-ON candidate seeds control plane before health wait.
+if [[ "${OPENFDD_MULTI_TENANT:-0}" == "1" || "${OPENFDD_MULTI_TENANT:-0}" == "true" ]]; then
+  docker run --rm -v "${VOL}:/workspace" alpine:3.20 \
+    sh -c 'mkdir -p /workspace/openfdd/control_plane && cat > /workspace/openfdd/control_plane/tenants.json <<EOF
+{"tenants":[
+  {"id":"acme","name":"ACME","building_ids":["ACME"]},
+  {"id":"building_100","name":"Building 100","building_ids":["BUILDING_100"]},
+  {"id":"lakeside_sd","name":"Lakeside SD","building_ids":["LAKESIDE_ES"]}
+]}
+EOF'
+fi
 
 deadline=$((SECONDS + 120))
 until docker run --rm --network "$NET" curlimages/curl:8.5.0 \

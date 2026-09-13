@@ -14,7 +14,8 @@
 **Program (CLOSED):** Wave K — **3.4.0 filesystem-historian pin** · tip `sha-9c3e8b1` · stress `20260910T021557Z` **`fully_qualified=true`**  
 **Stress (Wave L L8 closeout):** `reports/nightly-ot-bench_20260912T033836Z/` · **`fully_qualified=true`** (gates **00–17**; **no `SKIP_ZAP`**) · candidate health `3.5.6+e80237c0e758` · mode OFF  
 **Stress (Wave M M5 Mint attempt):** `reports/nightly-ot-bench_20260912T231928Z/` · **`fully_qualified=false`** · PASS: 03–05, 07, 09–12, 14–18 (incl. **18 durable session**) · FAIL/ERROR: 00 edges, 01 synth59 fixtures, 02 gate17, 06 ZAP (docker.sock), 08 MCP (docker.sock), 13 MQTTS edges=0, 19 AFDD flood  
-**Deferred:** Stage C IdP/MFA (M4 late) · Mint fieldbus kit + docker group session + synthetic-59 zip stage → re-run M5 until `fully_qualified=true`  
+**Wave N (MT security + ACME MQTTS):** Track in [`BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md`](BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md) — do not duplicate ACL/audit/tenant rows here.  
+**Deferred:** Stage C IdP/MFA Soft-OPEN under Wave N waiver · Mint fieldbus kit + docker group session + synthetic-59 zip stage → re-run M5 until `fully_qualified=true`  
 **Plan TODOs:** Track D + M1–M3 **landed in 3.5.7**; M4 late; M5 **partial** (do **not** claim full pin until Mint stress green or bensbench re-run)  
 **M1:** #782 SSE **CLOSED** in product (JWT `GET /api/mqtt/monitor/stream`) — close GitHub issue on docs PR  
 **Wait filler:** none  

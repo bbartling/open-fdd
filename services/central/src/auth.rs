@@ -16,6 +16,11 @@ use crate::state::AppState;
 const VALID_ROLES: &[&str] = &["viewer", "operator", "admin"];
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    constant_time_eq_bytes(a, b)
+}
+
+/// Shared with [`crate::user_store`] for file-plane password compare.
+pub(crate) fn constant_time_eq_bytes(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }
@@ -241,14 +246,16 @@ impl AuthConfig {
     }
 
     /// Validate username/password for UI / agent login.
-    /// - `admin` + `OPENFDD_ADMIN_PASSWORD` → Admin
-    /// - `agent` + `OPENFDD_AGENT_PASSWORD` → Operator (FDD AI assistance / MCP)
-    /// - `viewer` + `OPENFDD_VIEWER_PASSWORD` → Viewer (read-only; deployment-wide)
+    /// Returns `(subject, role, tenant_ids)`.
+    /// - `admin` + `OPENFDD_ADMIN_PASSWORD` → Admin, empty tenant_ids (hub_admin when MT ON)
+    /// - `agent` + `OPENFDD_AGENT_PASSWORD` → Operator, empty tenant_ids (deployment-wide; prefer file users when MT ON)
+    /// - `viewer` + `OPENFDD_VIEWER_PASSWORD` → Viewer, empty tenant_ids
+    /// - Wave N file users (`control_plane/users.json`) → role + non-empty tenant_ids
     pub fn authenticate_password(
         &self,
         username: &str,
         password: &str,
-    ) -> Result<(String, Role), String> {
+    ) -> Result<(String, Role, Vec<String>), String> {
         let user = username.trim();
         if user.eq_ignore_ascii_case("admin") {
             let expected = self
@@ -258,7 +265,7 @@ impl AuthConfig {
             if !constant_time_eq(expected.as_bytes(), password.as_bytes()) {
                 return Err("invalid credentials".into());
             }
-            return Ok(("admin".into(), Role::Admin));
+            return Ok(("admin".into(), Role::Admin, vec![]));
         }
         if user.eq_ignore_ascii_case("agent") {
             let expected = self.agent_password.as_ref().ok_or_else(|| {
@@ -267,7 +274,7 @@ impl AuthConfig {
             if !constant_time_eq(expected.as_bytes(), password.as_bytes()) {
                 return Err("invalid credentials".into());
             }
-            return Ok(("agent".into(), Role::Operator));
+            return Ok(("agent".into(), Role::Operator, vec![]));
         }
         if user.eq_ignore_ascii_case("viewer") {
             let expected = self.viewer_password.as_ref().ok_or_else(|| {
@@ -276,7 +283,14 @@ impl AuthConfig {
             if !constant_time_eq(expected.as_bytes(), password.as_bytes()) {
                 return Err("invalid credentials".into());
             }
-            return Ok(("viewer".into(), Role::Viewer));
+            return Ok(("viewer".into(), Role::Viewer, vec![]));
+        }
+        let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+        if let Some((sub, role, tids)) =
+            crate::user_store::UserStore::load_or_empty(std::path::Path::new(&workspace))
+                .authenticate(user, password)
+        {
+            return Ok((sub, role, tids));
         }
         Err("invalid credentials".into())
     }
@@ -440,17 +454,22 @@ mod tests {
             agent_password: Some("agent-pw".into()),
             viewer_password: Some("viewer-pw".into()),
         };
-        let (sub, role) = cfg.authenticate_password("agent", "agent-pw").unwrap();
+        let (sub, role, tids) = cfg.authenticate_password("agent", "agent-pw").unwrap();
         assert_eq!(sub, "agent");
         assert_eq!(role, Role::Operator);
+        assert!(tids.is_empty());
         assert!(cfg.authenticate_password("agent", "admin-pw").is_err());
         assert!(cfg.authenticate_password("admin", "agent-pw").is_err());
-        let (admin_sub, admin_role) = cfg.authenticate_password("admin", "admin-pw").unwrap();
+        let (admin_sub, admin_role, admin_tids) =
+            cfg.authenticate_password("admin", "admin-pw").unwrap();
         assert_eq!(admin_sub, "admin");
         assert_eq!(admin_role, Role::Admin);
-        let (viewer_sub, viewer_role) = cfg.authenticate_password("viewer", "viewer-pw").unwrap();
+        assert!(admin_tids.is_empty());
+        let (viewer_sub, viewer_role, viewer_tids) =
+            cfg.authenticate_password("viewer", "viewer-pw").unwrap();
         assert_eq!(viewer_sub, "viewer");
         assert_eq!(viewer_role, Role::Viewer);
+        assert!(viewer_tids.is_empty());
         assert!(cfg.authenticate_password("viewer", "admin-pw").is_err());
     }
 

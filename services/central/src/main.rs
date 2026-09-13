@@ -4,6 +4,7 @@ mod actions;
 mod afdd_scheduler;
 mod analytics;
 mod auth;
+mod user_store;
 mod canonical_state;
 mod contract;
 mod cutover;

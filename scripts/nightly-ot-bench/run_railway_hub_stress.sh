@@ -76,7 +76,9 @@ python3 "$MANIFEST_PY" create \
   --required 16_wave_l_ab_isolation \
   --required 17_wave_l_legacy_migrate_dry_run \
   --required 18_wave_m_durable_session \
-  --required 19_wave_m_afdd_flood
+  --required 19_wave_m_afdd_flood \
+  --required 20_wave_n_tenant_acl \
+  --required 21_wave_n_mqtts_continuity
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"
@@ -258,6 +260,24 @@ run_gate "17_wave_l_legacy_migrate_dry_run" "17 Wave L legacy migrate dry-run" \
 # --- 18 Wave M durable session / read-path honesty (gates 1-3) ---
 run_gate "18_wave_m_durable_session" "18 Wave M durable session" \
   bash "$DIR/30_wave_m_durable_session.sh"
+
+# --- 20 Wave N tenant ACL (ACME / B100 / lakeside_sd) — requires MT ON + users ---
+if [[ "${WAVE_N_ACL:-1}" == "1" ]]; then
+  run_gate "20_wave_n_tenant_acl" "20 Wave N tenant ACL" \
+    bash "$DIR/31_wave_n_tenant_acl.sh"
+else
+  record_gate "20_wave_n_tenant_acl" SKIPPED "20 Wave N tenant ACL" \
+    "WAVE_N_ACL=0"
+fi
+
+# --- 21 Wave N MQTTS continuity soak ---
+if [[ "${WAVE_N_CONTINUITY:-1}" == "1" ]]; then
+  run_gate "21_wave_n_mqtts_continuity" "21 Wave N MQTTS continuity" \
+    env TELEMETRY_LIVE="${TELEMETRY_LIVE:-1}" bash "$DIR/32_wave_n_mqtts_continuity.sh"
+else
+  record_gate "21_wave_n_mqtts_continuity" SKIPPED "21 Wave N MQTTS continuity" \
+    "WAVE_N_CONTINUITY=0"
+fi
 
 # --- 19 Wave M AFDD flood gate 12 (isolated default; live needs ALLOW_LIVE=1) ---
 # Parent railway stress is an authorized ops window (same class as ZAP) — default ALLOW_LIVE=1 here.
