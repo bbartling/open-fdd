@@ -87,23 +87,6 @@ impl TenantContext {
         self.building_ids.iter().any(|b| b == building_id)
     }
 
-    /// Same as [`Self::allow_building`], auditing denials for pen-test trails.
-    pub fn allow_building_audited(&self, building_id: &str, subject: &str, surface: &str) -> bool {
-        let ok = self.allow_building(building_id);
-        if !ok {
-            open_fdd_edge_prototype::auth::audit::log_event(
-                "tenant_access_denied",
-                serde_json::json!({
-                    "username": subject,
-                    "building_id": building_id,
-                    "active_tenant_id": self.tenant_id,
-                    "surface": surface,
-                }),
-            );
-        }
-        ok
-    }
-
     /// Resolve Parquet historian root for this context.
     ///
     /// Mode OFF ? `base` unchanged (today's single-hub layout).

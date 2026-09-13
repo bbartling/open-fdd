@@ -211,11 +211,6 @@ impl AuthConfig {
         self.secret.is_some()
     }
 
-    /// Mint a JWT for username/role. Requires `OPENFDD_JWT_SECRET`.
-    pub fn issue_token(&self, sub: &str, role: Role, ttl_secs: i64) -> Result<String, String> {
-        self.issue_token_with_tenants(sub, role, ttl_secs, &[])
-    }
-
     /// Mint a JWT with optional tenant membership claims (Wave L L4+).
     pub fn issue_token_with_tenants(
         &self,
