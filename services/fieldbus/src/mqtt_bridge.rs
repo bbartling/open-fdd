@@ -568,6 +568,10 @@ pub async fn spawn_if_configured(
             "OPENFDD_BUILDING_ID is unset; MQTT telemetry will omit canonical building identity and H7 persistence will fail closed"
         );
     }
+    let tenant_id = std::env::var("OPENFDD_TENANT_ID")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
     let port: u16 = std::env::var("OPENFDD_MQTT_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -581,10 +585,20 @@ pub async fn spawn_if_configured(
     let delta_mode = mqtt_delta_enabled();
     info!(
         publish_interval_secs = interval,
-        cell_mode, delta_mode, "mqtt bridge publish profile"
+        cell_mode,
+        delta_mode,
+        tenant_id = tenant_id.as_deref(),
+        "mqtt bridge publish profile"
     );
 
-    let topics = TopicBuilder::new(site_id.clone(), edge_id.clone());
+    // Wave N: when OPENFDD_TENANT_ID is set, emit tenants/{tid}/buildings/{bid}/… topics
+    // required by central MT-ON ingest. Building defaults to SITE_ID when unset.
+    let topics = if let Some(tid) = tenant_id.as_ref() {
+        let bid = building_id.clone().unwrap_or_else(|| site_id.clone());
+        TopicBuilder::with_tenant(tid.clone(), bid, edge_id.clone())
+    } else {
+        TopicBuilder::new(site_id.clone(), edge_id.clone())
+    };
     let command_ctx = Arc::new(CommandContext {
         site_id: site_id.clone(),
         edge_id: edge_id.clone(),
