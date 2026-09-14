@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { OverviewPopulated } from "./OverviewPopulated";
+import { OverviewPopulated, clearOverviewSiteCacheForTests } from "./OverviewPopulated";
 
 const emptyOverview = {
   ok: true,
@@ -188,6 +188,7 @@ function renderOverview() {
 
 describe("OverviewPopulated metric isolation", () => {
   beforeEach(() => {
+    clearOverviewSiteCacheForTests();
     fetchCentralOverview.mockClear();
     fetchCentralOverview.mockResolvedValue(emptyOverview);
   });
@@ -286,11 +287,26 @@ describe("OverviewPopulated metric isolation", () => {
     });
   });
 
+  it("reuses cached overview on remount without a second DataFusion fan-out", async () => {
+    const first = renderOverview();
+    await waitFor(() => {
+      expect(fetchCentralOverview).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("overview-charts-ready")).toBeTruthy();
+    });
+    first.unmount();
+    renderOverview();
+    await waitFor(() => {
+      expect(screen.getByTestId("overview-charts-ready")).toBeTruthy();
+    });
+    expect(fetchCentralOverview).toHaveBeenCalledTimes(1);
+  });
+
   it("does not render an Overview equipment picker", async () => {
     renderOverview();
     await waitFor(() => {
-      expect(screen.getByTestId("overview-idle-hint")).toBeTruthy();
+      expect(screen.getByTestId("overview-populated")).toBeTruthy();
     });
     expect(screen.queryByTestId("overview-equipment-select")).toBeNull();
+    expect(screen.queryByTestId("overview-inspect-eq")).toBeNull();
   });
 });
