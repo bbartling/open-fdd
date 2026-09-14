@@ -201,7 +201,7 @@ test.describe("react product workflows (real stack)", () => {
     page,
   }) => {
     await page.goto("/rcx");
-    await expect(page.getByTestId("rcx-page")).toBeVisible({ timeout: 20_000 });
+    await waitForGatedPage(page, "rcx-page", "/rcx → rcx-page");
     const hosts = page.locator("[data-download-filename]");
     const n = await hosts.count();
     expect(n, "RCx page always mounts at least one Plotly host").toBeGreaterThan(0);
