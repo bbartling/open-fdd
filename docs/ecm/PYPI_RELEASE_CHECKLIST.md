@@ -1,3 +1,9 @@
+---
+title: PyPI release checklist
+parent: PyPI agent tools
+nav_order: 7
+---
+
 # Open-FDD PyPI Release Checklist — ECM Engineering
 
 - [ ] `open_fdd/ecm_engineering/` merged

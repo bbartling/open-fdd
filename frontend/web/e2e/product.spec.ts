@@ -196,4 +196,20 @@ test.describe("react product workflows (real stack)", () => {
       expect(name).not.toBe("newplot");
     }
   });
+
+  test("RCx Plotly hosts expose type-based PNG stems (never newplot)", async ({
+    page,
+  }) => {
+    await page.goto("/rcx");
+    await waitForGatedPage(page, "rcx-page", "/rcx → rcx-page");
+    const hosts = page.locator("[data-download-filename]");
+    const n = await hosts.count();
+    expect(n, "RCx page always mounts at least one Plotly host").toBeGreaterThan(0);
+    for (let i = 0; i < n; i++) {
+      const name = await hosts.nth(i).getAttribute("data-download-filename");
+      expect(name).toBeTruthy();
+      expect(name).not.toBe("newplot");
+      expect(name!.toLowerCase()).toMatch(/^rcx/);
+    }
+  });
 });

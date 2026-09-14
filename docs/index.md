@@ -50,9 +50,10 @@ Open-FDD is intended for **LAN, VPN, or OT-network deployment**. Do not expose t
 3. [Architecture]({{ site.baseurl }}/architecture/) — services, data flow, storage
 4. [API Reference]({{ site.baseurl }}/api/) — REST route map
 5. [MCP & Agents]({{ site.baseurl }}/mcp-agents/) — Cursor / OpenClaw integration
-6. [Operations]({{ site.baseurl }}/operations/) — [release channels]({{ site.baseurl }}/operations/release-channels.html), backup, GHCR
-7. [Security]({{ site.baseurl }}/operations/security.html) — auth, secrets, BACnet write safety
-8. [Documentation site]({{ site.baseurl }}/operations/github-pages.html) — GitHub Pages build (Actions-only)
+6. [PyPI agent tools]({{ site.baseurl }}/ecm/) — ECM workbooks + pandas oracle (`pip install open-fdd`) — not GHCR FDD
+7. [Operations]({{ site.baseurl }}/operations/) — [release channels]({{ site.baseurl }}/operations/release-channels.html), backup, GHCR
+8. [Security]({{ site.baseurl }}/operations/security.html) — auth, secrets, BACnet write safety
+9. [Documentation site]({{ site.baseurl }}/operations/github-pages.html) — GitHub Pages build (Actions-only)
 
 ## Stack images
 

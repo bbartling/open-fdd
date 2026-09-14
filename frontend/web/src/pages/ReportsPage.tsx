@@ -613,9 +613,7 @@ export function ReportsPage() {
             figure={figure}
             loading={loading}
             downloadFilename={
-              equipmentId && ruleId
-                ? `${equipmentId}_${ruleId}_series`
-                : "fdd_series"
+              ruleId ? `fdd_${ruleId}_series` : "fdd_series"
             }
             testId="plots-chart"
           />

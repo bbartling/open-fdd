@@ -1,3 +1,9 @@
+---
+title: Agent rules (ECM)
+parent: PyPI agent tools
+nav_order: 4
+---
+
 # AGENTS.md — Open-FDD ECM Engineering
 
 ## Mission

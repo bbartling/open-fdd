@@ -8,7 +8,10 @@ import {
   DataTable,
   Checkbox,
 } from "../components/widgets";
-import { PlotlyHost } from "../components/widgets/PlotlyHost";
+import {
+  PlotlyHost,
+  plotDownloadStem,
+} from "../components/widgets/PlotlyHost";
 import { useSessionQuery } from "../session";
 import { getPackageMapping } from "../api/mappingApi";
 import {
@@ -451,6 +454,11 @@ export function RcxPage() {
           figure={figure}
           loading={loading}
           height={420}
+          downloadFilename={plotDownloadStem(
+            "rcx",
+            family || undefined,
+            presetId || "preset",
+          )}
           testId="rcx-plot"
         />
         {donutFigure ? (
@@ -459,6 +467,7 @@ export function RcxPage() {
             label="Comfort donut"
             figure={donutFigure}
             height={320}
+            downloadFilename="rcx_comfort_donut"
             testId="rcx-comfort-donut"
           />
         ) : null}
@@ -468,6 +477,7 @@ export function RcxPage() {
             label="Worst zones timeseries"
             figure={companionFigure}
             height={360}
+            downloadFilename="rcx_worst_zones"
             testId="rcx-worst-zones"
           />
         ) : null}

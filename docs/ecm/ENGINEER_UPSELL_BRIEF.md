@@ -1,3 +1,9 @@
+---
+title: Engineer upsell brief
+parent: PyPI agent tools
+nav_order: 6
+---
+
 # Engineer upsell brief — open-fdd + PyPI (vibe freeze)
 
 **Date:** 2026-07-30  
