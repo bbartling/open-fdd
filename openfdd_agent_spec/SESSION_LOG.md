@@ -1,4 +1,18 @@
+## 2026-09-14 — Wave N data-path ACL (3.5.10)
+
+- Live hub on `sha-1f94cdf` / 3.5.9: ACL gate 31 list+select PASS, but FDD series + package mapping still returned foreign buildings (hub-root Parquet, no `allow_building` on data routes).
+- Product 3.5.10: `deny_if_building_out_of_scope` on FDD equipment/results/series/run, CSV mapping/buildings, analytics (+ fuel); gate 31 probes mapping+series 403.
+- Soft-OPEN: CSV package trees still under hub root (no `tenants/{tid}/` migrate yet); owned-building reads still work via hub root after ACL; Stage C IdP/MFA.
+
+## 2026-09-14 — Wave N OPS PINNED (3.5.9 / sha-1f94cdf)
+
+- #922 squash-merged: mqtt entrypoint key-perms + fieldbus first MQTT publish; Optional BACnet CI wait ≥300s.
+- Railway backup `20260914T023409Z`; hub+ACME re-pin `sha-1f94cdf`; health `3.5.9+1f94cdf06f3e`; `multi_tenant=true`.
+- Live gates: ACL trio PASS; MQTTS continuity PASS (`ingest_ok` 1→2). Tip Actions all success (incl. Optional BACnet).
+- Soft-OPEN: Stage C IdP/MFA; CSV tenant reload if empty; ZAP AF; metric FDD; MSTP addressing; Wave M mint residual.
+
 ## 2026-09-14 — Wave N MQTTS recovery notes (pre-3.5.9)
+
 
 - Live hub `sha-b2537de` / 3.5.8 · MT ON · central MQTTS CONNECT OK after: (1) `server.key.pem` mosquitto-readable, (2) server cert **SAN** for `openfdd-mqtt` + `.railway.internal` + `reseau.proxy.rlwy.net`.
 - Product follow-up **3.5.9**: mqtt entrypoint chmod/chown certs; fieldbus first MQTT publish immediate (CI Optional BACnet was red on tip).

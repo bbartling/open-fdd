@@ -513,6 +513,65 @@ pub async fn select_tenant(
     }))
 }
 
+fn resolve_tenant_context(state: &AppState, headers: &HeaderMap) -> crate::tenant::TenantContext {
+    let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+    let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
+    let user = state
+        .auth
+        .user_from_headers(headers)
+        .unwrap_or_else(|_| auth::AuthUser::dev_anonymous());
+    crate::tenant::TenantContext::resolve(&user, &plane)
+        .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&user))
+}
+
+/// Wave N: fail-closed building gate for historian/FDD/analytics when MT ON.
+fn deny_if_building_out_of_scope(
+    state: &AppState,
+    headers: &HeaderMap,
+    building_id: Option<&str>,
+) -> Option<(StatusCode, Json<Value>)> {
+    if !crate::tenant::multi_tenant_enabled() {
+        return None;
+    }
+    let ctx = resolve_tenant_context(state, headers);
+    let bid = building_id.map(str::trim).filter(|s| !s.is_empty());
+    match bid {
+        Some(b) if ctx.allow_building(b) => None,
+        Some(b) => {
+            open_fdd_edge_prototype::auth::audit::log_event(
+                "tenant_building_denied",
+                json!({
+                    "building_id": b,
+                    "active_tenant_id": ctx.tenant_id,
+                    "hub_admin": ctx.hub_admin,
+                }),
+            );
+            Some((
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "ok": false,
+                    "error": "building not in tenant scope",
+                    "building_id": b,
+                })),
+            ))
+        }
+        None if ctx.hub_admin => None,
+        None => {
+            open_fdd_edge_prototype::auth::audit::log_event(
+                "tenant_building_required",
+                json!({ "active_tenant_id": ctx.tenant_id }),
+            );
+            Some((
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "ok": false,
+                    "error": "building_id required in multi-tenant mode",
+                })),
+            ))
+        }
+    }
+}
+
 fn resolve_request_tenant(
     state: &AppState,
     headers: &HeaderMap,
@@ -1302,22 +1361,22 @@ pub async fn fdd_run(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(body): Json<FddRunRequest>,
-) -> Json<Value> {
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     if let Err(err) =
         enforce_tenant_budget(&state, &headers, crate::tenant_budget::BudgetKind::FddRun)
     {
-        return Json(json!({
+        return Ok(Json(json!({
             "ok": false,
             "error": err,
             "budget_exceeded": true
-        }));
+        })));
     }
     let has_sql = body.sql.as_ref().is_some_and(|s| !s.trim().is_empty());
     if has_sql {
-        return Json(json!({
+        return Ok(Json(json!({
             "ok": false,
             "error": "raw SQL rejected on /api/fdd/run; use mode=registry with typed params"
-        }));
+        })));
     }
     // Resolve building_id from top-level field, or nested `params.building_id`
     // (the hunt curl nests it inside params). Trim/blank guarded so an empty
@@ -1329,6 +1388,9 @@ pub async fn fdd_run(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string);
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id.as_deref()) {
+        return Err(deny);
+    }
     // Hunt / nightly bench may nest rule_ids under params; hoist so
     // run_registry's top-level filter applies (else all rules → timeout → {}).
     let rule_ids = body.rule_ids.clone().or_else(|| {
@@ -1424,7 +1486,7 @@ pub async fn fdd_run(
         }
     }
 
-    Json(result)
+    Ok(Json(result))
 }
 
 pub async fn fdd_registry_rules() -> Json<Value> {
@@ -1453,12 +1515,30 @@ impl BuildingScopeQuery {
     }
 }
 
-pub async fn fdd_equipment(Query(q): Query<BuildingScopeQuery>) -> Json<Value> {
-    Json(open_fdd_edge_prototype::fdd::registry_api::equipment_response(q.scoped()))
+pub async fn fdd_equipment(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<BuildingScopeQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
+        return Err(deny);
+    }
+    Ok(Json(
+        open_fdd_edge_prototype::fdd::registry_api::equipment_response(q.scoped()),
+    ))
 }
 
-pub async fn fdd_results(Query(q): Query<BuildingScopeQuery>) -> Json<Value> {
-    Json(open_fdd_edge_prototype::fdd::registry_api::results_response(q.scoped()))
+pub async fn fdd_results(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<BuildingScopeQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
+        return Err(deny);
+    }
+    Ok(Json(
+        open_fdd_edge_prototype::fdd::registry_api::results_response(q.scoped()),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1469,7 +1549,16 @@ pub struct FddSeriesQuery {
     building_id: Option<String>,
 }
 
-pub async fn fdd_series(Query(query): Query<FddSeriesQuery>) -> Json<Value> {
+pub async fn fdd_series(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(query): Query<FddSeriesQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
     let result = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::fdd::registry_api::series_response(
             &query.equipment_id,
@@ -1479,7 +1568,7 @@ pub async fn fdd_series(Query(query): Query<FddSeriesQuery>) -> Json<Value> {
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("series task failed: {e}")}));
-    Json(result)
+    Ok(Json(result))
 }
 
 pub async fn fdd_roles() -> Json<Value> {
@@ -1673,7 +1762,11 @@ pub struct PackageMappingQuery {
 }
 
 /// Inventory + validation for ingested package column→role maps (P1-M4-03).
-pub async fn csv_import_package_mapping(Query(q): Query<PackageMappingQuery>) -> Json<Value> {
+pub async fn csv_import_package_mapping(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<PackageMappingQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let Some(building_id) = q
         .building_id
         .as_deref()
@@ -1681,11 +1774,14 @@ pub async fn csv_import_package_mapping(Query(q): Query<PackageMappingQuery>) ->
         .filter(|s| !s.is_empty())
         .map(str::to_string)
     else {
-        return Json(json!({
+        return Ok(Json(json!({
             "ok": false,
             "error": "building_id query parameter required",
-        }));
+        })));
     };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
     let equipment_id = q
         .equipment_id
         .as_deref()
@@ -1700,17 +1796,35 @@ pub async fn csv_import_package_mapping(Query(q): Query<PackageMappingQuery>) ->
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package mapping task: {e}")}));
-    Json(result)
+    Ok(Json(result))
 }
 
 /// List ingested package buildings under workspace csv_buildings.
-pub async fn csv_import_package_buildings() -> Json<Value> {
+pub async fn csv_import_package_buildings(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Json<Value> {
     let result = tokio::task::spawn_blocking(
         open_fdd_edge_prototype::csv_ingest::package::list_package_buildings_handler,
     )
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package buildings task: {e}")}));
-    Json(result)
+    if !crate::tenant::multi_tenant_enabled() {
+        return Json(result);
+    }
+    let ctx = resolve_tenant_context(&state, &headers);
+    let mut filtered = result;
+    if let Some(arr) = filtered.get_mut("buildings").and_then(|v| v.as_array_mut()) {
+        arr.retain(|b| {
+            let id = b
+                .get("building_id")
+                .or_else(|| b.get("id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            id.is_empty() || ctx.allow_building(id)
+        });
+    }
+    Json(filtered)
 }
 
 pub async fn csv_plan(Json(body): Json<Value>) -> Json<Value> {
@@ -2371,120 +2485,273 @@ async fn jobs_attach_eplus_artifact(
 // Analytics (Milestone C) — typed envelopes, no Plotly JSON
 // ---------------------------------------------------------------------------
 
-async fn analytics_runtime(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+async fn analytics_runtime(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
     let env = analytics::runtime::handle_async(&req).await;
-    Json(json!({
+    Ok(Json(json!({
         "ok": true,
         "analytics": env.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_vav_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_vav_health(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::vav_health::handle_async(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_ahu_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_ahu_health(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_ahu(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_ahu_temperature_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_ahu_temperature_health(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_ahu_temperature(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_ahu_pressure_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_ahu_pressure_health(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_ahu_pressure(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_ahu_economizer_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_ahu_economizer_health(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_ahu_economizer(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_chiller_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_chiller_health(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_chiller(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_cooling_tower_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_cooling_tower_health(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_cooling_tower(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_sensor_faults(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_sensor_faults(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_sensor_faults(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_pid_hunting(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_pid_hunting(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_pid_hunting(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_boiler_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_boiler_health(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_boiler(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_hp_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_hp_health(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_hp(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_zone_other_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_zone_other_health(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_zone_other(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_sensor_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_sensor_health(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::sensor_health::handle_async(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_schedule(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_schedule(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::schedule::handle_async(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_mechanical_cooling(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_mechanical_cooling(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::mechanical_cooling::handle_async(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_bas_vs_web_oat(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+async fn analytics_bas_vs_web_oat(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
     let max_points = req.query.max_points.unwrap_or(2000);
     let env = match analytics::historian::bas_vs_web_from_history(
         req.query.equipment_ids.as_deref(),
@@ -2513,13 +2780,22 @@ async fn analytics_bas_vs_web_oat(Json(req): Json<AnalyticsRequest>) -> Json<Val
             )
         }
     };
-    Json(json!({
+    Ok(Json(json!({
         "ok": true,
         "analytics": env.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_inspect(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+async fn analytics_inspect(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
     let eq = req
         .query
         .equipment_ids
@@ -2559,45 +2835,90 @@ async fn analytics_inspect(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
             )
         }
     };
-    Json(json!({
+    Ok(Json(json!({
         "ok": true,
         "analytics": env.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_economizer(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_economizer(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::economizer::handle_async(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_rcx_ahu(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_rcx_ahu(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::rcx::handle_ahu_async(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_rcx_vav(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_rcx_vav(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::rcx::handle_vav_async(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_rcx_chiller(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_rcx_chiller(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant::handle_chiller_async(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_rcx_boiler(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_rcx_boiler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant::handle_boiler_async(&req).await.to_json(),
-    }))
+    })))
 }
 
 async fn analytics_rcx_presets_list() -> Json<Value> {
@@ -2607,7 +2928,16 @@ async fn analytics_rcx_presets_list() -> Json<Value> {
     }))
 }
 
-async fn analytics_rcx_preset(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+async fn analytics_rcx_preset(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
     let preset_id = req
         .query
         .query_version
@@ -2683,21 +3013,39 @@ async fn analytics_rcx_preset(Json(req): Json<AnalyticsRequest>) -> Json<Value> 
             })),
         );
     }
-    Json(json!({
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics_json,
         "action_id": action_id,
-    }))
+    })))
 }
 
-async fn analytics_metering(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
-    Json(json!({
+async fn analytics_metering(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "analytics": analytics::metering::handle_async(&req).await.to_json(),
-    }))
+    })))
 }
 
-async fn analytics_setpoints(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+async fn analytics_setpoints(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
     let env = match analytics::historian::setpoints_from_history(
         req.query.equipment_ids.as_deref(),
         req.query.building_id.as_deref(),
@@ -2717,10 +3065,19 @@ async fn analytics_setpoints(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
             vec![format!("setpoints failed: {e}")],
         ),
     };
-    Json(json!({"ok": true, "analytics": env.to_json()}))
+    Ok(Json(json!({"ok": true, "analytics": env.to_json()})))
 }
 
-async fn analytics_diurnal(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+async fn analytics_diurnal(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
     let env = match analytics::historian::diurnal_from_history(
         req.query.equipment_ids.as_deref(),
         req.query.building_id.as_deref(),
@@ -2740,10 +3097,19 @@ async fn analytics_diurnal(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
             vec![format!("diurnal failed: {e}")],
         ),
     };
-    Json(json!({"ok": true, "analytics": env.to_json()}))
+    Ok(Json(json!({"ok": true, "analytics": env.to_json()})))
 }
 
-async fn analytics_topology(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+async fn analytics_topology(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
     let env =
         match analytics::historian::topology_from_history(req.query.building_id.as_deref()).await {
             Ok(Some(env)) => analytics::finalize_historian(&req, env, analytics::QV_TOPOLOGY),
@@ -2759,10 +3125,19 @@ async fn analytics_topology(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
                 vec![format!("topology failed: {e}")],
             ),
         };
-    Json(json!({"ok": true, "analytics": env.to_json()}))
+    Ok(Json(json!({"ok": true, "analytics": env.to_json()})))
 }
 
-async fn analytics_sensor_stats(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+async fn analytics_sensor_stats(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
     let fan_state = req
         .series
         .as_ref()
@@ -2788,10 +3163,18 @@ async fn analytics_sensor_stats(Json(req): Json<AnalyticsRequest>) -> Json<Value
             vec![format!("sensor-stats failed: {e}")],
         ),
     };
-    Json(json!({"ok": true, "analytics": env.to_json()}))
+    Ok(Json(json!({"ok": true, "analytics": env.to_json()})))
 }
 
-async fn analytics_fuel(Json(req): Json<FuelRequest>) -> Json<Value> {
+async fn analytics_fuel(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<FuelRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, req.building_id.as_deref())
+    {
+        return Err(deny);
+    }
     let qv = req.query_version.clone().unwrap_or_else(|| "fuel".into());
     let campus = req.campus_id.clone();
     let action_id = actions::start_action(
@@ -2828,10 +3211,10 @@ async fn analytics_fuel(Json(req): Json<FuelRequest>) -> Json<Value> {
             obj.insert("action_id".into(), json!(aid));
         }
     }
-    Json(json!({
+    Ok(Json(json!({
         "ok": result.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
         "analytics": result,
-    }))
+    })))
 }
 
 /// Fuel campus ZIP import (campus.json + bill CSVs, or Liberty_* CSV layout).
