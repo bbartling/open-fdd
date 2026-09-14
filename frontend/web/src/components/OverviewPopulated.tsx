@@ -340,7 +340,7 @@ export function OverviewPopulated({
   }, [buildingId]);
 
   useEffect(() => {
-    void getSessionConfig()
+    void getSessionConfig(buildingId)
       .then((body) => {
         const p = body.config?.params ?? {};
         const vav = p["VAV-1"] ?? {};
@@ -379,7 +379,7 @@ export function OverviewPopulated({
     setScheduleNote(null);
     try {
       saveStoredSchedule(week, tz);
-      const prev = await getSessionConfig().catch(() => null);
+      const prev = await getSessionConfig(buildingId).catch(() => null);
       const dayKey: Record<string, string> = {
         Monday: "mon",
         Tuesday: "tue",
@@ -416,7 +416,7 @@ export function OverviewPopulated({
           },
         },
       };
-      await putSessionConfig(config);
+      await putSessionConfig(config, buildingId);
       setScheduleNote(
         `Schedule saved (tz ${tz}, ${bareMin} occ h/wk). Calendar persisted to session config.`,
       );
@@ -439,17 +439,20 @@ export function OverviewPopulated({
     try {
       // Same tuning source as Vibe19: package session_config.params (confirm_min=0
       // etc.), then Lab localStorage overrides.
-      const prev = await getSessionConfig().catch(() => null);
+      const prev = await getSessionConfig(buildingId).catch(() => null);
       const params = effectiveRunParams(
         prev?.config?.params as Record<string, unknown> | undefined,
         loadLocalRuleParams(buildingId),
         buildingId,
       );
-      await putSessionConfig({
-        ...(prev?.config ?? {}),
-        schema_version: prev?.config?.schema_version ?? SESSION_SCHEMA,
-        params: { ...(prev?.config?.params ?? {}), ...params },
-      });
+      await putSessionConfig(
+        {
+          ...(prev?.config ?? {}),
+          schema_version: prev?.config?.schema_version ?? SESSION_SCHEMA,
+          params: { ...(prev?.config?.params ?? {}), ...params },
+        },
+        buildingId,
+      );
       const result = await runFdd({
         mode: "registry",
         building_id: buildingId,

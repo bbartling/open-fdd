@@ -279,6 +279,15 @@ else
     "WAVE_N_CONTINUITY=0"
 fi
 
+# --- 22 Wave O admin + data-model/session ACL ---
+if [[ "${WAVE_O_ADMIN_ACL:-1}" == "1" ]]; then
+  run_gate "22_wave_o_admin_datamodel_acl" "22 Wave O admin + data-model ACL" \
+    bash "$DIR/33_wave_o_admin_datamodel_acl.sh"
+else
+  record_gate "22_wave_o_admin_datamodel_acl" SKIPPED "22 Wave O admin + data-model ACL" \
+    "WAVE_O_ADMIN_ACL=0"
+fi
+
 # --- 19 Wave M AFDD flood gate 12 (isolated default; live needs ALLOW_LIVE=1) ---
 # Parent railway stress is an authorized ops window (same class as ZAP) — default ALLOW_LIVE=1 here.
 set +e

@@ -96,6 +96,23 @@ pub fn router(state: Arc<AppState>) -> Router {
 
     let protected = Router::new()
         .route("/api/auth/agent-token", post(auth_agent_token))
+        .route(
+            "/api/admin/users",
+            get(admin_list_users).put(admin_upsert_user),
+        )
+        .route("/api/admin/users/{username}", delete(admin_delete_user))
+        .route(
+            "/api/admin/users/{username}/disabled",
+            post(admin_set_user_disabled),
+        )
+        .route(
+            "/api/admin/tenants",
+            get(admin_list_tenants_cp).put(admin_upsert_tenant),
+        )
+        .route(
+            "/api/admin/tenants/{tenant_id}",
+            delete(admin_delete_tenant),
+        )
         .route("/api/edges", get(list_edges))
         .route("/api/edges/{edge_id}", get(get_edge))
         .route("/api/edges/{edge_id}/discovery", get(get_edge_discovery))
@@ -522,6 +539,231 @@ fn resolve_tenant_context(state: &AppState, headers: &HeaderMap) -> crate::tenan
         .unwrap_or_else(|_| auth::AuthUser::dev_anonymous());
     crate::tenant::TenantContext::resolve(&user, &plane)
         .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&user))
+}
+
+fn require_hub_admin(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<auth::AuthUser, (StatusCode, Json<Value>)> {
+    let user = state.auth.user_from_headers(headers).map_err(|e| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    let hub_admin = matches!(user.role, auth::Role::Admin) && user.tenant_ids.is_empty();
+    if !hub_admin {
+        tracing::info!(
+            target: "security_audit",
+            event = "admin_cp_denied",
+            subject = %user.sub,
+            "non-hub-admin blocked from /api/admin"
+        );
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "hub admin required"})),
+        ));
+    }
+    Ok(user)
+}
+
+fn workspace_path() -> std::path::PathBuf {
+    std::path::PathBuf::from(
+        std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()),
+    )
+}
+
+pub async fn admin_list_users(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let _admin = require_hub_admin(&state, &headers)?;
+    let store = crate::user_store::UserStore::load_or_empty(&workspace_path());
+    Ok(Json(json!({
+        "ok": true,
+        "users": store.public_list(),
+    })))
+}
+
+pub async fn admin_upsert_user(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<crate::admin_cp::UserUpsertRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let admin = require_hub_admin(&state, &headers)?;
+    let ws = workspace_path();
+    let mut store = crate::user_store::UserStore::load_or_empty(&ws);
+    let rec = crate::user_store::UserRecord {
+        username: body.username,
+        role: body.role,
+        tenant_ids: body.tenant_ids,
+        password_env: body.password_env,
+        password: body.password,
+        disabled: body.disabled,
+    };
+    store.upsert(rec).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    store.save(&ws).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    tracing::info!(
+        target: "security_audit",
+        event = "admin_user_upsert",
+        actor = %admin.sub,
+        "control-plane user upsert"
+    );
+    Ok(Json(json!({"ok": true, "users": store.public_list()})))
+}
+
+#[derive(Deserialize)]
+pub struct AdminDisabledBody {
+    pub disabled: bool,
+}
+
+pub async fn admin_set_user_disabled(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(username): Path<String>,
+    Json(body): Json<AdminDisabledBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let admin = require_hub_admin(&state, &headers)?;
+    let ws = workspace_path();
+    let mut store = crate::user_store::UserStore::load_or_empty(&ws);
+    store.set_disabled(&username, body.disabled).map_err(|e| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    store.save(&ws).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    tracing::info!(
+        target: "security_audit",
+        event = "admin_user_disabled",
+        actor = %admin.sub,
+        username = %username,
+        disabled = body.disabled,
+        "control-plane user disabled flag"
+    );
+    Ok(Json(json!({"ok": true, "users": store.public_list()})))
+}
+
+pub async fn admin_delete_user(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(username): Path<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let admin = require_hub_admin(&state, &headers)?;
+    let ws = workspace_path();
+    let mut store = crate::user_store::UserStore::load_or_empty(&ws);
+    store.remove(&username).map_err(|e| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    store.save(&ws).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    tracing::info!(
+        target: "security_audit",
+        event = "admin_user_delete",
+        actor = %admin.sub,
+        username = %username,
+        "control-plane user deleted"
+    );
+    Ok(Json(json!({"ok": true, "users": store.public_list()})))
+}
+
+pub async fn admin_list_tenants_cp(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let _admin = require_hub_admin(&state, &headers)?;
+    let plane = crate::tenant::ControlPlane::load_or_legacy(&workspace_path());
+    Ok(Json(json!({
+        "ok": true,
+        "tenants": plane.tenants,
+    })))
+}
+
+pub async fn admin_upsert_tenant(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<crate::admin_cp::TenantUpsertRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let admin = require_hub_admin(&state, &headers)?;
+    let ws = workspace_path();
+    let mut plane = crate::tenant::ControlPlane::load_or_legacy(&ws);
+    plane
+        .upsert_tenant(crate::tenant::TenantRecord {
+            id: body.id,
+            name: body.name,
+            building_ids: body.building_ids,
+        })
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"ok": false, "error": e})),
+            )
+        })?;
+    plane.save(&ws).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    tracing::info!(
+        target: "security_audit",
+        event = "admin_tenant_upsert",
+        actor = %admin.sub,
+        "control-plane tenant upsert"
+    );
+    Ok(Json(json!({"ok": true, "tenants": plane.tenants})))
+}
+
+pub async fn admin_delete_tenant(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(tenant_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let admin = require_hub_admin(&state, &headers)?;
+    let ws = workspace_path();
+    let mut plane = crate::tenant::ControlPlane::load_or_legacy(&ws);
+    plane.remove_tenant(&tenant_id).map_err(|e| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    plane.save(&ws).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    tracing::info!(
+        target: "security_audit",
+        event = "admin_tenant_delete",
+        actor = %admin.sub,
+        tenant_id = %tenant_id,
+        "control-plane tenant deleted"
+    );
+    Ok(Json(json!({"ok": true, "tenants": plane.tenants})))
 }
 
 /// Wave N: fail-closed building gate for historian/FDD/analytics when MT ON.
@@ -1615,18 +1857,46 @@ pub async fn clear_actions() -> (StatusCode, Json<Value>) {
     }
 }
 
-/// `openfdd_session_v1` session/fault settings (#515) — persisted per workspace.
-pub async fn fdd_session_config_get() -> Json<Value> {
-    Json(open_fdd_edge_prototype::fdd::session_config::get_session_config())
+#[derive(Debug, Deserialize)]
+pub struct SessionConfigQuery {
+    #[serde(default)]
+    pub building_id: Option<String>,
 }
 
-pub async fn fdd_session_config_put(Json(body): Json<Value>) -> Json<Value> {
+/// `openfdd_session_v1` session/fault settings (#515) — persisted per workspace.
+/// Wave O9: `building_id` query/body is ACL-gated when multi-tenant is on.
+pub async fn fdd_session_config_get(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<SessionConfigQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
+        return Err(deny);
+    }
+    Ok(Json(
+        open_fdd_edge_prototype::fdd::session_config::get_session_config(),
+    ))
+}
+
+pub async fn fdd_session_config_put(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let building_id = body
+        .get("building_id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id) {
+        return Err(deny);
+    }
     let result = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::fdd::session_config::put_session_config(&body)
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("session config task: {e}")}));
-    Json(result)
+    Ok(Json(result))
 }
 
 #[utoipa::path(

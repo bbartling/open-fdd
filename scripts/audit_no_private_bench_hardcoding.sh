@@ -52,6 +52,10 @@ is_allowed() {
     edge/src/main.rs) return 0 ;;
     scripts/bench_5007_long_smoke.sh) return 0 ;;
     scripts/nightly-ot-bench/*) return 0 ;;
+    # BACpypes3 diagnose-only (not product OT) — private bench bind examples OK here.
+    scripts/ops/bacpypes3_whois_smoke.py) return 0 ;;
+    scripts/ops/local_bacnet_ot_bench.sh) return 0 ;;
+    docs/operations/LOCAL_BACNET_BACPYPE3_BENCH.md) return 0 ;;
     scripts/audit_no_private_bench_hardcoding.sh) return 0 ;;
     scripts/audit_no_hardcoding.sh) return 0 ;;
     docker/compose.react.fieldbus.local.example.yml) return 0 ;;

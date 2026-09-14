@@ -152,8 +152,15 @@ export async function updatePackageRoles(
   return body;
 }
 
-export async function getSessionConfig(): Promise<SessionConfigResponse> {
-  return apiFetch<SessionConfigResponse>(SESSION_CONFIG_PATH);
+export async function getSessionConfig(
+  buildingId?: string,
+): Promise<SessionConfigResponse> {
+  const q = new URLSearchParams();
+  if (buildingId && buildingId.trim()) {
+    q.set("building_id", buildingId.trim());
+  }
+  const suffix = q.toString() ? `?${q.toString()}` : "";
+  return apiFetch<SessionConfigResponse>(`${SESSION_CONFIG_PATH}${suffix}`);
 }
 
 /**

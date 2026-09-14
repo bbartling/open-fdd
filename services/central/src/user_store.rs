@@ -6,11 +6,11 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::auth::{constant_time_eq_bytes, Role};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserRecord {
     pub username: String,
     /// `operator` or `viewer` (hub `admin` stays env-only).
@@ -18,14 +18,17 @@ pub struct UserRecord {
     #[serde(default)]
     pub tenant_ids: Vec<String>,
     /// Env var holding the plaintext password (preferred on Railway).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password_env: Option<String>,
     /// Lab-only plaintext; never commit real secrets.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,
+    /// When true, authenticate fails (hub admin soft-delete / suspend).
+    #[serde(default)]
+    pub disabled: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct UserStore {
     #[serde(default)]
     pub users: Vec<UserRecord>,
@@ -61,6 +64,9 @@ impl UserStore {
             .users
             .iter()
             .find(|u| u.username.trim().eq_ignore_ascii_case(want))?;
+        if rec.disabled {
+            return None;
+        }
         let role = Role::parse(rec.role.trim())?;
         // Hub admin must not be minted from the file store (empty tenant_ids + Admin is hub_admin).
         if matches!(role, Role::Admin) {
@@ -138,6 +144,7 @@ mod tests {
                 tenant_ids: vec!["acme".into()],
                 password_env: None,
                 password: Some("x".into()),
+                disabled: false,
             }],
         };
         assert!(store.authenticate("evil", "x").is_none());

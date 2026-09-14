@@ -14,6 +14,7 @@ const ORACLE_MAIN_SECTIONS = [
   "Dump",
   "Sites",
   "Operations",
+  "Admin",
 ] as const;
 
 describe("MAIN_SECTIONS navigation contract", () => {

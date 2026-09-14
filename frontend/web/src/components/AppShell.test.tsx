@@ -111,6 +111,7 @@ describe("AppShell layout parity", () => {
       "Dump",
       "Sites",
       "Operations",
+      "Admin",
     ]);
   });
 

@@ -33,3 +33,4 @@ Operators and AI agents must treat BACnet as a **shared, fragile OT resource** �
 - [`services/fieldbus/AGENTS.md`](../../services/fieldbus/AGENTS.md) — fieldbus agent contract
 - [`config/fieldbus/gateway.toml`](../../config/fieldbus/gateway.toml) — non-interval settings
 - Wave N tracker: [`BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md`](BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md)
+- Local Mint Who-Is + MQTTS smoke: [`LOCAL_BACNET_BACPYPE3_BENCH.md`](LOCAL_BACNET_BACPYPE3_BENCH.md)
