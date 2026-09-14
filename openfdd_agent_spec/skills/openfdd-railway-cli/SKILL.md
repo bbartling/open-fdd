@@ -14,17 +14,17 @@ Checklist: [`RAILWAY_DEPLOYMENT_CHECKLIST.md`](../../../docs/operations/RAILWAY_
 
 **Not Open-FDD MCP.** Railway CLI / Railway’s optional MCP manage cloud deploys. HVAC FDD tools stay in [`mcp/`](../../../mcp/) (`openfdd-mcp` + agent JWT to private central).
 
-## Verified host state (bensbench, 2026-09-11)
+## Verified host state (Mint / bensbench, 2026-09-13)
 
 | Item | Value |
 | --- | --- |
 | Package | `@railway/cli` via `npm i -g @railway/cli` |
-| Auth | **`railway login`** (browser) — verified; optional `RAILWAY_TOKEN` in `~/.config/railway/bensbench.env` |
-| Link | `~/open-fdd` → project **`gleaming-cooperation`**, env **`production`** |
-| **Product hub pin** | **`sha-0bfcd81`** / VERSION **3.5.7** / health **`3.5.7+0bfcd81b949f`** · `multi_tenant=false` · `active_tenant_id=legacy` · `tenant_budgets=false` (Wave M **OPS PINNED**; M5 Mint partial). Rollback **`sha-e80237c`** / **3.5.6** (Wave L) or **`sha-9c3e8b1`** / **3.4.0** (Wave K). |
-| Stress closeout | Mid-wave = smoke + gates **11–15**. Full stress at Wave L **L8** / shippable pins — [`STRESS_CLOSEOUT.md`](../../../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md) |
+| Auth | Prefer **`railway login`** (CLI session). Stale `RAILWAY_TOKEN` in `.secrets/.env` breaks CLI — `env -u RAILWAY_TOKEN` when needed. |
+| Link | checkout → project **`gleaming-cooperation`**, env **`production`** |
+| **Product hub pin** | Wave N in progress: tip **`sha-b2537de`** / **3.5.8** · `multi_tenant=true` (authorized early Stage C). Prior Wave M pin **`sha-0bfcd81`** / **3.5.7** is rollback. Next rev **3.5.9** = mqtt entrypoint key-perms + fieldbus first-publish. |
+| Stress closeout | Wave N gate = ACL trio (31) + MQTTS continuity (32) + hub stress while ACME streams — [`BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md`](../../../docs/operations/BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md) · [`STRESS_CLOSEOUT.md`](../../../docs/operations/STRESS_CLOSEOUT.md) |
 | Local firewall hub | HTTP only — [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md) |
-| Fieldbus | **Not** a Railway service — bensbench x86 via `./scripts/openfdd_fieldbus_railway_up.sh sha-<7>` |
+| Fieldbus | **Not** a Railway service — ACME VIM OT edge (private) or bensbench x86 via `./scripts/openfdd_fieldbus_railway_up.sh sha-<7>` |
 
 ### Live services (names matter for CLI)
 
@@ -57,7 +57,8 @@ See [`PATCH_CYCLE.md`](../../../docs/operations/PATCH_CYCLE.md). After each tiny
 5. `./scripts/nightly-ot-bench/run_railway_hub_stress.sh`
 6. Sync [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../../../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md)
 
-MQTT certs: `railway volume add` on `openfdd-mqtt` at `/mosquitto/certs`, upload `ca.pem` + server cert/key. Pi reachability: `railway tcp-proxy create --port 8883 --service openfdd-mqtt` (human-approved) or VPN. Never commit PEMs/tokens.
+MQTT certs: volume on `openfdd-mqtt` at `/mosquitto/certs` (`ca.pem`, `server.cert.pem`, `server.key.pem`, `acl`).  
+**Learned (Wave N):** (1) `server.key.pem` must be readable by uid **1883** (`mosquitto`) — root `0600` → crash `Permission denied`; tip mqtt image entrypoint `chmod a+r` + `chown`. (2) Server cert **must include SAN** (`DNS:openfdd-mqtt`, `DNS:openfdd-mqtt.railway.internal`, TCP-proxy host) — rustls rejects CN-only → `ssl/tls alert bad certificate` while `openssl s_client` still OK. (3) Volume SFTP/`service files` fail while mqtt is crash-looping — detach volume → temporary alpine `sleep infinity` helper → chmod/upload → reattach → delete helper. Never leave stray Railway projects from `railway up` without `--project`. TCP proxy: `railway tcp-proxy list -s openfdd-mqtt`. Never commit PEMs/tokens.
 
 ## Non-negotiables
 
@@ -129,9 +130,9 @@ Re-pin = **image tag only**. Never delete/recreate the `/workspace` volume. Docs
 
 **Always pin tip after Publish:** stale `3.3.N+oldsha` on Railway while tip is newer is a P0 fail. Re-pin central + mqtt + web + x86 fieldbus to the same `sha-<7>`.
 
-## OT floor (x86 fieldbus)
+## OT floor (fieldbus)
 
-`OPENFDD_FIELDBUS_POLL_INTERVAL_SECS=60` and `OPENFDD_MQTT_PUBLISH_INTERVAL_SECS=60`. Never set `OPENFDD_FIELDBUS_DEV_FAST_POLL=1` in production.
+**Wave N lock:** poll + MQTT publish are compile-time **300 s** (`FIXED_POLL_INTERVAL_SECS`). Env/TOML overrides are ignored. First MQTT publish is immediate after connect, then every 300 s. Never burst OT; never deploy fieldbus on Railway.
 
 ## Data model (empty Overview)
 

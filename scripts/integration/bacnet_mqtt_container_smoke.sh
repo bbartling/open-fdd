@@ -175,7 +175,9 @@ echo "$POLL_STATUS" | jq -e '
 echo "OK fieldbus poll state contains BACpypes3 point"
 
 # Wait until central observes, parses, and accepts the fieldbus BACnet telemetry envelope.
-deadline=$((SECONDS + 90))
+# Tip fieldbus may still sleep one FIXED 300s interval before first publish (pre-3.5.9).
+# Post-3.5.9 publishes immediately; a long deadline remains safe either way.
+deadline=$((SECONDS + 360))
 while true; do
   MONITOR="$(curl -fsS http://127.0.0.1:18080/api/mqtt/monitor \
     -H "Authorization: Bearer $TOKEN")"
