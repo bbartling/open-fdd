@@ -347,6 +347,14 @@ fn short_sha(sha: &str) -> String {
     responses((status = 200, description = "Central health", body = OkHealthResponse))
 )]
 pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse> {
+    let now = chrono::Utc::now();
+    let uptime_secs = (now - state.started_at).num_seconds().max(0) as u64;
+    let last_ingest_at = state
+        .last_ingest_at
+        .lock()
+        .unwrap()
+        .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
+    let historian_present = crate::durable_storage::historian_root_present();
     Json(OkHealthResponse {
         ok: true,
         service: "openfdd-central".into(),
@@ -356,6 +364,12 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
         ingest_dup: *state.ingest_dup.lock().unwrap(),
         ingest_reject: *state.ingest_reject.lock().unwrap(),
         multi_tenant: crate::tenant::multi_tenant_enabled(),
+        started_at: state
+            .started_at
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        uptime_secs,
+        last_ingest_at,
+        historian_present,
     })
 }
 

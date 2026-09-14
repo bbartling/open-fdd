@@ -11,12 +11,23 @@ pub struct OkHealthResponse {
     pub service: String,
     pub version: String,
     pub edges: usize,
+    /// Successful MQTT/CSV ingest accepts **since this process started** (resets on re-pin).
     pub ingest_ok: u64,
     pub ingest_dup: u64,
     pub ingest_reject: u64,
     /// Wave L — multi-tenant shared-hosting mode (default false / OFF).
     #[serde(default)]
     pub multi_tenant: bool,
+    /// Process start time (RFC3339 UTC). Surviving `/workspace` data is independent of this.
+    pub started_at: String,
+    /// Seconds since `started_at`.
+    pub uptime_secs: u64,
+    /// Last successful ingest timestamp this process (null right after boot until first accept).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_ingest_at: Option<String>,
+    /// True when OPENFDD storage/parquet root exists on disk (durable historian, not since-boot).
+    #[serde(default)]
+    pub historian_present: bool,
 }
 
 #[derive(Debug, Serialize, ToSchema)]

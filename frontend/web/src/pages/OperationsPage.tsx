@@ -494,7 +494,7 @@ function OtStatusStrip() {
         </span>
       </div>
       <div className="ops-ot-strip__item">
-        <span className="ops-ot-strip__label">Ingest OK</span>
+        <span className="ops-ot-strip__label">Ingest OK (since boot)</span>
         <span className="ops-ot-strip__value">{ingest?.ingest_ok != null ? String(ingest.ingest_ok) : "—"}</span>
       </div>
       <div className="ops-ot-strip__item">

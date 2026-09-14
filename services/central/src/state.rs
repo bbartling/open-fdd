@@ -94,6 +94,10 @@ pub struct AppState {
     pub ingest_ok: Mutex<u64>,
     pub ingest_dup: Mutex<u64>,
     pub ingest_reject: Mutex<u64>,
+    /// Process boot instant for `/api/health` honesty after re-pin.
+    pub started_at: DateTime<Utc>,
+    /// Last successful ingest accept this process (MQTT/CSV paths that bump `ingest_ok`).
+    pub last_ingest_at: Mutex<Option<DateTime<Utc>>>,
     pub mqtt_publisher: Mutex<Option<AsyncClient>>,
     mqtt_monitor: Mutex<MqttMonitorState>,
     /// Login failures keyed by ip+username (generic throttle; no secrets).
@@ -114,11 +118,19 @@ impl AppState {
             ingest_ok: Mutex::new(0),
             ingest_dup: Mutex::new(0),
             ingest_reject: Mutex::new(0),
+            started_at: Utc::now(),
+            last_ingest_at: Mutex::new(None),
             mqtt_publisher: Mutex::new(None),
             mqtt_monitor: Mutex::new(MqttMonitorState::default()),
             login_failures: Mutex::new(HashMap::new()),
             tenant_budgets: TenantBudgetTracker::new(),
         }
+    }
+
+    /// Record a successful ingest accept (bumps counter + last_ingest_at).
+    pub fn note_ingest_ok(&self) {
+        *self.ingest_ok.lock().unwrap() += 1;
+        *self.last_ingest_at.lock().unwrap() = Some(Utc::now());
     }
 
     pub fn set_mqtt_publisher(&self, client: AsyncClient) {
