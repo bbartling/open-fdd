@@ -38,6 +38,18 @@ import {
   isWeatherEquipmentId,
   spanHoursBetween,
 } from "../lib/overviewMetrics";
+
+/** Under-hood per-site Overview paint (Wave O7). No UI chrome. */
+type OverviewSiteCache = {
+  body: OverviewVibe19Response;
+  lastRuleResultCount: number | null;
+};
+const overviewSiteCache = new Map<string, OverviewSiteCache>();
+
+/** Test-only: reset site cache between Vitest cases. */
+export function clearOverviewSiteCacheForTests(): void {
+  overviewSiteCache.clear();
+}
 import {
   effectiveRunParams,
   loadLocalRuleParams,
@@ -260,58 +272,71 @@ export function OverviewPopulated({
     }
   }, [buildingId, equipmentId, selected?.equipment_type]);
 
-  const refreshOverview = useCallback(async () => {
-    if (!buildingId) return;
-    overviewAbort.current?.abort();
-    const ac = new AbortController();
-    overviewAbort.current = ac;
-    setLoadingOverview(true);
-    setOverviewErr(null);
-    try {
-      const body = await fetchCentralOverview({
-        building_id: buildingId,
-        equipment,
-        signal: ac.signal,
-      });
-      if (ac.signal.aborted) return;
-      if (!body.ok) {
-        throw new Error(body.error || "Central analytics failed");
+  const equipmentRef = useRef(equipment);
+  equipmentRef.current = equipment;
+
+  const refreshOverview = useCallback(
+    async (opts?: { force?: boolean }) => {
+      if (!buildingId) return;
+      const force = opts?.force === true;
+      if (!force) {
+        const hit = overviewSiteCache.get(buildingId);
+        if (hit) {
+          setOverview(hit.body);
+          if (hit.lastRuleResultCount != null) {
+            setLastRuleResultCount(hit.lastRuleResultCount);
+          }
+          hasOverview.current = true;
+          setOverviewErr(null);
+          setLoadingOverview(false);
+          return;
+        }
       }
-      setOverview(body);
-      setVavHealthToken((n) => n + 1);
-      hasOverview.current = true;
-      const results = await getFddResults(buildingId).catch(() => null);
-      if (ac.signal.aborted) return;
-      if (results) setLastRuleResultCount(results.length);
-    } catch (err) {
-      if (ac.signal.aborted) return;
-      setOverviewErr(formatErr(err));
-      if (!hasOverview.current) {
-        setOverview(null);
+      overviewAbort.current?.abort();
+      const ac = new AbortController();
+      overviewAbort.current = ac;
+      setLoadingOverview(true);
+      setOverviewErr(null);
+      try {
+        const body = await fetchCentralOverview({
+          building_id: buildingId,
+          equipment: equipmentRef.current,
+          signal: ac.signal,
+        });
+        if (ac.signal.aborted) return;
+        if (!body.ok) {
+          throw new Error(body.error || "Central analytics failed");
+        }
+        setOverview(body);
+        hasOverview.current = true;
+        const results = await getFddResults(buildingId).catch(() => null);
+        if (ac.signal.aborted) return;
+        const count = results ? results.length : null;
+        if (results) setLastRuleResultCount(results.length);
+        overviewSiteCache.set(buildingId, {
+          body,
+          lastRuleResultCount: count,
+        });
+      } catch (err) {
+        if (ac.signal.aborted) return;
+        setOverviewErr(formatErr(err));
+        if (!hasOverview.current) {
+          setOverview(null);
+        }
+      } finally {
+        if (!ac.signal.aborted) {
+          setLoadingOverview(false);
+        }
       }
-    } finally {
-      if (!ac.signal.aborted) {
-        setLoadingOverview(false);
-      }
-    }
-  }, [buildingId, equipment]);
+    },
+    [buildingId],
+  );
 
   useEffect(() => {
     if (!buildingId) return;
-    // Demo freshness (Wave H / 3.3.39): auto-load last Overview analytics on
-    // site select — do not require mashing "Update analytics" every visit.
+    // Demo freshness: auto-load last Overview analytics on site select.
+    // Cache hit paints instantly (Wave O7); miss hits DataFusion once.
     void refreshOverview();
-  }, [buildingId, refreshOverview]);
-
-  useEffect(() => {
-    if (!buildingId) return;
-    const onVis = () => {
-      if (document.visibilityState === "visible") {
-        void refreshOverview();
-      }
-    };
-    document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
   }, [buildingId, refreshOverview]);
 
   useEffect(() => {
@@ -327,9 +352,20 @@ export function OverviewPopulated({
   useEffect(() => {
     if (lastBuildingId.current !== buildingId) {
       lastBuildingId.current = buildingId;
-      hasOverview.current = false;
-      setOverview(null);
-      setOverviewErr(null);
+      const hit = buildingId ? overviewSiteCache.get(buildingId) : undefined;
+      if (hit) {
+        setOverview(hit.body);
+        if (hit.lastRuleResultCount != null) {
+          setLastRuleResultCount(hit.lastRuleResultCount);
+        }
+        hasOverview.current = true;
+        setOverviewErr(null);
+        setLoadingOverview(false);
+      } else {
+        hasOverview.current = false;
+        setOverview(null);
+        setOverviewErr(null);
+      }
     }
   }, [buildingId]);
 
@@ -366,13 +402,15 @@ export function OverviewPopulated({
       );
       // Matrices join FDD results — bump refresh so health cells leave stale/unknown.
       setVavHealthToken((t) => t + 1);
+      if (buildingId) overviewSiteCache.delete(buildingId);
       void getFddResults(buildingId)
         .then((rows) => setLastRuleResultCount(rows.length))
         .catch(() => undefined);
+      void refreshOverview({ force: true });
     };
     window.addEventListener(RULES_UPDATED_EVENT, onRules);
     return () => window.removeEventListener(RULES_UPDATED_EVENT, onRules);
-  }, [buildingId]);
+  }, [buildingId, refreshOverview]);
 
   const saveSchedule = async () => {
     setScheduleBusy(true);
@@ -420,7 +458,7 @@ export function OverviewPopulated({
       setScheduleNote(
         `Schedule saved (tz ${tz}, ${bareMin} occ h/wk). Calendar persisted to session config.`,
       );
-      void refreshOverview();
+      void refreshOverview({ force: true });
     } catch (err) {
       setScheduleNote(formatErr(err));
     } finally {
@@ -599,7 +637,7 @@ export function OverviewPopulated({
             loading={busy}
             onClick={() => {
               void refreshMeta();
-              void refreshOverview();
+              void refreshOverview({ force: true });
             }}
             testId="overview-refresh"
           />
