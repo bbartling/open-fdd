@@ -513,11 +513,7 @@ pub async fn select_tenant(
     }))
 }
 
-
-fn resolve_tenant_context(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> crate::tenant::TenantContext {
+fn resolve_tenant_context(state: &AppState, headers: &HeaderMap) -> crate::tenant::TenantContext {
     let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
     let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
     let user = state
@@ -2494,11 +2490,9 @@ async fn analytics_runtime(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     let env = analytics::runtime::handle_async(&req).await;
@@ -2513,11 +2507,9 @@ async fn analytics_vav_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2531,11 +2523,9 @@ async fn analytics_ahu_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2549,11 +2539,9 @@ async fn analytics_ahu_temperature_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2567,11 +2555,9 @@ async fn analytics_ahu_pressure_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2585,11 +2571,9 @@ async fn analytics_ahu_economizer_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2603,11 +2587,9 @@ async fn analytics_chiller_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2621,11 +2603,9 @@ async fn analytics_cooling_tower_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2639,11 +2619,9 @@ async fn analytics_sensor_faults(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2657,11 +2635,9 @@ async fn analytics_pid_hunting(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2675,11 +2651,9 @@ async fn analytics_boiler_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2693,11 +2667,9 @@ async fn analytics_hp_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2711,11 +2683,9 @@ async fn analytics_zone_other_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2729,11 +2699,9 @@ async fn analytics_sensor_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2747,11 +2715,9 @@ async fn analytics_schedule(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2765,11 +2731,9 @@ async fn analytics_mechanical_cooling(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2783,11 +2747,9 @@ async fn analytics_bas_vs_web_oat(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     let max_points = req.query.max_points.unwrap_or(2000);
@@ -2829,11 +2791,9 @@ async fn analytics_inspect(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     let eq = req
@@ -2886,11 +2846,9 @@ async fn analytics_economizer(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2904,11 +2862,9 @@ async fn analytics_rcx_ahu(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2922,11 +2878,9 @@ async fn analytics_rcx_vav(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2940,11 +2894,9 @@ async fn analytics_rcx_chiller(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2958,11 +2910,9 @@ async fn analytics_rcx_boiler(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -2983,11 +2933,9 @@ async fn analytics_rcx_preset(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     let preset_id = req
@@ -3077,11 +3025,9 @@ async fn analytics_metering(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     Ok(Json(json!({
@@ -3095,11 +3041,9 @@ async fn analytics_setpoints(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     let env = match analytics::historian::setpoints_from_history(
@@ -3129,11 +3073,9 @@ async fn analytics_diurnal(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     let env = match analytics::historian::diurnal_from_history(
@@ -3163,11 +3105,9 @@ async fn analytics_topology(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     let env =
@@ -3193,11 +3133,9 @@ async fn analytics_sensor_stats(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(
-        &state,
-        &headers,
-        req.query.building_id.as_deref(),
-    ) {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
+    {
         return Err(deny);
     }
     let fan_state = req
@@ -3233,8 +3171,7 @@ async fn analytics_fuel(
     headers: HeaderMap,
     Json(req): Json<FuelRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.building_id.as_deref())
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, req.building_id.as_deref())
     {
         return Err(deny);
     }
