@@ -1,9 +1,9 @@
 # BUG REPORT — Wave N Multi-Tenant Security + ACME MQTTS
 
-**Date:** 2026-09-13 (Wave N kickoff) · **updated:** 2026-09-14T00:10Z  
+**Date:** 2026-09-13 (Wave N kickoff) · **updated:** 2026-09-14T02:51Z  
 **Platform:** Railway hub (`gleaming-cooperation` / `production`) + ACME on-prem fieldbus OT edge (private; not in GH)  
-**Prior ops pin:** `sha-0bfcd81` / **3.5.7** · Wave M durable results · `multi_tenant=false` at kickoff  
-**Live hub (this update):** `sha-b2537de` / **3.5.8+b2537deda08e** · **`multi_tenant=true`** · control plane tenants `acme` / `building_100` / `lakeside_sd` · MQTT broker Online after key-perm + SAN repair  
+**OPS PINNED:** `sha-1f94cdf` / **3.5.9+1f94cdf06f3e** · `multi_tenant=true` · ACME `vim-1` streaming · ACL trio PASS · MQTTS continuity PASS (`reports/wave_n_tip_pin_20260914T024543Z`)  
+**Rollback:** `sha-0bfcd81` / **3.5.7** (Wave M) or interim `sha-b2537de` / **3.5.8**  
 **Program:** Wave N — prod MT ON (authorized Stage C early waiver) · three client tenants · ACME MQTTS bench · ACL/audit/continuity stress · fixed 300 s fieldbus · PyPI/ECM GH Pages math  
 **Cursor plan:** [`wave_n_acme_mt_security_7f2a9c01`](../../../.cursor/plans/wave_n_acme_mt_security_7f2a9c01.plan.md)  
 **OT BUG_REPORT pointer:** [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md) (hardware/MQTT Soft-OPEN carry; MT security lives **here**)  
@@ -24,35 +24,37 @@ Hub `admin`: empty `tenant_ids`, **no buildings owned**, can select any client.
 
 | ID | Status | Symptom / work | Next |
 |----|--------|----------------|------|
-| **wave-n-mt-prod-enable** | CLOSED (ops) | MT ON + users/tenants on volume | Stress still required before OPS PINNED |
-| **wave-n-tenant-password-logins** | CLOSED (product #920) | `users.json` + membership mint | Keep secrets in Railway / `.secrets` only |
-| **wave-n-mqtt-broker-key-perms** | CLOSED (ops) | `server.key.pem` root `0600` → mosquitto Permission denied / crash-loop | Tip image entrypoint `chmod a+r`/`chown 1883` (rev **3.5.9**); ops recovery via alpine volume helper |
-| **wave-n-mqtt-server-san** | CLOSED (ops) | CN-only server cert → rustls/native-tls **hostname mismatch** / `bad certificate` (openssl s_client still OK) | Reissued server cert SAN: `openfdd-mqtt`, `.railway.internal`, `reseau.proxy.rlwy.net`, localhost |
-| **wave-n-acme-mqtts-ingest** | Soft-OPEN (ops proven) | Live: `edge:acme:vim-1` CONNECT + health `edges:1` / `ingest_ok≥2` on `sha-b2537de` after key-perm+SAN repair | Re-prove after **3.5.9** re-pin + continuity ≥2×300s; keep Soft-OPEN until OPS PINNED |
-| **wave-n-acl-stress** | Soft-OPEN | Product gates 31 present; live trio PASS smoke earlier; full stress pending stream | Run hub stress with MQTTS live |
-| **wave-n-mqtts-continuity** | OPEN | Continuity gate 32 needs rising `ingest_ok` across ≥2×300s | After ACME streaming |
-| **wave-n-audit-pen-test** | Soft-OPEN | Audit harden shipped in #920 | Assert events in stress |
-| **wave-n-zap-mt-af** | Soft-OPEN | Disposable ZAP AF on MT-ON | Artifact when stream healthy |
-| **wave-n-fieldbus-fixed-300s** | CLOSED (product #920) | Compile-time 300 s | CI Optional BACnet failed until first-publish (**3.5.9**) |
-| **wave-n-optional-bacnet-ci** | OPEN | Tip Actions red: Optional BACnet→MQTT (90s wait < 300s first publish) | Merge first-publish + keep CI tidy green |
-| **wave-n-metric-fdd** | Soft-OPEN | Trane VAV metric path | After ingest |
+| **wave-n-mt-prod-enable** | CLOSED | MT ON + users/tenants on volume | — |
+| **wave-n-tenant-password-logins** | CLOSED (#920) | `users.json` + membership mint | Secrets Railway / `.secrets` only |
+| **wave-n-mqtt-broker-key-perms** | CLOSED (ops+3.5.9) | root `0600` key → mosquitto crash-loop | Entrypoint chmod/chown; alpine volume helper documented |
+| **wave-n-mqtt-server-san** | CLOSED (ops) | CN-only cert → rustls hostname mismatch | Server SAN includes proxy host |
+| **wave-n-acme-mqtts-ingest** | CLOSED (ops pin) | ACME → Railway ingest | Keep ACME private refresh on tip `sha-*` |
+| **wave-n-acl-stress** | CLOSED (live list/select) · OPEN data-path until 3.5.10 | Gate 31 list+select PASS on tip; **FDD/mapping leaked cross-tenant on 3.5.9** | Land 3.5.10 + re-run gate 31 with mapping+series |
+| **wave-n-mqtts-continuity** | CLOSED (live) | Gate 32 PASS `ingest_ok` 1→2 @320s | Prefer ≥2×300s for heavy pins |
+| **wave-n-audit-pen-test** | Soft-OPEN | Audit harden shipped | Assert event rows in next full hub stress |
+| **wave-n-zap-mt-af** | Soft-OPEN | Disposable ZAP AF on MT-ON | Schedule when convenient |
+| **wave-n-fieldbus-fixed-300s** | CLOSED (#920/#922) | Compile-time 300 s + first publish immediate | — |
+| **wave-n-optional-bacnet-ci** | CLOSED (#922) | Tip Optional BACnet **success** on `1f94cdf` | Keep 360s smoke wait for base-image PR runs |
+| **wave-n-metric-fdd** | Soft-OPEN | Trane VAV metric path | Follow-up soak |
 | **wave-n-mstp-vav-addressing** | Soft-OPEN | Identical ZN-T floats may mean wrong MSTP MAC | Fix routing, not invent values |
-| **wave-n-csv-tenant-reload** | OPEN | B100 + LAKESIDE_ES under tenant roots after MT partition | Re-import if historian empty |
-| **wave-n-lakeside-sd-tenant** | CLOSED (CP) | Tenant + users staged | CSV reload may still be needed |
+| **wave-n-csv-tenant-reload** | Soft-OPEN | Hub-root `building=BUILDING_100` / `LAKESIDE_ES` still readable by owned JWTs after data-path ACL; no `tenants/{tid}/` tree yet | Optional migrate / re-import under tenant roots |
+| **wave-n-lakeside-sd-tenant** | CLOSED (CP) | Tenant + users live | — |
 | **wave-n-pypi-ecm-math-docs** | CLOSED (#920) | GH Pages math + docs | Soft-OPEN wheel refresh if needed |
-| **stage-c-idp-mfa-sku** | Soft-OPEN | Early MT waiver; IdP/MFA not done | Track until commercial Stage C |
-| **fieldbus-never-cloud** | Doc lock | `openfdd-fieldbus` OT-only | AGENTS + BACNET_OT_POLICY |
-| **wave-m-m5-mint-bench** | Soft-OPEN carry | Mint kit/docker/synth59 residual | Do not block Wave N MT |
-| **wave-n-gh-tidy** | OPEN | 0 open PRs; tip Actions green; no orphan branches/projects | Required before OPS PINNED |
+| **stage-c-idp-mfa-sku** | Soft-OPEN | Early MT waiver; IdP/MFA not done | Commercial Stage C |
+| **fieldbus-never-cloud** | Doc lock | `openfdd-fieldbus` OT-only | — |
+| **wave-m-m5-mint-bench** | Soft-OPEN carry | Mint kit/docker/synth59 residual | Do not block Wave N |
+| **wave-n-gh-tidy** | CLOSED | 0 open PRs; tip Actions green on `1f94cdf`; feature branch deleted | Keep each merge tidy |
 
 ## Ops learnings (attach to future patch cycles)
 
 1. **Prefer CLI session** (`railway login`); `env -u RAILWAY_TOKEN` if a stale token in `.secrets/.env` shadows auth.  
 2. **Mqtt crash-loop blocks volume SFTP / service files** — detach volume → temporary alpine `CMD ["sleep","infinity"]` helper → fix perms/certs → reattach → **delete helper**. Always pass `--project` / link hub before `railway up` (stray projects get scheduled delete).  
 3. **Never trust openssl-only as proof of app TLS** — rustls/native-tls need **SAN**; CN-only fails with hostname mismatch / bad certificate.  
-4. **Fieldbus poll is fixed 300 s** — CI must not rely on env interval overrides; first MQTT publish must not sleep a full interval (product fix in 3.5.9).  
+4. **Fieldbus poll is fixed 300 s** — CI must not rely on env interval overrides; first MQTT publish must not sleep a full interval (product fix in 3.5.9). Optional BACnet PR jobs test **base** GHCR images — keep smoke wait ≥300s.  
 5. **TCP proxy** `reseau.proxy.rlwy.net:44763` → mqtt `:8883` must stay ACTIVE and listed in server SAN.  
-6. **GH tidy gate:** tip required/product checks green; cancel superseded fails; `gh pr list` → 0; delete merged feature branches; no leftover local branches/worktrees.
+6. **GH tidy gate:** tip required/product checks green; cancel superseded fails; `gh pr list` → 0; delete merged feature branches; no leftover local branches/worktrees.  
+7. **First MQTT publish races empty poll** on tip — expect `edges≥1` immediately; `ingest_ok` may wait one 300s cycle unless `poll/once` then restart.  
+8. **List/select ACL ≠ data-path ACL** — gate 31 must also probe `/api/csv/import/package/mapping` + `/api/fdd/series` for foreign `building_id` → **403**. `TenantContext::allow_building` must wrap FDD/analytics/CSV reads (3.5.10+).  
 
 ## Stage C early-MT waiver (2026-09-13)
 
@@ -70,8 +72,9 @@ Hub `admin`: empty `tenant_ids`, **no buildings owned**, can select any client.
 |-----|--------------|------|
 | 2026-09-13 | kickoff `sha-0bfcd81` / 3.5.7 | Plan approved; MT still OFF on live hub |
 | 2026-09-13 | `sha-b2537de` / 3.5.8 | #920+#921 merged; MT ON; ACL smoke PASS; mqtt crash (key perms) |
-| 2026-09-14 | `sha-b2537de` | Key perms fixed via volume helper; server SAN reissued; central MQTTS CONNECT OK (`central:lab` TLSv1.3); ACME PEMs refreshed; ingest proof still OPEN |
-| 2026-09-13 | Actions | Optional BACnet→MQTT **FAILURE** on tip (300s lock vs 90s wait) — must clear with 3.5.9 before sign-off |
+| 2026-09-14 | `sha-b2537de` | Key perms + server SAN fixed; central CONNECT; ACME ingest_ok climbing |
+| 2026-09-14 | Actions | #922 tip: Optional BACnet **PASS**; all tip workflows success |
+| 2026-09-14 | **OPS PINNED** `sha-1f94cdf` / 3.5.9 | Hub+ACME re-pin; ACL PASS; continuity `ingest_ok` 1→2; backup `20260914T023409Z` |
 
 ## Never
 

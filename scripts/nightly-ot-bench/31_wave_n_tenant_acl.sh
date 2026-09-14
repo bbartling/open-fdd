@@ -43,7 +43,23 @@ deny_building() {
     echo "FAIL: $label select foreign tenant expected 403, got $sel" | tee -a "$ART/acl.log"
     return 1
   fi
-  echo "PASS: $label denied $bid / tenant $4 (list+select)" | tee -a "$ART/acl.log"
+  # Data-path ACL: mapping + FDD series must not leak foreign buildings (Wave N).
+  local map_code series_code
+  map_code="$(curl -s -o "$ART/${label}_map_${bid}.json" -w '%{http_code}' \
+    -H "Authorization: Bearer $token" \
+    "$BASE/api/csv/import/package/mapping?building_id=${bid}")"
+  if [[ "$map_code" != "403" && "$map_code" != "401" ]]; then
+    echo "FAIL: $label mapping foreign building $bid expected 403, got $map_code" | tee -a "$ART/acl.log"
+    return 1
+  fi
+  series_code="$(curl -s -o "$ART/${label}_series_${bid}.json" -w '%{http_code}' \
+    -H "Authorization: Bearer $token" \
+    "$BASE/api/fdd/series?building_id=${bid}&equipment_id=AHU_1&rule_id=FC1")"
+  if [[ "$series_code" != "403" && "$series_code" != "401" ]]; then
+    echo "FAIL: $label fdd/series foreign building $bid expected 403, got $series_code" | tee -a "$ART/acl.log"
+    return 1
+  fi
+  echo "PASS: $label denied $bid / tenant $4 (list+select+mapping+series)" | tee -a "$ART/acl.log"
   return 0
 }
 
