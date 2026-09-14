@@ -3147,7 +3147,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "open_fdd_edge_prototype"
-version = "3.5.9"
+version = "3.5.10"
 dependencies = [
  "arrow",
  "base64 0.22.1",
@@ -3188,7 +3188,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-central"
-version = "3.5.9"
+version = "3.5.10"
 dependencies = [
  "anyhow",
  "axum",
@@ -3229,7 +3229,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-fieldbus"
-version = "3.5.9"
+version = "3.5.10"
 dependencies = [
  "axum",
  "bacnet-client",
@@ -3281,7 +3281,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd_contracts"
-version = "3.5.9"
+version = "3.5.10"
 dependencies = [
  "chrono",
  "serde",
@@ -3293,7 +3293,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd_mqtt"
-version = "3.5.9"
+version = "3.5.10"
 dependencies = [
  "anyhow",
  "chrono",
