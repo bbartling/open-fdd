@@ -96,11 +96,11 @@ pub fn router(state: Arc<AppState>) -> Router {
 
     let protected = Router::new()
         .route("/api/auth/agent-token", post(auth_agent_token))
-        .route("/api/admin/users", get(admin_list_users).put(admin_upsert_user))
         .route(
-            "/api/admin/users/{username}",
-            delete(admin_delete_user),
+            "/api/admin/users",
+            get(admin_list_users).put(admin_upsert_user),
         )
+        .route("/api/admin/users/{username}", delete(admin_delete_user))
         .route(
             "/api/admin/users/{username}/disabled",
             post(admin_set_user_disabled),
@@ -568,7 +568,9 @@ fn require_hub_admin(
 }
 
 fn workspace_path() -> std::path::PathBuf {
-    std::path::PathBuf::from(std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()))
+    std::path::PathBuf::from(
+        std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()),
+    )
 }
 
 pub async fn admin_list_users(
@@ -1868,9 +1870,7 @@ pub async fn fdd_session_config_get(
     headers: HeaderMap,
     Query(q): Query<SessionConfigQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref())
-    {
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
         return Err(deny);
     }
     Ok(Json(

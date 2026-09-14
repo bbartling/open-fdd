@@ -64,7 +64,8 @@ impl UserStore {
         {
             return Err("username reserved for env identities".into());
         }
-        let role = Role::parse(rec.role.trim()).ok_or_else(|| "role must be operator or viewer".to_string())?;
+        let role = Role::parse(rec.role.trim())
+            .ok_or_else(|| "role must be operator or viewer".to_string())?;
         if matches!(role, Role::Admin) {
             return Err("file users cannot be admin (hub admin is env-only)".into());
         }
