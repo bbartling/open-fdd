@@ -1,0 +1,101 @@
+---
+title: Install & ECM overview
+parent: PyPI agent tools
+nav_order: 3
+permalink: /ecm/overview.html
+---
+
+# Open-FDD Python package (PyPI)
+
+`open-fdd` (PyPI **4.1+**) ships:
+
+1. **ECM engineering** (`open_fdd.ecm_engineering`) — agent-drivable HVAC spreadsheet workbooks + Python benchmarks.
+2. **Pandas oracle** (`open_fdd.rules`, `open_fdd.analytics`, `open_fdd.reporting`) — cookbook catalog, analytics helpers, Engineering Findings.
+
+**Why it exists:** agents put industry-method calcs into **Excel** for human audit, then optionally **compare honesty against EnergyPlus** — see [Purpose: Excel + EnergyPlus](purpose-excel-energyplus.html).
+
+The ECM API fills the same workbook input cells a human engineer would fill.
+It does not replace the visible spreadsheet calculations.
+
+**Production FDD** (DataFusion SQL fault detection) lives in the [GHCR container stack]({{ site.baseurl }}/quick-start/docker-ghcr.html), not this wheel.
+
+**Product freeze / upsell:** [Engineer upsell brief](ENGINEER_UPSELL_BRIEF.html) — customers see ECM via **PyPI → open-fdd**, not vibe tip churn.
+
+**Build handoff / golden example:** [OPENFDD_AGENT_ECM_HANDOFF](OPENFDD_AGENT_ECM_HANDOFF.html) · packaged workbook in-repo under `open_fdd/ecm_engineering/examples/liberty_dual_ahu/ECM_FULL_PARITY.xlsx`.
+
+## Install
+
+```bash
+pip install open-fdd                 # ECM only (openpyxl)
+pip install "open-fdd[oracle]"       # + pandas rules
+pip install "open-fdd[analytics]"    # + analytics helpers (same as oracle)
+pip install "open-fdd[reporting]"    # + Engineering Findings extras
+```
+
+For the FastAPI ECM example:
+
+```bash
+pip install "open-fdd[ecm-web]"
+```
+
+## Oracle rules (pandas)
+
+```python
+from open_fdd.rules import RULES, run_rule
+```
+
+See also the [Pandas cookbook]({{ site.baseurl }}/rules/cookbook/pandas-cookbook.html).
+
+## Generate a workbook in a few lines
+
+```python
+from open_fdd.ecm_engineering import ECMJob
+
+job = (
+    ECMJob("Lincoln Middle School")
+    .set_global(
+        area_ft2=85000,
+        electric_rate=0.145,
+        gas_rate=0.92,
+    )
+    .add_ecm(
+        "static_pressure_reset",
+        fan_kw=55.9,
+        hours=4100,
+        baseline_speed=0.82,
+        proposed_speed=0.67,
+    )
+    .add_ecm(
+        "boiler_reset",
+        base_therms=48000,
+        base_eff=0.86,
+        prop_eff=0.92,
+    )
+)
+
+job.save("Lincoln_Middle_School_ECMs.xlsx")
+```
+
+The resulting XLSX contains the engineering inputs and formulas for human review.
+
+### Module names vs calculators
+
+```python
+from open_fdd.ecm_engineering import list_ecm_modules, list_calculators
+
+list_ecm_modules()   # names accepted by add_ecm (aliases included)
+list_calculators()   # independent Python benchmarks (job.calc), not sheet names
+```
+
+## CLI
+
+```bash
+open-fdd-ecm calculators
+open-fdd-ecm demo --out Demo_ECMs.xlsx
+```
+
+## Math & agent rules
+
+- [ECM engineering math]({{ site.baseurl }}/operations/ECM_ENGINEERING_MATH.html)
+- [Agent rules](AGENTS_ECM_ENGINEERING.html)
+- [PyPI release checklist](PYPI_RELEASE_CHECKLIST.html)

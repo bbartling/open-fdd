@@ -1,5 +1,7 @@
 # Open-FDD Python package (PyPI)
 
+> **GitHub Pages:** this README is excluded from the docs site (`exclude: README.md`). Published overview lives at [`docs/ecm/index.md`](index.md) / [`overview.md`](overview.md) — section **PyPI agent tools**.
+
 `open-fdd` (PyPI **4.1+**) ships:
 
 1. **ECM engineering** (`open_fdd.ecm_engineering`) — agent-drivable HVAC spreadsheet workbooks + Python benchmarks.

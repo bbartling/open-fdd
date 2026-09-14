@@ -22,9 +22,19 @@ O8 → O9 → O10 → O7 → O3 → O1 → O6 → O2 → O4 · **O5 Soft-OPEN on
 | O2a audit + ZAP disposition | queued | **this agent:** audit asserts · **Kali agent:** ZAP/AF (cite only) |
 | O2b MT shared-DB harden | **IN PLAN** (HOLD) | product ACL/headers + **beefed CI/stress tests** (no Kali here) |
 | O3–O4 | queued | after O10 streams |
+| O11 PyPI Pages | IN PROGRESS | `docs/ecm/` section + Drivers CSV nav dedupe |
+| O12a Plotly PNG stems | IN PROGRESS | RCx/FDD never `newplot.png`; type-based stems |
+| O12b Creekside meter map | OPEN | BAS BACnet electricity meter in dataset; data model lacks metering roles |
 
 ## Hygiene
 
 - 0 open PRs after each merge (except the active tip PR)
 - Delete feature branches; tip Actions green before Railway re-pin
 - Product OT = `openfdd-fieldbus` + rusty-bacnet; bacpypes3 diagnose-only
+
+## Open defects (Wave O additions)
+
+| ID | Status | Summary |
+|----|--------|---------|
+| **wave-o-plotly-newplot** | Patching | RCx (and any host without stem) download `newplot.png`; fix PlotlyHost + RCx/FDD type stems |
+| **wave-o-creekside-meter-map** | OPEN | `LAKESIDE_ES` / Creekside: integrated BAS BACnet electricity meter present in data; package map omits metering → empty Metering UI |

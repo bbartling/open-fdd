@@ -12,10 +12,23 @@ export interface PlotlyHostProps extends Omit<WidgetBaseProps, "label"> {
   figureId?: string;
   height?: number;
   /**
-   * Stable PNG stem for the mode-bar camera button. Without this Plotly
-   * downloads as `newplot.png`, which breaks vibe19-style named exports.
+   * Stable PNG stem for the mode-bar camera button. Prefer a plot-type stem
+   * (e.g. `rcx_fan_runtime`, `fdd_AHU-FC-003_series`) — not equipment labels.
+   * When omitted, falls back to sanitized `id` so Plotly never emits `newplot.png`.
    */
   downloadFilename?: string;
+}
+
+/** Safe Plotly `toImageButtonOptions.filename` stem (no path / extension). */
+export function plotDownloadStem(...parts: Array<string | null | undefined>): string {
+  const joined = parts
+    .map((p) => (p ?? "").trim())
+    .filter(Boolean)
+    .join("_")
+    .replace(/[^A-Za-z0-9._-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^[._-]+|[._-]+$/g, "");
+  return joined || "openfdd_plot";
 }
 
 type PlotlyStatic = {
@@ -216,14 +229,12 @@ export function PlotlyHost({
         responsive: true,
         displayModeBar: true,
         displaylogo: false,
-      };
-      // Named downloads match vibe19/pandas stems (avoid Plotly's newplot.png).
-      if (downloadFilename) {
-        config.toImageButtonOptions = {
+        // Always name PNGs — Plotly defaults to newplot.png otherwise.
+        toImageButtonOptions: {
           format: "png",
-          filename: downloadFilename,
-        };
-      }
+          filename: plotDownloadStem(downloadFilename || id),
+        },
+      };
       try {
         await (Plotly.react ?? Plotly.newPlot)(el, clean.data, layout, config);
         if (cancelled) {
@@ -272,7 +283,7 @@ export function PlotlyHost({
     <div
       className={`widget widget--plotly${error || renderErr ? " widget--error" : ""}`}
       data-testid={widgetTestId(`plotly-host-${id}`, testId)}
-      data-download-filename={downloadFilename}
+      data-download-filename={plotDownloadStem(downloadFilename || id)}
       aria-disabled={disabled || undefined}
       aria-busy={loading || (!drawn && Boolean(clean)) || undefined}
     >

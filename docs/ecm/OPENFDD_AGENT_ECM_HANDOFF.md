@@ -1,3 +1,9 @@
+---
+title: Agent handoff (Liberty ECM)
+parent: PyPI agent tools
+nav_order: 5
+---
+
 # Handoff — Liberty ECM full-parity example → open-fdd + PyPI
 
 **Date:** 2026-07-30  

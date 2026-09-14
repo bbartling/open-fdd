@@ -1,6 +1,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, waitFor } from "@testing-library/react";
-import { mergePlotlyHostLayout, PlotlyHost } from "./PlotlyHost";
+import {
+  mergePlotlyHostLayout,
+  plotDownloadStem,
+  PlotlyHost,
+} from "./PlotlyHost";
 import { sanitizePlotlyFigure } from "../../api/plotlySanitize";
 
 describe("mergePlotlyHostLayout", () => {
@@ -160,6 +164,13 @@ describe("PlotlyHost", () => {
     expect(layout2.uirevision).not.toEqual(layout.uirevision);
   });
 
+  it("plotDownloadStem sanitizes type parts", () => {
+    expect(plotDownloadStem("rcx", "Motors / fans", "fan runtime")).toBe(
+      "rcx_Motors_fans_fan_runtime",
+    );
+    expect(plotDownloadStem(null, "  ")).toBe("openfdd_plot");
+  });
+
   it("passes named PNG stem via toImageButtonOptions", async () => {
     const figure = {
       data: [{ x: ["2026-01-01"], y: [10], type: "bar", name: "AHU" }],
@@ -187,6 +198,29 @@ describe("PlotlyHost", () => {
     expect(config.toImageButtonOptions).toEqual({
       format: "png",
       filename: "mech_cooling_oat_bins",
+    });
+  });
+
+  it("falls back to widget id so downloads are never newplot.png", async () => {
+    const figure = {
+      data: [{ x: ["2026-01-01"], y: [1], type: "scatter", name: "a" }],
+      layout: {},
+    };
+    render(
+      <PlotlyHost id="rcx-plot" label="RCx" figure={figure} height={300} />,
+    );
+    await waitFor(() => {
+      expect(react.mock.calls.length + newPlot.mock.calls.length).toBeGreaterThan(
+        0,
+      );
+    });
+    const call = (react.mock.calls[0] ?? newPlot.mock.calls[0]) as unknown[];
+    const config = call[3] as {
+      toImageButtonOptions?: { format?: string; filename?: string };
+    };
+    expect(config.toImageButtonOptions).toEqual({
+      format: "png",
+      filename: "rcx-plot",
     });
   });
 

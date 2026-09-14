@@ -12,9 +12,10 @@ nav_order: 8
 pip install "open-fdd[oracle]"
 ```
 
-- API: [`docs/ecm/AGENTS_ECM_ENGINEERING.md`](../ecm/AGENTS_ECM_ENGINEERING.md)
-- Math on GH Pages: [`ECM_ENGINEERING_MATH.md`](../operations/ECM_ENGINEERING_MATH.md)
-- Release: [`PYPI_RELEASE_CHECKLIST.md`](../ecm/PYPI_RELEASE_CHECKLIST.md)
+- Section hub: [PyPI agent tools](../ecm/)
+- API / agent rules: [AGENTS_ECM_ENGINEERING](../ecm/AGENTS_ECM_ENGINEERING.html)
+- Math on GH Pages: [ECM_ENGINEERING_MATH](../operations/ECM_ENGINEERING_MATH.html)
+- Release: [PYPI_RELEASE_CHECKLIST](../ecm/PYPI_RELEASE_CHECKLIST.html)
 
 Do **not** treat the wheel as the product FDD runtime (that is GHCR DataFusion).
 

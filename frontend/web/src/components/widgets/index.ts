@@ -44,7 +44,7 @@ export type {
   StatusBadgeVariant,
 } from "./Progress";
 
-export { PlotlyHost } from "./PlotlyHost";
+export { PlotlyHost, plotDownloadStem } from "./PlotlyHost";
 export type { PlotlyHostProps } from "./PlotlyHost";
 
 export { ConfirmModal } from "./ConfirmModal";
