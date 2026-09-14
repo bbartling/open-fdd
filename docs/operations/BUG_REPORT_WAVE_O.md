@@ -22,6 +22,7 @@ O8 → O9 → O10 → O7 → O3 → O1 → O6 → O2 → O4 · **O5 Soft-OPEN on
 | O7 Overview cache | **MERGED** #926 | silent per-`buildingId` cache · **3.5.12** |
 | O11 PyPI Pages | IN PR | `docs/ecm/` section + Drivers CSV nav dedupe |
 | O12a Plotly PNG stems | IN PR | RCx/FDD type stems; PlotlyHost never `newplot.png` |
+| O12a Plotly PNG stems | **MERGED** #927 | 3.5.13 type stems |
 | O12b Creekside meter map | OPEN | BAS BACnet electricity meter in dataset; data model lacks metering roles |
 | O2a audit + ZAP disposition | queued | **this agent:** audit asserts · **Kali agent:** ZAP/AF (cite only) |
 | O2b MT shared-DB harden | **IN PLAN** | product ACL/headers + **beefed CI/stress tests** (no Kali here) |
@@ -39,3 +40,4 @@ O8 → O9 → O10 → O7 → O3 → O1 → O6 → O2 → O4 · **O5 Soft-OPEN on
 |----|--------|---------|
 | **wave-o-plotly-newplot** | Patching **3.5.13** | RCx hosts downloaded `newplot.png`; PlotlyHost always stems + RCx/FDD type names |
 | **wave-o-creekside-meter-map** | OPEN | `LAKESIDE_ES` / Creekside: integrated BAS BACnet electricity meter present in data; package map omits metering → empty Metering UI |
+| **wave-o-health-post-repin** | Patching **3.5.14** | `/api/health` started_at/uptime/last_ingest_at/historian_present; gate 32 boot grace |

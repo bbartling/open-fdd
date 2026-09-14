@@ -69,7 +69,9 @@ What this proves:
 | MQTT telemetry stream | `openfdd/history/.../part-*.parquet` | Same volume — **no per-message backup file** |
 | BACnet weather mirror | Weather historian partition on central | Same volume |
 
-`ingest_ok` in `/api/health` may reset when central restarts; use Parquet file counts and `/api/datasets` as restore proof.
+`ingest_ok` / live `edges` in `/api/health` are **since this process started** — they reset to 0 on every central container restart (Railway tip re-pin or local recreate). That does **not** mean the volume was wiped. Tip health also exposes `started_at`, `uptime_secs`, `last_ingest_at`, and `historian_present` so operators can tell “just restarted” from “no durable store.” Use Parquet file counts, `/api/datasets`, and gate 18 as restore proof — not a non-zero `ingest_ok` immediately after re-pin.
+
+**Local Compose is a real product path** (edge/LAN operators). Smoke it before every tip. **Majority stress** (MT, ACME MQTTS, gates 31–33, sell bar) stays on **Railway**. Never claim Railway PASS from local-only soak.
 
 ## Railway hub (mandatory before central re-pin)
 

@@ -57,6 +57,30 @@ fn looks_ephemeral(path: &Path) -> bool {
     s.contains(".cache") || s.starts_with("/app/") || s == "/app"
 }
 
+/// Cheap health honesty: configured historian / workspace openfdd root exists on disk.
+/// Does not scan Parquet (no DataFusion). False right after boot if volume not mounted.
+pub fn historian_root_present() -> bool {
+    if let Some(root) = env_path("OPENFDD_PARQUET_ROOT") {
+        return root.is_dir();
+    }
+    if let Ok(url) = std::env::var("OPENFDD_STORAGE_URL") {
+        if let Some(path) = url.strip_prefix("file://") {
+            let trimmed = path.trim();
+            if !trimmed.is_empty() {
+                return PathBuf::from(trimmed).is_dir();
+            }
+        }
+        // Non-file stores (s3://…): treat as present when URL is configured.
+        if !url.trim().is_empty() {
+            return true;
+        }
+    }
+    if let Some(ws) = env_path("OPENFDD_WORKSPACE") {
+        return ws.join("openfdd").is_dir() || ws.is_dir();
+    }
+    PathBuf::from("workspace/openfdd").is_dir()
+}
+
 /// Validate authoritative local storage before accepting traffic.
 pub fn assert_authoritative_storage() -> Result<()> {
     let results = resolve_rule_results_base();
@@ -135,5 +159,20 @@ mod tests {
         let resolved = resolve_rule_results_base();
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
         assert_eq!(resolved, root.join("rule_results"));
+    }
+
+    #[test]
+    fn historian_root_present_sees_parquet_dir() {
+        let _g = lock_env();
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("hist");
+        std::fs::create_dir_all(&root).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &root);
+        std::env::remove_var("OPENFDD_STORAGE_URL");
+        std::env::remove_var("OPENFDD_WORKSPACE");
+        assert!(historian_root_present());
+        std::env::set_var("OPENFDD_PARQUET_ROOT", dir.path().join("missing"));
+        assert!(!historian_root_present());
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
     }
 }

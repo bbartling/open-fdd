@@ -383,7 +383,7 @@ fn handle_telemetry(
                 .sequences
                 .insert(format!("{:?}", env.protocol), env.sequence);
             shadow.last_telemetry = Some(env);
-            *state.ingest_ok.lock().unwrap() += 1;
+            state.note_ingest_ok();
         }
         Err(_) => handle_untyped_payload(state, payload),
     }

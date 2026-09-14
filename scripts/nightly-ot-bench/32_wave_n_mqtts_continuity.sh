@@ -49,6 +49,25 @@ print(len(edges) if isinstance(edges,list) else 0)
 PY
 }
 
+# O13: after tip re-pin, ingest_ok/edges reset (since-boot). Wait out a short grace
+# so we do not FAIL-NEW solely because central just restarted.
+grace_after_boot() {
+  local health uptime need sleep_for
+  health="$(curl -sf "${auth_hdr[@]}" "$BASE/api/health" || echo '{}')"
+  uptime="$(echo "$health" | jq -r '.uptime_secs // 0')"
+  need="${WAVE_N_BOOT_GRACE_SECS:-90}"
+  if [[ "$uptime" =~ ^[0-9]+$ ]] && (( uptime < need )); then
+    sleep_for=$((need - uptime))
+    echo "boot grace: uptime_secs=$uptime < $need — sleep ${sleep_for}s (ingest_ok is since-boot)" | tee "$ART/boot_grace.log"
+    sleep "$sleep_for"
+  fi
+  if echo "$health" | jq -e 'has("historian_present") and .historian_present == false' >/dev/null 2>&1; then
+    echo "WARN: historian_present=false — volume may be missing (not just counters reset)" | tee -a "$ART/boot_grace.log"
+  fi
+}
+
+grace_after_boot
+
 snap before
 b_ing="$(ingest_val "$ART/ingest_before.json")"
 b_edges="$(edge_count "$ART/edges_before.json")"

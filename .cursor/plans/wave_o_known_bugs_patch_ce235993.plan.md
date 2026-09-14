@@ -82,13 +82,16 @@ todos:
     status: pending
   - id: o11-pypi-agent-pages
     content: "O11 docs (parallel): human-readable GH Pages 'PyPI agent tools' — purpose Excel+E+, calcs, agent→xlsx; fix Drivers duplicate CSV; MORE ITEMS TBD while human inspects — do not close early"
-    status: in_progress
+    status: completed
   - id: o12-plotly-download-stems
     content: "O12a: RCx+FDD Plotly PNG downloads never newplot.png — generic type stems (rcx_{family}_{preset}, fdd_{ruleId}_series); PlotlyHost always sets toImageButtonOptions; e2e assert"
-    status: in_progress
+    status: completed
   - id: o12-creekside-meter-map
     content: "O12b: LAKESIDE_ES/Creekside package data model OFF — no metering roles mapped but dataset has integrated BAS BACnet electricity meter; remap equipType meter + kwh/electric_kw (or elec_power) so Metering/UTIL/SV see it; do not invent points"
     status: pending
+  - id: o13-health-post-repin-honesty
+    content: "O13: Post-re-pin 'wonky' health — /api/health ingest_ok+edges are since-boot and reset to 0 on container restart while /workspace Parquet survives; add started_at/uptime + last_ingest_at (and optional historian presence) so ops/UI don't read 0 as data loss; stress grace after tip pin; docs one-liner in backup-update-restore"
+    status: in_progress
 isProject: false
 ---
 
@@ -133,6 +136,19 @@ isProject: false
 | Secrets | No ACME kits/IPs/passwords in git or public chat |
 | Continuous bake | One ordered sequence; parallelize Mint prep while CI runs |
 | Docs / PyPI agents | **O11** parallel docs track — GH Pages section **PyPI agent tools** (`docs/ecm/`); not on product tip critical path |
+| Local vs Railway validation | **Local Compose (`react` / `react-ot`) is a real product path** — some operators run Open-FDD on the edge/LAN; Mint local compile + stack smoke must prove a **working product**, not a toy. **Majority stress / sell-week bar stays Railway hub** (ACME MQTTS, MT, full stress, gates 31–33). Never claim Railway PASS from local-only; never skip local product smoke before GHCR tip |
+
+---
+
+## Local product validation vs Railway stress (locked)
+
+| Tier | Where | What “PASS” means |
+|------|--------|-------------------|
+| **Product smoke (required every tip)** | Mint local — `cargo check/test` touched crates · `npm` web build/test · `./scripts/openfdd_stack_up.sh react` or `react-ot` (+ demo gate when UI dirty) | Stack boots, auth, Overview/FDD/RCx/Inspect basic paths, health honest — **edge/LAN deployable product** |
+| **OT bench scrape** | Mint BACnet Who-Is/read before fieldbus GHCR | Wire path works before ACME |
+| **Stress / sell bar (majority)** | **Railway hub** + on-prem ACME fieldbus → MQTTS | Gates 31–33, continuity, ACL, full HVAC @300s, hub stress closeout |
+
+**Anti-patterns:** Greenwash Railway from local `react-ot` · Skip local stack smoke because “Railway is SoT” · Treat local as agent-only playground · Replace Railway stress with laptop soak.
 
 ---
 
@@ -199,6 +215,32 @@ Possible follow-ons (placeholders only):
 
 ---
 
+## O13 — Post–re-pin health honesty (felt “wonky”, data OK)
+
+**Context (2026-09-14 Railway tip pin):** Professional path is correct — **image tag only**, same `/workspace` volume; local `railway_central_workspace_backup.sh` is insurance, **not** restore-on-every-patch. Historian Parquet stays on disk.
+
+**What felt wonky:** After central/mqtt restart, public `/api/health` showed `edges: 0` / `ingest_ok: 0` even though packages + Parquet were intact. Operators (and agents) read that as “data gone / hub broken.”
+
+**Root cause:** `ingest_ok` / live `edges` are **process-lifetime** counters in central memory — they reset on every container start. MQTT edges reconnect on the next session / ~**300 s** poll. That is expected; it is **not** volume wipe.
+
+**Fix (product + ops — this train, small tip OK):**
+
+| Change | Why |
+|--------|-----|
+| `/api/health`: add `started_at` (or `uptime_secs`) + `last_ingest_at` (ISO/unix of last successful MQTT/CSV write this process, nullable after boot) | Separates “just restarted” from “never ingesting” |
+| Optional: `historian_reachable` / cheap parquet root present flag (no full DF scan) | Proves durable store without waiting for edges |
+| Docs: one paragraph in [`backup-update-restore.md`](../../docs/operations/backup-update-restore.md) + Railway skill — **ingest_ok≠0 is not restore proof**; gate 18 / datasets are |
+| Stress / mid-wave gates: **grace window** after re-pin (e.g. allow edges/ingest 0 for ≤1× poll interval) before FAIL continuity | Stop false FAIL-NEW right after tip |
+| SPA: if health panel shows edges/ingest, label as **since boot** (quiet — no agent sermon chrome) | Matches O7/O8 “no explainer banners” rule |
+
+**Not O13:** Pushing local backup tarballs back to Railway on every tip · rewriting historian layout · faster than 300 s OT poll.
+
+**Close when:** After a tip re-pin, health clearly shows fresh boot + durable store still OK; stress does not fail solely on post-restart `ingest_ok: 0`; BUG_REPORT cites one Railway tip with evidence.
+
+**Bake order:** Parallel with O10 reconnect wait — cheap honesty win for sell-week demos.
+
+---
+
 ## Parallelism (save wall-clock)
 
 | Overlap OK | Do not overlap |
@@ -245,6 +287,7 @@ Docs: [`LOCAL_BACNET_BACPYPE3_BENCH.md`](../../docs/operations/LOCAL_BACNET_BACP
 | ∥ | **O11** | GH Pages **PyPI agent tools** section (`docs/ecm/`) | Docs PR + Pages green; expand when human dumps more |
 | ∥ | **O12a** | Plotly PNG stems (RCx/FDD ≠ `newplot.png`) | Web tip + vitest/e2e |
 | ∥ | **O12b** | Creekside meter data-model map | Package remap + Metering proof on `LAKESIDE_ES` |
+| ∥ | **O13** | Post–re-pin health honesty (`ingest_ok`/`edges` since-boot) | Health fields + stress grace + docs |
 
 **Parallelism (save wall-clock, still no deferral):** After reboot resume → GHCR+Railway pin → while #926 CI → O10 Mint prep. O2b mapping can draft offline during O10 GHCR wait; **do not** ship O2b product until after O1 tenant paths are in place (shared-DB ACL depends on tenant building scope). **O11** docs can ship in parallel anytime (docs-only).
 
