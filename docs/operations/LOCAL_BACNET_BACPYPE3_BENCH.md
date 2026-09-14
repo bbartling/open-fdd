@@ -6,9 +6,17 @@ nav_order: 19
 
 # Local BACnet / BACpypes3 OT bench (Mint OptiPlex)
 
-Use this host when you forget you can troubleshoot **BACnet → fieldbus → MQTTS → central** without Railway or ACME VIM.
+Use this host to troubleshoot **BACnet → fieldbus → MQTTS → central** without Railway
+or ACME VIM.
 
-**Typical Mint NIC:** `eno1` → `192.168.204.11/24` (confirm with `ip a`).
+**Production path:** `openfdd-fieldbus` + **rusty-bacnet** (Rust). Poll/publish stays
+fixed **300 s**. Never put fieldbus on Railway.
+
+**BACpypes3 / Python:** diagnose-only (Who-Is / ReadProperty when you need a second
+stack). Not a product driver; exit or `pkill` before fieldbus owns UDP **47808**.
+
+**Typical Mint NIC:** `eno1` → `192.168.204.11/24` (confirm with `ip a`; private bench
+IP — keep out of product code).
 
 ## Critical: one listener on UDP 47808
 

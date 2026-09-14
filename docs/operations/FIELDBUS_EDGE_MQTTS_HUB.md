@@ -28,7 +28,10 @@ This is the **public** pattern for on-prem `openfdd-fieldbus` publishing into a 
 
 ## Local Mint / OptiPlex bench
 
-When the OT LAN is on this host (`192.168.204.11/24`), use BACpypes3 Who-Is + the container MQTTS smoke — [`LOCAL_BACNET_BACPYPE3_BENCH.md`](LOCAL_BACNET_BACPYPE3_BENCH.md) · `./scripts/ops/local_bacnet_ot_bench.sh`.
+Production OT on the bench is still **`openfdd-fieldbus` (rusty-bacnet)**. BACpypes3 is
+diagnose-only (Who-Is / RP when fieldbus is stopped). See
+[`LOCAL_BACNET_BACPYPE3_BENCH.md`](LOCAL_BACNET_BACPYPE3_BENCH.md) ·
+`./scripts/ops/local_bacnet_ot_bench.sh`.
 
 ## Policy
 
