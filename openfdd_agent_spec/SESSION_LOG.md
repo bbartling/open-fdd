@@ -1,4 +1,12 @@
+## 2026-09-14 — Wave N MQTTS recovery notes (pre-3.5.9)
+
+- Live hub `sha-b2537de` / 3.5.8 · MT ON · central MQTTS CONNECT OK after: (1) `server.key.pem` mosquitto-readable, (2) server cert **SAN** for `openfdd-mqtt` + `.railway.internal` + `reseau.proxy.rlwy.net`.
+- Product follow-up **3.5.9**: mqtt entrypoint chmod/chown certs; fieldbus first MQTT publish immediate (CI Optional BACnet was red on tip).
+- ACME PEMs refreshed; edge still on 300s-first-sleep image until re-pin. GH tidy + ACL/continuity stress still required before OPS PINNED.
+- Railway skill updated (key perms, SAN, volume helper, fixed 300s OT floor). See `BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md`.
+
 ## 2026-09-12 — Wave M 3.5.7 OPS PINNED (Mint closeout / sha-0bfcd81)
+
 
 - Product #918 squash-merged (`0bfcd81b`); GHCR tip complete central/web/mqtt/fieldbus `sha-0bfcd81`.
 - Railway re-pin via `openfdd_railway_release.sh` + `OPENFDD_RELEASE_HUB_ONLY=1` (fieldbus published after hub); health `3.5.7+0bfcd81b949f`; `OPENFDD_RULE_RESULTS_DIR=/workspace/openfdd/rule_results`.

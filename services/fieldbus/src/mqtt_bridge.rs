@@ -621,8 +621,14 @@ pub async fn spawn_if_configured(
         let type_stamps = load_equipment_type_stamps();
 
         let mut seq = 0u64;
+        // Publish immediately on start (after connect), then every fixed interval.
+        // Sleeping first forced CI/ops to wait a full 300s for the first envelope.
+        let mut first_cycle = true;
         loop {
-            tokio::time::sleep(Duration::from_secs_f64(interval)).await;
+            if !first_cycle {
+                tokio::time::sleep(Duration::from_secs_f64(interval)).await;
+            }
+            first_cycle = false;
             seq += 1;
 
             // Keep MQTT command subscription alive even while suspended.
