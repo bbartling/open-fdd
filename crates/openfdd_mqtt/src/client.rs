@@ -39,6 +39,9 @@ impl MqttHandle {
 
         let mut opts = MqttOptions::new(&cfg.client_id, &cfg.host, cfg.port);
         opts.set_keep_alive(Duration::from_secs(cfg.keep_alive_secs.max(10)));
+        // rumqttc defaults both directions to 10 KiB — too small for full-site
+        // cell-mode HVAC envelopes (ACME ~20 KiB). Raise before CONNECT.
+        opts.set_max_packet_size(1024 * 1024, 1024 * 1024);
         opts.set_transport(Transport::tls_with_config(TlsConfiguration::SimpleNative {
             ca: ca_pem,
             client_auth: Some((pkcs12, password)),

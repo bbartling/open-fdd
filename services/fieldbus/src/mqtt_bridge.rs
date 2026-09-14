@@ -135,6 +135,30 @@ fn telemetry_point_signature(point: &TelemetryPoint) -> String {
     format!("{}:{:?}", point.value, point.quality)
 }
 
+/// Split a publish batch so each MQTT envelope stays within a single equipment
+/// (and thus well under typical MQTT packet caps on full-site HVAC polls).
+fn chunk_points_by_equipment(points: Vec<TelemetryPoint>) -> Vec<Vec<TelemetryPoint>> {
+    let mut by_equip: HashMap<String, Vec<TelemetryPoint>> = HashMap::new();
+    let mut order: Vec<String> = Vec::new();
+    for p in points {
+        let key = p
+            .tags
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if !by_equip.contains_key(&key) {
+            order.push(key.clone());
+        }
+        by_equip.entry(key).or_default().push(p);
+    }
+    order
+        .into_iter()
+        .filter_map(|k| by_equip.remove(&k))
+        .filter(|chunk| !chunk.is_empty())
+        .collect()
+}
+
 fn apply_delta_filter(
     points: Vec<TelemetryPoint>,
     last: &mut HashMap<String, String>,
@@ -629,7 +653,6 @@ pub async fn spawn_if_configured(
                 tokio::time::sleep(Duration::from_secs_f64(interval)).await;
             }
             first_cycle = false;
-            seq += 1;
 
             // Keep MQTT command subscription alive even while suspended.
             if mqtt.is_none() {
@@ -732,25 +755,35 @@ pub async fn spawn_if_configured(
             if bacnet_points.is_empty() && rest_out.is_empty() {
                 continue;
             }
+            // Chunk by equipment so one large site cannot exceed MQTT packet limits
+            // (rumqttc default was 10 KiB; ACME full HVAC ~20 KiB in one envelope).
             if !bacnet_points.is_empty() {
-                let env = TelemetryEnvelope::new(
-                    &site_id,
-                    &edge_id,
-                    Protocol::Bacnet,
-                    seq,
-                    bacnet_points,
-                );
                 let topic = topics.topic(TopicKind::Telemetry, Some(Protocol::Bacnet));
-                if let Err(err) = spool.enqueue(&topic, env).await {
-                    warn!(%err, "spool enqueue failed");
-                    continue;
+                for chunk in chunk_points_by_equipment(bacnet_points) {
+                    seq += 1;
+                    let env = TelemetryEnvelope::new(
+                        &site_id,
+                        &edge_id,
+                        Protocol::Bacnet,
+                        seq,
+                        chunk,
+                    );
+                    if let Err(err) = spool.enqueue(&topic, env).await {
+                        warn!(%err, "spool enqueue failed");
+                        break;
+                    }
                 }
             }
             if !rest_out.is_empty() {
-                let env = TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Rest, seq, rest_out);
                 let topic = topics.topic(TopicKind::Telemetry, Some(Protocol::Rest));
-                if let Err(err) = spool.enqueue(&topic, env).await {
-                    warn!(%err, "rest spool enqueue failed");
+                for chunk in chunk_points_by_equipment(rest_out) {
+                    seq += 1;
+                    let env =
+                        TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Rest, seq, chunk);
+                    if let Err(err) = spool.enqueue(&topic, env).await {
+                        warn!(%err, "rest spool enqueue failed");
+                        break;
+                    }
                 }
             }
 
@@ -797,6 +830,37 @@ mod tests {
         assert_eq!(dev, 100);
         assert_eq!(ot, "analog-value");
         assert_eq!(inst, 5);
+    }
+
+    #[test]
+    fn chunk_points_by_equipment_splits_and_preserves_order() {
+        let mk = |equip: &str, id: &str| {
+            let mut tags = serde_json::Map::new();
+            tags.insert(
+                "equipment_id".into(),
+                serde_json::Value::String(equip.to_string()),
+            );
+            TelemetryPoint {
+                id: id.to_string(),
+                display_name: None,
+                kind: Some(ValueKind::Number),
+                value: serde_json::json!(1.0),
+                unit: None,
+                quality: Quality::Good,
+                tags,
+            }
+        };
+        let chunks = chunk_points_by_equipment(vec![
+            mk("jci_vav_8", "a"),
+            mk("rtu_01", "b"),
+            mk("jci_vav_8", "c"),
+            mk("rtu_01", "d"),
+        ]);
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].len(), 2);
+        assert_eq!(chunks[0][0].id, "a");
+        assert_eq!(chunks[0][1].id, "c");
+        assert_eq!(chunks[1][0].tags["equipment_id"], serde_json::json!("rtu_01"));
     }
 
     #[test]

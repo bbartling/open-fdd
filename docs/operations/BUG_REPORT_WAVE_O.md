@@ -1,9 +1,7 @@
 # Wave O — Known bugs / patch train tracker
 
-**Ops pin (Wave N, until O8/O9 tip):** `sha-9072e0b` / **3.5.10** · `multi_tenant=true`  
-**O8+O9 tip:** master `764bb17e` / **3.5.11**  
-**O7 tip:** master `69ad9558` / **3.5.12** Overview site cache — GHCR Publish in flight  
-**O11+O12a tip (open):** **3.5.13** — PyPI agent Pages + Plotly PNG stems (never `newplot.png`)
+**Ops pin (live Railway):** `sha-e8f4fd3` / **3.5.14** · `multi_tenant=true` · O13 health fields live  
+**O14 tip (open):** **3.5.15** — MQTT packet size + per-equipment publish chunks (O10 ACME unblock)
 
 Parent plan: `.cursor/plans/wave_o_known_bugs_patch_ce235993.plan.md`  
 Prior Soft-OPEN: [`BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md`](BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md)
@@ -18,15 +16,16 @@ O8 → O9 → O10 → O7 → O3 → O1 → O6 → O2 → O4 · **O5 Soft-OPEN on
 |------|--------|----------|
 | O8 hub admin | **MERGED** #925 | `/admin` + `/api/admin/*` · gate 33 |
 | O9 site data-model ACL | **MERGED** #925 | site export + session `building_id` ACL |
-| O10 full HVAC @300s | NEXT after 3.5.12 pin | private catalog ~38 devices; rusty tip gate MS/TP |
+| O10 full HVAC @300s | **BLOCKED→fixing 3.5.15** | ACME catalog 36 HVAC @300s on `sha-e8f4fd3`; publish failed rumqttc 10KiB cap (~20KiB envelope) |
 | O7 Overview cache | **MERGED** #926 | silent per-`buildingId` cache · **3.5.12** |
-| O11 PyPI Pages | IN PR | `docs/ecm/` section + Drivers CSV nav dedupe |
-| O12a Plotly PNG stems | IN PR | RCx/FDD type stems; PlotlyHost never `newplot.png` |
+| O11 PyPI Pages | **MERGED** #927 | `docs/ecm/` section + Drivers CSV nav dedupe |
 | O12a Plotly PNG stems | **MERGED** #927 | 3.5.13 type stems |
 | O12b Creekside meter map | OPEN | BAS BACnet electricity meter in dataset; data model lacks metering roles |
+| O13 health post-repin | **MERGED** #928 | 3.5.14 started_at/uptime/historian_present |
+| O14 MQTT packet / chunk | **IN PR** | rumqttc 1MiB + per-equip envelopes + mosquitto `max_packet_size` |
 | O2a audit + ZAP disposition | queued | **this agent:** audit asserts · **Kali agent:** ZAP/AF (cite only) |
 | O2b MT shared-DB harden | **IN PLAN** | product ACL/headers + **beefed CI/stress tests** (no Kali here) |
-| O3–O4 | queued | after O10 streams |
+| O3–O4 | queued | after O10 streams healthy |
 
 ## Hygiene
 
@@ -38,6 +37,7 @@ O8 → O9 → O10 → O7 → O3 → O1 → O6 → O2 → O4 · **O5 Soft-OPEN on
 
 | ID | Status | Summary |
 |----|--------|---------|
-| **wave-o-plotly-newplot** | Patching **3.5.13** | RCx hosts downloaded `newplot.png`; PlotlyHost always stems + RCx/FDD type names |
+| **wave-o-plotly-newplot** | **CLOSED** 3.5.13 | RCx hosts downloaded `newplot.png`; PlotlyHost always stems + RCx/FDD type names |
 | **wave-o-creekside-meter-map** | OPEN | `LAKESIDE_ES` / Creekside: integrated BAS BACnet electricity meter present in data; package map omits metering → empty Metering UI |
-| **wave-o-health-post-repin** | Patching **3.5.14** | `/api/health` started_at/uptime/last_ingest_at/historian_present; gate 32 boot grace |
+| **wave-o-health-post-repin** | **CLOSED** 3.5.14 | `/api/health` started_at/uptime/last_ingest_at/historian_present; gate 32 boot grace |
+| **wave-o10-mqtt-packet-cap** | Patching **3.5.15** | Full HVAC cell publish ~19.5KiB > rumqttc default 10KiB → eventloop tear-down; no Railway ingest advance |
