@@ -1,3 +1,10 @@
+## 2026-09-14 — Wave N OPS PINNED (3.5.10 / sha-9072e0b)
+
+- #923 squash-merged: fail-closed `allow_building` on FDD/CSV/analytics; gate 31 probes mapping+series.
+- Railway hub-only re-pin `sha-9072e0b`; health `3.5.10+9072e0b9fcf6`; `multi_tenant=true`.
+- Live: ACL PASS (incl. data-path); continuity `ingest_ok` 0→2; ACME fieldbus on `sha-1f94cdf` (first-publish) while fieldbus tip publish finishes.
+- Soft-OPEN: Stage C IdP/MFA; CSV `tenants/{tid}/` migrate; ZAP AF; metric FDD; MSTP addressing; Wave M mint residual.
+
 ## 2026-09-14 — Wave N data-path ACL (3.5.10)
 
 - Live hub on `sha-1f94cdf` / 3.5.9: ACL gate 31 list+select PASS, but FDD series + package mapping still returned foreign buildings (hub-root Parquet, no `allow_building` on data routes).

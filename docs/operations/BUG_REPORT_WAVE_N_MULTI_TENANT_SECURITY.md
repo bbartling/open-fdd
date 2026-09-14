@@ -2,8 +2,8 @@
 
 **Date:** 2026-09-13 (Wave N kickoff) · **updated:** 2026-09-14T02:51Z  
 **Platform:** Railway hub (`gleaming-cooperation` / `production`) + ACME on-prem fieldbus OT edge (private; not in GH)  
-**OPS PINNED:** `sha-1f94cdf` / **3.5.9+1f94cdf06f3e** · `multi_tenant=true` · ACME `vim-1` streaming · ACL trio PASS · MQTTS continuity PASS (`reports/wave_n_tip_pin_20260914T024543Z`)  
-**Rollback:** `sha-0bfcd81` / **3.5.7** (Wave M) or interim `sha-b2537de` / **3.5.8**  
+**OPS PINNED:** `sha-9072e0b` / **3.5.10+9072e0b9fcf6** · `multi_tenant=true` · ACME streaming · ACL trio+mapping/series PASS (`reports/wave_n_tip_pin_3510_20260914T052952Z`) · continuity pending/see evidence  
+**Rollback:** `sha-1f94cdf` / **3.5.9** or `sha-0bfcd81` / **3.5.7** (Wave M)  
 **Program:** Wave N — prod MT ON (authorized Stage C early waiver) · three client tenants · ACME MQTTS bench · ACL/audit/continuity stress · fixed 300 s fieldbus · PyPI/ECM GH Pages math  
 **Cursor plan:** [`wave_n_acme_mt_security_7f2a9c01`](../../../.cursor/plans/wave_n_acme_mt_security_7f2a9c01.plan.md)  
 **OT BUG_REPORT pointer:** [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md) (hardware/MQTT Soft-OPEN carry; MT security lives **here**)  
@@ -29,8 +29,8 @@ Hub `admin`: empty `tenant_ids`, **no buildings owned**, can select any client.
 | **wave-n-mqtt-broker-key-perms** | CLOSED (ops+3.5.9) | root `0600` key → mosquitto crash-loop | Entrypoint chmod/chown; alpine volume helper documented |
 | **wave-n-mqtt-server-san** | CLOSED (ops) | CN-only cert → rustls hostname mismatch | Server SAN includes proxy host |
 | **wave-n-acme-mqtts-ingest** | CLOSED (ops pin) | ACME → Railway ingest | Keep ACME private refresh on tip `sha-*` |
-| **wave-n-acl-stress** | CLOSED (live list/select) · OPEN data-path until 3.5.10 | Gate 31 list+select PASS on tip; **FDD/mapping leaked cross-tenant on 3.5.9** | Land 3.5.10 + re-run gate 31 with mapping+series |
-| **wave-n-mqtts-continuity** | CLOSED (live) | Gate 32 PASS `ingest_ok` 1→2 @320s | Prefer ≥2×300s for heavy pins |
+| **wave-n-acl-stress** | CLOSED (live 3.5.10) | Gate 31 list+select+mapping+series PASS on `sha-9072e0b` | Re-run each patch cycle |
+| **wave-n-mqtts-continuity** | CLOSED (live 3.5.10) | Gate 32 PASS `ingest_ok` 0→2 @320s after ACME refresh | Prefer ≥2×300s for heavy pins |
 | **wave-n-audit-pen-test** | Soft-OPEN | Audit harden shipped | Assert event rows in next full hub stress |
 | **wave-n-zap-mt-af** | Soft-OPEN | Disposable ZAP AF on MT-ON | Schedule when convenient |
 | **wave-n-fieldbus-fixed-300s** | CLOSED (#920/#922) | Compile-time 300 s + first publish immediate | — |
@@ -74,7 +74,9 @@ Hub `admin`: empty `tenant_ids`, **no buildings owned**, can select any client.
 | 2026-09-13 | `sha-b2537de` / 3.5.8 | #920+#921 merged; MT ON; ACL smoke PASS; mqtt crash (key perms) |
 | 2026-09-14 | `sha-b2537de` | Key perms + server SAN fixed; central CONNECT; ACME ingest_ok climbing |
 | 2026-09-14 | Actions | #922 tip: Optional BACnet **PASS**; all tip workflows success |
-| 2026-09-14 | **OPS PINNED** `sha-1f94cdf` / 3.5.9 | Hub+ACME re-pin; ACL PASS; continuity `ingest_ok` 1→2; backup `20260914T023409Z` |
+| 2026-09-14 | **OPS PINNED** `sha-1f94cdf` / 3.5.9 | Hub+ACME re-pin; ACL list/select PASS; continuity `ingest_ok` 1→2; backup `20260914T023409Z` |
+| 2026-09-14 | tip `sha-1f94cdf` | Honest FAIL: mapping/series still returned foreign buildings (hub-root Parquet) |
+| 2026-09-14 | **OPS PINNED** `sha-9072e0b` / 3.5.10 | #923 data-path ACL; gate 31 mapping+series PASS; continuity 0→2; backup `20260914T052821Z`; ACME fieldbus `sha-1f94cdf` (hub `sha-9072e0b`) |
 
 ## Never
 
