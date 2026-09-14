@@ -453,6 +453,11 @@ export function OverviewPopulated({
         },
         buildingId,
       );
+      const result = await runFdd({
+        mode: "registry",
+        building_id: buildingId,
+        params,
+      });
       const n = result.results?.length ?? 0;
       setLastRuleResultCount(n);
       setRulesNote(
