@@ -28,7 +28,7 @@ Hub `admin`: empty `tenant_ids`, **no buildings owned**, can select any client.
 | **wave-n-tenant-password-logins** | CLOSED (product #920) | `users.json` + membership mint | Keep secrets in Railway / `.secrets` only |
 | **wave-n-mqtt-broker-key-perms** | CLOSED (ops) | `server.key.pem` root `0600` → mosquitto Permission denied / crash-loop | Tip image entrypoint `chmod a+r`/`chown 1883` (rev **3.5.9**); ops recovery via alpine volume helper |
 | **wave-n-mqtt-server-san** | CLOSED (ops) | CN-only server cert → rustls/native-tls **hostname mismatch** / `bad certificate` (openssl s_client still OK) | Reissued server cert SAN: `openfdd-mqtt`, `.railway.internal`, `reseau.proxy.rlwy.net`, localhost |
-| **wave-n-acme-mqtts-ingest** | OPEN | Edge TLS path restored; first publish still 300s sleep on `sha-b2537de`; `edges`/`ingest_ok` not yet advancing | Prove edge CONNECT + ingest after ≥1 poll; ship **3.5.9** first-publish |
+| **wave-n-acme-mqtts-ingest** | Soft-OPEN (ops proven) | Live: `edge:acme:vim-1` CONNECT + health `edges:1` / `ingest_ok≥2` on `sha-b2537de` after key-perm+SAN repair | Re-prove after **3.5.9** re-pin + continuity ≥2×300s; keep Soft-OPEN until OPS PINNED |
 | **wave-n-acl-stress** | Soft-OPEN | Product gates 31 present; live trio PASS smoke earlier; full stress pending stream | Run hub stress with MQTTS live |
 | **wave-n-mqtts-continuity** | OPEN | Continuity gate 32 needs rising `ingest_ok` across ≥2×300s | After ACME streaming |
 | **wave-n-audit-pen-test** | Soft-OPEN | Audit harden shipped in #920 | Assert events in stress |
