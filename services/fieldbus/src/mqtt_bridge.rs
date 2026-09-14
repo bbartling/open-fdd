@@ -761,13 +761,8 @@ pub async fn spawn_if_configured(
                 let topic = topics.topic(TopicKind::Telemetry, Some(Protocol::Bacnet));
                 for chunk in chunk_points_by_equipment(bacnet_points) {
                     seq += 1;
-                    let env = TelemetryEnvelope::new(
-                        &site_id,
-                        &edge_id,
-                        Protocol::Bacnet,
-                        seq,
-                        chunk,
-                    );
+                    let env =
+                        TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Bacnet, seq, chunk);
                     if let Err(err) = spool.enqueue(&topic, env).await {
                         warn!(%err, "spool enqueue failed");
                         break;
@@ -860,7 +855,10 @@ mod tests {
         assert_eq!(chunks[0].len(), 2);
         assert_eq!(chunks[0][0].id, "a");
         assert_eq!(chunks[0][1].id, "c");
-        assert_eq!(chunks[1][0].tags["equipment_id"], serde_json::json!("rtu_01"));
+        assert_eq!(
+            chunks[1][0].tags["equipment_id"],
+            serde_json::json!("rtu_01")
+        );
     }
 
     #[test]
