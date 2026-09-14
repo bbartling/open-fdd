@@ -14,6 +14,7 @@ import { AuthPage } from "./pages/AuthPage";
 import { SitesPage } from "./pages/SitesPage";
 import { RcxPage } from "./pages/RcxPage";
 import { OperationsPage } from "./pages/OperationsPage";
+import { AdminPage } from "./pages/AdminPage";
 import { REPORTS_API_ROOT, REPORTS_ROUTE } from "./api/reportsApi";
 
 /** Bundle anchors for nightly gate 11 (#549). */
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/wattlab" element={<Navigate to="/export" replace />} />
         <Route path="/twin" element={<Navigate to="/export" replace />} />
         <Route path="/operations" element={gated(<OperationsPage />)} />
+        <Route path="/admin" element={gated(<AdminPage />)} />
       </Routes>
     </BrowserRouter>
   );

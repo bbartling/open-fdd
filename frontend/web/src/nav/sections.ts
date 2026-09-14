@@ -11,6 +11,7 @@ export const MAIN_SECTIONS = [
   { id: "export", label: "Dump", path: "/export" },
   { id: "sites", label: "Sites", path: "/sites" },
   { id: "operations", label: "Operations", path: "/operations" },
+  { id: "admin", label: "Admin", path: "/admin" },
 ] as const;
 
 /** Secondary App pages (collapsed sidebar details). */
@@ -26,4 +27,5 @@ export const SIDEBAR_NAV = [
   { to: "/metering", label: "Metering", short: "E", testId: "nav-metering" },
   { to: "/export", label: "Dump", short: "X", testId: "nav-export" },
   { to: "/operations", label: "Operations", short: "O", testId: "nav-operations" },
+  { to: "/admin", label: "Admin", short: "D", testId: "nav-admin" },
 ] as const;

@@ -20,6 +20,8 @@ function resolveActiveId(
   if (pathname.startsWith("/inspect")) return "inspect";
   if (pathname.startsWith("/mapping")) return "data-model";
   if (pathname.startsWith("/sites")) return "sites";
+  if (pathname.startsWith("/admin")) return "admin";
+  if (pathname.startsWith("/operations")) return "operations";
   if (pathname.startsWith("/actions")) return "actions";
   if (pathname.startsWith("/findings")) return "results";
   if (pathname.startsWith("/rcx")) return "rcx-plots";

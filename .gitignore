@@ -68,6 +68,7 @@ services/central/.cache/
 dist/
 build/
 .venv/
+.venv-bacpypes3/
 
 workspace/.cache/
 workspace/jobs/

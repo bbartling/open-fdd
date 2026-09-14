@@ -1,6 +1,7 @@
 //! Open-FDD Central — MQTTS ingest + REST/OpenAPI control plane.
 
 mod actions;
+mod admin_cp;
 mod afdd_scheduler;
 mod analytics;
 mod auth;

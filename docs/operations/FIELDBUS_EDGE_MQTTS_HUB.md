@@ -26,6 +26,10 @@ This is the **public** pattern for on-prem `openfdd-fieldbus` publishing into a 
 4. Start compose; wait ≥ one 300 s poll; confirm central `/api/health` ingest counters / edges advance.
 5. On each GHCR refresh: pull → recreate → one poll validate (see private site scripts — not in this repo).
 
+## Local Mint / OptiPlex bench
+
+When the OT LAN is on this host (`192.168.204.11/24`), use BACpypes3 Who-Is + the container MQTTS smoke — [`LOCAL_BACNET_BACPYPE3_BENCH.md`](LOCAL_BACNET_BACPYPE3_BENCH.md) · `./scripts/ops/local_bacnet_ot_bench.sh`.
+
 ## Policy
 
 Full agent rules: [`BACNET_OT_POLICY.md`](BACNET_OT_POLICY.md) · Wave N tracker: [`BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md`](BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md).

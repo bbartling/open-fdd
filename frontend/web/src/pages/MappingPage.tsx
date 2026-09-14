@@ -39,6 +39,10 @@ export function MappingPage() {
   const equipmentId = query.equipment ?? "";
 
   const [buildings, setBuildings] = useState<string[]>([]);
+  /** Full-site inventory for export (never equipment-filtered). */
+  const [siteInventory, setSiteInventory] = useState<PackageMappingResponse | null>(
+    null,
+  );
   const [inventory, setInventory] = useState<PackageMappingResponse | null>(null);
   const [sessionConfig, setSessionConfig] = useState<SessionConfig | null>(null);
 
@@ -74,17 +78,18 @@ export function MappingPage() {
   const refreshInventory = useCallback(async () => {
     if (!buildingId) {
       setInventory(null);
+      setSiteInventory(null);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      // Load site inventory first; only request a specific equipment once it
-      // belongs to this building (avoids cross-site sticky ?eq= errors).
+      // Load full site inventory first (export SoT); equipment filter is edit-only.
       const [invAll, sess] = await Promise.all([
         getPackageMapping(buildingId),
-        getSessionConfig(),
+        getSessionConfig(buildingId),
       ]);
+      setSiteInventory(invAll);
       const ids = invAll.equipment_ids ?? [];
       let inv = invAll;
       let eqId = equipmentId;
@@ -110,6 +115,7 @@ export function MappingPage() {
       }
     } catch (err) {
       setInventory(null);
+      setSiteInventory(null);
       setError(formatErr(err));
     } finally {
       setLoading(false);
@@ -178,14 +184,15 @@ export function MappingPage() {
   };
 
   const onDownloadManifest = () => {
-    if (!inventory) return;
-    const blob = new Blob([buildMappingManifest(inventory)], {
+    const src = siteInventory ?? inventory;
+    if (!src || !buildingId) return;
+    const blob = new Blob([buildMappingManifest(src)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `data_model_${inventory.building_id ?? buildingId ?? "unknown"}.json`;
+    a.download = `data_model_${src.building_id ?? buildingId}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -214,7 +221,10 @@ export function MappingPage() {
   ];
   const equipmentOptions = [
     { value: "", label: "— select equipment —" },
-    ...(inventory?.equipment_ids ?? []).map((id) => ({ value: id, label: id })),
+    ...((siteInventory ?? inventory)?.equipment_ids ?? []).map((id) => ({
+      value: id,
+      label: id,
+    })),
   ];
   const roleOptions = useMemo(() => {
     const catalog = new Set(cookbookRoles);
@@ -246,7 +256,7 @@ export function MappingPage() {
           equipment selectors (or URL <code>?site=</code> / <code>?eq=</code>).
         </p>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
           <Select
             id="map-building"
             label="Building (site)"
@@ -260,7 +270,7 @@ export function MappingPage() {
           />
           <Select
             id="map-equipment"
-            label="Equipment"
+            label="Equipment (edit)"
             value={equipmentId}
             options={equipmentOptions}
             onChange={(value) => {
@@ -276,6 +286,17 @@ export function MappingPage() {
             checked={showUnmappedOnly}
             onChange={setShowUnmappedOnly}
             testId="map-unmapped-only"
+          />
+          <Button
+            id="map-download-manifest"
+            label="Export site data model"
+            variant="secondary"
+            onClick={onDownloadManifest}
+            disabled={
+              !buildingId ||
+              (!(siteInventory?.equipment?.length) && !(inventory?.equipment?.length))
+            }
+            testId="map-download-manifest"
           />
         </div>
         <p className="oracle-sidebar__caption">
@@ -437,14 +458,6 @@ export function MappingPage() {
                   void refreshInventory();
                 }}
                 testId="map-reload"
-              />
-              <Button
-                id="map-download-manifest"
-                label="Export data model JSON"
-                variant="secondary"
-                onClick={onDownloadManifest}
-                disabled={!inventory?.ok && !(inventory?.equipment?.length)}
-                testId="map-download-manifest"
               />
             </div>
             {dirty ? (

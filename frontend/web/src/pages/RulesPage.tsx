@@ -87,7 +87,10 @@ export function RulesPage() {
         getFddStatus(),
         listFddRules(),
         listPackageBuildings().catch(() => [] as string[]),
-        getSessionConfig().catch(() => ({ ok: true, config: null })),
+        getSessionConfig(buildingId || undefined).catch(() => ({
+          ok: true,
+          config: null,
+        })),
       ]);
       setStatus(st);
       setRules(ruleList);

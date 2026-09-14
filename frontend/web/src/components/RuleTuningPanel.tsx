@@ -242,7 +242,7 @@ export function RuleTuningPanel() {
     // Seed Lab sliders from persisted session_config (package / Vibe19 parity),
     // then apply any local browser overrides on top (scoped by building).
     setParams(loadLocalRuleParams(buildingId));
-    void getSessionConfig()
+    void getSessionConfig(buildingId)
       .then((body) => {
         if (cancelled) return;
         const merged = effectiveRunParams(
@@ -276,18 +276,21 @@ export function RuleTuningPanel() {
     async (nextParams: RuleParamMap) => {
       const gen = ++persistGen.current;
       try {
-        const prev = await getSessionConfig();
+        const prev = await getSessionConfig(buildingId);
         if (gen !== persistGen.current) return;
-        await putSessionConfig({
-          ...(prev.config ?? {}),
-          schema_version: prev.config?.schema_version ?? SESSION_SCHEMA,
-          params: {
-            ...nextParams,
-            _ui: {
-              require_operational_proof: opsGate ? 1 : 0,
+        await putSessionConfig(
+          {
+            ...(prev.config ?? {}),
+            schema_version: prev.config?.schema_version ?? SESSION_SCHEMA,
+            params: {
+              ...nextParams,
+              _ui: {
+                require_operational_proof: opsGate ? 1 : 0,
+              },
             },
           },
-        });
+          buildingId,
+        );
         if (gen === persistGen.current) setPersistErr(null);
       } catch (err) {
         if (gen === persistGen.current) {

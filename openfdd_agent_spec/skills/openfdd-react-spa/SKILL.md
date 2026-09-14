@@ -48,6 +48,18 @@ description: >-
     Registry `description` is canonical short name; cookbooks add long titles. Use shared
     `ruleLabels` helpers (planned); merge `GET /api/fdd/rules` into `cookbookRuleCatalog`
     at boot instead of duplicating static maps.
+15. **Site-switch performance (Wave O7):** Cache Overview + health per `buildingId`.
+    Do **not** re-fan-out all analytics POSTs on every `?site=` change or thrash
+    matrices twice. Invalidate on `RULES_UPDATED` / existing explicit refresh only.
+    Prefer durable `GET /api/fdd/results` for flags. Serving SPA from Rust does
+    **not** fix this — packaging ≠ UX.
+16. **No agent UI chrome:** Never add banners, tips, or “we optimized / cached /
+    AI …” copy to explain under-hood work. Keep the product quiet and professional.
+    Put rationale in `openfdd_agent_spec` / PR description, not the SPA.
+17. **Hub Admin (Wave O8):** `/admin` is hub_admin only — quiet tables for users/tenants.
+18. **Data Model export (Wave O9):** Export = **entire active site** data model JSON.
+    Do not offer device/point-scoped export. Equipment picker is for edits only.
+    Foreign `building_id` must 403 for non-admin (mapping, model download, session config).
 
 ## Key files
 
@@ -74,3 +86,5 @@ description: >-
 - Nesting Operations under Sites or treating Sites ingest labels as backend mode
 - Exposing MQTT broker secrets to the SPA
 - Shipping GHCR web without Vite operator approval on low-RAM benches when required by the active plan
+- Adding goofy explanatory UI text for agent/under-hood changes
+- Clearing Overview and re-running all DataFusion analytics on every building switch
