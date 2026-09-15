@@ -2,6 +2,8 @@
 title: Historian filesystem freeze (3.4.0)
 parent: Operations
 nav_order: 7
+nav_exclude: true
+
 ---
 
 # Historian filesystem freeze — 3.4.0

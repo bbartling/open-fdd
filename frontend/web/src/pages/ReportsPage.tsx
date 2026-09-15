@@ -21,16 +21,20 @@ import {
   type FddResultRow,
   type FddRuleSummary,
 } from "../api/fddApi";
-import { listFddEquipment, postInspect, postSensorHealth } from "../api/analyticsApi";
+import { listFddEquipment, postBasVsWebOat, postInspect, postSensorHealth } from "../api/analyticsApi";
 import {
   missingSegmentCount,
   type PlotlyFigure,
 } from "../api/plotDataset";
 import {
+  expandFddPlotRoles,
+  isOatMeteoRule,
   ruleResultChart,
   sensorFaultChart,
   sensorHealthHeatmap,
+  withConfirmedFaultLane,
 } from "../api/vibeCharts";
+import { basOverlay } from "../api/centralOverview";
 import {
   preferredPlotRuleId,
 } from "../lib/fddPlotStatus";
@@ -82,35 +86,6 @@ function isZoneTempRule(
   }
   const rule = rules.find((r) => r.rule_id === ruleId);
   return (rule?.required_roles ?? []).includes("zone_t");
-}
-
-function lastYAxisTitle(fig: PlotlyFigure | null): string {
-  if (!fig?.layout) return "";
-  const yKeys = Object.keys(fig.layout).filter((k) => /^yaxis\d*$/.test(k));
-  yKeys.sort((a, b) => {
-    const na = a === "yaxis" ? 1 : Number(a.replace("yaxis", ""));
-    const nb = b === "yaxis" ? 1 : Number(b.replace("yaxis", ""));
-    return na - nb;
-  });
-  const last = fig.layout[yKeys[yKeys.length - 1] as "yaxis"] as
-    | { title?: string | { text?: string }; domain?: number[] }
-    | undefined;
-  const title = last?.title;
-  return typeof title === "string" ? title : String(title?.text ?? "");
-}
-
-function lastYAxisDomain0(fig: PlotlyFigure | null): number {
-  if (!fig?.layout) return 1;
-  const yKeys = Object.keys(fig.layout).filter((k) => /^yaxis\d*$/.test(k));
-  yKeys.sort((a, b) => {
-    const na = a === "yaxis" ? 1 : Number(a.replace("yaxis", ""));
-    const nb = b === "yaxis" ? 1 : Number(b.replace("yaxis", ""));
-    return na - nb;
-  });
-  const last = fig.layout[yKeys[yKeys.length - 1] as "yaxis"] as
-    | { domain?: number[] }
-    | undefined;
-  return last?.domain?.[0] ?? 1;
 }
 
 export function ReportsPage() {
@@ -294,13 +269,13 @@ export function ReportsPage() {
     setNoFaultIsError(false);
     try {
       const series = await getFddSeries(equipmentId, ruleId, buildingId || undefined);
-      const roles = series.roles ?? [];
       let rows = (series.rows ?? []) as Array<Record<string, unknown>>;
       const zoneRule = isZoneTempRule(ruleId, rules);
       const gateOn = zoneRule && applyZoneComfortGate;
       if (gateOn && rows.some((r) => "occ_mode" in r || "occupied" in r)) {
         rows = rows.filter(rowIsOccupied);
       }
+      const roles = expandFddPlotRoles(ruleId, series.roles ?? [], rows);
       const fault = rows.map((r) => {
         const v = r.confirmed_fault ?? r.fault;
         if (v === true || v === 1 || v === "1" || v === "true") return 1;
@@ -309,12 +284,38 @@ export function ReportsPage() {
       });
       const hasFaultOverlay = fault.some((v) => v != null);
       const trueFaultCount = fault.filter((v) => v === 1).length;
-      const fig = ruleResultChart(rows, {
-        equipmentId: series.equipment_id ?? equipmentId,
-        ruleId: series.rule_id ?? ruleId,
-        roles,
-        confirmedFault: hasFaultOverlay ? fault : undefined,
-      });
+
+      let fig: PlotlyFigure | null = null;
+      if (isOatMeteoRule(ruleId) && buildingId) {
+        try {
+          // Web OAT is on weather equip — series alone is local oa_t only.
+          const basEnv = await postBasVsWebOat({
+            building_id: buildingId,
+            max_points: 4000,
+          });
+          const overlay = basOverlay(basEnv.points ?? [], 5);
+          if (overlay) {
+            fig = withConfirmedFaultLane(overlay, {
+              equipmentId: series.equipment_id ?? equipmentId,
+              ruleId: series.rule_id ?? ruleId,
+              faultX: rows.map(
+                (r) => String(r.timestamp_utc ?? r.timestamp ?? "") || null,
+              ),
+              confirmedFault: hasFaultOverlay ? fault : [],
+            });
+          }
+        } catch {
+          // Fall through to ordinary series chart.
+        }
+      }
+      if (!fig) {
+        fig = ruleResultChart(rows, {
+          equipmentId: series.equipment_id ?? equipmentId,
+          ruleId: series.rule_id ?? ruleId,
+          roles,
+          confirmedFault: hasFaultOverlay ? fault : undefined,
+        });
+      }
       setFigure(fig);
       const resultRow = results.find(
         (r) =>
@@ -516,10 +517,6 @@ export function ReportsPage() {
     return Object.keys(previewRows[0]).map((k) => ({ key: k, header: k }));
   }, [previewRows]);
 
-  const lastTrace = figure?.data[figure.data.length - 1]?.name ?? "";
-  const lastAxis = lastYAxisTitle(figure);
-  const lastDomain0 = lastYAxisDomain0(figure);
-
   return (
     <AppShell
       title="FDD Plots"
@@ -617,12 +614,6 @@ export function ReportsPage() {
             }
             testId="plots-chart"
           />
-
-          {figure ? (
-            <p data-testid="plots-fault-lane">
-              last_axis={lastAxis} last_trace={lastTrace} domain0={lastDomain0}
-            </p>
-          ) : null}
 
           <div style={{ margin: "0.75rem 0" }}>
             <Button

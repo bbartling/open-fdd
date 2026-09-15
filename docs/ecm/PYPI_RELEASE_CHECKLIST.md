@@ -1,19 +1,11 @@
 ---
 title: PyPI release checklist
-parent: PyPI agent tools
-nav_order: 7
+nav_exclude: true
+permalink: /ecm/PYPI_RELEASE_CHECKLIST.html
 ---
 
-# Open-FDD PyPI Release Checklist — ECM Engineering
+# Removed from public docs
 
-- [ ] `open_fdd/ecm_engineering/` merged
-- [ ] workbook `.xlsx` included as package data
-- [ ] `open_fdd_model.json` included as package data
-- [ ] tests pass
-- [ ] generated workbook smoke test passes
-- [ ] FastAPI example remains optional dependency only
-- [ ] Vibe 20 imports migrated through parity tests
-- [ ] Open-FDD version bumped
-- [ ] wheel inspected for workbook/template files
-- [ ] existing Trusted Publishing workflow used
-- [ ] PyPI installed package tested with `ECMJob(...).save(...)`
+Release checklist lives with maintainers in-repo. Public agent entry: **[AI agents & skills]({{ site.baseurl }}/ecm/agent-context.html)**.
+
+<meta http-equiv="refresh" content="0; url={{ site.baseurl }}/ecm/agent-context.html">

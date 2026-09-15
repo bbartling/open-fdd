@@ -36,6 +36,7 @@ Railway CLI: [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md)
 - Railway is the AFDD head-end. Do not require local central for closeout.
 - Stress is **LAST**. Do not cite older-pin stress as proof.
 - ZAP = Railway public origin + `zap_baseline_verdict.py`; archive `reports/zap-railway_<TS>/`.
+- **Kali owns ActiveScan / exploratory PEN**; Mint runs gate 34 headers/`security.txt` + `preauth_disclosure` / gate 31 ACL. Skill: [`openfdd-mt-security`](../openfdd-mt-security/SKILL.md).
 - **After ZAP:** `docker rm -f` leftover zap containers (low-RAM). One agent only — no duplicate Task workers on the same train.
 - **`SKIP_ZAP=1` ⇒ not fully_qualified** (required gate SKIPPED). Never claim ZAP PASS when skipped.
 - Railway MCP: exact image pin; `RAILWAY_ONLY=1` refuses local-central fallback in gate 13.

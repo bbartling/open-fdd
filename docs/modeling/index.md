@@ -22,12 +22,21 @@ in the package**, not a broken engine. See
 
 | Guide | Content |
 |-------|---------|
+| [**SQL rules → Haystack map**](sql-rules-haystack-map.html) | All production SQL rules + Haystack tags / SQL roles for the data model |
 | [Package schema](package-schema.html) | Compact ingest maps vs rich (SCAFFOLD) evidence |
 | [Heat-pump buildings](heat-pump-buildings.html) | WSHP topology, role tiers, anti-patterns |
 | [Zone terminals / FCU / UV](zone-terminals.html) | ZONE = FCU or standalone DDC; UV = CV AHU |
 | [Rule readiness](rule-readiness.html) | Runnable / missing / not applicable |
 | [Haystack model](haystack-model.html) | Sites, equipment, points, RDF APIs |
 | [Assignments](assignments.html) | Bind drivers → Haystack → FDD |
+
+## SQL FDD ↔ data model
+
+Commissioning-grade packages must map points so **every rule you care about** has its required Haystack tags (or package columns) → SQL roles. Full registry table:
+
+→ **[SQL rules → Haystack map](sql-rules-haystack-map.html)** (live count from `sql_rules/registry.yaml`)
+
+Rule recipes live in the **[Rule Cookbook]({{ site.baseurl }}/rules/)** (`/rules/` permalink is stable).
 
 ## Agent entry points (repo)
 

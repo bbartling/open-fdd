@@ -71,7 +71,7 @@ pub const RCX_PRESETS: &[RcxPresetMeta] = &[
         id: "vav_health_matrix",
         title: "Zones — VAV health (broken / comfort / rogue)",
         family: "Zones / VAV",
-        chart: "ranking",
+        chart: "vav_health",
         role_col: "zone_t",
         eq_kinds: &["VAV"],
         overlay_col: None,
@@ -497,7 +497,15 @@ pub async fn run_preset(
         return Ok(None);
     };
     if meta.id == "vav_health_matrix" {
-        return super::vav_health::vav_health_from_history(building_id, 70.0, 75.0).await;
+        return Ok(Some(
+            match super::vav_health::vav_health_from_history(building_id, 70.0, 75.0).await? {
+                Some(env) => annotate(env, meta),
+                None => empty_stub(
+                    meta,
+                    "VAV health matrix unavailable — missing historian or no VAV equipment",
+                ),
+            },
+        ));
     }
     if meta.chart == "overview_analytics" {
         return Ok(Some(empty_stub(

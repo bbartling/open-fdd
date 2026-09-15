@@ -45,8 +45,9 @@ When driving a **tiny-rev / ops closeout** (not Milestone A migration PRs):
 1. **Log first** — gate FAIL → row in [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) **Patch cycle — Phase 7 bugs** + `SESSION_LOG.md` one-liner on milestone events.
 2. **One concern per PR** — harness fixes, product fixes, and docs-only fixes stay separate.
 3. **VERSION** — bump workspace patch only when product/runtime behavior changes (`docs/VERSIONING.md`).
-4. **Post-merge** — GHCR publish → backup + re-pin (Railway + local) → smoke → re-stress affected gate only.
-5. **Railway F1** — cloud pipeline stress (DF55, BUILDING_50, AFDD flood, bldg2) is logged under BUG_REPORT **Railway F1**; it does not block declaring local synthetic CSV FDD evidence.
+4. **Auth / MT security PRs** — update [`skills/openfdd-mt-security/SKILL.md`](skills/openfdd-mt-security/SKILL.md) + AGENTS rule **60b** when changing pre-auth routes, tenant ACL, CSP/`security.txt`, or MQTT ACL notes. Keep `cargo test -p openfdd-central --test preauth_disclosure` green.
+5. **Post-merge** — GHCR publish → backup + re-pin (Railway + local) → smoke → re-stress affected gate only. **Skip Railway re-pin while Kali owns the hub** unless operator OK.
+6. **Railway F1** — cloud pipeline stress (DF55, BUILDING_50, AFDD flood, bldg2) is logged under BUG_REPORT **Railway F1**; it does not block declaring local synthetic CSV FDD evidence.
 
 Full gate matrix: [`scripts/nightly-ot-bench/README.md`](../scripts/nightly-ot-bench/README.md).
 

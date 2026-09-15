@@ -26,5 +26,6 @@ Central REST (`:8080`) owns JWT auth, historian, and **DataFusion SQL** FDD
 | [SQL FDD Rules](sql-fdd-rules.html) | Registry SQL FDD on central |
 | [CSV batch import](csv-batch-import.html) | Headless CSV ingest API |
 | [Plots & reports](plots-and-reports.html) | Trends and reports |
+| [**RCx & FDD plot examples**](rcx-plots-by-hvac.html) | Presets by HVAC type + screenshot gallery (old `/RCX_PLOTS_BY_HVAC.html` redirects here) |
 
-See [Architecture → Services](../architecture/services.html) and the [Rule Cookbook](../rules/cookbook/).
+See [Architecture → Services](../architecture/services.html) and the [Rule Cookbook]({{ site.baseurl }}/rules/).

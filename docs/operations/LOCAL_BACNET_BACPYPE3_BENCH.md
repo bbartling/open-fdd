@@ -2,6 +2,8 @@
 title: Local BACnet + BACpypes3 bench (Mint)
 parent: Operations
 nav_order: 19
+nav_exclude: true
+
 ---
 
 # Local BACnet / BACpypes3 OT bench (Mint OptiPlex)

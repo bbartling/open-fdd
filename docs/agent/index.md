@@ -17,7 +17,7 @@ Open-FDD is a **vendor-neutral, local-first edge platform**. It does **not** shi
 | Layer | Components |
 |-------|------------|
 | Runtime | `central` (API/FDD), `ui` (React), `fieldbus` (BACnet→MQTTS), `mqtt` (broker) |
-| Data | Arrow/Feather historian, DataFusion SQL FDD |
+| Data | **Parquet** historian, DataFusion SQL FDD |
 | Model | Haystack RDF, assignments, FDD wires |
 | API | JWT REST, `/api/agent/tools` catalog |
 | UI | React SPA (`frontend/web`) — health matrices, E+ dump export (legacy WattLab routes) |

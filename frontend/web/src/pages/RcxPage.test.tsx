@@ -11,6 +11,7 @@ const ALL_PRESETS = [
   { id: "zone_comfort_rank", title: "Zones rank", family: "Zones / VAV", chart: "ranking", frozen: true },
   { id: "zone_temps", title: "Zones temps", family: "Zones / VAV", chart: "timeseries", frozen: true },
   { id: "vav_flows", title: "VAV flows", family: "Zones / VAV", chart: "timeseries", frozen: true },
+  { id: "vav_health_matrix", title: "VAV health", family: "Zones / VAV", chart: "vav_health", frozen: false },
   { id: "ahu_dats", title: "AHU DAT", family: "AHU / air", chart: "timeseries", frozen: true },
   { id: "ahu_mats", title: "AHU MAT", family: "AHU / air", chart: "timeseries", frozen: true },
   { id: "ahu_rats", title: "AHU RAT", family: "AHU / air", chart: "timeseries", frozen: true },
@@ -108,6 +109,82 @@ describe("RcxPage vibe19 catalog", () => {
     expect(screen.getByTestId("rcx-comfort-donut")).toBeTruthy();
     expect(screen.getByTestId("rcx-companion-note").textContent).toMatch(
       /Worst-zones timeseries/,
+    );
+  });
+
+  it("renders vav_health_matrix from rows when points are empty", async () => {
+    const zonesFirst = [
+      {
+        id: "vav_health_matrix",
+        title: "VAV health",
+        family: "Zones / VAV",
+        chart: "vav_health",
+        frozen: false,
+      },
+      ...ALL_PRESETS.filter((p) => p.id !== "vav_health_matrix"),
+    ];
+    vi.mocked(listRcxPresets).mockResolvedValueOnce(zonesFirst);
+    vi.mocked(postRcxPreset).mockResolvedValueOnce({
+      schema_version: "1",
+      query_version: "vav-health-v1",
+      generated_at: "",
+      engine: "datafusion",
+      warnings: [],
+      coverage: {
+        chart_kind: "vav_health",
+        schema_version: "vav_health_matrix_v1",
+        title: "VAV health",
+        family: "Zones / VAV",
+      },
+      rows: [
+        {
+          equipment_id: "TERM_A",
+          broken_box: true,
+          poor_zone_performance: false,
+          rogue_damper: false,
+          comfort_fault_h: 22,
+        },
+        {
+          equipment_id: "TERM_B",
+          broken_box: false,
+          poor_zone_performance: true,
+          rogue_damper: false,
+          comfort_fault_h: 8,
+        },
+        {
+          equipment_id: "TERM_C",
+          broken_box: null,
+          poor_zone_performance: false,
+          rogue_damper: false,
+          comfort_fault_h: 0,
+        },
+      ],
+      equipment: [],
+      points: [],
+      skipped: [],
+    } as Awaited<ReturnType<typeof postRcxPreset>>);
+
+    render(
+      <MemoryRouter initialEntries={["/rcx?site=BUILDING_100"]}>
+        <RcxPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(postRcxPreset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          series: expect.objectContaining({ preset_id: "vav_health_matrix" }),
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId("rcx-error")).toBeNull();
+      expect(screen.getByTestId("rcx-plot")).toBeTruthy();
+      expect(screen.getByTestId("rcx-comfort-donut")).toBeTruthy();
+      expect(screen.getByTestId("rcx-rows-table")).toBeTruthy();
+    });
+    expect(screen.getByTestId("rcx-companion-note").textContent).toMatch(
+      /Broken-box flags unknown/,
     );
   });
 });

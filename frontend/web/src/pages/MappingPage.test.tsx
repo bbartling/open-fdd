@@ -23,6 +23,13 @@ vi.mock("../api/mappingApi", async () => {
   };
 });
 
+vi.mock("../api/fddApi", () => ({
+  listFddRules: vi.fn(async () => [
+    { rule_id: "FC1", required_roles: ["duct_static"], optional_roles: ["fan_cmd"] },
+    { rule_id: "CMD-1", required_roles: ["fan_cmd", "fan_status"], optional_roles: [] },
+  ]),
+}));
+
 import {
   getPackageMapping,
   getSessionConfig,
@@ -107,6 +114,20 @@ describe("MappingPage", () => {
     expect(screen.getByTestId("mapping-validation-summary").textContent).toMatch(
       /1 warning/,
     );
+    // unmapped_columns extras appear; FDD consumers for fan_cmd
+    expect(screen.getByTestId("map-columns-table").textContent).toMatch(/DA_P/);
+    expect(screen.getByTestId("map-columns-table").textContent).toMatch(/CMD-1/);
+  });
+
+  it("exports sit above equipment selects and offers view-as-text", async () => {
+    renderMapping();
+    await waitFor(() => screen.getByTestId("map-download-manifest"));
+    const exportBtn = screen.getByTestId("map-download-manifest");
+    const building = screen.getByTestId("map-building-select");
+    expect(
+      exportBtn.compareDocumentPosition(building) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByTestId("map-view-manifest-text")).toBeTruthy();
   });
 
   it("saves role edits via package roles + session-config", async () => {

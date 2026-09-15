@@ -1,3 +1,8 @@
+---
+title: Historian S3
+nav_exclude: true
+---
+
 # S3-compatible historian operations
 
 Open-FDD uses the same canonical Parquet historian contract on local disk and S3-compatible object storage. The engine stays provider-neutral: AWS S3, MinIO, Railway Storage Buckets, and compatible providers map deployment settings into the same `OPENFDD_*` variables.

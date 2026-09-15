@@ -2,6 +2,8 @@
 title: Documentation site
 parent: Operations
 nav_order: 4
+nav_exclude: true
+
 ---
 
 # GitHub Pages documentation

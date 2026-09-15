@@ -559,11 +559,15 @@ pub fn results_response(building_id: Option<&str>) -> Value {
     json!({"ok": true, "count": rows.len(), "results": rows})
 }
 
-/// Roles used for FDD Plots series SELECT (required - optional, SQL-safe).
+/// Roles used for FDD Plots series SELECT (required ∪ optional, SQL-safe).
 ///
 /// Portable rules keep `required_roles` empty and put sensors in
 /// `optional_roles`; Plots still need those columns or the UI shows
 /// "No plottable series".
+///
+/// ECON-1..7 always candidate `oa_damper_pct` so FDD Plots can dual-axis
+/// the damper when the historian has it (ECON-4 omits it from registry
+/// roles — OA fraction math — but operators still need the overlay).
 fn series_plot_columns(rule: &RuleSpec) -> Vec<&str> {
     let mut columns: Vec<&str> = rule
         .required_roles
@@ -572,6 +576,17 @@ fn series_plot_columns(rule: &RuleSpec) -> Vec<&str> {
         .map(String::as_str)
         .filter(|name| name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
         .collect();
+    let id = rule.rule_id.to_ascii_uppercase();
+    if id.starts_with("ECON-")
+        && id
+            .as_bytes()
+            .get(5)
+            .copied()
+            .is_some_and(|c| c.is_ascii_digit())
+        && !columns.contains(&"oa_damper_pct")
+    {
+        columns.push("oa_damper_pct");
+    }
     columns.sort_unstable();
     columns.dedup();
     columns
@@ -1484,6 +1499,25 @@ mod tests {
         assert!(
             !sv_cols.is_empty(),
             "SV-FLATLINE must expose optional sensor roles for Plots"
+        );
+    }
+
+    #[test]
+    fn series_plot_columns_includes_oa_damper_for_econ4() {
+        let reg = load_reg().expect("registry");
+        let econ4 = reg
+            .rules
+            .iter()
+            .find(|r| r.rule_id == "ECON-4")
+            .expect("ECON-4");
+        assert!(
+            !econ4.required_roles.iter().any(|r| r == "oa_damper_pct"),
+            "ECON-4 registry should not require damper for OA-fraction math"
+        );
+        let cols = series_plot_columns(econ4);
+        assert!(
+            cols.contains(&"oa_damper_pct"),
+            "ECON-4 FDD Plots must candidate oa_damper_pct, got {cols:?}"
         );
     }
 

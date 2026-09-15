@@ -62,7 +62,7 @@ What the agent did:
 - Wrote **global** and **ECM module inputs** only.
 - Left Excel formulas intact for savings / payback screens.
 
-See [Install & API overview](overview.html) and [Agent rules](AGENTS_ECM_ENGINEERING.html). Calcs behind the screens: [Engineering calcs]({{ site.baseurl }}/operations/ECM_ENGINEERING_MATH.html).
+See [Install & API overview](overview.html) and [AI agents & skills](agent-context.html). Calcs behind the screens: [Engineering calcs](engineering-calcs.html).
 
 ---
 
@@ -104,7 +104,7 @@ Bug register (sheet ↔ E+): [BUG_REPORT_ECM_SPREADSHEET_VS_EPLUS]({{ site.baseu
 
 | Page | Use when |
 |------|----------|
-| [Engineering calcs]({{ site.baseurl }}/operations/ECM_ENGINEERING_MATH.html) | You need the math agents encode into Excel |
+| [Engineering calcs](engineering-calcs.html) | You need the math agents encode into Excel |
 | [Install & overview](overview.html) | `pip` extras, CLI, module vs calculator names |
 | [Agent rules](AGENTS_ECM_ENGINEERING.html) | Guardrails before letting an agent touch a job |
 | [PyPI release checklist](PYPI_RELEASE_CHECKLIST.html) | Calcs or templates changed — republish the wheel |

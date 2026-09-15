@@ -2,6 +2,8 @@
 title: AI context handoff (patch series)
 parent: Operations
 nav_order: 2
+nav_exclude: true
+
 ---
 
 # AI / agent context handoff — Open-FDD (machine port)

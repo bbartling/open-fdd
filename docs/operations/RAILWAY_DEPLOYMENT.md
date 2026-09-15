@@ -2,6 +2,8 @@
 title: Railway deployment
 parent: Operations
 nav_order: 4
+nav_exclude: true
+
 ---
 
 # Railway deployment

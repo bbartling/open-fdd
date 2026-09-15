@@ -2,6 +2,8 @@
 title: Build recipes
 parent: Operations
 nav_order: 2
+nav_exclude: true
+
 ---
 
 # Build recipes

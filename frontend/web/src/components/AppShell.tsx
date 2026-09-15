@@ -318,7 +318,14 @@ export function AppShell({
           onMouseDown={onSidebarResizeStart}
         />
 
-        <div id="app-sidebar-oracle" className="app-sidebar__scroll">
+        <div
+          id="app-sidebar-oracle"
+          className="app-sidebar__scroll"
+          onWheel={(e) => {
+            // Keep middle/main pane fixed while scrolling the Oracle sidebar.
+            e.stopPropagation();
+          }}
+        >
           <OracleSidebar collapsed={collapsed} />
         </div>
 

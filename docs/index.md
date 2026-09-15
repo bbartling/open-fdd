@@ -14,7 +14,7 @@ Open-FDD is open-source building analytics software for operators, integrators, 
 ## What it does
 
 - Collects live data from **BACnet**, **Modbus**, **Haystack**, **JSON API**, and **CSV** imports
-- Stores telemetry in an **Apache Arrow / Feather** historian at the edge
+- Stores telemetry in an **Apache Parquet** historian (Arrow/DataFusion) at the edge
 - Models sites, equipment, and points with **Project Haystack** semantics
 - Runs **DataFusion SQL** rules for supervisory fault detection (`sql_rules/` registry)
 - Serves a **React** SPA (`openfdd-web`) — Overview, FDD, RCx, and findings against central `/api` only
@@ -45,15 +45,15 @@ Open-FDD is intended for **LAN, VPN, or OT-network deployment**. Do not expose t
 
 ## Get started
 
-1. [Quick Start]({{ site.baseurl }}/quick-start/) — GHCR bootstrap, first login, health check
-2. [**FDD Rule Cookbook**]({{ site.baseurl }}/rules/cookbook/) — **DataFusion SQL + Pandas** HVAC fault patterns
-3. [Architecture]({{ site.baseurl }}/architecture/) — services, data flow, storage
-4. [API Reference]({{ site.baseurl }}/api/) — REST route map
-5. [MCP & Agents]({{ site.baseurl }}/mcp-agents/) — Cursor / OpenClaw integration
-6. [PyPI agent tools]({{ site.baseurl }}/ecm/) — ECM workbooks + pandas oracle (`pip install open-fdd`) — not GHCR FDD
-7. [Operations]({{ site.baseurl }}/operations/) — [release channels]({{ site.baseurl }}/operations/release-channels.html), backup, GHCR
-8. [Security]({{ site.baseurl }}/operations/security.html) — auth, secrets, BACnet write safety
-9. [Documentation site]({{ site.baseurl }}/operations/github-pages.html) — GitHub Pages build (Actions-only)
+1. [Quick Start]({{ site.baseurl }}/quick-start/) — local Compose + Railway hub + GHCR bootstrap
+2. [**Rule Cookbook**]({{ site.baseurl }}/rules/) — **DataFusion SQL + Pandas** HVAC fault patterns
+3. [Haystack modeling]({{ site.baseurl }}/modeling/) — packages, SQL roles, zone terminals
+4. [Architecture]({{ site.baseurl }}/architecture/) — services, data flow, storage
+5. [API Reference]({{ site.baseurl }}/api/) — REST route map
+6. [MCP & Agents]({{ site.baseurl }}/mcp-agents/) — Cursor / OpenClaw integration
+7. [PyPI agent tools]({{ site.baseurl }}/ecm/) — ECM workbooks + pandas oracle (`pip install open-fdd`) — not GHCR FDD
+8. [Web App]({{ site.baseurl }}/web-app/) — SPA routes, RCx / FDD plot examples
+9. [Security](https://github.com/bbartling/open-fdd/blob/master/SECURITY.md) — auth, secrets, BACnet write safety (repo)
 
 ## Stack images
 

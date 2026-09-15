@@ -2,6 +2,8 @@
 title: Fieldbus edge to MQTTS hub
 parent: Operations
 nav_order: 18
+nav_exclude: true
+
 ---
 
 # Fieldbus edge → MQTTS cloud hub (generic pattern)

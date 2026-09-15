@@ -382,6 +382,127 @@ export function comfortDonut(
   };
 }
 
+function flagTrue(v: unknown): boolean {
+  return v === true || v === 1 || String(v).toLowerCase() === "true";
+}
+
+/**
+ * VAV health matrix donut — mutually exclusive bucket per terminal
+ * (broken > comfort-fail > rogue > ok). Null/unknown broken does not
+ * force the broken slice.
+ */
+export function vavHealthDonut(
+  rows: Array<Record<string, unknown>>,
+  opts?: { title?: string },
+): PlotlyFigure | null {
+  if (!rows.length) return null;
+  let nBroken = 0;
+  let nComfort = 0;
+  let nRogue = 0;
+  let nOk = 0;
+  for (const r of rows) {
+    if (flagTrue(r.broken_box)) {
+      nBroken += 1;
+      continue;
+    }
+    if (flagTrue(r.poor_zone_performance)) {
+      nComfort += 1;
+      continue;
+    }
+    if (flagTrue(r.rogue_damper)) {
+      nRogue += 1;
+      continue;
+    }
+    nOk += 1;
+  }
+  const total = nBroken + nComfort + nRogue + nOk;
+  if (total <= 0) return null;
+  return {
+    data: [
+      {
+        type: "pie",
+        name: "vav_health",
+        labels: ["broken", "comfort-fail", "rogue", "ok"],
+        values: [nBroken, nComfort, nRogue, nOk],
+        marker: {
+          colors: ["#7f1d1d", "#dc2626", "#ea580c", "#16a34a"],
+        },
+        hole: 0.45,
+      } as PlotlyTrace,
+    ],
+    layout: {
+      title: opts?.title ?? "VAV health boxes",
+      height: 320,
+      showlegend: true,
+      paper_bgcolor: "white",
+      plot_bgcolor: "white",
+      uirevision: `vav-health-donut:${nBroken}:${nComfort}:${nRogue}:${nOk}`,
+    },
+    meta: {
+      point_count: rows.length,
+      provenance: "vav_health_matrix_v1 rows",
+    },
+  };
+}
+
+/** Horizontal bars: worst VAVs by comfort_fault_h (fallback fail %). */
+export function vavHealthWorstBars(
+  rows: Array<Record<string, unknown>>,
+  opts: { title: string; limit?: number; yTitle?: string },
+): PlotlyFigure | null {
+  if (!rows.length) return null;
+  const scored = rows
+    .map((r) => {
+      const eq = String(r.equipment_id ?? "");
+      const hours = Number(
+        r.comfort_fault_h ?? r.comfort_fail_h ?? r.total_fault_h ?? 0,
+      );
+      const pct = Number(r.occupied_comfort_fail_pct ?? r.fail_pct ?? 0);
+      const value = Number.isFinite(hours) && hours > 0 ? hours : pct;
+      return { eq, value: Number.isFinite(value) ? value : 0, row: r };
+    })
+    .filter((r) => r.eq)
+    .sort((a, b) => b.value - a.value);
+  const limit = opts.limit ?? 24;
+  const top = scored.slice(0, limit).reverse(); // bottom = worst after h-bar
+  if (!top.length) return null;
+  const outliers = outlierEquipmentIds(
+    top.map((t) => ({
+      equipment_id: t.eq,
+      value_f: t.value,
+    })),
+    { primaryOnly: false },
+  );
+  return {
+    data: [
+      {
+        type: "bar",
+        name: "comfort fail h",
+        orientation: "h",
+        y: top.map((t) => t.eq),
+        x: top.map((t) => t.value),
+        marker: {
+          color: top.map((t, i) =>
+            outliers.has(t.eq) ? OUTLIER_RED : rainbowColor(i),
+          ),
+        },
+      } as PlotlyTrace,
+    ],
+    layout: overviewChartLayout({
+      xTitle: opts.yTitle ?? "comfort fail h",
+      yTitle: "equipment",
+      height: Math.max(360, 28 * Math.min(top.length, 24)),
+      tickangle: 0,
+      uirevision: `vav-health-bars:${fingerprintJson(top.map((t) => t.eq))}`,
+      extra: { title: opts.title },
+    }),
+    meta: {
+      point_count: top.length,
+      provenance: "vav_health_matrix_v1 rows",
+    },
+  };
+}
+
 export function rankingBars(
   points: Array<Record<string, unknown>>,
   opts: { title: string; yTitle?: string },
@@ -662,6 +783,132 @@ export function ruleResultChart(
       roles: opts.roles,
       point_count: rows.length,
       provenance: "GET /api/fdd/series",
+    },
+  };
+}
+
+/** Weather / OAT-METEO FDD Plots — never local-only OAT. */
+export function isOatMeteoRule(ruleId: string): boolean {
+  const u = String(ruleId ?? "")
+    .trim()
+    .toUpperCase();
+  return (
+    u === "OAT-METEO" ||
+    u === "WEATHER" ||
+    u === "WX-1" ||
+    u.includes("OAT-METEO")
+  );
+}
+
+/** ECON-1..7: keep oa_damper_pct when the series rows carry it. */
+export function expandFddPlotRoles(
+  ruleId: string,
+  roles: string[],
+  rows: Array<Record<string, unknown>>,
+): string[] {
+  const out = [...roles];
+  const id = String(ruleId ?? "").trim().toUpperCase();
+  if (!/^ECON-[1-7]$/.test(id)) return out;
+  if (out.includes("oa_damper_pct")) return out;
+  const hasDamper = rows.some((r) => {
+    const v = r.oa_damper_pct;
+    if (v == null || v === "") return false;
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n);
+  });
+  if (hasDamper) out.push("oa_damper_pct");
+  return out;
+}
+
+/**
+ * Stack a confirmed_fault swim lane under an existing signal figure
+ * (RCx bas_vs_web_oat overlay → FDD Plots weather parity).
+ */
+export function withConfirmedFaultLane(
+  fig: PlotlyFigure,
+  opts: {
+    equipmentId: string;
+    ruleId: string;
+    /** Fault sample timestamps (may differ from overlay x). */
+    faultX: Array<string | null>;
+    confirmedFault: Array<boolean | number | null>;
+  },
+): PlotlyFigure {
+  const fault = opts.confirmedFault;
+  const hasFault =
+    fault.length > 0 &&
+    fault.length === opts.faultX.length &&
+    fault.some((v) => v != null);
+  if (!hasFault) {
+    return {
+      ...fig,
+      layout: {
+        ...fig.layout,
+        title: ruleLabelPlotTitle(opts.ruleId, opts.equipmentId),
+      },
+      meta: {
+        ...fig.meta,
+        equipment_id: opts.equipmentId,
+        rule_id: opts.ruleId,
+        provenance: `${fig.meta?.provenance ?? "overlay"} + FDD fault`,
+      },
+    };
+  }
+
+  const signalDomain: [number, number] = [0.28, 1.0];
+  const faultDomain: [number, number] = [0.0, 0.22];
+  const layout: Record<string, unknown> = {
+    ...fig.layout,
+    title: ruleLabelPlotTitle(opts.ruleId, opts.equipmentId),
+    height: Math.max(380, Number(fig.layout?.height ?? 320) + 90),
+    yaxis: {
+      ...((fig.layout?.yaxis as Record<string, unknown> | undefined) ?? {}),
+      domain: signalDomain,
+      autorange: true,
+    },
+    yaxis2: {
+      domain: faultDomain,
+      title: { text: "fault", font: { size: 11 } },
+      range: [-0.05, 1.15],
+      tickvals: [0, 1],
+      ticktext: ["ok", "fault"],
+      showgrid: true,
+      anchor: "x",
+    },
+    xaxis: {
+      ...((fig.layout?.xaxis as Record<string, unknown> | undefined) ?? {}),
+      anchor: "y2",
+    },
+    uirevision: `fdd-oat-meteo:${opts.ruleId}:${opts.equipmentId}`,
+  };
+
+  const data: PlotlyTrace[] = [
+    ...fig.data.map((t) => ({
+      ...t,
+      yaxis: t.yaxis ?? "y",
+    })),
+    {
+      type: "scatter",
+      mode: "lines",
+      name: "confirmed_fault",
+      x: opts.faultX,
+      y: fault.map((v) => (v === true || v === 1 ? 1 : 0)),
+      yaxis: "y2",
+      line: { width: 0.8, color: "rgba(220,38,38,0.9)", shape: "hv" },
+      fill: "tozeroy",
+      fillcolor: "rgba(239,68,68,0.35)",
+    },
+  ];
+
+  return {
+    data,
+    layout,
+    meta: {
+      ...fig.meta,
+      equipment_id: opts.equipmentId,
+      rule_id: opts.ruleId,
+      point_count: Math.max(fig.meta?.point_count ?? 0, opts.faultX.length),
+      provenance: "POST /api/analytics/bas-vs-web-oat + GET /api/fdd/series fault",
     },
   };
 }

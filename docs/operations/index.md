@@ -1,22 +1,15 @@
 ---
 title: Operations
-layout: default
 nav_order: 10
-has_children: true
+nav_exclude: true
+has_children: false
 permalink: /operations/
 ---
 
-# Operations
+# Operations (removed from public docs)
 
-Production edge operations: backup, GHCR updates, security, and troubleshooting.
+Operator bootstrap now lives under **[Quick Start]({{ site.baseurl }}/quick-start/)** (Local + Railway + Docker/GHCR).
 
-| Guide | Content |
-|-------|---------|
-| [Release channels](release-channels.html) | Nightly, beta, stable policy |
-| [Backup, update, restore](backup-update-restore.html) | Site lifecycle scripts |
-| [GHCR images](ghcr-images.html) | Tags, platforms, retention |
-| [Railway deployment](RAILWAY_DEPLOYMENT.html) | Experimental cloud CSV lab |
-| [Railway validation #752](RAILWAY_VALIDATION_752.html) | Validation record, security findings, and go/no-go assessment |
-| [Security](security.html) | Auth, TLS, secrets, BACnet |
-| [Troubleshooting](troubleshooting.html) | Common issues |
-| [Documentation site](github-pages.html) | GitHub Pages build & local preview |
+Agent / patch-train notes remain in the repo under `docs/operations/` but are **not** in the online left nav.
+
+<meta http-equiv="refresh" content="0; url={{ site.baseurl }}/quick-start/">

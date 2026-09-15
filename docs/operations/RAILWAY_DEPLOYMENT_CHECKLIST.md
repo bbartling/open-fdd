@@ -2,6 +2,8 @@
 title: Railway deployment checklist
 parent: Railway deployment
 nav_order: 1
+nav_exclude: true
+
 ---
 
 # Railway deployment checklist (open-fdd)

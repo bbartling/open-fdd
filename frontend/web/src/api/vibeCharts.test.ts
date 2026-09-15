@@ -8,7 +8,13 @@ import {
   comfortDonut,
   sensorFaultChart,
   sensorHealthHeatmap,
+  vavHealthDonut,
+  vavHealthWorstBars,
+  expandFddPlotRoles,
+  isOatMeteoRule,
+  withConfirmedFaultLane,
 } from "./vibeCharts";
+import { basOverlay } from "./centralOverview";
 import chartContract from "./charts.contract.json";
 
 describe("vibeCharts", () => {
@@ -109,6 +115,83 @@ describe("vibeCharts", () => {
     expect(fig?.data.some((t) => String(t.name).toLowerCase().includes("damper"))).toBe(
       true,
     );
+  });
+
+  it("expandFddPlotRoles adds oa_damper_pct for ECON-4 when present in rows", () => {
+    const roles = expandFddPlotRoles(
+      "ECON-4",
+      ["mat", "rat", "oa_t", "fan_cmd"],
+      [
+        { timestamp_utc: "t0", mat: 55, rat: 72, oa_t: 40, fan_cmd: 1, oa_damper_pct: 25 },
+        { timestamp_utc: "t1", mat: 56, rat: 71, oa_t: 41, fan_cmd: 1, oa_damper_pct: 30 },
+      ],
+    );
+    expect(roles).toContain("oa_damper_pct");
+  });
+
+  it("ECON-4 FDD figure includes damper on % axis plus confirmed_fault", () => {
+    const rows = [
+      {
+        timestamp_utc: "2026-03-01T11:00:00Z",
+        mat: 55,
+        rat: 72,
+        oa_t: 40,
+        fan_cmd: 1,
+        oa_damper_pct: 20,
+      },
+      {
+        timestamp_utc: "2026-03-01T12:00:00Z",
+        mat: 56,
+        rat: 71,
+        oa_t: 42,
+        fan_cmd: 1,
+        oa_damper_pct: 35,
+      },
+    ];
+    const roles = expandFddPlotRoles("ECON-4", ["mat", "rat", "oa_t", "fan_cmd"], rows);
+    const fig = ruleResultChart(rows, {
+      equipmentId: "AHU_1",
+      ruleId: "ECON-4",
+      roles,
+      confirmedFault: [0, 1],
+    });
+    expect(fig?.data.some((t) => String(t.name).includes("oa_damper_pct"))).toBe(true);
+    expect(fig?.data.some((t) => t.name === "confirmed_fault")).toBe(true);
+    const damper = fig?.data.find((t) => String(t.name).includes("oa_damper_pct"));
+    expect(damper?.yaxis).toBe("y2");
+    expect(fig?.layout?.yaxis2).toBeTruthy();
+  });
+
+  it("OAT-METEO FDD figure has BAS + Web OAT traces and confirmed_fault", () => {
+    const overlay = basOverlay(
+      [
+        {
+          timestamp_utc: "2026-07-01T00:00:00Z",
+          bas_oat_f: 70,
+          web_oat_f: 68,
+        },
+        {
+          timestamp_utc: "2026-07-01T01:00:00Z",
+          bas_oat_f: 72,
+          web_oat_f: 69,
+        },
+      ],
+      5,
+    );
+    expect(overlay).toBeTruthy();
+    const fig = withConfirmedFaultLane(overlay!, {
+      equipmentId: "AHU_1",
+      ruleId: "OAT-METEO",
+      faultX: ["2026-07-01T00:00:00Z", "2026-07-01T01:00:00Z"],
+      confirmedFault: [0, 1],
+    });
+    const oatTraces = (fig.data ?? []).filter(
+      (t) => t.name === "BAS oa_t" || t.name === "Web OAT",
+    );
+    expect(oatTraces.length).toBeGreaterThanOrEqual(2);
+    expect(fig.data.some((t) => t.name === "confirmed_fault")).toBe(true);
+    expect(isOatMeteoRule("OAT-METEO")).toBe(true);
+    expect(isOatMeteoRule("weather")).toBe(true);
   });
 
   it("ruleResultChart rejects PrimitiveArray timestamp dumps", () => {
@@ -214,5 +297,54 @@ describe("vibeCharts", () => {
       { equipment_id: "VAV_1", n_samples: 10, n_fail: 4 },
     ]);
     expect(fig?.data[0]?.type).toBe("pie");
+  });
+
+  it("vavHealthDonut buckets broken / comfort / rogue / ok", () => {
+    const fig = vavHealthDonut([
+      { equipment_id: "VAV_1", broken_box: true, poor_zone_performance: true },
+      {
+        equipment_id: "VAV_2",
+        broken_box: false,
+        poor_zone_performance: true,
+        rogue_damper: false,
+      },
+      {
+        equipment_id: "VAV_3",
+        broken_box: false,
+        poor_zone_performance: false,
+        rogue_damper: true,
+      },
+      {
+        equipment_id: "VAV_4",
+        broken_box: false,
+        poor_zone_performance: false,
+        rogue_damper: false,
+      },
+      { equipment_id: "VAV_5", broken_box: null, poor_zone_performance: null },
+    ]);
+    expect(fig?.data[0]?.type).toBe("pie");
+    expect(fig?.data[0]?.labels).toEqual([
+      "broken",
+      "comfort-fail",
+      "rogue",
+      "ok",
+    ]);
+    expect(fig?.data[0]?.values).toEqual([1, 1, 1, 2]);
+  });
+
+  it("vavHealthWorstBars ranks by comfort_fault_h horizontally", () => {
+    const fig = vavHealthWorstBars(
+      [
+        { equipment_id: "VAV_lo", comfort_fault_h: 1 },
+        { equipment_id: "VAV_hi", comfort_fault_h: 40 },
+        { equipment_id: "VAV_mid", comfort_fault_h: 12 },
+      ],
+      { title: "worst" },
+    );
+    expect(fig?.data[0]?.type).toBe("bar");
+    expect(fig?.data[0]?.orientation).toBe("h");
+    // reversed for horizontal display: bottom = worst
+    expect(fig?.data[0]?.y?.at(-1)).toBe("VAV_hi");
+    expect(fig?.data[0]?.x?.at(-1)).toBe(40);
   });
 });
