@@ -2,6 +2,8 @@
 title: Backup, update, restore
 parent: Operations
 nav_order: 2
+nav_exclude: true
+
 ---
 
 # Backup, update, restore

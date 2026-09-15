@@ -112,7 +112,7 @@ railway service source connect --service openfdd-web \
 ./scripts/openfdd_fieldbus_railway_up.sh "$SHA"
 ```
 
-Smoke: public SPA + `https://<web>/api/health` (and `/api/tenants` — Wave L: `multi_tenant=false`, empty `historian_prefix`, `active_tenant_id=legacy` when OFF). Version must match the **pinned** SHA (`3.5.3+d67d27b…` for `sha-d67d27b`). Export **`RAILWAY_ADMIN_PASSWORD`** from Railway vars for mid-wave gates (local `.env` must not clobber).
+Smoke: public SPA + `https://<web>/api/health` (lean readiness only). With auth ON, **`/api/tenants` requires Bearer** — do not smoke it unauthenticated (Kali O2c). After login, `/api/tenants` shows membership-scoped tenants; hub admin sees all. Version must match the **pinned** SHA. Export **`RAILWAY_ADMIN_PASSWORD`** from Railway vars for mid-wave gates (local `.env` must not clobber).
 
 **Wave L mid-wave:** gates **11–14** (`22`–`25_wave_l_*.sh`). Full `run_railway_hub_stress.sh` at **L8**.
 

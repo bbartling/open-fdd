@@ -2,6 +2,8 @@
 title: Bench recovery (machine death)
 parent: Operations
 nav_order: 2
+nav_exclude: true
+
 ---
 
 # Bench recovery — recreate Open-FDD field edge if this host dies

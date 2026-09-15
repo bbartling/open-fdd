@@ -65,6 +65,7 @@ body {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
 }
 
 .app-shell--sidebar-collapsed .app-sidebar {

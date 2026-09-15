@@ -138,6 +138,9 @@ pub async fn vav_health_from_history(
         env.coverage = Some(json!({"schema_version": SCHEMA_VAV_HEALTH, "building_id": bid}));
         return Ok(Some(env));
     }
+    // No id-prefix SQL filter: opaque package ids (e.g. B100 terminals) are
+    // stamped `equipType: vav` in equipment_types.json. Prefer stamp via
+    // kind_for; fall back to id heuristics that resolve to "vav".
     let sql = r#"
 SELECT
   equipment_id,
@@ -153,7 +156,6 @@ SELECT
   END) * 300.0 / 3600.0 AS full_open_h,
   COUNT(*) * 300.0 / 3600.0 AS span_h
 FROM history
-WHERE equipment_id LIKE 'VAV%'
 GROUP BY equipment_id
 ORDER BY equipment_id
 "#
@@ -187,11 +189,22 @@ ORDER BY equipment_id
     let mut n0 = 0u32;
     let mut nq = 0u32;
     let (has_fdd, broken_map) = broken_box_from_fdd(bid);
+    let stamped_types = open_fdd_edge_prototype::equipment_types::load_type_map(
+        &super::historian::parquet_root(),
+        Some(bid),
+    );
     for row in result.rows {
         let eq = row
             .get("equipment_id")
             .and_then(|v| v.as_str())
             .unwrap_or("");
+        if eq.is_empty() {
+            continue;
+        }
+        let stamped = stamped_types.get(eq).map(String::as_str);
+        if open_fdd_edge_prototype::equipment_types::kind_for(eq, stamped) != "vav" {
+            continue;
+        }
         let dmp_cov = row.get("dmp_cov").and_then(|v| v.as_f64()).unwrap_or(0.0);
         let zone_cov = row.get("zone_cov").and_then(|v| v.as_f64()).unwrap_or(0.0);
         let fail_h = row
@@ -284,8 +297,9 @@ ORDER BY equipment_id
         }
     }));
     if env.rows.is_empty() {
-        env.warnings
-            .push("no VAV% equipment_id rows in historian".into());
+        env.warnings.push(
+            "no VAV equipment in historian (stamp equipType:vav or use VAV* ids)".into(),
+        );
     }
     if !has_fdd {
         env.warnings

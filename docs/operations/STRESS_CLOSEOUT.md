@@ -2,6 +2,8 @@
 title: Stress closeout (nightly OT + Railway)
 parent: Operations
 nav_order: 6
+nav_exclude: true
+
 ---
 
 # Stress closeout — agent handbook

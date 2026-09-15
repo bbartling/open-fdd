@@ -127,6 +127,15 @@ Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRES
 | Cleanup | `docker rm -f` zap-* / openfdd-mcp-railway-* leftovers (low-RAM) |
 | Close | BUG_REPORT + hygiene (0 open PRs / only `master`) |
 
+**Auth / MT smoke (Kali O2c — do not regress):** With `OPENFDD_JWT_SECRET` set, unauth
+`GET /api/tenants` (and capabilities / health/stack / building/snapshot /
+dashboard/summary) must be **401** — never Admin-via-`dev_anonymous`. Public
+readiness = `GET /api/health` only. Local regression:
+`cargo test -p openfdd-central --test preauth_disclosure`. Live ACL = gate 31;
+headers/`security.txt` = gate 34. Skill:
+[`skills/openfdd-mt-security/SKILL.md`](skills/openfdd-mt-security/SKILL.md).
+**No Railway re-pin while Kali owns the hub** unless operator OK.
+
 **Stress tiers (do not conflate):**
 
 | Tier | Scope |

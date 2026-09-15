@@ -2,6 +2,8 @@
 title: Local deployment (firewall hub)
 parent: Operations
 nav_order: 5
+nav_exclude: true
+
 ---
 
 # Local deployment — firewall / on-prem hub

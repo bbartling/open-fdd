@@ -2,6 +2,8 @@
 title: Security
 parent: Operations
 nav_order: 11
+nav_exclude: true
+
 ---
 
 # Security
@@ -19,13 +21,15 @@ Open-FDD is **not internet-ready**. LAN / VPN / OT only until the checklist belo
 - [x] Open mode (unset JWT secret) is loopback-only
 - [x] Startup logs `auth_enabled` **without** secrets
 - [ ] Dedicated reverse proxy / TLS on every deployment (expose **web proxy only**; do not publish `:8080` to the internet)
-- [ ] Per-building tenancy (JWT role is **not** multi-tenant isolation)
+- [x] Multi-tenant building ACL when `OPENFDD_MULTI_TENANT=1` (`TenantContext::allow_building` on data paths; `/api/tenants` JWT-only — Kali O2c)
 - [x] Viewer is read-only; mutations require operator/admin
 - [x] Login throttle + generic credential errors
 - [x] Package zip-slip / bomb caps on archive ingest
 - [x] No wildcard CORS in the SPA nginx config
-- [x] SPA CSP without `unsafe-eval` (Unity `/twins` may use `wasm-unsafe-eval` only)
+- [x] SPA CSP without `unsafe-eval` (Unity `/twins` may use `wasm-unsafe-eval` only); Google Fonts allowlisted; HSTS when `X-Forwarded-Proto=https`
+- [x] `/.well-known/security.txt` served as text/plain (not SPA HTML)
 - [ ] Production secret rotation, SSO, and WAF as required by the site
+- [ ] Staging MQTT ACL pairwise deny proof (Kali)
 
 OT writes stay **off** unless an operator explicitly enables them.
 
@@ -52,6 +56,7 @@ for HTTPS / HSTS when you terminate TLS at the edge.
 - JWT on protected REST routes
 - Credentials in `workspace/auth.env.local` (mode `600`, never commit)
 - Integrator role for commissioning; rotate with `openfdd_auth_init.sh`
+- **Kali O2c / Wave P2c:** With auth ON, `/api/tenants`, `/api/capabilities`, `/api/health/stack`, `/api/building/snapshot`, and `/api/dashboard/summary` require Bearer JWT (401 unauth). Never Admin-via-`dev_anonymous` for those handlers. Public readiness = `GET /api/health`. Regression: `cargo test -p openfdd-central --test preauth_disclosure`. Agent skill: `openfdd_agent_spec/skills/openfdd-mt-security`.
 
 ## TLS
 

@@ -22,15 +22,39 @@ import {
   type PackageMappingResponse,
   type SessionConfig,
 } from "../api/mappingApi";
+import { listFddRules, type FddRuleSummary } from "../api/fddApi";
 
 type ColumnRow = {
   column: string;
   role: string;
   status: string;
+  fdd_rules: string;
 };
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** Invert registry required∪optional roles → consuming rule ids. */
+function buildRoleToFddRules(rules: FddRuleSummary[]): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const r of rules) {
+    const id = String(r.rule_id ?? "").trim();
+    if (!id) continue;
+    const roles = [
+      ...(r.required_roles ?? []),
+      ...(r.optional_roles ?? []),
+    ];
+    for (const role of roles) {
+      const key = String(role ?? "").trim();
+      if (!key) continue;
+      const list = map.get(key) ?? [];
+      if (!list.includes(id)) list.push(id);
+      map.set(key, list);
+    }
+  }
+  for (const [, list] of map) list.sort();
+  return map;
 }
 
 export function MappingPage() {
@@ -56,6 +80,9 @@ export function MappingPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [showUnmappedOnly, setShowUnmappedOnly] = useState(false);
   const [cookbookRoles, setCookbookRoles] = useState<string[]>([]);
+  const [fddRules, setFddRules] = useState<FddRuleSummary[]>([]);
+
+  const roleToFdd = useMemo(() => buildRoleToFddRules(fddRules), [fddRules]);
 
   const selectedEq: MappingEquipment | null = useMemo(() => {
     const list = inventory?.equipment ?? [];
@@ -133,6 +160,12 @@ export function MappingPage() {
   }, []);
 
   useEffect(() => {
+    void listFddRules()
+      .then(setFddRules)
+      .catch(() => setFddRules([]));
+  }, []);
+
+  useEffect(() => {
     void refreshInventory();
   }, [refreshInventory]);
 
@@ -197,23 +230,54 @@ export function MappingPage() {
     URL.revokeObjectURL(url);
   };
 
+  const onViewManifestText = () => {
+    const src = siteInventory ?? inventory;
+    if (!src || !buildingId) return;
+    const text = buildMappingManifest(src);
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    // Revoke later so the new tab can load.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
   const tableRows: ColumnRow[] = useMemo(() => {
     const cols = selectedEq?.columns ?? [];
-    return cols
-      .map((c) => ({
+    const seen = new Set(cols.map((c) => c.column));
+    const extras = (selectedEq?.unmapped_columns ?? []).filter(
+      (c) => c && !seen.has(c),
+    );
+    const allCols = [
+      ...cols.map((c) => ({
         column: c.column,
         role: draftRoles[c.column] ?? c.role ?? "",
-        status: (() => {
-          const role = draftRoles[c.column] ?? c.role ?? "";
-          if (!role) return "unmapped";
-          const owners = Object.entries(draftRoles)
-            .filter(([, r]) => r === role)
-            .map(([col]) => col);
-          return owners.length > 1 ? "ambiguous" : "mapped";
-        })(),
-      }))
+      })),
+      ...extras.map((column) => ({
+        column,
+        role: draftRoles[column] ?? "",
+      })),
+    ];
+    return allCols
+      .map((c) => {
+        const role = c.role;
+        const consumers = role ? (roleToFdd.get(role) ?? []) : [];
+        return {
+          column: c.column,
+          role,
+          status: (() => {
+            if (!role) return "unmapped";
+            const owners = allCols.filter((x) => x.role === role).map((x) => x.column);
+            return owners.length > 1 ? "ambiguous" : "mapped";
+          })(),
+          fdd_rules: consumers.length
+            ? consumers.slice(0, 8).join(", ") + (consumers.length > 8 ? "…" : "")
+            : role
+              ? "(analytics only)"
+              : "—",
+        };
+      })
       .filter((r) => (showUnmappedOnly ? r.status !== "mapped" : true));
-  }, [selectedEq, draftRoles, showUnmappedOnly]);
+  }, [selectedEq, draftRoles, showUnmappedOnly, roleToFdd]);
 
   const buildingOptions = [
     { value: "", label: "— select building —" },
@@ -256,6 +320,43 @@ export function MappingPage() {
           equipment selectors (or URL <code>?site=</code> / <code>?eq=</code>).
         </p>
 
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.75rem",
+            alignItems: "flex-end",
+            marginBottom: "0.75rem",
+          }}
+        >
+          <Button
+            id="map-download-manifest"
+            label="Export site data model"
+            variant="secondary"
+            onClick={onDownloadManifest}
+            disabled={
+              !buildingId ||
+              (!(siteInventory?.equipment?.length) && !(inventory?.equipment?.length))
+            }
+            testId="map-download-manifest"
+          />
+          <Button
+            id="map-view-manifest-text"
+            label="View as text"
+            variant="secondary"
+            onClick={onViewManifestText}
+            disabled={
+              !buildingId ||
+              (!(siteInventory?.equipment?.length) && !(inventory?.equipment?.length))
+            }
+            testId="map-view-manifest-text"
+          />
+        </div>
+        <p className="oracle-sidebar__caption">
+          Export / view is the <strong>entire site</strong> data model (not filtered by
+          the equipment editor below).
+        </p>
+
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
           <Select
             id="map-building"
@@ -286,17 +387,6 @@ export function MappingPage() {
             checked={showUnmappedOnly}
             onChange={setShowUnmappedOnly}
             testId="map-unmapped-only"
-          />
-          <Button
-            id="map-download-manifest"
-            label="Export site data model"
-            variant="secondary"
-            onClick={onDownloadManifest}
-            disabled={
-              !buildingId ||
-              (!(siteInventory?.equipment?.length) && !(inventory?.equipment?.length))
-            }
-            testId="map-download-manifest"
           />
         </div>
         <p className="oracle-sidebar__caption">
@@ -390,10 +480,15 @@ export function MappingPage() {
                 { key: "column", header: "Column" },
                 { key: "role", header: "Role" },
                 { key: "status", header: "Status" },
+                { key: "fdd_rules", header: "FDD rules" },
               ]}
               rows={tableRows}
               testId="map-columns-table"
             />
+            <p className="oracle-sidebar__caption">
+              FDD rules = registry consumers of the assigned SQL role.{" "}
+              <em>(analytics only)</em> means mapped but no SQL FDD rule lists that role.
+            </p>
 
             <div style={{ marginTop: "1rem" }}>
               <h3>Edit roles</h3>
@@ -405,9 +500,18 @@ export function MappingPage() {
                 }}
                 data-testid="mapping-role-editors"
               >
-                {(selectedEq.columns ?? []).map((c) => (
+                {(selectedEq.columns ?? [])
+                  .map((c) => c.column)
+                  .concat(
+                    (selectedEq.unmapped_columns ?? []).filter(
+                      (c) =>
+                        c &&
+                        !(selectedEq.columns ?? []).some((x) => x.column === c),
+                    ),
+                  )
+                  .map((column) => (
                   <div
-                    key={c.column}
+                    key={column}
                     style={{
                       display: "grid",
                       gridTemplateColumns: "1fr 1fr",
@@ -415,16 +519,16 @@ export function MappingPage() {
                       alignItems: "center",
                     }}
                   >
-                    <span id={`role-label-${c.column}`}>
-                      <code>{c.column}</code>
+                    <span id={`role-label-${column}`}>
+                      <code>{column}</code>
                     </span>
                     <Select
-                      id={`role-${c.column}`}
-                      label={`Role for ${c.column}`}
-                      value={draftRoles[c.column] ?? ""}
+                      id={`role-${column}`}
+                      label={`Role for ${column}`}
+                      value={draftRoles[column] ?? ""}
                       options={roleOptions}
-                      onChange={(value) => onRoleChange(c.column, value)}
-                      testId={`map-role-input-${c.column}`}
+                      onChange={(value) => onRoleChange(column, value)}
+                      testId={`map-role-input-${column}`}
                       density="compact"
                     />
                   </div>

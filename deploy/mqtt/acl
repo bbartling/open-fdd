@@ -1,0 +1,33 @@
+# Example ACL — replace with generated mosquitto.acl from openfdd-provision.
+# Legacy (mode OFF):
+# user edge:local:fieldbus-1
+# topic write openfdd/v1/sites/local/edges/fieldbus-1/#
+# topic read openfdd/v1/sites/local/edges/fieldbus-1/commands/#
+#
+# user central:local
+# topic read openfdd/v1/sites/local/#
+# topic write openfdd/v1/sites/local/edges/+/commands/#
+#
+# Wave L tenant namespace (mode ON) — TopicBuilder::with_tenant:
+# user edge:acme:bldg2:fieldbus-1
+# topic write openfdd/v1/tenants/acme/buildings/bldg2/edges/fieldbus-1/#
+# topic read openfdd/v1/tenants/acme/buildings/bldg2/edges/fieldbus-1/commands/#
+#
+# Kali O2c / P2c MQTT ACL matrix (staging proof — Mint does not ActiveScan OT):
+# - Edge A: write telemetry/status/acks for tenant A building only; read commands A only.
+# - Deny: tenant B topics, openfdd/v1/tenants/+/… wildcards, cross-tenant #.
+# - Central: read tenant trees it serves; write commands only to owned edges.
+# - Mount generated ACL at mosquitto acl_file; never ship long-lived edge keys in repo.
+
+# Edge fieldbus-1
+user edge:local:fieldbus-1
+topic write openfdd/v1/sites/local/edges/fieldbus-1/telemetry/#
+topic write openfdd/v1/sites/local/edges/fieldbus-1/metadata/#
+topic write openfdd/v1/sites/local/edges/fieldbus-1/discovery/#
+topic write openfdd/v1/sites/local/edges/fieldbus-1/status
+topic write openfdd/v1/sites/local/edges/fieldbus-1/acks/#
+topic read openfdd/v1/sites/local/edges/fieldbus-1/commands/#
+
+user central:local
+topic write openfdd/v1/sites/local/edges/fieldbus-1/commands/#
+topic read openfdd/v1/sites/local/#

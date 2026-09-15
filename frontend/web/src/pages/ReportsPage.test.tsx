@@ -54,6 +54,22 @@ vi.mock("../api/analyticsApi", () => ({
   listFddEquipment: vi.fn(async () => [
     { equipment_id: "VAV_1", equipment_type: "VAV" },
   ]),
+  postBasVsWebOat: vi.fn(async () => ({
+    points: [
+      {
+        timestamp_utc: "2024-01-01T00:00:00Z",
+        bas_oat_f: 40,
+        web_oat_f: 42,
+      },
+      {
+        timestamp_utc: "2024-01-01T00:05:00Z",
+        bas_oat_f: 41,
+        web_oat_f: 43,
+      },
+    ],
+    rows: [],
+    warnings: [],
+  })),
   postSensorHealth: vi.fn(async () => ({
     schema_version: "analytics-envelope-v1",
     query_version: "sensor-health-v1",
@@ -121,7 +137,7 @@ describe("ReportsPage FDD Plots", () => {
     });
   });
 
-  it("auto-loads series and puts confirmed_fault on the bottom lane", async () => {
+  it("auto-loads series without developer fault-lane debug chrome", async () => {
     renderPlots();
     await waitFor(() => {
       expect(getFddSeries).toHaveBeenCalledWith("VAV_1", "VAV-1", "B1");
@@ -129,11 +145,11 @@ describe("ReportsPage FDD Plots", () => {
       expect(screen.getByTestId("plots-preview-table")).toBeTruthy();
       expect(screen.queryByTestId("plots-no-fault")).toBeNull();
     });
-    const meta = screen.getByTestId("plots-fault-lane").textContent ?? "";
-    expect(meta).toMatch(/last_axis=fault/);
-    expect(meta).toMatch(/last_trace=confirmed_fault/);
-    const domain0 = Number(meta.match(/domain0=([0-9.]+)/)?.[1] ?? "1");
-    expect(domain0).toBeLessThan(0.4);
+    // Layout/fault-lane asserts live in vibeCharts tests — never paint
+    // last_axis=/domain0= debug under the plot for operators.
+    expect(screen.queryByTestId("plots-fault-lane")).toBeNull();
+    expect(screen.queryByText(/last_axis=/)).toBeNull();
+    expect(screen.queryByText(/domain0=/)).toBeNull();
   });
 
   it("fails when results exist but confirmed_fault overlay is absent", async () => {
@@ -182,5 +198,104 @@ describe("ReportsPage FDD Plots", () => {
         /0 confirmed_fault trues/,
       );
     });
+  });
+
+  it("OAT-METEO loads bas-vs-web-oat overlay (not local-only series)", async () => {
+    const { listFddRules } = await import("../api/fddApi");
+    const { postBasVsWebOat } = await import("../api/analyticsApi");
+    const { getPackageMapping } = await import("../api/mappingApi");
+    const { listFddEquipment } = await import("../api/analyticsApi");
+
+    vi.mocked(listFddRules).mockResolvedValue([
+      {
+        rule_id: "OAT-METEO",
+        description: "Equipment OAT vs weather",
+        required_roles: ["oa_t"],
+        optional_roles: ["web_oa_t"],
+        parameter_count: 0,
+      },
+    ]);
+    vi.mocked(getPackageMapping).mockResolvedValue({
+      ok: true,
+      building_id: "B1",
+      equipment: [
+        {
+          equipment_id: "AHU_1",
+          equipment_type: "AHU",
+          ok: true,
+          roles: { oa_t: "oa_t" },
+          columns: [{ column: "oa_t", role: "oa_t", status: "mapped" }],
+        },
+      ],
+    } as never);
+    vi.mocked(listFddEquipment).mockResolvedValue([
+      { equipment_id: "AHU_1", equipment_type: "AHU" },
+    ]);
+    vi.mocked(getFddResults).mockResolvedValue([
+      { rule_id: "OAT-METEO", equipment_id: "AHU_1", status: "FAULT", fault_hours: 2 },
+    ]);
+    vi.mocked(getFddSeries).mockResolvedValue({
+      ok: true,
+      equipment_id: "AHU_1",
+      rule_id: "OAT-METEO",
+      roles: ["oa_t"],
+      rows: [
+        { timestamp_utc: "2024-01-01T00:00:00Z", oa_t: 40, confirmed_fault: 0 },
+        { timestamp_utc: "2024-01-01T00:05:00Z", oa_t: 55, confirmed_fault: 1 },
+      ],
+      downsampled: false,
+      max_points: 5000,
+      has_confirmed_fault: true,
+    });
+
+    renderPlots("/reports?site=B1&eq=AHU_1");
+    await waitFor(() => {
+      expect(postBasVsWebOat).toHaveBeenCalled();
+      expect(screen.getByTestId("plots-chart")).toBeTruthy();
+    });
+    const call = vi.mocked(postBasVsWebOat).mock.calls.at(-1)?.[0] as {
+      building_id?: string;
+    };
+    expect(call?.building_id).toBe("B1");
+  });
+});
+
+describe("FDD weather + econ helpers", () => {
+  it("expandFddPlotRoles appends oa_damper_pct for ECON when column present", async () => {
+    const { expandFddPlotRoles } = await import("../api/vibeCharts");
+    expect(
+      expandFddPlotRoles(
+        "ECON-4",
+        ["mat", "rat", "oa_t"],
+        [{ oa_damper_pct: 40 }, { oa_damper_pct: 55 }],
+      ),
+    ).toEqual(["mat", "rat", "oa_t", "oa_damper_pct"]);
+    expect(expandFddPlotRoles("ECON-4", ["mat"], [{ mat: 60 }])).toEqual(["mat"]);
+    expect(
+      expandFddPlotRoles("VAV-1", ["zone_t"], [{ oa_damper_pct: 10 }]),
+    ).toEqual(["zone_t"]);
+  });
+
+  it("withConfirmedFaultLane keeps BAS+web traces and adds fault lane", async () => {
+    const { withConfirmedFaultLane } = await import("../api/vibeCharts");
+    const { basOverlay } = await import("../api/centralOverview");
+    const overlay = basOverlay(
+      [
+        { timestamp_utc: "t0", bas_oat_f: 40, web_oat_f: 42 },
+        { timestamp_utc: "t1", bas_oat_f: 41, web_oat_f: 43 },
+      ],
+      5,
+    )!;
+    const fig = withConfirmedFaultLane(overlay, {
+      equipmentId: "AHU_1",
+      ruleId: "OAT-METEO",
+      faultX: ["t0", "t1"],
+      confirmedFault: [0, 1],
+    });
+    const names = fig.data.map((t) => String(t.name ?? ""));
+    expect(names.some((n) => /BAS/i.test(n))).toBe(true);
+    expect(names.some((n) => /Web OAT/i.test(n))).toBe(true);
+    expect(names).toContain("confirmed_fault");
+    expect(fig.layout?.yaxis2).toBeTruthy();
   });
 });

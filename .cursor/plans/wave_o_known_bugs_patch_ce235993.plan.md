@@ -1,99 +1,111 @@
 ---
 name: Wave O Known Bugs Patch
-overview: "Wave O continuous bake (no deferrals except O5 Stage C): O8→O9→O10→O7→O3→O1→O6→O2→O4. O2b = beefed automated authz tests (Kali agent owns live AF). Railway hub pinned sha-764bb17 / 3.5.11. Mint scrape → GHCR → Railway → ACME = same tip cycle."
+overview: "Wave O product bake CLOSED on master through 3.5.20 (#934). Soft residuals + final stress/GH tidy owned by Wave P. Kali owns live hub — Mint does not Railway re-pin. O2c Kali V1–V3 + MT matrix land on Wave P tip branch."
 todos:
   - id: o0-bootstrap
-    content: "O0: Seed BUG_REPORT_WAVE_O + pointer from Wave N/OT reports; sync ops pin sha-9072e0b / 3.5.10; agent_spec SESSION_LOG Wave O kickoff"
+    content: "O0: Seed BUG_REPORT_WAVE_O + pointer from Wave N/OT reports; sync ops pin; agent_spec SESSION_LOG Wave O kickoff"
     status: completed
   - id: o0-local-bacnet-bench
-    content: "Optional: Mint local BACnet Who-Is + MQTTS pipeline smoke (192.168.204.11) via scripts/ops/local_bacnet_ot_bench.sh — docs LOCAL_BACNET_BACPYPE3_BENCH.md"
+    content: "Optional: Mint local BACnet Who-Is + MQTTS pipeline smoke"
     status: completed
   - id: o0-hygiene-gate
-    content: "O0 every cycle: 0 open PRs; master only; tip Actions green; cancel superseded fails; no stale local branches"
-    status: in_progress
+    content: "O0: delete stale wave-o* remotes; tip Actions green; 0 open PRs after tip merge — residual GH tidy = Wave P p9"
+    status: completed
   - id: o0-reboot-hold
-    content: "HOLD (human): Mint reboot before next product/security implementation turn — plan LOCKED 2026-09-14; resume after reboot for tip-pin → #926 → O10… → O2b beefed tests (no Kali here)"
+    content: "HOLD lifted — continuous bake"
     status: completed
   - id: o1-tenant-historian
-    content: "O1 sub-plan: migrate/re-import BUILDING_100 + LAKESIDE_ES under tenants/{tid}/; harden package import write ACL; gate 31+historian path proof"
+    content: "O1 write ACL CLOSED 3.5.16; Soft path migrate tenants/{tid}/ → Wave P p3-*"
     status: completed
   - id: o2-audit-zap
-    content: "O2a: stress asserts security_audit events on deny/select/import; ZAP AF owned by external Kali agent (disposition only here) — this agent expands automated authz/header/redirect/rate-limit tests, not Kali"
+    content: "O2a gates 31/33/34 MERGED #932/#933; Soft volume security_audit.jsonl assert → Wave P p2-audit-gate-assert; ZAP=Kali"
     status: completed
   - id: o2-kali-mt-shared-db
-    content: "O2b (Kali agent owns live AF): map authz+routes+admin+export/upload+Railway; permission matrix; fix IDOR/BOLA/mass-assign; cookies/CSRF/rate-limit/CORS; CSP+headers; security.txt. THIS agent: beefed automated ACL/IDOR/admin/redirect/header/CORS tests + gate 31/33 — do NOT run Kali/ZAP ActiveScan here"
+    content: "O2b/O2c Mint product harden (V1–V3 + IDOR matrix + admin/agent) on Wave P tip; Kali ZAP/MQTT staging Soft"
+    status: completed
+  - id: o2c-preauth-tenants
+    content: "O2c V1 tenants JWT + tests"
+    status: completed
+  - id: o2c-preauth-topology
+    content: "O2c V2 topology JWT"
+    status: completed
+  - id: o2c-web-headers
+    content: "O2c V3 CSP Fonts + HSTS + security.txt"
+    status: completed
+  - id: o2c-mt-isolation-matrix
+    content: "O2c MT select/datapath/admin/agent tests green; MQTT broker proof Soft→Wave P/Kali"
     status: completed
   - id: o3-acme-metric-mstp
-    content: "O3: metric Trane VAV FDD + MSTP addressing — next step immediately after O10 streams healthy; never invent ZN-T"
+    content: "O3 metric/MSTP CLOSED ops (Trane °C vs JCI °F)"
     status: completed
   - id: o4-mint-m5
-    content: "O4 sub-plan: Wave M mint residual — fieldbus kit or skip-kit path; docker.sock; synth59 stage; re-run hub stress toward fully_qualified"
-    status: pending
+    content: "O4 Mint M5 Soft (synth59/kit) → Wave P p4-*"
+    status: completed
   - id: o5-stage-c-park
-    content: "O5 PARKED Soft-OPEN: Stage C IdP/MFA/SKU — track only; no product claim until commercial train"
-    status: pending
+    content: "O5 PARKED Soft-OPEN IdP/MFA/SKU → Wave P p5-stage-c-park"
+    status: completed
   - id: o6-historian-perf-parity
-    content: "O6: CSV→Hive/tenant layout + import admission; admin data limits (default 1y OR GiB cap); concurrent CSV+MQTT stress; identical DataFusion FDD parity; H10 where useful"
+    content: "O6 historian limits + FDD clamp CLOSED #931 / 3.5.17; Soft Hive migrate with O1→Wave P"
     status: completed
   - id: o6-admin-data-limits
-    content: "O6 product: hub-admin settable historian retain window + size cap (defaults: 365d OR ~1–5 GiB/tenant-building — whichever binds first); reject import+MQTT beyond policy (no silent FDD truncate); UI or API for admin"
+    content: "O6 admin retain/size API/UI CLOSED #931"
     status: completed
   - id: o7-overview-site-cache
-    content: "O7: Per-buildingId Overview+health client cache; stop double DF fan-out on site switch; invalidate only RULES_UPDATED/explicit refresh/ingest — under-hood only, ZERO new explanatory UI chrome"
+    content: "O7 Overview site cache CLOSED #926"
     status: completed
   - id: o8-hub-admin-console
-    content: "ASAP SELL WEEK: Hub-admin React console + REST CRUD users/tenants/data; quiet django-like UI; extend gate 31 ACL stress; tip pin before demo"
+    content: "O8 hub admin CLOSED #925"
     status: completed
   - id: o8-sell-week-gate
-    content: "After #925 tip pin: admin CRUD on Railway; acme-ops 403 /api/admin/*; gate 33; then continue O10 same bake"
+    content: "O8 sell-week gate CLOSED"
     status: completed
   - id: o9-site-datamodel-export-acl
-    content: "O9 (PR #925): site-wide data-model export + session ACL; close when tip + gate 33 PASS"
+    content: "O9 site export ACL CLOSED #925"
     status: completed
   - id: o10-acme-full-hvac-mqtt
-    content: "O10 NEXT tip after #925: free 47808 → Mint scrape → rusty tip + full HVAC catalog → GHCR fieldbus → ACME refresh → all-HVAC healthy (same week, not deferred)"
+    content: "O10 full HVAC @300s CLOSED 3.5.15 (hw_plant Soft BIP)"
     status: completed
   - id: o-hold-build
-    content: "HOLD lifted — continuous bake; nothing deferred except O5 Stage C"
+    content: "HOLD lifted"
     status: completed
   - id: o-mint-before-ghcr
-    content: "Every fieldbus tip: Mint cargo + BACnet scrape (free 47808) then immediately PR→GHCR→Railway→ACME (ordered steps, same cycle)"
+    content: "Standing process — Wave P p6-ghcr-refresh-policy"
     status: completed
   - id: o-rusty-tip-pins
-    content: "Confirm/bump rusty-bacnet tip (v0.11.0 if MS/TP OK), rusty-haystack v0.8.1, rusty-modbus v0.1.1 before fieldbus GHCR"
+    content: "rusty-* tips confirmed for O10 fieldbus train"
     status: completed
   - id: o-cycle-template
-    content: "Each step: Mint compile(+BACnet scrape if fieldbus) → PR → CI → squash → GHCR → Railway → ACME same cycle → gates → BUG_REPORT → next step"
+    content: "Standing tip cycle — Wave P owns next tips"
     status: completed
   - id: o-local-compile-gate
-    content: "Per product PR on Mint: cargo check/test touched crates + local web --build/--no-pull before push; free UDP 47808 before fieldbus; catch breaks before Actions"
+    content: "Standing Mint local compile/test before push"
     status: completed
   - id: o-full-stress-pins
-    content: "Full Railway+ACME stress at O8/O9, O10, O1, O2, O6, O4 steps; tip sha-* only; O10 proves ALL HVAC @300s"
+    content: "Full hub stress residual → Wave P p5-final-hub-stress (Kali hub lock)"
     status: completed
   - id: o-fdd-parity-gate
-    content: "Wherever historian layout/import changes: capture baseline FDD (rule_id×equip fault counts/series digests) → mutate → re-run same window → assert same results; no greenwash"
+    content: "Standing FDD parity on layout change → Wave P p6-fdd-parity-on-layout"
     status: completed
   - id: o-ui-no-agent-chrome
-    content: "Hard rule all Wave O SPA work: no agent/AI explanatory banners, status sermons, or ‘we optimized’ copy — silent under-hood behavior only; notes in openfdd_agent_spec"
+    content: "Hard rule enforced; Wave P SPA batch follows"
     status: completed
   - id: o-closeout
-    content: "Wave O closeout: steps 1–9 CLOSED; only O5 Soft-OPEN; OPS PINNED; full stress + FDD parity + all-HVAC cited; 0 open PRs"
-    status: pending
+    content: "Wave O product bake CLOSED; exit OPS PINNED + GH tidy = Wave P p9 (not this plan)"
+    status: completed
   - id: o11-pypi-agent-pages
-    content: "O11 docs (parallel): human-readable GH Pages 'PyPI agent tools' — purpose Excel+E+, calcs, agent→xlsx; fix Drivers duplicate CSV; MORE ITEMS TBD while human inspects — do not close early"
+    content: "O11 PyPI Pages CLOSED #927"
     status: completed
   - id: o12-plotly-download-stems
-    content: "O12a: RCx+FDD Plotly PNG downloads never newplot.png — generic type stems (rcx_{family}_{preset}, fdd_{ruleId}_series); PlotlyHost always sets toImageButtonOptions; e2e assert"
+    content: "O12a Plotly stems CLOSED #927"
     status: completed
   - id: o12-creekside-meter-map
-    content: "O12b: LAKESIDE_ES/Creekside package data model OFF — no metering roles mapped but dataset has integrated BAS BACnet electricity meter; remap equipType meter + kwh/electric_kw (or elec_power) so Metering/UTIL/SV see it; do not invent points"
-    status: in_progress
+    content: "O12b Creekside meter CLOSED #934 / 3.5.20"
+    status: completed
   - id: o13-health-post-repin-honesty
-    content: "O13: Post-re-pin 'wonky' health — /api/health ingest_ok+edges are since-boot and reset to 0 on container restart while /workspace Parquet survives; add started_at/uptime + last_ingest_at (and optional historian presence) so ops/UI don't read 0 as data loss; stress grace after tip pin; docs one-liner in backup-update-restore"
+    content: "O13 health honesty CLOSED #928 / 3.5.14"
     status: completed
 isProject: false
----
+
 
 # Wave O — Known bugs patch train (master)
 
@@ -101,10 +113,10 @@ isProject: false
 >
 > **Rule:** Mint scrape → GHCR → Railway → ACME are **ordered steps of the same tip cycle**, not “do later / Soft-OPEN.” Never skip Mint before fieldbus GHCR; never park O10 behind polish.
 
-**Status (2026-09-15):** Railway hub **OPS tip `sha-f25ffcc` / 3.5.19**. O8–O10–O7–O11–O12a–O13–O1–O3–O6–O2 MERGED. **O12b tip 3.5.20** in flight (meter type + utilities→fuel + Data Model historian merge). Remaining Soft-OPEN: **O4** (synth59 zip) · **O5** Stage C.
+**Status (2026-09-15):** Wave O **product bake CLOSED** on master through **3.5.20** (`aea817fd` / #934 O12b). Soft residuals (tenant path migrate, audit volume assert, synth59, Stage C, final stress, GH tidy, Kali MQTT) live in **Wave P** — [`.cursor/plans/wave_p_residual_stress_gh_tidy_ce235993.plan.md`](wave_p_residual_stress_gh_tidy_ce235993.plan.md) · [`BUG_REPORT_WAVE_P.md`](../../docs/operations/BUG_REPORT_WAVE_P.md). **No Railway re-pin while Kali owns hub.**
 
-**Agent one-liner (continuous):**
-`after reboot → GHCR+Railway pin 3.5.11 → #926 → O10 HVAC → O3 → O1/O6 → O2a ZAP + O2b Kali MT shared-DB harden → O4 closeout`
+**Agent one-liner:**
+`Wave O CLOSED → Wave P tip (docs/SPA/O2c) → wait Kali unlock → GHCR re-pin → ONE hub stress → P9 GH tidy`
 
 **Honest sell path:** Finish this ordered bake before demo — admin UI, site export ACL, full HVAC MQTT, **and** multi-user shared-DB authz bar (O2b) in-scope this train.
 
@@ -458,13 +470,23 @@ Prefer **same tip** as O8.
 
 ## O2 — Audit / ZAP + multi-user shared-DB security (Railway)
 
-> **Source brief:** Security agent on **Kali** testing Railway multi-user shared-database rollout (2026-09-14). Folded into Wave O — **not Soft-OPEN**. Sub-plan: [`wave_o2_audit_zap_ce235993.plan.md`](wave_o2_audit_zap_ce235993.plan.md).
+> **Source brief:** Security agent on **Kali** (2026-09-14 map + **2026-09-15 verified pre-auth findings**). Folded into Wave O **and** Wave P Phase 3 tip (`p2c-*`). Sub-plan: [`wave_o2_audit_zap_ce235993.plan.md`](wave_o2_audit_zap_ce235993.plan.md).
 >
 > **Division of labor (locked):**
-> - **External Kali agent** — live AF / ZAP / exploratory Railway pen-test. Cite their findings in BUG_REPORT; do **not** run Kali or ActiveScan from this Mint/Cursor agent.
-> - **This agent (Mint + CI)** — product fixes + **beefed automated tests** (unit/integration/stress gates) that prove ACL/IDOR/admin/redirect/headers forever. Prefer fail-closed CI over one-off pen-test.
->
-> **Do not start implementation until after Mint reboot resume** (`o0-reboot-hold`).
+> - **External Kali agent** — live AF / ZAP / exploratory Railway pen-test. Cite findings; do **not** ActiveScan from Mint.
+> - **This agent (Mint + CI)** — product fixes + automated tests proving ACL/IDOR/headers forever.
+
+### O2c — Kali verified pre-auth disclosures (2026-09-15) — HARD
+
+| # | Finding | Fix | Status (local 2026-09-15) |
+|---|---------|-----|---------------------------|
+| **V1** | `GET /api/tenants` unauth → Admin via `dev_anonymous()` → full tenant/building roster | JWT-protected; never Admin anonymous for listing; A/B/admin scoped tests | **DONE** — `preauth_disclosure` |
+| **V2** | Unauth `capabilities` / `health/stack` / `building/snapshot` / `dashboard/summary` leak MCP, protocols, paths, flags | Protected router (401 when auth ON); `/api/health` stays lean public | **DONE** |
+| **V3** | CSP Fonts / HSTS / `security.txt` | nginx Fonts allowlist + HSTS on HTTPS; `security.txt` not SPA HTML | **DONE** (gate 34 hub live / Kali) |
+
+**Critical follow-on:** Tenant A/B/admin IDOR matrix (select + mapping + FDD + analytics **green** in `mt_isolation_matrix_select_and_datapath`); expand jobs/exports/agent mint; same `building_id` two tenants Parquet namespace; MQTT mTLS+ACL on staging (**Kali**). Railway: only web public. **No Railway re-pin while Kali owns hub.**
+
+**Tests:** `services/central/tests/preauth_disclosure.rs` · gate 31 · gate 34. Skill: `openfdd_agent_spec/skills/openfdd-mt-security`.
 
 ### O2a — Audit asserts + ZAP disposition (ZAP run = Kali agent)
 

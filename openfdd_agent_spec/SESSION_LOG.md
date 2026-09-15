@@ -1,3 +1,17 @@
+## 2026-09-15 — Wave O CLOSED → Wave P residual ownership
+
+- Wave O product bake **CLOSED** on master through **3.5.20** (#934). Soft residuals → Wave P + `BUG_REPORT_WAVE_P.md`.
+- Mint tip `fix/wave-p-docs-spa-local`: docs/SPA/p8* + Kali O2c (V1–V3, MT IDOR, admin/agent least-privilege). `preauth_disclosure` 6/6.
+- GHCR #934 hub publishing; fieldbus Docker Hub 500 → re-run. **No Railway re-pin while Kali owns hub.**
+- Soft-OPEN: tenant path migrate, audit volume assert, synth59, ACME HW, Stage C, final stress, P9 tidy.
+
+## 2026-09-15 — Kali O2c / Wave P2c pre-auth + MT security
+
+- Kali verified: unauth `/api/tenants` Admin-via-anonymous; public topology APIs leak MCP/protocols/paths; CSP Fonts + HSTS + `security.txt`.
+- Mint **V1–V3 landed locally:** tenants/capabilities/stack/snapshot/summary on JWT router; `list_tenants` fail-closed; nginx Fonts CSP + HSTS + `security.txt`; skill `openfdd-mt-security`.
+- Tests: `preauth_disclosure` (anon 401, A/B/admin, topology, health lean, MT datapath IDOR, admin/agent least-privilege).
+- Railway re-pin deferred (Kali). Soft: staging MQTT ACL proof.
+
 ## 2026-09-14 — Wave N OPS PINNED (3.5.10 / sha-9072e0b)
 
 - #923 squash-merged: fail-closed `allow_building` on FDD/CSV/analytics; gate 31 probes mapping+series.

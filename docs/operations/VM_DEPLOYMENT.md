@@ -2,6 +2,8 @@
 title: VM deployment
 parent: Operations
 nav_order: 5
+nav_exclude: true
+
 ---
 
 # VM deployment behind a firewall

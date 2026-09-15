@@ -27,6 +27,8 @@ import {
   oatScatter,
   rankingBars,
   rcxFigureHasFaultLane,
+  vavHealthDonut,
+  vavHealthWorstBars,
 } from "../api/vibeCharts";
 import { resolveRoleUnit } from "../api/roleUnits";
 import type { PlotlyFigure } from "../api/plotDataset";
@@ -277,7 +279,48 @@ export function RcxPage() {
           familyPresets.find((p) => p.id === presetId)?.chart ??
           "",
       );
+      const schema = String(res.coverage?.schema_version ?? "");
+      const qv = String(res.query_version ?? "");
+      const isVavHealth =
+        kind === "vav_health" ||
+        schema === "vav_health_matrix_v1" ||
+        qv === "vav-health-v1" ||
+        presetId === "vav_health_matrix";
       const points = res.points ?? [];
+      const matrixRows = res.rows ?? [];
+      if (isVavHealth) {
+        if (!matrixRows.length) {
+          setFigure(null);
+          setError(
+            res.warnings?.[0] ?? "No VAV health rows — preset returned empty.",
+          );
+          return;
+        }
+        const fig = vavHealthWorstBars(matrixRows, {
+          title,
+          yTitle: "comfort fail h",
+        });
+        setDonutFigure(
+          vavHealthDonut(matrixRows, { title: "VAV health boxes" }),
+        );
+        const brokenUnknown = matrixRows.some(
+          (r) => r.broken_box === null || r.broken_box === undefined,
+        );
+        if (brokenUnknown) {
+          setCompanionNote(
+            "Broken-box flags unknown until Run all rules joins VAV FDD results.",
+          );
+        } else {
+          setCompanionNote(null);
+        }
+        if (rcxFigureHasFaultLane(fig)) {
+          setFigure(null);
+          setError("Internal: RCx figure must not include a fault lane");
+          return;
+        }
+        setFigure(fig);
+        return;
+      }
       if (!points.length) {
         setFigure(null);
         setError(res.warnings?.[0] ?? "No points — preset returned empty.");

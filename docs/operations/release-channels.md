@@ -2,6 +2,8 @@
 title: Release channels
 parent: Operations
 nav_order: 1
+nav_exclude: true
+
 ---
 
 # Release channels

@@ -35,17 +35,11 @@ pub fn router(state: Arc<AppState>) -> Router {
     let public = Router::new()
         .route("/api/health", get(health))
         .route("/health", get(health))
-        .route("/api/capabilities", get(capabilities))
         .route("/api/auth/status", get(auth_status))
         .route("/api/auth/me", get(auth_me))
-        .route("/api/auth/login", post(auth_login))
-        // Shell strip + building summary are intentionally public (UI before login).
-        .route("/api/health/stack", get(health_stack))
-        .route("/api/building/snapshot", get(building_snapshot))
-        .route("/api/dashboard/summary", get(dashboard_summary))
-        .route("/api/tenants", get(list_tenants))
-        .route("/api/tenants/select", post(select_tenant))
-        .route("/api/tenants/budgets", get(list_tenant_budgets));
+        .route("/api/auth/login", post(auth_login));
+    // Kali O2c: detailed tenants / capabilities / stack / snapshot / summary
+    // require JWT when auth is ON (moved onto protected router below).
 
     // Admin-gated agent token mint lives on the authenticated router below.
 
@@ -95,6 +89,14 @@ pub fn router(state: Arc<AppState>) -> Router {
         .layer(DefaultBodyLimit::max(128 * 1024 * 1024));
 
     let protected = Router::new()
+        // Kali O2c / Wave P2c: was public; leaks plane + topology when unauthenticated.
+        .route("/api/capabilities", get(capabilities))
+        .route("/api/health/stack", get(health_stack))
+        .route("/api/building/snapshot", get(building_snapshot))
+        .route("/api/dashboard/summary", get(dashboard_summary))
+        .route("/api/tenants", get(list_tenants))
+        .route("/api/tenants/select", post(select_tenant))
+        .route("/api/tenants/budgets", get(list_tenant_budgets))
         .route("/api/auth/agent-token", post(auth_agent_token))
         .route(
             "/api/admin/users",
@@ -378,23 +380,29 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
 }
 
 /// Wave L — list tenants from file control plane (legacy singleton when mode OFF).
+/// Kali O2c: when auth is ON this sits behind JWT middleware — never Admin-via-anonymous.
 #[utoipa::path(
     get,
     path = "/api/tenants",
     tag = "central",
-    responses((status = 200, description = "Tenant control-plane listing", body = crate::tenant::TenantsListResponse))
+    responses(
+        (status = 200, description = "Tenant control-plane listing", body = crate::tenant::TenantsListResponse),
+        (status = 401, description = "Auth required when JWT secret is configured")
+    )
 )]
 pub async fn list_tenants(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-) -> Json<crate::tenant::TenantsListResponse> {
+) -> Result<Json<crate::tenant::TenantsListResponse>, (StatusCode, Json<Value>)> {
     let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
     let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
-    // Public route: prefer JWT membership when present; otherwise anonymous passthrough.
-    let user = state
-        .auth
-        .user_from_headers(&headers)
-        .unwrap_or_else(|_| auth::AuthUser::dev_anonymous());
+    // Fail closed: never fall back to Admin anonymous for tenant roster.
+    let user = state.auth.user_from_headers(&headers).map_err(|e| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
     let ctx = crate::tenant::TenantContext::resolve(&user, &plane)
         .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&user));
     // Keep gate 11 fail-closed on mode: never advertise ON until operator enable.
@@ -416,14 +424,14 @@ pub async fn list_tenants(
             .filter(|t| allowed.contains(t.id.as_str()))
             .collect()
     };
-    Json(crate::tenant::TenantsListResponse {
+    Ok(Json(crate::tenant::TenantsListResponse {
         ok: true,
         multi_tenant,
         active_tenant_id: ctx.tenant_id,
         buildings_visible,
         historian_prefix,
         tenants,
-    })
+    }))
 }
 
 /// Wave L L4 — select active tenant for the browser session (single domain).
