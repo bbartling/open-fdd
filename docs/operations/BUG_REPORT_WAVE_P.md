@@ -37,3 +37,15 @@
 ## Exit (P9)
 
 Wave P **OPS PINNED** only when: last tip GHCR + Railway re-pin (operator OK) + **ONE** full `run_railway_hub_stress.sh` cited + 0 open PRs + stale `wave-*` remotes deleted + Soft-OPEN ≤ Stage C (+ honest synth59 if still missing).
+
+## Wave R (2026-09-15)
+
+| ID | Status | Note |
+|----|--------|------|
+| **r1** | FIXED in tip | FC1 SQL prefers `fan_status` for fan-hi gate (match pandas `_fan()`); was cmd-only → 1h vs 40h |
+| **r2** | FIXED | Hub stress Wave L OFF 12–17 → PASS N/A when `multi_tenant=true` |
+| **r3** | FIXED | AFDD flood 429 retry + 45s cool-down after ACL |
+| **r6** | Soft | `ingest_reject`≈58 on ACME; no `/api/*/dead-letters` yet — triage Soft; ACME honesty carry |
+| **r7** | DONE | JCI FEC **5007** Who-Is + AI:1173≈76°F (`reports/local_bacnet_ot_wave_r_*`) |
+| **r10** | DONE | Viewer optional documented in RAILWAY_DEPLOYMENT.md |
+| **r12** | Parked | Stage C IdP/MFA/SKU |

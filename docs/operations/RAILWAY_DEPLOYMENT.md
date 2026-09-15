@@ -215,6 +215,8 @@ Store these only in Railway **Variables / Secrets**. Never commit them, never pa
 
 Prefer **`agent`** for remote AI assistance. Do not share the admin password with MCP hosts. Do not treat Railway’s built-in assistant as the FDD/HVAC agent.
 
+**Viewer optional on Railway lab:** `OPENFDD_VIEWER_PASSWORD` / username `viewer` is deployment-wide read-only and is **often unset**. Auth role-matrix marks viewer checks `NOT_APPLICABLE` when login fails — that is expected Soft, not an ACL regression. Tenant isolation uses `*-ops` / `*-agent` file users, not `viewer`.
+
 ### Secure agent auth on Railway (Cursor / MCP)
 
 1. Set `OPENFDD_JWT_SECRET`, `OPENFDD_ADMIN_PASSWORD`, and `OPENFDD_AGENT_PASSWORD` on **central**. Optionally set `OPENFDD_VIEWER_PASSWORD` for read-only `viewer` login.
