@@ -114,13 +114,8 @@ fn materialize_fuel_campus_from_utilities(building_id: &str, bills_src: &Path) -
     fs::create_dir_all(&dest_dir).with_context(|| format!("mkdir {}", dest_dir.display()))?;
     let bills_name = "electric_monthly_bills.csv";
     let dest_bills = dest_dir.join(bills_name);
-    fs::copy(bills_src, &dest_bills).with_context(|| {
-        format!(
-            "copy {} → {}",
-            bills_src.display(),
-            dest_bills.display()
-        )
-    })?;
+    fs::copy(bills_src, &dest_bills)
+        .with_context(|| format!("copy {} → {}", bills_src.display(), dest_bills.display()))?;
     let campus = json!({
         "campus_id": building_id,
         "label": building_id,

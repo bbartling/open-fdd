@@ -241,9 +241,6 @@ mod tests {
         assert_eq!(canonical_kind("electricMeter"), Some("meter"));
         assert_eq!(infer_kind_from_id("CS_ELEC_METER"), "meter");
         assert_eq!(api_equipment_type_for("CS_ELEC_METER", None), "METER");
-        assert_eq!(
-            api_equipment_type_for("MTR_1", Some("meter")),
-            "METER"
-        );
+        assert_eq!(api_equipment_type_for("MTR_1", Some("meter")), "METER");
     }
 }

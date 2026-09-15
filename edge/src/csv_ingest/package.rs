@@ -1468,8 +1468,7 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
             .and_then(|v| v.as_array())
             .cloned()
             .unwrap_or_default();
-        let mut known: std::collections::BTreeSet<String> =
-            all_ids.iter().cloned().collect();
+        let mut known: std::collections::BTreeSet<String> = all_ids.iter().cloned().collect();
         for row in hist_equips {
             let Some(id) = row.get("equipment_id").and_then(|v| v.as_str()) else {
                 continue;

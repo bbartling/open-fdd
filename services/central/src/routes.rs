@@ -2128,8 +2128,8 @@ pub async fn csv_import_package(
     let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
     if ok {
         // Promote package utilities_v1 → Metering fuel campus (Creekside / LAKESIDE_ES).
-        let _ = tokio::task::spawn_blocking(fuel::import::sync_campuses_from_package_utilities)
-            .await;
+        let _ =
+            tokio::task::spawn_blocking(fuel::import::sync_campuses_from_package_utilities).await;
     }
     open_fdd_edge_prototype::auth::audit::log_event(
         "package_import",
