@@ -44,3 +44,13 @@ O8 → O9 → O10 → O7 → O3 → O1 → O6 → O2 → O4 · **O5 Soft-OPEN on
 | **wave-o-health-post-repin** | **CLOSED** 3.5.14 | `/api/health` started_at/uptime/last_ingest_at/historian_present; gate 32 boot grace |
 | **wave-o10-mqtt-packet-cap** | **CLOSED** 3.5.15 | Full HVAC cell publish ~19.5KiB > rumqttc default 10KiB → eventloop tear-down |
 | **wave-o1-import-write-acl** | **CLOSED** 3.5.16 | Package import/append deny foreign building when MT ON |
+
+
+## Soft residuals (not blocking O12b tip)
+
+| ID | Status | Note |
+|----|--------|------|
+| **wave-o1-tenant-path-migrate** | Soft-OPEN | Hub still stores `building=BUILDING_100` / `building=LAKESIDE_ES` at historian root (no `tenants/{tid}/` layout). Import write ACL CLOSED 3.5.16; path migrate deferred (backup-first). |
+| **wave-o2a-audit-volume-assert** | Soft-OPEN | Gates 31/33/34 prove HTTP ACL/headers; volume `security_audit.jsonl` event asserts not yet wired into gate (file on `/workspace/logs`). Kali AF stays external. |
+| **wave-o4-synth59-handoff** | Soft-OPEN | Full hub stress `fully_qualified` blocked — synth59 handoff zip missing on Mint. Tip gates 31/33/34 PASS on 3.5.19. |
+| **wave-o5-stage-c** | Soft-OPEN | IdP/MFA/SKU commercial. |
