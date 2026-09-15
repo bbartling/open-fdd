@@ -59,6 +59,30 @@ deny_building() {
     echo "FAIL: $label fdd/series foreign building $bid expected 403, got $series_code" | tee -a "$ART/acl.log"
     return 1
   fi
+  # Wave O2: IDOR must not be empty 200 — body asserts ok:false when JSON.
+  if [[ -s "$ART/${label}_series_${bid}.json" ]] && jq -e 'type == "object"' "$ART/${label}_series_${bid}.json" >/dev/null 2>&1; then
+    if ! jq -e '.ok == false' "$ART/${label}_series_${bid}.json" >/dev/null 2>&1; then
+      echo "FAIL: $label fdd/series deny body missing ok:false (empty-200 risk)" | tee -a "$ART/acl.log"
+      return 1
+    fi
+  fi
+  # Extra data-path probes (equipment + analytics).
+  local equip_code analytics_code
+  equip_code="$(curl -s -o "$ART/${label}_equip_${bid}.json" -w '%{http_code}' \
+    -H "Authorization: Bearer $token" \
+    "$BASE/api/fdd/equipment?building_id=${bid}")"
+  if [[ "$equip_code" != "403" && "$equip_code" != "401" ]]; then
+    echo "FAIL: $label fdd/equipment foreign building $bid expected 403, got $equip_code" | tee -a "$ART/acl.log"
+    return 1
+  fi
+  analytics_code="$(curl -s -o "$ART/${label}_analytics_${bid}.json" -w '%{http_code}' \
+    -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg b "$bid" '{building_id:$b}')" \
+    "$BASE/api/analytics/runtime")"
+  if [[ "$analytics_code" != "403" && "$analytics_code" != "401" ]]; then
+    echo "FAIL: $label analytics/runtime foreign building $bid expected 403, got $analytics_code" | tee -a "$ART/acl.log"
+    return 1
+  fi
   # Wave O1: package write paths must fail closed like reads.
   local append_code
   append_code="$(curl -s -o "$ART/${label}_append_${bid}.json" -w '%{http_code}' \
@@ -69,7 +93,7 @@ deny_building() {
     echo "FAIL: $label package append foreign building $bid expected 403, got $append_code" | tee -a "$ART/acl.log"
     return 1
   fi
-  echo "PASS: $label denied $bid / tenant $4 (list+select+mapping+series+append)" | tee -a "$ART/acl.log"
+  echo "PASS: $label denied $bid / tenant $4 (list+select+mapping+series+equip+analytics+append)" | tee -a "$ART/acl.log"
   return 0
 }
 

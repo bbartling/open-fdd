@@ -14,7 +14,7 @@ function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-function safeReturnPath(raw: string | null): string {
+export function safeReturnPath(raw: string | null): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
   if (raw.startsWith("/auth") || raw.startsWith("/login")) return "/";
   return raw;

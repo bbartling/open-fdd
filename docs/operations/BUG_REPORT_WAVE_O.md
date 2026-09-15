@@ -1,8 +1,8 @@
 # Wave O — Known bugs / patch train tracker
 
-**Ops pin (live Railway):** `sha-174432a` / **3.5.16** · `multi_tenant=true`
-**Closed tips:** O8–O9 3.5.11 · O7 3.5.12 · O11+O12a 3.5.13 · O13 3.5.14 · O14 MQTT 3.5.15 · O1 write ACL 3.5.16
-**O6 tip (open):** **3.5.17** — historian retain/size admin limits
+**Ops pin (live Railway):** `sha-bdbd9c0` / **3.5.17** · `multi_tenant=true`
+**Closed tips:** O8–O9 3.5.11 · O7 3.5.12 · O11+O12a 3.5.13 · O13 3.5.14 · O14 MQTT 3.5.15 · O1 write ACL 3.5.16 · **O6 historian limits 3.5.17**
+**Next tip:** O2 audit/authz tests · O4 Mint residual
 
 Parent plan: `.cursor/plans/wave_o_known_bugs_patch_ce235993.plan.md`  
 Prior Soft-OPEN: [`BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md`](BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md)
@@ -26,10 +26,10 @@ O8 → O9 → O10 → O7 → O3 → O1 → O6 → O2 → O4 · **O5 Soft-OPEN on
 | O14 MQTT packet / chunk | **CLOSED** 3.5.15 | rumqttc 1MiB + per-equip chunks |
 | O1 import write ACL | **CLOSED** 3.5.16 | peek+deny foreign building; gate31 append 403 |
 | O3 metric/MSTP | **CLOSED** ops | Trane ~21°C vs JCI ~70°F; distinct ZN-T/SAT across Trane VAVs |
-| O6 historian limits | **IN PR** | retain_days+size_gib hub-admin · 3.5.17 |
-| O2a audit + ZAP disposition | queued | **this agent:** audit asserts · **Kali agent:** ZAP/AF (cite only) |
-| O2b MT shared-DB harden | **IN PLAN** | product ACL/headers + **beefed CI/stress tests** (no Kali here) |
-| O3–O4 | queued | after O10 streams healthy |
+| O6 historian limits | **CLOSED** #931 / 3.5.17 | retain_days+size_gib admin API/UI; import/MQTT enforce; FDD/analytics start clamp; gate31 PASS + gate32 99→134 on tip |
+| O2a audit + ZAP disposition | **IN PR** 3.5.18 | gate 31 body ok:false + equip/analytics; gate 33 historian-limits + mass-assign; gate 34 headers/security.txt/CORS |
+| O2b MT shared-DB harden | **IN PR** | security.txt nginx location; Auth redirect unit tests; stress required 22+23 |
+| O4 Mint M5 | queued | after O2 |
 
 ## Hygiene
 

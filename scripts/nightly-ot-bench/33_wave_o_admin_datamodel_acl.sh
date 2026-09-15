@@ -69,7 +69,7 @@ else
 fi
 
 # --- O8: tenant token cannot hit admin ---
-for path in /api/admin/users /api/admin/tenants; do
+for path in /api/admin/users /api/admin/tenants /api/admin/historian-limits; do
   c="$(code_for GET "$path" "$ACME_TOKEN")"
   if [[ "$c" != "403" && "$c" != "401" ]]; then
     echo "FAIL: acme GET $path expected 403, got $c" | tee -a "$ART/acl.log"
@@ -85,6 +85,25 @@ if [[ "$c" != "403" && "$c" != "401" ]]; then
   fail=1
 else
   echo "PASS: acme denied user upsert ($c)" | tee -a "$ART/acl.log"
+fi
+
+# Wave O2: mass-assign role=admin must hard-reject for hub admin PUT.
+c="$(code_for PUT /api/admin/users "$ADMIN_TOKEN" \
+  -d '{"username":"massassignprobe","role":"admin","tenant_ids":[],"password":"ProbePass9!"}')"
+if [[ "$c" != "400" && "$c" != "403" ]]; then
+  echo "FAIL: mass-assign role=admin expected 400/403, got $c" | tee -a "$ART/acl.log"
+  fail=1
+else
+  echo "PASS: mass-assign role=admin rejected ($c)" | tee -a "$ART/acl.log"
+fi
+
+# Hub admin can read historian limits (O6).
+c="$(code_for GET /api/admin/historian-limits "$ADMIN_TOKEN")"
+if [[ "$c" != "200" ]]; then
+  echo "FAIL: admin GET /api/admin/historian-limits got $c" | tee -a "$ART/acl.log"
+  fail=1
+else
+  echo "PASS: admin historian-limits 200" | tee -a "$ART/acl.log"
 fi
 
 # --- O9: foreign mapping + session-config ---

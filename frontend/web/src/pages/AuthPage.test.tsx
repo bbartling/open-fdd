@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { AuthPage } from "./AuthPage";
+import { AuthPage, safeReturnPath } from "./AuthPage";
 
 vi.mock("../api/authApi", () => ({
   getAuthMe: vi.fn(async () => {
@@ -21,6 +21,21 @@ vi.mock("../api/authApi", () => ({
 }));
 
 import { getAuthMe, getStoredToken, login, setStoredToken } from "../api/authApi";
+
+describe("safeReturnPath", () => {
+  it("rejects protocol-relative and absolute foreign from=", () => {
+    expect(safeReturnPath("//evil.example")).toBe("/");
+    expect(safeReturnPath("https://evil.example")).toBe("/");
+    expect(safeReturnPath("http://evil.example/x")).toBe("/");
+    expect(safeReturnPath(null)).toBe("/");
+  });
+
+  it("allows same-origin relative paths and blocks auth loops", () => {
+    expect(safeReturnPath("/overview")).toBe("/overview");
+    expect(safeReturnPath("/auth")).toBe("/");
+    expect(safeReturnPath("/login?x=1")).toBe("/");
+  });
+});
 
 describe("AuthPage", () => {
   beforeEach(() => {
