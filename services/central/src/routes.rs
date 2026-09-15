@@ -1978,8 +1978,26 @@ pub async fn csv_preview(headers: HeaderMap, body: Bytes) -> Json<Value> {
 }
 
 /// `openfdd_package_v1` zip upload (#514): multipart, JSON base64, or raw zip body.
-pub async fn csv_import_package(headers: HeaderMap, body: Bytes) -> Json<Value> {
+pub async fn csv_import_package(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let ct = content_type(&headers);
+    match open_fdd_edge_prototype::csv_ingest::package::peek_package_building_id(&ct, &body) {
+        Ok(bid) => {
+            if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&bid)) {
+                return Err(deny);
+            }
+        }
+        Err(e) if crate::tenant::multi_tenant_enabled() => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"ok": false, "error": e})),
+            ));
+        }
+        Err(_) => {}
+    }
     let action_id = actions::start_action(
         "package_import",
         "Package import",
@@ -2016,27 +2034,54 @@ pub async fn csv_import_package(headers: HeaderMap, body: Bytes) -> Json<Value> 
             obj.insert("action_id".into(), json!(aid));
         }
     }
-    Json(result)
+    Ok(Json(result))
 }
 
-pub async fn csv_import_package_append(headers: HeaderMap, body: Bytes) -> Json<Value> {
+pub async fn csv_import_package_append(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let ct = content_type(&headers);
+    let building_id = if ct.to_ascii_lowercase().contains("application/json") {
+        serde_json::from_slice::<Value>(&body).ok().and_then(|v| {
+            v.get("building_id")
+                .and_then(|b| b.as_str())
+                .map(str::to_string)
+        })
+    } else {
+        open_fdd_edge_prototype::csv_ingest::package::peek_package_building_id(&ct, &body).ok()
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id.as_deref()) {
+        return Err(deny);
+    }
     let result = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::csv_ingest::package::append_package_handler(&ct, &body)
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package append task: {e}")}));
-    Json(result)
+    Ok(Json(result))
 }
 
 /// Edit role assignments for an ingested package equipment, then re-ingest.
-pub async fn csv_import_package_roles(Json(body): Json<Value>) -> Json<Value> {
+pub async fn csv_import_package_roles(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let building_id = body
+        .get("building_id")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id.as_deref()) {
+        return Err(deny);
+    }
     let result = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::csv_ingest::package::update_package_roles_handler(&body)
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package roles task: {e}")}));
-    Json(result)
+    Ok(Json(result))
 }
 
 #[derive(Debug, Deserialize)]
