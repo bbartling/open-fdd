@@ -45,7 +45,7 @@ Foreign building / tenant / job / command IDs must never return **200 + data** (
 
 ## MQTT (staging / Kali next)
 
-Example ACL comments: [`deploy/mqtt/acl`](../../../deploy/mqtt/acl). Edge cert for
+Example ACL comments: [`deploy/mqtt/acl.example`](../../../deploy/mqtt/acl.example). Edge cert for
 Tenant A may pub telemetry/status under `openfdd/v1/tenants/{tid}/buildings/{bid}/…`
 and sub commands for that edge only — **deny** Tenant B topics and `#` wildcards
 across tenants. Production mounts generated `mosquitto.acl` at broker `acl_file`;

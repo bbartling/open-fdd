@@ -244,7 +244,10 @@ fn tenants_scoped_by_membership() {
 
     let (st, body) = http("GET", server.port, "/api/tenants", None, Some(&tok_admin));
     assert_eq!(st, 200, "{body}");
-    assert!(body.contains("tenant_a") && body.contains("tenant_b"), "{body}");
+    assert!(
+        body.contains("tenant_a") && body.contains("tenant_b"),
+        "{body}"
+    );
 }
 
 /// Kali V2: sensitive public surfaces must not disclose topology when unauthenticated.
@@ -272,10 +275,7 @@ fn anonymous_topology_endpoints_denied_or_generic() {
     ];
     for path in sensitive {
         let (st, body) = http("GET", server.port, path, None, None);
-        assert!(
-            st == 401 || st == 200,
-            "{path}: unexpected {st} {body}"
-        );
+        assert!(st == 401 || st == 200, "{path}: unexpected {st} {body}");
         if st == 200 {
             for needle in banned {
                 assert!(
@@ -456,10 +456,7 @@ fn admin_and_agent_token_least_privilege() {
         Some(&tok_admin),
     );
     assert_eq!(st, 200, "admin mint: {st} {body}");
-    let agent = parse(&body)["token"]
-        .as_str()
-        .expect("token")
-        .to_string();
+    let agent = parse(&body)["token"].as_str().expect("token").to_string();
     assert_eq!(parse(&body)["role"].as_str(), Some("operator"));
 
     let (st, body) = http("GET", server.port, "/api/admin/users", None, Some(&agent));
