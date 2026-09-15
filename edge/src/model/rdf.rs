@@ -242,7 +242,7 @@ pub fn haystack_rows_to_turtle(rows: &[Value]) -> String {
     let mut lines = vec![
         format!("@prefix hs: <{HS_PREFIX}> ."),
         format!("@prefix ofdd: <{OFDD_PREFIX}> ."),
-        format!("@prefix xsd: <http://www.w3.org/2001/XMLSchema#> ."),
+        "@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .".to_string(),
         String::new(),
     ];
 
