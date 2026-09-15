@@ -1331,11 +1331,8 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
         Some(eq) => match validate_id(eq) {
             Ok(id) => {
                 if !all_ids.iter().any(|x| x == &id) {
-                    return json!({
-                        "ok": false,
-                        "error": format!("equipment {id:?} not found under building {building_id}"),
-                        "equipment_ids": all_ids,
-                    });
+                    // Partial CSV package trees omit historian-only equips (e.g. CS_ELEC_METER).
+                    return mapping_from_historian_equipment(&building_id, Some(&id));
                 }
                 vec![id]
             }
@@ -1459,6 +1456,59 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
             "blockers": blockers,
             "warnings": warnings,
         }));
+    }
+
+    // Package trees can be a partial CSV rematerialization (e.g. AHU-only fixture)
+    // while MQTT/historian still holds the full site (Creekside meter, HPs, …).
+    // Merge historian-only equipment so Data Model / Metering maps stay complete.
+    let hist = mapping_from_historian_equipment(&building_id, equipment_id);
+    if hist.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+        let hist_equips = hist
+            .get("equipment")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let mut known: std::collections::BTreeSet<String> = all_ids.iter().cloned().collect();
+        for row in hist_equips {
+            let Some(id) = row.get("equipment_id").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            if known.contains(id) {
+                continue;
+            }
+            known.insert(id.to_string());
+            equipment.push(row);
+        }
+        let mut ids: Vec<String> = known.into_iter().collect();
+        ids.sort();
+        let mut blocker_count = 0usize;
+        let mut warning_count = 0usize;
+        for row in &equipment {
+            blocker_count += row
+                .get("blockers")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            warning_count += row
+                .get("warnings")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+        }
+        return json!({
+            "ok": true,
+            "building_id": building_id,
+            "unit_system": unit_system,
+            "equipment_ids": ids,
+            "equipment": equipment,
+            "session_role_map": session_role_map,
+            "validation": {
+                "blocker_count": blocker_count,
+                "warning_count": warning_count,
+                "equipment_count": equipment.len(),
+            },
+            "sources": ["csv_buildings", "historian"],
+        });
     }
 
     json!({

@@ -258,6 +258,11 @@ pub const COOKBOOK_ROLES: &[&str] = &[
     "oa_h",
     "occ_mode",
     "return_fan",
+    "elec_power",
+    "electric_kw",
+    "electric_kwh",
+    "kwh",
+    "gas_flow",
 ];
 
 /// Cookbook roles that may appear as literal CSV column names (identity mapping).
@@ -295,6 +300,11 @@ pub fn is_known_cookbook_role(role: &str) -> bool {
             | "oa_h"
             | "occ_mode"
             | "return_fan"
+            | "elec_power"
+            | "electric_kw"
+            | "electric_kwh"
+            | "kwh"
+            | "gas_flow"
     )
 }
 

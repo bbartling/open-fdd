@@ -27,7 +27,12 @@ pub fn fuel_root() -> PathBuf {
 }
 
 /// List imported campuses (directories containing campus.json).
+///
+/// Also materializes campuses from package `utilities_v1` under
+/// `data/csv_buildings/<building_id>/utilities/` so Metering sees Creekside-style
+/// package utilities without a separate fuel ZIP import.
 pub fn list_campuses() -> Result<Value> {
+    let _ = sync_campuses_from_package_utilities();
     let root = fuel_root();
     let mut campuses = Vec::new();
     if root.is_dir() {
@@ -63,6 +68,82 @@ pub fn list_campuses() -> Result<Value> {
         "campuses": campuses,
         "active": active,
     }))
+}
+
+/// Mirror `openfdd_package_v1` utilities into `$OPENFDD_WORKSPACE/data/fuel/<building_id>/`.
+///
+/// Idempotent: refreshes campus.json + electric monthly bill CSV when package utilities exist.
+/// Does not invent meters — only promotes files already written by package ingest.
+pub fn sync_campuses_from_package_utilities() -> Result<Vec<String>> {
+    let csv_root = workspace_root().join("data").join("csv_buildings");
+    if !csv_root.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut synced = Vec::new();
+    for entry in fs::read_dir(&csv_root).with_context(|| format!("read {}", csv_root.display()))? {
+        let entry = entry?;
+        let building_root = entry.path();
+        if !building_root.is_dir() {
+            continue;
+        }
+        let building_id = entry.file_name().to_string_lossy().to_string();
+        if building_id.contains('/') || building_id.contains("..") {
+            continue;
+        }
+        let bills = building_root
+            .join("utilities")
+            .join("electric")
+            .join("monthly_bills.csv");
+        if !bills.is_file() {
+            continue;
+        }
+        match materialize_fuel_campus_from_utilities(&building_id, &bills) {
+            Ok(()) => synced.push(building_id),
+            Err(e) => tracing::warn!(
+                building_id = %building_id,
+                error = %e,
+                "package utilities → fuel campus sync skipped"
+            ),
+        }
+    }
+    Ok(synced)
+}
+
+fn materialize_fuel_campus_from_utilities(building_id: &str, bills_src: &Path) -> Result<()> {
+    let dest_dir = fuel_root().join(building_id);
+    fs::create_dir_all(&dest_dir).with_context(|| format!("mkdir {}", dest_dir.display()))?;
+    let bills_name = "electric_monthly_bills.csv";
+    let dest_bills = dest_dir.join(bills_name);
+    fs::copy(bills_src, &dest_bills)
+        .with_context(|| format!("copy {} → {}", bills_src.display(), dest_bills.display()))?;
+    let campus = json!({
+        "campus_id": building_id,
+        "label": building_id,
+        "notes": "Materialized from openfdd_package_v1 utilities_v1 (electric monthly bills)",
+        "siteRef": building_id,
+        "buildings": [{
+            "building_id": building_id,
+            "label": building_id,
+            "floor_area_ft2": 1.0,
+            "property_type": "unknown"
+        }],
+        "meters": [{
+            "meter_id": format!("{building_id}_electric"),
+            "fuel": "electricity",
+            "unit": "kwh",
+            "file": bills_name,
+            "serves": [building_id]
+        }]
+    });
+    let campus_path = dest_dir.join("campus.json");
+    fs::write(
+        &campus_path,
+        serde_json::to_string_pretty(&campus).context("serialize campus.json")?,
+    )
+    .with_context(|| format!("write {}", campus_path.display()))?;
+    // Prove bills load before advertising the campus.
+    let _ = load_campus(&dest_dir)?;
+    Ok(())
 }
 
 pub fn get_campus_meta(campus_id: Option<&str>) -> Result<Value> {

@@ -17,6 +17,6 @@ pub use campus::{annual_summary, load_campus, Campus, KBTU_PER_KWH, KBTU_PER_MCF
 #[allow(unused_imports)]
 pub use eui::compare_eui;
 #[allow(unused_imports)]
-pub use import::{fuel_root, import_fuel_zip, list_campuses};
+pub use import::{fuel_root, import_fuel_zip, list_campuses, sync_campuses_from_package_utilities};
 #[allow(unused_imports)]
 pub use open_meteo::fetch_open_meteo_handler;
