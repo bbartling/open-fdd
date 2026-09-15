@@ -46,6 +46,8 @@ pub fn canonical_kind(raw: &str) -> Option<&'static str> {
         "boiler" | "hwplant" | "hotwaterplant" => Some("boiler"),
         "heatpump" | "hp" => Some("heatpump"),
         "weather" => Some("weather"),
+        // Electricity / utility meters (UTIL-* / SV-* / RCx metering).
+        "meter" | "electricmeter" | "utilitymeter" | "powermeter" => Some("meter"),
         _ => None,
     }
 }
@@ -54,6 +56,8 @@ pub fn infer_kind_from_id(equipment_id: &str) -> &'static str {
     let id = equipment_id.to_ascii_uppercase().replace('\\', "/");
     if id.contains("WEATHER") {
         "weather"
+    } else if id.contains("METER") {
+        "meter"
     } else if id.contains("VAV") || id.contains("ZONE") {
         "vav"
     } else if id.contains("AHU") || id.contains("RTU") || id.contains("MAU") || id.contains("DOAS")
@@ -101,6 +105,7 @@ pub fn api_equipment_type_for(equipment_id: &str, stamped_type: Option<&str>) ->
         "weather" => "WEATHER",
         "zone_other" => "Zone Other",
         "vrf" => "VRF",
+        "meter" => "METER",
         _ => "GENERAL",
     }
 }
@@ -227,6 +232,18 @@ mod tests {
         assert_eq!(
             stamped_type_from_map_json(&snake, "AC_2").as_deref(),
             Some("heatPump")
+        );
+    }
+
+    #[test]
+    fn meter_stamp_and_id_inference() {
+        assert_eq!(canonical_kind("meter"), Some("meter"));
+        assert_eq!(canonical_kind("electricMeter"), Some("meter"));
+        assert_eq!(infer_kind_from_id("CS_ELEC_METER"), "meter");
+        assert_eq!(api_equipment_type_for("CS_ELEC_METER", None), "METER");
+        assert_eq!(
+            api_equipment_type_for("MTR_1", Some("meter")),
+            "METER"
         );
     }
 }

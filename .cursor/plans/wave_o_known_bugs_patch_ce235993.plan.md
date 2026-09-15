@@ -4,7 +4,7 @@ overview: "Wave O continuous bake (no deferrals except O5 Stage C): O8→O9→O1
 todos:
   - id: o0-bootstrap
     content: "O0: Seed BUG_REPORT_WAVE_O + pointer from Wave N/OT reports; sync ops pin sha-9072e0b / 3.5.10; agent_spec SESSION_LOG Wave O kickoff"
-    status: pending
+    status: completed
   - id: o0-local-bacnet-bench
     content: "Optional: Mint local BACnet Who-Is + MQTTS pipeline smoke (192.168.204.11) via scripts/ops/local_bacnet_ot_bench.sh — docs LOCAL_BACNET_BACPYPE3_BENCH.md"
     status: completed
@@ -16,16 +16,16 @@ todos:
     status: completed
   - id: o1-tenant-historian
     content: "O1 sub-plan: migrate/re-import BUILDING_100 + LAKESIDE_ES under tenants/{tid}/; harden package import write ACL; gate 31+historian path proof"
-    status: pending
+    status: completed
   - id: o2-audit-zap
     content: "O2a: stress asserts security_audit events on deny/select/import; ZAP AF owned by external Kali agent (disposition only here) — this agent expands automated authz/header/redirect/rate-limit tests, not Kali"
-    status: pending
+    status: completed
   - id: o2-kali-mt-shared-db
     content: "O2b (Kali agent owns live AF): map authz+routes+admin+export/upload+Railway; permission matrix; fix IDOR/BOLA/mass-assign; cookies/CSRF/rate-limit/CORS; CSP+headers; security.txt. THIS agent: beefed automated ACL/IDOR/admin/redirect/header/CORS tests + gate 31/33 — do NOT run Kali/ZAP ActiveScan here"
-    status: pending
+    status: completed
   - id: o3-acme-metric-mstp
     content: "O3: metric Trane VAV FDD + MSTP addressing — next step immediately after O10 streams healthy; never invent ZN-T"
-    status: pending
+    status: completed
   - id: o4-mint-m5
     content: "O4 sub-plan: Wave M mint residual — fieldbus kit or skip-kit path; docker.sock; synth59 stage; re-run hub stress toward fully_qualified"
     status: pending
@@ -34,10 +34,10 @@ todos:
     status: pending
   - id: o6-historian-perf-parity
     content: "O6: CSV→Hive/tenant layout + import admission; admin data limits (default 1y OR GiB cap); concurrent CSV+MQTT stress; identical DataFusion FDD parity; H10 where useful"
-    status: pending
+    status: completed
   - id: o6-admin-data-limits
     content: "O6 product: hub-admin settable historian retain window + size cap (defaults: 365d OR ~1–5 GiB/tenant-building — whichever binds first); reject import+MQTT beyond policy (no silent FDD truncate); UI or API for admin"
-    status: pending
+    status: completed
   - id: o7-overview-site-cache
     content: "O7: Per-buildingId Overview+health client cache; stop double DF fan-out on site switch; invalidate only RULES_UPDATED/explicit refresh/ingest — under-hood only, ZERO new explanatory UI chrome"
     status: completed
@@ -52,31 +52,31 @@ todos:
     status: completed
   - id: o10-acme-full-hvac-mqtt
     content: "O10 NEXT tip after #925: free 47808 → Mint scrape → rusty tip + full HVAC catalog → GHCR fieldbus → ACME refresh → all-HVAC healthy (same week, not deferred)"
-    status: in_progress
+    status: completed
   - id: o-hold-build
     content: "HOLD lifted — continuous bake; nothing deferred except O5 Stage C"
     status: completed
   - id: o-mint-before-ghcr
     content: "Every fieldbus tip: Mint cargo + BACnet scrape (free 47808) then immediately PR→GHCR→Railway→ACME (ordered steps, same cycle)"
-    status: pending
+    status: completed
   - id: o-rusty-tip-pins
     content: "Confirm/bump rusty-bacnet tip (v0.11.0 if MS/TP OK), rusty-haystack v0.8.1, rusty-modbus v0.1.1 before fieldbus GHCR"
-    status: pending
+    status: completed
   - id: o-cycle-template
     content: "Each step: Mint compile(+BACnet scrape if fieldbus) → PR → CI → squash → GHCR → Railway → ACME same cycle → gates → BUG_REPORT → next step"
-    status: pending
+    status: completed
   - id: o-local-compile-gate
     content: "Per product PR on Mint: cargo check/test touched crates + local web --build/--no-pull before push; free UDP 47808 before fieldbus; catch breaks before Actions"
-    status: pending
+    status: completed
   - id: o-full-stress-pins
     content: "Full Railway+ACME stress at O8/O9, O10, O1, O2, O6, O4 steps; tip sha-* only; O10 proves ALL HVAC @300s"
-    status: pending
+    status: completed
   - id: o-fdd-parity-gate
     content: "Wherever historian layout/import changes: capture baseline FDD (rule_id×equip fault counts/series digests) → mutate → re-run same window → assert same results; no greenwash"
-    status: pending
+    status: completed
   - id: o-ui-no-agent-chrome
     content: "Hard rule all Wave O SPA work: no agent/AI explanatory banners, status sermons, or ‘we optimized’ copy — silent under-hood behavior only; notes in openfdd_agent_spec"
-    status: pending
+    status: completed
   - id: o-closeout
     content: "Wave O closeout: steps 1–9 CLOSED; only O5 Soft-OPEN; OPS PINNED; full stress + FDD parity + all-HVAC cited; 0 open PRs"
     status: pending
@@ -88,10 +88,10 @@ todos:
     status: completed
   - id: o12-creekside-meter-map
     content: "O12b: LAKESIDE_ES/Creekside package data model OFF — no metering roles mapped but dataset has integrated BAS BACnet electricity meter; remap equipType meter + kwh/electric_kw (or elec_power) so Metering/UTIL/SV see it; do not invent points"
-    status: pending
+    status: in_progress
   - id: o13-health-post-repin-honesty
     content: "O13: Post-re-pin 'wonky' health — /api/health ingest_ok+edges are since-boot and reset to 0 on container restart while /workspace Parquet survives; add started_at/uptime + last_ingest_at (and optional historian presence) so ops/UI don't read 0 as data loss; stress grace after tip pin; docs one-liner in backup-update-restore"
-    status: in_progress
+    status: completed
 isProject: false
 ---
 
@@ -101,7 +101,7 @@ isProject: false
 >
 > **Rule:** Mint scrape → GHCR → Railway → ACME are **ordered steps of the same tip cycle**, not “do later / Soft-OPEN.” Never skip Mint before fieldbus GHCR; never park O10 behind polish.
 
-**Status (2026-09-14 post-reboot):** Railway hub **OPS pin in progress** `sha-764bb17` / **3.5.11+764bb17e3bd8** (central+mqtt+web Online; `multi_tenant=true`). **#926** O7+rustls-0.23.45 in CI. Private O10 catalog ~38 HVAC devices ready. Next: merge #926 → GHCR 3.5.12 → O10 fieldbus/ACME → edges+ingest recover → O3→O1→O6→O2b tests→O4. O5 Soft-OPEN only.
+**Status (2026-09-15):** Railway hub **OPS tip `sha-f25ffcc` / 3.5.19**. O8–O10–O7–O11–O12a–O13–O1–O3–O6–O2 MERGED. **O12b tip 3.5.20** in flight (meter type + utilities→fuel + Data Model historian merge). Remaining Soft-OPEN: **O4** (synth59 zip) · **O5** Stage C.
 
 **Agent one-liner (continuous):**
 `after reboot → GHCR+Railway pin 3.5.11 → #926 → O10 HVAC → O3 → O1/O6 → O2a ZAP + O2b Kali MT shared-DB harden → O4 closeout`

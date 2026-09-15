@@ -73,7 +73,10 @@ pub fn load_bill_csv(path: &Path) -> Result<Vec<BillRow>> {
         bail!("bill CSV {} has no header row", path.display());
     }
 
-    let month_i = find_col(&headers, &["month"]).unwrap_or(0);
+    let month_i = find_col(&headers, &["month"])
+        .or_else(|| find_col(&headers, &["billing", "period"]))
+        .or_else(|| find_col(&headers, &["period"]))
+        .unwrap_or(0);
     let usage_i = find_col(&headers, &["kwh"])
         .or_else(|| find_col(&headers, &["usage"]))
         .or(if headers.len() > 1 { Some(1) } else { Some(0) })
@@ -157,6 +160,22 @@ mod tests {
         assert!((rows[0].cost_usd.unwrap() - 120.5).abs() < 1e-9);
         assert_eq!(rows[1].month, "2015-02");
         assert!((rows[1].usage - 1500.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn loads_package_utilities_billing_period_csv() {
+        let mut f = NamedTempFile::new().unwrap();
+        writeln!(
+            f,
+            "account,billing_period,kwh,demand_kw\nACCT1,2024-01,1000,50\nACCT1,2024-02,1100,55"
+        )
+        .unwrap();
+        let rows = load_bill_csv(f.path()).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].month, "2024-01");
+        assert!((rows[0].usage - 1000.0).abs() < 1e-9);
+        assert!((rows[0].demand_kw.unwrap() - 50.0).abs() < 1e-9);
+        assert_eq!(rows[1].month, "2024-02");
     }
 
     #[test]
