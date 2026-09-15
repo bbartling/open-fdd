@@ -59,7 +59,17 @@ deny_building() {
     echo "FAIL: $label fdd/series foreign building $bid expected 403, got $series_code" | tee -a "$ART/acl.log"
     return 1
   fi
-  echo "PASS: $label denied $bid / tenant $4 (list+select+mapping+series)" | tee -a "$ART/acl.log"
+  # Wave O1: package write paths must fail closed like reads.
+  local append_code
+  append_code="$(curl -s -o "$ART/${label}_append_${bid}.json" -w '%{http_code}' \
+    -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg b "$bid" '{confirm:true,building_id:$b,equipment_id:"AHU_1",csv:"timestamp_utc,x\n2026-01-01T00:00:00Z,1\n"}')" \
+    "$BASE/api/csv/import/package/append")"
+  if [[ "$append_code" != "403" && "$append_code" != "401" ]]; then
+    echo "FAIL: $label package append foreign building $bid expected 403, got $append_code" | tee -a "$ART/acl.log"
+    return 1
+  fi
+  echo "PASS: $label denied $bid / tenant $4 (list+select+mapping+series+append)" | tee -a "$ART/acl.log"
   return 0
 }
 

@@ -872,8 +872,7 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
     }
 }
 
-/// HTTP entry: multipart / JSON base64 / raw zip body.
-pub fn import_package_handler(content_type: &str, body: &[u8]) -> Value {
+fn extract_package_zip_bytes(content_type: &str, body: &[u8]) -> Result<Vec<u8>, String> {
     let ct = content_type.to_ascii_lowercase();
     let zip_bytes: Vec<u8> =
         if ct.contains("multipart/form-data") || ct.contains("application/json") {
@@ -883,23 +882,48 @@ pub fn import_package_handler(content_type: &str, body: &[u8]) -> Value {
             } else {
                 super::upload::parse_upload(content_type, body)
             };
-            let (files, _sid) = match parsed {
-                Ok(parsed) => parsed,
-                Err(e) => return json!({"ok": false, "error": e}),
-            };
+            let (files, _sid) = parsed?;
             let Some((_, bytes)) = files
                 .into_iter()
                 .find(|(name, _)| name.to_lowercase().ends_with(".zip"))
             else {
-                return json!({"ok": false, "error": "no .zip file in upload"});
+                return Err("no .zip file in upload".into());
             };
             bytes
         } else {
             body.to_vec()
         };
     if zip_bytes.is_empty() {
-        return json!({"ok": false, "error": "empty upload"});
+        return Err("empty upload".into());
     }
+    Ok(zip_bytes)
+}
+
+/// Peek `manifest.json` `building_id` before package write (Wave O1 MT ACL).
+pub fn peek_package_building_id(content_type: &str, body: &[u8]) -> Result<String, String> {
+    let zip_bytes = extract_package_zip_bytes(content_type, body)?;
+    let entries = read_zip_entries(&zip_bytes)?;
+    let prefix = resolve_building_prefix(&entries)?;
+    let manifest_path = if prefix.as_os_str().is_empty() {
+        PathBuf::from("manifest.json")
+    } else {
+        prefix.join("manifest.json")
+    };
+    let raw = entries
+        .get(&manifest_path)
+        .ok_or_else(|| "manifest.json missing".to_string())?;
+    let manifest_raw: Value =
+        serde_json::from_slice(raw).map_err(|e| format!("manifest.json: {e}"))?;
+    let manifest = parse_manifest(&manifest_raw)?;
+    validate_id(&manifest.building_id)
+}
+
+/// HTTP entry: multipart / JSON base64 / raw zip body.
+pub fn import_package_handler(content_type: &str, body: &[u8]) -> Value {
+    let zip_bytes = match extract_package_zip_bytes(content_type, body) {
+        Ok(b) => b,
+        Err(e) => return json!({"ok": false, "error": e}),
+    };
     import_package_zip(&zip_bytes)
 }
 
@@ -1731,6 +1755,16 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("path traversal rejected"));
+    }
+
+    #[test]
+    fn peek_package_building_id_reads_manifest() {
+        let zip = build_zip(&[(
+            "manifest.json",
+            r#"{"schema_version":"openfdd_package_v1","building_id":"ACME","grid_minutes":5}"#,
+        )]);
+        let bid = peek_package_building_id("application/zip", &zip).expect("peek");
+        assert_eq!(bid, "ACME");
     }
 
     #[test]
