@@ -1,0 +1,5 @@
+Contact: https://github.com/bbartling/open-fdd/security/advisories/new
+Expires: 2027-09-15T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://github.com/bbartling/open-fdd/security/advisories/new
+Policy: https://github.com/bbartling/open-fdd/blob/master/SECURITY.md

@@ -78,7 +78,9 @@ python3 "$MANIFEST_PY" create \
   --required 18_wave_m_durable_session \
   --required 19_wave_m_afdd_flood \
   --required 20_wave_n_tenant_acl \
-  --required 21_wave_n_mqtts_continuity
+  --required 21_wave_n_mqtts_continuity \
+  --required 22_wave_o_admin_datamodel_acl \
+  --required 23_wave_o_security
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"
@@ -286,6 +288,15 @@ if [[ "${WAVE_O_ADMIN_ACL:-1}" == "1" ]]; then
 else
   record_gate "22_wave_o_admin_datamodel_acl" SKIPPED "22 Wave O admin + data-model ACL" \
     "WAVE_O_ADMIN_ACL=0"
+fi
+
+# --- 23 Wave O security headers / security.txt / CORS / login throttle ---
+if [[ "${WAVE_O_SECURITY:-1}" == "1" ]]; then
+  run_gate "23_wave_o_security" "23 Wave O security surface" \
+    bash "$DIR/34_wave_o_security.sh"
+else
+  record_gate "23_wave_o_security" SKIPPED "23 Wave O security surface" \
+    "WAVE_O_SECURITY=0"
 fi
 
 # --- 19 Wave M AFDD flood gate 12 (isolated default; live needs ALLOW_LIVE=1) ---
