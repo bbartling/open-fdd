@@ -583,7 +583,7 @@ fn series_plot_columns(rule: &RuleSpec) -> Vec<&str> {
             .get(5)
             .copied()
             .is_some_and(|c| c.is_ascii_digit())
-        && !columns.iter().any(|c| *c == "oa_damper_pct")
+        && !columns.contains(&"oa_damper_pct")
     {
         columns.push("oa_damper_pct");
     }
@@ -1516,7 +1516,7 @@ mod tests {
         );
         let cols = series_plot_columns(econ4);
         assert!(
-            cols.iter().any(|c| *c == "oa_damper_pct"),
+            cols.contains(&"oa_damper_pct"),
             "ECON-4 FDD Plots must candidate oa_damper_pct, got {cols:?}"
         );
     }
