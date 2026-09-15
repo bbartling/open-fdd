@@ -95,7 +95,8 @@ impl HistorianLimits {
             let mut f = fs::File::create(&tmp).map_err(|e| format!("create tmp: {e}"))?;
             f.write_all(body.as_bytes())
                 .map_err(|e| format!("write tmp: {e}"))?;
-            f.write_all(b"\n").map_err(|e| format!("write tmp nl: {e}"))?;
+            f.write_all(b"\n")
+                .map_err(|e| format!("write tmp nl: {e}"))?;
             f.sync_all().map_err(|e| format!("sync tmp: {e}"))?;
         }
         fs::rename(&tmp, &path).map_err(|e| format!("rename historian_limits: {e}"))?;

@@ -1746,7 +1746,11 @@ pub async fn fdd_run(
             }
         };
         if let Some(obj) = payload.as_object_mut() {
-            if let Some(s) = obj.get("start_utc").and_then(|v| v.as_str()).map(str::to_string) {
+            if let Some(s) = obj
+                .get("start_utc")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+            {
                 if let Some(c) = clamp_str(&s) {
                     obj.insert("start_utc".into(), json!(c));
                 }
@@ -2168,7 +2172,8 @@ pub async fn csv_import_package_append(
         return Err(deny);
     }
     if let Some(bid) = building_id.as_deref() {
-        if let Some(msg) = crate::historian_limits::deny_building_over_size(&workspace_path(), bid) {
+        if let Some(msg) = crate::historian_limits::deny_building_over_size(&workspace_path(), bid)
+        {
             open_fdd_edge_prototype::auth::audit::log_event(
                 "historian_size_cap_deny",
                 json!({ "building_id": bid, "surface": "csv/import/package/append" }),

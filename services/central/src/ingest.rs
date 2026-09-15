@@ -349,9 +349,10 @@ fn handle_telemetry(
             }
 
             // Wave O6: refuse MQTT append when building historian size cap is already hit.
-            if let Some(msg) =
-                crate::historian_limits::deny_building_over_size(&workspace_path_ingest(), &env.site_id)
-            {
+            if let Some(msg) = crate::historian_limits::deny_building_over_size(
+                &workspace_path_ingest(),
+                &env.site_id,
+            ) {
                 record_reject(state, payload, &msg);
                 return;
             }
