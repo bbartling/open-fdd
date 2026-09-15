@@ -35,16 +35,31 @@ admin_user = os.environ.get("OPENFDD_ADMIN_USER", "admin")
 admin_pass = os.environ.get("OPENFDD_ADMIN_PASSWORD", "")
 building = os.environ.get("OPENFDD_AFDD_FLOOD_BUILDING", "SYNTHETIC_59")
 
-def http(method, path, token=None, body=None, timeout=120):
+def http(method, path, token=None, body=None, timeout=120, retries=6):
+    """Retry on HTTP 429 (login throttle / ACL storm) with exponential backoff."""
     data = None if body is None else json.dumps(body).encode()
-    req = urllib.request.Request(base.rstrip("/") + path, data=data, method=method)
-    req.add_header("Accept", "application/json")
-    if body is not None:
-        req.add_header("Content-Type", "application/json")
-    if token:
-        req.add_header("Authorization", f"Bearer {token}")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.status, json.loads(resp.read().decode() or "{}")
+    last_err = None
+    for attempt in range(retries):
+        req = urllib.request.Request(base.rstrip("/") + path, data=data, method=method)
+        req.add_header("Accept", "application/json")
+        if body is not None:
+            req.add_header("Content-Type", "application/json")
+        if token:
+            req.add_header("Authorization", f"Bearer {token}")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.status, json.loads(resp.read().decode() or "{}")
+        except urllib.error.HTTPError as e:
+            last_err = e
+            if e.code == 429 and attempt + 1 < retries:
+                delay = min(60, 2 ** attempt)  # 1,2,4,8,16,32 (cap 60)
+                time.sleep(delay)
+                continue
+            raise
+        except Exception as e:
+            last_err = e
+            raise
+    raise last_err
 
 report = {
     "ok": False,

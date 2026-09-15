@@ -24,10 +24,17 @@ base AS (
       WHEN COALESCE(mode_stable, 1) = 0 THEN 0
       WHEN duct_static IS NOT NULL AND duct_static_sp IS NOT NULL
        AND duct_static < duct_static_sp - {{EPS_DSP}}
-       AND fan_cmd >= 1.0 - {{EPS_VFD_SPD}}
+       -- Match pandas cookbook `_fan()`: prefer fan_status (proven on/off) over
+       -- VFD fan_cmd for the "full fan" gate. Synth-59 AHU_CASE_FC1 has status=1
+       -- with cmd=0.6 for most fault hours; cmd-only gating under-counts (1h vs 40h).
+       AND fan_for_hi >= 1.0 - {{EPS_VFD_SPD}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM (
   SELECT h.*,
+    CASE
+      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1.0 ELSE 0.0 END
+      ELSE fan_cmd
+    END AS fan_for_hi,
     CASE
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN SUM(CASE WHEN COALESCE(fan_on, 1) = 0 THEN 1 ELSE 0 END) OVER (

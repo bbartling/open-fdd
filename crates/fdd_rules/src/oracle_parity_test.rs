@@ -2440,4 +2440,67 @@ timestamp_utc,zone_col,occ_col
         let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
         assert_hours_close(got, expected, "VAV-2 fractional occ_mode SQL");
     }
+
+    #[tokio::test]
+    async fn fc1_prefers_fan_status_over_partial_fan_cmd() {
+        // Synth-59 AHU_CASE_FC1 shape: fan_status=1 with fan_cmd=0.6 must count as
+        // "full fan" like pandas cookbook `_fan()` (status first) — not cmd-only.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_FC1_STATUS");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,duct_static,duct_static_sp,fan_cmd,fan_status
+2026-01-01T00:00:00Z,0.5,1.5,0.6,1
+2026-01-01T00:05:00Z,0.5,1.5,0.6,1
+2026-01-01T00:10:00Z,0.5,1.5,0.6,1
+2026-01-01T00:15:00Z,0.5,1.5,0.6,1
+2026-01-01T00:20:00Z,0.5,1.5,0.0,0
+2026-01-01T00:25:00Z,0.5,1.5,0.0,0
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_CASE_FC1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "duct_static",
+                    role: "duct_static",
+                },
+                RoleCol {
+                    csv_col: "duct_static_sp",
+                    role: "duct_static_sp",
+                },
+                RoleCol {
+                    csv_col: "fan_cmd",
+                    role: "fan_cmd",
+                },
+                RoleCol {
+                    csv_col: "fan_status",
+                    role: "fan_status",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "fc1_duct_static_low.sql",
+            300.0,
+            600,
+            &[
+                ("EPS_DSP", "0.12"),
+                ("EPS_VFD_SPD", "0.13"),
+                ("REQUIRE_OPERATIONAL_GATE", "0"),
+                ("MODE_DELAY_ROWS_PRECEDING", "0"),
+            ],
+        )
+        .await;
+
+        // Four consecutive duct-low + status-on samples; confirm_rows=2 → 3 confirmed.
+        let raw = [true, true, true, true, false, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(expected, 0.25, "pandas reference");
+        assert_hours_close(got, expected, "FC1 fan_status-preferred SQL");
+    }
 }

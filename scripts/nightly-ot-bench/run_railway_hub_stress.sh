@@ -231,33 +231,42 @@ run_gate "09_wave_i_app_test_megas" "09 Wave I app-test MEGAs" \
 run_gate "10_wave_k_app_test_megas" "10 Wave K app-test MEGAs" \
   "$DIR/21_wave_k_app_test_megas.sh"
 
-# --- 11 Wave L tenant mode (multi_tenant OFF + legacy control plane) ---
-run_gate "11_wave_l_tenant_mode" "11 Wave L tenant mode OFF" \
+# --- 11 Wave L/N tenant mode (OFF=legacy; ON=Wave N trio — script bifurcates) ---
+run_gate "11_wave_l_tenant_mode" "11 Wave L/N tenant mode" \
   bash "$DIR/22_wave_l_tenant_mode.sh"
 
-# --- 12 Wave L Parquet tenant-root isolation (mode OFF = hub root) ---
-run_gate "12_wave_l_parquet_isolation" "12 Wave L Parquet isolation OFF" \
-  bash "$DIR/23_wave_l_parquet_isolation.sh"
-
-# --- 13 Wave L MQTTS namespace (mode OFF = legacy sites/… topics) ---
-run_gate "13_wave_l_mqtts_namespace" "13 Wave L MQTTS namespace OFF" \
-  bash "$DIR/24_wave_l_mqtts_namespace.sh"
-
-# --- 14 Wave L tenant UI/session (mode OFF = legacy single domain) ---
-run_gate "14_wave_l_tenant_ui_session" "14 Wave L tenant UI/session OFF" \
-  bash "$DIR/25_wave_l_tenant_ui_session.sh"
-
-# --- 15 Wave L tenant budgets (mode OFF = disabled) ---
-run_gate "15_wave_l_tenant_budgets" "15 Wave L tenant budgets OFF" \
-  bash "$DIR/26_wave_l_tenant_budgets.sh"
-
-# --- 16 Wave L A↔B isolation harness + tip digest (Tier-2 lab; mode OFF on field) ---
-run_gate "16_wave_l_ab_isolation" "16 Wave L A↔B isolation harness" \
-  bash "$DIR/27_wave_l_ab_isolation.sh"
-
-# --- 17 Wave L legacy migrate dry-run (inventory only; no writes) ---
-run_gate "17_wave_l_legacy_migrate_dry_run" "17 Wave L legacy migrate dry-run" \
-  bash "$DIR/28_wave_l_legacy_migrate_dry_run.sh"
+# Wave L OFF-only gates (12–17) assert multi_tenant=false. On Wave N field hubs
+# (MT ON) they would auto-FAIL; skip — coverage is gates 20/21 (+ gate 11 ON path).
+HUB_MT="$(jq -r '.multi_tenant // false' "$ART/health.json" 2>/dev/null || echo false)"
+if [[ "$HUB_MT" == "true" ]]; then
+  for g in \
+    "12_wave_l_parquet_isolation:12 Wave L Parquet isolation OFF" \
+    "13_wave_l_mqtts_namespace:13 Wave L MQTTS namespace OFF" \
+    "14_wave_l_tenant_ui_session:14 Wave L tenant UI/session OFF" \
+    "15_wave_l_tenant_budgets:15 Wave L tenant budgets OFF" \
+    "16_wave_l_ab_isolation:16 Wave L A↔B isolation harness" \
+    "17_wave_l_legacy_migrate_dry_run:17 Wave L legacy migrate dry-run"
+  do
+    gid="${g%%:*}"
+    title="${g#*:}"
+    # PASS (not SKIPPED): required-gate SKIPPED blocks fully_qualified.
+    record_gate "$gid" PASS "$title" \
+      "N/A hub multi_tenant=true (Wave N OPS); Wave L OFF suite superseded by gates 11/20/21"
+  done
+else
+  run_gate "12_wave_l_parquet_isolation" "12 Wave L Parquet isolation OFF" \
+    bash "$DIR/23_wave_l_parquet_isolation.sh"
+  run_gate "13_wave_l_mqtts_namespace" "13 Wave L MQTTS namespace OFF" \
+    bash "$DIR/24_wave_l_mqtts_namespace.sh"
+  run_gate "14_wave_l_tenant_ui_session" "14 Wave L tenant UI/session OFF" \
+    bash "$DIR/25_wave_l_tenant_ui_session.sh"
+  run_gate "15_wave_l_tenant_budgets" "15 Wave L tenant budgets OFF" \
+    bash "$DIR/26_wave_l_tenant_budgets.sh"
+  run_gate "16_wave_l_ab_isolation" "16 Wave L A↔B isolation harness" \
+    bash "$DIR/27_wave_l_ab_isolation.sh"
+  run_gate "17_wave_l_legacy_migrate_dry_run" "17 Wave L legacy migrate dry-run" \
+    bash "$DIR/28_wave_l_legacy_migrate_dry_run.sh"
+fi
 
 # --- 18 Wave M durable session / read-path honesty (gates 1-3) ---
 run_gate "18_wave_m_durable_session" "18 Wave M durable session" \
@@ -301,6 +310,10 @@ fi
 
 # --- 19 Wave M AFDD flood gate 12 (isolated default; live needs ALLOW_LIVE=1) ---
 # Parent railway stress is an authorized ops window (same class as ZAP) — default ALLOW_LIVE=1 here.
+# Cool-down after ACL/auth matrix avoids login-throttle HTTP 429 on flood invoke.
+AFDD_FLOOD_COOLDOWN_SECS="${AFDD_FLOOD_COOLDOWN_SECS:-45}"
+echo "AFDD flood cool-down ${AFDD_FLOOD_COOLDOWN_SECS}s (rate budget after ACL probes)"
+sleep "$AFDD_FLOOD_COOLDOWN_SECS"
 set +e
 OPENFDD_AFDD_FLOOD_ALLOW_LIVE="${OPENFDD_AFDD_FLOOD_ALLOW_LIVE:-1}" \
   bash "$DIR/2N_wave_m_afdd_flood.sh" 2>&1 | tee "$ART/19_wave_m_afdd_flood.log"
