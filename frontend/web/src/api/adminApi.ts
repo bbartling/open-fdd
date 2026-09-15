@@ -81,3 +81,28 @@ export async function deleteAdminTenant(tenantId: string): Promise<void> {
     method: "DELETE",
   });
 }
+
+export type HistorianLimits = {
+  retain_days: number;
+  size_gib: number;
+};
+
+export async function getHistorianLimits(): Promise<HistorianLimits> {
+  const body = await apiFetch<{ ok?: boolean; limits?: HistorianLimits }>(
+    "/api/admin/historian-limits",
+  );
+  return body.limits ?? { retain_days: 365, size_gib: 5 };
+}
+
+export async function putHistorianLimits(input: HistorianLimits): Promise<HistorianLimits> {
+  const body = await apiFetch<{ ok?: boolean; limits?: HistorianLimits; error?: string }>(
+    "/api/admin/historian-limits",
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  if (body.ok === false) throw new Error(body.error || "save limits failed");
+  return body.limits ?? input;
+}

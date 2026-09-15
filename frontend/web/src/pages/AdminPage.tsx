@@ -5,8 +5,10 @@ import { getAuthMe, type AuthMe } from "../api/authApi";
 import {
   deleteAdminTenant,
   deleteAdminUser,
+  getHistorianLimits,
   listAdminTenants,
   listAdminUsers,
+  putHistorianLimits,
   setAdminUserDisabled,
   upsertAdminTenant,
   upsertAdminUser,
@@ -36,6 +38,9 @@ export function AdminPage() {
   const [tName, setTName] = useState("");
   const [tBuildings, setTBuildings] = useState("");
 
+  const [retainDays, setRetainDays] = useState("365");
+  const [sizeGib, setSizeGib] = useState("5");
+
   const [deleteUser, setDeleteUser] = useState<string | null>(null);
   const [deleteTenant, setDeleteTenant] = useState<string | null>(null);
 
@@ -50,9 +55,15 @@ export function AdminPage() {
         setTenants([]);
         return;
       }
-      const [u, t] = await Promise.all([listAdminUsers(), listAdminTenants()]);
+      const [u, t, lim] = await Promise.all([
+        listAdminUsers(),
+        listAdminTenants(),
+        getHistorianLimits(),
+      ]);
       setUsers(u);
       setTenants(t);
+      setRetainDays(String(lim.retain_days));
+      setSizeGib(String(lim.size_gib));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -109,6 +120,28 @@ export function AdminPage() {
       setTName("");
       setTBuildings("");
       await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onSaveLimits = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const retain_days = Number.parseInt(retainDays, 10);
+      const size_gib = Number.parseFloat(sizeGib);
+      if (!Number.isFinite(retain_days) || retain_days < 1) {
+        throw new Error("retain_days must be a positive integer");
+      }
+      if (!Number.isFinite(size_gib) || size_gib <= 0) {
+        throw new Error("size_gib must be a positive number");
+      }
+      const lim = await putHistorianLimits({ retain_days, size_gib });
+      setRetainDays(String(lim.retain_days));
+      setSizeGib(String(lim.size_gib));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -290,6 +323,44 @@ export function AdminPage() {
             disabled={busy || !tId.trim()}
             onClick={() => void onSaveTenant()}
             testId="admin-tenant-save"
+          />
+        </div>
+      </section>
+
+      <section style={{ marginTop: "2rem" }}>
+        <h2>Historian limits</h2>
+        <p style={{ maxWidth: 520, opacity: 0.85 }}>
+          Retain window and size cap (whichever binds first). Defaults 365 days or 5 GiB.
+        </p>
+        <div style={{ display: "grid", gap: "0.5rem", maxWidth: 320, marginTop: "0.75rem" }}>
+          <label>
+            Retain days
+            <input
+              type="number"
+              min={1}
+              max={3650}
+              value={retainDays}
+              onChange={(e) => setRetainDays(e.target.value)}
+              data-testid="admin-historian-retain-days"
+            />
+          </label>
+          <label>
+            Size GiB
+            <input
+              type="number"
+              min={0.1}
+              step={0.1}
+              value={sizeGib}
+              onChange={(e) => setSizeGib(e.target.value)}
+              data-testid="admin-historian-size-gib"
+            />
+          </label>
+          <Button
+            id="admin-historian-limits-save"
+            label="Save limits"
+            disabled={busy}
+            onClick={() => void onSaveLimits()}
+            testId="admin-historian-limits-save"
           />
         </div>
       </section>

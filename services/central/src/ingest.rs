@@ -17,6 +17,10 @@ use crate::live_historian::LiveHistorian;
 use crate::state::AppState;
 use crate::tenant::multi_tenant_enabled;
 
+fn workspace_path_ingest() -> PathBuf {
+    PathBuf::from(std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()))
+}
+
 fn redact_payload(payload: &[u8]) -> String {
     if payload.is_empty() {
         return "<redacted empty utf8 payload: 0 bytes>".into();
@@ -341,6 +345,15 @@ fn handle_telemetry(
             let key = (env.edge_id.clone(), env.message_id);
             if state.seen_messages.contains_key(&key) {
                 *state.ingest_dup.lock().unwrap() += 1;
+                return;
+            }
+
+            // Wave O6: refuse MQTT append when building historian size cap is already hit.
+            if let Some(msg) = crate::historian_limits::deny_building_over_size(
+                &workspace_path_ingest(),
+                &env.site_id,
+            ) {
+                record_reject(state, payload, &msg);
                 return;
             }
 

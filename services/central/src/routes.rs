@@ -113,6 +113,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/admin/tenants/{tenant_id}",
             delete(admin_delete_tenant),
         )
+        .route(
+            "/api/admin/historian-limits",
+            get(admin_get_historian_limits).put(admin_put_historian_limits),
+        )
         .route("/api/edges", get(list_edges))
         .route("/api/edges/{edge_id}", get(get_edge))
         .route("/api/edges/{edge_id}/discovery", get(get_edge_discovery))
@@ -778,6 +782,53 @@ pub async fn admin_delete_tenant(
         "control-plane tenant deleted"
     );
     Ok(Json(json!({"ok": true, "tenants": plane.tenants})))
+}
+
+pub async fn admin_get_historian_limits(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let _admin = require_hub_admin(&state, &headers)?;
+    let lim = crate::historian_limits::HistorianLimits::load(&workspace_path());
+    Ok(Json(json!({
+        "ok": true,
+        "limits": lim,
+        "storage_root": crate::historian_limits::storage_root().display().to_string(),
+    })))
+}
+
+pub async fn admin_put_historian_limits(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<crate::historian_limits::HistorianLimits>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let admin = require_hub_admin(&state, &headers)?;
+    let ws = workspace_path();
+    let mut lim = body;
+    lim.sanitize();
+    lim.save(&ws).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    tracing::info!(
+        target: "security_audit",
+        event = "admin_historian_limits_put",
+        actor = %admin.sub,
+        retain_days = lim.retain_days,
+        size_gib = lim.size_gib,
+        "historian retain/size limits updated"
+    );
+    open_fdd_edge_prototype::auth::audit::log_event(
+        "admin_historian_limits_put",
+        json!({
+            "actor": admin.sub,
+            "retain_days": lim.retain_days,
+            "size_gib": lim.size_gib,
+        }),
+    );
+    Ok(Json(json!({"ok": true, "limits": lim})))
 }
 
 /// Wave N: fail-closed building gate for historian/FDD/analytics when MT ON.
@@ -1667,7 +1718,7 @@ pub async fn fdd_run(
         .filter(|_| body.rule_ids.is_none())
         .map(str::to_string)
         .unwrap_or_else(|| body.mode.clone());
-    let payload = json!({
+    let mut payload = json!({
         "confirmation_seconds": body.confirmation_seconds,
         "params": body.params,
         "mode": mode,
@@ -1675,6 +1726,48 @@ pub async fn fdd_run(
         "equipment_id": body.equipment_id,
         "building_id": building_id,
     });
+    // Wave O6: clamp AFDD/bulk start_utc to hub retain floor (never silent mid-result truncate).
+    {
+        let lim = crate::historian_limits::HistorianLimits::load(&workspace_path());
+        let floor = lim.retain_floor_utc();
+        let clamp_str = |s: &str| -> Option<String> {
+            let parsed = chrono::DateTime::parse_from_rfc3339(s.trim())
+                .ok()
+                .map(|dt| dt.with_timezone(&Utc))
+                .or_else(|| {
+                    chrono::NaiveDateTime::parse_from_str(s.trim(), "%Y-%m-%dT%H:%M:%SZ")
+                        .ok()
+                        .map(|n| n.and_utc())
+                })?;
+            if parsed < floor {
+                Some(floor.to_rfc3339())
+            } else {
+                None
+            }
+        };
+        if let Some(obj) = payload.as_object_mut() {
+            if let Some(s) = obj
+                .get("start_utc")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+            {
+                if let Some(c) = clamp_str(&s) {
+                    obj.insert("start_utc".into(), json!(c));
+                }
+            }
+            if let Some(params) = obj.get_mut("params").and_then(|v| v.as_object_mut()) {
+                if let Some(s) = params
+                    .get("start_utc")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+                {
+                    if let Some(c) = clamp_str(&s) {
+                        params.insert("start_utc".into(), json!(c));
+                    }
+                }
+            }
+        }
+    }
     let echo_building_id = building_id.clone();
 
     let run_all = rule_ids.as_ref().map(|r| r.is_empty()).unwrap_or(true);
@@ -1984,20 +2077,43 @@ pub async fn csv_import_package(
     body: Bytes,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let ct = content_type(&headers);
-    match open_fdd_edge_prototype::csv_ingest::package::peek_package_building_id(&ct, &body) {
-        Ok(bid) => {
-            if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&bid)) {
-                return Err(deny);
+    let peeked_building =
+        match open_fdd_edge_prototype::csv_ingest::package::peek_package_building_id(&ct, &body) {
+            Ok(bid) => {
+                if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&bid)) {
+                    return Err(deny);
+                }
+                if let Some(msg) =
+                    crate::historian_limits::deny_building_over_size(&workspace_path(), &bid)
+                {
+                    open_fdd_edge_prototype::auth::audit::log_event(
+                        "historian_size_cap_deny",
+                        json!({ "building_id": bid, "surface": "csv/import/package" }),
+                    );
+                    return Err((
+                        StatusCode::FORBIDDEN,
+                        Json(json!({"ok": false, "error": msg})),
+                    ));
+                }
+                Some(bid)
             }
-        }
-        Err(e) if crate::tenant::multi_tenant_enabled() => {
-            return Err((
-                StatusCode::BAD_REQUEST,
+            Err(e) if crate::tenant::multi_tenant_enabled() => {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"ok": false, "error": e})),
+                ));
+            }
+            Err(_) => None,
+        };
+    let _import_slot = crate::historian_limits::acquire_import_slot()
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::TOO_MANY_REQUESTS,
                 Json(json!({"ok": false, "error": e})),
-            ));
-        }
-        Err(_) => {}
-    }
+            )
+        })?;
+    let _ = peeked_building;
     let action_id = actions::start_action(
         "package_import",
         "Package import",
@@ -2055,6 +2171,27 @@ pub async fn csv_import_package_append(
     if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id.as_deref()) {
         return Err(deny);
     }
+    if let Some(bid) = building_id.as_deref() {
+        if let Some(msg) = crate::historian_limits::deny_building_over_size(&workspace_path(), bid)
+        {
+            open_fdd_edge_prototype::auth::audit::log_event(
+                "historian_size_cap_deny",
+                json!({ "building_id": bid, "surface": "csv/import/package/append" }),
+            );
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({"ok": false, "error": msg})),
+            ));
+        }
+    }
+    let _import_slot = crate::historian_limits::acquire_import_slot()
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(json!({"ok": false, "error": e})),
+            )
+        })?;
     let result = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::csv_ingest::package::append_package_handler(&ct, &body)
     })
@@ -2814,16 +2951,37 @@ async fn jobs_attach_eplus_artifact(
 // Analytics (Milestone C) — typed envelopes, no Plotly JSON
 // ---------------------------------------------------------------------------
 
+/// Building ACL + Wave O6 retain-window clamp (start only; never silent mid-query truncate).
+fn gate_analytics(
+    state: &AppState,
+    headers: &HeaderMap,
+    mut req: AnalyticsRequest,
+) -> Result<AnalyticsRequest, (StatusCode, Json<Value>)> {
+    if let Some(deny) =
+        deny_if_building_out_of_scope(state, headers, req.query.building_id.as_deref())
+    {
+        return Err(deny);
+    }
+    let lim = crate::historian_limits::HistorianLimits::load(&workspace_path());
+    let before = req.query.start;
+    req.query.start = lim.clamp_start(req.query.start);
+    if before != req.query.start {
+        // Surface clamp in warnings via a light marker on the query path (handlers own envelopes).
+        tracing::debug!(
+            target: "openfdd_central",
+            retain_days = lim.retain_days,
+            "analytics start clamped to historian retain floor"
+        );
+    }
+    Ok(req)
+}
+
 async fn analytics_runtime(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     let env = analytics::runtime::handle_async(&req).await;
     Ok(Json(json!({
         "ok": true,
@@ -2836,11 +2994,7 @@ async fn analytics_vav_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::vav_health::handle_async(&req).await.to_json(),
@@ -2852,11 +3006,7 @@ async fn analytics_ahu_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_ahu(&req).await.to_json(),
@@ -2868,11 +3018,7 @@ async fn analytics_ahu_temperature_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_ahu_temperature(&req).await.to_json(),
@@ -2884,11 +3030,7 @@ async fn analytics_ahu_pressure_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_ahu_pressure(&req).await.to_json(),
@@ -2900,11 +3042,7 @@ async fn analytics_ahu_economizer_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_ahu_economizer(&req).await.to_json(),
@@ -2916,11 +3054,7 @@ async fn analytics_chiller_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_chiller(&req).await.to_json(),
@@ -2932,11 +3066,7 @@ async fn analytics_cooling_tower_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_cooling_tower(&req).await.to_json(),
@@ -2948,11 +3078,7 @@ async fn analytics_sensor_faults(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_sensor_faults(&req).await.to_json(),
@@ -2964,11 +3090,7 @@ async fn analytics_pid_hunting(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_pid_hunting(&req).await.to_json(),
@@ -2980,11 +3102,7 @@ async fn analytics_boiler_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_boiler(&req).await.to_json(),
@@ -2996,11 +3114,7 @@ async fn analytics_hp_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_hp(&req).await.to_json(),
@@ -3012,11 +3126,7 @@ async fn analytics_zone_other_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant_health::handle_zone_other(&req).await.to_json(),
@@ -3028,11 +3138,7 @@ async fn analytics_sensor_health(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::sensor_health::handle_async(&req).await.to_json(),
@@ -3044,11 +3150,7 @@ async fn analytics_schedule(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::schedule::handle_async(&req).await.to_json(),
@@ -3060,11 +3162,7 @@ async fn analytics_mechanical_cooling(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::mechanical_cooling::handle_async(&req).await.to_json(),
@@ -3076,11 +3174,7 @@ async fn analytics_bas_vs_web_oat(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     let max_points = req.query.max_points.unwrap_or(2000);
     let env = match analytics::historian::bas_vs_web_from_history(
         req.query.equipment_ids.as_deref(),
@@ -3120,11 +3214,7 @@ async fn analytics_inspect(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     let eq = req
         .query
         .equipment_ids
@@ -3175,11 +3265,7 @@ async fn analytics_economizer(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::economizer::handle_async(&req).await.to_json(),
@@ -3191,11 +3277,7 @@ async fn analytics_rcx_ahu(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::rcx::handle_ahu_async(&req).await.to_json(),
@@ -3207,11 +3289,7 @@ async fn analytics_rcx_vav(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::rcx::handle_vav_async(&req).await.to_json(),
@@ -3223,11 +3301,7 @@ async fn analytics_rcx_chiller(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant::handle_chiller_async(&req).await.to_json(),
@@ -3239,11 +3313,7 @@ async fn analytics_rcx_boiler(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::plant::handle_boiler_async(&req).await.to_json(),
@@ -3262,11 +3332,7 @@ async fn analytics_rcx_preset(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     let preset_id = req
         .query
         .query_version
@@ -3354,11 +3420,7 @@ async fn analytics_metering(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::metering::handle_async(&req).await.to_json(),
@@ -3370,11 +3432,7 @@ async fn analytics_setpoints(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     let env = match analytics::historian::setpoints_from_history(
         req.query.equipment_ids.as_deref(),
         req.query.building_id.as_deref(),
@@ -3402,11 +3460,7 @@ async fn analytics_diurnal(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     let env = match analytics::historian::diurnal_from_history(
         req.query.equipment_ids.as_deref(),
         req.query.building_id.as_deref(),
@@ -3434,11 +3488,7 @@ async fn analytics_topology(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     let env =
         match analytics::historian::topology_from_history(req.query.building_id.as_deref()).await {
             Ok(Some(env)) => analytics::finalize_historian(&req, env, analytics::QV_TOPOLOGY),
@@ -3462,11 +3512,7 @@ async fn analytics_sensor_stats(
     headers: HeaderMap,
     Json(req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, req.query.building_id.as_deref())
-    {
-        return Err(deny);
-    }
+    let req = gate_analytics(&state, &headers, req)?;
     let fan_state = req
         .series
         .as_ref()
