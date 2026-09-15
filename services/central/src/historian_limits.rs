@@ -114,9 +114,7 @@ impl HistorianLimits {
 
     /// Clamp an optional query/FDD start to the retain floor (no silent mid-query truncate of results).
     pub fn clamp_start(&self, start: Option<DateTime<Utc>>) -> Option<DateTime<Utc>> {
-        let Some(s) = start else {
-            return None;
-        };
+        let s = start?;
         let floor = self.retain_floor_utc();
         Some(if s < floor { floor } else { s })
     }
