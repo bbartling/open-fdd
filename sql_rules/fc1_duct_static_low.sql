@@ -32,8 +32,8 @@ base AS (
   FROM (
   SELECT h.*,
     CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1.0 ELSE 0.0 END
-      ELSE fan_cmd
+      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1.0 ELSE 0.0 END
+      ELSE h.fan_cmd
     END AS fan_for_hi,
     CASE
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
