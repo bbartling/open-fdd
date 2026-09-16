@@ -28,19 +28,40 @@ ACCEPT_ZAP_MEDIUM="${ACCEPT_ZAP_MEDIUM:-1}"
 QUAL="$ROOT/scripts/qualification"
 MANIFEST_PY="$QUAL/write_manifest.py"
 
+# Pull hub auth from Railway CLI (never print values). Prefer file+jq over pipes —
+# empty stdin / stale RAILWAY_TOKEN previously yielded blank passwords → mass gate FAIL.
+_fetch_railway_var() {
+  local key="$1"
+  local svc="${OPENFDD_RAILWAY_CENTRAL_SVC:-openfdd-central-cQ-F}"
+  local tmp
+  tmp="$(mktemp)"
+  # Stale RAILWAY_TOKEN in env breaks CLI; session login is preferred on bensbench.
+  if ! env -u RAILWAY_TOKEN railway variable list --service "$svc" --json >"$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    return 1
+  fi
+  python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get(sys.argv[2],"") or "")' "$tmp" "$key"
+  local rc=$?
+  rm -f "$tmp"
+  return "$rc"
+}
+
 if [[ -z "${RAILWAY_ADMIN_PASSWORD:-}" ]] && command -v railway >/dev/null 2>&1; then
-  RAILWAY_ADMIN_PASSWORD="$(railway variable list --service openfdd-central-cQ-F --json 2>/dev/null \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("OPENFDD_ADMIN_PASSWORD",""))' || true)"
+  RAILWAY_ADMIN_PASSWORD="$(_fetch_railway_var OPENFDD_ADMIN_PASSWORD || true)"
 fi
 if [[ -n "${RAILWAY_ADMIN_PASSWORD:-}" ]]; then
   export OPENFDD_ADMIN_PASSWORD="$RAILWAY_ADMIN_PASSWORD"
   export RAILWAY_ADMIN_PASSWORD
 fi
 if [[ -z "${OPENFDD_AGENT_PASSWORD:-}" ]] && command -v railway >/dev/null 2>&1; then
-  OPENFDD_AGENT_PASSWORD="$(railway variable list --service openfdd-central-cQ-F --json 2>/dev/null \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("OPENFDD_AGENT_PASSWORD",""))' || true)"
+  OPENFDD_AGENT_PASSWORD="$(_fetch_railway_var OPENFDD_AGENT_PASSWORD || true)"
   export OPENFDD_AGENT_PASSWORD
 fi
+if [[ -z "${OPENFDD_ADMIN_PASSWORD:-}" ]]; then
+  echo "ERROR: OPENFDD_ADMIN_PASSWORD unset after Railway fetch — refuse hub stress without auth" >&2
+  exit 2
+fi
+echo "hub auth: OPENFDD_ADMIN_PASSWORD len=${#OPENFDD_ADMIN_PASSWORD} agent_len=${#OPENFDD_AGENT_PASSWORD}"
 
 ART="$(artifact_dir)"
 export ARTIFACT_DIR="$ART"
