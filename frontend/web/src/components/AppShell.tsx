@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, useLocation } from "react-router";
+import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { SectionTabs } from "./SectionTabs";
 import { OracleSidebar } from "./OracleSidebar";
 import { SIDEBAR_NAV } from "../nav/sections";
 import { hrefWithSession } from "../session/sessionQuery";
 import { apiFetch } from "../api/client";
+import {
+  getAuthMe,
+  getStoredToken,
+  logout,
+  type AuthMe,
+} from "../api/authApi";
 import {
   getStoredActiveTenant,
   setStoredActiveTenant,
@@ -72,7 +78,33 @@ export function AppShell({
   const [tenantLabel, setTenantLabel] = useState<string | null>(() => {
     return getStoredActiveTenant();
   });
+  const [sessionUser, setSessionUser] = useState<string | null>(null);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!getStoredToken()) {
+      setSessionUser(null);
+      return;
+    }
+    void getAuthMe()
+      .then((me: AuthMe) => {
+        if (!cancelled && me.username) setSessionUser(me.username);
+      })
+      .catch(() => {
+        if (!cancelled) setSessionUser(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname]);
+
+  const onSignOut = () => {
+    logout();
+    setSessionUser(null);
+    navigate("/auth");
+  };
 
   const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const pendingWidthRef = useRef<number | null>(null);
@@ -286,6 +318,15 @@ export function AppShell({
                 {collapsed ? tenantLabel.slice(0, 3) : `tenant:${tenantLabel}`}
               </div>
             ) : null}
+            {sessionUser ? (
+              <div
+                className="app-sidebar__session"
+                data-testid="app-session-user"
+                title={`Signed in as ${sessionUser}`}
+              >
+                {collapsed ? sessionUser.slice(0, 3) : sessionUser}
+              </div>
+            ) : null}
           </div>
           <button
             type="button"
@@ -327,6 +368,42 @@ export function AppShell({
           }}
         >
           <OracleSidebar collapsed={collapsed} />
+        </div>
+
+        <div className="app-sidebar__account" data-testid="app-account">
+          {sessionUser ? (
+            <>
+              {!collapsed ? (
+                <span className="app-sidebar__account-label">
+                  Signed in as <strong>{sessionUser}</strong>
+                </span>
+              ) : null}
+              <button
+                type="button"
+                className="button button--small"
+                data-testid="app-sign-out"
+                onClick={onSignOut}
+                title="Sign out"
+              >
+                {collapsed ? "Out" : "Sign out"}
+              </button>
+              <Link
+                to={hrefWithSession("/auth", location.search)}
+                className="app-sidebar__account-link"
+                data-testid="app-account-link"
+              >
+                {collapsed ? "A" : "Account"}
+              </Link>
+            </>
+          ) : (
+            <Link
+              to={hrefWithSession("/auth", location.search)}
+              className="button button--small"
+              data-testid="app-sign-in"
+            >
+              {collapsed ? "In" : "Sign in"}
+            </Link>
+          )}
         </div>
 
         <details className="app-sidebar__pages" open={false}>

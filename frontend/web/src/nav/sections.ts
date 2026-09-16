@@ -17,7 +17,7 @@ export const MAIN_SECTIONS = [
 /** Secondary App pages (collapsed sidebar details). */
 export const SIDEBAR_NAV = [
   { to: "/", label: "Home", short: "H", testId: "nav-home" },
-  { to: "/auth", label: "Auth", short: "A", testId: "nav-auth" },
+  { to: "/auth", label: "Account", short: "A", testId: "nav-auth" },
   { to: "/jobs", label: "Jobs", short: "J", testId: "nav-jobs" },
   { to: "/upload", label: "Upload", short: "U", testId: "nav-upload" },
   { to: "/mapping", label: "Mapping", short: "M", testId: "nav-mapping" },

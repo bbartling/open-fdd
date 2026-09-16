@@ -6,10 +6,10 @@
 
 | Item | Status |
 |------|--------|
-| Product tip | **OPS PINNED 3.5.22** / `sha-4d3a6b0` (#936) · health `3.5.22+4d3a6b0e0707` · `multi_tenant=true` |
-| Harness tip | `4c0862e1` (#937) synth59 hours rel-tol + AFDD bearer / auth fetch |
-| Backup | `20260915T232819Z` (+ release backups under `~/openfdd-releases/`) |
-| Hub stress | `reports/nightly-ot-bench_20260916T011952Z/` · **`fully_qualified=true`** · no `SKIP_ZAP` |
+| Product tip | **Wave S hub tip `sha-a830e17` / 3.5.23** (#939 TTL + capacity sampler) · health `3.5.23+a830e173…` · `multi_tenant=true` · backup `20260916T200208Z` |
+| Prior OPS PINNED | Wave R **3.5.22** / `sha-4d3a6b0` (#936) · stress `reports/nightly-ot-bench_20260916T011952Z/` **`fully_qualified=true`** |
+| Soft Park S5 | Capacity sampler in tip; **mega stress on `sha-a830e17` in flight** — cite `capacity_report.json` |
+| Follow-on | **3.5.24** FDD Actions single-flight (409 busy) + sidebar Sign out / Account (anti dual `fdd_run_all` OOM) |
 
 ## Soft-OPEN (≤ Stage C)
 
@@ -23,8 +23,9 @@
 | **p2c-mqtt-acl-staging** | Broker ACL proof = Kali staging |
 | **historian-n-building-scale** | Small Parquet parts × N buildings; offline H4 now; runtime compaction Soft later |
 | **admin-capacity-gauges** | Volume/cgroup/historian gauges — not host MemTotal charts |
-| **railway-capacity-stress** | S5a sampler + gate 24 wired; cite `capacity_report.json` on next mega |
+| **railway-capacity-stress** | S5a sampler + gate 24 wired; tip `sha-a830e17`; mega stress after hub re-pin |
 | **mqtt-pause-ui** | Option A parked (streaming pause; not fieldbus stop) |
+| **fdd-actions-singleflight** | Dual `fdd_run_all` OOMed hub; tip patch **3.5.24** (409 busy + stale reclaim + sidebar Sign out) |
 
 ## Wave R closeout (2026-09-16)
 

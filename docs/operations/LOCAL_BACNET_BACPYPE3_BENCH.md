@@ -151,4 +151,5 @@ This Mint host may need a **user-local** Docker Compose v2 plugin (`~/.docker/cl
 | Companion wire MCP | [`../mcp-agents/companion-rusty-bacnet-mcp.md`](../mcp-agents/companion-rusty-bacnet-mcp.md) |
 | Lessons / DIY router / rusty labs (sibling) | [`~/Desktop/py-bacnet-stacks-playground`](https://github.com/bbartling/py-bacnet-stacks-playground) |
 | Free `:47808` | `scripts/fieldbus/preflight_free_47808.sh` |
+| DIY router lab BIP→MS/TP (DNET **2001** / MAC2 / 123102 via `.59`) | `scripts/nightly-ot-bench/field_devices.diy_router_lab.example.toml` — **never** plant DNET **2000** / BASRT |
 | Upstream shell tip | [BACpypes3 discussion #125](https://github.com/JoelBender/BACpypes3/discussions/125#discussioncomment-16177547) |
