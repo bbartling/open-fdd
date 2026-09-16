@@ -96,6 +96,51 @@ fn rewrite_all_unlocked(entries: &[ActionEntry]) -> Result<(), String> {
 const JSONL_CAP: usize = 50;
 const DEFAULT_LIST_LIMIT: usize = 10;
 const MAX_LIST_LIMIT: usize = 500;
+/// Orphaned `running` rows after OOM/crash — fail them so single-flight can recover.
+const STALE_RUNNING_SECS: i64 = 2 * 60 * 60;
+
+fn is_heavy_fdd_kind(kind: &str) -> bool {
+    matches!(kind, "fdd_run_all" | "fdd_run_rule") || kind.starts_with("fdd_")
+}
+
+fn reclaim_stale_running_unlocked(now: chrono::DateTime<Utc>) -> Result<(), String> {
+    let mut entries = read_all_unlocked();
+    let mut changed = false;
+    for entry in &mut entries {
+        if entry.status != "running" {
+            continue;
+        }
+        let Some(started) = chrono::DateTime::parse_from_rfc3339(&entry.started_at)
+            .ok()
+            .map(|t| t.with_timezone(&Utc))
+        else {
+            continue;
+        };
+        if (now - started).num_seconds() < STALE_RUNNING_SECS {
+            continue;
+        }
+        entry.status = "fail".into();
+        entry.finished_at = Some(utc_now());
+        entry.duration_ms = Some(((now - started).num_milliseconds().max(0)) as u64);
+        match &mut entry.detail {
+            Some(Value::Object(base)) => {
+                base.insert("error".into(), json!("stale running action reclaimed"));
+                base.insert("reclaimed".into(), json!(true));
+            }
+            slot => {
+                *slot = Some(json!({
+                    "error": "stale running action reclaimed",
+                    "reclaimed": true,
+                }));
+            }
+        }
+        changed = true;
+    }
+    if changed {
+        rewrite_all_unlocked(&entries)?;
+    }
+    Ok(())
+}
 
 fn prune_unlocked(cap: usize) -> Result<(), String> {
     let mut entries = read_all_unlocked();
@@ -122,7 +167,20 @@ fn append_unlocked(entry: &ActionEntry) -> Result<(), String> {
     Ok(())
 }
 
+/// True when a heavy FDD action is already `running` (after stale reclaim).
+pub fn heavy_fdd_busy() -> Result<Option<ActionEntry>, String> {
+    let _guard = LOG_LOCK.lock().map_err(|e| e.to_string())?;
+    reclaim_stale_running_unlocked(Utc::now())?;
+    Ok(read_all_unlocked()
+        .into_iter()
+        .find(|e| e.status == "running" && is_heavy_fdd_kind(&e.kind)))
+}
+
 /// Start a new action (`status=running`). Returns the entry id.
+///
+/// Heavy FDD kinds (`fdd_run_all` / `fdd_run_rule` / `fdd_*`) are single-flight:
+/// a second start fails with a busy error so Railway low-RAM hubs do not OOM
+/// from overlapping DataFusion runs.
 pub fn start_action(kind: &str, label: &str, detail: Option<Value>) -> Result<String, String> {
     let id = format!("act-{}", Uuid::new_v4());
     let entry = ActionEntry {
@@ -136,6 +194,18 @@ pub fn start_action(kind: &str, label: &str, detail: Option<Value>) -> Result<St
         detail,
     };
     let _guard = LOG_LOCK.lock().map_err(|e| e.to_string())?;
+    reclaim_stale_running_unlocked(Utc::now())?;
+    if is_heavy_fdd_kind(kind) {
+        if let Some(other) = read_all_unlocked()
+            .into_iter()
+            .find(|e| e.status == "running" && is_heavy_fdd_kind(&e.kind))
+        {
+            return Err(format!(
+                "busy: {} still running (id={}, started_at={}) — wait for it to finish or clear Actions",
+                other.kind, other.id, other.started_at
+            ));
+        }
+    }
     append_unlocked(&entry)?;
     Ok(id)
 }
@@ -279,6 +349,25 @@ mod tests {
         }
         let all = read_all_unlocked();
         assert!(all.len() <= JSONL_CAP, "jsonl cap {}", all.len());
+
+        let _ = fs::remove_dir_all(&dir);
+        std::env::remove_var("OPENFDD_WORKSPACE");
+    }
+
+    #[test]
+    fn heavy_fdd_is_single_flight() {
+        let _t = TEST_LOCK.lock().unwrap();
+        let dir = std::env::temp_dir().join(format!("openfdd-actions-sf-{}", Uuid::new_v4()));
+        let _ = fs::create_dir_all(&dir);
+        std::env::set_var("OPENFDD_WORKSPACE", &dir);
+
+        let id = start_action("fdd_run_all", "Run all", None).expect("first");
+        let err = start_action("fdd_run_all", "Run all again", None).expect_err("busy");
+        assert!(err.starts_with("busy:"), "{err}");
+        let err2 = start_action("fdd_run_rule", "One rule", None).expect_err("busy rule");
+        assert!(err2.starts_with("busy:"), "{err2}");
+        finish_action(&id, "ok", None).expect("finish");
+        start_action("fdd_run_rule", "One rule after", None).expect("after finish");
 
         let _ = fs::remove_dir_all(&dir);
         std::env::remove_var("OPENFDD_WORKSPACE");

@@ -164,6 +164,36 @@ body {
   margin-top: 0.1rem;
 }
 
+.app-sidebar__session {
+  font-size: 0.65rem;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 0.1rem;
+}
+
+.app-sidebar__account {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  padding: 0.5rem 0.65rem;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-sidebar__account-label {
+  flex: 1 1 100%;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.app-sidebar__account-link {
+  font-size: 0.75rem;
+  color: var(--color-link, #2563eb);
+}
+
 .app-shell--sidebar-collapsed .app-sidebar__brand {
   display: none;
 }
@@ -173,6 +203,10 @@ body {
 }
 
 .app-shell--sidebar-collapsed .app-sidebar__tenant {
+  display: block;
+}
+
+.app-shell--sidebar-collapsed .app-sidebar__session {
   display: block;
 }
 

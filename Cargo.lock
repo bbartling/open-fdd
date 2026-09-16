@@ -1921,7 +1921,7 @@ checksum = "9f1f227452a390804cdb637b74a86990f2a7d7ba4b7d5693aac9b4dd6defd8d6"
 
 [[package]]
 name = "fdd_bench"
-version = "3.5.23"
+version = "3.5.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1937,7 +1937,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_cli"
-version = "3.5.23"
+version = "3.5.24"
 dependencies = [
  "anyhow",
  "clap",
@@ -1956,7 +1956,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_core"
-version = "3.5.23"
+version = "3.5.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1970,7 +1970,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_csv"
-version = "3.5.23"
+version = "3.5.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1983,7 +1983,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_rules"
-version = "3.5.23"
+version = "3.5.24"
 dependencies = [
  "anyhow",
  "datafusion",
@@ -2000,7 +2000,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_sql"
-version = "3.5.23"
+version = "3.5.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2018,7 +2018,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_store"
-version = "3.5.23"
+version = "3.5.24"
 dependencies = [
  "anyhow",
  "arrow",
@@ -3272,7 +3272,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-mcp"
-version = "3.5.23"
+version = "3.5.24"
 dependencies = [
  "base64 0.22.1",
  "reqwest 0.12.28",

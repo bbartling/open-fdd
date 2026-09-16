@@ -1,0 +1,15 @@
+# Isolated two-Pi BIP↔MS/TP lab via DIY router (never plant DNET 2000).
+# Copy to config/fieldbus/field_devices.toml.local for local OT bench overlays.
+# Router BIP: 192.168.204.59:47808 → MS/TP DNET 2001 / MAC 2 / device 123102.
+
+[[devices]]
+name = "lab-mstp-mini-via-diy-router"
+enabled = true
+device_instance = 123102
+host = "192.168.204.59"
+port = 47808
+mstp_network = 2001
+mstp_mac = [2]
+points = [
+  { object_type = "analog-input", object_instance = 1, point_name = "lab-ai-1", units = "°F" },
+]

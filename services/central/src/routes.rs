@@ -1806,15 +1806,30 @@ pub async fn fdd_run(
             ),
         )
     };
-    let action_id = actions::start_action(
+    let action_id = match actions::start_action(
         kind,
         &label,
         Some(json!({
             "building_id": building_id,
             "rule_ids": rule_ids,
         })),
-    )
-    .ok();
+    ) {
+        Ok(id) => Some(id),
+        Err(err) if err.starts_with("busy:") => {
+            return Err((
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "ok": false,
+                    "error": err,
+                    "busy": true,
+                })),
+            ));
+        }
+        Err(err) => {
+            tracing::warn!(%err, "actions start_action failed; continuing FDD without action id");
+            None
+        }
+    };
 
     let mut result = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
