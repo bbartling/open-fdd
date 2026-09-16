@@ -1,3 +1,26 @@
+## 2026-09-16 — Wave R OPS PINNED (3.5.22 / sha-4d3a6b0)
+
+- Product #936 + harness #937 on master. Hub health `3.5.22+4d3a6b0e0707` · `multi_tenant=true`.
+- Backup `20260915T232819Z`. Stress `reports/nightly-ot-bench_20260916T011952Z/` **`fully_qualified=true`** (gates 00–23; no `SKIP_ZAP`).
+- Soft-OPEN ≤ Stage C: IdP/MFA; UTIL-INTERVAL; ACME ingest_reject count; Kali ZAP AF.
+- GH tidy: 0 open wave PRs; wave feature remotes deleted.
+
+## 2026-09-15 — Wave R tip pin 3.5.22 + hub stress
+
+- #936 squash-merged (`4d3a6b0e`): FC1 SQL `fan_status` parity + Wave L OFF N/A when MT ON + AFDD 429 backoff · product **3.5.22**.
+- GHCR Publish hub+fieldbus green; hub-only tip check PASS `sha-4d3a6b0`.
+- Railway backup `20260915T232819Z` + release backup `20260915T234044Z`; hub re-pin central→mqtt→web → live health **`3.5.22+4d3a6b0e0707`** · `multi_tenant=true` · ACME ingest climbing.
+- Soft: r6 ingest_reject count-only (no dead-letter dump API); r11 `rules_failed=1` = UTIL-INTERVAL not FC1; Stage C parked.
+- Hub stress `run_railway_hub_stress.sh` (no `SKIP_ZAP`, `ACCEPT_ZAP_MEDIUM=1`) in flight → OPS PINNED when Soft ≤ Stage C.
+
+## 2026-09-15 — Wave R tip pin 3.5.22 + hub stress
+
+- #936 squash-merged (`4d3a6b0e`): FC1 SQL `fan_status` parity + Wave L OFF N/A when MT ON + AFDD 429 backoff · product **3.5.22**.
+- GHCR Publish hub+fieldbus green; hub-only tip check PASS `sha-4d3a6b0`.
+- Railway backup `20260915T232819Z` + release backup `20260915T234044Z`; hub re-pin central→mqtt→web → live health **`3.5.22+4d3a6b0e0707`** · `multi_tenant=true` · ACME ingest climbing.
+- Soft: r6 ingest_reject count-only (no dead-letter dump API); r11 `rules_failed=1` = UTIL-INTERVAL not FC1; Stage C parked.
+- Hub stress `run_railway_hub_stress.sh` (no `SKIP_ZAP`, `ACCEPT_ZAP_MEDIUM=1`) in flight → OPS PINNED when Soft ≤ Stage C.
+
 ## 2026-09-15 — Wave O CLOSED → Wave P residual ownership
 
 - Wave O product bake **CLOSED** on master through **3.5.20** (#934). Soft residuals → Wave P + `BUG_REPORT_WAVE_P.md`.

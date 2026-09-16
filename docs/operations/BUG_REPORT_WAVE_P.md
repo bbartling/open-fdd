@@ -1,51 +1,43 @@
-# Wave P — Residual stress + GH tidy tracker
+# Wave P / Wave R — Residual stress + GH tidy tracker
 
-**Parent:** [`BUG_REPORT_WAVE_O.md`](BUG_REPORT_WAVE_O.md) Soft residuals · plan [`.cursor/plans/wave_p_residual_stress_gh_tidy_ce235993.plan.md`](../../.cursor/plans/wave_p_residual_stress_gh_tidy_ce235993.plan.md)
+**Parent:** [`BUG_REPORT_WAVE_O.md`](BUG_REPORT_WAVE_O.md) Soft residuals · Wave R plan [`wave_r_stress_patches_5406b539.plan.md`](../../.cursor/plans/wave_r_stress_patches_5406b539.plan.md)
 
-**Authority:** Wave P **owns unfinished Wave O Soft** + local docs/SPA + Kali O2c/P2c product tip. **No Railway re-pin while Kali owns the hub** unless operator OK.
-
-## Tip / GHCR
+## Tip / GHCR / Railway
 
 | Item | Status |
 |------|--------|
-| O12b Creekside meter (#934) | **MERGED** master `3.5.20` / `aea817fd` |
-| GHCR Publish #934 | hub in flight; fieldbus failed once (Docker Hub oauth 500 — re-run) |
-| Railway / ACME re-pin | **DEFERRED** (Kali owns hub) |
-| Local tip (docs+SPA+O2c) | Branch `fix/wave-p-docs-spa-local` — ship next |
+| Product tip | **OPS PINNED 3.5.22** / `sha-4d3a6b0` (#936) · health `3.5.22+4d3a6b0e0707` · `multi_tenant=true` |
+| Harness tip | `4c0862e1` (#937) synth59 hours rel-tol + AFDD bearer / auth fetch |
+| Backup | `20260915T232819Z` (+ release backups under `~/openfdd-releases/`) |
+| Hub stress | `reports/nightly-ot-bench_20260916T011952Z/` · **`fully_qualified=true`** · no `SKIP_ZAP` |
 
-## Soft-OPEN (carry from Wave O)
+## Soft-OPEN (≤ Stage C)
 
 | ID | Note |
 |----|------|
-| **wave-o1-tenant-path-migrate** | Hub-root `building=*` still; backup-first `tenants/{tid}/` migrate |
-| **wave-o2a-audit-volume-assert** | Gates 31/33/34 HTTP ACL green; `security_audit.jsonl` volume assert not wired |
-| **wave-o4-synth59-handoff** | Missing synth59 zip → blocks `fully_qualified` final stress |
-| **wave-o5-stage-c** | IdP/MFA/SKU commercial |
-| **p2c-mqtt-acl-staging** | ACL notes in `deploy/mqtt/acl` + skill; broker proof = Kali staging |
-| **p8-acme-hw / weather / rtu / vav** | ACME catalog expands after Kali unlock + Mint scrape |
+| **stage-c-idp-mfa-sku** | Commercial IdP/MFA/SKU |
+| **util-interval** | `utility_interval` relation missing → `rules_failed` Soft; live AFDD flood ignores |
+| **r6-ingest-reject** | Count on `/api/health` + `/api/ingest/stats` only; ACME honesty (no invent ΔP SP / TEC ghosts / OAT-METEO) |
+| **kali-zap-af** | Authenticated ZAP AF remains Kali-owned |
+| **wave-o1-tenant-path-migrate** | Hub-root `building=*` still; optional `tenants/{tid}/` migrate |
+| **p2c-mqtt-acl-staging** | Broker ACL proof = Kali staging |
 
-## Mint closed locally (this train)
-
-| Item | Evidence |
-|------|----------|
-| Docs GH Pages blast + Quick Start | `docs/` nav_exclude Operations; QS local+Railway |
-| SPA p8* (Mapping/RCx/FDD/scroll/stems) | `frontend/web` on branch |
-| Kali V1–V3 pre-auth | JWT router + nginx Fonts/HSTS/`security.txt` |
-| MT IDOR matrix + admin/agent least-privilege | `services/central/tests/preauth_disclosure.rs` |
-| Agent skills | `openfdd-mt-security`, `openfdd-rcx-fdd-plot-poll` |
-
-## Exit (P9)
-
-Wave P **OPS PINNED** only when: last tip GHCR + Railway re-pin (operator OK) + **ONE** full `run_railway_hub_stress.sh` cited + 0 open PRs + stale `wave-*` remotes deleted + Soft-OPEN ≤ Stage C (+ honest synth59 if still missing).
-
-## Wave R (2026-09-15)
+## Wave R closeout (2026-09-16)
 
 | ID | Status | Note |
 |----|--------|------|
-| **r1** | FIXED in tip | FC1 SQL prefers `fan_status` for fan-hi gate (match pandas `_fan()`); was cmd-only → 1h vs 40h |
-| **r2** | FIXED | Hub stress Wave L OFF 12–17 → PASS N/A when `multi_tenant=true` |
-| **r3** | FIXED | AFDD flood 429 retry + 45s cool-down after ACL |
-| **r6** | Soft | `ingest_reject`≈58 on ACME; no `/api/*/dead-letters` yet — triage Soft; ACME honesty carry |
-| **r7** | DONE | JCI FEC **5007** Who-Is + AI:1173≈76°F (`reports/local_bacnet_ot_wave_r_*`) |
-| **r10** | DONE | Viewer optional documented in RAILWAY_DEPLOYMENT.md |
-| **r12** | Parked | Stage C IdP/MFA/SKU |
+| **r1** | **CLOSED** | FC1 SQL `fan_status` parity (#936); soak ~39.58h vs golden 40 via rel-tol (#937) |
+| **r2** | **CLOSED** | Wave L OFF 12–17 PASS N/A when MT ON |
+| **r3** | **CLOSED** | AFDD pre-minted bearer; gate 19 PASS |
+| **r4** | **CLOSED** | ZAP baseline PASS (`ACCEPT_ZAP_MEDIUM=1`) |
+| **r5** | **CLOSED** | Hub pin `sha-4d3a6b0` / 3.5.22 |
+| **r6** | Soft | ingest_reject count Soft + ACME honesty |
+| **r7** | **CLOSED** | JCI FEC **5007** Who-Is + AI:1173 |
+| **r10** | **CLOSED** | Viewer optional; Railway has `OPENFDD_VIEWER_PASSWORD` |
+| **r11** | Soft | UTIL-INTERVAL (not FC1) |
+| **r12** | Parked | Stage C |
+| **r13** | **OPS PINNED** | Stress `20260916T011952Z` fully_qualified |
+
+## Exit (P9 / R)
+
+**Done:** tip GHCR + Railway re-pin + ONE full `run_railway_hub_stress.sh` cited + 0 open wave PRs + Soft-OPEN ≤ Stage C.
