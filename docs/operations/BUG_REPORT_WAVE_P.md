@@ -9,7 +9,7 @@
 | Product tip | **Wave Soft Park hub `sha-f318dbc` / 3.5.24** (#940) · health `3.5.24+f318dbcc…` · `multi_tenant=true` · backup `20260916T215014Z` |
 | Prior hub | `sha-a830e17` / 3.5.23 · backup `20260916T200208Z` · mid-repin stress `20260916T200629Z` (not fully_qualified) |
 | Prior OPS PINNED | Wave R **3.5.22** / `sha-4d3a6b0` (#936) · stress `20260916T011952Z` **`fully_qualified=true`** |
-| Soft Park S5 | Mega stress **in flight** on `sha-f318dbc` (cite artifact + `capacity_report.json` when done) · field Soft: `bldg2__pi-1` kit missing on this host |
+| Soft Park S5 | Stress `reports/nightly-ot-bench_20260916T215804Z/` · **22 PASS / 4 FAIL** · not `fully_qualified` · `capacity_report.json` ok (34 samples, Δ ingest_ok +88, 0 health flaps) · FAILs: 00 edges (kit Soft), 01 synth59 (**busy** proved single-flight vs stale pre-pin action), 03 B100, 19 AFDD flood Soft |
 | Closed this cycle | Dual `fdd_run_all` OOM → **409 busy** + stale reclaim + Account Sign out (#940) |
 
 ## Soft-OPEN (≤ Stage C)
@@ -24,7 +24,7 @@
 | **p2c-mqtt-acl-staging** | Broker ACL proof = Kali staging |
 | **historian-n-building-scale** | Small Parquet parts × N buildings; offline H4 now; runtime compaction Soft later |
 | **admin-capacity-gauges** | Volume/cgroup/historian gauges — not host MemTotal charts |
-| **railway-capacity-stress** | S5a sampler + gate 24 on tip `sha-f318dbc`; mega stress artifact pending closeout |
+| **railway-capacity-stress** | **CITED** `20260916T215804Z` capacity_report (gates 24/24b PASS) on `sha-f318dbc` |
 | **mqtt-pause-ui** | Option A parked (streaming pause; not fieldbus stop) |
 | **fdd-actions-singleflight** | **CLOSED** · live hub **3.5.24** / `sha-f318dbc` (#940) |
 
