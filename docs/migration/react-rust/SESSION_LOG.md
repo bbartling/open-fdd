@@ -1,5 +1,11 @@
 # Session log — React / Rust modernization
 
+## 2026-09-16 — Wave S Data Model TTL + Railway capacity stress
+
+- Mapping: Export TTL / View TTL as text (`map-download-ttl`, `map-view-ttl-text`); TS `buildDataModelTurtle` + central `GET /api/csv/import/package/mapping/ttl` (JWT + building ACL). TTL is derived export only — package maps remain FDD SoT.
+- Soft park unchanged: MQTT pause, historian N-building scale, admin capacity gauges stay Soft-OPEN.
+- Hub stress S5a: `lib_capacity_sample.sh` + gate `24_capacity_pressure`; artifacts `capacity_samples.ndjson` / `capacity_report.json` / `hub_env_capacity.json`.
+
 ## 2026-08-10 — Sites tab + Run Rules removal + FDD/inspect
 
 - **Sites** is a main section tab after WattLab; sidebar “Manage sites…” / Mapping link removed (use Sites tab).

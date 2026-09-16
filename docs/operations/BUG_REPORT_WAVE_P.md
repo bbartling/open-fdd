@@ -21,6 +21,10 @@
 | **kali-zap-af** | Authenticated ZAP AF remains Kali-owned |
 | **wave-o1-tenant-path-migrate** | Hub-root `building=*` still; optional `tenants/{tid}/` migrate |
 | **p2c-mqtt-acl-staging** | Broker ACL proof = Kali staging |
+| **historian-n-building-scale** | Small Parquet parts × N buildings; offline H4 now; runtime compaction Soft later |
+| **admin-capacity-gauges** | Volume/cgroup/historian gauges — not host MemTotal charts |
+| **railway-capacity-stress** | S5a sampler + gate 24 wired; cite `capacity_report.json` on next mega |
+| **mqtt-pause-ui** | Option A parked (streaming pause; not fieldbus stop) |
 
 ## Wave R closeout (2026-09-16)
 

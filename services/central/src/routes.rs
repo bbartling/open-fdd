@@ -59,6 +59,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(csv_import_package_mapping),
         )
         .route(
+            "/api/csv/import/package/mapping/ttl",
+            get(csv_import_package_mapping_ttl),
+        )
+        .route(
             "/api/csv/import/package/buildings",
             get(csv_import_package_buildings),
         )
@@ -2276,6 +2280,75 @@ pub async fn csv_import_package_mapping(
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package mapping task: {e}")}));
     Ok(Json(result))
+}
+
+/// Derived Turtle export of package mapping inventory (Wave S). Not FDD SoT.
+pub async fn csv_import_package_mapping_ttl(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<PackageMappingQuery>,
+) -> Result<axum::response::Response, (StatusCode, Json<Value>)> {
+    use axum::response::IntoResponse;
+
+    let Some(building_id) = q
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id query parameter required",
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let equipment_id = q
+        .equipment_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let inventory = tokio::task::spawn_blocking(move || {
+        open_fdd_edge_prototype::csv_ingest::package::get_package_mapping_handler(
+            &building_id,
+            equipment_id.as_deref(),
+        )
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("package mapping task: {e}")}));
+
+    if inventory.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+        let status = if inventory.get("error").is_some() {
+            StatusCode::BAD_REQUEST
+        } else {
+            StatusCode::OK
+        };
+        return Err((status, Json(inventory)));
+    }
+
+    let ttl = open_fdd_edge_prototype::csv_ingest::data_model_ttl::package_mapping_to_turtle(
+        &inventory,
+    );
+    Ok((
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                "text/turtle; charset=utf-8",
+            ),
+            (
+                axum::http::header::CACHE_CONTROL,
+                "no-store",
+            ),
+        ],
+        ttl,
+    )
+        .into_response())
 }
 
 /// List ingested package buildings under workspace csv_buildings.

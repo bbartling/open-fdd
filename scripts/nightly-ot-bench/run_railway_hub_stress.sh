@@ -9,6 +9,8 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$DIR/lib.sh"
+# shellcheck disable=SC1091
+source "$DIR/lib_capacity_sample.sh"
 load_bench_env
 cd "$ROOT"
 
@@ -117,7 +119,8 @@ python3 "$MANIFEST_PY" create \
   --required 20_wave_n_tenant_acl \
   --required 21_wave_n_mqtts_continuity \
   --required 22_wave_o_admin_datamodel_acl \
-  --required 23_wave_o_security
+  --required 23_wave_o_security \
+  --required 24_capacity_pressure
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"
@@ -137,6 +140,7 @@ run_gate() {
   if [[ -n "${RAILWAY_ADMIN_PASSWORD:-}" ]]; then
     export OPENFDD_ADMIN_PASSWORD="$RAILWAY_ADMIN_PASSWORD"
   fi
+  export OPENFDD_STRESS_GATE="$gate"
   hdr "$title"
   local log="$ART/${gate}.log"
   local t0=$SECONDS
@@ -154,6 +158,12 @@ run_gate() {
   fi
   return 0
 }
+
+# Capacity sampler rides along existing gates (S5a).
+export CAPACITY_SAMPLE="${CAPACITY_SAMPLE:-1}"
+capacity_fetch_hub_env_railway || capacity_write_hub_env || true
+capacity_sampler_start || true
+trap 'capacity_sampler_stop || true' EXIT
 
 # --- 00 hub health + expected edge (strict; no masked probe failures) ---
 run_gate "00_hub_health_edges" "00 hub health + edges" bash -euo pipefail -c '
@@ -370,6 +380,28 @@ else
     "$ART/19_wave_m_afdd_flood.log" "$ART/2N_wave_m_afdd_flood.json"
 fi
 
+# --- 24 capacity pressure (S5a; sampler already running) ---
+run_gate "24_capacity_pressure" "24 capacity pressure" \
+  bash "$DIR/24_capacity_pressure.sh"
+
+capacity_sampler_stop || true
+trap - EXIT
+set +e
+capacity_write_report
+CAP_RC=$?
+set -e
+if [[ -f "$ART/capacity_report.json" ]]; then
+  if [[ "$CAP_RC" -eq 0 ]]; then
+    record_gate "24b_capacity_report" PASS "24b capacity report" "" \
+      "$ART/capacity_report.json" "$ART/capacity_samples.ndjson" "$ART/hub_env_capacity.json"
+  else
+    record_gate "24b_capacity_report" FAIL "24b capacity report" "hard_fail_or_strict" \
+      "$ART/capacity_report.json" "$ART/capacity_samples.ndjson" "$ART/hub_env_capacity.json"
+  fi
+else
+  record_gate "24b_capacity_report" FAIL "24b capacity report" "missing capacity_report.json"
+fi
+
 # Finalize — SUMMARY generated from recorded gates only
 set +e
 python3 "$MANIFEST_PY" finalize --manifest "$MANIFEST" --summary-md "$ART/SUMMARY.md"
@@ -377,5 +409,10 @@ FINAL_RC=$?
 set -e
 echo "Report: $ART/SUMMARY.md"
 echo "Manifest: $MANIFEST"
+if [[ -f "$ART/capacity_report.json" ]]; then
+  echo "Capacity: $ART/capacity_report.json"
+  jq -c '{status,sample_count,soft_warns,hard_fails,peak_memory_percent_used,delta_historian_small_files}' \
+    "$ART/capacity_report.json" 2>/dev/null || true
+fi
 cat "$ART/SUMMARY.md"
 exit "$FINAL_RC"

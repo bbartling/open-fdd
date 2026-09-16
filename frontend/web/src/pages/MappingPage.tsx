@@ -22,6 +22,7 @@ import {
   type PackageMappingResponse,
   type SessionConfig,
 } from "../api/mappingApi";
+import { buildDataModelTurtle } from "../api/dataModelTurtle";
 import { listFddRules, type FddRuleSummary } from "../api/fddApi";
 
 type ColumnRow = {
@@ -241,6 +242,35 @@ export function MappingPage() {
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
+  const hasSiteModel =
+    !!buildingId &&
+    (!!(siteInventory?.equipment?.length) || !!(inventory?.equipment?.length));
+
+  const onDownloadTtl = () => {
+    const src = siteInventory ?? inventory;
+    if (!src || !buildingId) return;
+    const blob = new Blob([buildDataModelTurtle(src)], {
+      type: "text/turtle;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `data_model_${src.building_id ?? buildingId}.ttl`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const onViewTtlText = () => {
+    const src = siteInventory ?? inventory;
+    if (!src || !buildingId) return;
+    const blob = new Blob([buildDataModelTurtle(src)], {
+      type: "text/turtle;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
   const tableRows: ColumnRow[] = useMemo(() => {
     const cols = selectedEq?.columns ?? [];
     const seen = new Set(cols.map((c) => c.column));
@@ -334,10 +364,7 @@ export function MappingPage() {
             label="Export site data model"
             variant="secondary"
             onClick={onDownloadManifest}
-            disabled={
-              !buildingId ||
-              (!(siteInventory?.equipment?.length) && !(inventory?.equipment?.length))
-            }
+            disabled={!hasSiteModel}
             testId="map-download-manifest"
           />
           <Button
@@ -345,16 +372,30 @@ export function MappingPage() {
             label="View as text"
             variant="secondary"
             onClick={onViewManifestText}
-            disabled={
-              !buildingId ||
-              (!(siteInventory?.equipment?.length) && !(inventory?.equipment?.length))
-            }
+            disabled={!hasSiteModel}
             testId="map-view-manifest-text"
+          />
+          <Button
+            id="map-download-ttl"
+            label="Export TTL"
+            variant="secondary"
+            onClick={onDownloadTtl}
+            disabled={!hasSiteModel}
+            testId="map-download-ttl"
+          />
+          <Button
+            id="map-view-ttl-text"
+            label="View TTL as text"
+            variant="secondary"
+            onClick={onViewTtlText}
+            disabled={!hasSiteModel}
+            testId="map-view-ttl-text"
           />
         </div>
         <p className="oracle-sidebar__caption">
-          Export / view is the <strong>entire site</strong> data model (not filtered by
-          the equipment editor below).
+          Export / view is the <strong>entire site</strong> data model (JSON or Turtle
+          derived export — not filtered by the equipment editor below). TTL does not
+          replace package zip maps for FDD.
         </p>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
