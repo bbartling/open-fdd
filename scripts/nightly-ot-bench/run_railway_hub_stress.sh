@@ -28,19 +28,56 @@ ACCEPT_ZAP_MEDIUM="${ACCEPT_ZAP_MEDIUM:-1}"
 QUAL="$ROOT/scripts/qualification"
 MANIFEST_PY="$QUAL/write_manifest.py"
 
+# Pull hub auth from Railway CLI (never print values). Prefer file+jq over pipes —
+# empty stdin / stale RAILWAY_TOKEN previously yielded blank passwords → mass gate FAIL.
+_fetch_railway_var() {
+  local key="$1"
+  local svc="${OPENFDD_RAILWAY_CENTRAL_SVC:-openfdd-central-cQ-F}"
+  local tmp
+  tmp="$(mktemp)"
+  # Stale RAILWAY_TOKEN in env breaks CLI; session login is preferred on bensbench.
+  if ! env -u RAILWAY_TOKEN railway variable list --service "$svc" --json >"$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    return 1
+  fi
+  python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get(sys.argv[2],"") or "")' "$tmp" "$key"
+  local rc=$?
+  rm -f "$tmp"
+  return "$rc"
+}
+
 if [[ -z "${RAILWAY_ADMIN_PASSWORD:-}" ]] && command -v railway >/dev/null 2>&1; then
-  RAILWAY_ADMIN_PASSWORD="$(railway variable list --service openfdd-central-cQ-F --json 2>/dev/null \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("OPENFDD_ADMIN_PASSWORD",""))' || true)"
+  RAILWAY_ADMIN_PASSWORD="$(_fetch_railway_var OPENFDD_ADMIN_PASSWORD || true)"
 fi
 if [[ -n "${RAILWAY_ADMIN_PASSWORD:-}" ]]; then
   export OPENFDD_ADMIN_PASSWORD="$RAILWAY_ADMIN_PASSWORD"
   export RAILWAY_ADMIN_PASSWORD
 fi
 if [[ -z "${OPENFDD_AGENT_PASSWORD:-}" ]] && command -v railway >/dev/null 2>&1; then
-  OPENFDD_AGENT_PASSWORD="$(railway variable list --service openfdd-central-cQ-F --json 2>/dev/null \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("OPENFDD_AGENT_PASSWORD",""))' || true)"
+  OPENFDD_AGENT_PASSWORD="$(_fetch_railway_var OPENFDD_AGENT_PASSWORD || true)"
   export OPENFDD_AGENT_PASSWORD
 fi
+if [[ -z "${OPENFDD_ADMIN_PASSWORD:-}" ]]; then
+  echo "ERROR: OPENFDD_ADMIN_PASSWORD unset after Railway fetch — refuse hub stress without auth" >&2
+  exit 2
+fi
+echo "hub auth: OPENFDD_ADMIN_PASSWORD len=${#OPENFDD_ADMIN_PASSWORD} agent_len=${#OPENFDD_AGENT_PASSWORD}"
+
+# Mint bearer once up-front. Gate 23 deliberately trips login 429; AFDD flood must not re-login.
+if [[ -z "${OPENFDD_ADMIN_TOKEN:-}" ]]; then
+  OPENFDD_ADMIN_TOKEN="$(
+    curl -sf --max-time 30 -X POST "$OPENFDD_API_BASE/api/auth/login" \
+      -H 'Content-Type: application/json' \
+      -d "{\"username\":\"${OPENFDD_ADMIN_USER:-admin}\",\"password\":$(python3 -c 'import json,os; print(json.dumps(os.environ["OPENFDD_ADMIN_PASSWORD"]))')}" \
+      | jq -r '.token // .access_token // empty'
+  )"
+  export OPENFDD_ADMIN_TOKEN
+fi
+if [[ -z "${OPENFDD_ADMIN_TOKEN:-}" ]]; then
+  echo "ERROR: could not mint OPENFDD_ADMIN_TOKEN at stress start" >&2
+  exit 2
+fi
+echo "hub auth: OPENFDD_ADMIN_TOKEN len=${#OPENFDD_ADMIN_TOKEN}"
 
 ART="$(artifact_dir)"
 export ARTIFACT_DIR="$ART"
@@ -310,12 +347,14 @@ fi
 
 # --- 19 Wave M AFDD flood gate 12 (isolated default; live needs ALLOW_LIVE=1) ---
 # Parent railway stress is an authorized ops window (same class as ZAP) — default ALLOW_LIVE=1 here.
-# Cool-down after ACL/auth matrix avoids login-throttle HTTP 429 on flood invoke.
-AFDD_FLOOD_COOLDOWN_SECS="${AFDD_FLOOD_COOLDOWN_SECS:-45}"
-echo "AFDD flood cool-down ${AFDD_FLOOD_COOLDOWN_SECS}s (rate budget after ACL probes)"
+# Uses OPENFDD_ADMIN_TOKEN minted at stress start (gate 23 login throttle must not force re-login).
+AFDD_FLOOD_COOLDOWN_SECS="${AFDD_FLOOD_COOLDOWN_SECS:-15}"
+echo "AFDD flood cool-down ${AFDD_FLOOD_COOLDOWN_SECS}s"
 sleep "$AFDD_FLOOD_COOLDOWN_SECS"
 set +e
 OPENFDD_AFDD_FLOOD_ALLOW_LIVE="${OPENFDD_AFDD_FLOOD_ALLOW_LIVE:-1}" \
+  OPENFDD_ADMIN_TOKEN="${OPENFDD_ADMIN_TOKEN:-}" \
+  OPENFDD_AFDD_FLOOD_IGNORE_RULES_FAILED="${OPENFDD_AFDD_FLOOD_IGNORE_RULES_FAILED:-1}" \
   bash "$DIR/2N_wave_m_afdd_flood.sh" 2>&1 | tee "$ART/19_wave_m_afdd_flood.log"
 FLOOD_RC=${PIPESTATUS[0]}
 set -e

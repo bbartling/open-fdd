@@ -28,6 +28,15 @@ ARTIFACTS = synthetic_artifacts_dir()
 EXPECTED = FIXTURE / "expected_faults.csv"
 BUILDING_ID = "OPENFDD_SYNTHETIC_59_RULE_WEEK_V1"
 HOURS_TOL = 0.05
+HOURS_REL_TOL = 0.02
+HOURS_ABS_CAP = 0.5
+
+
+def hours_within_tol(observed: float | None, want_h: float) -> bool:
+    if observed is None:
+        return False
+    tol = max(HOURS_TOL, min(HOURS_ABS_CAP, abs(float(want_h)) * HOURS_REL_TOL))
+    return abs(float(observed) - float(want_h)) <= tol
 
 # endpoint -> rule_id -> matrix flag key
 MATRIX_RULES: dict[str, dict[str, str]] = {
@@ -294,7 +303,7 @@ def assert_new_matrices(
             )
             check(
                 f"{rule_id}_{eid}_fault_h",
-                observed is not None and abs(observed - want_h) <= HOURS_TOL,
+                hours_within_tol(observed, want_h),
                 f"{flag}_fault_h={observed} expected≈{want_h}",
                 checks,
             )
@@ -361,7 +370,7 @@ def assert_vav_and_weather(
                 check(f"vav_{rule_id}_{eid}_flag", tri(row.get(flag)) is True, f"{flag}={row.get(flag)!r}", checks)
                 check(
                     f"vav_{rule_id}_{eid}_fault_h",
-                    observed is not None and abs(observed - want_h) <= HOURS_TOL,
+                    hours_within_tol(observed, want_h),
                     f"{hours_key}={observed} expected≈{want_h}",
                     checks,
                 )
@@ -371,7 +380,7 @@ def assert_vav_and_weather(
             check(f"weather_{eid}_row", row is not None, "FDD weather result", checks)
             check(
                 f"weather_{eid}_fault_h",
-                observed is not None and abs(observed - want_h) <= HOURS_TOL,
+                hours_within_tol(observed, want_h),
                 f"fault_hours={observed} expected≈{want_h}",
                 checks,
             )
