@@ -379,10 +379,9 @@ mod tests {
             let _guard = LOG_LOCK.lock().unwrap();
             let mut entries = read_all_unlocked();
             let entry = entries.iter_mut().find(|e| e.id == id).expect("row");
-            entry.started_at = (Utc::now()
-                - chrono::Duration::seconds(STALE_RUNNING_SECS + 60))
-            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-            .to_string();
+            entry.started_at = (Utc::now() - chrono::Duration::seconds(STALE_RUNNING_SECS + 60))
+                .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                .to_string();
             rewrite_all_unlocked(&entries).expect("rewrite");
         }
         // Next heavy start must reclaim and succeed (not busy).
