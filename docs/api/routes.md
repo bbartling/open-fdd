@@ -48,6 +48,8 @@ Routes are registered in `edge/src/server.rs`. Below is a concise map — not ev
 | Method | Path |
 |--------|------|
 | GET | `/api/ingest/contract` |
+| GET | `/api/csv/import/package/mapping` |
+| GET | `/api/csv/import/package/mapping/ttl` |
 | POST | `/api/csv/import/preflight`, `/execute` |
 | POST | `/api/csv-workbench/preview` |
 

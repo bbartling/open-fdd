@@ -128,6 +128,14 @@ describe("MappingPage", () => {
       exportBtn.compareDocumentPosition(building) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByTestId("map-view-manifest-text")).toBeTruthy();
+    expect(screen.getByTestId("map-download-ttl")).toBeTruthy();
+    expect(screen.getByTestId("map-view-ttl-text")).toBeTruthy();
+    const ttlBtn = screen.getByTestId("map-download-ttl");
+    const control = (
+      ttlBtn.matches("button") ? ttlBtn : ttlBtn.querySelector("button")
+    ) as HTMLButtonElement | null;
+    expect(control).toBeTruthy();
+    expect(control?.disabled).toBe(false);
   });
 
   it("saves role edits via package roles + session-config", async () => {

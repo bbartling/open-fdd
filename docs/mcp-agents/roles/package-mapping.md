@@ -25,6 +25,8 @@ contract. Do not document or implement as though they already drive Central
 import. Until SCAFFOLD tools land, map with compact JSON and existing
 `openfdd_csv_import_*` tools.
 
+Product SPA **Mapping** exports the site inventory as JSON and Turtle (`GET /api/csv/import/package/mapping/ttl`) — derived views only. SPARQL/Oxigraph stays edge model-QA, not product FDD.
+
 ## Mission
 
 Get a building's historian/point data into Open-FDD with an honest,

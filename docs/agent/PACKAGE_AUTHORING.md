@@ -6,6 +6,8 @@ If Overview tables, RCx plots, Inspect traces, or health matrices are empty, the
 
 **Never** hard-code a site, vendor suffix table, city, or equipment id in product code (`services/`, `sql_rules/`, `frontend/web`, `mcp/`). Gold ids: `AHU_1`, `VAV_1`, `CHW_1`, `weather/`.
 
+**UI export is not SoT:** Mapping → Export site data model (JSON) / Export TTL (Turtle) are **derived views** of the same package inventory. Agents and FDD still author and resolve roles via zip maps → `columns.csv` → DataFusion SQL. Do not replace package authoring with Brick/SPARQL or treat downloaded `.ttl` as the ingest contract.
+
 Haystack names in sidecar `points` translate via `haystack_point_to_role` (`discharge-air-temp` → `sat`). Do not invent a second vocabulary. Alias table: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](../migration/vibe19/ROLE_MAPPING_PARITY.md). Ingest shapes: [`docs/RUST_DATAFUSION_ENGINE.md`](../RUST_DATAFUSION_ENGINE.md).
 
 Modeling docs for agents: [`docs/modeling/`](../modeling/) — especially

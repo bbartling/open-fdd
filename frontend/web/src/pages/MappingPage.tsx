@@ -22,6 +22,7 @@ import {
   type PackageMappingResponse,
   type SessionConfig,
 } from "../api/mappingApi";
+import { buildDataModelTurtle } from "../api/dataModelTurtle";
 import { listFddRules, type FddRuleSummary } from "../api/fddApi";
 
 type ColumnRow = {
@@ -216,8 +217,25 @@ export function MappingPage() {
     }
   };
 
+  /** Prefer site/equip inventory only when it matches the selected building. */
+  const exportSource = (() => {
+    if (!buildingId) return null;
+    const candidates = [siteInventory, inventory];
+    for (const src of candidates) {
+      if (
+        src &&
+        (src.building_id ?? "").trim() === buildingId &&
+        (src.equipment?.length ?? 0) > 0
+      ) {
+        return src;
+      }
+    }
+    return null;
+  })();
+  const hasSiteModel = exportSource != null;
+
   const onDownloadManifest = () => {
-    const src = siteInventory ?? inventory;
+    const src = exportSource;
     if (!src || !buildingId) return;
     const blob = new Blob([buildMappingManifest(src)], {
       type: "application/json",
@@ -231,13 +249,38 @@ export function MappingPage() {
   };
 
   const onViewManifestText = () => {
-    const src = siteInventory ?? inventory;
+    const src = exportSource;
     if (!src || !buildingId) return;
     const text = buildMappingManifest(src);
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank", "noopener,noreferrer");
     // Revoke later so the new tab can load.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
+  const onDownloadTtl = () => {
+    const src = exportSource;
+    if (!src || !buildingId) return;
+    const blob = new Blob([buildDataModelTurtle(src)], {
+      type: "text/turtle;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `data_model_${src.building_id ?? buildingId}.ttl`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const onViewTtlText = () => {
+    const src = exportSource;
+    if (!src || !buildingId) return;
+    const blob = new Blob([buildDataModelTurtle(src)], {
+      type: "text/turtle;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
@@ -334,10 +377,7 @@ export function MappingPage() {
             label="Export site data model"
             variant="secondary"
             onClick={onDownloadManifest}
-            disabled={
-              !buildingId ||
-              (!(siteInventory?.equipment?.length) && !(inventory?.equipment?.length))
-            }
+            disabled={!hasSiteModel}
             testId="map-download-manifest"
           />
           <Button
@@ -345,16 +385,30 @@ export function MappingPage() {
             label="View as text"
             variant="secondary"
             onClick={onViewManifestText}
-            disabled={
-              !buildingId ||
-              (!(siteInventory?.equipment?.length) && !(inventory?.equipment?.length))
-            }
+            disabled={!hasSiteModel}
             testId="map-view-manifest-text"
+          />
+          <Button
+            id="map-download-ttl"
+            label="Export TTL"
+            variant="secondary"
+            onClick={onDownloadTtl}
+            disabled={!hasSiteModel}
+            testId="map-download-ttl"
+          />
+          <Button
+            id="map-view-ttl-text"
+            label="View TTL as text"
+            variant="secondary"
+            onClick={onViewTtlText}
+            disabled={!hasSiteModel}
+            testId="map-view-ttl-text"
           />
         </div>
         <p className="oracle-sidebar__caption">
-          Export / view is the <strong>entire site</strong> data model (not filtered by
-          the equipment editor below).
+          Export / view is the <strong>entire site</strong> data model (JSON or Turtle
+          derived export — not filtered by the equipment editor below). TTL does not
+          replace package zip maps for FDD.
         </p>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
