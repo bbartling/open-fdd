@@ -4,16 +4,16 @@ overview: "SPA + central TTL export/view derived from package mapping inventory.
 todos:
   - id: ttl-builder-ts
     content: buildDataModelTurtle(inventory) from openfdd_data_model_v1; vitest golden fixtures
-    status: pending
+    status: completed
   - id: spa-buttons
     content: MappingPage Export TTL + View TTL as text; testids map-download-ttl / map-view-ttl-text
-    status: pending
+    status: completed
   - id: central-ttl-route
     content: GET package mapping TTL building_id JWT+allow_building; unit test ACL + shape
-    status: pending
+    status: completed
   - id: docs
     content: PACKAGE_AUTHORING + web Data Model docs — TTL export-only; AI zips still maps
-    status: pending
+    status: completed
 isProject: false
 ---
 

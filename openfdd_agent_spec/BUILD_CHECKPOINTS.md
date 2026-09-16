@@ -246,3 +246,9 @@ Product ship vs stress closeout — living detail: [`docs/operations/BUG_REPORT_
 - [x] VERSION **3.3.20** + Railway-hub stress harness — #831 `aef6fc1f` / `sha-aef6fc1`
 - [x] Field cutover: react-ot + bosspi off closeout; `openfdd_fieldbus_railway_up.sh sha-aef6fc1`; hosted-weather loopback
 - [x] `run_railway_hub_stress.sh` + BUG_REPORT verdict CLOSED (CSV + ZAP)
+
+# Wave S — Data Model TTL + capacity harness (2026-09-16)
+
+- [x] Mapping Export TTL / View TTL + `GET /api/csv/import/package/mapping/ttl` (JWT+ACL); reversible UTF-8 `enc_` IRI parity SPA↔central — tip **3.5.23** / #939
+- [x] S5a Railway capacity sampler + `24_capacity_pressure` + required `24b_capacity_report`
+- [ ] S5 mega hub stress after GHCR tip + Railway re-pin → `fully_qualified` + `capacity_report.json`

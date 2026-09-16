@@ -164,12 +164,12 @@ PY
 
 capacity_fetch_hub_env_railway() {
   local art="${ARTIFACT_DIR:?}"
-  command -v railway >/dev/null 2>&1 || return 0
+  command -v railway >/dev/null 2>&1 || return 1
   local svc="${OPENFDD_RAILWAY_CENTRAL_SVC:-openfdd-central-cQ-F}"
-  local tmp
+  local tmp rc=1
   tmp="$(mktemp)"
   if env -u RAILWAY_TOKEN railway variable list --service "$svc" --json >"$tmp" 2>/dev/null; then
-    python3 - "$tmp" "$art/hub_env_capacity.json" <<'PY'
+    if python3 - "$tmp" "$art/hub_env_capacity.json" <<'PY'
 import json, sys
 src, out = sys.argv[1:3]
 d = json.load(open(src))
@@ -184,8 +184,12 @@ with open(out, "w", encoding="utf-8") as f:
     json.dump(payload, f, indent=2)
     f.write("\n")
 PY
+    then
+      rc=0
+    fi
   fi
   rm -f "$tmp"
+  return "$rc"
 }
 
 capacity_write_report() {

@@ -9,26 +9,25 @@ export function turtleEscape(s: string): string {
     .replace(/\r/g, "\\r");
 }
 
-/** Stable FNV-1a 32-bit for collision-free IRI segments. */
-function fnv1a32(s: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
+/** Lowercase hex of UTF-8 bytes — shared with Rust `iri_segment`. */
+function utf8Hex(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let out = "";
+  for (let i = 0; i < bytes.length; i++) {
+    out += bytes[i]!.toString(16).padStart(2, "0");
   }
-  return h >>> 0;
+  return out;
 }
 
 /**
- * Sanitize path segments for stable ofdd IRIs.
- * When sanitization would collide distinct IDs (`AHU 1` vs `AHU_1`), append a
- * deterministic hash of the raw id so RDF subjects stay unique.
+ * Stable ofdd IRI local-name segment.
+ * Safe ASCII ids (`[A-Za-z0-9._-]`) pass through; otherwise reversible
+ * `enc_<utf8-hex>` so SPA and central emit the same subject for historian IDs
+ * (including non-ASCII).
  */
 export function turtleIriSegment(s: string): string {
-  const sanitized = s.replace(/[^A-Za-z0-9._-]+/g, "_");
-  if (sanitized === s) return sanitized;
-  const base = sanitized.replace(/^_+|_+$/g, "") || "x";
-  return `${base}_${fnv1a32(s).toString(16)}`;
+  if (/^[A-Za-z0-9._-]+$/.test(s)) return s;
+  return `enc_${utf8Hex(s)}`;
 }
 
 /**

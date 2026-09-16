@@ -120,7 +120,8 @@ python3 "$MANIFEST_PY" create \
   --required 21_wave_n_mqtts_continuity \
   --required 22_wave_o_admin_datamodel_acl \
   --required 23_wave_o_security \
-  --required 24_capacity_pressure
+  --required 24_capacity_pressure \
+  --required 24b_capacity_report
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"

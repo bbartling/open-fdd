@@ -41,11 +41,13 @@ describe("dataModelTurtle", () => {
     expect(turtleEscape('a"b')).toBe('a\\"b');
   });
 
-  it("sanitizes IRI segments without colliding distinct ids", () => {
+  it("uses reversible UTF-8 enc_ segments without colliding distinct ids", () => {
     expect(turtleIriSegment("AHU_1")).toBe("AHU_1");
-    expect(turtleIriSegment("AHU 1")).not.toBe(turtleIriSegment("AHU_1"));
+    expect(turtleIriSegment("AHU 1")).toBe("enc_4148552031");
     expect(turtleIriSegment("AHU:1")).not.toBe(turtleIriSegment("AHU 1"));
-    expect(turtleIriSegment("site:lab/1")).toMatch(/^site_lab_1_[0-9a-f]+$/);
+    expect(turtleIriSegment("site:lab/1")).toMatch(/^enc_[0-9a-f]+$/);
+    // Cross-surface contract with Rust iri_segment (UTF-8 hex, not UTF-16).
+    expect(turtleIriSegment("AHUé")).toBe("enc_414855c3a9");
   });
 
   it("keeps distinct historian ids on separate RDF subjects", () => {
@@ -67,10 +69,27 @@ describe("dataModelTurtle", () => {
         },
       ],
     });
-    const spaceSubj = `ofdd:building_B1_equip_${turtleIriSegment("AHU 1")}`;
-    expect(ttl).toContain(spaceSubj);
+    expect(ttl).toContain("ofdd:building_B1_equip_enc_4148552031");
     expect(ttl).toContain("ofdd:building_B1_equip_AHU_1");
-    expect(spaceSubj).not.toBe("ofdd:building_B1_equip_AHU_1");
+  });
+
+  it("matches central non-ASCII subject IRIs", () => {
+    const ttl = buildDataModelTurtle({
+      ok: true,
+      building_id: "Café",
+      equipment: [
+        {
+          equipment_id: "AHUé",
+          equipment_type: "AHU",
+          ok: true,
+          roles: { SF_SPD: "fan_cmd" },
+        },
+      ],
+    });
+    const bid = turtleIriSegment("Café");
+    const eid = turtleIriSegment("AHUé");
+    expect(eid).toBe("enc_414855c3a9");
+    expect(ttl).toContain(`ofdd:building_${bid}_equip_${eid}`);
   });
 
   it("emits prefixes, building, AHU role binding, no phantom roles", () => {

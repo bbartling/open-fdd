@@ -10,34 +10,25 @@ fn turtle_escape(s: &str) -> String {
         .replace('\r', "\\r")
 }
 
-/// Stable FNV-1a 32-bit — keeps historian IDs that sanitize to the same
-/// shape (`AHU 1` vs `AHU_1`) on distinct Turtle local names.
-fn fnv1a32(bytes: &[u8]) -> u32 {
-    let mut h: u32 = 0x811c_9dc5;
+fn utf8_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
     for &b in bytes {
-        h ^= u32::from(b);
-        h = h.wrapping_mul(0x0100_0193);
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 0x0f) as usize] as char);
     }
-    h
+    out
 }
 
+/// Stable ofdd IRI local-name segment (parity with SPA `turtleIriSegment`).
+/// Safe ASCII ids pass through; otherwise reversible `enc_<utf8-hex>`.
 fn iri_segment(s: &str) -> String {
-    let sanitized: String = s
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    if sanitized == s {
-        return sanitized;
+    if s.bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'_' || b == b'-')
+    {
+        return s.to_string();
     }
-    let base = sanitized.trim_matches('_');
-    let base = if base.is_empty() { "x" } else { base };
-    format!("{base}_{:x}", fnv1a32(s.as_bytes()))
+    format!("enc_{}", utf8_hex(s.as_bytes()))
 }
 
 /// Build Turtle from the JSON returned by [`super::package::get_package_mapping_handler`].
@@ -198,6 +189,7 @@ mod tests {
         assert_ne!(iri_segment("AHU 1"), iri_segment("AHU_1"));
         assert_ne!(iri_segment("AHU:1"), iri_segment("AHU 1"));
         assert_eq!(iri_segment("AHU_1"), "AHU_1");
+        assert_eq!(iri_segment("AHU 1"), "enc_4148552031");
         let inv = json!({
             "building_id": "B1",
             "equipment": [
@@ -206,10 +198,29 @@ mod tests {
             ]
         });
         let ttl = package_mapping_to_turtle(&inv);
-        let s_space = format!("ofdd:building_B1_equip_{}", iri_segment("AHU 1"));
-        let s_us = "ofdd:building_B1_equip_AHU_1";
-        assert!(ttl.contains(&s_space));
-        assert!(ttl.contains(s_us));
-        assert_ne!(s_space.as_str(), s_us);
+        assert!(ttl.contains("ofdd:building_B1_equip_enc_4148552031"));
+        assert!(ttl.contains("ofdd:building_B1_equip_AHU_1"));
+    }
+
+    #[test]
+    fn non_ascii_iri_matches_spa_utf8_hex_contract() {
+        // SPA TextEncoder UTF-8 hex for "AHUé" — must match central export.
+        assert_eq!(iri_segment("AHUé"), "enc_414855c3a9");
+        let inv = json!({
+            "building_id": "Café",
+            "equipment": [{
+                "equipment_id": "AHUé",
+                "equipment_type": "AHU",
+                "roles": { "SF_SPD": "fan_cmd" }
+            }]
+        });
+        let ttl = package_mapping_to_turtle(&inv);
+        assert!(ttl.contains(&format!(
+            "ofdd:building_{}_equip_{}",
+            iri_segment("Café"),
+            iri_segment("AHUé")
+        )));
+        assert!(ttl.contains("ofdd:building_enc_"));
+        assert!(ttl.contains("equip_enc_414855c3a9"));
     }
 }

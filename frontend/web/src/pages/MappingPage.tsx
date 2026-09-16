@@ -217,8 +217,25 @@ export function MappingPage() {
     }
   };
 
+  /** Prefer site/equip inventory only when it matches the selected building. */
+  const exportSource = (() => {
+    if (!buildingId) return null;
+    const candidates = [siteInventory, inventory];
+    for (const src of candidates) {
+      if (
+        src &&
+        (src.building_id ?? "").trim() === buildingId &&
+        (src.equipment?.length ?? 0) > 0
+      ) {
+        return src;
+      }
+    }
+    return null;
+  })();
+  const hasSiteModel = exportSource != null;
+
   const onDownloadManifest = () => {
-    const src = siteInventory ?? inventory;
+    const src = exportSource;
     if (!src || !buildingId) return;
     const blob = new Blob([buildMappingManifest(src)], {
       type: "application/json",
@@ -232,7 +249,7 @@ export function MappingPage() {
   };
 
   const onViewManifestText = () => {
-    const src = siteInventory ?? inventory;
+    const src = exportSource;
     if (!src || !buildingId) return;
     const text = buildMappingManifest(src);
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
@@ -242,12 +259,8 @@ export function MappingPage() {
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
-  const hasSiteModel =
-    !!buildingId &&
-    (!!(siteInventory?.equipment?.length) || !!(inventory?.equipment?.length));
-
   const onDownloadTtl = () => {
-    const src = siteInventory ?? inventory;
+    const src = exportSource;
     if (!src || !buildingId) return;
     const blob = new Blob([buildDataModelTurtle(src)], {
       type: "text/turtle;charset=utf-8",
@@ -261,7 +274,7 @@ export function MappingPage() {
   };
 
   const onViewTtlText = () => {
-    const src = siteInventory ?? inventory;
+    const src = exportSource;
     if (!src || !buildingId) return;
     const blob = new Blob([buildDataModelTurtle(src)], {
       type: "text/turtle;charset=utf-8",

@@ -25,7 +25,7 @@ todos:
     status: pending
   - id: railway-capacity-stress
     content: "S5a harness: capacity NDJSON sampler + report during Railway hub stress; gate 24 optional pressure"
-    status: pending
+    status: completed
 isProject: false
 ---
 
