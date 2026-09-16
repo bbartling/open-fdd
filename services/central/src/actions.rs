@@ -167,15 +167,6 @@ fn append_unlocked(entry: &ActionEntry) -> Result<(), String> {
     Ok(())
 }
 
-/// True when a heavy FDD action is already `running` (after stale reclaim).
-pub fn heavy_fdd_busy() -> Result<Option<ActionEntry>, String> {
-    let _guard = LOG_LOCK.lock().map_err(|e| e.to_string())?;
-    reclaim_stale_running_unlocked(Utc::now())?;
-    Ok(read_all_unlocked()
-        .into_iter()
-        .find(|e| e.status == "running" && is_heavy_fdd_kind(&e.kind)))
-}
-
 /// Start a new action (`status=running`). Returns the entry id.
 ///
 /// Heavy FDD kinds (`fdd_run_all` / `fdd_run_rule` / `fdd_*`) are single-flight:

@@ -110,14 +110,12 @@ fn parse_rows(req: &AnalyticsRequest) -> Option<Vec<MeterRow>> {
     let series = req.series.as_ref()?;
     let arr = if let Some(a) = series.as_array() {
         a.clone()
-    } else if let Some(a) = series
-        .get("rows")
-        .or_else(|| series.get("points"))
-        .and_then(|v| v.as_array())
-    {
-        a.clone()
     } else {
-        return None;
+        let a = series
+            .get("rows")
+            .or_else(|| series.get("points"))
+            .and_then(|v| v.as_array())?;
+        a.clone()
     };
     let mut out = Vec::new();
     for v in arr {

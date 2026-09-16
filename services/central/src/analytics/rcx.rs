@@ -301,10 +301,9 @@ fn parse_rcx_series(req: &AnalyticsRequest) -> Option<Vec<RcxSeriesPoint>> {
     let series = req.series.as_ref()?;
     let arr = if let Some(a) = series.as_array() {
         a.clone()
-    } else if let Some(a) = series.get("points").and_then(|v| v.as_array()) {
-        a.clone()
     } else {
-        return None;
+        let a = series.get("points").and_then(|v| v.as_array())?;
+        a.clone()
     };
     let mut out = Vec::new();
     for v in arr {
@@ -319,14 +318,12 @@ fn parse_zone_points(req: &AnalyticsRequest) -> Option<Vec<ZoneComfortPoint>> {
     let series = req.series.as_ref()?;
     let arr = if let Some(a) = series.as_array() {
         a.clone()
-    } else if let Some(a) = series
-        .get("zones")
-        .or_else(|| series.get("points"))
-        .and_then(|v| v.as_array())
-    {
-        a.clone()
     } else {
-        return None;
+        let a = series
+            .get("zones")
+            .or_else(|| series.get("points"))
+            .and_then(|v| v.as_array())?;
+        a.clone()
     };
     let mut out = Vec::new();
     for v in arr {

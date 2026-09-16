@@ -236,10 +236,9 @@ fn parse_evidence(req: &AnalyticsRequest) -> Option<Vec<EvidenceRow>> {
         a.clone()
     } else if let Some(a) = series.get("evidence").and_then(|v| v.as_array()) {
         a.clone()
-    } else if let Some(a) = series.get("points").and_then(|v| v.as_array()) {
-        a.clone()
     } else {
-        return None;
+        let a = series.get("points").and_then(|v| v.as_array())?;
+        a.clone()
     };
     let mut out = Vec::new();
     for v in arr {
