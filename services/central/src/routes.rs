@@ -2332,19 +2332,15 @@ pub async fn csv_import_package_mapping_ttl(
         return Err((status, Json(inventory)));
     }
 
-    let ttl = open_fdd_edge_prototype::csv_ingest::data_model_ttl::package_mapping_to_turtle(
-        &inventory,
-    );
+    let ttl =
+        open_fdd_edge_prototype::csv_ingest::data_model_ttl::package_mapping_to_turtle(&inventory);
     Ok((
         [
             (
                 axum::http::header::CONTENT_TYPE,
                 "text/turtle; charset=utf-8",
             ),
-            (
-                axum::http::header::CACHE_CONTROL,
-                "no-store",
-            ),
+            (axum::http::header::CACHE_CONTROL, "no-store"),
         ],
         ttl,
     )
