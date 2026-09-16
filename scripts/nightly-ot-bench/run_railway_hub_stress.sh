@@ -63,6 +63,22 @@ if [[ -z "${OPENFDD_ADMIN_PASSWORD:-}" ]]; then
 fi
 echo "hub auth: OPENFDD_ADMIN_PASSWORD len=${#OPENFDD_ADMIN_PASSWORD} agent_len=${#OPENFDD_AGENT_PASSWORD}"
 
+# Mint bearer once up-front. Gate 23 deliberately trips login 429; AFDD flood must not re-login.
+if [[ -z "${OPENFDD_ADMIN_TOKEN:-}" ]]; then
+  OPENFDD_ADMIN_TOKEN="$(
+    curl -sf --max-time 30 -X POST "$OPENFDD_API_BASE/api/auth/login" \
+      -H 'Content-Type: application/json' \
+      -d "{\"username\":\"${OPENFDD_ADMIN_USER:-admin}\",\"password\":$(python3 -c 'import json,os; print(json.dumps(os.environ["OPENFDD_ADMIN_PASSWORD"]))')}" \
+      | jq -r '.token // .access_token // empty'
+  )"
+  export OPENFDD_ADMIN_TOKEN
+fi
+if [[ -z "${OPENFDD_ADMIN_TOKEN:-}" ]]; then
+  echo "ERROR: could not mint OPENFDD_ADMIN_TOKEN at stress start" >&2
+  exit 2
+fi
+echo "hub auth: OPENFDD_ADMIN_TOKEN len=${#OPENFDD_ADMIN_TOKEN}"
+
 ART="$(artifact_dir)"
 export ARTIFACT_DIR="$ART"
 MANIFEST="$ART/qualification_manifest.json"
@@ -331,12 +347,13 @@ fi
 
 # --- 19 Wave M AFDD flood gate 12 (isolated default; live needs ALLOW_LIVE=1) ---
 # Parent railway stress is an authorized ops window (same class as ZAP) — default ALLOW_LIVE=1 here.
-# Cool-down after ACL/auth matrix avoids login-throttle HTTP 429 on flood invoke.
-AFDD_FLOOD_COOLDOWN_SECS="${AFDD_FLOOD_COOLDOWN_SECS:-120}"
-echo "AFDD flood cool-down ${AFDD_FLOOD_COOLDOWN_SECS}s (rate budget after ACL probes)"
+# Uses OPENFDD_ADMIN_TOKEN minted at stress start (gate 23 login throttle must not force re-login).
+AFDD_FLOOD_COOLDOWN_SECS="${AFDD_FLOOD_COOLDOWN_SECS:-15}"
+echo "AFDD flood cool-down ${AFDD_FLOOD_COOLDOWN_SECS}s"
 sleep "$AFDD_FLOOD_COOLDOWN_SECS"
 set +e
 OPENFDD_AFDD_FLOOD_ALLOW_LIVE="${OPENFDD_AFDD_FLOOD_ALLOW_LIVE:-1}" \
+  OPENFDD_ADMIN_TOKEN="${OPENFDD_ADMIN_TOKEN:-}" \
   bash "$DIR/2N_wave_m_afdd_flood.sh" 2>&1 | tee "$ART/19_wave_m_afdd_flood.log"
 FLOOD_RC=${PIPESTATUS[0]}
 set -e
