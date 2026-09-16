@@ -6,10 +6,11 @@
 
 | Item | Status |
 |------|--------|
-| Product tip | **Wave S hub tip `sha-a830e17` / 3.5.23** (#939 TTL + capacity sampler) · health `3.5.23+a830e173…` · `multi_tenant=true` · backup `20260916T200208Z` |
-| Prior OPS PINNED | Wave R **3.5.22** / `sha-4d3a6b0` (#936) · stress `reports/nightly-ot-bench_20260916T011952Z/` **`fully_qualified=true`** |
-| Soft Park S5 | Capacity sampler in tip; **mega stress on `sha-a830e17` in flight** — cite `capacity_report.json` |
-| Follow-on | **3.5.24** FDD Actions single-flight (409 busy) + sidebar Sign out / Account (anti dual `fdd_run_all` OOM) |
+| Product tip | **Wave Soft Park hub `sha-f318dbc` / 3.5.24** (#940) · health `3.5.24+f318dbcc…` · `multi_tenant=true` · backup `20260916T215014Z` |
+| Prior hub | `sha-a830e17` / 3.5.23 · backup `20260916T200208Z` · mid-repin stress `20260916T200629Z` (not fully_qualified) |
+| Prior OPS PINNED | Wave R **3.5.22** / `sha-4d3a6b0` (#936) · stress `20260916T011952Z` **`fully_qualified=true`** |
+| Soft Park S5 | Mega stress **in flight** on `sha-f318dbc` (cite artifact + `capacity_report.json` when done) · field Soft: `bldg2__pi-1` kit missing on this host |
+| Closed this cycle | Dual `fdd_run_all` OOM → **409 busy** + stale reclaim + Account Sign out (#940) |
 
 ## Soft-OPEN (≤ Stage C)
 
@@ -23,9 +24,9 @@
 | **p2c-mqtt-acl-staging** | Broker ACL proof = Kali staging |
 | **historian-n-building-scale** | Small Parquet parts × N buildings; offline H4 now; runtime compaction Soft later |
 | **admin-capacity-gauges** | Volume/cgroup/historian gauges — not host MemTotal charts |
-| **railway-capacity-stress** | S5a sampler + gate 24 wired; tip `sha-a830e17`; mega stress after hub re-pin |
+| **railway-capacity-stress** | S5a sampler + gate 24 on tip `sha-f318dbc`; mega stress artifact pending closeout |
 | **mqtt-pause-ui** | Option A parked (streaming pause; not fieldbus stop) |
-| **fdd-actions-singleflight** | Dual `fdd_run_all` OOMed hub; tip patch **3.5.24** (409 busy + stale reclaim + sidebar Sign out) |
+| **fdd-actions-singleflight** | **CLOSED** · live hub **3.5.24** / `sha-f318dbc` (#940) |
 
 ## Wave R closeout (2026-09-16)
 
