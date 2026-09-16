@@ -311,7 +311,7 @@ fi
 # --- 19 Wave M AFDD flood gate 12 (isolated default; live needs ALLOW_LIVE=1) ---
 # Parent railway stress is an authorized ops window (same class as ZAP) — default ALLOW_LIVE=1 here.
 # Cool-down after ACL/auth matrix avoids login-throttle HTTP 429 on flood invoke.
-AFDD_FLOOD_COOLDOWN_SECS="${AFDD_FLOOD_COOLDOWN_SECS:-45}"
+AFDD_FLOOD_COOLDOWN_SECS="${AFDD_FLOOD_COOLDOWN_SECS:-120}"
 echo "AFDD flood cool-down ${AFDD_FLOOD_COOLDOWN_SECS}s (rate budget after ACL probes)"
 sleep "$AFDD_FLOOD_COOLDOWN_SECS"
 set +e
