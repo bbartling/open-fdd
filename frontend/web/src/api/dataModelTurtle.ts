@@ -9,9 +9,26 @@ export function turtleEscape(s: string): string {
     .replace(/\r/g, "\\r");
 }
 
-/** Sanitize path segments for stable ofdd IRIs. */
+/** Stable FNV-1a 32-bit for collision-free IRI segments. */
+function fnv1a32(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+/**
+ * Sanitize path segments for stable ofdd IRIs.
+ * When sanitization would collide distinct IDs (`AHU 1` vs `AHU_1`), append a
+ * deterministic hash of the raw id so RDF subjects stay unique.
+ */
 export function turtleIriSegment(s: string): string {
-  return s.replace(/[^A-Za-z0-9._-]+/g, "_");
+  const sanitized = s.replace(/[^A-Za-z0-9._-]+/g, "_");
+  if (sanitized === s) return sanitized;
+  const base = sanitized.replace(/^_+|_+$/g, "") || "x";
+  return `${base}_${fnv1a32(s).toString(16)}`;
 }
 
 /**

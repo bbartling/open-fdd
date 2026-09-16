@@ -41,8 +41,36 @@ describe("dataModelTurtle", () => {
     expect(turtleEscape('a"b')).toBe('a\\"b');
   });
 
-  it("sanitizes IRI segments", () => {
-    expect(turtleIriSegment("site:lab/1")).toBe("site_lab_1");
+  it("sanitizes IRI segments without colliding distinct ids", () => {
+    expect(turtleIriSegment("AHU_1")).toBe("AHU_1");
+    expect(turtleIriSegment("AHU 1")).not.toBe(turtleIriSegment("AHU_1"));
+    expect(turtleIriSegment("AHU:1")).not.toBe(turtleIriSegment("AHU 1"));
+    expect(turtleIriSegment("site:lab/1")).toMatch(/^site_lab_1_[0-9a-f]+$/);
+  });
+
+  it("keeps distinct historian ids on separate RDF subjects", () => {
+    const ttl = buildDataModelTurtle({
+      ok: true,
+      building_id: "B1",
+      equipment: [
+        {
+          equipment_id: "AHU 1",
+          equipment_type: "AHU",
+          ok: true,
+          roles: { A: "sat" },
+        },
+        {
+          equipment_id: "AHU_1",
+          equipment_type: "AHU",
+          ok: true,
+          roles: { B: "fan_cmd" },
+        },
+      ],
+    });
+    const spaceSubj = `ofdd:building_B1_equip_${turtleIriSegment("AHU 1")}`;
+    expect(ttl).toContain(spaceSubj);
+    expect(ttl).toContain("ofdd:building_B1_equip_AHU_1");
+    expect(spaceSubj).not.toBe("ofdd:building_B1_equip_AHU_1");
   });
 
   it("emits prefixes, building, AHU role binding, no phantom roles", () => {

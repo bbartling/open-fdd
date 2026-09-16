@@ -62,15 +62,16 @@ dm = host.get("data_management") if isinstance(host.get("data_management"), dict
 if not dm and isinstance(dms, dict):
     dm = dms
 
-file_count = (
-    dm.get("file_count")
-    or dm.get("files")
-    or dm.get("parquet_files")
-    or (dm.get("total_row_count") if False else None)
-)
-# walk common keys
-small_files = dm.get("small_files") or dm.get("small_file_count")
-bytes_v = dm.get("estimated_bytes") or dm.get("total_bytes") or dm.get("bytes")
+def first_present(obj, *keys):
+    """Prefer explicit None checks — 0 is a valid historian metric."""
+    for k in keys:
+        if k in obj and obj[k] is not None:
+            return obj[k]
+    return None
+
+file_count = first_present(dm, "file_count", "files", "parquet_files")
+small_files = first_present(dm, "small_files", "small_file_count")
+bytes_v = first_present(dm, "estimated_bytes", "total_bytes", "bytes")
 if storage.get("used_bytes") is not None and bytes_v is None:
     bytes_v = storage.get("used_bytes")
 
@@ -281,6 +282,32 @@ elif (
 sp = peak("storage_percent_used")
 if sp is not None and sp > 80:
     soft_warns.append(f"storage_percent_used peak={sp} > 80")
+
+def http_ok(code):
+    try:
+        return 200 <= int(code) < 300
+    except (TypeError, ValueError):
+        return False
+
+def sample_usable(s):
+    if not (http_ok(s.get("host_http")) and http_ok(s.get("dm_http"))):
+        return False
+    return any(
+        isinstance(s.get(k), (int, float))
+        for k in (
+            "memory_percent_used",
+            "storage_used_bytes",
+            "historian_file_count",
+            "historian_small_files",
+            "historian_bytes",
+        )
+    )
+
+usable = [s for s in samples if sample_usable(s)]
+if samples and not usable:
+    hard_fails.append(
+        "no sample with successful host_http+dm_http and usable capacity metrics"
+    )
 
 by_gate = {}
 for s in samples:

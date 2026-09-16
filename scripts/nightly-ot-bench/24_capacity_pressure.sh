@@ -87,6 +87,9 @@ fi
 echo "pressure building_id=$PICK" | tee -a "$LOG"
 
 BUDGET="${CAPACITY_FDD_P95_SECS:-180}"
+# Hard transport timeout must exceed the soft latency budget so slow-but-ok
+# responses can soft-warn / CAPACITY_STRICT instead of curl-aborting as 000.
+HARD_TIMEOUT="${CAPACITY_FDD_HARD_TIMEOUT_SECS:-$((BUDGET * 2))}"
 EQ_URL="$(python3 -c "import urllib.parse,sys; print(sys.argv[1].rstrip('/') + '/api/fdd/equipment?building_id=' + urllib.parse.quote(sys.argv[2]))" "$BASE" "$PICK")"
 EQ_BODY="$ART/24_equipment.json"
 eq_code="$(http_code_to "$EQ_BODY" --max-time 60 \
@@ -143,20 +146,20 @@ if [[ -n "$EQ_ID" ]]; then
   echo "equipment_id=$EQ_ID" | tee -a "$LOG"
   PAYLOAD="$(jq -nc --arg b "$PICK" --arg e "$EQ_ID" \
     '{building_id:$b, equipment_id:$e, rule_ids:["FC1"], confirm:true}')"
-  ANALYTICS_CODE="$(http_code_to "$FDD_BODY" --max-time "$BUDGET" \
+  ANALYTICS_CODE="$(http_code_to "$FDD_BODY" --max-time "$HARD_TIMEOUT" \
     -X POST -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
     -d "$PAYLOAD" "$BASE/api/fdd/run")"
   echo "fdd/run HTTP $ANALYTICS_CODE" | tee -a "$LOG"
 else
   PAYLOAD="$(jq -nc --arg b "$PICK" '{building_id:$b}')"
-  ANALYTICS_CODE="$(http_code_to "$FDD_BODY" --max-time "$BUDGET" \
+  ANALYTICS_CODE="$(http_code_to "$FDD_BODY" --max-time "$HARD_TIMEOUT" \
     -X POST -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
     -d "$PAYLOAD" "$BASE/api/analytics/runtime")"
   echo "analytics/runtime HTTP $ANALYTICS_CODE (no equipment)" | tee -a "$LOG"
 fi
 END_S="$(date +%s)"
 ELAPSED_S=$((END_S - START_S))
-echo "elapsed_s=$ELAPSED_S budget_s=$BUDGET" | tee -a "$LOG"
+echo "elapsed_s=$ELAPSED_S budget_s=$BUDGET hard_timeout_s=$HARD_TIMEOUT" | tee -a "$LOG"
 
 if [[ "$ANALYTICS_CODE" == "502" || "$ANALYTICS_CODE" == "503" || "$ANALYTICS_CODE" == "504" || "$ANALYTICS_CODE" == "000" ]]; then
   echo "FAIL: query path HTTP $ANALYTICS_CODE" | tee -a "$LOG"

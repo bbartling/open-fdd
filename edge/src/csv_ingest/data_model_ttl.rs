@@ -10,8 +10,20 @@ fn turtle_escape(s: &str) -> String {
         .replace('\r', "\\r")
 }
 
+/// Stable FNV-1a 32-bit — keeps historian IDs that sanitize to the same
+/// shape (`AHU 1` vs `AHU_1`) on distinct Turtle local names.
+fn fnv1a32(bytes: &[u8]) -> u32 {
+    let mut h: u32 = 0x811c_9dc5;
+    for &b in bytes {
+        h ^= u32::from(b);
+        h = h.wrapping_mul(0x0100_0193);
+    }
+    h
+}
+
 fn iri_segment(s: &str) -> String {
-    s.chars()
+    let sanitized: String = s
+        .chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' {
                 c
@@ -19,7 +31,13 @@ fn iri_segment(s: &str) -> String {
                 '_'
             }
         })
-        .collect()
+        .collect();
+    if sanitized == s {
+        return sanitized;
+    }
+    let base = sanitized.trim_matches('_');
+    let base = if base.is_empty() { "x" } else { base };
+    format!("{base}_{:x}", fnv1a32(s.as_bytes()))
 }
 
 /// Build Turtle from the JSON returned by [`super::package::get_package_mapping_handler`].
@@ -173,5 +191,25 @@ mod tests {
         let ttl = package_mapping_to_turtle(&inv);
         assert!(ttl.contains("ofdd:building_X_equip_E1"));
         assert!(ttl.contains("ofdd:Equipment"));
+    }
+
+    #[test]
+    fn historian_id_collision_keeps_distinct_subjects() {
+        assert_ne!(iri_segment("AHU 1"), iri_segment("AHU_1"));
+        assert_ne!(iri_segment("AHU:1"), iri_segment("AHU 1"));
+        assert_eq!(iri_segment("AHU_1"), "AHU_1");
+        let inv = json!({
+            "building_id": "B1",
+            "equipment": [
+                {"equipment_id": "AHU 1", "equipment_type": "AHU", "roles": {"A": "sat"}},
+                {"equipment_id": "AHU_1", "equipment_type": "AHU", "roles": {"B": "fan_cmd"}},
+            ]
+        });
+        let ttl = package_mapping_to_turtle(&inv);
+        let s_space = format!("ofdd:building_B1_equip_{}", iri_segment("AHU 1"));
+        let s_us = "ofdd:building_B1_equip_AHU_1";
+        assert!(ttl.contains(&s_space));
+        assert!(ttl.contains(s_us));
+        assert_ne!(s_space.as_str(), s_us);
     }
 }
