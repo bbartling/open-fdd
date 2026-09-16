@@ -97,7 +97,9 @@ const JSONL_CAP: usize = 50;
 const DEFAULT_LIST_LIMIT: usize = 10;
 const MAX_LIST_LIMIT: usize = 500;
 /// Orphaned `running` rows after OOM/crash — fail them so single-flight can recover.
-const STALE_RUNNING_SECS: i64 = 2 * 60 * 60;
+/// 30m is enough for a full hub FDD pass on Railway low-RAM; 2h left synth59 Soft
+/// after dual-run crashes (orphan busy until reclaim).
+const STALE_RUNNING_SECS: i64 = 30 * 60;
 
 fn is_heavy_fdd_kind(kind: &str) -> bool {
     matches!(kind, "fdd_run_all" | "fdd_run_rule") || kind.starts_with("fdd_")
@@ -359,6 +361,41 @@ mod tests {
         assert!(err2.starts_with("busy:"), "{err2}");
         finish_action(&id, "ok", None).expect("finish");
         start_action("fdd_run_rule", "One rule after", None).expect("after finish");
+
+        let _ = fs::remove_dir_all(&dir);
+        std::env::remove_var("OPENFDD_WORKSPACE");
+    }
+
+    #[test]
+    fn stale_running_heavy_fdd_is_reclaimed() {
+        let _t = TEST_LOCK.lock().unwrap();
+        let dir = std::env::temp_dir().join(format!("openfdd-actions-stale-{}", Uuid::new_v4()));
+        let _ = fs::create_dir_all(&dir);
+        std::env::set_var("OPENFDD_WORKSPACE", &dir);
+
+        let id = start_action("fdd_run_all", "Orphan", None).expect("start");
+        // Backdate the running row beyond STALE_RUNNING_SECS.
+        {
+            let _guard = LOG_LOCK.lock().unwrap();
+            let mut entries = read_all_unlocked();
+            let entry = entries.iter_mut().find(|e| e.id == id).expect("row");
+            entry.started_at = (Utc::now() - chrono::Duration::seconds(STALE_RUNNING_SECS + 60))
+                .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                .to_string();
+            rewrite_all_unlocked(&entries).expect("rewrite");
+        }
+        // Next heavy start must reclaim and succeed (not busy).
+        let id2 = start_action("fdd_run_all", "After reclaim", None).expect("reclaim start");
+        assert_ne!(id2, id);
+        let listed = list_actions(10);
+        let orphan = listed["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["id"] == id)
+            .expect("orphan listed");
+        assert_eq!(orphan["status"], "fail");
+        assert_eq!(orphan["detail"]["reclaimed"], true);
 
         let _ = fs::remove_dir_all(&dir);
         std::env::remove_var("OPENFDD_WORKSPACE");
