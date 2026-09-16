@@ -55,17 +55,25 @@ jobs:
           echo "Publish conclusion=${PUBLISH_CONCLUSION:-n/a} tip=${tag}"
 
           hub_only=0
+          skip=0
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${HUB_ONLY_INPUT}" == "true" ]]; then
             hub_only=1
           fi
-          # After a cancelled/failed Publish, still check hub — partial tags are the bug.
-          if [[ "${PUBLISH_CONCLUSION:-}" == "cancelled" || "${PUBLISH_CONCLUSION:-}" == "failure" ]]; then
+          # Cancelled Publish never pushes this SHA's tags (superseded by a newer push).
+          # Checking hub completeness for that SHA is red noise — skip, do not FAIL.
+          if [[ "${PUBLISH_CONCLUSION:-}" == "cancelled" ]]; then
+            skip=1
+            echo "Publish was cancelled; skipping tip completeness for ${tag}."
+          elif [[ "${PUBLISH_CONCLUSION:-}" == "failure" ]]; then
+            # Failed Publish may still leave a partial tip — enforce hub-only.
             hub_only=1
-            echo "Publish was ${PUBLISH_CONCLUSION}; enforcing hub-only completeness (central/web/mqtt)."
+            echo "Publish was failure; enforcing hub-only completeness (central/web/mqtt)."
           fi
           echo "hub_only=${hub_only}" >> "$GITHUB_OUTPUT"
+          echo "skip=${skip}" >> "$GITHUB_OUTPUT"
 
       - name: Check GHCR tip stack
+        if: steps.tip.outputs.skip != '1'
         env:
           TAG: ${{ steps.tip.outputs.tag }}
           HUB_ONLY: ${{ steps.tip.outputs.hub_only }}
@@ -77,3 +85,7 @@ jobs:
           else
             ./scripts/check_ghcr_tip_stack.sh "$TAG"
           fi
+
+      - name: Skipped (cancelled Publish)
+        if: steps.tip.outputs.skip == '1'
+        run: echo "OK: tip completeness skipped for cancelled Publish"

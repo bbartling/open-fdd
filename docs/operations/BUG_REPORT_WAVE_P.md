@@ -6,7 +6,7 @@
 
 | Item | Status |
 |------|--------|
-| Product tip | **Wave Soft Park hub `sha-f318dbc` / 3.5.24** (#940) · health `3.5.24+f318dbcc…` · `multi_tenant=true` · backup `20260916T215014Z` |
+| Product tip | **Wave Soft Park patch train → `3.5.25`** (stale Action reclaim 30m + tip-completeness skip cancelled Publish) · live hub until re-pin: `sha-f318dbc` / 3.5.24 · backup `20260916T215014Z` |
 | Prior hub | `sha-a830e17` / 3.5.23 · backup `20260916T200208Z` · mid-repin stress `20260916T200629Z` (not fully_qualified) |
 | Prior OPS PINNED | Wave R **3.5.22** / `sha-4d3a6b0` (#936) · stress `20260916T011952Z` **`fully_qualified=true`** |
 | Soft Park S5 | Stress `reports/nightly-ot-bench_20260916T215804Z/` · **22 PASS / 4 FAIL** · not `fully_qualified` · `capacity_report.json` ok (34 samples, Δ ingest_ok +88, 0 health flaps) · FAILs: 00 edges (kit Soft), 01 synth59 (**busy** proved single-flight vs stale pre-pin action), 03 B100, 19 AFDD flood Soft |
