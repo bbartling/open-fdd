@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use super::{
     envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, DF_ENGINE, QV_DIURNAL, QV_ECONOMIZER,
     QV_MECHANICAL_COOLING, QV_RUNTIME, QV_SCHEDULE, QV_SENSOR_HEALTH, QV_SENSOR_STATS,
-    QV_SETPOINTS, QV_TOPOLOGY,
+    QV_SETPOINTS, QV_SQL_ANOMALY, QV_TOPOLOGY,
 };
 
 /// Canonical numeric role columns that may appear as `history` columns after
@@ -3012,6 +3012,214 @@ pub async fn descriptive_counts_from_history_filtered(
     Ok(Some(env))
 }
 
+/// Sensor roles screened for Overview SQL anomaly table (SAT/OAT/zone-style).
+pub const ANOMALY_SCREEN_ROLES: &[&str] = &[
+    "oa_t", "web_oa_t", "rat", "mat", "sat", "zone_t", "zone_rh", "duct_static", "oa_h",
+];
+
+/// Rolling Z-score (+ optional LAG transition events) per equipment × role.
+pub async fn sql_anomaly_from_history(
+    equipment_filter: Option<&[String]>,
+    building_id: Option<&str>,
+    window_rows: u32,
+    z_threshold: f64,
+    method: &str,
+    transition_events: bool,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let ts_col = pick_ts_col(&cols).unwrap_or("timestamp_utc");
+    let role_cols: Vec<&str> = ANOMALY_SCREEN_ROLES
+        .iter()
+        .copied()
+        .filter(|c| cols.contains(*c))
+        .collect();
+    if role_cols.is_empty() {
+        return Ok(None);
+    }
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let win = window_rows.clamp(3, 168);
+    let thr = z_threshold.clamp(1.0, 10.0);
+    let use_robust = method.eq_ignore_ascii_case("robust");
+    let mut parts = Vec::with_capacity(role_cols.len());
+    for role in &role_cols {
+        parts.push(if use_robust {
+            robust_anomaly_role_sql(role, ts_col, thr, &eq_filter, transition_events)
+        } else {
+            zscore_anomaly_role_sql(role, ts_col, win, thr, &eq_filter, transition_events)
+        });
+    }
+    let sql = format!(
+        "{} ORDER BY anomaly_hours DESC, score DESC, equipment_id, role",
+        parts.join(" UNION ALL ")
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    let mut rows = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let eq = r
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let role = r.get("role").and_then(|v| v.as_str()).unwrap_or("");
+        let method_out = r
+            .get("method")
+            .and_then(|v| v.as_str())
+            .unwrap_or(if use_robust { "robust" } else { "zscore" });
+        rows.push(json!({
+            "equipment_id": eq,
+            "equipment_type": infer_eq_type(&eq),
+            "role": role_to_haystack(role),
+            "metric": role,
+            "method": method_out,
+            "score": as_f64(r.get("score")).map(round4),
+            "threshold": as_f64(r.get("threshold")).map(round4),
+            "anomaly_hours": as_f64(r.get("anomaly_hours")).map(round4),
+            "anomaly_events": as_f64(r.get("anomaly_events")).map(round4),
+            "last_at": r.get("last_at").cloned().unwrap_or(json!(null)),
+            "source": "historian",
+        }));
+    }
+    let mut env = envelope_with_engine(
+        QV_SQL_ANOMALY,
+        &AnalyticsQuery::default(),
+        vec!["sql_anomaly rolling z-score from historian Parquet".into()],
+        DF_ENGINE,
+    );
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({
+        "history_rows": n,
+        "roles_screened": role_cols.len(),
+        "window_rows": win,
+        "z_threshold": thr,
+        "method": method_out_label(method),
+        "transition_events": transition_events,
+        "building_id": safe_building_segment(building_id),
+    }));
+    Ok(Some(env))
+}
+
+fn method_out_label(method: &str) -> &str {
+    if method.eq_ignore_ascii_case("robust") {
+        "robust"
+    } else {
+        "zscore"
+    }
+}
+
+fn zscore_anomaly_role_sql(
+    role: &str,
+    ts_col: &str,
+    window_rows: u32,
+    threshold: f64,
+    eq_filter: &str,
+    transition_events: bool,
+) -> String {
+    let preceding = window_rows.saturating_sub(1);
+    let event_col = if transition_events {
+        "CAST(SUM(CASE WHEN is_anom = 1 AND COALESCE(prev_anom, 0) = 0 THEN 1 ELSE 0 END) AS DOUBLE) AS anomaly_events"
+    } else {
+        "CAST(0 AS DOUBLE) AS anomaly_events"
+    };
+    format!(
+        r#"
+SELECT equipment_id, '{role}' AS role, 'zscore' AS method,
+  MAX(ABS(zscore)) AS score,
+  {threshold} AS threshold,
+  CAST(SUM(is_anom) AS DOUBLE) AS anomaly_hours,
+  {event_col},
+  MAX(CASE WHEN is_anom = 1 THEN ts END) AS last_at
+FROM (
+  SELECT equipment_id, ts, zscore, is_anom,
+    LAG(is_anom) OVER (PARTITION BY equipment_id ORDER BY ts) AS prev_anom
+  FROM (
+    SELECT equipment_id, ts, zscore,
+      CASE WHEN zscore IS NOT NULL AND ABS(zscore) > {threshold} THEN 1 ELSE 0 END AS is_anom
+    FROM (
+      SELECT equipment_id, ts, val,
+        CASE
+          WHEN roll_std IS NULL OR roll_std < 1e-9 THEN NULL
+          ELSE (val - roll_mean) / roll_std
+        END AS zscore
+      FROM (
+        SELECT equipment_id, {ts_col} AS ts, {role} AS val,
+          AVG({role}) OVER (
+            PARTITION BY equipment_id ORDER BY {ts_col}
+            ROWS BETWEEN {preceding} PRECEDING AND CURRENT ROW
+          ) AS roll_mean,
+          STDDEV_POP({role}) OVER (
+            PARTITION BY equipment_id ORDER BY {ts_col}
+            ROWS BETWEEN {preceding} PRECEDING AND CURRENT ROW
+          ) AS roll_std
+        FROM history
+        WHERE equipment_id IS NOT NULL AND {role} IS NOT NULL{eq_filter}
+      ) w
+    ) z
+  ) flags
+) agg
+GROUP BY equipment_id
+HAVING SUM(is_anom) > 0"#
+    )
+}
+
+/// Static median / MAD-style robust z per equipment (Soft fallback when MAD window unsupported).
+fn robust_anomaly_role_sql(
+    role: &str,
+    ts_col: &str,
+    threshold: f64,
+    eq_filter: &str,
+    transition_events: bool,
+) -> String {
+    let event_col = if transition_events {
+        "CAST(SUM(CASE WHEN is_anom = 1 AND COALESCE(prev_anom, 0) = 0 THEN 1 ELSE 0 END) AS DOUBLE) AS anomaly_events"
+    } else {
+        "CAST(0 AS DOUBLE) AS anomaly_events"
+    };
+    format!(
+        r#"
+SELECT equipment_id, '{role}' AS role, 'robust' AS method,
+  MAX(ABS(rz)) AS score,
+  {threshold} AS threshold,
+  CAST(SUM(is_anom) AS DOUBLE) AS anomaly_hours,
+  {event_col},
+  MAX(CASE WHEN is_anom = 1 THEN ts END) AS last_at
+FROM (
+  SELECT b.equipment_id, b.ts, b.val,
+    CASE
+      WHEN s.sigma IS NULL OR s.sigma < 1e-9 THEN NULL
+      ELSE (b.val - s.med) / s.sigma
+    END AS rz,
+    CASE
+      WHEN s.sigma IS NOT NULL AND s.sigma >= 1e-9
+        AND ABS((b.val - s.med) / s.sigma) > {threshold} THEN 1
+      ELSE 0
+    END AS is_anom,
+    LAG(CASE
+      WHEN s.sigma IS NOT NULL AND s.sigma >= 1e-9
+        AND ABS((b.val - s.med) / s.sigma) > {threshold} THEN 1
+      ELSE 0
+    END) OVER (PARTITION BY b.equipment_id ORDER BY b.ts) AS prev_anom
+  FROM (
+    SELECT equipment_id, {ts_col} AS ts, {role} AS val
+    FROM history
+    WHERE equipment_id IS NOT NULL AND {role} IS NOT NULL{eq_filter}
+  ) b
+  INNER JOIN (
+    SELECT equipment_id,
+      approx_percentile({role}, 0.5) AS med,
+      STDDEV_POP({role}) AS sigma
+    FROM history
+    WHERE equipment_id IS NOT NULL AND {role} IS NOT NULL{eq_filter}
+    GROUP BY equipment_id
+  ) s ON b.equipment_id = s.equipment_id
+) agg
+GROUP BY equipment_id
+HAVING SUM(is_anom) > 0"#
+    )
+}
+
 fn round4(x: f64) -> f64 {
     (x * 10_000.0).round() / 10_000.0
 }
@@ -3029,6 +3237,15 @@ mod tests {
     /// Serializes tests that mutate the process-global `OPENFDD_PARQUET_ROOT`.
     /// Async-aware so the guard may be held across `.await` (clippy-clean).
     static ENV_LOCK: Mutex<()> = Mutex::const_new(());
+
+    #[test]
+    fn zscore_role_sql_rolling_window_and_lag_transition() {
+        let sql = zscore_anomaly_role_sql("sat", "timestamp_utc", 24, 3.0, "", true);
+        assert!(sql.contains("ROWS BETWEEN 23 PRECEDING"));
+        assert!(sql.contains("ABS(zscore) > 3"));
+        assert!(sql.contains("LAG(is_anom)"));
+        assert!(sql.contains("anomaly_events"));
+    }
 
     #[test]
     fn rcx_eq_filter_vav_includes_mqtt_zone_loopback() {

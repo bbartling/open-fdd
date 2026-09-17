@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { useSessionQuery } from "../session";
-import { Button, InlineAlert } from "../components/widgets";
+import { Button, Checkbox, InlineAlert, RadioGroup } from "../components/widgets";
 import { createJob } from "../api/jobsApi";
 import {
   createExport,
   downloadExport,
   type EngineeringExport,
+  type ExportKind,
 } from "../api/exportApi";
 import { LockedSiteCaption } from "../components/LockedSiteCaption";
 
@@ -15,14 +16,15 @@ function formatErr(err: unknown): string {
 }
 
 /**
- * One Dump control — EnergyPlus / AI-agent engineering bundle only.
- * No profile radios, no Related Upload/Metering/Twin links, no handoff URI.
+ * Export tab — two dump choices: EnergyPlus/agent engineering bundle or ordinary CSV.
  */
 export function ExportPage() {
   const { query, setQuery } = useSessionQuery();
   const jobId = query.jobId ?? "";
   const buildingId = query.siteId ?? "";
 
+  const [kind, setKind] = useState<ExportKind>("energyplus");
+  const [includeFaults, setIncludeFaults] = useState(false);
   const [bundle, setBundle] = useState<EngineeringExport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -37,14 +39,14 @@ export function ExportPage() {
   const ensureJob = async (): Promise<string> => {
     if (jobId) return jobId;
     const job = await createJob({
-      jobName: `E+ dump · ${buildingId || "site"}`,
-      description: "EnergyPlus / agent engineering bundle",
+      jobName: `Export · ${buildingId || "site"}`,
+      description: "Site data export",
     });
     setQuery({ jobId: job.job_id }, true);
     return job.job_id;
   };
 
-  const onDump = async () => {
+  const onBuildDownload = async () => {
     if (!buildingId) {
       setError("Lock a site on Overview first");
       return;
@@ -54,7 +56,10 @@ export function ExportPage() {
     setNotice(null);
     try {
       const jid = await ensureJob();
-      const artifact = await createExport(jid, buildingId, "summary");
+      const artifact = await createExport(jid, buildingId, {
+        kind,
+        includeFaults: kind === "csv" ? includeFaults : undefined,
+      });
       setBundle(artifact);
       await downloadExport(jid, artifact.export_id, artifact.filename);
       setNotice(`Downloaded ${artifact.filename}`);
@@ -68,24 +73,48 @@ export function ExportPage() {
   return (
     <AppShell
       title="Dump"
-      caption="One EnergyPlus / AI-agent engineering dump for the locked site."
+      caption="Download site data for agents or spreadsheets."
       activeSectionId="export"
     >
       <div className="page-stack" data-testid="wattlab-page">
         <LockedSiteCaption buildingId={buildingId} testId="locked-site" />
 
         <section data-testid="wattlab-uploads">
-          <h3>EnergyPlus agent dump</h3>
-          <p>
-            Builds an <code>openfdd_engineering_bundle_v1</code> ZIP from the
-            active site package and downloads it (one-shot — not retained on
-            disk after download). No other dump modes.
-          </p>
+          <RadioGroup
+            id="export-dump-kind"
+            label="Dump type"
+            testId="export-dump-kind"
+            value={kind}
+            onChange={(v) => setKind(v as ExportKind)}
+            options={[
+              {
+                value: "energyplus",
+                label: "EnergyPlus / agent dump",
+                description: "For EnergyPlus / AI agents — engineering bundle ZIP.",
+              },
+              {
+                value: "csv",
+                label: "Ordinary CSV",
+                description: "For Excel / sheets; optional fault column.",
+              },
+            ]}
+          />
+
+          {kind === "csv" ? (
+            <Checkbox
+              id="export-include-faults"
+              label="Include faults as a column"
+              testId="export-include-faults"
+              checked={includeFaults}
+              onChange={setIncludeFaults}
+            />
+          ) : null}
+
           <div className="oracle-sidebar__btn-row">
             <Button
               id="export-build-bundle"
-              label={saving ? "Working…" : "Dump"}
-              onClick={() => void onDump()}
+              label={saving ? "Working…" : "Build & download"}
+              onClick={() => void onBuildDownload()}
               disabled={!buildingId || saving}
               testId="wattlab-build-dump"
             />

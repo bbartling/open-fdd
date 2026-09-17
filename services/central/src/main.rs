@@ -9,6 +9,7 @@ mod canonical_state;
 mod contract;
 mod cutover;
 mod durable_storage;
+mod csv_site_export;
 mod engineering_bundle;
 mod eplus_runner;
 mod fuel;

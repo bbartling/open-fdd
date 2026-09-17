@@ -33,11 +33,10 @@ describe("wattlabApi", () => {
 
     const dump = await createDump("job-1", "BUILDING_100");
 
-    expect(createExport).toHaveBeenCalledWith(
-      "job-1",
-      "BUILDING_100",
-      "summary",
-    );
+    expect(createExport).toHaveBeenCalledWith("job-1", "BUILDING_100", {
+      kind: "energyplus",
+      profile: "summary",
+    });
     expect(dump.dump_id).toBe("export-1");
   });
 

@@ -170,6 +170,38 @@ export async function getFddResults(buildingId?: string): Promise<FddResultRow[]
   return body.results ?? [];
 }
 
+export interface FddReadiness {
+  ok: boolean;
+  has_results: boolean;
+  clean: boolean;
+  dirty_reasons: string[];
+  completed_at?: string | null;
+  result_count: number;
+  mode?: string | null;
+  error?: string;
+}
+
+export function buildFddReadinessPath(buildingId?: string): string {
+  const base = `${FDD_RESULTS_PATH}/readiness`;
+  if (!buildingId) return base;
+  const q = new URLSearchParams({ building_id: buildingId });
+  return `${base}?${q.toString()}`;
+}
+
+export async function getFddReadiness(buildingId?: string): Promise<FddReadiness> {
+  const body = await apiFetch<FddReadiness>(buildFddReadinessPath(buildingId));
+  if (!body.ok) {
+    throw new Error(body.error || "Failed to load FDD readiness");
+  }
+  return {
+    ...body,
+    dirty_reasons: Array.isArray(body.dirty_reasons) ? body.dirty_reasons : [],
+    result_count: Number(body.result_count ?? 0),
+    has_results: Boolean(body.has_results),
+    clean: Boolean(body.clean),
+  };
+}
+
 export async function getFddSeries(
   equipmentId: string,
   ruleId: string,

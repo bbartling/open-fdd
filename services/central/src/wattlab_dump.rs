@@ -36,7 +36,9 @@ pub async fn create_dump(
         job_id,
         engineering_bundle::CreateExportRequest {
             building_id: request.building_id,
+            kind: "energyplus".into(),
             profile: request.profile,
+            include_faults: false,
         },
     )
     .await?;

@@ -4,13 +4,24 @@ import { newRequestId } from "./requestId";
 
 const REQUEST_ID_HEADER = "x-request-id";
 
+/** @deprecated Legacy API profiles — not exposed on Export tab. */
 export type ExportProfile = "summary" | "diagnostic" | "forensic";
+
+export type ExportKind = "energyplus" | "csv";
+
+export interface CreateExportOptions {
+  kind?: ExportKind;
+  /** Only for csv kind. */
+  includeFaults?: boolean;
+  /** @deprecated Use kind energyplus; defaults to summary. */
+  profile?: ExportProfile;
+}
 
 export interface EngineeringExport {
   export_id: string;
   job_id: string;
   building_id: string;
-  profile: ExportProfile;
+  profile: string;
   filename: string;
   download_url: string;
   schema_version?: string;
@@ -36,14 +47,24 @@ function exportPath(jobId: string, suffix = ""): string {
 export async function createExport(
   jobId: string,
   buildingId: string,
-  profile: ExportProfile = "summary",
+  options: CreateExportOptions = {},
 ): Promise<EngineeringExport> {
-  const body = await apiFetch<CreateExportResponse>(exportPath(jobId), {
+  const kind = options.kind ?? "energyplus";
+  const body: Record<string, unknown> = {
+    building_id: buildingId,
+    kind,
+  };
+  if (kind === "energyplus") {
+    body.profile = options.profile ?? "summary";
+  } else if (options.includeFaults) {
+    body.include_faults = true;
+  }
+  const response = await apiFetch<CreateExportResponse>(exportPath(jobId), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ building_id: buildingId, profile }),
+    body: JSON.stringify(body),
   });
-  return body.export;
+  return response.export;
 }
 
 export async function downloadExport(

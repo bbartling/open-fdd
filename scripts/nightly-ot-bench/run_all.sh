@@ -92,6 +92,7 @@ recreate_bench_fieldbus || true
 
 run_phase 02_bacnet_ot.sh "02 BACnet OT (5007 + BIP + poll)" || OVERALL=1
 run_phase 03_mqtt_parquet_persist.sh "03 MQTTS + Parquet persistence" || OVERALL=1
+run_phase 35_mqtt_telemetry_pause_resume.sh "35 MQTT telemetry pause/resume" || OVERALL=1
 run_phase 04_modbus_ot.sh "04 Modbus OT (bench sim)" || OVERALL=1
 run_phase 05_haystack.sh "05 Haystack API surface" || OVERALL=1
 run_phase 06_csv_fdd_sql.sh "06 CSV import + SQL FDD (FC1)" || OVERALL=1

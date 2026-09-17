@@ -194,6 +194,19 @@ export async function postSensorHealth(
   return postAnalytics("/api/analytics/sensor-health", body);
 }
 
+export async function postSqlAnomaly(
+  body: AnalyticsRequest & {
+    series?: {
+      window_rows?: number;
+      z_threshold?: number;
+      method?: string;
+      transition_events?: boolean;
+    };
+  },
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/sql-anomaly", body);
+}
+
 export async function postVavHealth(
   body: AnalyticsRequest,
 ): Promise<AnalyticsEnvelope> {

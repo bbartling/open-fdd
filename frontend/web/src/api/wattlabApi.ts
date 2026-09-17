@@ -1,6 +1,7 @@
 import {
   createExport,
   downloadExport,
+  type CreateExportOptions,
   type EngineeringExport,
   type ExportProfile,
 } from "./exportApi";
@@ -18,7 +19,10 @@ export async function createDump(
   buildingId: string,
   profile: WattlabDumpProfile = "summary",
 ): Promise<WattlabDump> {
-  const exp = await createExport(jobId, buildingId, profile);
+  const exp = await createExport(jobId, buildingId, {
+    kind: "energyplus",
+    profile,
+  });
   return { ...exp, dump_id: exp.export_id };
 }
 
@@ -35,4 +39,4 @@ export async function downloadDump(
 
 // Re-export for callers migrating to export API.
 export { createExport, downloadExport, exportPath };
-export type { EngineeringExport, ExportProfile };
+export type { CreateExportOptions, EngineeringExport, ExportProfile };

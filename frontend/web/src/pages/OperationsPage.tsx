@@ -447,6 +447,7 @@ interface IngestStats {
   ingest_ok?: number;
   ingest_dup?: number;
   ingest_reject?: number;
+  reject_buckets?: Record<string, number>;
   dead_letters?: number;
 }
 
@@ -484,6 +485,12 @@ function OtStatusStrip() {
   }, [refresh]);
 
   const liveEdges = (edges?.edges ?? []).filter((edge) => edge.has_telemetry).length;
+  const rejectBucketSummary = ingest?.reject_buckets
+    ? Object.entries(ingest.reject_buckets)
+        .filter(([, count]) => count > 0)
+        .map(([key, count]) => `${key}:${count}`)
+        .join(" · ")
+    : "";
 
   return (
     <div className="ops-ot-strip" data-testid="ops-ot-strip" role="status" aria-live="polite">
@@ -501,6 +508,12 @@ function OtStatusStrip() {
         <span className="ops-ot-strip__label">Rejects</span>
         <span className="ops-ot-strip__value">{ingest?.ingest_reject != null ? String(ingest.ingest_reject) : "—"}</span>
       </div>
+      {rejectBucketSummary ? (
+        <div className="ops-ot-strip__item ops-ot-strip__item--wide" data-testid="ops-ingest-reject-buckets">
+          <span className="ops-ot-strip__label">Reject buckets</span>
+          <span className="ops-ot-strip__value ops-ot-strip__value--mono">{rejectBucketSummary}</span>
+        </div>
+      ) : null}
       <div className="ops-ot-strip__item">
         <span className="ops-ot-strip__label">Edges w/ telemetry</span>
         <span className="ops-ot-strip__value">{edges ? String(liveEdges) : "—"}</span>
@@ -802,11 +815,55 @@ function EdgeKitDownloadPanel() {
 }
 
 function TelemetrySuspendPanel() {
+  const [edgeRows, setEdgeRows] = useState<
+    Array<{ edge_id: string; site_id?: string | null; has_telemetry?: boolean }>
+  >([]);
+  const [edgesLoading, setEdgesLoading] = useState(true);
+  const [edgesError, setEdgesError] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState("");
   const [siteId, setSiteId] = useState("local");
   const [edgeId, setEdgeId] = useState("fieldbus-1");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const refreshEdges = useCallback(async () => {
+    setEdgesLoading(true);
+    setEdgesError(null);
+    try {
+      const body = await apiFetch<EdgesListResponse>("/api/edges");
+      const rows = (body.edges ?? []).slice().sort((a, b) => a.edge_id.localeCompare(b.edge_id));
+      setEdgeRows(rows);
+      if (rows.length === 0) {
+        setSelectedEdgeId("");
+        return;
+      }
+      setSelectedEdgeId((prev) => {
+        const current = rows.find((row) => row.edge_id === prev);
+        const pick = current ?? rows.find((row) => row.has_telemetry) ?? rows[0];
+        if (!pick) return prev;
+        setEdgeId(pick.edge_id);
+        const site = (pick.site_id ?? "").trim();
+        if (site) setSiteId(site);
+        return pick.edge_id;
+      });
+    } catch (err) {
+      setEdgesError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setEdgesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshEdges();
+  }, [refreshEdges]);
+
+  const selectEdge = useCallback((row: { edge_id: string; site_id?: string | null }) => {
+    setSelectedEdgeId(row.edge_id);
+    setEdgeId(row.edge_id);
+    const site = (row.site_id ?? "").trim();
+    if (site) setSiteId(site);
+  }, []);
 
   const issue = useCallback(
     async (action: "suspend" | "resume") => {
@@ -903,12 +960,63 @@ function TelemetrySuspendPanel() {
       </div>
       {error ? <div className="inline-alert inline-alert--error" role="alert">{error}</div> : null}
       {message ? <div className="inline-alert" role="status">{message}</div> : null}
+      {edgesError ? (
+        <div className="inline-alert inline-alert--error" role="alert">{edgesError}</div>
+      ) : null}
+      <div className="button-row">
+        <Button
+          label={edgesLoading ? "Refreshing edges…" : "Refresh edges"}
+          variant="secondary"
+          disabled={edgesLoading || busy}
+          onClick={() => void refreshEdges()}
+        />
+      </div>
+      <div className="table-wrap" data-testid="telemetry-edge-picker">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Select</th>
+              <th scope="col">Edge</th>
+              <th scope="col">Site</th>
+              <th scope="col">Telemetry</th>
+            </tr>
+          </thead>
+          <tbody>
+            {edgesLoading && edgeRows.length === 0 ? (
+              <tr><td colSpan={4}>Loading edges from central…</td></tr>
+            ) : edgeRows.length === 0 ? (
+              <tr><td colSpan={4}>No edges registered — use manual site/edge below or wait for MQTT telemetry.</td></tr>
+            ) : edgeRows.map((row) => (
+              <tr
+                key={row.edge_id}
+                data-testid={`telemetry-edge-row-${row.edge_id}`}
+                className={row.edge_id === selectedEdgeId ? "is-selected" : undefined}
+                onClick={() => selectEdge(row)}
+              >
+                <td>
+                  <input
+                    type="radio"
+                    name="telemetry-edge-pick"
+                    checked={row.edge_id === selectedEdgeId}
+                    aria-label={`Select edge ${row.edge_id}`}
+                    onChange={() => selectEdge(row)}
+                  />
+                </td>
+                <td><code>{row.edge_id}</code></td>
+                <td>{row.site_id?.trim() ? row.site_id : "—"}</td>
+                <td>{row.has_telemetry ? "Live" : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <div className="form-row">
         <label htmlFor="telemetry-site-id">Site id</label>
         <input id="telemetry-site-id" value={siteId} onChange={(e) => setSiteId(e.target.value)} />
         <label htmlFor="telemetry-edge-id">Edge id</label>
         <input id="telemetry-edge-id" value={edgeId} onChange={(e) => setEdgeId(e.target.value)} />
       </div>
+      <p className="muted">Manual site/edge overrides the table selection when needed.</p>
     </section>
   );
 }
