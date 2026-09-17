@@ -1497,10 +1497,8 @@ pub async fn issue_command(
     // Wave N+ MT hubs reject sites/… ingest; command + ack topics must match the
     // edge's tenants/{tid}/buildings/{bid}/… namespace or pause/resume never acks.
     let topics = if crate::tenant::multi_tenant_enabled() {
-        let workspace =
-            std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
-        let plane =
-            crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
+        let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+        let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
         let tid = body
             .tenant_id
             .as_deref()
