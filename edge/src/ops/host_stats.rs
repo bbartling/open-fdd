@@ -2,8 +2,8 @@
 
 use crate::data_management;
 use chrono::Utc;
-use fdd_store::HistorianConfig;
 use fdd_store::stats::HistorianStats;
+use fdd_store::HistorianConfig;
 use serde_json::{json, Value};
 use std::env;
 use std::fs;

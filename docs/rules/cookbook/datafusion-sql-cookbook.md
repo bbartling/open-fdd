@@ -69,10 +69,6 @@ Always handle **`NULL`** — missing samples must not latch faults.
 CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan_norm
 ```
 
-### Utility meter rules (`UTIL-MONTHLY`, `UTIL-INTERVAL`)
-
-Optional CSV sidecars under `utilities/electric/` register `utility_monthly`, `utility_interval`, and `bas_submeter`. When a file is absent, the product session registers a **zero-row view** for that table so registry runs do not fail planning — `UTIL-INTERVAL` returns **0 fault hours** when no interval CSV exists (live OT / ACME sites without utility feeds). SQL: `util_interval_fault.sql` treats empty `utility_interval` as no fault. Pandas oracle: skip or expect 0h when the interval frame is empty — parity is **no false fault**, not MAE on missing data.
-
 ---
 
 ## Fault confirmation delay (default 5 minutes)

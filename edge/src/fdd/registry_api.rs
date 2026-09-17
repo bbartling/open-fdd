@@ -267,11 +267,7 @@ fn rule_set_hash() -> String {
     format!("{:x}", hasher.finalize())
 }
 
-fn write_run_meta(
-    building_id: Option<&str>,
-    mode: &str,
-    result_count: usize,
-) {
+fn write_run_meta(building_id: Option<&str>, mode: &str, result_count: usize) {
     let dir = results_dir(building_id);
     let _ = std::fs::create_dir_all(&dir);
     let body = json!({
@@ -296,10 +292,7 @@ pub fn readiness_response(building_id: Option<&str>) -> Value {
         if let Ok(rd) = std::fs::read_dir(&dir) {
             for ent in rd.flatten() {
                 let path = ent.path();
-                let name = path
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("");
+                let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
                 if !name.ends_with(".json") || name.starts_with('_') {
                     continue;
                 }
@@ -325,10 +318,7 @@ pub fn readiness_response(building_id: Option<&str>) -> Value {
         dirty_reasons.push("missing_meta".into());
     }
     if let Some(m) = &meta {
-        let stored = m
-            .get("rule_set_hash")
-            .and_then(Value::as_str)
-            .unwrap_or("");
+        let stored = m.get("rule_set_hash").and_then(Value::as_str).unwrap_or("");
         if !stored.is_empty() && stored != rule_set_hash() {
             dirty_reasons.push("rule_set_changed".into());
         }
@@ -1519,10 +1509,8 @@ pub fn run_registry(payload: &Value) -> Value {
     )) {
         Ok(report) => {
             let normalized = results_response(building_id);
-            let result_count = normalized
-                .get("count")
-                .and_then(Value::as_u64)
-                .unwrap_or(0) as usize;
+            let result_count =
+                normalized.get("count").and_then(Value::as_u64).unwrap_or(0) as usize;
             write_run_meta(building_id, "registry", result_count);
             json!({
                 "ok": true,
@@ -1830,10 +1818,7 @@ mod tests {
             let tmp = tempfile::tempdir().expect("tempdir");
             let prev = std::env::var("OPENFDD_RULE_RESULTS_DIR").ok();
             std::env::set_var("OPENFDD_RULE_RESULTS_DIR", tmp.path());
-            Self {
-                _keep: tmp,
-                prev,
-            }
+            Self { _keep: tmp, prev }
         }
     }
 
