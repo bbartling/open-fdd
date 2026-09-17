@@ -6,11 +6,12 @@
 
 | Item | Status |
 |------|--------|
-| Product tip | **Wave Soft Park patch train → `3.5.25`** (stale Action reclaim 30m + tip-completeness skip cancelled Publish) · live hub until re-pin: `sha-f318dbc` / 3.5.24 · backup `20260916T215014Z` |
-| Prior hub | `sha-a830e17` / 3.5.23 · backup `20260916T200208Z` · mid-repin stress `20260916T200629Z` (not fully_qualified) |
+| Product tip | **OPS PINNED `3.5.26` / `sha-2c4c2d9`** · tip-completeness YAML parse (#944) · hub re-pin backup `20260917T020217Z` · health `3.5.26+2c4c2d9e02e9` |
+| Prior tip | `3.5.25` / `sha-9d28e99` (#943 stale reclaim 30m + skip cancelled Publish) — Publish cancelled by 3.5.26 tip; tip-completeness skip path verified |
+| Prior hub | `sha-f318dbc` / 3.5.24 · backup `20260916T215014Z` · Soft Park S5 `20260916T215804Z` |
 | Prior OPS PINNED | Wave R **3.5.22** / `sha-4d3a6b0` (#936) · stress `20260916T011952Z` **`fully_qualified=true`** |
 | Soft Park S5 | Stress `reports/nightly-ot-bench_20260916T215804Z/` · **22 PASS / 4 FAIL** · not `fully_qualified` · `capacity_report.json` ok (34 samples, Δ ingest_ok +88, 0 health flaps) · FAILs: 00 edges (kit Soft), 01 synth59 (**busy** proved single-flight vs stale pre-pin action), 03 B100, 19 AFDD flood Soft |
-| Closed this cycle | Dual `fdd_run_all` OOM → **409 busy** + stale reclaim + Account Sign out (#940) |
+| Closed this cycle | Dual `fdd_run_all` OOM → **409 busy** + stale reclaim + Account Sign out (#940) · tip-completeness invalid YAML (#944) |
 
 ## Soft-OPEN (≤ Stage C)
 
@@ -26,7 +27,8 @@
 | **admin-capacity-gauges** | Volume/cgroup/historian gauges — not host MemTotal charts |
 | **railway-capacity-stress** | **CITED** `20260916T215804Z` capacity_report (gates 24/24b PASS) on `sha-f318dbc` |
 | **mqtt-pause-ui** | Option A parked (streaming pause; not fieldbus stop) |
-| **fdd-actions-singleflight** | **CLOSED** · live hub **3.5.24** / `sha-f318dbc` (#940) |
+| **fdd-actions-singleflight** | **CLOSED** · live hub **3.5.26** / `sha-2c4c2d9` (#940/#943/#944) |
+| **edge-kit-soft** | Soft · `deploy/mqtt/kits/bldg2__pi-1` missing on bensbench → fieldbus Railway up blocked (gate 00) |
 
 ## Wave R closeout (2026-09-16)
 
