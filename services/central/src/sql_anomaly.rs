@@ -11,7 +11,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde_json::{json, Value};
 
-use crate::analytics::{self, AnalyticsRequest, AnalyticsQuery};
+use crate::analytics::{self, AnalyticsQuery, AnalyticsRequest};
 use crate::auth;
 use crate::state::AppState;
 
@@ -73,9 +73,7 @@ pub async fn handle_analytics(req: &AnalyticsRequest) -> analytics::AnalyticsEnv
         return analytics::envelope(
             analytics::QV_SQL_ANOMALY,
             &req.query,
-            vec![
-                "sql anomaly screening disabled (OPENFDD_SQL_ANOMALY_SCREENING=0)".into(),
-            ],
+            vec!["sql anomaly screening disabled (OPENFDD_SQL_ANOMALY_SCREENING=0)".into()],
         );
     }
     let p = params_from_request(req);
@@ -166,5 +164,4 @@ mod tests {
         assert_eq!(p.method, "zscore");
         assert!(!p.transition_events);
     }
-
 }

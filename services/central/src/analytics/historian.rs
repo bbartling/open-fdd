@@ -3014,7 +3014,15 @@ pub async fn descriptive_counts_from_history_filtered(
 
 /// Sensor roles screened for Overview SQL anomaly table (SAT/OAT/zone-style).
 pub const ANOMALY_SCREEN_ROLES: &[&str] = &[
-    "oa_t", "web_oa_t", "rat", "mat", "sat", "zone_t", "zone_rh", "duct_static", "oa_h",
+    "oa_t",
+    "web_oa_t",
+    "rat",
+    "mat",
+    "sat",
+    "zone_t",
+    "zone_rh",
+    "duct_static",
+    "oa_h",
 ];
 
 /// Rolling Z-score (+ optional LAG transition events) per equipment × role.

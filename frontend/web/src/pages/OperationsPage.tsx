@@ -965,6 +965,7 @@ function TelemetrySuspendPanel() {
       ) : null}
       <div className="button-row">
         <Button
+          id="telemetry-refresh-edges"
           label={edgesLoading ? "Refreshing edges…" : "Refresh edges"}
           variant="secondary"
           disabled={edgesLoading || busy}

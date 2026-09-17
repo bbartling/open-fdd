@@ -66,7 +66,9 @@ fn package_fallback_csv(building_id: &str, include_faults: bool) -> Result<Vec<u
         )));
     }
     files.sort_by(|a, b| a.0.cmp(&b.0));
-    let mut merged = WriterBuilder::new().has_headers(true).from_writer(Vec::new());
+    let mut merged = WriterBuilder::new()
+        .has_headers(true)
+        .from_writer(Vec::new());
     let mut out_headers: Option<Vec<String>> = None;
     let fault_index = if include_faults {
         Some(load_confirmed_fault_index(building_id))
@@ -115,10 +117,7 @@ fn package_fallback_csv(building_id: &str, include_faults: bool) -> Result<Vec<u
                 row.insert(1, eq.clone());
             }
             if let Some(ref idx) = fault_index {
-                let ts = ts_col
-                    .and_then(|i| row.get(i))
-                    .cloned()
-                    .unwrap_or_default();
+                let ts = ts_col.and_then(|i| row.get(i)).cloned().unwrap_or_default();
                 let (fault, rules) = fault_at_row(idx, &eq, &ts);
                 row.push(if fault { "1" } else { "0" }.into());
                 row.push(rules);
@@ -128,9 +127,7 @@ fn package_fallback_csv(building_id: &str, include_faults: bool) -> Result<Vec<u
                 .map_err(|e| JobError::Io(e.to_string()))?;
         }
     }
-    merged
-        .into_inner()
-        .map_err(|e| JobError::Io(e.to_string()))
+    merged.into_inner().map_err(|e| JobError::Io(e.to_string()))
 }
 
 fn collect_history_wide(
@@ -172,7 +169,9 @@ fn collect_history_wide(
 }
 
 fn query_result_to_csv(result: &QueryResult) -> Result<Vec<u8>, JobError> {
-    let mut wtr = WriterBuilder::new().has_headers(true).from_writer(Vec::new());
+    let mut wtr = WriterBuilder::new()
+        .has_headers(true)
+        .from_writer(Vec::new());
     wtr.write_record(&result.columns)
         .map_err(|e| JobError::Io(e.to_string()))?;
     for row in &result.rows {
@@ -217,7 +216,9 @@ fn maybe_join_faults(
     let mut out_headers = headers.clone();
     out_headers.push("fault".into());
     out_headers.push("fault_rules".into());
-    let mut wtr = WriterBuilder::new().has_headers(true).from_writer(Vec::new());
+    let mut wtr = WriterBuilder::new()
+        .has_headers(true)
+        .from_writer(Vec::new());
     wtr.write_record(&out_headers)
         .map_err(|e| JobError::Io(e.to_string()))?;
     for rec in rdr.records() {

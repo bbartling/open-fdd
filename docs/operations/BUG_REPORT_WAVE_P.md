@@ -18,7 +18,7 @@
 | ID | Note |
 |----|------|
 | **stage-c-idp-mfa-sku** | Commercial IdP/MFA/SKU |
-| **util-interval** | **CLOSED (branch)** · empty `utility_interval` view when CSV absent → UTIL-INTERVAL plans 0h (not `rules_failed`) |
+| **util-interval** | **CLOSED (branch)** · empty `utility_interval`/`bas_submeter` views when CSV absent → UTIL-INTERVAL plans **0h** (not `rules_failed`); pandas oracle: expect 0h when interval frame empty |
 | **r6-ingest-reject** | **CLOSED (branch)** · count on health + `reject_buckets` on `/api/ingest/stats` (no dead-letter dump API) |
 | **kali-zap-af** | Authenticated ZAP AF remains Kali-owned |
 | **wave-o1-tenant-path-migrate** | Hub-root `building=*` still; optional `tenants/{tid}/` migrate |

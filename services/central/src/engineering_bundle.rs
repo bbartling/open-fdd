@@ -394,7 +394,12 @@ pub async fn create_export(
         let size_bytes =
             crate::csv_site_export::build_csv_zip(&building_id, request.include_faults, &zip_path)
                 .await?;
-        ("csv".into(), filename, crate::csv_site_export::CSV_BUNDLE_SCHEMA.into(), size_bytes)
+        (
+            "csv".into(),
+            filename,
+            crate::csv_site_export::CSV_BUNDLE_SCHEMA.into(),
+            size_bytes,
+        )
     } else {
         let profile = validate_profile(&request.profile)?;
         let package = package_root(&building_id)?;
