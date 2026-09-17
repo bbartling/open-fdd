@@ -437,13 +437,10 @@ fn reject_reason_bucket(error: &str) -> &'static str {
 fn record_reject(state: &AppState, payload: &[u8], error: &str) {
     *state.ingest_reject.lock().unwrap() += 1;
     let bucket = reject_reason_bucket(error).to_string();
-    *state
-        .ingest_reject_buckets
-        .lock()
-        .unwrap()
-        .entry(bucket)
-        .and_modify(|n| *n += 1)
-        .or_insert(1);
+    {
+        let mut buckets = state.ingest_reject_buckets.lock().unwrap();
+        *buckets.entry(bucket).or_insert(0) += 1;
+    }
     state.dead_letters.lock().unwrap().push(serde_json::json!({
         "error": error,
         "raw": redact_payload(payload),

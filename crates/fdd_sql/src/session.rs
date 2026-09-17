@@ -344,11 +344,37 @@ fn format_cell(col: &datafusion::arrow::array::ArrayRef, idx: usize) -> serde_js
 mod utility_csv_tests {
     use super::*;
     use std::io::Write;
+    use std::sync::{Mutex, MutexGuard};
+
+    static WORKSPACE_LOCK: Mutex<()> = Mutex::new(());
+
+    struct WorkspaceGuard {
+        _lock: MutexGuard<'static, ()>,
+        prev: Option<String>,
+    }
+
+    impl WorkspaceGuard {
+        fn set(path: &Path) -> Self {
+            let lock = WORKSPACE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            let prev = std::env::var("OPENFDD_WORKSPACE").ok();
+            std::env::set_var("OPENFDD_WORKSPACE", path);
+            Self { _lock: lock, prev }
+        }
+    }
+
+    impl Drop for WorkspaceGuard {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(v) => std::env::set_var("OPENFDD_WORKSPACE", v),
+                None => std::env::remove_var("OPENFDD_WORKSPACE"),
+            }
+        }
+    }
 
     #[tokio::test]
     async fn register_utility_interval_empty_view_when_csv_missing() {
         let tmp = tempfile::tempdir().unwrap();
-        std::env::set_var("OPENFDD_WORKSPACE", tmp.path());
+        let _ws = WorkspaceGuard::set(tmp.path());
         let ctx = SessionContext::new();
         register_utility_if_present(&ctx, "NO_UTIL_CSV")
             .await
@@ -369,12 +395,16 @@ mod utility_csv_tests {
         let mut f = std::fs::File::create(util.join("monthly_bills.csv")).unwrap();
         writeln!(f, "account,billing_period,kwh,demand_kw").unwrap();
         writeln!(f, "a1,2026-01,100,10").unwrap();
-        std::env::set_var("OPENFDD_WORKSPACE", tmp.path());
+        let _ws = WorkspaceGuard::set(tmp.path());
         let ctx = SessionContext::new();
         let ok = register_utility_if_present(&ctx, "TEST_BLDG")
             .await
             .expect("register utility");
-        assert!(ok);
+        assert!(
+            ok,
+            "expected utility_monthly CSV registration under {}",
+            util.display()
+        );
         assert!(ctx.table("utility_monthly").await.is_ok());
     }
 }
