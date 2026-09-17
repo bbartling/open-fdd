@@ -75,6 +75,10 @@ pub struct IssueCommandRequest {
     pub site_id: String,
     #[serde(default = "default_edge")]
     pub edge_id: String,
+    /// Wave N+ MT: when set (or resolvable from site_id/building), commands use
+    /// `tenants/{tid}/buildings/{bid}/edges/{eid}/…` instead of legacy `sites/…`.
+    #[serde(default)]
+    pub tenant_id: Option<String>,
     pub target_id: String,
     pub approved_by: String,
     #[schema(value_type = Object)]

@@ -35,11 +35,20 @@ fi
 auth_hdr=(-H "Authorization: Bearer $tok")
 
 fb_reachable=0
+LOCAL_EDGE_ID=""
 if curl -sf --max-time 3 -H "Authorization: Bearer $FB_KEY" \
   "$FIELDBUS_BASE/telemetry/status" >/dev/null 2>&1; then
   fb_reachable=1
+  # Prefer edge id from local status state_path (.../telemetry-<edge>.json).
+  LOCAL_EDGE_ID="$(
+    curl -sf --max-time 5 -H "Authorization: Bearer $FB_KEY" \
+      "$FIELDBUS_BASE/telemetry/status" 2>/dev/null \
+      | jq -r '.state_path // empty' \
+      | sed -n 's/.*telemetry-\([^/]*\)\.json$/\1/p'
+  )"
+  LOCAL_EDGE_ID="${LOCAL_EDGE_ID:-${OPENFDD_EDGE_ID:-}}"
 fi
-echo "fieldbus_rest_reachable=$fb_reachable base=$FIELDBUS_BASE" | tee "$ART/pause_resume.log"
+echo "fieldbus_rest_reachable=$fb_reachable base=$FIELDBUS_BASE local_edge=${LOCAL_EDGE_ID:-none}" | tee "$ART/pause_resume.log"
 
 fb() {
   curl -sf --max-time 30 -H "Authorization: Bearer $FB_KEY" -H "Content-Type: application/json" "$@"
@@ -78,8 +87,12 @@ pick_edge() {
 issue_telemetry() {
   local action="$1" site="$2" edge="$3"
   local body resp cmd_id status i
-  body="$(jq -nc --arg s "$site" --arg e "$edge" --arg a "$action" \
-    '{site_id:$s,edge_id:$e,target_id:"edge:telemetry",approved_by:"stress-gate-35",value:{action:$a},ttl_secs:180}')"
+    body="$(jq -nc --arg s "$site" --arg e "$edge" --arg a "$action" --arg t "${OPENFDD_TENANT_ID:-}" \
+      'if ($t|length)>0 then
+         {site_id:$s,edge_id:$e,tenant_id:$t,target_id:"edge:telemetry",approved_by:"stress-gate-35",value:{action:$a},ttl_secs:180}
+       else
+         {site_id:$s,edge_id:$e,target_id:"edge:telemetry",approved_by:"stress-gate-35",value:{action:$a},ttl_secs:180}
+       end')"
   resp="$(curl -sf --max-time 30 "${auth_hdr[@]}" -X POST "$BASE/api/commands" \
     -H 'Content-Type: application/json' -d "$body")"
   echo "$resp" | tee "$ART/cmd_${action}.json" >/dev/null
@@ -102,9 +115,9 @@ issue_telemetry() {
       return 1
     fi
   done
-  # MQTT may be slow; fieldbus REST can confirm when reachable.
-  if [[ "$fb_reachable" == "1" ]]; then
-    echo "WARN: ack still $status after ${ACK_POLLS}s — checking fieldbus REST" | tee -a "$ART/pause_resume.log"
+  # MQTT may be slow; fieldbus REST can confirm only when the target edge is local.
+  if [[ "$fb_reachable" == "1" && -n "${LOCAL_EDGE_ID:-}" && "$edge" == "$LOCAL_EDGE_ID" ]]; then
+    echo "WARN: ack still $status after ${ACK_POLLS}s — checking local fieldbus REST ($LOCAL_EDGE_ID)" | tee -a "$ART/pause_resume.log"
     return 0
   fi
   echo "FAIL: no executed ack for $action (last=$status)" | tee -a "$ART/pause_resume.log"
@@ -120,11 +133,20 @@ echo "ingest_before=$before" | tee -a "$ART/pause_resume.log"
 
 issue_telemetry suspend "$SITE_ID" "$EDGE_ID"
 
-if [[ "$fb_reachable" == "1" ]]; then
+# Local REST asserts only when pause targeted the same edge as this host's fieldbus.
+use_local_fb=0
+if [[ "$fb_reachable" == "1" && -n "${LOCAL_EDGE_ID:-}" && "$EDGE_ID" == "$LOCAL_EDGE_ID" ]]; then
+  use_local_fb=1
+fi
+
+if [[ "$use_local_fb" == "1" ]]; then
   status="$(fb "$FIELDBUS_BASE/telemetry/status")"
   echo "$status" | tee "$ART/telemetry_suspended_status.json"
   echo "$status" | python3 -c 'import json,sys; s=json.load(sys.stdin); assert s.get("suspended") is True, s'
   echo "PASS: fieldbus reports suspended=true" | tee -a "$ART/pause_resume.log"
+elif [[ "$fb_reachable" == "1" ]]; then
+  echo "NOTE: local fieldbus edge=$LOCAL_EDGE_ID ≠ target=$EDGE_ID — skip REST suspended assert (remote ACME)" \
+    | tee -a "$ART/pause_resume.log"
 fi
 
 sleep "$STALL_SECS"
@@ -138,7 +160,7 @@ if [[ "$delta_suspend" -gt 2 ]]; then
     | tee -a "$ART/pause_resume.log"
   # Still resume so we leave the edge healthy.
   issue_telemetry resume "$SITE_ID" "$EDGE_ID" || true
-  if [[ "$fb_reachable" == "1" ]]; then
+  if [[ "$use_local_fb" == "1" ]]; then
     fb -X POST "$FIELDBUS_BASE/telemetry/resume" -d '{"approved_by":"stress-gate-35-cleanup"}' || true
   fi
   exit 1
@@ -147,7 +169,7 @@ echo "PASS: ingest stalled while suspended (delta=$delta_suspend)" | tee -a "$AR
 
 issue_telemetry resume "$SITE_ID" "$EDGE_ID"
 
-if [[ "$fb_reachable" == "1" ]]; then
+if [[ "$use_local_fb" == "1" ]]; then
   status="$(fb "$FIELDBUS_BASE/telemetry/status")"
   echo "$status" | tee "$ART/telemetry_resumed_status.json"
   echo "$status" | python3 -c 'import json,sys; s=json.load(sys.stdin); assert s.get("suspended") is False, s'
@@ -163,7 +185,7 @@ ok=0
 if [[ "$after" -gt "$mid" ]]; then
   echo "PASS: ingest climbed after resume $mid → $after" | tee -a "$ART/pause_resume.log"
   ok=1
-elif [[ "$fb_reachable" == "1" ]]; then
+elif [[ "$use_local_fb" == "1" ]]; then
   # Poll interval can be 300s; REST confirmed resume is enough with live fieldbus.
   echo "PASS: resume confirmed via fieldbus REST (ingest flat over ${RESUME_WAIT_SECS}s)" \
     | tee -a "$ART/pause_resume.log"

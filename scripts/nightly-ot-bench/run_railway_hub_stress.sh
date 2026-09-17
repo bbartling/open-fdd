@@ -365,6 +365,7 @@ echo "AFDD flood cool-down ${AFDD_FLOOD_COOLDOWN_SECS}s"
 sleep "$AFDD_FLOOD_COOLDOWN_SECS"
 set +e
 OPENFDD_AFDD_FLOOD_ALLOW_LIVE="${OPENFDD_AFDD_FLOOD_ALLOW_LIVE:-1}" \
+  OPENFDD_AFDD_FLOOD_BUILDING="${OPENFDD_AFDD_FLOOD_BUILDING:-OPENFDD_SYNTHETIC_59_RULE_WEEK_V1}" \
   OPENFDD_ADMIN_TOKEN="${OPENFDD_ADMIN_TOKEN:-}" \
   OPENFDD_AFDD_FLOOD_IGNORE_RULES_FAILED="${OPENFDD_AFDD_FLOOD_IGNORE_RULES_FAILED:-1}" \
   bash "$DIR/2N_wave_m_afdd_flood.sh" 2>&1 | tee "$ART/19_wave_m_afdd_flood.log"
@@ -409,6 +410,7 @@ if [[ "${MQTT_PAUSE_RESUME:-1}" == "1" ]]; then
   run_gate "35_mqtt_telemetry_pause_resume" "35 MQTT telemetry pause/resume" \
     env TELEMETRY_LIVE="${TELEMETRY_LIVE:-1}" \
       OPENFDD_ADMIN_TOKEN="${OPENFDD_ADMIN_TOKEN:-}" \
+      OPENFDD_TENANT_ID="${OPENFDD_TENANT_ID:-acme}" \
       EXPECTED_EDGE_ID="${EXPECTED_EDGE_ID}" \
       EXPECTED_SITE_ID="${EXPECTED_SITE_ID}" \
       bash "$DIR/35_mqtt_telemetry_pause_resume.sh"

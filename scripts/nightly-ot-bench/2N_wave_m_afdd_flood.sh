@@ -33,7 +33,9 @@ base, out, summary, max_wall, max_rules, fixture = sys.argv[1:7]
 max_wall = int(max_wall); max_rules = int(max_rules)
 admin_user = os.environ.get("OPENFDD_ADMIN_USER", "admin")
 admin_pass = os.environ.get("OPENFDD_ADMIN_PASSWORD", "")
-building = os.environ.get("OPENFDD_AFDD_FLOOD_BUILDING", "SYNTHETIC_59")
+building = os.environ.get(
+    "OPENFDD_AFDD_FLOOD_BUILDING", "OPENFDD_SYNTHETIC_59_RULE_WEEK_V1"
+)
 
 def http(method, path, token=None, body=None, timeout=120, retries=12):
     """Retry on HTTP 429 (login throttle / ACL storm) with exponential backoff."""
@@ -147,7 +149,8 @@ if rules_failed:
     else:
         reasons.append(f"rules_failed={rules_failed} (do not weaken fixtures)")
 if not body.get("ok", st == 200):
-    reasons.append("invoke returned ok=false")
+    err = body.get("error") or (body.get("cycle") or {}).get("error")
+    reasons.append(f"invoke returned ok=false{f': {err}' if err else ''}")
 
 report["ok"] = not reasons
 report["fail_reasons"] = reasons

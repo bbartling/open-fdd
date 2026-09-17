@@ -7,13 +7,20 @@
 # Same ZIP as Operations → Download edge kit (public PEMs + edge.json only).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SITE_ID="${1:-${OPENFDD_SITE_ID:-bldg2}}"
+SITE_ID="${1:-${OPENFDD_SITE_ID:-ACME}}"
 EDGE_ID="${2:-${OPENFDD_EDGE_ID:-pi-1}}"
+TENANT_ID="${OPENFDD_TENANT_ID:-acme}"
+BUILDING_ID="${OPENFDD_BUILDING_ID:-${SITE_ID}}"
 BASE="${OPENFDD_API_BASE:-}"
 if [[ -f "$ROOT/.env" ]]; then
   # shellcheck disable=SC1091
   set -a && source "$ROOT/.env" && set +a
   BASE="${OPENFDD_API_BASE:-$BASE}"
+  # Re-apply CLI / Railway defaults after .env (local lab ids must not win).
+  SITE_ID="${1:-${OPENFDD_SITE_ID:-ACME}}"
+  EDGE_ID="${2:-${OPENFDD_EDGE_ID:-pi-1}}"
+  TENANT_ID="${OPENFDD_TENANT_ID:-acme}"
+  BUILDING_ID="${OPENFDD_BUILDING_ID:-${SITE_ID}}"
 fi
 
 [[ -n "$BASE" ]] || { echo "ERROR: set OPENFDD_API_BASE" >&2; exit 2; }
@@ -31,12 +38,12 @@ KIT_DIR="$ROOT/deploy/mqtt/kits/${SITE_ID}__${EDGE_ID}"
 TMP_ZIP="$(mktemp "${TMPDIR:-/tmp}/openfdd-edge-kit.XXXXXX.zip")"
 trap 'rm -f "$TMP_ZIP"' EXIT
 
-echo "== POST /api/mqtt/edge-kits site=$SITE_ID edge=$EDGE_ID =="
+echo "== POST /api/mqtt/edge-kits site=$SITE_ID edge=$EDGE_ID tenant=$TENANT_ID building=$BUILDING_ID =="
 HTTP="$(curl -sS -w '%{http_code}' -o "$TMP_ZIP" \
   -X POST "${BASE%/}/api/mqtt/edge-kits" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H 'Content-Type: application/json' \
-  -d "{\"site_id\":\"${SITE_ID}\",\"edge_id\":\"${EDGE_ID}\"}")"
+  -d "{\"site_id\":\"${SITE_ID}\",\"edge_id\":\"${EDGE_ID}\",\"tenant_id\":\"${TENANT_ID}\",\"building_id\":\"${BUILDING_ID}\"}")"
 if [[ "$HTTP" != "200" ]]; then
   echo "ERROR: edge-kits HTTP $HTTP (CA key may be absent on hub — reuse backup kit)" >&2
   exit 2
