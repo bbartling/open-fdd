@@ -168,9 +168,10 @@ fn statvfs_bytes(path: &Path) -> Option<(u64, u64, u64)> {
     if unsafe { libc::statvfs(c_path.as_ptr(), &mut stat) } != 0 {
         return None;
     }
-    let block = u64::from(stat.f_frsize);
-    let total = block.saturating_mul(u64::from(stat.f_blocks));
-    let avail = block.saturating_mul(u64::from(stat.f_bavail));
+    // Linux `statvfs` fields are already `u64`; avoid clippy::useless_conversion.
+    let block = stat.f_frsize;
+    let total = block.saturating_mul(stat.f_blocks);
+    let avail = block.saturating_mul(stat.f_bavail);
     let used = total.saturating_sub(avail);
     Some((total, used, avail))
 }
