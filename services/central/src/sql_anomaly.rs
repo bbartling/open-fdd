@@ -11,7 +11,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde_json::{json, Value};
 
-use crate::analytics::{self, AnalyticsRequest};
+use crate::analytics::{self, AnalyticsQuery, AnalyticsRequest};
 use crate::auth;
 use crate::state::AppState;
 
