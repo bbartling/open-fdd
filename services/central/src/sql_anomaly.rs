@@ -11,7 +11,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde_json::{json, Value};
 
-use crate::analytics::{self, AnalyticsQuery, AnalyticsRequest};
+use crate::analytics::{self, AnalyticsRequest};
 use crate::auth;
 use crate::state::AppState;
 
@@ -131,6 +131,7 @@ async fn status(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analytics::AnalyticsQuery;
     use crate::test_env_lock::lock_env;
 
     #[test]
