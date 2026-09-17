@@ -27,6 +27,10 @@
 | **admin-capacity-gauges** | **CLOSED (branch)** · cgroup memory + workspace `statvfs` + Parquet small-file strip on Admin |
 | **railway-capacity-stress** | **CITED** `20260916T215804Z` capacity_report (gates 24/24b PASS) on `sha-f318dbc` |
 | **mqtt-pause-ui** | **CLOSED (branch)** · Ops edge picker + `edge:telemetry` pause/resume; stress gate `35_mqtt_telemetry_pause_resume` required on Railway + local `run_all` |
+| **overview-oneshot-cache** | **CLOSED (branch)** · `_run_meta` + readiness grey-out Run all / Update analytics |
+| **export-two-option** | **CLOSED (branch)** · Export = EnergyPlus zip **or** CSV (+ optional faults column) |
+| **sql-anomaly-overview** | **CLOSED (branch)** · `POST /api/analytics/sql-anomaly` + Overview table |
+| **sidebar-independent-scroll** | **CLOSED (branch)** · Oracle vs main hover wheel isolation |
 | **fdd-actions-singleflight** | **CLOSED** · live hub **3.5.26** / `sha-2c4c2d9` (#940/#943/#944) |
 | **edge-kit-soft** | **OPS script** `./scripts/openfdd_restore_edge_kit.sh` → `deploy/mqtt/kits/bldg2__pi-1/` (not in git; run before fieldbus Railway up) |
 
