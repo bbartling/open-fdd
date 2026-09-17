@@ -33,7 +33,7 @@ async fn build_site_csv_bytes(
     include_faults: bool,
 ) -> Result<Vec<u8>, JobError> {
     if let Some(csv) = historian_csv_async(building_id).await? {
-        return Ok(maybe_join_faults(csv, building_id, include_faults)?);
+        return maybe_join_faults(csv, building_id, include_faults);
     }
     package_fallback_csv(building_id, include_faults)
 }
