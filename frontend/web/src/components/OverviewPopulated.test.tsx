@@ -76,7 +76,24 @@ vi.mock("../api/fddApi", () => ({
     { rule_id: "FAULT-ELAPSED-HOURS" },
   ]),
   getFddResults: vi.fn(async () => []),
+  getFddReadiness: vi.fn(async () => ({
+    ok: true,
+    has_results: false,
+    clean: false,
+    dirty_reasons: ["never_run"],
+    result_count: 0,
+    completed_at: null,
+  })),
   runFdd: vi.fn(),
+}));
+
+vi.mock("../api/client", () => ({
+  apiFetch: vi.fn(async (path: string) => {
+    if (String(path).includes("/api/afdd/scheduler/status")) {
+      return { ok: true, config: { mode: "bulk" } };
+    }
+    return { ok: true };
+  }),
 }));
 
 vi.mock("../api/mappingApi", () => ({
@@ -156,6 +173,10 @@ vi.mock("../api/analyticsApi", () => ({
   postBasVsWebOat: vi.fn(async () => ({
     ...emptyAnalytics,
     query_version: "bas-vs-web-oat-v2",
+  })),
+  postSqlAnomaly: vi.fn(async () => ({
+    ...emptyAnalytics,
+    query_version: "sql-anomaly-v1",
   })),
 }));
 
@@ -246,6 +267,7 @@ describe("OverviewPopulated metric isolation", () => {
     expect(screen.getByTestId("overview-hp-health")).toBeTruthy();
     expect(screen.getByTestId("overview-vav-health")).toBeTruthy();
     expect(screen.getByTestId("overview-zone-other-health")).toBeTruthy();
+    expect(screen.getByTestId("overview-sql-anomaly")).toBeTruthy();
     expect(screen.queryByTestId("overview-motor-runtime")).toBeNull();
     expect(screen.queryByTestId("overview-mech-cooling")).toBeNull();
     expect(screen.getByTestId("overview-devices-by-type")).toBeTruthy();
@@ -258,10 +280,50 @@ describe("OverviewPopulated metric isolation", () => {
         /Needs Run all rules/,
       );
     });
+    const runAll = screen.getByTestId("overview-update-all-rules").querySelector("button");
+    expect(runAll?.disabled).toBe(false);
+  });
+
+  it("greys Run all + Update analytics when readiness clean with results", async () => {
+    const { getFddReadiness, getFddResults } = await import("../api/fddApi");
+    vi.mocked(getFddReadiness).mockResolvedValue({
+      ok: true,
+      has_results: true,
+      clean: true,
+      dirty_reasons: [],
+      result_count: 12,
+      completed_at: "2026-09-17T00:00:00Z",
+    });
+    vi.mocked(getFddResults).mockResolvedValue(
+      Array.from({ length: 12 }, (_, i) => ({
+        rule_id: `R${i}`,
+        equipment_id: "AHU_1",
+        status: "PASS",
+        fault_hours: 0,
+      })),
+    );
+    renderOverview();
+    await waitFor(() => {
+      expect(screen.getByTestId("overview-readiness-label").textContent).toMatch(
+        /Results current \(12/,
+      );
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("overview-update-all-rules").querySelector("button")?.disabled,
+      ).toBe(true);
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("overview-refresh").querySelector("button")?.disabled,
+      ).toBe(true);
+    });
+    expect(screen.getByTestId("overview-force-run-all")).toBeTruthy();
+    expect(screen.getByTestId("overview-force-analytics")).toBeTruthy();
   });
 
   it("bumps health refresh when RULES_UPDATED_EVENT fires", async () => {
-    const { getFddResults } = await import("../api/fddApi");
+    const { getFddResults, getFddReadiness } = await import("../api/fddApi");
     const { RULES_UPDATED_EVENT } = await import("./RuleTuningPanel");
     vi.mocked(getFddResults).mockResolvedValue(
       Array.from({ length: 12 }, (_, i) => ({
@@ -271,6 +333,14 @@ describe("OverviewPopulated metric isolation", () => {
         fault_hours: 0,
       })),
     );
+    vi.mocked(getFddReadiness).mockResolvedValue({
+      ok: true,
+      has_results: true,
+      clean: true,
+      dirty_reasons: [],
+      result_count: 12,
+      completed_at: "2026-09-17T00:00:00Z",
+    });
     renderOverview();
     await waitFor(() => {
       expect(screen.getByTestId("overview-charts-ready")).toBeTruthy();
@@ -282,7 +352,33 @@ describe("OverviewPopulated metric isolation", () => {
     );
     await waitFor(() => {
       expect(screen.getByTestId("overview-readiness-label").textContent).toMatch(
-        /Ready \(12 result rows\)/,
+        /Results current \(12|Ready \(12/,
+      );
+    });
+  });
+
+  it("login with durable results does not show Needs Run all rules", async () => {
+    const { getFddReadiness, getFddResults } = await import("../api/fddApi");
+    vi.mocked(getFddReadiness).mockResolvedValue({
+      ok: true,
+      has_results: true,
+      clean: true,
+      dirty_reasons: [],
+      result_count: 8,
+      completed_at: "2026-09-17T00:00:00Z",
+    });
+    vi.mocked(getFddResults).mockResolvedValue(
+      Array.from({ length: 8 }, (_, i) => ({
+        rule_id: `R${i}`,
+        equipment_id: "AHU_1",
+        status: "PASS",
+        fault_hours: 0,
+      })),
+    );
+    renderOverview();
+    await waitFor(() => {
+      expect(screen.getByTestId("overview-readiness-label").textContent).not.toMatch(
+        /Needs Run all rules/,
       );
     });
   });

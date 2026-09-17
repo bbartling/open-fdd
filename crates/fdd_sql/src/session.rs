@@ -90,18 +90,46 @@ pub async fn register_utility_if_present(ctx: &SessionContext, building_id: &str
         registered = true;
     }
 
-    if !registered {
-        let empty = "CREATE OR REPLACE VIEW utility_monthly AS \
+    ensure_empty_utility_views(ctx).await?;
+    Ok(registered)
+}
+
+/// Register zero-row utility relations when optional CSVs are absent so UTIL-* rules
+/// plan cleanly (0 fault hours) instead of failing the registry run.
+async fn ensure_empty_utility_views(ctx: &SessionContext) -> Result<()> {
+    let views: [(&str, &str); 3] = [
+        (
+            "utility_monthly",
+            "CREATE OR REPLACE VIEW utility_monthly AS \
             SELECT CAST(NULL AS VARCHAR) AS account, \
                    CAST(NULL AS VARCHAR) AS billing_period, \
                    CAST(NULL AS DOUBLE) AS kwh, \
                    CAST(NULL AS DOUBLE) AS demand_kw \
-            WHERE 1=0";
-        if ctx.sql(empty).await.is_ok() {
-            let _ = ctx.table("utility_monthly").await;
+            WHERE 1=0",
+        ),
+        (
+            "utility_interval",
+            "CREATE OR REPLACE VIEW utility_interval AS \
+            SELECT CAST(NULL AS VARCHAR) AS timestamp_utc, \
+                   CAST(NULL AS DOUBLE) AS kwh \
+            WHERE 1=0",
+        ),
+        (
+            "bas_submeter",
+            "CREATE OR REPLACE VIEW bas_submeter AS \
+            SELECT CAST(NULL AS VARCHAR) AS timestamp_utc, \
+                   CAST(NULL AS DOUBLE) AS kwh \
+            WHERE 1=0",
+        ),
+    ];
+    for (name, ddl) in views {
+        if ctx.table(name).await.is_err() {
+            ctx.sql(ddl)
+                .await
+                .with_context(|| format!("register empty utility view {name}"))?;
         }
     }
-    Ok(registered)
+    Ok(())
 }
 
 pub async fn register_weather_if_present(
@@ -316,6 +344,46 @@ fn format_cell(col: &datafusion::arrow::array::ArrayRef, idx: usize) -> serde_js
 mod utility_csv_tests {
     use super::*;
     use std::io::Write;
+    use std::sync::{Mutex, MutexGuard};
+
+    static WORKSPACE_LOCK: Mutex<()> = Mutex::new(());
+
+    struct WorkspaceGuard {
+        _lock: MutexGuard<'static, ()>,
+        prev: Option<String>,
+    }
+
+    impl WorkspaceGuard {
+        fn set(path: &Path) -> Self {
+            let lock = WORKSPACE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            let prev = std::env::var("OPENFDD_WORKSPACE").ok();
+            std::env::set_var("OPENFDD_WORKSPACE", path);
+            Self { _lock: lock, prev }
+        }
+    }
+
+    impl Drop for WorkspaceGuard {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(v) => std::env::set_var("OPENFDD_WORKSPACE", v),
+                None => std::env::remove_var("OPENFDD_WORKSPACE"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn register_utility_interval_empty_view_when_csv_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let _ws = WorkspaceGuard::set(tmp.path());
+        let ctx = SessionContext::new();
+        register_utility_if_present(&ctx, "NO_UTIL_CSV")
+            .await
+            .expect("register utility placeholders");
+        assert!(ctx.table("utility_interval").await.is_ok());
+        let df = ctx.sql("SELECT * FROM utility_interval").await.unwrap();
+        let batches = df.collect().await.unwrap();
+        assert!(batches.iter().all(|b| b.num_rows() == 0));
+    }
 
     #[tokio::test]
     async fn register_utility_csv_without_read_csv_sql() {
@@ -327,12 +395,16 @@ mod utility_csv_tests {
         let mut f = std::fs::File::create(util.join("monthly_bills.csv")).unwrap();
         writeln!(f, "account,billing_period,kwh,demand_kw").unwrap();
         writeln!(f, "a1,2026-01,100,10").unwrap();
-        std::env::set_var("OPENFDD_WORKSPACE", tmp.path());
+        let _ws = WorkspaceGuard::set(tmp.path());
         let ctx = SessionContext::new();
         let ok = register_utility_if_present(&ctx, "TEST_BLDG")
             .await
             .expect("register utility");
-        assert!(ok);
+        assert!(
+            ok,
+            "expected utility_monthly CSV registration under {}",
+            util.display()
+        );
         assert!(ctx.table("utility_monthly").await.is_ok());
     }
 }

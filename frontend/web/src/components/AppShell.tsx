@@ -17,6 +17,33 @@ import {
   type TenantsListResponse,
 } from "../api/tenantApi";
 
+/** Keep wheel scrolling inside a pane so the document does not chain-scroll. */
+function useWheelScrollContainment(ref: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const onWheel = (event: WheelEvent) => {
+      event.stopPropagation();
+      if (el.scrollHeight <= el.clientHeight) {
+        event.preventDefault();
+        return;
+      }
+      const atTop = el.scrollTop <= 0;
+      const atBottom =
+        el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+      const up = event.deltaY < 0;
+      const down = event.deltaY > 0;
+      if ((up && atTop) || (down && atBottom)) {
+        event.preventDefault();
+      }
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  });
+}
+
 function shortRevision(version: string): { full: string; display: string; collapsed: string } {
   const raw = version.trim();
   const plus = raw.indexOf("+");
@@ -109,6 +136,10 @@ export function AppShell({
   const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const pendingWidthRef = useRef<number | null>(null);
   const resizeRafRef = useRef<number | null>(null);
+  const sidebarScrollRef = useRef<HTMLDivElement>(null);
+  const mainPaneRef = useRef<HTMLDivElement>(null);
+  useWheelScrollContainment(sidebarScrollRef);
+  useWheelScrollContainment(mainPaneRef);
 
   const onSidebarResizeStart = (e: React.MouseEvent<HTMLElement>) => {
     if (collapsed) return;
@@ -361,11 +392,8 @@ export function AppShell({
 
         <div
           id="app-sidebar-oracle"
+          ref={sidebarScrollRef}
           className="app-sidebar__scroll"
-          onWheel={(e) => {
-            // Keep middle/main pane fixed while scrolling the Oracle sidebar.
-            e.stopPropagation();
-          }}
         >
           <OracleSidebar collapsed={collapsed} />
         </div>
@@ -430,7 +458,7 @@ export function AppShell({
           </nav>
         </details>
       </aside>
-      <div className="app-main">
+      <div className="app-main" ref={mainPaneRef} data-testid="app-main">
         {!hideHeader ? (
           <header className="app-header">
             <h1 className="app-header__title">{title}</h1>

@@ -418,8 +418,29 @@ fn handle_untyped_payload(state: &AppState, payload: &[u8]) {
     record_reject(state, payload, "decode failed");
 }
 
+fn reject_reason_bucket(error: &str) -> &'static str {
+    if error.contains("multi-tenant mode requires") {
+        "topic_tenant_scope"
+    } else if error.contains("does not match topic") {
+        "topic_identity_mismatch"
+    } else if error.contains("canonical historian ingest failed") {
+        "historian_persist"
+    } else if error.contains("historian size") || error.contains("size cap") {
+        "historian_size_cap"
+    } else if error.ends_with("decode failed") {
+        "decode_failed"
+    } else {
+        "validation_or_other"
+    }
+}
+
 fn record_reject(state: &AppState, payload: &[u8], error: &str) {
     *state.ingest_reject.lock().unwrap() += 1;
+    let bucket = reject_reason_bucket(error).to_string();
+    {
+        let mut buckets = state.ingest_reject_buckets.lock().unwrap();
+        *buckets.entry(bucket).or_insert(0) += 1;
+    }
     state.dead_letters.lock().unwrap().push(serde_json::json!({
         "error": error,
         "raw": redact_payload(payload),
@@ -436,6 +457,18 @@ fn record_reject(state: &AppState, payload: &[u8], error: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reject_bucket_classifies_common_errors() {
+        assert_eq!(
+            reject_reason_bucket("metadata decode failed"),
+            "decode_failed"
+        );
+        assert_eq!(
+            reject_reason_bucket("envelope site/edge (a/b) does not match topic (c/d)"),
+            "topic_identity_mismatch"
+        );
+    }
 
     #[test]
     fn parse_telemetry_topic() {

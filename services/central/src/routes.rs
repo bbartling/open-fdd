@@ -136,6 +136,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/fdd/cache/status", get(fdd_cache_status))
         .route("/api/fdd/equipment", get(fdd_equipment))
         .route("/api/fdd/results", get(fdd_results))
+        .route("/api/fdd/results/readiness", get(fdd_results_readiness))
         .route("/api/fdd/series", get(fdd_series))
         .route("/api/fdd/roles", get(fdd_roles))
         .route("/api/fdd/cookbook-roles", get(fdd_cookbook_roles))
@@ -290,6 +291,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/analytics/diurnal", post(analytics_diurnal))
         .route("/api/analytics/topology", post(analytics_topology))
         .route("/api/analytics/sensor-stats", post(analytics_sensor_stats))
+        .route("/api/analytics/sql-anomaly", post(analytics_sql_anomaly))
         .route("/api/fuel/campus/import", post(fuel_campus_import))
         .route("/api/fuel/campus", get(fuel_campus_list))
         .route(
@@ -1233,22 +1235,32 @@ pub async fn auth_agent_token(
     security(("bearerAuth" = [])),
     responses((status = 200, description = "Registered edge shadows", body = EdgesListResponse))
 )]
-pub async fn list_edges(State(state): State<Arc<AppState>>) -> Json<EdgesListResponse> {
+pub async fn list_edges(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> Json<EdgesListResponse> {
+    let ctx = resolve_tenant_context(&state, &headers);
     let edges = state
         .edges
         .iter()
-        .map(|e| {
+        .filter_map(|e| {
             let g = e.value().lock().unwrap();
             let site_id = g
                 .last_telemetry
                 .as_ref()
                 .map(|t| t.site_id.clone())
                 .filter(|s| !s.is_empty());
-            crate::models::EdgeSummary {
+            if ctx.multi_tenant && !ctx.hub_admin {
+                match site_id.as_deref() {
+                    Some(site) if ctx.allow_building(site) => {}
+                    _ => return None,
+                }
+            }
+            Some(crate::models::EdgeSummary {
                 edge_id: e.key().clone(),
                 site_id,
                 has_telemetry: g.last_telemetry.is_some(),
-            }
+            })
         })
         .collect();
     Json(EdgesListResponse { ok: true, edges })
@@ -1372,6 +1384,7 @@ pub async fn ingest_stats(State(state): State<Arc<AppState>>) -> Json<IngestStat
         ingest_ok: *state.ingest_ok.lock().unwrap(),
         ingest_dup: *state.ingest_dup.lock().unwrap(),
         ingest_reject: *state.ingest_reject.lock().unwrap(),
+        reject_buckets: state.ingest_reject_buckets.lock().unwrap().clone(),
         dead_letters: state.dead_letters.lock().unwrap().len(),
     })
 }
@@ -1435,6 +1448,33 @@ pub async fn issue_command(
             hint: None,
             error: Some("operator or admin role required to issue commands".into()),
         });
+    }
+
+    if crate::tenant::multi_tenant_enabled() {
+        let ctx = resolve_tenant_context(&state, &headers);
+        let site = body.site_id.trim();
+        if !ctx.allow_building(site) {
+            open_fdd_edge_prototype::auth::audit::log_event(
+                "tenant_building_denied",
+                json!({
+                    "building_id": site,
+                    "active_tenant_id": ctx.tenant_id,
+                    "hub_admin": ctx.hub_admin,
+                    "target_id": body.target_id,
+                    "edge_id": body.edge_id,
+                    "request_id": request_id,
+                }),
+            );
+            return Json(IssueCommandResponse {
+                ok: false,
+                command: None,
+                publish_topic: None,
+                response_topic: None,
+                published: None,
+                hint: None,
+                error: Some("site not in tenant scope".into()),
+            });
+        }
     }
 
     if body.target_id.is_empty() {
@@ -1917,6 +1957,19 @@ pub async fn fdd_results(
     ))
 }
 
+pub async fn fdd_results_readiness(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<BuildingScopeQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
+        return Err(deny);
+    }
+    Ok(Json(
+        open_fdd_edge_prototype::fdd::registry_api::readiness_response(q.scoped()),
+    ))
+}
+
 #[derive(Debug, Deserialize)]
 pub struct FddSeriesQuery {
     equipment_id: String,
@@ -2021,8 +2074,9 @@ pub async fn fdd_session_config_put(
         .get("building_id")
         .and_then(|v| v.as_str())
         .map(str::trim)
-        .filter(|s| !s.is_empty());
-    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id) {
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id.as_deref()) {
         return Err(deny);
     }
     let result = tokio::task::spawn_blocking(move || {
@@ -2030,6 +2084,14 @@ pub async fn fdd_session_config_put(
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("session config task: {e}")}));
+    if result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if let Some(bid) = building_id.as_deref() {
+            open_fdd_edge_prototype::fdd::registry_api::mark_building_results_dirty(
+                bid,
+                "session_config",
+            );
+        }
+    }
     Ok(Json(result))
 }
 
@@ -2140,7 +2202,6 @@ pub async fn csv_import_package(
                 Json(json!({"ok": false, "error": e})),
             )
         })?;
-    let _ = peeked_building;
     let action_id = actions::start_action(
         "package_import",
         "Package import",
@@ -2157,6 +2218,17 @@ pub async fn csv_import_package(
         // Promote package utilities_v1 → Metering fuel campus (Creekside / LAKESIDE_ES).
         let _ =
             tokio::task::spawn_blocking(fuel::import::sync_campuses_from_package_utilities).await;
+        if let Some(bid) = result
+            .get("building_id")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .or(peeked_building)
+        {
+            open_fdd_edge_prototype::fdd::registry_api::mark_building_results_dirty(
+                &bid,
+                "package_import",
+            );
+        }
     }
     open_fdd_edge_prototype::auth::audit::log_event(
         "package_import",
@@ -2229,6 +2301,19 @@ pub async fn csv_import_package_append(
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package append task: {e}")}));
+    if result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if let Some(bid) = result
+            .get("building_id")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .or(building_id)
+        {
+            open_fdd_edge_prototype::fdd::registry_api::mark_building_results_dirty(
+                &bid,
+                "package_append",
+            );
+        }
+    }
     Ok(Json(result))
 }
 
@@ -2250,6 +2335,14 @@ pub async fn csv_import_package_roles(
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package roles task: {e}")}));
+    if result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if let Some(bid) = building_id.as_deref() {
+            open_fdd_edge_prototype::fdd::registry_api::mark_building_results_dirty(
+                bid,
+                "package_roles",
+            );
+        }
+    }
     Ok(Json(result))
 }
 
@@ -3601,6 +3694,16 @@ async fn analytics_topology(
                 vec![format!("topology failed: {e}")],
             ),
         };
+    Ok(Json(json!({"ok": true, "analytics": env.to_json()})))
+}
+
+async fn analytics_sql_anomaly(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let req = gate_analytics(&state, &headers, req)?;
+    let env = crate::sql_anomaly::handle_analytics(&req).await;
     Ok(Json(json!({"ok": true, "analytics": env.to_json()})))
 }
 

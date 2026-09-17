@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { Button, ConfirmModal, InlineAlert } from "../components/widgets";
 import { getAuthMe, type AuthMe } from "../api/authApi";
+import { AdminCapacityStripWithLimits } from "../components/AdminCapacityStrip";
 import {
   deleteAdminTenant,
   deleteAdminUser,
@@ -326,6 +327,8 @@ export function AdminPage() {
           />
         </div>
       </section>
+
+      <AdminCapacityStripWithLimits />
 
       <section style={{ marginTop: "2rem" }}>
         <h2>Historian limits</h2>

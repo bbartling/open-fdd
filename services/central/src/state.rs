@@ -94,6 +94,8 @@ pub struct AppState {
     pub ingest_ok: Mutex<u64>,
     pub ingest_dup: Mutex<u64>,
     pub ingest_reject: Mutex<u64>,
+    /// Count-only reject reason buckets for `/api/ingest/stats` (no dead-letter dump).
+    pub ingest_reject_buckets: Mutex<std::collections::BTreeMap<String, u64>>,
     /// Process boot instant for `/api/health` honesty after re-pin.
     pub started_at: DateTime<Utc>,
     /// Last successful ingest accept this process (MQTT/CSV paths that bump `ingest_ok`).
@@ -118,6 +120,7 @@ impl AppState {
             ingest_ok: Mutex::new(0),
             ingest_dup: Mutex::new(0),
             ingest_reject: Mutex::new(0),
+            ingest_reject_buckets: Mutex::new(std::collections::BTreeMap::new()),
             started_at: Utc::now(),
             last_ingest_at: Mutex::new(None),
             mqtt_publisher: Mutex::new(None),

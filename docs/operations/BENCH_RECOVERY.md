@@ -113,7 +113,7 @@ Public web: `https://openfdd-web-production-af99.up.railway.app`
 ### 6) Fieldbus only on this host
 
 ```bash
-# Edge kit: deploy/mqtt/kits/bldg2__pi-1/  (restore from backup OR mint if CA allows)
+# Edge kit: deploy/mqtt/kits/bldg2__pi-1/  (backup OR ./scripts/openfdd_restore_edge_kit.sh)
 ./scripts/openfdd_fieldbus_railway_up.sh "$SHA"
 curl -sf http://127.0.0.1:8081/health
 # Railway: /api/edges → has_telemetry true for pi-1 / bldg2

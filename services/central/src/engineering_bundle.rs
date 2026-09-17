@@ -22,8 +22,13 @@ const PROFILES: &[&str] = &["summary", "diagnostic", "forensic"];
 #[derive(Debug, Deserialize)]
 pub struct CreateExportRequest {
     pub building_id: String,
+    /// `energyplus` (engineering bundle) or `csv` (flat historian CSV zip).
+    #[serde(default = "default_kind")]
+    pub kind: String,
     #[serde(default = "default_profile")]
     pub profile: String,
+    #[serde(default)]
+    pub include_faults: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +46,21 @@ pub struct ExportArtifact {
 
 fn default_profile() -> String {
     "summary".into()
+}
+
+fn default_kind() -> String {
+    "energyplus".into()
+}
+
+fn normalize_kind(kind: &str) -> Result<String, JobError> {
+    let kind = kind.trim().to_ascii_lowercase();
+    match kind.as_str() {
+        "energyplus" | "csv" => Ok(kind),
+        "" => Ok("energyplus".into()),
+        other => Err(JobError::Invalid(format!(
+            "invalid export kind: {other}; expected energyplus or csv"
+        ))),
+    }
 }
 
 fn validate_segment(value: &str, label: &str) -> Result<String, JobError> {
@@ -68,7 +88,7 @@ fn validate_profile(profile: &str) -> Result<String, JobError> {
     Ok(profile)
 }
 
-fn package_root(building_id: &str) -> Result<PathBuf, JobError> {
+pub fn package_root(building_id: &str) -> Result<PathBuf, JobError> {
     let root = jobs::workspace_root().join("data").join("csv_buildings");
     let package = root.join(building_id);
     if !package.join("manifest.json").is_file() {
@@ -363,18 +383,34 @@ pub async fn create_export(
             )));
         }
     }
-    let profile = validate_profile(&request.profile)?;
-    let package = package_root(&building_id)?;
+    let kind = normalize_kind(&request.kind)?;
     let export_id = format!("export-{}", Uuid::new_v4());
     let root = export_dir(job_id, &export_id)?;
-    let staging = root.join("staging");
-    let _manifest = build_staging(&building_id, &profile, &package, &staging)?;
 
-    let filename = format!("openfdd_engineering_{building_id}_{profile}.zip");
-    let zip_path = root.join(&filename);
-    let size_bytes = zip_tree(&staging, &zip_path, "")?;
-    // Drop staging tree immediately — only the zip (+ metadata) remain until download.
-    let _ = fs::remove_dir_all(&staging);
+    let (profile, filename, schema_version, size_bytes) = if kind == "csv" {
+        fs::create_dir_all(&root).map_err(|e| JobError::Io(e.to_string()))?;
+        let filename = format!("openfdd_csv_{building_id}.zip");
+        let zip_path = root.join(&filename);
+        let size_bytes =
+            crate::csv_site_export::build_csv_zip(&building_id, request.include_faults, &zip_path)
+                .await?;
+        (
+            "csv".into(),
+            filename,
+            crate::csv_site_export::CSV_BUNDLE_SCHEMA.into(),
+            size_bytes,
+        )
+    } else {
+        let profile = validate_profile(&request.profile)?;
+        let package = package_root(&building_id)?;
+        let staging = root.join("staging");
+        let _manifest = build_staging(&building_id, &profile, &package, &staging)?;
+        let filename = format!("openfdd_engineering_{building_id}_{profile}.zip");
+        let zip_path = root.join(&filename);
+        let size_bytes = zip_tree(&staging, &zip_path, "")?;
+        let _ = fs::remove_dir_all(&staging);
+        (profile, filename, BUNDLE_SCHEMA.into(), size_bytes)
+    };
 
     let artifact = ExportArtifact {
         export_id: export_id.clone(),
@@ -383,7 +419,7 @@ pub async fn create_export(
         profile,
         filename,
         download_url: format!("/api/jobs/{job_id}/exports/{export_id}/download"),
-        schema_version: BUNDLE_SCHEMA.into(),
+        schema_version,
         created_at: Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
         size_bytes,
     };

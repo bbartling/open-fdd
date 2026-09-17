@@ -69,15 +69,22 @@ def first_present(obj, *keys):
             return obj[k]
     return None
 
+parquet = dm.get("parquet") if isinstance(dm.get("parquet"), dict) else {}
 file_count = first_present(dm, "file_count", "files", "parquet_files")
+if file_count is None:
+    file_count = first_present(parquet, "file_count", "parquet_files")
 small_files = first_present(dm, "small_files", "small_file_count")
+if small_files is None:
+    small_files = first_present(parquet, "small_file_count", "small_files")
 bytes_v = first_present(dm, "estimated_bytes", "total_bytes", "bytes")
+if bytes_v is None:
+    bytes_v = first_present(parquet, "estimated_bytes", "total_bytes", "bytes")
 if storage.get("used_bytes") is not None and bytes_v is None:
     bytes_v = storage.get("used_bytes")
 
 mem_total = mem.get("total_bytes")
-memory_source = "host_proc"
-if mem_total and int(mem_total) > 64 * 1024**3:
+memory_source = mem.get("source") or "host_proc"
+if memory_source == "host_proc" and mem_total and int(mem_total) > 64 * 1024**3:
     memory_source = "host_proc_likely_shared_node"
 
 sample = {

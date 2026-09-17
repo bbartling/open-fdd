@@ -1,30 +1,33 @@
 ---
 name: Wave S MQTT Pause Parked
-overview: "Parked feature — tenant-scoped edge telemetry pause/resume UI. Backend exists; not part of TTL tip."
+overview: "Edge telemetry pause/resume UI + required stress gate (Option A streaming only)."
 todos:
   - id: pause-ui-later
-    content: "Later wave: SPA pause/resume (client=own edges; admin=all) + audit; Option A streaming only"
+    content: "Tenant-scoped audit polish; hub admin vs client edges — core UI + gate landed in Wave UX Soft Tip A"
     status: pending
 isProject: false
 ---
 
-# MQTT / edge telemetry pause-resume (parked)
+# MQTT / edge telemetry pause-resume
 
 **Parent:** [wave_soft_park_480c17e1.plan.md](wave_soft_park_480c17e1.plan.md)  
-**Prior decision:** Wave P Option **A** — pause/resume **streaming**, do **not** stop the fieldbus container process.
+**Decision:** Wave P Option **A** — pause/resume **streaming**, do **not** stop the fieldbus container process.
 
-## Already exists (backend)
+## Backend
 
 - Fieldbus: `services/fieldbus/src/services/telemetry_control.rs`
 - REST: `/telemetry/suspend`, `/telemetry/resume`, status
 - MQTT command: `target_id=edge:telemetry` via Central `POST /api/commands`
-- Ops can already issue commands
+- Multi-tenant ON: `GET /api/edges` and `POST /api/commands` enforce `allow_building` on `site_id` (non–hub-admin sees own buildings only)
 
-## Later feature wave (not now)
+## Ops UI
 
-- Tenant-scoped MQTT / Ops dashboard switch
-- Client JWT: only own edges; admin: all edges
-- Audit events for suspend/resume
-- Stress gate for pause → ingest stall → resume → ingest climbs
+- Operations → **Suspend telemetry**: edge picker from `GET /api/edges` (table + manual override); commands use `edge:telemetry` only.
 
-Do **not** implement in the Data Model TTL tip.
+## Stress qualification (required)
+
+- Gate script: `scripts/nightly-ot-bench/35_mqtt_telemetry_pause_resume.sh`
+- **Local OT:** `run_all.sh` runs phase **35** immediately after **03** MQTT persist (pause → stall → resume).
+- **Railway hub stress:** `run_railway_hub_stress.sh` records **35_mqtt_telemetry_pause_resume** as a **required** gate after continuity (21) and capacity (24/24b). `MQTT_PAUSE_RESUME=0` skips (not fully qualified).
+
+Do **not** fold this into the Data Model TTL tip alone — it is a cross-cutting OT + hub qualification gate.

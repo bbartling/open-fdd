@@ -121,7 +121,8 @@ python3 "$MANIFEST_PY" create \
   --required 22_wave_o_admin_datamodel_acl \
   --required 23_wave_o_security \
   --required 24_capacity_pressure \
-  --required 24b_capacity_report
+  --required 24b_capacity_report \
+  --required 35_mqtt_telemetry_pause_resume
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"
@@ -401,6 +402,19 @@ if [[ -f "$ART/capacity_report.json" ]]; then
   fi
 else
   record_gate "24b_capacity_report" FAIL "24b capacity report" "missing capacity_report.json"
+fi
+
+# --- 35 MQTT telemetry pause → stall → resume (Option A streaming; hub + local fieldbus) ---
+if [[ "${MQTT_PAUSE_RESUME:-1}" == "1" ]]; then
+  run_gate "35_mqtt_telemetry_pause_resume" "35 MQTT telemetry pause/resume" \
+    env TELEMETRY_LIVE="${TELEMETRY_LIVE:-1}" \
+      OPENFDD_ADMIN_TOKEN="${OPENFDD_ADMIN_TOKEN:-}" \
+      EXPECTED_EDGE_ID="${EXPECTED_EDGE_ID}" \
+      EXPECTED_SITE_ID="${EXPECTED_SITE_ID}" \
+      bash "$DIR/35_mqtt_telemetry_pause_resume.sh"
+else
+  record_gate "35_mqtt_telemetry_pause_resume" SKIPPED "35 MQTT telemetry pause/resume" \
+    "MQTT_PAUSE_RESUME=0"
 fi
 
 # Finalize — SUMMARY generated from recorded gates only

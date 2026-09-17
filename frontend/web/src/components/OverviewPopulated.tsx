@@ -13,7 +13,9 @@ import {
   getFddStatus,
   listFddRules,
   getFddResults,
+  getFddReadiness,
   runFdd,
+  type FddReadiness,
 } from "../api/fddApi";
 import {
   getPackageMapping,
@@ -24,9 +26,11 @@ import {
 import type { OverviewVibe19Response } from "../api/overviewTypes";
 import { fetchCentralOverview } from "../api/centralOverview";
 import type { FddEquipmentItem } from "../api/analyticsApi";
+import { apiFetch } from "../api/client";
 import { VavHealthSection } from "./VavHealthSection";
 import { PlantHealthSections } from "./PlantHealthSections";
 import { WeatherHealthSection } from "./WeatherHealthSection";
+import { SqlAnomalySection } from "./SqlAnomalySection";
 import { mergeRuleDescriptionsFromApi } from "../lib/ruleLabels";
 import { RULES_UPDATED_EVENT } from "./RuleTuningPanel";
 import { naturalCompare } from "../lib/naturalSort";
@@ -182,6 +186,10 @@ export function OverviewPopulated({
   const [lastRuleResultCount, setLastRuleResultCount] = useState<number | null>(
     null,
   );
+  const [fddReadiness, setFddReadiness] = useState<FddReadiness | null>(null);
+  const [analyticsClean, setAnalyticsClean] = useState(false);
+  const [afddOwnsRefresh, setAfddOwnsRefresh] = useState(false);
+  const [forceRules, setForceRules] = useState(false);
   const [overviewElapsedSec, setOverviewElapsedSec] = useState(0);
   const overviewLoadStarted = useRef<number | null>(null);
   const hasOverview = useRef(false);
@@ -275,6 +283,22 @@ export function OverviewPopulated({
   const equipmentRef = useRef(equipment);
   equipmentRef.current = equipment;
 
+  const refreshReadiness = useCallback(async () => {
+    if (!buildingId) {
+      setFddReadiness(null);
+      return;
+    }
+    try {
+      const ready = await getFddReadiness(buildingId);
+      setFddReadiness(ready);
+      if (ready.has_results) {
+        setLastRuleResultCount(ready.result_count);
+      }
+    } catch {
+      setFddReadiness(null);
+    }
+  }, [buildingId]);
+
   const refreshOverview = useCallback(
     async (opts?: { force?: boolean }) => {
       if (!buildingId) return;
@@ -289,6 +313,7 @@ export function OverviewPopulated({
           hasOverview.current = true;
           setOverviewErr(null);
           setLoadingOverview(false);
+          setAnalyticsClean(true);
           return;
         }
       }
@@ -309,7 +334,10 @@ export function OverviewPopulated({
         }
         setOverview(body);
         hasOverview.current = true;
-        const results = await getFddResults(buildingId).catch(() => null);
+        const [results] = await Promise.all([
+          getFddResults(buildingId).catch(() => null),
+          refreshReadiness(),
+        ]);
         if (ac.signal.aborted) return;
         const count = results ? results.length : null;
         if (results) setLastRuleResultCount(results.length);
@@ -317,27 +345,36 @@ export function OverviewPopulated({
           body,
           lastRuleResultCount: count,
         });
+        setAnalyticsClean(true);
       } catch (err) {
         if (ac.signal.aborted) return;
         setOverviewErr(formatErr(err));
         if (!hasOverview.current) {
           setOverview(null);
         }
+        setAnalyticsClean(false);
       } finally {
         if (!ac.signal.aborted) {
           setLoadingOverview(false);
         }
       }
     },
-    [buildingId],
+    [buildingId, refreshReadiness],
   );
 
   useEffect(() => {
     if (!buildingId) return;
-    // Demo freshness: auto-load last Overview analytics on site select.
-    // Cache hit paints instantly (Wave O7); miss hits DataFusion once.
+    // Results-first + readiness, then analytics (cache hit paints instantly).
+    void refreshReadiness();
     void refreshOverview();
-  }, [buildingId, refreshOverview]);
+    void apiFetch<{ ok?: boolean; config?: { mode?: string } }>(
+      "/api/afdd/scheduler/status",
+    )
+      .then((s) => {
+        setAfddOwnsRefresh(String(s.config?.mode ?? "").toLowerCase() === "continuous");
+      })
+      .catch(() => setAfddOwnsRefresh(false));
+  }, [buildingId, refreshOverview, refreshReadiness]);
 
   useEffect(() => {
     return () => {
@@ -352,6 +389,8 @@ export function OverviewPopulated({
   useEffect(() => {
     if (lastBuildingId.current !== buildingId) {
       lastBuildingId.current = buildingId;
+      setAnalyticsClean(false);
+      setForceRules(false);
       const hit = buildingId ? overviewSiteCache.get(buildingId) : undefined;
       if (hit) {
         setOverview(hit.body);
@@ -361,6 +400,7 @@ export function OverviewPopulated({
         hasOverview.current = true;
         setOverviewErr(null);
         setLoadingOverview(false);
+        setAnalyticsClean(true);
       } else {
         hasOverview.current = false;
         setOverview(null);
@@ -394,23 +434,27 @@ export function OverviewPopulated({
         count?: number;
       };
       const n = detail?.count;
+      const single = detail?.mode === "single";
       if (typeof n === "number") setLastRuleResultCount(n);
       setRulesNote(
-        detail?.mode === "single"
+        single
           ? `Rule ${detail.rule_id} updated · ${n ?? "—"} result row(s)`
           : `Rules updated · ${n ?? "—"} result row(s)`,
       );
       // Matrices join FDD results — bump refresh so health cells leave stale/unknown.
       setVavHealthToken((t) => t + 1);
-      if (buildingId) overviewSiteCache.delete(buildingId);
       void getFddResults(buildingId)
         .then((rows) => setLastRuleResultCount(rows.length))
         .catch(() => undefined);
+      void refreshReadiness();
+      // Lab single-rule: keep Run-all grey if meta still clean; still refresh analytics.
+      if (buildingId) overviewSiteCache.delete(buildingId);
+      setAnalyticsClean(false);
       void refreshOverview({ force: true });
     };
     window.addEventListener(RULES_UPDATED_EVENT, onRules);
     return () => window.removeEventListener(RULES_UPDATED_EVENT, onRules);
-  }, [buildingId, refreshOverview]);
+  }, [buildingId, refreshOverview, refreshReadiness]);
 
   const saveSchedule = async () => {
     setScheduleBusy(true);
@@ -458,6 +502,8 @@ export function OverviewPopulated({
       setScheduleNote(
         `Schedule saved (tz ${tz}, ${bareMin} occ h/wk). Calendar persisted to session config.`,
       );
+      setAnalyticsClean(false);
+      void refreshReadiness();
       void refreshOverview({ force: true });
     } catch (err) {
       setScheduleNote(formatErr(err));
@@ -498,9 +544,11 @@ export function OverviewPopulated({
       });
       const n = result.results?.length ?? 0;
       setLastRuleResultCount(n);
+      setForceRules(false);
       setRulesNote(
         `Ran all rules · ${n} result row(s) · ${String(result.total_ms ?? "—")} ms`,
       );
+      await refreshReadiness();
       try {
         window.dispatchEvent(
           new CustomEvent(RULES_UPDATED_EVENT, {
@@ -519,14 +567,25 @@ export function OverviewPopulated({
   };
 
   const busy = loadingOverview && !overview;
-  const fddPending =
-    lastRuleResultCount == null || lastRuleResultCount === 0;
+  const resultRows =
+    fddReadiness?.result_count ?? lastRuleResultCount ?? 0;
+  const fddPending = resultRows === 0;
+  const runAllGrey =
+    (afddOwnsRefresh || (Boolean(fddReadiness?.clean) && !forceRules)) &&
+    resultRows > 0;
+  const updateAnalyticsGrey = analyticsClean && Boolean(overview) && !busy;
   const readinessLabel = (() => {
     if (rulesBusy) return "Running all rules…";
     if (busy || loadingOverview) return "Updating analytics…";
+    if (afddOwnsRefresh && resultRows > 0) {
+      return `AFDD owns refresh (${resultRows} result rows)`;
+    }
+    if (fddReadiness?.clean && resultRows > 0) {
+      return `Results current (${resultRows} result rows)`;
+    }
     if (overview && fddPending) return "Needs Run all rules";
-    if (overview && lastRuleResultCount != null && lastRuleResultCount > 0) {
-      return `Ready (${lastRuleResultCount} result rows)`;
+    if (overview && resultRows > 0) {
+      return `Ready (${resultRows} result rows)`;
     }
     return "Idle";
   })();
@@ -632,29 +691,74 @@ export function OverviewPopulated({
             label={
               busy
                 ? `Updating analytics… ${overviewElapsedSec}s`
-                : "Update analytics"
+                : updateAnalyticsGrey
+                  ? "Analytics current"
+                  : "Update analytics"
             }
             loading={busy}
+            disabled={updateAnalyticsGrey}
             onClick={() => {
+              setAnalyticsClean(false);
               void refreshMeta();
               void refreshOverview({ force: true });
             }}
             testId="overview-refresh"
           />
+          {updateAnalyticsGrey ? (
+            <Button
+              id="overview-force-analytics"
+              label="Force refresh analytics"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => {
+                setAnalyticsClean(false);
+                void refreshMeta();
+                void refreshOverview({ force: true });
+              }}
+              testId="overview-force-analytics"
+            />
+          ) : null}
           <p className="oracle-sidebar__caption">
             Update analytics = charts
+            {updateAnalyticsGrey ? " · grey until dirty or Force" : ""}
           </p>
         </div>
         <div className="overview-toolbar__action">
           <Button
             id="overview-run-all-rules"
-            label={rulesBusy ? "Running all rules…" : "Run all rules"}
+            label={
+              rulesBusy
+                ? "Running all rules…"
+                : runAllGrey
+                  ? afddOwnsRefresh
+                    ? "AFDD owns refresh"
+                    : "Results current"
+                  : "Run all rules"
+            }
             loading={rulesBusy}
+            disabled={runAllGrey || rulesBusy}
             onClick={() => void onUpdateAllRules()}
             testId="overview-update-all-rules"
           />
+          {runAllGrey && !afddOwnsRefresh ? (
+            <Button
+              id="overview-force-run-all"
+              label="Force re-run all"
+              variant="secondary"
+              disabled={rulesBusy}
+              onClick={() => {
+                setForceRules(true);
+                void onUpdateAllRules();
+              }}
+              testId="overview-force-run-all"
+            />
+          ) : null}
           <p className="oracle-sidebar__caption">
-            Run all rules = health flags
+            {runAllGrey && !afddOwnsRefresh
+              ? "Results current — retune one rule in Lab"
+              : afddOwnsRefresh
+                ? "Continuous AFDD owns registry refresh"
+                : "Run all rules = health flags"}
           </p>
         </div>
         {overview ? (
@@ -872,6 +976,7 @@ export function OverviewPopulated({
         refreshToken={vavHealthToken}
         equipment={equipment}
       />
+      <SqlAnomalySection buildingId={buildingId} refreshToken={vavHealthToken} />
 
       <section className="overview-section" data-testid="overview-devices-by-type">
         <h3>Devices by type</h3>

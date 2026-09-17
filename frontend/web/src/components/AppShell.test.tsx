@@ -1,8 +1,16 @@
+import { readFileSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { AppShell } from "./AppShell";
 import { MAIN_SECTIONS } from "../nav/sections";
+
+const appCss = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "../styles/app.css"),
+  "utf8",
+);
 
 vi.mock("../api/client", () => ({
   apiFetch: vi.fn(async (path: string) => {
@@ -136,5 +144,72 @@ describe("AppShell layout parity", () => {
     // CSS file regex lives in scripts/assert_full_width.mjs (npm test).
     // This marker keeps the product intent visible next to AppShell tests.
     expect("full-width").toBe("full-width");
+  });
+
+  it("defines independent scroll panes for shell, sidebar, and main", () => {
+    render(
+      <MemoryRouter>
+        <AppShell title="Scroll">
+          <div>body</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("app-shell").classList.contains("app-shell")).toBe(
+      true,
+    );
+    expect(screen.getByTestId("app-main").classList.contains("app-main")).toBe(
+      true,
+    );
+    expect(document.getElementById("app-sidebar-oracle")).toBeTruthy();
+
+    const shellBlock = appCss.match(/\.app-shell\s*\{[^}]+\}/s)?.[0] ?? "";
+    expect(shellBlock).toMatch(/overflow:\s*hidden/);
+    expect(shellBlock).toMatch(/max-height:\s*100%/);
+
+    const mainBlock = appCss.match(/\.app-main\s*\{[^}]+\}/s)?.[0] ?? "";
+    expect(mainBlock).toMatch(/min-height:\s*0/);
+    expect(mainBlock).toMatch(/overflow-y:\s*auto/);
+    expect(mainBlock).toMatch(/overscroll-behavior:\s*contain/);
+  });
+
+  it("stops wheel propagation from sidebar and main scroll panes", () => {
+    render(
+      <MemoryRouter>
+        <AppShell title="Wheel">
+          <div>body</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const sidebar = document.getElementById("app-sidebar-oracle")!;
+    Object.defineProperty(sidebar, "scrollHeight", { value: 400, configurable: true });
+    Object.defineProperty(sidebar, "clientHeight", { value: 200, configurable: true });
+    sidebar.scrollTop = 100;
+
+    const sidebarWheel = new WheelEvent("wheel", {
+      deltaY: 10,
+      bubbles: true,
+      cancelable: true,
+    });
+    const sidebarStop = vi.spyOn(sidebarWheel, "stopPropagation");
+    sidebar.dispatchEvent(sidebarWheel);
+    expect(sidebarStop).toHaveBeenCalled();
+
+    const main = screen.getByTestId("app-main");
+    Object.defineProperty(main, "scrollHeight", { value: 800, configurable: true });
+    Object.defineProperty(main, "clientHeight", { value: 400, configurable: true });
+    main.scrollTop = 0;
+
+    const mainWheel = new WheelEvent("wheel", {
+      deltaY: -10,
+      bubbles: true,
+      cancelable: true,
+    });
+    const mainPrevent = vi.spyOn(mainWheel, "preventDefault");
+    const mainStop = vi.spyOn(mainWheel, "stopPropagation");
+    main.dispatchEvent(mainWheel);
+    expect(mainStop).toHaveBeenCalled();
+    expect(mainPrevent).toHaveBeenCalled();
   });
 });

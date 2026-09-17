@@ -231,6 +231,114 @@ fn results_dir(building_id: Option<&str>) -> PathBuf {
     }
 }
 
+const RUN_META_FILE: &str = "_run_meta.json";
+const DIRTY_FILE: &str = "_dirty.json";
+
+/// Mark a building's FDD results dirty so Overview re-enables Run all rules.
+pub fn mark_building_results_dirty(building_id: &str, reason: &str) {
+    let bid = building_id.trim();
+    if bid.is_empty() {
+        return;
+    }
+    let dir = results_dir(Some(bid));
+    let _ = std::fs::create_dir_all(&dir);
+    let body = json!({
+        "dirty": true,
+        "reason": reason,
+        "at": chrono::Utc::now().to_rfc3339(),
+    });
+    let path = dir.join(DIRTY_FILE);
+    let _ = std::fs::write(path, body.to_string());
+}
+
+fn clear_building_dirty(building_id: Option<&str>) {
+    let path = results_dir(building_id).join(DIRTY_FILE);
+    let _ = std::fs::remove_file(path);
+}
+
+fn rule_set_hash() -> String {
+    use sha2::{Digest, Sha256};
+    let mut ids: Vec<String> = load_reg()
+        .map(|r| r.rules.into_iter().map(|x| x.rule_id).collect())
+        .unwrap_or_default();
+    ids.sort();
+    let mut hasher = Sha256::new();
+    hasher.update(ids.join("|").as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+fn write_run_meta(building_id: Option<&str>, mode: &str, result_count: usize) {
+    let dir = results_dir(building_id);
+    let _ = std::fs::create_dir_all(&dir);
+    let body = json!({
+        "completed_at": chrono::Utc::now().to_rfc3339(),
+        "mode": mode,
+        "rule_set_hash": rule_set_hash(),
+        "result_count": result_count,
+    });
+    let _ = std::fs::write(dir.join(RUN_META_FILE), body.to_string());
+    if mode == "registry" || mode == "afdd" {
+        clear_building_dirty(building_id);
+    }
+}
+
+/// `GET /api/fdd/results/readiness` — clean/dirty for Overview one-shot grey-out.
+pub fn readiness_response(building_id: Option<&str>) -> Value {
+    let dir = results_dir(building_id);
+    let meta_path = dir.join(RUN_META_FILE);
+    let dirty_path = dir.join(DIRTY_FILE);
+    let mut result_count = 0usize;
+    if dir.is_dir() {
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for ent in rd.flatten() {
+                let path = ent.path();
+                let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                if !name.ends_with(".json") || name.starts_with('_') {
+                    continue;
+                }
+                result_count += 1;
+            }
+        }
+    }
+    let meta: Option<Value> = std::fs::read_to_string(&meta_path)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok());
+    let dirty_body: Option<Value> = std::fs::read_to_string(&dirty_path)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok());
+    let mut dirty_reasons: Vec<String> = Vec::new();
+    if let Some(d) = &dirty_body {
+        if let Some(r) = d.get("reason").and_then(Value::as_str) {
+            dirty_reasons.push(r.to_string());
+        }
+    }
+    if meta.is_none() && result_count == 0 {
+        dirty_reasons.push("never_run".into());
+    } else if meta.is_none() && result_count > 0 {
+        dirty_reasons.push("missing_meta".into());
+    }
+    if let Some(m) = &meta {
+        let stored = m.get("rule_set_hash").and_then(Value::as_str).unwrap_or("");
+        if !stored.is_empty() && stored != rule_set_hash() {
+            dirty_reasons.push("rule_set_changed".into());
+        }
+    }
+    let has_results = result_count > 0;
+    let clean = has_results && meta.is_some() && dirty_reasons.is_empty();
+    json!({
+        "ok": true,
+        "has_results": has_results,
+        "clean": clean,
+        "dirty_reasons": dirty_reasons,
+        "completed_at": meta.as_ref().and_then(|m| m.get("completed_at").cloned()),
+        "result_count": meta
+            .as_ref()
+            .and_then(|m| m.get("result_count").and_then(Value::as_u64))
+            .unwrap_or(result_count as u64),
+        "mode": meta.as_ref().and_then(|m| m.get("mode").cloned()),
+    })
+}
+
 fn load_reg() -> Result<RuleRegistry, String> {
     let dir = sql_rules_dir();
     load_registry(&dir).map_err(|e| format!("load registry {}: {e}", dir.display()))
@@ -490,13 +598,21 @@ pub fn results_response(building_id: Option<&str>) -> Value {
             .flatten()
             .filter_map(Result::ok)
             .map(|e| e.path())
-            .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("json"))
+            .filter(|p| {
+                p.extension().and_then(|x| x.to_str()) == Some("json")
+                    && p.file_name()
+                        .and_then(|x| x.to_str())
+                        .is_some_and(|n| !n.starts_with('_'))
+            })
             .collect();
         files.sort();
         for path in files {
             let Some(rule_id) = path.file_stem().and_then(|x| x.to_str()) else {
                 continue;
             };
+            if rule_id.starts_with('_') {
+                continue;
+            }
             let Ok(text) = std::fs::read_to_string(&path) else {
                 continue;
             };
@@ -1393,6 +1509,9 @@ pub fn run_registry(payload: &Value) -> Value {
     )) {
         Ok(report) => {
             let normalized = results_response(building_id);
+            let result_count =
+                normalized.get("count").and_then(Value::as_u64).unwrap_or(0) as usize;
+            write_run_meta(building_id, "registry", result_count);
             json!({
                 "ok": true,
                 "engine": "fdd_rules+DataFusion",
@@ -1686,6 +1805,93 @@ mod tests {
             lookup_fault_flag(&idx, "2024-01-01T00:00:00Z"),
             Some(true),
             "+00:00 must join to Z"
+        );
+    }
+
+    struct RuleResultsDirGuard {
+        _keep: tempfile::TempDir,
+        prev: Option<String>,
+    }
+
+    impl RuleResultsDirGuard {
+        fn new() -> Self {
+            let tmp = tempfile::tempdir().expect("tempdir");
+            let prev = std::env::var("OPENFDD_RULE_RESULTS_DIR").ok();
+            std::env::set_var("OPENFDD_RULE_RESULTS_DIR", tmp.path());
+            Self { _keep: tmp, prev }
+        }
+    }
+
+    impl Drop for RuleResultsDirGuard {
+        fn drop(&mut self) {
+            match self.prev.take() {
+                Some(v) => std::env::set_var("OPENFDD_RULE_RESULTS_DIR", v),
+                None => std::env::remove_var("OPENFDD_RULE_RESULTS_DIR"),
+            }
+        }
+    }
+
+    #[test]
+    fn readiness_never_run_is_not_clean() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        let building = "READINESS_NEVER_RUN";
+        let v = readiness_response(Some(building));
+        assert_eq!(v["ok"], true, "{v}");
+        assert_eq!(v["clean"], false, "{v}");
+        let reasons: Vec<String> = v["dirty_reasons"]
+            .as_array()
+            .expect("dirty_reasons array")
+            .iter()
+            .filter_map(|x| x.as_str().map(str::to_string))
+            .collect();
+        assert!(
+            reasons.iter().any(|r| r == "never_run"),
+            "expected never_run in {reasons:?}, full={v}"
+        );
+    }
+
+    #[test]
+    fn readiness_after_run_meta_and_result_is_clean() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        let building = "READINESS_CLEAN";
+        let scoped = results_dir(Some(building));
+        std::fs::create_dir_all(&scoped).expect("mkdir results");
+        std::fs::write(scoped.join("FC1.json"), b"{}").expect("write result");
+        write_run_meta(Some(building), "registry", 1);
+        let v = readiness_response(Some(building));
+        assert_eq!(v["ok"], true, "{v}");
+        assert_eq!(v["clean"], true, "{v}");
+        assert!(
+            v["dirty_reasons"].as_array().is_some_and(|a| a.is_empty()),
+            "{v}"
+        );
+        assert_eq!(v["has_results"], true, "{v}");
+    }
+
+    #[test]
+    fn readiness_mark_building_dirty_is_not_clean() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        let building = "READINESS_DIRTY";
+        let scoped = results_dir(Some(building));
+        std::fs::create_dir_all(&scoped).expect("mkdir results");
+        std::fs::write(scoped.join("FC1.json"), b"{}").expect("write result");
+        write_run_meta(Some(building), "registry", 1);
+        mark_building_results_dirty(building, "package_reimport");
+        let v = readiness_response(Some(building));
+        assert_eq!(v["ok"], true, "{v}");
+        assert_eq!(v["clean"], false, "{v}");
+        let reasons: Vec<String> = v["dirty_reasons"]
+            .as_array()
+            .expect("dirty_reasons array")
+            .iter()
+            .filter_map(|x| x.as_str().map(str::to_string))
+            .collect();
+        assert!(
+            reasons.iter().any(|r| r == "package_reimport"),
+            "expected package_reimport in {reasons:?}, full={v}"
         );
     }
 }

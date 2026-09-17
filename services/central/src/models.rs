@@ -63,6 +63,9 @@ pub struct IngestStatsResponse {
     pub ingest_ok: u64,
     pub ingest_dup: u64,
     pub ingest_reject: u64,
+    /// Operator-readable reject counts (no payload dump).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub reject_buckets: std::collections::BTreeMap<String, u64>,
     pub dead_letters: usize,
 }
 
