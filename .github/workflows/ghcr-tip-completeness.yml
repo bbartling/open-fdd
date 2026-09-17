@@ -86,6 +86,7 @@ jobs:
             ./scripts/check_ghcr_tip_stack.sh "$TAG"
           fi
 
-      - name: Skipped (cancelled Publish)
+      - name: "Skipped (cancelled Publish)"
         if: steps.tip.outputs.skip == '1'
-        run: echo "OK: tip completeness skipped for cancelled Publish"
+        run: |
+          echo "OK: tip completeness skipped for cancelled Publish"
