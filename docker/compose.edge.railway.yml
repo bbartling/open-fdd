@@ -3,8 +3,10 @@
 services:
   fieldbus:
     environment:
+      # Hub is multi_tenant=true — tenant topics required (sites/… is rejected).
       OPENFDD_MQTT_PUBLISH_INTERVAL_SECS: "60"
       OPENFDD_FIELDBUS_POLL_INTERVAL_SECS: "60"
-      OPENFDD_BUILDING_ID: "bldg2"
+      OPENFDD_TENANT_ID: ${OPENFDD_TENANT_ID:-acme}
+      OPENFDD_BUILDING_ID: ${OPENFDD_BUILDING_ID:-ACME}
       OPENFDD_EQUIPMENT_TYPE: "zone_other"
       OPENFDD_FIELDBUS_DEV_FAST_POLL: "0"

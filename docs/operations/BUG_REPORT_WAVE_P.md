@@ -6,12 +6,12 @@
 
 | Item | Status |
 |------|--------|
-| Product tip | **TIP TRAIN `3.5.27` (branch `fix/wave-ux-soft-tip-a-3527`)** · Soft UX #1–#5 + mqtt-pause gate 35 · awaiting GHCR + Railway re-pin · prior OPS PINNED `3.5.26` / `sha-2c4c2d9` |
-| Prior tip | `3.5.26` / `sha-2c4c2d9` (#944 tip-completeness YAML) · hub backup `20260917T020217Z` · health `3.5.26+2c4c2d9e02e9` |
-| Prior hub | `sha-f318dbc` / 3.5.24 · backup `20260916T215014Z` · Soft Park S5 `20260916T215804Z` |
+| Product tip | **Soft Tip B in flight `3.5.28`** — MT command topics (`tenants/…`) for gate 35 mqtt-pause; prior OPS pin Soft UX `3.5.27` / `sha-bf93ea7` stress `20260917T191546Z` **not fully_qualified** (19 wrong building id FIXED ops; 35 sites/ command path product bug) · backup `20260917T190320Z` · FEC online soak 90/90 parked DIY |
+| Prior tip | `3.5.27` / `sha-bf93ea7` (#946 Soft UX) · hub stress FAIL gates 19+35 · FEC probe `diy-bacnet-router/docs/evidence/FEC_ONLINE_PROBE_20260917T1858Z` |
+| Prior hub | `3.5.26` / `sha-2c4c2d9` (#944) · backup `20260917T020217Z` |
 | Prior OPS PINNED | Wave R **3.5.22** / `sha-4d3a6b0` (#936) · stress `20260916T011952Z` **`fully_qualified=true`** |
 | Soft Park S5 | Stress `reports/nightly-ot-bench_20260916T215804Z/` · **22 PASS / 4 FAIL** · not `fully_qualified` · `capacity_report.json` ok (34 samples, Δ ingest_ok +88, 0 health flaps) · FAILs: 00 edges (kit Soft), 01 synth59 (**busy** proved single-flight vs stale pre-pin action), 03 B100, 19 AFDD flood Soft |
-| Closed this cycle | Dual `fdd_run_all` OOM → **409 busy** + stale reclaim + Account Sign out (#940) · tip-completeness invalid YAML (#944) |
+| Closed this cycle | Dual `fdd_run_all` OOM → **409 busy** + stale reclaim + Account Sign out (#940) · tip-completeness invalid YAML (#944) · Soft UX tip A #946 · Railway fieldbus MT ACME topics · AFDD flood default building `OPENFDD_SYNTHETIC_59_RULE_WEEK_V1` · **OPEN** Tip B: `POST /api/commands` MT `TopicBuilder::with_tenant` |
 
 ## Soft-OPEN (≤ Stage C)
 
@@ -32,7 +32,7 @@
 | **sql-anomaly-overview** | **CLOSED (branch)** · `POST /api/analytics/sql-anomaly` + Overview table |
 | **sidebar-independent-scroll** | **CLOSED (branch)** · Oracle vs main hover wheel isolation |
 | **fdd-actions-singleflight** | **CLOSED** · live hub **3.5.26** / `sha-2c4c2d9` (#940/#943/#944) |
-| **edge-kit-soft** | **OPS script** `./scripts/openfdd_restore_edge_kit.sh` → `deploy/mqtt/kits/bldg2__pi-1/` (not in git; run before fieldbus Railway up) |
+| **edge-kit-soft** | **OPS** · MT kit `./scripts/openfdd_restore_edge_kit.sh ACME pi-1` → `deploy/mqtt/kits/ACME__pi-1/` · `openfdd_fieldbus_railway_up.sh` hard-sets `tenant=acme`/`building=ACME` (legacy `sites/bldg2` rejected under MT) · live ACME OT remains `vim-1` |
 
 ## Wave R closeout (2026-09-16)
 

@@ -11,22 +11,34 @@ if [[ -f "$ROOT/.env" ]]; then
   set -a && source "$ROOT/.env" && set +a
 fi
 
-# Railway field identity wins over local .env (lab/fieldbus-1) unless opted out.
+# Railway field identity wins over local .env / parent-shell pollution unless
+# OPENFDD_FIELD_IDENTITY_FROM_ENV=1 is set *intentionally after* this block.
 export OPENFDD_IMAGE_TAG="$SHA"
 export OPENFDD_FIELDBUS_IMAGE="ghcr.io/bbartling/openfdd-fieldbus:${SHA}"
-if [[ "${OPENFDD_FIELD_IDENTITY_FROM_ENV:-0}" != "1" ]]; then
+# Parent shells sometimes leave OPENFDD_FIELD_IDENTITY_FROM_ENV=1 from manual
+# experiments — only honor it when OPENFDD_RAILWAY_USE_ENV_IDENTITY=1.
+if [[ "${OPENFDD_RAILWAY_USE_ENV_IDENTITY:-0}" == "1" ]]; then
+  : # keep sourced OPENFDD_* site/edge/tenant/building
+else
   export OPENFDD_MQTT_HOST=reseau.proxy.rlwy.net
   export OPENFDD_MQTT_PORT=44763
-  export OPENFDD_SITE_ID=bldg2
-  # Live broker CA has no ca.key.pem on Railway — reuse the already-signed
-  # pi-1 kit on this x86 host (physical Pi is stopped). Override when a
-  # CA-signed bensbench-1 kit exists.
+  # Wave N+ Railway hub is multi_tenant=true — hard-set ACME tenant path
+  # (do not keep local .env site/building/edge — those reject under MT ingest).
+  # Live ACME OT edge is vim-1 (private); bensbench x86 uses pi-1 under ACME.
+  export OPENFDD_SITE_ID=ACME
   export OPENFDD_EDGE_ID="${OPENFDD_RAILWAY_EDGE_ID:-pi-1}"
+  export OPENFDD_TENANT_ID=acme
+  export OPENFDD_BUILDING_ID=ACME
 fi
+export OPENFDD_TENANT_ID="${OPENFDD_TENANT_ID:-acme}"
+export OPENFDD_BUILDING_ID="${OPENFDD_BUILDING_ID:-ACME}"
 export OPENFDD_EDGE_KIT_DIR="${OPENFDD_EDGE_KIT_DIR:-$ROOT/deploy/mqtt/kits/${OPENFDD_SITE_ID}__${OPENFDD_EDGE_ID}}"
 
 if [[ ! -f "$OPENFDD_EDGE_KIT_DIR/ca.pem" || ! -f "$OPENFDD_EDGE_KIT_DIR/edge.cert.pem" ]]; then
-  echo "ERROR: edge kit missing at $OPENFDD_EDGE_KIT_DIR (POST /api/mqtt/edge-kits on Railway)" >&2
+  echo "ERROR: edge kit missing at $OPENFDD_EDGE_KIT_DIR" >&2
+  echo "  Restore MT kit: OPENFDD_API_BASE=https://… OPENFDD_ADMIN_PASSWORD=… \\" >&2
+  echo "    ./scripts/openfdd_restore_edge_kit.sh ${OPENFDD_SITE_ID} ${OPENFDD_EDGE_ID}" >&2
+  echo "  (POST body must include tenant_id=${OPENFDD_TENANT_ID} building_id=${OPENFDD_BUILDING_ID})" >&2
   exit 2
 fi
 
@@ -38,7 +50,7 @@ docker compose -f "$ROOT/docker/compose.react.yml" \
 echo "== pull fieldbus $OPENFDD_FIELDBUS_IMAGE =="
 docker pull "$OPENFDD_FIELDBUS_IMAGE"
 
-echo "== up edge → $OPENFDD_MQTT_HOST:$OPENFDD_MQTT_PORT site=$OPENFDD_SITE_ID edge=$OPENFDD_EDGE_ID =="
+echo "== up edge → $OPENFDD_MQTT_HOST:$OPENFDD_MQTT_PORT tenant=$OPENFDD_TENANT_ID building=$OPENFDD_BUILDING_ID edge=$OPENFDD_EDGE_ID =="
 docker compose -f "$ROOT/docker/compose.edge.yml" \
   -f "$ROOT/docker/compose.edge.railway.yml" \
   up -d --no-build --force-recreate

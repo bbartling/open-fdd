@@ -162,6 +162,20 @@ impl ControlPlane {
             .unwrap_or_default()
     }
 
+    /// First tenant that lists `building_id` (case-sensitive). Used for MT command topics.
+    pub fn tenant_for_building(&self, building_id: &str) -> Option<String> {
+        let bid = building_id.trim();
+        if bid.is_empty() {
+            return None;
+        }
+        self.tenants.iter().find_map(|t| {
+            t.building_ids
+                .iter()
+                .any(|b| b == bid)
+                .then(|| t.id.clone())
+        })
+    }
+
     pub fn all_building_ids(&self) -> Vec<String> {
         let mut out = Vec::new();
         for t in &self.tenants {
@@ -194,6 +208,31 @@ mod tests {
     use super::*;
     use crate::auth::{AuthUser, Role};
     use crate::test_env_lock::lock_env;
+
+    #[test]
+    fn buildings_for_tenant_and_lookup() {
+        let plane = ControlPlane {
+            tenants: vec![
+                TenantRecord {
+                    id: "acme".into(),
+                    name: "ACME".into(),
+                    building_ids: vec!["ACME".into()],
+                },
+                TenantRecord {
+                    id: "building_100".into(),
+                    name: "B100".into(),
+                    building_ids: vec!["BUILDING_100".into()],
+                },
+            ],
+        };
+        assert_eq!(plane.tenant_for_building("ACME").as_deref(), Some("acme"));
+        assert_eq!(
+            plane.tenant_for_building("BUILDING_100").as_deref(),
+            Some("building_100")
+        );
+        assert_eq!(plane.tenant_for_building("missing"), None);
+        assert_eq!(plane.buildings_for_tenant("acme"), vec!["ACME".to_string()]);
+    }
 
     #[test]
     fn multi_tenant_flag_defaults_off() {

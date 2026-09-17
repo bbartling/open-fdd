@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getStoredToken } from "../api/authApi";
 import { apiFetch, apiFetchBlob } from "../api/client";
+import { getStoredActiveTenant } from "../api/tenantApi";
 import { AppShell } from "../components/AppShell";
 import { Button } from "../components/widgets";
 
@@ -879,6 +880,18 @@ function TelemetrySuspendPanel() {
       setError(null);
       setMessage(null);
       try {
+        const activeTenant = getStoredActiveTenant();
+        const payload: Record<string, unknown> = {
+          site_id: siteId,
+          edge_id: edgeId,
+          target_id: "edge:telemetry",
+          approved_by: "operations-ui",
+          value: { action },
+          ttl_secs: 120,
+        };
+        if (activeTenant && activeTenant !== "legacy") {
+          payload.tenant_id = activeTenant;
+        }
         const body = await apiFetch<{
           ok: boolean;
           published?: boolean;
@@ -888,14 +901,7 @@ function TelemetrySuspendPanel() {
         }>("/api/commands", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            site_id: siteId,
-            edge_id: edgeId,
-            target_id: "edge:telemetry",
-            approved_by: "operations-ui",
-            value: { action },
-            ttl_secs: 120,
-          }),
+          body: JSON.stringify(payload),
         });
         if (!body.ok) {
           throw new Error(body.error ?? "command rejected");

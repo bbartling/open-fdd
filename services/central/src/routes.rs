@@ -1494,7 +1494,40 @@ pub async fn issue_command(
         body.approved_by.clone()
     };
 
-    let topics = TopicBuilder::new(&body.site_id, &body.edge_id);
+    // Wave N+ MT hubs reject sites/… ingest; command + ack topics must match the
+    // edge's tenants/{tid}/buildings/{bid}/… namespace or pause/resume never acks.
+    let topics = if crate::tenant::multi_tenant_enabled() {
+        let workspace =
+            std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+        let plane =
+            crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
+        let tid = body
+            .tenant_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .or_else(|| plane.tenant_for_building(&body.site_id));
+        match tid {
+            Some(tid) => TopicBuilder::with_tenant(tid, &body.site_id, &body.edge_id),
+            None => {
+                return Json(IssueCommandResponse {
+                    ok: false,
+                    command: None,
+                    publish_topic: None,
+                    response_topic: None,
+                    published: None,
+                    hint: None,
+                    error: Some(format!(
+                        "multi-tenant mode requires tenant_id (building {} is not mapped to a tenant)",
+                        body.site_id
+                    )),
+                });
+            }
+        }
+    } else {
+        TopicBuilder::new(&body.site_id, &body.edge_id)
+    };
     let protocol = if body.target_id.starts_with("edge:") {
         Protocol::Mixed
     } else {
