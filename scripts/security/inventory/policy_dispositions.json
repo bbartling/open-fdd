@@ -1,0 +1,29 @@
+{
+  "schema_version": "openfdd_policy_dispositions_v1",
+  "notes": [
+    "Unknown policy remains BLOCKED_POLICY until a product decision is recorded.",
+    "Do not encode today's behavior as correct merely because a handler returns 200."
+  ],
+  "blocked_pending_decision": [
+    {
+      "policy": "job_ownership_trace",
+      "reason": "Jobs list/get/update/download ownership vs tenant scope needs explicit product policy + storage trace.",
+      "finding_ids_private": ["SEC-JOB-OWNERSHIP"]
+    },
+    {
+      "policy": "authenticated_global_metadata",
+      "reason": "actions/export/meta/host/stats/ingest/agent-tools/fdd-schema admin vs tenant scope not fully specified.",
+      "finding_ids_private": ["SEC-GLOBAL-META"]
+    }
+  ],
+  "hypotheses_for_ci_reproduction_only": [
+    {
+      "id": "SEC-MT-EMPTY-MEMBERSHIP",
+      "summary": "empty membership / resolve_tenant_context passthrough must not broaden MT access"
+    },
+    {
+      "id": "SEC-SCOPED-ADMIN-MINT",
+      "summary": "scoped admin must not mint broader agent authority than hub policy allows"
+    }
+  ]
+}

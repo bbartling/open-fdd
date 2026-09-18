@@ -1,0 +1,23 @@
+{
+  "schema_version": "openfdd_security_profiles_v1",
+  "notes": [
+    "Required check IDs per profile/suite. Subset runs must set full_profile=false.",
+    "mqtt_acl is optional and never satisfied by continuity gate 21."
+  ],
+  "profiles": {
+    "live_readonly": {
+      "required_suites": ["X", "Y", "Z"],
+      "forbids": ["fixture_writes", "token_mint", "throttle_burst", "broker_acl_mutation"]
+    },
+    "isolated_full": {
+      "required_suites": ["X", "Y", "Z"],
+      "optional_suites": ["mqtt_acl"],
+      "requires_flag_for_writes": "--allow-fixture-writes"
+    },
+    "local_open": {
+      "required_suites": ["Z"],
+      "auth_isolation": "NOT_APPLICABLE",
+      "requires": ["loopback_binding_evidence"]
+    }
+  }
+}

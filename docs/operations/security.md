@@ -103,6 +103,34 @@ logging:
 
 For pen tests, ask operators for: `docker logs` (or Railway/AWS log export) filtered on `security_audit`, plus `workspace/logs/security_audit.jsonl*`.
 
+## Python security harness (qualification evidence)
+
+Reusable offline-first tooling lives under [`scripts/security/`](../../scripts/security/README.md).
+It produces **scoped** evidence for named auth/JWT/authz/deployment checks for a
+candidate + config + fixture set. It does **not** certify that Open-FDD is free of
+vulnerabilities, and dry-run plans are never qualification PASS.
+
+```bash
+# Plan only (default): no network / no credential reads
+python3 scripts/security/openfdd_security_probe.py \
+  --config scripts/security/config/example_security_fixtures.json \
+  --base-url http://127.0.0.1:18080 --profile isolated_full --dry-run
+
+# Offline evaluator tests
+python3 -B -m unittest discover -s tests/security -v
+```
+
+Stress gates (wired; live execute requires `OPENFDD_SECURITY_EXECUTE=1`):
+
+| Gate ID | Script | Role |
+| --- | --- | --- |
+| `25_security_python_harness` | `25_security_python_harness.sh` | Pre-stress probe (≠ Wave L `25_wave_l_*`) |
+| `25b_security_post_stress` | `25b_security_post_stress.sh` | Post-stress re-auth + bounded reads |
+| `26_security_mqtt_acl` | `26_security_mqtt_acl.sh` | Optional broker ACL (≠ continuity gate 21) |
+
+Evidence paths: `reports/security/` or per-run `ARTIFACT_DIR/gate25*_*/`.
+Credentials are env refs only. Product findings stay private per [`SECURITY.md`](../../SECURITY.md).
+
 ## BACnet write safety
 
 - `POST /api/bacnet/write-dry-run` before live writes

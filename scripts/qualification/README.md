@@ -4,7 +4,7 @@
 
 | Profile | Entry | Environment |
 |---------|-------|-------------|
-| `railway_field` | `./scripts/nightly-ot-bench/run_railway_hub_stress.sh` | Live Railway hub + x86 fieldbus (read-oriented; light ZAP) |
+| `railway_field` | `./scripts/nightly-ot-bench/run_railway_hub_stress.sh` | Authorized live ops window; includes data mutations and telemetry pause/resume, plus public ZAP baseline |
 | `lab_local` | `./scripts/nightly-ot-bench/run_all.sh` | Disposable/local stack (not field closeout) |
 | `harness_selftest` | `python3 scripts/qualification/write_manifest.py selftest` | No network |
 
@@ -20,6 +20,33 @@
 - Statuses: `PASS` | `FAIL` | `ERROR` | `SKIPPED` | `BLOCKED` | `NOT_APPLICABLE`.
 - Required gate `SKIPPED` / `BLOCKED` / `ERROR` ⇒ `fully_qualified=false` (e.g. `SKIP_ZAP=1`).
 - `SUMMARY.md` is **generated** from the manifest — never a static success sentence.
+
+### Security assurance scope
+
+Manifest v1 summarizes recorded verdicts for the caller's required-gate list.
+It does not establish route coverage or validate HTTP assertions/artifact freshness.
+Its `fully_qualified` field is not a blanket security certification.
+An empty required list or an entirely `NOT_APPLICABLE` run is BLOCKED; a required
+N/A gate needs a nonblank reason. Reasons alone do not prove feature applicability.
+
+The security dimension includes recorded role/tenant/ACL/header gates **and**
+Python harness gates `25_security_python_harness` / `25b_security_post_stress` /
+`26_security_mqtt_acl` when required by the runner. MQTT continuity (21) and
+telemetry pause/resume (35) are transport evidence, not broker authorization
+tests. All-N/A security remains `NOT_APPLICABLE`; no security evidence remains
+`null`. Dry-run harness artifacts cannot fully qualify.
+
+Harness: [`scripts/security/README.md`](../security/README.md). Offline tests:
+`python3 -B -m unittest discover -s tests/security -v`. Audit contract:
+[`.cursor/plans/security_stress_integration_audit.md`](../../.cursor/plans/security_stress_integration_audit.md).
+Live execute / Railway ACL windows remain HOLD until authorized; dry-run is the default.
+
+Offline reporting regression tests (no application/network testing):
+
+```bash
+python3 -B -m unittest discover -s tests/qualification -v
+python3 -B scripts/qualification/write_manifest.py selftest
+```
 
 ## Scripts
 

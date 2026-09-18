@@ -122,6 +122,9 @@ python3 "$MANIFEST_PY" create \
   --required 23_wave_o_security \
   --required 24_capacity_pressure \
   --required 24b_capacity_report \
+  --required 25_security_python_harness \
+  --required 25b_security_post_stress \
+  --required 26_security_mqtt_acl \
   --required 35_mqtt_telemetry_pause_resume
 
 record_gate() {
@@ -158,6 +161,47 @@ run_gate() {
     python3 "$MANIFEST_PY" record --manifest "$MANIFEST" --gate "$gate" --status FAIL \
       --title "$title" --reason "exit=$rc" --artifact "$log" --duration-secs "$dur"
   fi
+  return 0
+}
+
+# Record from structured security_gate_verdict.json (exit alone is insufficient).
+run_security_gate() {
+  local gate="$1" title="$2" art_subdir="$3"
+  shift 3
+  if [[ -n "${RAILWAY_ADMIN_PASSWORD:-}" ]]; then
+    export OPENFDD_ADMIN_PASSWORD="$RAILWAY_ADMIN_PASSWORD"
+  fi
+  export OPENFDD_STRESS_GATE="$gate"
+  hdr "$title"
+  local gate_art="$ART/$art_subdir"
+  mkdir -p "$gate_art"
+  local log="$ART/${gate}.log"
+  local t0=$SECONDS
+  set +e
+  env ARTIFACT_DIR="$gate_art" "$@" 2>&1 | tee "$log"
+  local rc=${PIPESTATUS[0]}
+  set -e
+  local dur=$((SECONDS - t0))
+  local verdict="$gate_art/security_gate_verdict.json"
+  local report="$gate_art/python_harness/security_report.json"
+  [[ -f "$gate_art/python_harness_post/security_report.json" ]] && \
+    report="$gate_art/python_harness_post/security_report.json"
+  local status="ERROR" reason="missing security_gate_verdict.json"
+  if [[ -f "$verdict" ]]; then
+    status="$(jq -r '.status // "ERROR"' "$verdict")"
+    reason="$(jq -r '.reason // empty' "$verdict")"
+  elif [[ "$rc" -eq 0 ]]; then
+    status="ERROR"
+    reason="exit=0 but missing structured verdict"
+  else
+    status="FAIL"
+    reason="exit=$rc; missing structured verdict"
+  fi
+  local args=(python3 "$MANIFEST_PY" record --manifest "$MANIFEST" --gate "$gate" \
+    --status "$status" --title "$title" --reason "$reason" --artifact "$log" --duration-secs "$dur")
+  [[ -f "$verdict" ]] && args+=(--artifact "$verdict")
+  [[ -f "$report" ]] && args+=(--artifact "$report")
+  "${args[@]}"
   return 0
 }
 
@@ -280,12 +324,20 @@ run_gate "09_wave_i_app_test_megas" "09 Wave I app-test MEGAs" \
 run_gate "10_wave_k_app_test_megas" "10 Wave K app-test MEGAs" \
   "$DIR/21_wave_k_app_test_megas.sh"
 
+# --- 25 Python security harness (pre-stress). Default dry-run → BLOCKED until
+# OPENFDD_SECURITY_EXECUTE=1 in an authorized window. Distinct from Wave L 25_*.
+export OPENFDD_SECURITY_PROFILE="${OPENFDD_SECURITY_PROFILE:-live_readonly}"
+run_security_gate "25_security_python_harness" "25 security python harness (pre)" \
+  "gate25_security_python_harness" \
+  bash "$DIR/25_security_python_harness.sh"
+
 # --- 11 Wave L/N tenant mode (OFF=legacy; ON=Wave N trio — script bifurcates) ---
 run_gate "11_wave_l_tenant_mode" "11 Wave L/N tenant mode" \
   bash "$DIR/22_wave_l_tenant_mode.sh"
 
 # Wave L OFF-only gates (12–17) assert multi_tenant=false. On Wave N field hubs
-# (MT ON) they would auto-FAIL; skip — coverage is gates 20/21 (+ gate 11 ON path).
+# (MT ON) they are NOT_APPLICABLE — superseded by gates 11/20/21 (explicit IDs).
+# Do not fabricate PASS for omitted Wave L OFF suites.
 HUB_MT="$(jq -r '.multi_tenant // false' "$ART/health.json" 2>/dev/null || echo false)"
 if [[ "$HUB_MT" == "true" ]]; then
   for g in \
@@ -298,9 +350,8 @@ if [[ "$HUB_MT" == "true" ]]; then
   do
     gid="${g%%:*}"
     title="${g#*:}"
-    # PASS (not SKIPPED): required-gate SKIPPED blocks fully_qualified.
-    record_gate "$gid" PASS "$title" \
-      "N/A hub multi_tenant=true (Wave N OPS); Wave L OFF suite superseded by gates 11/20/21"
+    record_gate "$gid" NOT_APPLICABLE "$title" \
+      "hub multi_tenant=true; Wave L OFF suite not applicable — replacement evidence: 11_wave_l_tenant_mode + 20_wave_n_tenant_acl + 21_wave_n_mqtts_continuity"
   done
 else
   run_gate "12_wave_l_parquet_isolation" "12 Wave L Parquet isolation OFF" \
@@ -324,7 +375,7 @@ run_gate "18_wave_m_durable_session" "18 Wave M durable session" \
 # --- 20 Wave N tenant ACL (ACME / B100 / lakeside_sd) — requires MT ON + users ---
 if [[ "${WAVE_N_ACL:-1}" == "1" ]]; then
   run_gate "20_wave_n_tenant_acl" "20 Wave N tenant ACL" \
-    bash "$DIR/31_wave_n_tenant_acl.sh"
+    env ARTIFACT_DIR="$ART/gate20_wave_n_tenant_acl" bash "$DIR/31_wave_n_tenant_acl.sh"
 else
   record_gate "20_wave_n_tenant_acl" SKIPPED "20 Wave N tenant ACL" \
     "WAVE_N_ACL=0"
@@ -342,7 +393,7 @@ fi
 # --- 22 Wave O admin + data-model/session ACL ---
 if [[ "${WAVE_O_ADMIN_ACL:-1}" == "1" ]]; then
   run_gate "22_wave_o_admin_datamodel_acl" "22 Wave O admin + data-model ACL" \
-    bash "$DIR/33_wave_o_admin_datamodel_acl.sh"
+    env ARTIFACT_DIR="$ART/gate22_wave_o_admin_datamodel_acl" bash "$DIR/33_wave_o_admin_datamodel_acl.sh"
 else
   record_gate "22_wave_o_admin_datamodel_acl" SKIPPED "22 Wave O admin + data-model ACL" \
     "WAVE_O_ADMIN_ACL=0"
@@ -419,6 +470,16 @@ else
     "MQTT_PAUSE_RESUME=0"
 fi
 
+# --- 25b security postcheck (re-auth + bounded reads). Runs even after prior fails. ---
+run_security_gate "25b_security_post_stress" "25b security post-stress" \
+  "gate25b_security_post_stress" \
+  bash "$DIR/25b_security_post_stress.sh"
+
+# --- 26 MQTT ACL (optional). Continuity ≠ ACL. Default BLOCKED without fixture. ---
+run_security_gate "26_security_mqtt_acl" "26 security MQTT ACL" \
+  "gate26_security_mqtt_acl" \
+  bash "$DIR/26_security_mqtt_acl.sh"
+
 # Finalize — SUMMARY generated from recorded gates only
 set +e
 python3 "$MANIFEST_PY" finalize --manifest "$MANIFEST" --summary-md "$ART/SUMMARY.md"
@@ -431,5 +492,6 @@ if [[ -f "$ART/capacity_report.json" ]]; then
   jq -c '{status,sample_count,soft_warns,hard_fails,peak_memory_percent_used,delta_historian_small_files}' \
     "$ART/capacity_report.json" 2>/dev/null || true
 fi
+echo "security_scope: profile=${OPENFDD_SECURITY_PROFILE:-live_readonly} execute=${OPENFDD_SECURITY_EXECUTE:-0}"
 cat "$ART/SUMMARY.md"
 exit "$FINAL_RC"

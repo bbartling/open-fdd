@@ -1,0 +1,4 @@
+# Optional pins for security tooling.
+# The harness is stdlib-only today; keep this file for future explicit pins.
+# Example (not required):
+# pytest==8.3.4

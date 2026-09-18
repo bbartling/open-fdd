@@ -1,0 +1,17 @@
+{
+  "schema_version": "openfdd_security_report_v1",
+  "description": "Versioned security probe evidence. Dry-run/executed=false cannot qualify.",
+  "required_fields": [
+    "schema_version",
+    "run_id",
+    "profile",
+    "executed",
+    "dry_run",
+    "full_profile",
+    "checks",
+    "counts",
+    "overall_status",
+    "fully_qualified"
+  ],
+  "statuses": ["PASS", "FAIL", "ERROR", "BLOCKED", "SKIPPED", "NOT_APPLICABLE"]
+}

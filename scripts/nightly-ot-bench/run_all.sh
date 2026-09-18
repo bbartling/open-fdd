@@ -134,4 +134,31 @@ else
   skip "synthetic health matrix skipped (RUN_SYNTH59_HEALTH_MATRIX=1)"
 fi
 
+# Security Python harness (offline-safe default = dry-run → BLOCKED evidence).
+# Opt-in execute: OPENFDD_SECURITY_EXECUTE=1 OPENFDD_SECURITY_PROFILE=local_open|isolated_full
+{
+  echo
+  echo "## Security scope"
+  echo "- Profile: \`${OPENFDD_SECURITY_PROFILE:-local_open}\`"
+  echo "- Execute: \`${OPENFDD_SECURITY_EXECUTE:-0}\` (0 = dry-run plan only; not qualification evidence)"
+  echo "- Artifacts: \`$ART/gate25_security_python_harness\`"
+} >>"$REPORT"
+export CENTRAL_BASE="${CENTRAL_BASE:-http://127.0.0.1:8080}"
+export OPENFDD_SECURITY_PROFILE="${OPENFDD_SECURITY_PROFILE:-local_open}"
+export ARTIFACT_DIR="$ART/gate25_security_python_harness"
+if ! run_phase 25_security_python_harness.sh "25 security python harness"; then
+  # Dry-run exits 2 (BLOCKED) — record honestly, do not greenwash.
+  echo "- **25 security:** BLOCKED/FAIL (see gate25 logs; dry-run is not PASS)" >>"$REPORT"
+  OVERALL=1
+fi
+unset ARTIFACT_DIR
+export ARTIFACT_DIR="$ART"
+if [[ "${OPENFDD_SECURITY_MQTT_ACL:-0}" == "1" ]]; then
+  export ARTIFACT_DIR="$ART/gate26_security_mqtt_acl"
+  run_phase 26_security_mqtt_acl.sh "26 security MQTT ACL" || OVERALL=1
+  export ARTIFACT_DIR="$ART"
+else
+  echo "- **26 security MQTT ACL:** BLOCKED (OPENFDD_SECURITY_MQTT_ACL!=1; continuity ≠ ACL)" >>"$REPORT"
+fi
+
 finish_report
