@@ -26,7 +26,8 @@ if [[ "$RAILWAY_BASE" != https://* ]]; then
 fi
 EXPECTED_EDGE_ID="${EXPECTED_EDGE_ID:-}"
 EXPECTED_SITE_ID="${EXPECTED_SITE_ID:-}"
-ACCEPT_ZAP_MEDIUM="${ACCEPT_ZAP_MEDIUM:-1}"
+ACCEPT_ZAP_MEDIUM="${ACCEPT_ZAP_MEDIUM:-0}"
+ZAP_DISPOSITIONS="${ZAP_DISPOSITIONS:-$QUAL/zap_risk_dispositions.json}"
 QUAL="$ROOT/scripts/qualification"
 MANIFEST_PY="$QUAL/write_manifest.py"
 
@@ -271,7 +272,8 @@ else
       "missing/empty zap_baseline.json (scanner startup or truncate); docker_rc=$zap_rc" \
       "$ART/06_zap_baseline.log"
   else
-    ZARGS=(python3 "$QUAL/zap_baseline_verdict.py" --report "$ZJSON" --out "$ART/zap_measured.json")
+    ZARGS=(python3 "$QUAL/zap_baseline_verdict.py" --report "$ZJSON" --out "$ART/zap_measured.json"
+      --dispositions "$ZAP_DISPOSITIONS")
     [[ "$ACCEPT_ZAP_MEDIUM" == "1" ]] && ZARGS+=(--accept-medium)
     set +e
     "${ZARGS[@]}" 2>&1 | tee -a "$ART/06_zap_baseline.log"

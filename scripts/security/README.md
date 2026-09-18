@@ -75,3 +75,15 @@ Distinct from existing `25_wave_l_tenant_ui_session.sh` (Wave L OFF smoke).
 
 Stdlib only for the harness. Optional pins would go in
 `scripts/security/requirements.txt` if added later.
+
+
+## Inventory honesty (v2)
+
+Dispositions:
+
+- **IMPLEMENTED** — suite actually emits intersecting `implemented_check_ids`
+- **PLANNED** — check IDs reserved; **not tested yet**
+- **BLOCKED_POLICY** — policy unresolved; cannot claim PASS
+
+Never use COVERED. See `inventory/implemented_checks.json` and
+`tests/security/test_inventory_integrity.py`.

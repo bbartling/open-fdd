@@ -409,8 +409,16 @@ pub async fn list_tenants(
             Json(json!({"ok": false, "error": e})),
         )
     })?;
-    let ctx = crate::tenant::TenantContext::resolve(&user, &plane)
-        .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&user));
+    let ctx = match crate::tenant::TenantContext::resolve(&user, &plane) {
+        Ok(ctx) => ctx,
+        Err(detail) if crate::tenant::multi_tenant_enabled() => {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({"ok": false, "error": detail})),
+            ));
+        }
+        Err(_) => crate::tenant::TenantContext::single_tenant_passthrough(&user),
+    };
     // Keep gate 11 fail-closed on mode: never advertise ON until operator enable.
     let multi_tenant = crate::tenant::multi_tenant_enabled();
     let buildings_visible: Vec<String> = plane
@@ -569,8 +577,7 @@ fn resolve_tenant_context(state: &AppState, headers: &HeaderMap) -> crate::tenan
         .auth
         .user_from_headers(headers)
         .unwrap_or_else(|_| auth::AuthUser::dev_anonymous());
-    crate::tenant::TenantContext::resolve(&user, &plane)
-        .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&user))
+    crate::tenant::TenantContext::resolve_fail_closed(&user, &plane)
 }
 
 fn require_hub_admin(
@@ -904,8 +911,7 @@ fn resolve_request_tenant(
         .auth
         .user_from_headers(headers)
         .unwrap_or_else(|_| auth::AuthUser::dev_anonymous());
-    let ctx = crate::tenant::TenantContext::resolve(&user, &plane)
-        .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&user));
+    let ctx = crate::tenant::TenantContext::resolve_fail_closed(&user, &plane);
     (ctx.tenant_id, cfg)
 }
 
@@ -1003,8 +1009,7 @@ pub async fn auth_me(
                 std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
             let plane =
                 crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
-            let ctx = crate::tenant::TenantContext::resolve(&user, &plane)
-                .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&user));
+            let ctx = crate::tenant::TenantContext::resolve_fail_closed(&user, &plane);
             Ok(Json(AuthMeResponse {
                 ok: true,
                 username: user.sub,
@@ -1123,8 +1128,7 @@ pub async fn auth_login(
         role,
         tenant_ids: tenant_ids.clone(),
     };
-    let ctx = crate::tenant::TenantContext::resolve(&auth_user, &plane)
-        .unwrap_or_else(|_| crate::tenant::TenantContext::single_tenant_passthrough(&auth_user));
+    let ctx = crate::tenant::TenantContext::resolve_fail_closed(&auth_user, &plane);
     open_fdd_edge_prototype::auth::audit::log_event(
         "login_success",
         json!({
@@ -1183,14 +1187,47 @@ pub async fn auth_agent_token(
             })),
         ));
     }
+    let hub_admin = matches!(user.role, auth::Role::Admin) && user.tenant_ids.is_empty();
+    let scoped_admin = matches!(user.role, auth::Role::Admin) && !user.tenant_ids.is_empty();
     let ttl = body.ttl_secs.unwrap_or(3600).clamp(60, 86_400);
-    let tenant_ids: Vec<String> = body
+    let requested = body
         .tenant_id
         .as_ref()
         .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .map(|s| vec![s])
-        .unwrap_or_default();
+        .filter(|s| !s.is_empty());
+    let tenant_ids: Vec<String> = if hub_admin {
+        // Hub admin may mint scoped or (explicitly) empty membership agent.
+        requested.map(|s| vec![s]).unwrap_or_default()
+    } else if scoped_admin {
+        // Scoped admin must mint only within their membership; omit/blank/foreign → 403.
+        let Some(tid) = requested else {
+            return Err((
+                axum::http::StatusCode::FORBIDDEN,
+                Json(json!({
+                    "ok": false,
+                    "error": "scoped admin must supply tenant_id within membership"
+                })),
+            ));
+        };
+        if !user.tenant_ids.iter().any(|t| t == &tid) {
+            return Err((
+                axum::http::StatusCode::FORBIDDEN,
+                Json(json!({
+                    "ok": false,
+                    "error": "scoped admin cannot mint agent for foreign tenant"
+                })),
+            ));
+        }
+        vec![tid]
+    } else {
+        return Err((
+            axum::http::StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "admin role required to mint agent tokens"
+            })),
+        ));
+    };
     let active_tenant_id = tenant_ids
         .first()
         .cloned()
@@ -1213,6 +1250,7 @@ pub async fn auth_agent_token(
             "request_id": request_id,
             "tenant_ids": tenant_ids,
             "active_tenant_id": active_tenant_id,
+            "hub_admin_mint": hub_admin,
         }),
     );
     Ok(Json(AuthLoginResponse {

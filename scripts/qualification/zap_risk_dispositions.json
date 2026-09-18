@@ -1,0 +1,5 @@
+{
+  "schema_version": "openfdd_zap_risk_dispositions_v1",
+  "note": "Rule-specific Medium acceptances only. High is never accepted. Expired rows do not accept.",
+  "dispositions": []
+}

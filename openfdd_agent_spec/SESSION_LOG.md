@@ -826,3 +826,11 @@ Newest first. Append after non-trivial agent work.
 - Verification: `python3 -B -m unittest discover -s tests/qualification -v`
   passed 11 tests; `python3 -B scripts/qualification/write_manifest.py selftest`
   passed; `git diff --check` clean.
+
+## 2026-09-18T20:10Z — 3.5.29 security harness reconcile (PR #948)
+
+- Inventory v2: IMPLEMENTED/PLANNED/BLOCKED_POLICY; dup fdd-rules IDs fixed; CI integrity tests.
+- Layer C product fixes: MT empty-membership fail-closed; scoped-admin agent mint; tests in preauth_disclosure.
+- ZAP: ACCEPT_ZAP_MEDIUM default 0 + zap_risk_dispositions.json.
+- Live execute / MEGA stress still HOLD until tip merge + pin.
+- Evidence: docs/operations/SECURITY_HARNESS_EVIDENCE_3.5.29.md

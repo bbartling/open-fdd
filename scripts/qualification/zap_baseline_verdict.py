@@ -77,7 +77,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--accept-medium",
         action="store_true",
-        help="do not FAIL on Medium (still recorded; High always FAIL)",
+        help="DEPRECATED blanket Medium accept — prefer --dispositions",
+    )
+    p.add_argument(
+        "--dispositions",
+        help="JSON file of rule-specific Medium dispositions (name/pluginid + expiry)",
     )
     p.add_argument(
         "--selftest",
@@ -128,16 +132,44 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
-    if meds and not args.accept_medium:
+
+    accepted_names: set[str] = set()
+    if args.dispositions:
+        from datetime import date
+
+        disp_path = Path(args.dispositions)
+        if not disp_path.is_file():
+            print(f"ERROR: dispositions file missing: {disp_path}", file=sys.stderr)
+            return 2
+        disp = json.loads(disp_path.read_text(encoding="utf-8"))
+        today = date.today().isoformat()
+        for row in disp.get("dispositions") or []:
+            if not isinstance(row, dict):
+                continue
+            exp = str(row.get("expiry") or "")
+            if exp and exp < today:
+                continue
+            name = str(row.get("name") or "").strip()
+            if name:
+                accepted_names.add(name)
+
+    unaccepted = [n for n in measured["medium_alerts"] if n not in accepted_names]
+    if meds and unaccepted and not args.accept_medium:
         print(
-            f"FAIL: {meds} Medium alert(s) (pass --accept-medium to accept explicitly): "
-            f"{', '.join(measured['medium_alerts'][:8])}",
+            f"FAIL: {len(unaccepted)} unaccepted Medium alert(s) "
+            f"(add rule-specific dispositions or remove --accept-medium blanket): "
+            f"{', '.join(unaccepted[:8])}",
             file=sys.stderr,
         )
         return 1
-    if meds:
+    if meds and args.accept_medium:
         print(
-            f"PASS with accepted Medium residuals ({meds}): "
+            f"PASS with DEPRECATED blanket ACCEPT_ZAP_MEDIUM ({meds}): "
+            f"{', '.join(measured['medium_alerts'][:8])}"
+        )
+    elif meds:
+        print(
+            f"PASS with rule-specific Medium dispositions ({meds}): "
             f"{', '.join(measured['medium_alerts'][:8])}"
         )
     else:
