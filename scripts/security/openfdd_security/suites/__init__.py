@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from typing import Any, Callable
 from urllib.parse import urlencode
 
@@ -113,7 +115,8 @@ def run_suite_x(ctx: SuiteContext) -> None:
         ("/api/fdd/equipment", "x.preauth.anon401.get_api_fdd_equipment"),
         ("/api/fdd/results", "x.preauth.anon401.get_api_fdd_results"),
         ("/api/fdd/session-config", "x.preauth.anon401.get_api_fdd_session_config"),
-        ("/api/analytics/overview", "x.preauth.anon401.get_api_analytics_overview"),
+        # Prefer a live analytics GET (overview path is not routed → 404 bypasses auth layer).
+        ("/api/analytics/sql-anomaly/status", "x.preauth.anon401.get_api_analytics_overview"),
         ("/api/admin/users", "x.preauth.anon401.get_api_admin_users"),
         ("/api/jobs", "x.preauth.anon401.get_api_jobs"),
         ("/api/agent/tools", "x.preauth.anon401.get_api_agent_tools"),
@@ -240,20 +243,31 @@ def run_suite_x(ctx: SuiteContext) -> None:
                 detector_id="jwt_valid_sibling",
             )
         elif r_exp.status == 401 and r_ok.status == 401:
+            # live_readonly cannot mint server-valid JWTs; isolated_full owns these.
+            na = "NOT_APPLICABLE" if ctx.profile == "live_readonly" else "BLOCKED"
+            detail = (
+                "live_readonly: expiry/sibling JWT pair requires isolated JWT secret"
+                if na == "NOT_APPLICABLE"
+                else "server JWT secret not harness-isolated; expiry pair unverified"
+            )
             ctx.check(
                 "x.jwt.expired_signed_rejected",
                 "X",
                 "correctly signed expired token rejected",
-                "BLOCKED",
-                detail="server JWT secret not harness-isolated; expiry pair unverified",
+                na,
+                detail=detail,
                 detector_id="jwt_expired",
             )
             ctx.check(
                 "x.jwt.valid_sibling_accepted",
                 "X",
                 "valid sibling token accepted",
-                "BLOCKED",
-                detail="server JWT secret not harness-isolated",
+                na,
+                detail=(
+                    "live_readonly: valid-sibling acceptance requires isolated JWT secret"
+                    if na == "NOT_APPLICABLE"
+                    else "server JWT secret not harness-isolated"
+                ),
                 detector_id="jwt_valid_sibling",
             )
         else:
@@ -306,6 +320,28 @@ def _login_me(
         return
     password = resolve_password(ident)
     username = resolve_username(ident, default_user)
+    # Prefer pre-minted admin bearer after stress floods (avoids login 429).
+    if alias == "admin":
+        preexisting = (os.environ.get("OPENFDD_ADMIN_TOKEN") or "").strip()
+        if preexisting:
+            try:
+                me = ctx.client.request("GET", "/api/auth/me", token=preexisting)
+                if me.status == 200 and _is_json_object(me.body):
+                    ctx.tokens[alias] = preexisting
+                    role = (me.json() or {}).get("role")
+                    ctx.check(
+                        check_id,
+                        "X",
+                        f"login/me {alias}",
+                        "PASS" if role == "admin" else "FAIL",
+                        expected="200+token",
+                        observed=_status_of(me),
+                        identity_alias=alias,
+                        detail="reused OPENFDD_ADMIN_TOKEN",
+                    )
+                    return
+            except TransportError:
+                pass
     if not password or not username:
         ctx.check(
             check_id,
@@ -317,11 +353,18 @@ def _login_me(
         )
         return
     try:
-        r = ctx.client.request(
-            "POST",
-            "/api/auth/login",
-            json_body={"username": username, "password": password},
-        )
+        r = None
+        for attempt in range(6):
+            r = ctx.client.request(
+                "POST",
+                "/api/auth/login",
+                json_body={"username": username, "password": password},
+            )
+            if r.status != 429:
+                break
+            # Post-stress / gate 23 AFDD flood can trip login rate limits — wait and retry.
+            time.sleep(min(5 * (2**attempt), 45))
+        assert r is not None
         if r.status != 200 or not _is_json_object(r.body):
             ctx.check(
                 check_id,
@@ -331,6 +374,7 @@ def _login_me(
                 expected="200+token",
                 observed=_status_of(r),
                 identity_alias=alias,
+                detail="login rate-limited (429) after retries" if r.status == 429 else None,
             )
             return
         data = r.json()

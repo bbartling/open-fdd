@@ -1,18 +1,17 @@
 {
   "schema_version": "openfdd_security_fixtures_v1",
   "notes": [
-    "Nonsecret example only. Credentials are environment-variable references.",
-    "Never put passwords, tokens, or JWT secrets in this file."
+    "Railway hub (gleaming-cooperation) live_readonly profile.",
+    "Credentials are environment-variable references only — never store secrets here.",
+    "Map OPENFDD_USER_A_OPS_PASSWORD ← OPENFDD_USER_ACME_OPS_PASSWORD,",
+    "OPENFDD_USER_B_OPS_PASSWORD ← OPENFDD_USER_B100_OPS_PASSWORD via stress wrapper."
   ],
   "origin_allowlist": [
-    "http://127.0.0.1:18080",
-    "http://127.0.0.1:8080",
-    "http://localhost:18080",
     "https://openfdd-web-production-af99.up.railway.app"
   ],
   "tls": {
     "verify": true,
-    "allow_http_loopback": true,
+    "allow_http_loopback": false,
     "max_body_bytes": 1048576
   },
   "identities": {
@@ -26,34 +25,28 @@
       "username_env": "OPENFDD_USER_A_OPS_USER",
       "password_env": "OPENFDD_USER_A_OPS_PASSWORD",
       "role": "operator",
-      "tenant_ids": ["tenant_a"]
+      "tenant_ids": ["acme"]
     },
     "operator_b": {
       "username_env": "OPENFDD_USER_B_OPS_USER",
       "password_env": "OPENFDD_USER_B_OPS_PASSWORD",
       "role": "operator",
-      "tenant_ids": ["tenant_b"]
+      "tenant_ids": ["building_100"]
     },
     "viewer_a": {
       "username_env": "OPENFDD_VIEWER_USER",
       "password_env": "OPENFDD_VIEWER_PASSWORD",
       "role": "viewer",
-      "tenant_ids": ["tenant_a"]
-    },
-    "agent_a": {
-      "username_env": "OPENFDD_AGENT_A_USER",
-      "password_env": "OPENFDD_AGENT_A_PASSWORD",
-      "role": "operator",
-      "tenant_ids": ["tenant_a"]
+      "tenant_ids": ["acme"]
     }
   },
   "fixtures": {
-    "tenant_a": "tenant_a",
-    "tenant_b": "tenant_b",
-    "building_a": "BUILDING_A",
-    "building_b": "BUILDING_B",
-    "equipment_a": "AHU_A",
-    "equipment_b": "AHU_B",
+    "tenant_a": "acme",
+    "tenant_b": "building_100",
+    "building_a": "ACME",
+    "building_b": "BUILDING_100",
+    "equipment_a": "rtu_01",
+    "equipment_b": "AHU_1",
     "canary_a": "CANARY_A_SYNTH",
     "canary_b": "CANARY_B_SYNTH",
     "nonexistent_object": "DOES_NOT_EXIST_Z9"

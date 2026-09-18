@@ -83,23 +83,28 @@ SHA=sha-<7>
 # 2) field only on this machine
 ./scripts/openfdd_fieldbus_railway_up.sh "$SHA"
 
-# 3) stress LAST (Railway CSV + ZAP)
+# 3) stress LAST (FQ + ACME MQTTS + CSV + live security execute)
 export OPENFDD_API_BASE=https://openfdd-web-production-af99.up.railway.app
+export OPENFDD_SECURITY_EXECUTE=1
 ./scripts/nightly-ot-bench/run_railway_hub_stress.sh
+# FQ requires gates 19 + 35 + 25/25b; ACCEPT_ZAP_MEDIUM only with reviewed dispositions JSON
 ```
 
 ## Stress matrix (fill BUG_REPORT)
 
 | # | Gate | Pass |
 |---|------|------|
-| 0 | Hub health + x86 fieldbus + `/api/edges` telemetry | `3.3.N+…`; `has_telemetry:true` |
+| 0 | Hub health + x86 fieldbus + `/api/edges` telemetry | `3.5.N+…`; `has_telemetry:true` |
 | 0b | MQTTS → Overview Zone Other / `zone_t` charts | Hosted-weather AV 9101 charts populated (not empty + rising ingest) |
 | 1 | synth59 `--api-base` Railway | **59/59** |
 | 2 | Gate 17 | health matrix + overview |
 | 3 | B100 `RAILWAY_ONLY=1` | FC1 / runtime / series |
 | 4 | Creekside fixture + full zip | `LAKESIDE_ES` |
-| 5 | Gate 19 | **READY** |
-| 6 | ZAP baseline Railway public URL | High=0; every Medium explicitly accepted (`ACCEPT_ZAP_MEDIUM` / reviewed); cite `qualification_manifest` `fully_qualified` |
+| 5 | Gate 19 | **READY** (FQ required) |
+| 6 | Gate 35 ACME MQTTS | Live broker + fieldbus ingest (FQ required) |
+| 7 | Gates 25 / 25b | `OPENFDD_SECURITY_EXECUTE=1`; High=0; Medium via dispositions JSON only |
+| 8 | Gate 26 | Suite expansion when RUN; else N/A (not BLOCKED) |
+| 9 | ZAP baseline Railway public URL | High=0; every Medium dispositioned; cite `qualification_manifest` `fully_qualified` |
 
 ## Anti-patterns
 

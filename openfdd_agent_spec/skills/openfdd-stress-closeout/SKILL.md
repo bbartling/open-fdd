@@ -26,9 +26,9 @@ Railway CLI: [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md)
 
 1. Tip GHCR publish green → Railway backup + re-pin (central→mqtt→web)  
 2. `./scripts/openfdd_fieldbus_railway_up.sh sha-<7>` (stops local react-ot)  
-3. `OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-<7> ./scripts/nightly-ot-bench/run_railway_hub_stress.sh`  
-4. Cite `qualification_manifest.json` + generated `SUMMARY.md` (`fully_qualified`)  
-5. BUG_REPORT + SESSION_LOG → GH hygiene END  
+3. `OPENFDD_SECURITY_EXECUTE=1 OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-<7> ./scripts/nightly-ot-bench/run_railway_hub_stress.sh`  
+4. Cite `qualification_manifest.json` + generated `SUMMARY.md` (`fully_qualified` needs gates **19**+**35**+**25**/**25b**)  
+5. BUG_REPORT + SESSION_LOG + **Current ops pin** → OPS PINNED; GH hygiene END  
 
 ## Agent rules
 
@@ -36,9 +36,11 @@ Railway CLI: [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md)
 - Railway is the AFDD head-end. Do not require local central for closeout.
 - Stress is **LAST**. Do not cite older-pin stress as proof.
 - ZAP = Railway public origin + `zap_baseline_verdict.py`; archive `reports/zap-railway_<TS>/`.
+- **Security harness:** gates **25** / **25b** need `OPENFDD_SECURITY_EXECUTE=1` for FQ; dry-run alone is BLOCKED. Gate **26** N/A unless MQTT ACL fixtures. High=0; Medium only via reviewed dispositions JSON (never blanket `ACCEPT_ZAP_MEDIUM=1` without review).
 - **Kali owns ActiveScan / exploratory PEN**; Mint runs gate 34 headers/`security.txt` + `preauth_disclosure` / gate 31 ACL. Skill: [`openfdd-mt-security`](../openfdd-mt-security/SKILL.md).
 - **After ZAP:** `docker rm -f` leftover zap containers (low-RAM). One agent only — no duplicate Task workers on the same train.
 - **`SKIP_ZAP=1` ⇒ not fully_qualified** (required gate SKIPPED). Never claim ZAP PASS when skipped.
 - Railway MCP: exact image pin; `RAILWAY_ONLY=1` refuses local-central fallback in gate 13.
+- Keep [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) **Current ops pin** + railway-cli skill synced on tip-in-flight and OPS PINNED.
 - Do not rewrite historical PASS rows as if they used this enhanced suite.
-- Machine port brain: [`docs/operations/recovery/AI_CONTEXT_HANDOFF.md`](../../../docs/operations/recovery/AI_CONTEXT_HANDOFF.md). Next program: 3.3.27+ nightly bug train under `docs/operations/patch_trains/`.
+- Machine port brain: [`docs/operations/recovery/AI_CONTEXT_HANDOFF.md`](../../../docs/operations/recovery/AI_CONTEXT_HANDOFF.md). Next program: 3.5.x patch train under `docs/operations/` / BUG_REPORT.
