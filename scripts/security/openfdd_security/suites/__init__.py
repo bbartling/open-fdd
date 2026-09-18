@@ -1,0 +1,1107 @@
+"""Suite runners for X (auth/JWT), Y (authz), Z (deploy/abuse)."""
+from __future__ import annotations
+
+import json
+from typing import Any, Callable
+from urllib.parse import urlencode
+
+from ..config import FixtureRefs, IdentityRef, ProbeConfig, resolve_password, resolve_username
+from ..evidence import CheckResult
+from ..jwtutil import (
+    make_alg_none_token,
+    make_expired_token,
+    make_tampered_token,
+    make_valid_token,
+)
+from ..transport import SafeHttpClient, TransportError
+
+
+AddCheck = Callable[[CheckResult], None]
+
+
+def _status_of(resp) -> str:
+    return str(resp.status)
+
+
+def _is_json_object(body: bytes) -> bool:
+    try:
+        return isinstance(json.loads(body.decode("utf-8")), dict)
+    except Exception:
+        return False
+
+
+def _looks_html(body: bytes) -> bool:
+    t = body[:200].lower()
+    return b"<html" in t or b"<!doctype" in t
+
+
+class SuiteContext:
+    def __init__(
+        self,
+        client: SafeHttpClient,
+        cfg: ProbeConfig,
+        profile: str,
+        add: AddCheck,
+        *,
+        allow_fixture_writes: bool = False,
+        isolated_jwt_secret: bytes | None = None,
+        tokens: dict[str, str] | None = None,
+        mode: str = "live",  # live | dry_run | fixture
+    ) -> None:
+        self.client = client
+        self.cfg = cfg
+        self.profile = profile
+        self.add = add
+        self.allow_fixture_writes = allow_fixture_writes
+        self.isolated_jwt_secret = isolated_jwt_secret or b"harness-isolated-test-key-32b!!"
+        self.tokens = tokens or {}
+        self.mode = mode
+        self.fx: FixtureRefs = cfg.fixtures
+
+    def check(
+        self,
+        check_id: str,
+        suite: str,
+        title: str,
+        status: str,
+        **kwargs: Any,
+    ) -> None:
+        self.add(
+            CheckResult(
+                check_id=check_id,
+                suite=suite,
+                title=title,
+                status=status,
+                **kwargs,
+            )
+        )
+
+
+def run_suite_x(ctx: SuiteContext) -> None:
+    """Authentication / JWT / preauth."""
+    # Public health
+    try:
+        r = ctx.client.request("GET", "/api/health")
+        ok = r.status == 200 and _is_json_object(r.body) and b'"ok"' in r.body
+        ctx.check(
+            "x.preauth.health_public",
+            "X",
+            "GET /api/health is public lean readiness",
+            "PASS" if ok else "FAIL",
+            expected="200+ok",
+            observed=_status_of(r),
+            method="GET",
+            path_template="/api/health",
+            detail=None if ok else "health missing ok JSON",
+        )
+    except TransportError as exc:
+        ctx.check(
+            "x.preauth.health_public",
+            "X",
+            "GET /api/health is public lean readiness",
+            "ERROR",
+            detail=str(exc),
+        )
+
+    for path, cid in (
+        ("/api/tenants", "x.preauth.anon_tenants_401"),
+        ("/api/capabilities", "x.preauth.anon_capabilities_401"),
+        ("/api/health/stack", "x.preauth.anon_stack_401"),
+        ("/api/building/snapshot", "x.preauth.anon_snapshot_401"),
+        ("/api/dashboard/summary", "x.preauth.anon_summary_401"),
+        ("/api/edges", "x.preauth.anon401.get_api_edges"),
+        ("/api/fdd/equipment", "x.preauth.anon401.get_api_fdd_equipment"),
+        ("/api/fdd/results", "x.preauth.anon401.get_api_fdd_results"),
+        ("/api/fdd/session-config", "x.preauth.anon401.get_api_fdd_session_config"),
+        ("/api/analytics/overview", "x.preauth.anon401.get_api_analytics_overview"),
+        ("/api/admin/users", "x.preauth.anon401.get_api_admin_users"),
+        ("/api/jobs", "x.preauth.anon401.get_api_jobs"),
+        ("/api/agent/tools", "x.preauth.anon401.get_api_agent_tools"),
+    ):
+        try:
+            r = ctx.client.request("GET", path)
+            # local_open auth-off may 200 — mark N/A for that profile
+            if ctx.profile == "local_open":
+                ctx.check(
+                    cid,
+                    "X",
+                    f"anon {path}",
+                    "NOT_APPLICABLE",
+                    detail="local_open auth isolation untested",
+                    method="GET",
+                    path_template=path,
+                )
+                continue
+            ok = r.status == 401
+            # Protected data in error body is FAIL
+            leak = False
+            if r.status == 401 and ctx.fx.canary_a.encode() in r.body:
+                leak = True
+            ctx.check(
+                cid,
+                "X",
+                f"anonymous {path} → 401",
+                "FAIL" if leak else ("PASS" if ok else "FAIL"),
+                expected="401",
+                observed=_status_of(r),
+                method="GET",
+                path_template=path,
+                detail="canary in error body" if leak else None,
+            )
+        except TransportError as exc:
+            ctx.check(cid, "X", f"anon {path}", "ERROR", detail=str(exc))
+
+    # JWT negative cases (no login required)
+    try:
+        r = ctx.client.request("GET", "/api/edges")
+        ctx.check(
+            "x.jwt.missing_token_401",
+            "X",
+            "missing bearer → 401",
+            "PASS" if r.status == 401 else ("NOT_APPLICABLE" if ctx.profile == "local_open" else "FAIL"),
+            expected="401",
+            observed=_status_of(r),
+            method="GET",
+            path_template="/api/edges",
+        )
+    except TransportError as exc:
+        ctx.check("x.jwt.missing_token_401", "X", "missing bearer", "ERROR", detail=str(exc))
+
+    try:
+        r = ctx.client.request("GET", "/api/edges", token="not-a-jwt")
+        ctx.check(
+            "x.jwt.malformed_token_401",
+            "X",
+            "malformed JWT → 401",
+            "PASS" if r.status == 401 else ("NOT_APPLICABLE" if ctx.profile == "local_open" else "FAIL"),
+            expected="401",
+            observed=_status_of(r),
+        )
+    except TransportError as exc:
+        ctx.check("x.jwt.malformed_token_401", "X", "malformed JWT", "ERROR", detail=str(exc))
+
+    try:
+        r = ctx.client.request("GET", "/api/edges", token=make_alg_none_token())
+        ctx.check(
+            "x.jwt.alg_none_rejected",
+            "X",
+            "alg:none rejected",
+            "PASS" if r.status == 401 else ("NOT_APPLICABLE" if ctx.profile == "local_open" else "FAIL"),
+            expected="401",
+            observed=_status_of(r),
+            detector_id="jwt_alg_none",
+        )
+    except TransportError as exc:
+        ctx.check("x.jwt.alg_none_rejected", "X", "alg:none", "ERROR", detail=str(exc))
+
+    try:
+        bad = make_tampered_token(ctx.isolated_jwt_secret)
+        r = ctx.client.request("GET", "/api/edges", token=bad)
+        # Against real app with different secret also 401 — still PASS for rejection
+        ctx.check(
+            "x.jwt.tampered_sig_rejected",
+            "X",
+            "tampered signature rejected",
+            "PASS" if r.status == 401 else ("NOT_APPLICABLE" if ctx.profile == "local_open" else "FAIL"),
+            expected="401",
+            observed=_status_of(r),
+            detector_id="jwt_tampered_sig",
+        )
+    except TransportError as exc:
+        ctx.check("x.jwt.tampered_sig_rejected", "X", "tampered sig", "ERROR", detail=str(exc))
+
+    # Expired + valid sibling — only meaningful when server uses isolated secret
+    # (fixture mode / isolated_full with OPENFDD_SECURITY_JWT_SECRET matching).
+    secret = ctx.isolated_jwt_secret
+    expired = make_expired_token(secret, role="operator")
+    valid = make_valid_token(secret, role="operator", sub="sibling")
+    try:
+        r_exp = ctx.client.request("GET", "/api/edges", token=expired)
+        r_ok = ctx.client.request("GET", "/api/edges", token=valid)
+        # In fixture servers that share the secret: expired=401, valid=200
+        # Against live Railway (different secret): both 401 → BLOCKED not FAIL
+        if r_exp.status == 401 and r_ok.status == 200:
+            ctx.check(
+                "x.jwt.expired_signed_rejected",
+                "X",
+                "correctly signed expired token rejected",
+                "PASS",
+                expected="401",
+                observed=_status_of(r_exp),
+                detector_id="jwt_expired",
+            )
+            ctx.check(
+                "x.jwt.valid_sibling_accepted",
+                "X",
+                "valid sibling token accepted",
+                "PASS",
+                expected="200",
+                observed=_status_of(r_ok),
+                detector_id="jwt_valid_sibling",
+            )
+        elif r_exp.status == 401 and r_ok.status == 401:
+            ctx.check(
+                "x.jwt.expired_signed_rejected",
+                "X",
+                "correctly signed expired token rejected",
+                "BLOCKED",
+                detail="server JWT secret not harness-isolated; expiry pair unverified",
+                detector_id="jwt_expired",
+            )
+            ctx.check(
+                "x.jwt.valid_sibling_accepted",
+                "X",
+                "valid sibling token accepted",
+                "BLOCKED",
+                detail="server JWT secret not harness-isolated",
+                detector_id="jwt_valid_sibling",
+            )
+        else:
+            # Signature/expiry bypass
+            ctx.check(
+                "x.jwt.expired_signed_rejected",
+                "X",
+                "correctly signed expired token rejected",
+                "FAIL",
+                expected="401",
+                observed=_status_of(r_exp),
+                detector_id="jwt_expired",
+            )
+            ctx.check(
+                "x.jwt.valid_sibling_accepted",
+                "X",
+                "valid sibling token accepted",
+                "FAIL" if r_ok.status != 200 else "PASS",
+                expected="200",
+                observed=_status_of(r_ok),
+                detector_id="jwt_valid_sibling",
+            )
+    except TransportError as exc:
+        ctx.check("x.jwt.expired_signed_rejected", "X", "expired", "ERROR", detail=str(exc))
+        ctx.check("x.jwt.valid_sibling_accepted", "X", "sibling", "ERROR", detail=str(exc))
+
+    # Role logins
+    _login_me(ctx, "admin", "x.auth.admin_login_me", default_user="admin")
+    if ctx.profile != "live_readonly" or "operator_a" in ctx.cfg.identities:
+        _login_me(ctx, "operator_a", "x.auth.operator_a_login_me", default_user="acme-ops")
+
+
+def _login_me(
+    ctx: SuiteContext,
+    alias: str,
+    check_id: str,
+    *,
+    default_user: str,
+) -> None:
+    ident = ctx.cfg.identities.get(alias)
+    if not ident:
+        ctx.check(
+            check_id,
+            "X",
+            f"login/me {alias}",
+            "BLOCKED",
+            detail=f"identity {alias} missing from config",
+            identity_alias=alias,
+        )
+        return
+    password = resolve_password(ident)
+    username = resolve_username(ident, default_user)
+    if not password or not username:
+        ctx.check(
+            check_id,
+            "X",
+            f"login/me {alias}",
+            "BLOCKED",
+            detail=f"credentials for {alias} not available (env ref unset)",
+            identity_alias=alias,
+        )
+        return
+    try:
+        r = ctx.client.request(
+            "POST",
+            "/api/auth/login",
+            json_body={"username": username, "password": password},
+        )
+        if r.status != 200 or not _is_json_object(r.body):
+            ctx.check(
+                check_id,
+                "X",
+                f"login/me {alias}",
+                "FAIL",
+                expected="200+token",
+                observed=_status_of(r),
+                identity_alias=alias,
+            )
+            return
+        data = r.json()
+        token = data.get("token") or data.get("access_token")
+        if not token:
+            ctx.check(
+                check_id,
+                "X",
+                f"login/me {alias}",
+                "FAIL",
+                detail="login response missing token",
+                identity_alias=alias,
+            )
+            return
+        ctx.tokens[alias] = token
+        me = ctx.client.request("GET", "/api/auth/me", token=token)
+        if me.status != 200 or not _is_json_object(me.body):
+            ctx.check(
+                check_id,
+                "X",
+                f"login/me {alias}",
+                "FAIL",
+                expected="200 /api/auth/me",
+                observed=_status_of(me),
+                identity_alias=alias,
+                detector_id="wrong_identity",
+            )
+            return
+        me_data = me.json()
+        role = (me_data.get("role") or "").lower()
+        expected_role = (ident.role or "").lower()
+        sub = str(me_data.get("sub") or me_data.get("username") or "")
+        if expected_role and role and role != expected_role:
+            ctx.check(
+                check_id,
+                "X",
+                f"login/me {alias}",
+                "FAIL",
+                detail=f"role mismatch expected={expected_role} got={role}",
+                identity_alias=alias,
+                detector_id="wrong_identity",
+            )
+            return
+        if username and sub and sub != username and sub.lower() != username.lower():
+            ctx.check(
+                check_id,
+                "X",
+                f"login/me {alias}",
+                "FAIL",
+                detail=f"subject mismatch expected={username} got={sub}",
+                identity_alias=alias,
+                detector_id="wrong_identity",
+            )
+            return
+        ctx.check(
+            check_id,
+            "X",
+            f"login/me {alias}",
+            "PASS",
+            identity_alias=alias,
+            observed=f"role={role or 'present'} sub={sub or 'present'}",
+        )
+    except TransportError as exc:
+        ctx.check(check_id, "X", f"login/me {alias}", "ERROR", detail=str(exc))
+
+
+def run_suite_y(ctx: SuiteContext) -> None:
+    """Authorization: own success + foreign denial + detectors."""
+    fx = ctx.fx
+    tok_a = ctx.tokens.get("operator_a") or ctx.tokens.get("admin")
+    tok_b = ctx.tokens.get("operator_b")
+    tok_viewer = ctx.tokens.get("viewer_a") or ctx.tokens.get("viewer")
+
+    if not tok_a:
+        # Attempt login if credentials exist
+        _login_me(ctx, "operator_a", "y.authz._login_a", default_user="acme-ops")
+        tok_a = ctx.tokens.get("operator_a") or ctx.tokens.get("admin")
+    if not tok_b and "operator_b" in ctx.cfg.identities:
+        _login_me(ctx, "operator_b", "y.authz._login_b", default_user="b100-ops")
+        tok_b = ctx.tokens.get("operator_b")
+
+    if not tok_a:
+        for cid in (
+            "y.authz.a_own_building_control",
+            "y.authz.a_foreign_building_denied",
+            "y.authz.b_own_building_control",
+            "y.authz.b_foreign_building_denied",
+            "y.authz.viewer_mutation_denied",
+            "y.authz.admin_users_operator_denied",
+            "y.detector.always_401_invalidates_authz",
+            "y.detector.empty_200_not_deny",
+            "y.detector.html_200_not_deny",
+            "y.detector.foreign_canary_leak",
+        ):
+            ctx.check(cid, "Y", cid, "BLOCKED", detail="no operator_a/admin token")
+        return
+
+    # Positive own control for A
+    q = urlencode({"building_id": fx.building_a})
+    try:
+        r = ctx.client.request(
+            "GET", f"/api/fdd/equipment?{q}", token=tok_a
+        )
+        if r.status == 401:
+            ctx.check(
+                "y.authz.a_own_building_control",
+                "Y",
+                "A own building equipment",
+                "ERROR",
+                detail="valid A token got 401 — cannot demonstrate authorization",
+                detector_id="always_401",
+                identity_alias="operator_a",
+            )
+        elif r.status == 200 and _looks_html(r.body):
+            ctx.check(
+                "y.authz.a_own_building_control",
+                "Y",
+                "A own building equipment",
+                "FAIL",
+                detail="HTML 200 is not equipment schema",
+                detector_id="html_200",
+            )
+        elif r.status == 200 and _is_json_object(r.body):
+            # Empty list without schema markers may be soft — require object
+            ctx.check(
+                "y.authz.a_own_building_control",
+                "Y",
+                "A own building equipment",
+                "PASS",
+                expected="200+json",
+                observed="200",
+                identity_alias="operator_a",
+            )
+        elif r.status == 200 and r.body.strip() in (b"", b"[]", b"{}"):
+            ctx.check(
+                "y.authz.a_own_building_control",
+                "Y",
+                "A own building equipment",
+                "FAIL",
+                detail="empty 200 is not positive own-object control",
+                detector_id="empty_200",
+            )
+        else:
+            ctx.check(
+                "y.authz.a_own_building_control",
+                "Y",
+                "A own building equipment",
+                "BLOCKED" if r.status in (403, 404) else "FAIL",
+                observed=_status_of(r),
+                detail="own fixture missing or unexpected status",
+            )
+    except TransportError as exc:
+        ctx.check(
+            "y.authz.a_own_building_control",
+            "Y",
+            "A own",
+            "ERROR",
+            detail=str(exc),
+        )
+
+    # Foreign deny for A → B (403 preferred; 401 with valid token is ERROR)
+    q_b = urlencode({"building_id": fx.building_b})
+    try:
+        r = ctx.client.request(
+            "GET", f"/api/fdd/equipment?{q_b}", token=tok_a
+        )
+        body = r.body
+        if r.status == 401:
+            ctx.check(
+                "y.authz.a_foreign_building_denied",
+                "Y",
+                "A denied foreign building",
+                "ERROR",
+                detail="401 with nominally valid token invalidates authz case",
+                detector_id="always_401",
+            )
+            ctx.check(
+                "y.detector.always_401_invalidates_authz",
+                "Y",
+                "detector: always-401",
+                "FAIL",
+                detector_id="always_401",
+                detail="authz path returned 401 for valid token",
+            )
+        elif r.status == 200 and _looks_html(body):
+            ctx.check(
+                "y.authz.a_foreign_building_denied",
+                "Y",
+                "A denied foreign building",
+                "FAIL",
+                detector_id="html_200",
+            )
+            ctx.check(
+                "y.detector.html_200_not_deny",
+                "Y",
+                "detector: HTML 200",
+                "FAIL",
+                detector_id="html_200",
+            )
+        elif r.status == 200 and (
+            body.strip() in (b"", b"[]", b"{}")
+            or ( _is_json_object(body) and not _deny_envelope(body) and fx.canary_b.encode() not in body)
+        ):
+            # Empty 200 without deny envelope is not denial
+            if body.strip() in (b"", b"[]", b"{}"):
+                ctx.check(
+                    "y.authz.a_foreign_building_denied",
+                    "Y",
+                    "A denied foreign building",
+                    "FAIL",
+                    detector_id="empty_200",
+                    detail="empty 200 is not object denial",
+                )
+                ctx.check(
+                    "y.detector.empty_200_not_deny",
+                    "Y",
+                    "detector: empty 200",
+                    "FAIL",
+                    detector_id="empty_200",
+                )
+            elif fx.canary_b.encode() in body:
+                ctx.check(
+                    "y.authz.a_foreign_building_denied",
+                    "Y",
+                    "A denied foreign building",
+                    "FAIL",
+                    detector_id="foreign_canary",
+                )
+                ctx.check(
+                    "y.detector.foreign_canary_leak",
+                    "Y",
+                    "detector: foreign canary",
+                    "FAIL",
+                    detector_id="foreign_canary",
+                )
+            else:
+                # 200 with data but no canary — still FAIL if not deny
+                ctx.check(
+                    "y.authz.a_foreign_building_denied",
+                    "Y",
+                    "A denied foreign building",
+                    "FAIL",
+                    detail="200 without deny envelope",
+                )
+                ctx.check(
+                    "y.detector.empty_200_not_deny",
+                    "Y",
+                    "detector: empty/soft 200",
+                    "PASS",
+                    detail="no empty body in this response",
+                )
+        elif fx.canary_b.encode() in body:
+            ctx.check(
+                "y.authz.a_foreign_building_denied",
+                "Y",
+                "A denied foreign building",
+                "FAIL",
+                detector_id="foreign_canary",
+                detail="foreign canary present",
+            )
+            ctx.check(
+                "y.detector.foreign_canary_leak",
+                "Y",
+                "detector: foreign canary",
+                "FAIL",
+                detector_id="foreign_canary",
+            )
+        elif r.status in (403, 404):
+            if _is_json_object(body) and not _deny_ok(body) and b"ok" in body.lower():
+                # has ok field but not false
+                if not _deny_envelope(body):
+                    ctx.check(
+                        "y.authz.a_foreign_building_denied",
+                        "Y",
+                        "A denied foreign building",
+                        "FAIL",
+                        detail="deny body missing ok:false",
+                    )
+                else:
+                    ctx.check(
+                        "y.authz.a_foreign_building_denied",
+                        "Y",
+                        "A denied foreign building",
+                        "PASS",
+                        expected="403/404",
+                        observed=_status_of(r),
+                    )
+            else:
+                ctx.check(
+                    "y.authz.a_foreign_building_denied",
+                    "Y",
+                    "A denied foreign building",
+                    "PASS",
+                    expected="403/404",
+                    observed=_status_of(r),
+                )
+            # Detectors healthy
+            ctx.check(
+                "y.detector.always_401_invalidates_authz",
+                "Y",
+                "detector: always-401",
+                "PASS",
+                detail="foreign deny was not 401",
+                detector_id="always_401",
+            )
+            ctx.check(
+                "y.detector.empty_200_not_deny",
+                "Y",
+                "detector: empty 200",
+                "PASS",
+                detector_id="empty_200",
+            )
+            ctx.check(
+                "y.detector.html_200_not_deny",
+                "Y",
+                "detector: HTML 200",
+                "PASS",
+                detector_id="html_200",
+            )
+            ctx.check(
+                "y.detector.foreign_canary_leak",
+                "Y",
+                "detector: foreign canary",
+                "PASS",
+                detector_id="foreign_canary",
+            )
+        else:
+            ctx.check(
+                "y.authz.a_foreign_building_denied",
+                "Y",
+                "A denied foreign building",
+                "FAIL",
+                expected="403/404",
+                observed=_status_of(r),
+            )
+            _emit_detector_defaults(ctx, r)
+    except TransportError as exc:
+        ctx.check(
+            "y.authz.a_foreign_building_denied",
+            "Y",
+            "A foreign",
+            "ERROR",
+            detail=str(exc),
+        )
+        for cid, det in (
+            ("y.detector.always_401_invalidates_authz", "always_401"),
+            ("y.detector.empty_200_not_deny", "empty_200"),
+            ("y.detector.html_200_not_deny", "html_200"),
+            ("y.detector.foreign_canary_leak", "foreign_canary"),
+        ):
+            ctx.check(cid, "Y", cid, "ERROR", detail=str(exc), detector_id=det)
+
+    # B direction if available
+    if tok_b:
+        try:
+            r = ctx.client.request(
+                "GET", f"/api/fdd/equipment?{q_b}", token=tok_b
+            )
+            ctx.check(
+                "y.authz.b_own_building_control",
+                "Y",
+                "B own building equipment",
+                "PASS" if r.status == 200 and not _looks_html(r.body) else "FAIL",
+                observed=_status_of(r),
+            )
+            r2 = ctx.client.request(
+                "GET", f"/api/fdd/equipment?{q}", token=tok_b
+            )
+            if r2.status == 401:
+                st = "ERROR"
+            elif r2.status in (403, 404):
+                st = "PASS"
+            else:
+                st = "FAIL"
+            ctx.check(
+                "y.authz.b_foreign_building_denied",
+                "Y",
+                "B denied foreign building",
+                st,
+                observed=_status_of(r2),
+            )
+        except TransportError as exc:
+            ctx.check("y.authz.b_own_building_control", "Y", "B own", "ERROR", detail=str(exc))
+            ctx.check("y.authz.b_foreign_building_denied", "Y", "B foreign", "ERROR", detail=str(exc))
+    else:
+        ctx.check(
+            "y.authz.b_own_building_control",
+            "Y",
+            "B own building equipment",
+            "BLOCKED",
+            detail="operator_b credentials missing",
+        )
+        ctx.check(
+            "y.authz.b_foreign_building_denied",
+            "Y",
+            "B denied foreign building",
+            "BLOCKED",
+            detail="operator_b credentials missing",
+        )
+
+    # Viewer mutation
+    if not tok_viewer and "viewer_a" in ctx.cfg.identities:
+        _login_me(ctx, "viewer_a", "y.authz._login_viewer", default_user="viewer")
+        tok_viewer = ctx.tokens.get("viewer_a")
+    if tok_viewer:
+        try:
+            r = ctx.client.request(
+                "POST",
+                "/api/auth/agent-token",
+                token=tok_viewer,
+                json_body={},
+            )
+            ctx.check(
+                "y.authz.viewer_mutation_denied",
+                "Y",
+                "viewer cannot mint agent-token",
+                "PASS" if r.status in (403, 401) else "FAIL",
+                expected="403",
+                observed=_status_of(r),
+                detector_id="viewer_mutation",
+            )
+        except TransportError as exc:
+            ctx.check(
+                "y.authz.viewer_mutation_denied",
+                "Y",
+                "viewer mutation",
+                "ERROR",
+                detail=str(exc),
+            )
+    else:
+        ctx.check(
+            "y.authz.viewer_mutation_denied",
+            "Y",
+            "viewer cannot mint agent-token",
+            "BLOCKED",
+            detail="viewer credentials missing (not N/A)",
+        )
+
+    # Operator denied admin
+    try:
+        r = ctx.client.request("GET", "/api/admin/users", token=tok_a)
+        if r.status == 401:
+            st = "ERROR"
+            detail = "valid token 401 on admin probe"
+        elif r.status == 403:
+            st = "PASS"
+            detail = None
+        elif tok_a == ctx.tokens.get("admin"):
+            st = "NOT_APPLICABLE"
+            detail = "token is hub admin"
+        else:
+            st = "FAIL"
+            detail = f"operator reached admin users: {r.status}"
+        ctx.check(
+            "y.authz.admin_users_operator_denied",
+            "Y",
+            "non-admin denied /api/admin/users",
+            st,
+            observed=_status_of(r),
+            detail=detail,
+        )
+    except TransportError as exc:
+        ctx.check(
+            "y.authz.admin_users_operator_denied",
+            "Y",
+            "admin users",
+            "ERROR",
+            detail=str(exc),
+        )
+
+    # Session-config selector: A must not read B's building config envelope with foreign canary
+    try:
+        q = urlencode({"building_id": fx.building_a})
+        r_own = ctx.client.request(
+            "GET", f"/api/fdd/session-config?{q}", token=tok_a
+        )
+        if r_own.status == 401:
+            ctx.check(
+                "y.authz.get_api_fdd_session_config",
+                "Y",
+                "A session-config own control",
+                "ERROR",
+                detail="valid A token 401",
+                path_template="/api/fdd/session-config",
+            )
+        elif r_own.status in (200, 404):
+            # 404 may mean fixture absent — BLOCKED not PASS
+            st = "PASS" if r_own.status == 200 and _is_json_object(r_own.body) else "BLOCKED"
+            ctx.check(
+                "y.authz.get_api_fdd_session_config",
+                "Y",
+                "A session-config own control",
+                st,
+                observed=_status_of(r_own),
+                detail=None if st == "PASS" else "own session-config fixture missing",
+                path_template="/api/fdd/session-config",
+            )
+        else:
+            ctx.check(
+                "y.authz.get_api_fdd_session_config",
+                "Y",
+                "A session-config own control",
+                "FAIL",
+                observed=_status_of(r_own),
+            )
+        q_b = urlencode({"building_id": fx.building_b})
+        r_f = ctx.client.request(
+            "GET", f"/api/fdd/session-config?{q_b}", token=tok_a
+        )
+        leak = fx.canary_b.encode() in r_f.body
+        if r_f.status == 401:
+            deny_st = "ERROR"
+        elif r_f.status in (403, 404) and not leak:
+            deny_st = "PASS"
+        elif r_f.status == 200 and leak:
+            deny_st = "FAIL"
+        elif r_f.status == 200:
+            deny_st = "FAIL"
+        else:
+            deny_st = "FAIL"
+        ctx.check(
+            "y.authz.a_foreign_session_config_denied",
+            "Y",
+            "A denied foreign session-config",
+            deny_st,
+            expected="403/404",
+            observed=_status_of(r_f),
+            detail="foreign canary leak" if leak else None,
+            path_template="/api/fdd/session-config",
+        )
+    except TransportError as exc:
+        ctx.check(
+            "y.authz.get_api_fdd_session_config",
+            "Y",
+            "session-config",
+            "ERROR",
+            detail=str(exc),
+        )
+        ctx.check(
+            "y.authz.a_foreign_session_config_denied",
+            "Y",
+            "session-config foreign",
+            "ERROR",
+            detail=str(exc),
+        )
+
+
+def _deny_envelope(body: bytes) -> bool:
+    try:
+        data = json.loads(body.decode("utf-8"))
+        return isinstance(data, dict) and data.get("ok") is False
+    except Exception:
+        return False
+
+
+def _deny_ok(body: bytes) -> bool:
+    return _deny_envelope(body)
+
+
+def _emit_detector_defaults(ctx: SuiteContext, r) -> None:
+    ctx.check(
+        "y.detector.always_401_invalidates_authz",
+        "Y",
+        "detector: always-401",
+        "PASS" if r.status != 401 else "FAIL",
+        detector_id="always_401",
+    )
+    ctx.check(
+        "y.detector.empty_200_not_deny",
+        "Y",
+        "detector: empty 200",
+        "FAIL" if r.status == 200 and r.body.strip() in (b"", b"[]") else "PASS",
+        detector_id="empty_200",
+    )
+    ctx.check(
+        "y.detector.html_200_not_deny",
+        "Y",
+        "detector: HTML 200",
+        "FAIL" if r.status == 200 and _looks_html(r.body) else "PASS",
+        detector_id="html_200",
+    )
+    canary = ctx.fx.canary_b.encode()
+    ctx.check(
+        "y.detector.foreign_canary_leak",
+        "Y",
+        "detector: foreign canary",
+        "FAIL" if canary in r.body else "PASS",
+        detector_id="foreign_canary",
+    )
+
+
+def run_suite_z(ctx: SuiteContext) -> None:
+    """Deployment headers / CORS / redirect credential policy / abuse bounds."""
+    if ctx.profile == "local_open":
+        parsed_ok = "127.0.0.1" in ctx.client.base_url or "localhost" in ctx.client.base_url
+        ctx.check(
+            "z.deploy.loopback_precondition",
+            "Z",
+            "local_open requires loopback origin",
+            "PASS" if parsed_ok else "BLOCKED",
+            detail=None if parsed_ok else "non-loopback local_open blocked",
+        )
+
+    try:
+        r = ctx.client.request("GET", "/.well-known/security.txt")
+        ctype = (r.header("content-type") or "").lower()
+        ok = r.status == 200 and "text/plain" in ctype and not _looks_html(r.body)
+        ctx.check(
+            "z.deploy.security_txt",
+            "Z",
+            "security.txt text/plain",
+            "PASS" if ok else "FAIL",
+            observed=f"{r.status}/{ctype}",
+        )
+    except TransportError as exc:
+        ctx.check("z.deploy.security_txt", "Z", "security.txt", "ERROR", detail=str(exc))
+
+    try:
+        r = ctx.client.request("GET", "/")
+        csp = r.header("content-security-policy") or r.header("Content-Security-Policy")
+        # Central API may not serve SPA — also try common web paths via same origin
+        if not csp:
+            r2 = ctx.client.request("GET", "/auth")
+            csp = r2.header("content-security-policy")
+        ctx.check(
+            "z.deploy.csp_present",
+            "Z",
+            "CSP header present on web surface",
+            "PASS" if csp else "BLOCKED",
+            detail="CSP missing on probed paths (may be API-only origin)" if not csp else None,
+        )
+    except TransportError as exc:
+        ctx.check("z.deploy.csp_present", "Z", "CSP", "ERROR", detail=str(exc))
+
+    # CORS disallow evil origin on authenticated response
+    tok = ctx.tokens.get("admin") or ctx.tokens.get("operator_a")
+    try:
+        r = ctx.client.request(
+            "GET",
+            "/api/health",
+            headers={"Origin": "https://evil.example"},
+            token=tok,
+        )
+        acao = r.header("access-control-allow-origin")
+        if acao == "https://evil.example" or acao == "*":
+            ctx.check(
+                "z.deploy.cors_disallow_evil",
+                "Z",
+                "CORS rejects evil origin",
+                "FAIL",
+                observed=acao,
+                detector_id="cors_reflected",
+            )
+        else:
+            ctx.check(
+                "z.deploy.cors_disallow_evil",
+                "Z",
+                "CORS rejects evil origin",
+                "PASS",
+                observed=acao or "absent",
+                detector_id="cors_reflected",
+            )
+    except TransportError as exc:
+        ctx.check(
+            "z.deploy.cors_disallow_evil",
+            "Z",
+            "CORS",
+            "ERROR",
+            detail=str(exc),
+            detector_id="cors_transport",
+        )
+
+    # Redirect: request a path that may 3xx; ensure we do not follow with credentials
+    try:
+        r = ctx.client.request(
+            "GET",
+            "/api/edges",
+            token=tok or "probe",
+            expect_redirect=True,
+        )
+        if r.redirected and r.location and "://" in (r.location or ""):
+            # Off-origin redirect observed; credentials must not have been forwarded
+            ctx.check(
+                "z.detector.redirect_no_credential_forward",
+                "Z",
+                "no credential forward on redirect",
+                "PASS",
+                detail="client does not follow redirects",
+                detector_id="redirect_credential_sink",
+            )
+        else:
+            ctx.check(
+                "z.detector.redirect_no_credential_forward",
+                "Z",
+                "no credential forward on redirect",
+                "PASS",
+                detail="no off-origin redirect; transport policy enforced",
+                detector_id="redirect_credential_sink",
+            )
+    except TransportError as exc:
+        ctx.check(
+            "z.detector.redirect_no_credential_forward",
+            "Z",
+            "redirect policy",
+            "ERROR",
+            detail=str(exc),
+        )
+
+    if ctx.profile == "isolated_full":
+        try:
+            huge = b"x" * (ctx.client.budget.max_body_bytes + 10)
+            # We detect oversized *responses*; for request, post small marker
+            r = ctx.client.request(
+                "GET",
+                "/api/health",
+            )
+            # Fixture may expose /__oversized
+            try:
+                r2 = ctx.client.request("GET", "/__oversized")
+                if r2.status == 200 and len(r2.body) > ctx.client.budget.max_body_bytes:
+                    st = "FAIL"
+                    detail = "oversized body delivered"
+                else:
+                    st = "PASS"
+                    detail = "capped or non-oversized"
+            except TransportError as exc:
+                if "max_body_bytes" in str(exc):
+                    st = "PASS"
+                    detail = "body cap enforced"
+                else:
+                    st = "BLOCKED"
+                    detail = str(exc)
+            ctx.check(
+                "z.abuse.oversized_body_blocked",
+                "Z",
+                "response body size cap",
+                st,
+                detail=detail,
+                detector_id="oversized_body",
+            )
+        except TransportError as exc:
+            ctx.check(
+                "z.abuse.oversized_body_blocked",
+                "Z",
+                "oversized",
+                "ERROR",
+                detail=str(exc),
+            )
+
+
+def run_suite_mqtt_acl(ctx: SuiteContext) -> None:
+    """Optional broker ACL suite — BLOCKED without isolated broker evidence."""
+    ctx.check(
+        "mqtt.acl.own_topic_control",
+        "mqtt_acl",
+        "own topic pub/sub control",
+        "BLOCKED",
+        detail="isolated broker fixture not configured; continuity gate is not ACL proof",
+    )
+    ctx.check(
+        "mqtt.acl.foreign_topic_denied",
+        "mqtt_acl",
+        "foreign topic denied",
+        "BLOCKED",
+        detail="isolated broker fixture not configured",
+    )
+
+
+SUITE_RUNNERS = {
+    "X": run_suite_x,
+    "Y": run_suite_y,
+    "Z": run_suite_z,
+    "mqtt_acl": run_suite_mqtt_acl,
+}

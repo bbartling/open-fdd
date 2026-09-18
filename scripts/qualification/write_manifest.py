@@ -32,6 +32,26 @@ DEFAULT_REQUIRED = (
     "08_mcp_accuracy",
 )
 
+# Observed gates only: listing an id here does not register or require a gate.
+# Runners own required_gates. Planned Python/MQTT gates must also be wired there
+# before a report can make any claim about their coverage.
+SECURITY_GATES = (
+    "06_zap_baseline",
+    "07_auth_role_matrix",
+    "11_wave_l_tenant_mode",
+    "12_wave_l_parquet_isolation",
+    "13_wave_l_mqtts_namespace",
+    "14_wave_l_tenant_ui_session",
+    "15_wave_l_tenant_budgets",
+    "16_wave_l_ab_isolation",
+    "20_wave_n_tenant_acl",
+    "22_wave_o_admin_datamodel_acl",
+    "23_wave_o_security",
+    "25_security_python_harness",
+    "25b_security_post_stress",
+    "26_security_mqtt_acl",
+)
+
 
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -142,6 +162,8 @@ def finalize(manifest: dict[str, Any]) -> dict[str, Any]:
 
     blockers: list[str] = []
     fails: list[str] = []
+    if not required:
+        blockers.append("no required gates declared")
     for gid in required:
         st = manifest["gates"][gid]["status"]
         if st in ("FAIL",):
@@ -149,9 +171,15 @@ def finalize(manifest: dict[str, Any]) -> dict[str, Any]:
         elif st in ("ERROR", "BLOCKED", "SKIPPED"):
             blockers.append(f"{gid}={st}")
         elif st == "NOT_APPLICABLE":
-            continue
+            if not str(manifest["gates"][gid].get("failure_reason") or "").strip():
+                blockers.append(f"{gid}=NOT_APPLICABLE without reason")
         elif st != "PASS":
             blockers.append(f"{gid}={st}")
+
+    if required and all(
+        manifest["gates"][gid]["status"] == "NOT_APPLICABLE" for gid in required
+    ):
+        blockers.append("all required gates NOT_APPLICABLE; no passing evidence")
 
     fully = not fails and not blockers
     if fully:
@@ -172,19 +200,30 @@ def finalize(manifest: dict[str, Any]) -> dict[str, Any]:
         vals = [manifest["gates"][i]["status"] for i in ids if i in manifest["gates"]]
         if not vals:
             return None
+        if any(v not in VALID for v in vals):
+            return "ERROR"
         for bad in ("FAIL", "ERROR", "BLOCKED", "SKIPPED"):
             if bad in vals:
                 return bad
-        return "PASS" if all(v in ("PASS", "NOT_APPLICABLE") for v in vals) else vals[0]
+        if all(v == "NOT_APPLICABLE" for v in vals):
+            return "NOT_APPLICABLE"
+        return "PASS"
 
     manifest["dimensions"] = {
         "data_correctness": any_status(
             "01_synth59", "02_gate17", "03_b100", "04_creekside", "05_gate19"
         ),
-        "transport_durability": any_status("00_hub_health_edges"),
+        "transport_durability": any_status(
+            "00_hub_health_edges",
+            "21_wave_n_mqtts_continuity",
+            "35_mqtt_telemetry_pause_resume",
+        ),
         "browser_behavior": None,
         "api_mcp_contracts": any_status("07_auth_role_matrix", "08_mcp_accuracy"),
-        "security": any_status("06_zap_baseline", "07_auth_role_matrix"),
+        # Telemetry continuity is availability evidence, not MQTT ACL proof.
+        # This summarizes recorded verdicts; it does not validate their bodies,
+        # artifact hashes, fixture coverage, or the runner's required-gate list.
+        "security": any_status(*SECURITY_GATES),
         "performance": None,
     }
     manifest["ended_at"] = _now()

@@ -1,0 +1,5129 @@
+{
+  "schema_version": "openfdd_route_inventory_v2",
+  "source_commit_hint": "4a5c11e50b921df83f2ca3a59c52d4e99908157f",
+  "source_file": "services/central/src/routes.rs",
+  "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission.",
+  "route_count": 138,
+  "disposition_counts": {
+    "IMPLEMENTED": 13,
+    "PLANNED": 96,
+    "BLOCKED_POLICY": 29
+  },
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "section": "public",
+      "auth": "public",
+      "policy": "public",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [],
+      "anon_expected": [
+        200
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.health_public"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.health_public"
+      ],
+      "check_ids": [
+        "x.preauth.health_public"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "section": "public",
+      "auth": "public",
+      "policy": "public",
+      "disposition": "PLANNED",
+      "deny_statuses": [],
+      "anon_expected": [
+        200
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.public.get_health"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.public.get_health"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/status",
+      "section": "public",
+      "auth": "public",
+      "policy": "public",
+      "disposition": "PLANNED",
+      "deny_statuses": [],
+      "anon_expected": [
+        200
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.public.get_api_auth_status"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.public.get_api_auth_status"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "section": "public",
+      "auth": "public",
+      "policy": "optional_jwt_when_auth_on",
+      "disposition": "PLANNED",
+      "deny_statuses": [],
+      "anon_expected": [
+        200
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.public.get_api_auth_me"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.public.get_api_auth_me"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/login",
+      "section": "public",
+      "auth": "public",
+      "policy": "public",
+      "disposition": "PLANNED",
+      "deny_statuses": [],
+      "anon_expected": [
+        200
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.public.post_api_auth_login"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.public.post_api_auth_login"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "auth_session",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/csv/import/preview",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_csv_import_preview",
+        "y.authz.post_api_csv_import_preview"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_csv_import_preview",
+        "y.authz.post_api_csv_import_preview"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/csv/import/package",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_csv_import_package",
+        "y.authz.post_api_csv_import_package"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_csv_import_package",
+        "y.authz.post_api_csv_import_package"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/csv/import/package/append",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_csv_import_package_append",
+        "y.authz.post_api_csv_import_package_append"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_csv_import_package_append",
+        "y.authz.post_api_csv_import_package_append"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/csv/import/package/roles",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_csv_import_package_roles",
+        "y.authz.post_api_csv_import_package_roles"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_csv_import_package_roles",
+        "y.authz.post_api_csv_import_package_roles"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/csv/import/package/mapping",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_mapping",
+        "y.authz.get_api_csv_import_package_mapping"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_mapping",
+        "y.authz.get_api_csv_import_package_mapping"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/csv/import/package/mapping/ttl",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_mapping_ttl",
+        "y.authz.get_api_csv_import_package_mapping_ttl"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_mapping_ttl",
+        "y.authz.get_api_csv_import_package_mapping_ttl"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/csv/import/package/buildings",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_buildings",
+        "y.authz.get_api_csv_import_package_buildings"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_buildings",
+        "y.authz.get_api_csv_import_package_buildings"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/csv/import/plan",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_csv_import_plan",
+        "y.authz.post_api_csv_import_plan"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_csv_import_plan",
+        "y.authz.post_api_csv_import_plan"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/csv/import/preflight",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_csv_import_preflight",
+        "y.authz.post_api_csv_import_preflight"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_csv_import_preflight",
+        "y.authz.post_api_csv_import_preflight"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/csv/import/execute",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_csv_import_execute",
+        "y.authz.post_api_csv_import_execute"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_csv_import_execute",
+        "y.authz.post_api_csv_import_execute"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/csv/import/sessions",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_csv_import_sessions",
+        "y.authz.get_api_csv_import_sessions"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_csv_import_sessions",
+        "y.authz.get_api_csv_import_sessions"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/csv/import/sessions/latest/planned",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_csv_import_sessions_latest_planned",
+        "y.authz.get_api_csv_import_sessions_latest_planned"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_csv_import_sessions_latest_planned",
+        "y.authz.get_api_csv_import_sessions_latest_planned"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/csv/import/sessions/{session_id}",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_csv_import_sessions_session_id",
+        "y.authz.get_api_csv_import_sessions_session_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_csv_import_sessions_session_id",
+        "y.authz.get_api_csv_import_sessions_session_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/csv/import/sessions/{session_id}",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.delete_api_csv_import_sessions_session_id",
+        "y.authz.delete_api_csv_import_sessions_session_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.delete_api_csv_import_sessions_session_id",
+        "y.authz.delete_api_csv_import_sessions_session_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/csv/import/sessions/{session_id}/fusion-preview",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_csv_import_sessions_session_id_fusion_preview",
+        "y.authz.get_api_csv_import_sessions_session_id_fusion_preview"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_csv_import_sessions_session_id_fusion_preview",
+        "y.authz.get_api_csv_import_sessions_session_id_fusion_preview"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/datasets",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_datasets",
+        "y.authz.get_api_datasets"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_datasets",
+        "y.authz.get_api_datasets"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/datasets",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.delete_api_datasets",
+        "y.authz.delete_api_datasets"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.delete_api_datasets",
+        "y.authz.delete_api_datasets"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/datasets/{dataset_id}/preview",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_datasets_dataset_id_preview",
+        "y.authz.get_api_datasets_dataset_id_preview"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_datasets_dataset_id_preview",
+        "y.authz.get_api_datasets_dataset_id_preview"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/capabilities",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_capabilities_401"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.anon_capabilities_401"
+      ],
+      "check_ids": [
+        "x.preauth.anon_capabilities_401"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/health/stack",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_stack_401"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.anon_stack_401"
+      ],
+      "check_ids": [
+        "x.preauth.anon_stack_401"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/building/snapshot",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_snapshot_401"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.anon_snapshot_401"
+      ],
+      "check_ids": [
+        "x.preauth.anon_snapshot_401"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/dashboard/summary",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_summary_401"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.anon_summary_401"
+      ],
+      "check_ids": [
+        "x.preauth.anon_summary_401"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tenants",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_tenants_401"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.anon_tenants_401"
+      ],
+      "check_ids": [
+        "x.preauth.anon_tenants_401"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tenants/select",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_tenants_select",
+        "y.authz.post_api_tenants_select"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_tenants_select",
+        "y.authz.post_api_tenants_select"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tenants/budgets",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_tenants_budgets",
+        "y.authz.get_api_tenants_budgets"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_tenants_budgets",
+        "y.authz.get_api_tenants_budgets"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/agent-token",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_auth_agent_token",
+        "y.authz.post_api_auth_agent_token"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_auth_agent_token",
+        "y.authz.post_api_auth_agent_token"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "auth_session",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/users",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "admin_only",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_admin_users",
+        "y.authz.get_api_admin_users"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_admin_users"
+      ],
+      "check_ids": [
+        "x.preauth.anon401.get_api_admin_users"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/users",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "admin_only",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.put_api_admin_users",
+        "y.authz.put_api_admin_users"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.put_api_admin_users",
+        "y.authz.put_api_admin_users"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/users/{username}",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "admin_only",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.delete_api_admin_users_username",
+        "y.authz.delete_api_admin_users_username"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.delete_api_admin_users_username",
+        "y.authz.delete_api_admin_users_username"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/users/{username}/disabled",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "admin_only",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_admin_users_username_disabled",
+        "y.authz.post_api_admin_users_username_disabled"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_admin_users_username_disabled",
+        "y.authz.post_api_admin_users_username_disabled"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/tenants",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "admin_only",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_admin_tenants",
+        "y.authz.get_api_admin_tenants"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_admin_tenants",
+        "y.authz.get_api_admin_tenants"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/tenants",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "admin_only",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.put_api_admin_tenants",
+        "y.authz.put_api_admin_tenants"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.put_api_admin_tenants",
+        "y.authz.put_api_admin_tenants"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/tenants/{tenant_id}",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "admin_only",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.delete_api_admin_tenants_tenant_id",
+        "y.authz.delete_api_admin_tenants_tenant_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.delete_api_admin_tenants_tenant_id",
+        "y.authz.delete_api_admin_tenants_tenant_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/historian-limits",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "admin_only",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_admin_historian_limits",
+        "y.authz.get_api_admin_historian_limits"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_admin_historian_limits",
+        "y.authz.get_api_admin_historian_limits"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/historian-limits",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "admin_only",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.put_api_admin_historian_limits",
+        "y.authz.put_api_admin_historian_limits"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.put_api_admin_historian_limits",
+        "y.authz.put_api_admin_historian_limits"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/edges",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_edges",
+        "y.authz.get_api_edges"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_edges"
+      ],
+      "check_ids": [
+        "x.preauth.anon401.get_api_edges"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/edges/{edge_id}",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_edges_edge_id",
+        "y.authz.get_api_edges_edge_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_edges_edge_id",
+        "y.authz.get_api_edges_edge_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/edges/{edge_id}/discovery",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_edges_edge_id_discovery",
+        "y.authz.get_api_edges_edge_id_discovery"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_edges_edge_id_discovery",
+        "y.authz.get_api_edges_edge_id_discovery"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/edges/{edge_id}/metadata",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_edges_edge_id_metadata",
+        "y.authz.get_api_edges_edge_id_metadata"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_edges_edge_id_metadata",
+        "y.authz.get_api_edges_edge_id_metadata"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ingest/stats",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated_global_metadata",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.get_api_ingest_stats"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.get_api_ingest_stats"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/commands",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_commands",
+        "y.authz.post_api_commands"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_commands",
+        "y.authz.post_api_commands"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/commands/{command_id}/ack",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_commands_command_id_ack",
+        "y.authz.get_api_commands_command_id_ack"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_commands_command_id_ack",
+        "y.authz.get_api_commands_command_id_ack"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent/tools",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated_global_metadata",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.get_api_agent_tools",
+        "x.preauth.anon401.get_api_agent_tools"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_agent_tools"
+      ],
+      "check_ids": [
+        "x.preauth.anon401.get_api_agent_tools"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id; Y ownership matrix still BLOCKED_POLICY via policy_dispositions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fdd/rules",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fdd_rules",
+        "y.authz.get_api_fdd_rules"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fdd_rules",
+        "y.authz.get_api_fdd_rules"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fdd/rules/{rule_id}/params",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fdd_rules_rule_id_params",
+        "y.authz.get_api_fdd_rules_rule_id_params"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fdd_rules_rule_id_params",
+        "y.authz.get_api_fdd_rules_rule_id_params"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fdd/cache/status",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fdd_cache_status",
+        "y.authz.get_api_fdd_cache_status"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fdd_cache_status",
+        "y.authz.get_api_fdd_cache_status"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fdd/equipment",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fdd_equipment",
+        "y.authz.get_api_fdd_equipment"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_fdd_equipment"
+      ],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fdd_equipment"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fdd/results",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fdd_results",
+        "y.authz.get_api_fdd_results"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_fdd_results"
+      ],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fdd_results"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fdd/results/readiness",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fdd_results_readiness",
+        "y.authz.get_api_fdd_results_readiness"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fdd_results_readiness",
+        "y.authz.get_api_fdd_results_readiness"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fdd/series",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fdd_series",
+        "y.authz.get_api_fdd_series"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fdd_series",
+        "y.authz.get_api_fdd_series"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fdd/roles",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fdd_roles",
+        "y.authz.get_api_fdd_roles"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fdd_roles",
+        "y.authz.get_api_fdd_roles"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fdd/cookbook-roles",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fdd_cookbook_roles",
+        "y.authz.get_api_fdd_cookbook_roles"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fdd_cookbook_roles",
+        "y.authz.get_api_fdd_cookbook_roles"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fdd/session-config",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fdd_session_config",
+        "y.authz.get_api_fdd_session_config"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_fdd_session_config",
+        "y.authz.get_api_fdd_session_config"
+      ],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fdd_session_config",
+        "y.authz.get_api_fdd_session_config"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/fdd/session-config",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.put_api_fdd_session_config",
+        "y.authz.put_api_fdd_session_config"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.put_api_fdd_session_config",
+        "y.authz.put_api_fdd_session_config"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/fdd/run",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_fdd_run",
+        "y.authz.post_api_fdd_run"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_fdd_run",
+        "y.authz.post_api_fdd_run"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fdd/status",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fdd_status",
+        "y.authz.get_api_fdd_status"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fdd_status",
+        "y.authz.get_api_fdd_status"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/actions",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated_global_metadata",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.get_api_actions"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.get_api_actions"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/actions",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated_global_metadata",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.delete_api_actions"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.delete_api_actions"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/actions/{id}",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.delete_api_actions_id",
+        "y.authz.delete_api_actions_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.delete_api_actions_id",
+        "y.authz.delete_api_actions_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/faults/status",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_faults_status",
+        "y.authz.get_api_faults_status"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_faults_status",
+        "y.authz.get_api_faults_status"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/faults/summary",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_faults_summary",
+        "y.authz.get_api_faults_summary"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_faults_summary",
+        "y.authz.get_api_faults_summary"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/export/meta",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated_global_metadata",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.get_api_export_meta"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.get_api_export_meta"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/data-management/summary",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated_global_metadata",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.get_api_data_management_summary"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.get_api_data_management_summary"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/host/stats",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated_global_metadata",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.get_api_host_stats"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.get_api_host_stats"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fdd-schema/tables",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated_global_metadata",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.get_api_fdd_schema_tables"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.get_api_fdd_schema_tables"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fdd-rules",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fdd_rules_alias",
+        "y.authz.get_api_fdd_rules_alias"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fdd_rules_alias",
+        "y.authz.get_api_fdd_rules_alias"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/reports",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_reports",
+        "y.authz.get_api_reports"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_reports",
+        "y.authz.get_api_reports"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/reports/templates",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_reports_templates",
+        "y.authz.get_api_reports_templates"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_reports_templates",
+        "y.authz.get_api_reports_templates"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/reports/draft",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_reports_draft",
+        "y.authz.post_api_reports_draft"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_reports_draft",
+        "y.authz.post_api_reports_draft"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/reports/engineering-findings",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_reports_engineering_findings",
+        "y.authz.get_api_reports_engineering_findings"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_reports_engineering_findings",
+        "y.authz.get_api_reports_engineering_findings"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/reports/{report_id}",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_reports_report_id",
+        "y.authz.get_api_reports_report_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_reports_report_id",
+        "y.authz.get_api_reports_report_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/reports/{report_id}",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.patch_api_reports_report_id",
+        "y.authz.patch_api_reports_report_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.patch_api_reports_report_id",
+        "y.authz.patch_api_reports_report_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/reports/{report_id}",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.delete_api_reports_report_id",
+        "y.authz.delete_api_reports_report_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.delete_api_reports_report_id",
+        "y.authz.delete_api_reports_report_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/reports/{report_id}/render/pdf",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_reports_report_id_render_pdf",
+        "y.authz.post_api_reports_report_id_render_pdf"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_reports_report_id_render_pdf",
+        "y.authz.post_api_reports_report_id_render_pdf"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/reports/{report_id}/download.pdf",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_reports_report_id_download_pdf",
+        "y.authz.get_api_reports_report_id_download_pdf"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_reports_report_id_download_pdf",
+        "y.authz.get_api_reports_report_id_download_pdf"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.get_api_jobs",
+        "x.preauth.anon401.get_api_jobs"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_jobs"
+      ],
+      "check_ids": [
+        "x.preauth.anon401.get_api_jobs"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id; Y ownership matrix still BLOCKED_POLICY via policy_dispositions"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.post_api_jobs"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.post_api_jobs"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/{job_id}",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.get_api_jobs_job_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.get_api_jobs_job_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/jobs/{job_id}",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.patch_api_jobs_job_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.patch_api_jobs_job_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/jobs/{job_id}",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.delete_api_jobs_job_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.delete_api_jobs_job_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/duplicate",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.post_api_jobs_job_id_duplicate"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.post_api_jobs_job_id_duplicate"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/archive",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.post_api_jobs_job_id_archive"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.post_api_jobs_job_id_archive"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/restore",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.post_api_jobs_job_id_restore"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.post_api_jobs_job_id_restore"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/runs",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.post_api_jobs_job_id_runs"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.post_api_jobs_job_id_runs"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/{job_id}/runs/{run_id}",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.get_api_jobs_job_id_runs_run_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.get_api_jobs_job_id_runs_run_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/jobs/{job_id}/runs/{run_id}",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.patch_api_jobs_job_id_runs_run_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.patch_api_jobs_job_id_runs_run_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/runs/{run_id}/stale",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.post_api_jobs_job_id_runs_run_id_stale"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.post_api_jobs_job_id_runs_run_id_stale"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/{job_id}/findings",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.get_api_jobs_job_id_findings"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.get_api_jobs_job_id_findings"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/jobs/{job_id}/findings",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.put_api_jobs_job_id_findings"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.put_api_jobs_job_id_findings"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/{job_id}/dispositions",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.get_api_jobs_job_id_dispositions"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.get_api_jobs_job_id_dispositions"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/jobs/{job_id}/dispositions",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.put_api_jobs_job_id_dispositions"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.put_api_jobs_job_id_dispositions"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/wattlab/handoffs",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.post_api_jobs_job_id_wattlab_handoffs"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.post_api_jobs_job_id_wattlab_handoffs"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/exports",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.post_api_jobs_job_id_exports"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.post_api_jobs_job_id_exports"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/{job_id}/exports/{export_id}/download",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.get_api_jobs_job_id_exports_export_id_download"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.get_api_jobs_job_id_exports_export_id_download"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/wattlab/dumps",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.post_api_jobs_job_id_wattlab_dumps"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.post_api_jobs_job_id_wattlab_dumps"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/{job_id}/wattlab/dumps/{dump_id}/download",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.get_api_jobs_job_id_wattlab_dumps_dump_id_download"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.get_api_jobs_job_id_wattlab_dumps_dump_id_download"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/eplus/runs",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.post_api_jobs_job_id_eplus_runs"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.post_api_jobs_job_id_eplus_runs"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/eplus/runs/{eplus_run_id}/artifacts",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "job_ownership_trace",
+      "disposition": "BLOCKED_POLICY",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "policy.blocked.post_api_jobs_job_id_eplus_runs_eplus_run_id_artifacts"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "policy.blocked.post_api_jobs_job_id_eplus_runs_eplus_run_id_artifacts"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/runtime",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_runtime",
+        "y.authz.post_api_analytics_runtime"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_runtime",
+        "y.authz.post_api_analytics_runtime"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/vav-health",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_vav_health",
+        "y.authz.post_api_analytics_vav_health"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_vav_health",
+        "y.authz.post_api_analytics_vav_health"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/ahu-health",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_ahu_health",
+        "y.authz.post_api_analytics_ahu_health"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_ahu_health",
+        "y.authz.post_api_analytics_ahu_health"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/ahu-temperature-health",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_ahu_temperature_health",
+        "y.authz.post_api_analytics_ahu_temperature_health"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_ahu_temperature_health",
+        "y.authz.post_api_analytics_ahu_temperature_health"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/ahu-pressure-health",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_ahu_pressure_health",
+        "y.authz.post_api_analytics_ahu_pressure_health"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_ahu_pressure_health",
+        "y.authz.post_api_analytics_ahu_pressure_health"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/ahu-economizer-health",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_ahu_economizer_health",
+        "y.authz.post_api_analytics_ahu_economizer_health"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_ahu_economizer_health",
+        "y.authz.post_api_analytics_ahu_economizer_health"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/chiller-health",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_chiller_health",
+        "y.authz.post_api_analytics_chiller_health"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_chiller_health",
+        "y.authz.post_api_analytics_chiller_health"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/cooling-tower-health",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_cooling_tower_health",
+        "y.authz.post_api_analytics_cooling_tower_health"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_cooling_tower_health",
+        "y.authz.post_api_analytics_cooling_tower_health"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/sensor-faults",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_sensor_faults",
+        "y.authz.post_api_analytics_sensor_faults"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_sensor_faults",
+        "y.authz.post_api_analytics_sensor_faults"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/pid-hunting",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_pid_hunting",
+        "y.authz.post_api_analytics_pid_hunting"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_pid_hunting",
+        "y.authz.post_api_analytics_pid_hunting"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/boiler-health",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_boiler_health",
+        "y.authz.post_api_analytics_boiler_health"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_boiler_health",
+        "y.authz.post_api_analytics_boiler_health"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/hp-health",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_hp_health",
+        "y.authz.post_api_analytics_hp_health"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_hp_health",
+        "y.authz.post_api_analytics_hp_health"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/zone-other-health",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_zone_other_health",
+        "y.authz.post_api_analytics_zone_other_health"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_zone_other_health",
+        "y.authz.post_api_analytics_zone_other_health"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/sensor-health",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_sensor_health",
+        "y.authz.post_api_analytics_sensor_health"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_sensor_health",
+        "y.authz.post_api_analytics_sensor_health"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/schedule",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_schedule",
+        "y.authz.post_api_analytics_schedule"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_schedule",
+        "y.authz.post_api_analytics_schedule"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/mechanical-cooling",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_mechanical_cooling",
+        "y.authz.post_api_analytics_mechanical_cooling"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_mechanical_cooling",
+        "y.authz.post_api_analytics_mechanical_cooling"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/bas-vs-web-oat",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_bas_vs_web_oat",
+        "y.authz.post_api_analytics_bas_vs_web_oat"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_bas_vs_web_oat",
+        "y.authz.post_api_analytics_bas_vs_web_oat"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/inspect",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_inspect",
+        "y.authz.post_api_analytics_inspect"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_inspect",
+        "y.authz.post_api_analytics_inspect"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/economizer",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_economizer",
+        "y.authz.post_api_analytics_economizer"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_economizer",
+        "y.authz.post_api_analytics_economizer"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/rcx/ahu",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_rcx_ahu",
+        "y.authz.post_api_analytics_rcx_ahu"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_rcx_ahu",
+        "y.authz.post_api_analytics_rcx_ahu"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/rcx/vav",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_rcx_vav",
+        "y.authz.post_api_analytics_rcx_vav"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_rcx_vav",
+        "y.authz.post_api_analytics_rcx_vav"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/rcx/chiller",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_rcx_chiller",
+        "y.authz.post_api_analytics_rcx_chiller"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_rcx_chiller",
+        "y.authz.post_api_analytics_rcx_chiller"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/rcx/boiler",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_rcx_boiler",
+        "y.authz.post_api_analytics_rcx_boiler"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_rcx_boiler",
+        "y.authz.post_api_analytics_rcx_boiler"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/rcx/preset",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_rcx_preset",
+        "y.authz.post_api_analytics_rcx_preset"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_rcx_preset",
+        "y.authz.post_api_analytics_rcx_preset"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/analytics/rcx/presets",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_analytics_rcx_presets",
+        "y.authz.get_api_analytics_rcx_presets"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_analytics_rcx_presets",
+        "y.authz.get_api_analytics_rcx_presets"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/metering",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_metering",
+        "y.authz.post_api_analytics_metering"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_metering",
+        "y.authz.post_api_analytics_metering"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/fuel",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_fuel",
+        "y.authz.post_api_analytics_fuel"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_fuel",
+        "y.authz.post_api_analytics_fuel"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/setpoints",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_setpoints",
+        "y.authz.post_api_analytics_setpoints"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_setpoints",
+        "y.authz.post_api_analytics_setpoints"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/diurnal",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_diurnal",
+        "y.authz.post_api_analytics_diurnal"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_diurnal",
+        "y.authz.post_api_analytics_diurnal"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/topology",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_topology",
+        "y.authz.post_api_analytics_topology"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_topology",
+        "y.authz.post_api_analytics_topology"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/sensor-stats",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_sensor_stats",
+        "y.authz.post_api_analytics_sensor_stats"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_sensor_stats",
+        "y.authz.post_api_analytics_sensor_stats"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/sql-anomaly",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_sql_anomaly",
+        "y.authz.post_api_analytics_sql_anomaly"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_sql_anomaly",
+        "y.authz.post_api_analytics_sql_anomaly"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/fuel/campus/import",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_fuel_campus_import",
+        "y.authz.post_api_fuel_campus_import"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_fuel_campus_import",
+        "y.authz.post_api_fuel_campus_import"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fuel/campus",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fuel_campus",
+        "y.authz.get_api_fuel_campus"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fuel_campus",
+        "y.authz.get_api_fuel_campus"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/fuel/campus/weather/fetch",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_fuel_campus_weather_fetch",
+        "y.authz.post_api_fuel_campus_weather_fetch"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_fuel_campus_weather_fetch",
+        "y.authz.post_api_fuel_campus_weather_fetch"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    }
+  ]
+}

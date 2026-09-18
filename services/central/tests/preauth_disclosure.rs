@@ -484,3 +484,74 @@ fn admin_and_agent_token_least_privilege() {
     );
     assert_ne!(st, 403, "agent scoped to A: {st} {body}");
 }
+
+/// SEC-MT-EMPTY-MEMBERSHIP: operator JWT with empty tenant_ids under MT must not
+/// broaden access via single-tenant passthrough.
+#[test]
+fn empty_membership_operator_denied_under_mt() {
+    let server = Server::start_auth_mt();
+    let tok_empty = mint("ops-empty", "operator", &[]);
+
+    let (st, body) = http("GET", server.port, "/api/tenants", None, Some(&tok_empty));
+    assert_eq!(
+        st, 403,
+        "empty membership must not list tenants via passthrough: {st} {body}"
+    );
+    assert_eq!(parse(&body).get("ok"), Some(&json!(false)), "{body}");
+
+    let (st, body) = http(
+        "GET",
+        server.port,
+        "/api/fdd/equipment?building_id=BLDG_A_ONLY",
+        None,
+        Some(&tok_empty),
+    );
+    assert_eq!(
+        st, 403,
+        "empty membership must not read buildings: {st} {body}"
+    );
+}
+
+/// SEC-SCOPED-ADMIN-MINT: admin with tenant membership cannot mint broader agent.
+#[test]
+fn scoped_admin_cannot_mint_foreign_or_blank_agent() {
+    let server = Server::start_auth_mt();
+    let tok_scoped = mint("scoped-admin", "admin", &["tenant_a"]);
+
+    let (st, body) = http(
+        "POST",
+        server.port,
+        "/api/auth/agent-token",
+        Some(r#"{"ttl_secs":600}"#),
+        Some(&tok_scoped),
+    );
+    assert_eq!(st, 403, "scoped admin omit tenant_id: {st} {body}");
+
+    let (st, body) = http(
+        "POST",
+        server.port,
+        "/api/auth/agent-token",
+        Some(r#"{"ttl_secs":600,"tenant_id":"tenant_b"}"#),
+        Some(&tok_scoped),
+    );
+    assert_eq!(st, 403, "scoped admin foreign tenant: {st} {body}");
+
+    let (st, body) = http(
+        "POST",
+        server.port,
+        "/api/auth/agent-token",
+        Some(r#"{"ttl_secs":600,"tenant_id":"tenant_a"}"#),
+        Some(&tok_scoped),
+    );
+    assert_eq!(st, 200, "scoped admin own tenant mint: {st} {body}");
+    let agent = parse(&body)["token"].as_str().expect("token").to_string();
+
+    let (st, body) = http(
+        "GET",
+        server.port,
+        "/api/fdd/equipment?building_id=BLDG_B_ONLY",
+        None,
+        Some(&agent),
+    );
+    assert_eq!(st, 403, "minted agent must stay in A: {st} {body}");
+}

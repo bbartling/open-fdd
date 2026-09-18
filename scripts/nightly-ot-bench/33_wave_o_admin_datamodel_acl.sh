@@ -5,7 +5,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=/dev/null
 source "$ROOT/scripts/nightly-ot-bench/_common.sh" 2>/dev/null || true
 
+# Unique artifact root — never share with gate 31 (acl.log / health.json collision).
 ART="${ARTIFACT_DIR:-$ROOT/reports/wave_o_admin_acl_$(date -u +%Y%m%dT%H%M%SZ)}"
+if [[ -n "${ARTIFACT_DIR:-}" ]]; then
+  ART="${ARTIFACT_DIR%/}/gate33_wave_o_admin_datamodel_acl"
+fi
 mkdir -p "$ART"
 BASE="${OPENFDD_API_BASE:-${RAILWAY_BASE:-}}"
 [[ -n "$BASE" ]] || { echo "set OPENFDD_API_BASE or RAILWAY_BASE" >&2; exit 1; }
@@ -68,11 +72,14 @@ else
   echo "PASS: admin lists tenants" | tee -a "$ART/acl.log"
 fi
 
-# --- O8: tenant token cannot hit admin ---
+# --- O8: tenant token cannot hit admin (401 = auth failure, not ACL deny) ---
 for path in /api/admin/users /api/admin/tenants /api/admin/historian-limits; do
   c="$(code_for GET "$path" "$ACME_TOKEN")"
-  if [[ "$c" != "403" && "$c" != "401" ]]; then
-    echo "FAIL: acme GET $path expected 403, got $c" | tee -a "$ART/acl.log"
+  if [[ "$c" == "401" ]]; then
+    echo "ERROR: acme GET $path returned 401 — token invalid, not ACL" | tee -a "$ART/acl.log"
+    fail=1
+  elif [[ "$c" != "403" && "$c" != "404" ]]; then
+    echo "FAIL: acme GET $path expected 403/404, got $c" | tee -a "$ART/acl.log"
     fail=1
   else
     echo "PASS: acme denied $path ($c)" | tee -a "$ART/acl.log"
@@ -80,8 +87,11 @@ for path in /api/admin/users /api/admin/tenants /api/admin/historian-limits; do
 done
 c="$(code_for PUT /api/admin/users "$ACME_TOKEN" \
   -d '{"username":"evil","role":"operator","tenant_ids":["acme"],"password":"x"}')"
-if [[ "$c" != "403" && "$c" != "401" ]]; then
-  echo "FAIL: acme PUT /api/admin/users expected 403, got $c" | tee -a "$ART/acl.log"
+if [[ "$c" == "401" ]]; then
+  echo "ERROR: acme PUT /api/admin/users returned 401 — token invalid, not ACL" | tee -a "$ART/acl.log"
+  fail=1
+elif [[ "$c" != "403" && "$c" != "404" ]]; then
+  echo "FAIL: acme PUT /api/admin/users expected 403/404, got $c" | tee -a "$ART/acl.log"
   fail=1
 else
   echo "PASS: acme denied user upsert ($c)" | tee -a "$ART/acl.log"
@@ -108,46 +118,57 @@ fi
 
 # --- O9: foreign mapping + session-config ---
 c="$(code_for GET '/api/csv/import/package/mapping?building_id=BUILDING_100' "$ACME_TOKEN")"
-if [[ "$c" != "403" && "$c" != "401" ]]; then
-  echo "FAIL: acme mapping BUILDING_100 expected 403, got $c" | tee -a "$ART/acl.log"
+if [[ "$c" == "401" ]]; then
+  echo "ERROR: acme mapping BUILDING_100 returned 401 (auth, not ACL)" | tee -a "$ART/acl.log"
+  fail=1
+elif [[ "$c" != "403" && "$c" != "404" ]]; then
+  echo "FAIL: acme mapping BUILDING_100 expected 403/404, got $c" | tee -a "$ART/acl.log"
   fail=1
 else
   echo "PASS: acme denied foreign mapping ($c)" | tee -a "$ART/acl.log"
 fi
 
 c="$(code_for GET '/api/fdd/session-config?building_id=BUILDING_100' "$ACME_TOKEN")"
-if [[ "$c" != "403" && "$c" != "401" ]]; then
-  echo "FAIL: acme session-config BUILDING_100 expected 403, got $c" | tee -a "$ART/acl.log"
+if [[ "$c" == "401" ]]; then
+  echo "ERROR: acme session-config BUILDING_100 returned 401 (auth, not ACL)" | tee -a "$ART/acl.log"
+  fail=1
+elif [[ "$c" != "403" && "$c" != "404" ]]; then
+  echo "FAIL: acme session-config BUILDING_100 expected 403/404, got $c" | tee -a "$ART/acl.log"
   fail=1
 else
   echo "PASS: acme denied foreign session-config ($c)" | tee -a "$ART/acl.log"
 fi
 
 c="$(code_for GET '/api/fdd/session-config' "$ACME_TOKEN")"
-if [[ "$c" != "403" && "$c" != "401" ]]; then
-  echo "FAIL: acme session-config without building_id expected 403, got $c" | tee -a "$ART/acl.log"
+if [[ "$c" == "401" ]]; then
+  echo "ERROR: acme session-config without building_id returned 401 (auth, not ACL)" | tee -a "$ART/acl.log"
+  fail=1
+elif [[ "$c" != "403" && "$c" != "404" ]]; then
+  echo "FAIL: acme session-config without building_id expected 403/404, got $c" | tee -a "$ART/acl.log"
   fail=1
 else
   echo "PASS: acme denied unscoped session-config ($c)" | tee -a "$ART/acl.log"
 fi
 
-# Own-site session-config (ACME building id may be ACME)
+# Own-site session-config must succeed for ACL deny evidence to be valid.
 c="$(code_for GET '/api/fdd/session-config?building_id=ACME' "$ACME_TOKEN")"
 if [[ "$c" != "200" ]]; then
-  echo "WARN: acme session-config ACME got $c (may lack membership stamp)" | tee -a "$ART/acl.log"
+  echo "ERROR: acme session-config ACME got $c — own-object control failed; foreign denies not evidence" | tee -a "$ART/acl.log"
+  fail=1
 else
   echo "PASS: acme session-config ACME 200" | tee -a "$ART/acl.log"
 fi
 
-# Ephemeral user create → disable → login fail → delete (lab)
+# Ephemeral user create → disable → login fail → delete (lab; random password)
 EPHEM="o8probe$(date +%s | tail -c 5)"
+EPHEM_PW="Probe$(openssl rand -hex 6 2>/dev/null || date +%s)!"
 c="$(code_for PUT /api/admin/users "$ADMIN_TOKEN" \
-  -d "$(jq -nc --arg u "$EPHEM" '{username:$u,role:"viewer",tenant_ids:["acme"],password:"ProbePass9!",disabled:false}')")"
+  -d "$(jq -nc --arg u "$EPHEM" --arg p "$EPHEM_PW" '{username:$u,role:"viewer",tenant_ids:["acme"],password:$p,disabled:false}')")"
 if [[ "$c" != "200" ]]; then
   echo "FAIL: admin create $EPHEM got $c" | tee -a "$ART/acl.log"
   fail=1
 else
-  tok="$(login "$EPHEM" "ProbePass9!" || true)"
+  tok="$(login "$EPHEM" "$EPHEM_PW" || true)"
   if [[ -z "$tok" ]]; then
     echo "FAIL: ephemeral login before disable" | tee -a "$ART/acl.log"
     fail=1
@@ -155,7 +176,7 @@ else
     echo "PASS: ephemeral login before disable" | tee -a "$ART/acl.log"
   fi
   code_for POST "/api/admin/users/${EPHEM}/disabled" "$ADMIN_TOKEN" -d '{"disabled":true}' >/dev/null
-  tok2="$(login "$EPHEM" "ProbePass9!" || true)"
+  tok2="$(login "$EPHEM" "$EPHEM_PW" || true)"
   if [[ -n "$tok2" ]]; then
     echo "FAIL: disabled user still logs in" | tee -a "$ART/acl.log"
     fail=1

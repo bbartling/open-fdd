@@ -53,6 +53,23 @@ rotate/revoke compromised edge creds. Keep central, MCP, mqtt **private** on
 Railway; expose **web only**. Broker-side proof = Kali staging pentest (Mint does
 not ActiveScan OT).
 
+## Security tooling assurance (3.5.29+)
+
+Brief: `.cursor/agents/openfdd-security-python-harness.md`;
+contract: `.cursor/plans/security_stress_integration_audit.md`.
+CLI: `scripts/security/openfdd_security_probe.py`. Stress gates **25** / **25b** /
+**26** (`OPENFDD_SECURITY_EXECUTE=1` for live; **26** only with
+`OPENFDD_SECURITY_MQTT_ACL=1` + isolated broker — else N/A).
+
+- A valid tenant identity and successful own-object control must accompany a
+  foreign-object denial. A 401 from failed authentication is not authorization proof.
+- Missing credentials/fixtures are BLOCKED; transport/parse failures are ERROR.
+  N/A needs applicability evidence. Omitted tests never become PASS.
+- Test the evaluator with deliberately broken fixtures, then test real Rust
+  middleware/storage separately. Offline manifest tests only verify reporting.
+- Keep MQTT continuity in transport; broker identity/topic denial needs its own
+  evidence. Scope any PASS to candidate, configuration, fixtures and checked controls.
+
 ## Never
 
 - Fall back to `AuthUser::dev_anonymous()` Admin for tenant/topology list handlers

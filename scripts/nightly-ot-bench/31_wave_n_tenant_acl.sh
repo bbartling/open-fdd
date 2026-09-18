@@ -6,7 +6,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=/dev/null
 source "$ROOT/scripts/nightly-ot-bench/_common.sh" 2>/dev/null || true
 
+# Unique artifact root — never share with gate 33 (acl.log / acl_verdict.json collision).
 ART="${ARTIFACT_DIR:-$ROOT/reports/wave_n_acl_$(date -u +%Y%m%dT%H%M%SZ)}"
+if [[ -n "${ARTIFACT_DIR:-}" ]]; then
+  ART="${ARTIFACT_DIR%/}/gate31_wave_n_tenant_acl"
+fi
 mkdir -p "$ART"
 BASE="${OPENFDD_API_BASE:-${RAILWAY_BASE:-}}"
 [[ -n "$BASE" ]] || { echo "set OPENFDD_API_BASE or RAILWAY_BASE" >&2; exit 1; }
@@ -39,8 +43,13 @@ deny_building() {
     -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
     -d "$(jq -nc --arg t "$4" '{tenant_id:$t}')" \
     "$BASE/api/tenants/select")"
-  if [[ "$sel" != "403" && "$sel" != "401" ]]; then
-    echo "FAIL: $label select foreign tenant expected 403, got $sel" | tee -a "$ART/acl.log"
+  # 401 with a nominally valid tenant token is not authorization evidence (auth failure).
+  if [[ "$sel" == "401" ]]; then
+    echo "ERROR: $label select foreign tenant returned 401 — token/auth invalid, not ACL deny" | tee -a "$ART/acl.log"
+    return 1
+  fi
+  if [[ "$sel" != "403" && "$sel" != "404" ]]; then
+    echo "FAIL: $label select foreign tenant expected 403/404, got $sel" | tee -a "$ART/acl.log"
     return 1
   fi
   # Data-path ACL: mapping + FDD series must not leak foreign buildings (Wave N).
@@ -48,15 +57,23 @@ deny_building() {
   map_code="$(curl -s -o "$ART/${label}_map_${bid}.json" -w '%{http_code}' \
     -H "Authorization: Bearer $token" \
     "$BASE/api/csv/import/package/mapping?building_id=${bid}")"
-  if [[ "$map_code" != "403" && "$map_code" != "401" ]]; then
-    echo "FAIL: $label mapping foreign building $bid expected 403, got $map_code" | tee -a "$ART/acl.log"
+  if [[ "$map_code" == "401" ]]; then
+    echo "ERROR: $label mapping foreign building $bid returned 401 (auth, not ACL)" | tee -a "$ART/acl.log"
+    return 1
+  fi
+  if [[ "$map_code" != "403" && "$map_code" != "404" ]]; then
+    echo "FAIL: $label mapping foreign building $bid expected 403/404, got $map_code" | tee -a "$ART/acl.log"
     return 1
   fi
   series_code="$(curl -s -o "$ART/${label}_series_${bid}.json" -w '%{http_code}' \
     -H "Authorization: Bearer $token" \
     "$BASE/api/fdd/series?building_id=${bid}&equipment_id=AHU_1&rule_id=FC1")"
-  if [[ "$series_code" != "403" && "$series_code" != "401" ]]; then
-    echo "FAIL: $label fdd/series foreign building $bid expected 403, got $series_code" | tee -a "$ART/acl.log"
+  if [[ "$series_code" == "401" ]]; then
+    echo "ERROR: $label fdd/series foreign building $bid returned 401 (auth, not ACL)" | tee -a "$ART/acl.log"
+    return 1
+  fi
+  if [[ "$series_code" != "403" && "$series_code" != "404" ]]; then
+    echo "FAIL: $label fdd/series foreign building $bid expected 403/404, got $series_code" | tee -a "$ART/acl.log"
     return 1
   fi
   # Wave O2: IDOR must not be empty 200 — body asserts ok:false when JSON.
@@ -71,26 +88,39 @@ deny_building() {
   equip_code="$(curl -s -o "$ART/${label}_equip_${bid}.json" -w '%{http_code}' \
     -H "Authorization: Bearer $token" \
     "$BASE/api/fdd/equipment?building_id=${bid}")"
-  if [[ "$equip_code" != "403" && "$equip_code" != "401" ]]; then
-    echo "FAIL: $label fdd/equipment foreign building $bid expected 403, got $equip_code" | tee -a "$ART/acl.log"
+  if [[ "$equip_code" == "401" ]]; then
+    echo "ERROR: $label fdd/equipment foreign building $bid returned 401 (auth, not ACL)" | tee -a "$ART/acl.log"
+    return 1
+  fi
+  if [[ "$equip_code" != "403" && "$equip_code" != "404" ]]; then
+    echo "FAIL: $label fdd/equipment foreign building $bid expected 403/404, got $equip_code" | tee -a "$ART/acl.log"
     return 1
   fi
   analytics_code="$(curl -s -o "$ART/${label}_analytics_${bid}.json" -w '%{http_code}' \
     -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
     -d "$(jq -nc --arg b "$bid" '{building_id:$b}')" \
     "$BASE/api/analytics/runtime")"
-  if [[ "$analytics_code" != "403" && "$analytics_code" != "401" ]]; then
-    echo "FAIL: $label analytics/runtime foreign building $bid expected 403, got $analytics_code" | tee -a "$ART/acl.log"
+  if [[ "$analytics_code" == "401" ]]; then
+    echo "ERROR: $label analytics/runtime foreign building $bid returned 401 (auth, not ACL)" | tee -a "$ART/acl.log"
+    return 1
+  fi
+  if [[ "$analytics_code" != "403" && "$analytics_code" != "404" ]]; then
+    echo "FAIL: $label analytics/runtime foreign building $bid expected 403/404, got $analytics_code" | tee -a "$ART/acl.log"
     return 1
   fi
   # Wave O1: package write paths must fail closed like reads.
+  # Negative write probes belong on disposable fixtures — a broken app may succeed.
   local append_code
   append_code="$(curl -s -o "$ART/${label}_append_${bid}.json" -w '%{http_code}' \
     -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
     -d "$(jq -nc --arg b "$bid" '{confirm:true,building_id:$b,equipment_id:"AHU_1",csv:"timestamp_utc,x\n2026-01-01T00:00:00Z,1\n"}')" \
     "$BASE/api/csv/import/package/append")"
-  if [[ "$append_code" != "403" && "$append_code" != "401" ]]; then
-    echo "FAIL: $label package append foreign building $bid expected 403, got $append_code" | tee -a "$ART/acl.log"
+  if [[ "$append_code" == "401" ]]; then
+    echo "ERROR: $label package append foreign building $bid returned 401 (auth, not ACL)" | tee -a "$ART/acl.log"
+    return 1
+  fi
+  if [[ "$append_code" != "403" && "$append_code" != "404" ]]; then
+    echo "FAIL: $label package append foreign building $bid expected 403/404, got $append_code" | tee -a "$ART/acl.log"
     return 1
   fi
   echo "PASS: $label denied $bid / tenant $4 (list+select+mapping+series+equip+analytics+append)" | tee -a "$ART/acl.log"
@@ -133,6 +163,32 @@ mint_scoped() {
 [[ -n "$ACME_TOKEN" ]] || ACME_TOKEN="$(mint_scoped acme)"
 [[ -n "$B100_TOKEN" ]] || B100_TOKEN="$(mint_scoped building_100)"
 [[ -n "$LAKE_TOKEN" ]] || LAKE_TOKEN="$(mint_scoped lakeside_sd)"
+
+# Identity must validate via /api/auth/me before any ACL deny is treated as evidence.
+require_me() {
+  local token="$1" label="$2"
+  local code
+  code="$(curl -s -o "$ART/${label}_me.json" -w '%{http_code}' \
+    -H "Authorization: Bearer $token" "$BASE/api/auth/me")"
+  if [[ "$code" != "200" ]]; then
+    echo "ERROR: $label /api/auth/me got $code — cannot demonstrate authorization" | tee -a "$ART/acl.log"
+    return 1
+  fi
+  if ! jq -e 'type == "object"' "$ART/${label}_me.json" >/dev/null 2>&1; then
+    echo "ERROR: $label /api/auth/me non-object body" | tee -a "$ART/acl.log"
+    return 1
+  fi
+  echo "PASS: $label /api/auth/me 200" | tee -a "$ART/acl.log"
+  return 0
+}
+require_me "$ACME_TOKEN" "acme" || fail=1
+require_me "$B100_TOKEN" "b100" || fail=1
+require_me "$LAKE_TOKEN" "lake" || fail=1
+if [[ "$fail" -ne 0 ]]; then
+  jq -n --argjson fail "$fail" '{ok:false,gate:"wave_n_tenant_acl",reason:"identity /me failed"}' \
+    | tee "$ART/acl_verdict.json"
+  exit 1
+fi
 
 deny_building "$ACME_TOKEN" "BUILDING_100" "acme" "building_100" || fail=1
 deny_building "$ACME_TOKEN" "LAKESIDE_ES" "acme" "lakeside_sd" || fail=1

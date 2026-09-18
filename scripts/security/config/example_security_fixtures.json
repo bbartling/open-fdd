@@ -1,0 +1,60 @@
+{
+  "schema_version": "openfdd_security_fixtures_v1",
+  "notes": [
+    "Nonsecret example only. Credentials are environment-variable references.",
+    "Never put passwords, tokens, or JWT secrets in this file."
+  ],
+  "origin_allowlist": [
+    "http://127.0.0.1:18080",
+    "http://127.0.0.1:8080",
+    "http://localhost:18080"
+  ],
+  "tls": {
+    "verify": true,
+    "allow_http_loopback": true,
+    "max_body_bytes": 1048576
+  },
+  "identities": {
+    "admin": {
+      "username_env": "OPENFDD_ADMIN_USER",
+      "password_env": "OPENFDD_ADMIN_PASSWORD",
+      "role": "admin",
+      "tenant_ids": []
+    },
+    "operator_a": {
+      "username_env": "OPENFDD_USER_A_OPS_USER",
+      "password_env": "OPENFDD_USER_A_OPS_PASSWORD",
+      "role": "operator",
+      "tenant_ids": ["tenant_a"]
+    },
+    "operator_b": {
+      "username_env": "OPENFDD_USER_B_OPS_USER",
+      "password_env": "OPENFDD_USER_B_OPS_PASSWORD",
+      "role": "operator",
+      "tenant_ids": ["tenant_b"]
+    },
+    "viewer_a": {
+      "username_env": "OPENFDD_VIEWER_USER",
+      "password_env": "OPENFDD_VIEWER_PASSWORD",
+      "role": "viewer",
+      "tenant_ids": ["tenant_a"]
+    },
+    "agent_a": {
+      "username_env": "OPENFDD_AGENT_A_USER",
+      "password_env": "OPENFDD_AGENT_A_PASSWORD",
+      "role": "operator",
+      "tenant_ids": ["tenant_a"]
+    }
+  },
+  "fixtures": {
+    "tenant_a": "tenant_a",
+    "tenant_b": "tenant_b",
+    "building_a": "BUILDING_A",
+    "building_b": "BUILDING_B",
+    "equipment_a": "AHU_A",
+    "equipment_b": "AHU_B",
+    "canary_a": "CANARY_A_SYNTH",
+    "canary_b": "CANARY_B_SYNTH",
+    "nonexistent_object": "DOES_NOT_EXIST_Z9"
+  }
+}

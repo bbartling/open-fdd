@@ -1,4 +1,12 @@
+## 2026-09-18 — Security Python harness (offline)
+
+- Shipped `scripts/security/` probe library + CLI, route inventory (138 routes from `routes.rs`), suites X/Y/Z, offline unittest layers A/B + orchestrator sabotage.
+- Wired gates `25_security_python_harness` / `25b_security_post_stress` / `26_security_mqtt_acl` into `run_railway_hub_stress.sh` + `run_all.sh` (unique artifact dirs; structured verdicts). Default = dry-run → BLOCKED (HOLD: no live execute).
+- Legacy repairs: 401≠authz in gates 31/33; `auth_role_matrix` missing creds = BLOCKED + viewer password via `OPENFDD_VIEWER_PASSWORD`; Wave L 12–17 on MT hub → `NOT_APPLICABLE` with replacement IDs 11/20/21.
+- Live hub / real-app CI regressions / MQTT ACL fixtures: **pending** authorized window. No “100% secure” claim.
+
 ## 2026-09-16 — Wave R OPS PINNED (3.5.22 / sha-4d3a6b0)
+
 
 - Product #936 + harness #937 on master. Hub health `3.5.22+4d3a6b0e0707` · `multi_tenant=true`.
 - Backup `20260915T232819Z`. Stress `reports/nightly-ot-bench_20260916T011952Z/` **`fully_qualified=true`** (gates 00–23; no `SKIP_ZAP`).
@@ -803,3 +811,26 @@ Newest first. Append after non-trivial agent work.
 - Golden ECM: `examples/liberty_dual_ahu/ECM_FULL_PARITY.xlsx` + `docs/ecm/OPENFDD_AGENT_ECM_HANDOFF.md`.
 - PR: #607 (WattLab bake git + cutover docs + example).
 
+## 2026-09-18 — Security tooling handoff audit (offline)
+
+- Reviewed prior Cursor harness brief, integration plan and manifest rollup at
+  source `4a5c11e50b921df83f2ca3a59c52d4e99908157f` / 3.5.28.
+- Rewrote `.cursor/agents/openfdd-security-python-harness.md` and audit plan with
+  identity/positive controls, route inventory, bounded profiles, evidence validation,
+  intentionally broken fixture evaluation, real-app CI and pre/post stress requirements.
+- Corrected reporting: security gate coverage; MQTT continuity/pause in transport;
+  empty/all-N/A required sets cannot qualify; required N/A needs a reason.
+- Added offline qualification regression tests and synced guide/README. Python
+  security probe and runner integration remain pending; static product concerns
+  require isolated reproduction. No deployed security claim, live probes or re-pin.
+- Verification: `python3 -B -m unittest discover -s tests/qualification -v`
+  passed 11 tests; `python3 -B scripts/qualification/write_manifest.py selftest`
+  passed; `git diff --check` clean.
+
+## 2026-09-18T20:10Z — 3.5.29 security harness reconcile (PR #948)
+
+- Inventory v2: IMPLEMENTED/PLANNED/BLOCKED_POLICY; dup fdd-rules IDs fixed; CI integrity tests.
+- Layer C product fixes: MT empty-membership fail-closed; scoped-admin agent mint; tests in preauth_disclosure.
+- ZAP: ACCEPT_ZAP_MEDIUM default 0 + zap_risk_dispositions.json.
+- Live execute / MEGA stress still HOLD until tip merge + pin.
+- Evidence: docs/operations/SECURITY_HARNESS_EVIDENCE_3.5.29.md

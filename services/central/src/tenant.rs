@@ -76,6 +76,26 @@ impl TenantContext {
         })
     }
 
+    /// Fail-closed MT context: no buildings, not hub admin. Used when membership
+    /// resolution fails — must never fall back to single-tenant passthrough under MT.
+    pub fn deny_all_multi_tenant() -> Self {
+        Self {
+            tenant_id: None,
+            building_ids: vec![],
+            hub_admin: false,
+            multi_tenant: true,
+        }
+    }
+
+    /// Resolve membership; on error under MT return deny-all (never broaden via passthrough).
+    pub fn resolve_fail_closed(user: &AuthUser, plane: &ControlPlane) -> Self {
+        match Self::resolve(user, plane) {
+            Ok(ctx) => ctx,
+            Err(_) if multi_tenant_enabled() => Self::deny_all_multi_tenant(),
+            Err(_) => Self::single_tenant_passthrough(user),
+        }
+    }
+
     /// Fail-closed building gate when mode is on.
     pub fn allow_building(&self, building_id: &str) -> bool {
         if !self.multi_tenant {
