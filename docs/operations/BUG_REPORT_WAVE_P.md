@@ -6,8 +6,9 @@
 
 | Item | Status |
 |------|--------|
-| Product tip / **OPS PINNED** | **Soft Tip B `3.5.28` / `sha-4a5c11e`** (`4a5c11e5`, #947) · health `3.5.28+4a5c11e50b92` · `multi_tenant=true` · backup `20260917T214613Z` · hub stress `reports/nightly-ot-bench_20260917T215437Z/` **`fully_qualified=true`** (gates **19** + **35** PASS) · ACME fieldbus `sha-4a5c11e` · edges=`vim-1` |
-| **Patch cycle 3.5.29** `2026-09-18` | **IN FLIGHT** — tip **security-harness-ship**: Python probe + gates 25/25b/26 + legacy ACL false-PASS repairs. Live execute deferred to MEGA stress (`OPENFDD_SECURITY_EXECUTE=1`). Soft-OPEN acme-oa-t + local-bacnet unchanged (DIY MS/TP@38400 available). |
+| Product tip / **OPS PINNED** | **3.5.29** / **`sha-f727a55`** (#948) · health `3.5.29+f727a55e01a4` · `multi_tenant=true` · backup `20260918T221510Z` · hub stress `reports/nightly-ot-bench_20260918T231541Z/` **`fully_qualified=true`** (gates **19**+**35**+**25**/**25b**, `OPENFDD_SECURITY_EXECUTE=1`) · ACME fieldbus `sha-f727a55` |
+| Prior Soft Tip B | **3.5.28** / `sha-4a5c11e` · stress `20260917T215437Z` **`fully_qualified=true`** |
+| **Patch cycle 3.5.29** `2026-09-18` | Merged #948 → GHCR tip PASS → Railway backup+re-pin → fieldbus ACME → MEGA FQ. Soft-OPEN acme-oa-t + local-bacnet unchanged. Follow-on PR: stress QUAL/`set -u` order, Railway security fixtures, ZAP Medium dispositions, gate 25b login 429 reuse. |
 | **Stability audit** `2026-09-18T00:10Z` | **No new tip** — Railway Online on `sha-4a5c11e`; SQL↔pandas oracle OK; ACME FDD `rules_failed=0` |
 | **Patch cycle 3.5.29 attempt** `2026-09-18T12:00Z` | **HOLD TIP** — hygiene clean (0 open PRs, master Actions green, hub `3.5.28+4a5c11e50b92`, edges=1, ingest live). No product fix worth bump. Soft-OPEN `acme-oa-t-dup-reject` attributed to live edge **`vim-1`** (hub edges list); local `pi-1` fieldbus kit is not the registered telemetry edge. Local BACnet Soft-OPEN unchanged (FEC silence; mini MAC2 heard via `--mstp-passive` on Waveshare C). Prior FQ stress `20260917T215437Z` remains tip cite. |
 | Prior tip | `3.5.27` / `sha-bf93ea7` (#946 Soft UX) · hub stress `20260917T191546Z` not FQ (19 building + 35 MT topics — fixed in Tip B) |

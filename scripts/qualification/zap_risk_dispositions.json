@@ -1,5 +1,16 @@
 {
   "schema_version": "openfdd_zap_risk_dispositions_v1",
   "note": "Rule-specific Medium acceptances only. High is never accepted. Expired rows do not accept.",
-  "dispositions": []
+  "dispositions": [
+    {
+      "name": "CSP: style-src unsafe-inline",
+      "expiry": "2027-03-18",
+      "rationale": "Product SPA requires inline styles for Plotly/themed chrome; CSP still blocks scripts. Tracked Soft-OPEN for stricter style-src; public baseline High=0."
+    },
+    {
+      "name": "Sub Resource Integrity Attribute Missing",
+      "expiry": "2027-03-18",
+      "rationale": "Bundled SPA assets served same-origin via nginx; SRI not applied to first-party hashed chunks. Third-party script SRI remains required when CDN tags are introduced."
+    }
+  ]
 }

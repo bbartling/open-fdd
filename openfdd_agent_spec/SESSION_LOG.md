@@ -5,6 +5,20 @@
 - Legacy repairs: 401≠authz in gates 31/33; `auth_role_matrix` missing creds = BLOCKED + viewer password via `OPENFDD_VIEWER_PASSWORD`; Wave L 12–17 on MT hub → `NOT_APPLICABLE` with replacement IDs 11/20/21.
 - Live hub / real-app CI regressions / MQTT ACL fixtures: **pending** authorized window. No “100% secure” claim.
 
+
+## 2026-09-18 — tip `sha-f727a55` / 3.5.29 (#948) — OPS PINNED
+
+- GHCR tip PASS; backup `20260918T221510Z`; Railway hub re-pin central→mqtt→web; ACME fieldbus `sha-f727a55`.
+- MEGA `reports/nightly-ot-bench_20260918T231541Z/` **`fully_qualified=true`** (gates 19+35+25/25b, `OPENFDD_SECURITY_EXECUTE=1`).
+- Stress-script follow-ups (QUAL unbound fix, Railway fixtures allowlist, ZAP dispositions, analytics anon401 path, live_readonly JWT N/A, 25b admin-token/429) in same-day PR train.
+
+## 2026-09-18 — tip `sha-f727a55` / 3.5.29 (#948) — agent_spec sync + re-pin in flight
+
+- Merged #948 (security harness gates 25/25b/26 + MT fail-closed). Master tip `f727a55`.
+- Updated `openfdd_agent_spec/AGENTS.md` Current ops pin + railway-cli skill + root `AGENTS.md` to tip-in-flight (not OPS PINNED until MEGA FQ).
+- `PATCH_CYCLE.md` stress matrix: gates 19+35+25/25b, `OPENFDD_SECURITY_EXECUTE=1`.
+- Waiting GHCR Publish PASS → `check_ghcr_tip_stack.sh` → Railway backup/re-pin → fieldbus ACME → `run_railway_hub_stress.sh`.
+
 ## 2026-09-16 — Wave R OPS PINNED (3.5.22 / sha-4d3a6b0)
 
 

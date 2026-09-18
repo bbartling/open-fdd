@@ -27,8 +27,8 @@ fi
 EXPECTED_EDGE_ID="${EXPECTED_EDGE_ID:-}"
 EXPECTED_SITE_ID="${EXPECTED_SITE_ID:-}"
 ACCEPT_ZAP_MEDIUM="${ACCEPT_ZAP_MEDIUM:-0}"
-ZAP_DISPOSITIONS="${ZAP_DISPOSITIONS:-$QUAL/zap_risk_dispositions.json}"
 QUAL="$ROOT/scripts/qualification"
+ZAP_DISPOSITIONS="${ZAP_DISPOSITIONS:-$QUAL/zap_risk_dispositions.json}"
 MANIFEST_PY="$QUAL/write_manifest.py"
 
 # Pull hub auth from Railway CLI (never print values). Prefer file+jq over pipes —
@@ -60,11 +60,31 @@ if [[ -z "${OPENFDD_AGENT_PASSWORD:-}" ]] && command -v railway >/dev/null 2>&1;
   OPENFDD_AGENT_PASSWORD="$(_fetch_railway_var OPENFDD_AGENT_PASSWORD || true)"
   export OPENFDD_AGENT_PASSWORD
 fi
+if [[ -z "${OPENFDD_VIEWER_PASSWORD:-}" ]] && command -v railway >/dev/null 2>&1; then
+  OPENFDD_VIEWER_PASSWORD="$(_fetch_railway_var OPENFDD_VIEWER_PASSWORD || true)"
+  export OPENFDD_VIEWER_PASSWORD
+fi
+# Security harness A/B operators (Railway MT usernames) — never print values.
+export OPENFDD_ADMIN_USER="${OPENFDD_ADMIN_USER:-admin}"
+export OPENFDD_VIEWER_USER="${OPENFDD_VIEWER_USER:-viewer}"
+export OPENFDD_USER_A_OPS_USER="${OPENFDD_USER_A_OPS_USER:-acme-ops}"
+export OPENFDD_USER_B_OPS_USER="${OPENFDD_USER_B_OPS_USER:-b100-ops}"
+if [[ -z "${OPENFDD_USER_A_OPS_PASSWORD:-}" ]] && command -v railway >/dev/null 2>&1; then
+  OPENFDD_USER_A_OPS_PASSWORD="$(_fetch_railway_var OPENFDD_USER_ACME_OPS_PASSWORD || true)"
+  export OPENFDD_USER_A_OPS_PASSWORD
+fi
+if [[ -z "${OPENFDD_USER_B_OPS_PASSWORD:-}" ]] && command -v railway >/dev/null 2>&1; then
+  OPENFDD_USER_B_OPS_PASSWORD="$(_fetch_railway_var OPENFDD_USER_B100_OPS_PASSWORD || true)"
+  export OPENFDD_USER_B_OPS_PASSWORD
+fi
+if [[ -z "${OPENFDD_SECURITY_CONFIG:-}" && "$RAILWAY_BASE" == https://openfdd-web-production-af99.up.railway.app* ]]; then
+  export OPENFDD_SECURITY_CONFIG="$ROOT/scripts/security/config/railway_hub_security_fixtures.json"
+fi
 if [[ -z "${OPENFDD_ADMIN_PASSWORD:-}" ]]; then
   echo "ERROR: OPENFDD_ADMIN_PASSWORD unset after Railway fetch — refuse hub stress without auth" >&2
   exit 2
 fi
-echo "hub auth: OPENFDD_ADMIN_PASSWORD len=${#OPENFDD_ADMIN_PASSWORD} agent_len=${#OPENFDD_AGENT_PASSWORD}"
+echo "hub auth: OPENFDD_ADMIN_PASSWORD len=${#OPENFDD_ADMIN_PASSWORD} agent_len=${#OPENFDD_AGENT_PASSWORD} viewer_len=${#OPENFDD_VIEWER_PASSWORD} ops_a_len=${#OPENFDD_USER_A_OPS_PASSWORD} ops_b_len=${#OPENFDD_USER_B_OPS_PASSWORD}"
 
 # Mint bearer once up-front. Gate 23 deliberately trips login 429; AFDD flood must not re-login.
 if [[ -z "${OPENFDD_ADMIN_TOKEN:-}" ]]; then
