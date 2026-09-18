@@ -525,10 +525,7 @@ fn scoped_admin_cannot_mint_foreign_or_blank_agent() {
         Some(r#"{"ttl_secs":600}"#),
         Some(&tok_scoped),
     );
-    assert_eq!(
-        st, 403,
-        "scoped admin omit tenant_id: {st} {body}"
-    );
+    assert_eq!(st, 403, "scoped admin omit tenant_id: {st} {body}");
 
     let (st, body) = http(
         "POST",
@@ -537,10 +534,7 @@ fn scoped_admin_cannot_mint_foreign_or_blank_agent() {
         Some(r#"{"ttl_secs":600,"tenant_id":"tenant_b"}"#),
         Some(&tok_scoped),
     );
-    assert_eq!(
-        st, 403,
-        "scoped admin foreign tenant: {st} {body}"
-    );
+    assert_eq!(st, 403, "scoped admin foreign tenant: {st} {body}");
 
     let (st, body) = http(
         "POST",

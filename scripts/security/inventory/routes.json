@@ -5,9 +5,9 @@
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission.",
   "route_count": 138,
   "disposition_counts": {
-    "IMPLEMENTED": 6,
-    "PLANNED": 101,
-    "BLOCKED_POLICY": 31
+    "IMPLEMENTED": 13,
+    "PLANNED": 96,
+    "BLOCKED_POLICY": 29
   },
   "routes": [
     {
@@ -1176,7 +1176,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "admin_only",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -1188,10 +1188,11 @@
         "x.preauth.anon401.get_api_admin_users",
         "y.authz.get_api_admin_users"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_admin_users"
+      ],
       "check_ids": [
-        "x.preauth.anon401.get_api_admin_users",
-        "y.authz.get_api_admin_users"
+        "x.preauth.anon401.get_api_admin_users"
       ],
       "request_schema": {
         "type": "unknown",
@@ -1518,7 +1519,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "authenticated",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -1530,10 +1531,11 @@
         "x.preauth.anon401.get_api_edges",
         "y.authz.get_api_edges"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_edges"
+      ],
       "check_ids": [
-        "x.preauth.anon401.get_api_edges",
-        "y.authz.get_api_edges"
+        "x.preauth.anon401.get_api_edges"
       ],
       "request_schema": {
         "type": "unknown",
@@ -1780,7 +1782,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "authenticated_global_metadata",
-      "disposition": "BLOCKED_POLICY",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -1789,11 +1791,14 @@
       ],
       "source": "services/central/src/routes.rs",
       "planned_check_ids": [
-        "policy.blocked.get_api_agent_tools"
+        "policy.blocked.get_api_agent_tools",
+        "x.preauth.anon401.get_api_agent_tools"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_agent_tools"
+      ],
       "check_ids": [
-        "policy.blocked.get_api_agent_tools"
+        "x.preauth.anon401.get_api_agent_tools"
       ],
       "request_schema": {
         "type": "unknown",
@@ -1806,7 +1811,7 @@
       "selectors": [],
       "side_effects": "none",
       "fixture_needs": [],
-      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id; Y ownership matrix still BLOCKED_POLICY via policy_dispositions"
     },
     {
       "method": "GET",
@@ -1928,7 +1933,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -1940,10 +1945,11 @@
         "x.preauth.anon401.get_api_fdd_equipment",
         "y.authz.get_api_fdd_equipment"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_fdd_equipment"
+      ],
       "check_ids": [
-        "x.preauth.anon401.get_api_fdd_equipment",
-        "y.authz.get_api_fdd_equipment"
+        "x.preauth.anon401.get_api_fdd_equipment"
       ],
       "request_schema": {
         "type": "unknown",
@@ -1966,7 +1972,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -1978,10 +1984,11 @@
         "x.preauth.anon401.get_api_fdd_results",
         "y.authz.get_api_fdd_results"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_fdd_results"
+      ],
       "check_ids": [
-        "x.preauth.anon401.get_api_fdd_results",
-        "y.authz.get_api_fdd_results"
+        "x.preauth.anon401.get_api_fdd_results"
       ],
       "request_schema": {
         "type": "unknown",
@@ -2156,7 +2163,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -2168,7 +2175,10 @@
         "x.preauth.anon401.get_api_fdd_session_config",
         "y.authz.get_api_fdd_session_config"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_fdd_session_config",
+        "y.authz.get_api_fdd_session_config"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_fdd_session_config",
         "y.authz.get_api_fdd_session_config"
@@ -3006,7 +3016,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "job_ownership_trace",
-      "disposition": "BLOCKED_POLICY",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -3015,11 +3025,14 @@
       ],
       "source": "services/central/src/routes.rs",
       "planned_check_ids": [
-        "policy.blocked.get_api_jobs"
+        "policy.blocked.get_api_jobs",
+        "x.preauth.anon401.get_api_jobs"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_jobs"
+      ],
       "check_ids": [
-        "policy.blocked.get_api_jobs"
+        "x.preauth.anon401.get_api_jobs"
       ],
       "request_schema": {
         "type": "unknown",
@@ -3032,7 +3045,7 @@
       "selectors": [],
       "side_effects": "none",
       "fixture_needs": [],
-      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id; Y ownership matrix still BLOCKED_POLICY via policy_dispositions"
     },
     {
       "method": "POST",

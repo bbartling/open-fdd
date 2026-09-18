@@ -109,6 +109,14 @@ def run_suite_x(ctx: SuiteContext) -> None:
         ("/api/health/stack", "x.preauth.anon_stack_401"),
         ("/api/building/snapshot", "x.preauth.anon_snapshot_401"),
         ("/api/dashboard/summary", "x.preauth.anon_summary_401"),
+        ("/api/edges", "x.preauth.anon401.get_api_edges"),
+        ("/api/fdd/equipment", "x.preauth.anon401.get_api_fdd_equipment"),
+        ("/api/fdd/results", "x.preauth.anon401.get_api_fdd_results"),
+        ("/api/fdd/session-config", "x.preauth.anon401.get_api_fdd_session_config"),
+        ("/api/analytics/overview", "x.preauth.anon401.get_api_analytics_overview"),
+        ("/api/admin/users", "x.preauth.anon401.get_api_admin_users"),
+        ("/api/jobs", "x.preauth.anon401.get_api_jobs"),
+        ("/api/agent/tools", "x.preauth.anon401.get_api_agent_tools"),
     ):
         try:
             r = ctx.client.request("GET", path)
@@ -789,6 +797,82 @@ def run_suite_y(ctx: SuiteContext) -> None:
             "y.authz.admin_users_operator_denied",
             "Y",
             "admin users",
+            "ERROR",
+            detail=str(exc),
+        )
+
+    # Session-config selector: A must not read B's building config envelope with foreign canary
+    try:
+        q = urlencode({"building_id": fx.building_a})
+        r_own = ctx.client.request(
+            "GET", f"/api/fdd/session-config?{q}", token=tok_a
+        )
+        if r_own.status == 401:
+            ctx.check(
+                "y.authz.get_api_fdd_session_config",
+                "Y",
+                "A session-config own control",
+                "ERROR",
+                detail="valid A token 401",
+                path_template="/api/fdd/session-config",
+            )
+        elif r_own.status in (200, 404):
+            # 404 may mean fixture absent — BLOCKED not PASS
+            st = "PASS" if r_own.status == 200 and _is_json_object(r_own.body) else "BLOCKED"
+            ctx.check(
+                "y.authz.get_api_fdd_session_config",
+                "Y",
+                "A session-config own control",
+                st,
+                observed=_status_of(r_own),
+                detail=None if st == "PASS" else "own session-config fixture missing",
+                path_template="/api/fdd/session-config",
+            )
+        else:
+            ctx.check(
+                "y.authz.get_api_fdd_session_config",
+                "Y",
+                "A session-config own control",
+                "FAIL",
+                observed=_status_of(r_own),
+            )
+        q_b = urlencode({"building_id": fx.building_b})
+        r_f = ctx.client.request(
+            "GET", f"/api/fdd/session-config?{q_b}", token=tok_a
+        )
+        leak = fx.canary_b.encode() in r_f.body
+        if r_f.status == 401:
+            deny_st = "ERROR"
+        elif r_f.status in (403, 404) and not leak:
+            deny_st = "PASS"
+        elif r_f.status == 200 and leak:
+            deny_st = "FAIL"
+        elif r_f.status == 200:
+            deny_st = "FAIL"
+        else:
+            deny_st = "FAIL"
+        ctx.check(
+            "y.authz.a_foreign_session_config_denied",
+            "Y",
+            "A denied foreign session-config",
+            deny_st,
+            expected="403/404",
+            observed=_status_of(r_f),
+            detail="foreign canary leak" if leak else None,
+            path_template="/api/fdd/session-config",
+        )
+    except TransportError as exc:
+        ctx.check(
+            "y.authz.get_api_fdd_session_config",
+            "Y",
+            "session-config",
+            "ERROR",
+            detail=str(exc),
+        )
+        ctx.check(
+            "y.authz.a_foreign_session_config_denied",
+            "Y",
+            "session-config foreign",
             "ERROR",
             detail=str(exc),
         )
