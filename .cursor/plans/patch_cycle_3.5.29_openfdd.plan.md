@@ -1,209 +1,161 @@
 ---
 name: Open-FDD 3.5.29 patch cycle
-overview: "Optimized 3.5.29 cycle: hygiene → security Python harness (offline HOLD deploy) → Soft-OPEN tip → GHCR → Railway+fieldbus+DIY BACnet@38400 → MEGA hub stress (incl. gates 25/25b/26) → BUG_REPORT + hygiene end. No stale PRs/branches; no mid-wave stress; no local docker build."
+overview: "3.5.29 security-harness-ship + audit §§1–7. PR #948 iterating — inventory honesty, layer-C MT fixes, fail-closed qual. Do not merge until requirement-to-evidence table is green for offline/CI layers. Live execute + MEGA stress after tip pin only."
 todos:
   - id: p0-hygiene-start
-    content: "GH hygiene START — 0 open PRs; tip Actions green; hub healthy; prune stale branches"
+    content: "GH hygiene START"
     status: completed
-  - id: sec-plan-fold
-    content: "Fold security_stress_integration_audit into this plan + sub-checklist"
-    status: completed
-  - id: sec-inventory
-    content: "Security route inventory + policy/fixture manifests (BLOCKED≠PASS)"
+  - id: plan-reconcile
+    content: "Master plan req↔task↔exit for audit §§1–7 + layer C"
+    status: in_progress
+  - id: inv-honesty
+    content: "Inventory v2 PLANNED/IMPLEMENTED; dup IDs fixed; CI integrity"
+    status: in_progress
+  - id: xyz-suites
+    content: "X/Y/Z suite coverage expansion toward planned_check_ids"
     status: pending
-  - id: sec-harness
-    content: "Python openfdd_security lib/CLI + offline A/B evaluators (HOLD live deploy)"
-    status: pending
-  - id: sec-gates
-    content: "Wire gates 25/25b/26 stubs; repair legacy false-PASS; manifest profile validator"
-    status: pending
-  - id: p1-pick-fix
-    content: "Pick ONE Soft-OPEN / product fix for tip (after sec offline + hub audit)"
-    status: pending
-  - id: p2-version
-    content: "VERSION bump 3.5.28 → 3.5.29 (+ Cargo/README)"
-    status: pending
-  - id: p3-implement
-    content: "Ship tip fix + security tooling (one or two focused PRs; merge green)"
+  - id: layer-c-rust
+    content: "Layer C Rust regressions + fail-closed empty-membership/scoped-mint"
+    status: in_progress
+  - id: fail-closed-qual
+    content: "ZAP dispositions; 25/25b required; dry-run≠PASS; evidence validator"
+    status: in_progress
+  - id: evidence-table
+    content: "Requirement-to-evidence table + docs truth"
     status: pending
   - id: p4-pr-merge
-    content: "PR squash-merge → GHCR Publish; delete branch; 0 open PRs"
+    content: "PR 948 green merge only after offline+CI evidence"
     status: pending
   - id: p5-tip-gate
-    content: "./scripts/check_ghcr_tip_stack.sh sha-<7> PASS"
+    content: "GHCR tip complete sha-<7>"
     status: pending
   - id: p6-backup-repin
-    content: "Backup then Railway hub re-pin central→mqtt→web to tip"
+    content: "Backup + Railway re-pin"
     status: pending
   - id: p7-fieldbus-bacnet
-    content: "Fieldbus tip + ACME ingest; local BACnet@38400 DIY/FEC bench if picked"
+    content: "Fieldbus tip + local BACnet@38400 if picked"
     status: pending
   - id: p8-mega-stress
-    content: "MEGA hub stress LAST — FQ; 19+35; 25/25b; mqtt ACL 26 if applicable; synth59 59/59"
+    content: "MEGA stress with OPENFDD_SECURITY_EXECUTE=1; 25/25b PASS; 26 N/A or PASS"
     status: pending
   - id: p10-bug-report
-    content: "BUG_REPORT_WAVE_P tip + security scope + stress cites"
-    status: pending
-  - id: p11-hygiene-end
-    content: "GH hygiene END — 0 open PRs; tip Actions green"
+    content: "BUG_REPORT + hygiene end"
     status: pending
 isProject: false
 ---
 
-# Open-FDD 3.5.29 patch cycle (optimized + security mega-stress)
+# Open-FDD 3.5.29 — security harness (audit-complete)
 
-> **For agentic workers:** Execute in the order below. Do **not** stress mid-wave. Do **not** local `docker build` on bensbench. **No stale open PRs / feature branches / unexplained failed Actions.**
+**PR:** [#948](https://github.com/bbartling/open-fdd/pull/948) `tip/3.5.29-security-harness` — **do not merge** until §§1–5 offline/CI evidence below is green.
 
-**Goal:** Ship `3.5.29` with (1) reusable Python security regression harness + truthful qualification wiring, (2) one Soft-OPEN/product tip fix, (3) Railway + fieldbus refresh, (4) DIY MS/TP@38400 local OT when applicable, (5) **MEGA** hub stress FQ including new security phases.
+**Contracts (mandatory, not satisfied by linking alone):**
+- [`.cursor/agents/openfdd-security-python-harness.md`](../agents/openfdd-security-python-harness.md)
+- [`.cursor/plans/security_stress_integration_audit.md`](security_stress_integration_audit.md)
 
-**Sub-plan (acceptance checklist):** [`.cursor/plans/security_stress_integration_audit.md`](/home/ben/Desktop/open-fdd/.cursor/plans/security_stress_integration_audit.md) · agent brief [`.cursor/agents/openfdd-security-python-harness.md`](/home/ben/Desktop/open-fdd/.cursor/agents/openfdd-security-python-harness.md)
+**Tip decision:** `security-harness-ship` — Python probe + gates 25/25b/26 + legacy false-PASS repairs + MT fail-closed product fixes (empty membership, scoped admin mint). Soft-OPEN acme-oa-t / local-bacnet follow-on.
 
-**Baseline:** OPS PINNED **`3.5.28` / `sha-4a5c11e`** · prior FQ `reports/nightly-ot-bench_20260917T215437Z/` · tracker `docs/operations/BUG_REPORT_WAVE_P.md`
-
-**HOLD during security offline work:** No Railway re-pin / live hub mutation / OT writes / secret fetch solely for harness build. Live gates 25/25b execute only in **Task MEGA stress** after tip pin.
-
----
-
-## Optimized order (speed)
-
-| Phase | Master todos | Parallel? | Deploy? |
-|-------|--------------|-----------|---------|
-| **A. Hygiene** | `p0` | — | no |
-| **B. Security offline** | `sec-inventory` → `sec-harness` → `sec-gates` | inventory∥early lib skeleton | **HOLD** live |
-| **C. Tip pick + ship** | `p1` → `p2` → `p3` → `p4` → `p5` | CI wait only | GHCR publish yes |
-| **D. Hub refresh** | `p6` → `p7` | fieldbus after central healthy | Railway + local fieldbus |
-| **E. MEGA stress LAST** | `p8` | — | live hub yes |
-| **F. Closeout** | `p10` → `p11` | — | no |
-
-### Soft-OPEN candidates (`p1` — pick ONE after Phase B)
-
-| ID | Kind | Notes |
-|----|------|-------|
-| **security-harness-ship** | Tooling | Prefer if Phase B lands cleanly — tip = harness + gate wiring (+ tiny product fix only if required) |
-| **acme-oa-t-dup-reject** | Ops/catalog | ACME duplicate `oa_t` historian rejects |
-| **local-bacnet-ot-bench** | Bench | DIY dual-mini + FEC @38400 now available |
-| Product bug from hub / BUG_REPORT | Product | One concern only |
+**HOLD:** No Railway re-pin / live `OPENFDD_SECURITY_EXECUTE` until tip GHCR pin. Offline + CI layer C first.
 
 ---
 
-### Task 0 — Hygiene start (`p0`)
+## Reconciliation (2026-09-18 afternoon)
 
-**Exit:** 0 open PRs; only `master` locally (or intentional tip branch); tip Actions green; hub health ok.
+| Finding from mid-flight review | Status now |
+|---|---|
+| “No executable harness” | **False after tip commit** — CLI + suites exist; revalidated offline |
+| Duplicate `/api/fdd/rules` vs `/api/fdd-rules` check IDs | **Fixed** — unique `*_alias` IDs |
+| 107 routes labeled COVERED without tests | **Fixed** — inventory v2: **IMPLEMENTED 6 / PLANNED 101 / BLOCKED_POLICY 31** |
+| Missing schema/fixture/side-effect fields | **Stubbed** on all routes (`TODO` schemas until filled per route) |
+| Layer C Rust missing | **In progress** — fail-closed resolve + scoped mint + regression tests added |
+| `ACCEPT_ZAP_MEDIUM=1` blanket | **Default now 0** + `zap_risk_dispositions.json` |
 
-- [x] `gh pr list --state open` → empty (2026-09-18)
-- [x] Prune local branches with gone remotes (`docs/wave-s-s5-stress-cite`)
-- [x] `gh run list --branch master --limit 20` — tip `4a5c11e` Actions green
-- [x] Hub health: `ok`, `3.5.28+4a5c11e50b92`, edges=1, ingest live
-
----
-
-### Task S0 — Fold security sub-plan (`sec-plan-fold`)
-
-- [x] Reference audit plan + agent brief from this plan
-- [ ] Keep audit checklist boxes updated as work lands (do not mark live stress done early)
+Honest coverage: suite emits **~33** check IDs; only **6** routes intersect as IMPLEMENTED. Remaining PLANNED routes are **not** tested — do not claim otherwise.
 
 ---
 
-### Task S1 — Inventory (`sec-inventory`)
+## Requirement → task → exit (must all pass before merge)
 
-**Exit:** Checked-in route/policy inventory; unknown policy = BLOCKED disposition, not encoded-as-correct.
+### §1 Inventory
 
-- [ ] Derive route/method inventory from central registrations
-- [ ] Fixture/policy manifests (A/B canaries, roles, nonexistent-object control)
-- [ ] CI detection stub for new routes without disposition
+| Req | Task | Exit |
+|---|---|---|
+| Unique check IDs | `inv-honesty` | `inventory_integrity_errors()==[]` |
+| PLANNED ≠ IMPLEMENTED ≠ COVERED | `inv-honesty` | disposition counts; no COVERED |
+| Schema/selectors/side_effects/fixtures | `inv-honesty` | fields present (TODO schemas OK temporarily) |
+| CI drift + dup detection | `test_inventory_integrity.py` | unittest PASS |
+| Nested routers inventoried | `find_uninventoried_routes` empty vs `routes.rs` | PASS |
+
+### §2 Python tools
+
+| Req | Task | Exit |
+|---|---|---|
+| Lib/CLI/config/schemas/README | shipped under `scripts/security/` | dry-run exit 0, `executed=false` |
+| Profiles + budgets + redaction | suites + transport | broken-fixture detectors PASS/FAIL correctly |
+| Unknown suite / subset ≠ full profile | config tests | FAIL closed |
+
+### §3 X/Y/Z + product concerns
+
+| Req | Task | Exit |
+|---|---|---|
+| Core X/Y/Z on fixtures | suites | healthy 31/31; detectors FAIL on faults |
+| Empty-membership MT | `layer-c-rust` | `empty_membership_operator_denied_under_mt` PASS in CI |
+| Scoped-admin mint | `layer-c-rust` | `scoped_admin_cannot_mint_foreign_or_blank_agent` PASS in CI |
+| Jobs/global-meta ownership | BLOCKED_POLICY until policy decision | disposition BLOCKED_POLICY + finding IDs |
+| Browser login/logout | Playwright existing / follow-on | named separate; Python does not claim browser |
+
+### §4 Evaluate A/B/C
+
+| Layer | Exit |
+|---|---|
+| A offline unit | `unittest discover -s tests/security` PASS |
+| B broken fixtures | detector map in README/evidence table |
+| C Rust CI | `preauth_disclosure` new tests PASS on GH Actions (no local cargo) |
+
+### §5 Legacy + runners
+
+| Req | Exit |
+|---|---|
+| Gates 25/25b wired required | in `run_railway_hub_stress.sh` |
+| Gate 26 | N/A when `OPENFDD_SECURITY_MQTT_ACL!=1` (not BLOCKED) |
+| 401≠ACL; Wave L N/A; unique ART dirs | repaired scripts |
+| Dry-run gate 25 | BLOCKED (honest) until EXECUTE |
+
+### §6 Fail closed
+
+| Req | Exit |
+|---|---|
+| Structured verdict + hashes | sabotage tests |
+| Required 25/25b cannot waive missing creds | BLOCKED ⇒ not FQ |
+| 26 required + BLOCKED ⇒ not FQ; N/A when out of profile | gate script |
+| live_readonly ≠ isolated_full | profile registry |
+| all-N/A security ≠ PASS | manifest tests |
+| ZAP rule dispositions | default ACCEPT_ZAP_MEDIUM=0 |
+
+### §7 Evidence + tip cycle
+
+| Phase | When |
+|---|---|
+| Offline/CI evidence table | before merge |
+| Merge #948 → GHCR | after CI green including Rust layer C |
+| Backup + re-pin + fieldbus | after tip complete |
+| MEGA stress + EXECUTE=1 | last |
+| BUG_REPORT / hygiene | closeout |
 
 ---
 
-### Task S2 — Python harness offline (`sec-harness`) — HOLD deploy
-
-**Exit:** `scripts/security/openfdd_security/` + `openfdd_security_probe.py`; dry-run default; offline A + broken-fixture B evaluators PASS/FAIL as specified in audit §5; no Railway traffic.
+## Commands (offline — run every push)
 
 ```bash
-python3 scripts/security/openfdd_security_probe.py --list-suites
-python3 scripts/security/openfdd_security_probe.py \
-  --config scripts/security/examples/fixtures.example.json \
-  --base-url http://127.0.0.1:18080 --profile isolated_full --dry-run
-# Offline unit/evaluator suite (exact entrypoint per README)
+python3 -B -m unittest discover -s tests/security -v
+python3 -B -m unittest discover -s tests/qualification -v
+python3 scripts/qualification/zap_baseline_verdict.py --selftest
+# Layer C: CI only on bensbench — cargo test -p openfdd-central --test preauth_disclosure
 ```
-
-Profiles: `live_readonly` | `isolated_full` | `local_open`. See audit §3 for budgets/TLS/redirect/privacy rules.
-
----
-
-### Task S3 — Gates + legacy repairs (`sec-gates`)
-
-**Exit:** Offline orchestrator sabotage tests green; runners *wired* for 25/25b (26 when broker suite applicable) but **not executed live** until Task MEGA; legacy 401-as-authz / Wave L fabricated PASS / shared artifact names repaired or labeled limited smoke.
-
-- [ ] `25_security_python_harness` precheck + `25b_security_post_stress` postcheck in `run_railway_hub_stress.sh` / `run_all.sh`
-- [ ] `26_security_mqtt_acl` optional-feature wiring (BLOCKED≠continuity PASS)
-- [ ] Repair gates 07/20/22/23 false-PASS paths per audit §1
-- [ ] Manifest profile/evidence validator; dry-run/stale/hash mismatch ⇒ not FQ
-
----
-
-### Task 1 — Pick tip fix (`p1`)
-
-**Decision:** _(pending)_
-
-- [ ] Re-read Soft-OPEN in `BUG_REPORT_WAVE_P.md`
-- [ ] Prefer shipping security harness as tip content if Phase B complete; else one Soft-OPEN id
-- [ ] Write decision paragraph here
-
----
-
-### Task 2–4 — VERSION → implement → PR/GHCR (`p2`–`p5`)
-
-- [ ] Bump `3.5.28` → `3.5.29` (VERSION, Cargo workspace, README tip line)
-- [ ] Minimal product/ops diff + security tooling
-- [ ] One (or two sequential) green PRs; squash-merge; `--delete-branch`
-- [ ] Wait **Publish Open-FDD stack to GHCR** + `./scripts/check_ghcr_tip_stack.sh sha-<7>` PASS
-- [ ] Confirm `gh pr list --state open` empty after merge
-
----
-
-### Task 5–6 — Container refresh (`p6`–`p7`)
-
-```bash
-env -u RAILWAY_TOKEN ./scripts/railway_central_workspace_backup.sh
-env -u RAILWAY_TOKEN OPENFDD_IMAGE_TAG=sha-<7> ./scripts/railway_repin_hub.sh
-env -u RAILWAY_TOKEN ./scripts/openfdd_fieldbus_railway_up.sh sha-<7>
-# Local BACnet @38400 DIY/FEC when Soft-OPEN local-bacnet picked:
-# scripts/ops/local_bacnet_ot_bench.sh …
-```
-
----
-
-### Task MEGA stress LAST (`p8`)
-
-```bash
-env -u RAILWAY_TOKEN -u OPENFDD_ADMIN_PASSWORD ACCEPT_ZAP_MEDIUM=1 \
-  ./scripts/nightly-ot-bench/run_railway_hub_stress.sh
-```
-
-**Exit (enhanced):**
-- `SUMMARY.md` Status **PASS**, `fully_qualified=true`
-- Gates **19** + **35** PASS
-- Gates **25** + **25b** PASS (or profile-justified N/A with evidence — never dry-run as PASS)
-- Gate **26** PASS/BLOCKED per broker profile (never continuity-as-security)
-- Synth59 OpenFDD SQL **59/59**
-- Manifest shows `security_scope` + coverage counts; candidate sha matches tip
-
----
-
-### Task Closeout (`p10`–`p11`)
-
-- [ ] `BUG_REPORT_WAVE_P.md` → OPS PINNED 3.5.29 / sha; backup; stress path; Soft-OPEN closes; security harness cite
-- [ ] 0 open PRs; tip Actions green; master TODOs completed/cancelled with reason
 
 ## Anti-patterns
 
-- Mid-wave Railway stress or citing old FQ for new tip
-- Local docker/cargo image builds on bensbench
-- Live security execute during Phase B HOLD
-- 401-as-authorization PASS; missing creds as N/A; Wave L OFF suite fabricated PASS on MT hub
-- Stale open PRs / leftover feature branches after merge
-- Pi fieldbus as Railway closeout path
-
-## Done when
-
-All master todos completed/cancelled; hub `3.5.29+…`; MEGA FQ cited; security offline checklist in audit plan checked; 0 open wave PRs.
+- Marking PLANNED routes as tested
+- Merging #948 before layer-C CI green
+- Live stress without EXECUTE while claiming security PASS
+- Blanket ACCEPT_ZAP_MEDIUM=1 without dispositions
+- Cancelling required security work to close the plan

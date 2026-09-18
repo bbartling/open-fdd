@@ -121,15 +121,15 @@ Three layers, separate results:
 
 ## 6. Cursor completion checklist
 
-- [ ] Route inventory and policy/fixture manifests; unresolved policy explicit.
-- [ ] Python library/CLI, example nonsecret config, schema, README, safe examples.
-- [ ] Actual results for three test layers; CI-only/live-unverified items named.
-- [ ] Broken fixtures demonstrate detectors fail when controls are broken.
-- [ ] Both runners, pre/post phases and repaired legacy verdicts tested offline.
-- [ ] Evidence validator/sabotage tests block all listed false-PASS cases.
-- [ ] Cleanup, privacy, budgets and expiring risk dispositions verified.
-- [ ] Security guide, qualification README and session log describe shipped/pending scope accurately.
-- [ ] Completion: commands/exit codes, revisions, coverage, changed files, private finding IDs, limitations. No “security certified” or “100% secure” claim.
+- [x] Route inventory v2 (PLANNED/IMPLEMENTED/BLOCKED_POLICY); unresolved = BLOCKED_POLICY; schema stubs TODO.
+- [x] Python library/CLI, example config, schemas, README (expand suites still open).
+- [x] Layers A/B offline PASS; layer C tests added — **await CI**; live execute HOLD.
+- [x] Broken fixtures detectors mapped (see tests/security/test_broken_fixtures.py).
+- [x] Gates 25/25b/26 wired; legacy 401/Wave L/auth_matrix repairs landed; orchestrator sabotage offline.
+- [x] Sabotage tests for dry-run/hash/zero/all-N/A/subset (extend as gaps found).
+- [~] Budgets/redaction present; ZAP dispositions file + expiry; cleanup paths need more isolated_full coverage.
+- [x] security.md / SESSION_LOG / SECURITY_HARNESS_EVIDENCE_3.5.29.md updated for honesty.
+- [ ] Completion pending: layer-C CI green + suite expansion + live EXECUTE evidence table rows.
 
 ## Source methodology
 
