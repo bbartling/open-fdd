@@ -6,6 +6,9 @@ has_children: true
 permalink: /modeling/
 ---
 
+See also: [consumer / route matrix (DM-06)](consumer-route-matrix.md) · [ADR data model graph](../architecture/ADR_data_model_graph.md).
+
+
 # Haystack modeling
 
 Open-FDD uses **Project Haystack** semantics for sites, equipment, and points.

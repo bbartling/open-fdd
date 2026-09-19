@@ -20,9 +20,19 @@ description: >-
 
 Not production FDD. Consumers: vibe19, `frontend/web` lab paths, tests, notebooks.
 
+## Camber (external reference)
+
+[Camber](https://github.com/yroussev/camber) (Apache-2.0) is an **external** M&V /
+change-point algorithm reference for ports into `open_fdd.ecm_engineering` /
+`open_fdd.analytics` (Wave S3). Prefer clean-room from standards (IPMVP / G14) or
+Apache-attributed adapt with NOTICE. **Never** add Camber as a runtime dep of
+`openfdd-central` / `openfdd-web`, ship OT adapters, or treat `camber serve` as
+product UI. Role alias Camber↔SQL is a **doc table only** until twin SQL lands (S4).
+
 ## Agent rules
 
 1. Prefer clean venv + wheel install over editable-only proof.
 2. After API changes: bump package → **build one wheel → test that exact wheel → publish that exact wheel** → bump playground/UI pins → GHCR.
 3. Shim pattern in apps: `sys.modules[__name__] = open_fdd...` for private imports.
 4. Keep custom rules local to vibe19/UI (`CUSTOM-*`).
+5. Camber-inspired ports stay outside the product HTTP path (this skill + ECM engineering).

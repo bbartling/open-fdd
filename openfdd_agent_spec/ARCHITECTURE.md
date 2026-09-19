@@ -14,6 +14,7 @@ Trust **tested current code**. Update this file when code truth changes.
 | **React SPA** | Sole product UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)); internet-facing hygiene (no bench credential hints on login) | Secret/path handoffs in product UI; BACnet wire ownership in the browser |
 | **Historian** | **Parquet durable history**, Arrow in-memory batches, DataFusion SQL; provider-neutral `file://` / `s3://` storage contract ([historian lock](docs/HISTORIAN_ARCHITECTURE.md)) | Treat Feather/IPC as canonical durability; one file per telemetry sample; hard-code Railway; introduce a traditional DB as historian |
 | **Open-FDD PyPI** (`open-fdd`) | Third-party libraries: `ecm_engineering`, `rules`, `analytics`, `reporting` — runs **outside** the product app | Be mistaken for the product FDD runtime |
+| **Camber** (external) | [yroussev/camber](https://github.com/yroussev/camber) Apache-2.0 — algorithm reference for PyPI M&V / change-point ports only | GHCR request path; OT adapters; `camber serve` as product UI |
 | **Vibe 21 program kit** | [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/) — recovery → twin → Unity ZIP import | Skip Master Loop gates; Unity Editor in production |
 | **Vibe 19** (playground) | External pandas oracle demo + GHCR demo image | Own production FDD or product UI |
 | **Vibe 20** (playground) | EnergyPlus twin, calibration, ECM cross-check | Retain duplicate **generic** ECM formulas after Open-FDD parity |
@@ -57,9 +58,16 @@ Never delete one cookbook because the other engine “won.”
 
 ## Pandas allowed-use boundaries
 
-**Allowed:** vibe19 playground; PyPI oracle extras; notebooks; characterization/parity tests against cookbooks.
+**Allowed:** vibe19 playground; PyPI oracle extras; notebooks; characterization/parity tests against cookbooks; clean-room / Apache-attributed ports inspired by Camber into `open_fdd.*`.
 
-**Forbidden:** production central computing FDD or Overview analytics via pandas; silent SQL→pandas fallback; claiming product FDD is pandas.
+**Forbidden:** production central computing FDD or Overview analytics via pandas; silent SQL→pandas fallback; claiming product FDD is pandas; vendoring Camber into GHCR images.
+
+## Data model / graph (Wave S)
+
+- ADR: [`docs/architecture/ADR_data_model_graph.md`](../docs/architecture/ADR_data_model_graph.md)
+- Consumer/route matrix: [`docs/modeling/consumer-route-matrix.md`](../docs/modeling/consumer-route-matrix.md)
+- Telemetry/FDD = Parquet + DataFusion; RDF/SPARQL = relationships (when product central exposes them)
+- Package TTL namespace: `urn:openfdd:ns#`; legacy commissioning RDF: `https://open-fdd.dev/model#`
 
 ---
 
