@@ -1,4 +1,4 @@
-//! Package mapping inventory → Turtle export (`openfdd_data_model_v1` sidecar).
+//! Package mapping inventory → Turtle export (`openfdd_data_model_v2` sidecar).
 //! Derived view only — never invents cookbook roles. Not on the FDD request path.
 
 use serde_json::Value;
@@ -21,14 +21,30 @@ fn utf8_hex(bytes: &[u8]) -> String {
 }
 
 /// Stable ofdd IRI local-name segment (parity with SPA `turtleIriSegment`).
-/// Safe ASCII ids pass through; otherwise reversible `enc_<utf8-hex>`.
+/// Safe ASCII that does not start with reserved `enc_` and does not contain `__`
+/// passes through; otherwise reversible `enc_<utf8-hex>` (DM-01).
 fn iri_segment(s: &str) -> String {
-    if s.bytes()
+    let safe = s
+        .bytes()
         .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'_' || b == b'-')
-    {
+        && !s.starts_with("enc_")
+        && !s.contains("__");
+    if safe {
         return s.to_string();
     }
     format!("enc_{}", utf8_hex(s.as_bytes()))
+}
+
+fn building_subject(building_id: &str) -> String {
+    format!("ofdd:b_{}", iri_segment(building_id))
+}
+
+fn equipment_subject(building_id: &str, equipment_id: &str) -> String {
+    format!(
+        "ofdd:eq_{}__{}",
+        iri_segment(building_id),
+        iri_segment(equipment_id)
+    )
 }
 
 /// Build Turtle from the JSON returned by [`super::package::get_package_mapping_handler`].
@@ -39,12 +55,12 @@ pub fn package_mapping_to_turtle(inventory: &Value) -> String {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or("unknown");
-    let bid = iri_segment(building_id);
+    let b_subj = building_subject(building_id);
     let mut out = String::new();
     out.push_str("@prefix ofdd: <urn:openfdd:ns#> .\n");
     out.push_str("@prefix hs: <https://project-haystack.org/def/ph#> .\n");
     out.push_str("@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n\n");
-    out.push_str(&format!("ofdd:building_{bid} a ofdd:Building ;\n"));
+    out.push_str(&format!("{b_subj} a ofdd:Building ;\n"));
     out.push_str(&format!(
         "  ofdd:buildingId \"{}\" .\n\n",
         turtle_escape(building_id)
@@ -63,8 +79,7 @@ pub fn package_mapping_to_turtle(inventory: &Value) -> String {
         let Some(eid_raw) = eid_raw else {
             continue;
         };
-        let eid = iri_segment(eid_raw);
-        let subj = format!("ofdd:building_{bid}_equip_{eid}");
+        let subj = equipment_subject(building_id, eid_raw);
         let eq_type = eq
             .get("equipment_type")
             .and_then(|v| v.as_str())
@@ -79,7 +94,7 @@ pub fn package_mapping_to_turtle(inventory: &Value) -> String {
             "  ofdd:equipmentType \"{}\" ;\n",
             turtle_escape(eq_type)
         ));
-        out.push_str(&format!("  ofdd:inBuilding ofdd:building_{bid}"));
+        out.push_str(&format!("  ofdd:inBuilding {b_subj}"));
 
         if let Some(parent) = eq
             .get("parent_ahu")
@@ -88,8 +103,8 @@ pub fn package_mapping_to_turtle(inventory: &Value) -> String {
             .filter(|s| !s.is_empty())
         {
             out.push_str(&format!(
-                " ;\n  ofdd:parentAhu ofdd:building_{bid}_equip_{}",
-                iri_segment(parent)
+                " ;\n  ofdd:parentAhu {}",
+                equipment_subject(building_id, parent)
             ));
         }
 
@@ -162,7 +177,7 @@ mod tests {
         });
         let ttl = package_mapping_to_turtle(&inv);
         assert!(ttl.contains("@prefix ofdd:"));
-        assert!(ttl.contains("ofdd:building_B1_equip_AHU_1"));
+        assert!(ttl.contains("ofdd:eq_B1__AHU_1"));
         assert!(ttl.contains("fan_cmd"));
         assert!(ttl.contains("SF_SPD"));
         assert!(ttl.contains("unmappedColumn"));
@@ -180,8 +195,42 @@ mod tests {
             }]
         });
         let ttl = package_mapping_to_turtle(&inv);
-        assert!(ttl.contains("ofdd:building_X_equip_E1"));
+        assert!(ttl.contains("ofdd:eq_X__E1"));
         assert!(ttl.contains("ofdd:Equipment"));
+    }
+
+    #[test]
+    fn dm01_enc_prefix_reserved() {
+        assert_eq!(iri_segment("AHU 1"), "enc_4148552031");
+        assert_ne!(iri_segment("enc_4148552031"), iri_segment("AHU 1"));
+        assert!(iri_segment("enc_4148552031").starts_with("enc_"));
+    }
+
+    #[test]
+    fn dm02_building_equip_tuple_unambiguous() {
+        assert_ne!(
+            equipment_subject("X_equip_Y", "Z"),
+            equipment_subject("X", "Y_equip_Z")
+        );
+        assert_eq!(equipment_subject("X_equip_Y", "Z"), "ofdd:eq_X_equip_Y__Z");
+        assert_eq!(equipment_subject("X", "Y_equip_Z"), "ofdd:eq_X__Y_equip_Z");
+    }
+
+    #[test]
+    fn dm03_unmapped_only_equipment() {
+        let inv = json!({
+            "building_id": "B1",
+            "equipment": [{
+                "equipment_id": "ORPHAN",
+                "equipment_type": "unknown",
+                "roles": {},
+                "unmapped_columns": ["RAW_X"]
+            }]
+        });
+        let ttl = package_mapping_to_turtle(&inv);
+        assert!(ttl.contains("ofdd:eq_B1__ORPHAN"));
+        assert!(ttl.contains("unmappedColumn"));
+        assert!(ttl.contains("RAW_X"));
     }
 
     #[test]
@@ -198,13 +247,12 @@ mod tests {
             ]
         });
         let ttl = package_mapping_to_turtle(&inv);
-        assert!(ttl.contains("ofdd:building_B1_equip_enc_4148552031"));
-        assert!(ttl.contains("ofdd:building_B1_equip_AHU_1"));
+        assert!(ttl.contains("ofdd:eq_B1__enc_4148552031"));
+        assert!(ttl.contains("ofdd:eq_B1__AHU_1"));
     }
 
     #[test]
     fn non_ascii_iri_matches_spa_utf8_hex_contract() {
-        // SPA TextEncoder UTF-8 hex for "AHUé" — must match central export.
         assert_eq!(iri_segment("AHUé"), "enc_414855c3a9");
         let inv = json!({
             "building_id": "Café",
@@ -216,11 +264,9 @@ mod tests {
         });
         let ttl = package_mapping_to_turtle(&inv);
         assert!(ttl.contains(&format!(
-            "ofdd:building_{}_equip_{}",
+            "ofdd:eq_{}__{}",
             iri_segment("Café"),
             iri_segment("AHUé")
         )));
-        assert!(ttl.contains("ofdd:building_enc_"));
-        assert!(ttl.contains("equip_enc_414855c3a9"));
     }
 }
