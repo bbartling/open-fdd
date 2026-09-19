@@ -24,9 +24,10 @@ fn utf8_hex(bytes: &[u8]) -> String {
 /// Safe ASCII that does not start with reserved `enc_` and does not contain `__`
 /// passes through; otherwise reversible `enc_<utf8-hex>` (DM-01).
 fn iri_segment(s: &str) -> String {
-    let safe = s.bytes().all(|b| {
-        b.is_ascii_alphanumeric() || b == b'.' || b == b'_' || b == b'-'
-    }) && !s.starts_with("enc_")
+    let safe = s
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'_' || b == b'-')
+        && !s.starts_with("enc_")
         && !s.contains("__");
     if safe {
         return s.to_string();
