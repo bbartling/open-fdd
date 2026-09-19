@@ -10,9 +10,9 @@ Tracks [wave_s_data_model_graph_review_handoff.md](wave_s_data_model_graph_revie
 | Req ID | Handoff § | Summary | Child | Implementation | Test / command | Tip SHA | Artifact | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | ADR-1 | §1 | Shared vocab vs tenant instances; vendor≠tenant; one revision authority | S2 | `docs/architecture/ADR_data_model_graph.md` | review checklist | tip pending 3.5.32 | ADR merged | PASS |
-| DM-01 | §2 | Injective IRI segment (`AHU 1` vs literal `enc_…`) | S5 | TS+Rust exporters | unit + Node repro | | | BLOCKED |
-| DM-02 | §2 | Unambiguous building/equip tuple + tenant identity | S5 | exporters | adversarial ID corpus | | | BLOCKED |
-| DM-03 | §2 | TS keep unmapped-only equipment | S5 | `dataModelTurtle.ts` | TS/Rust graph parity | | | BLOCKED |
+| DM-01 | §2 | Injective IRI segment (`AHU 1` vs literal `enc_…`) | S5 | TS+Rust `enc_` reserved | vitest + rust unit | tip 3.5.33 pending | dataModelTurtle tests | PASS |
+| DM-02 | §2 | Unambiguous building/equip tuple + tenant identity | S5 | `ofdd:eq_<b>__<e>` | vitest + rust unit | tip 3.5.33 pending | tuple tests | PASS (tuple; tenant identity Soft-OPEN) |
+| DM-03 | §2 | TS keep unmapped-only equipment | S5 | TS+Rust exporters | vitest dm03 + rust dm03 | tip 3.5.33 pending | unmapped-only tests | PASS |
 | DM-04 | §2 | Honor stamped type/parent; no guessed feeds as fact | S5 | `package.rs` + stamps | fixture `AC_1`+`equipType:ahu` | | | BLOCKED |
 | DM-05 | §2 | Tenant-scoped model storage/cache/exports | S5 | central handlers+storage | gate 31-style A/B | | | BLOCKED |
 | DM-06 | §2 | Consumer/route matrix; SPARQL capability honesty | S2/S5 | `docs/modeling/consumer-route-matrix.md` | curl SPARQL expect unavailable | tip pending 3.5.32 | matrix + ADR | PASS (docs); live SPARQL still unavailable |
