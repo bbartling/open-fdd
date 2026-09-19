@@ -6,7 +6,11 @@
 
 | Item | Status |
 |------|--------|
-| Product tip / **OPS PINNED** | **3.5.31** / **`sha-7b81eb8`** (#951) · health `3.5.31+7b81eb810c0f` · backup `20260919T193923Z` · stress `20260919T195100Z` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave S1 CLOSED** |
+| Product tip / **OPS PINNED (FQ)** | **3.5.31** / **`sha-7b81eb8`** (#951) · health `3.5.31+7b81eb810c0f` · backup `20260919T193923Z` · stress `20260919T195100Z` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave S1 CLOSED** |
+| Hub **smoke tip** (no FQ claim) | **3.5.33** / **`sha-3cd3745`** (#954 DM IRI v2) · health `3.5.33+3cd37451220a` · backup `20260919T231221Z` · SPARQL `/api/model/sparql` **404 unavailable** · ingest live `vim-1` — mid-wave smoke only |
+| **Wave S2** `sha-8b0eefe` / 3.5.32 | Camber lock + data-model ADR + DM-06 route matrix (#953). Smoke superseded by S5 tip pin. |
+| **Wave S5 P1** `sha-3cd3745` / 3.5.33 | DM-01/02/03 IRI encoding (`enc_` reserved, `ofdd:eq_<b>__<e>`). Vitest 9/9 + Rust unit 7/7. Soft-OPEN DM-04..10 / ECM / Pages / model gate. |
+| **Wave S Soft-OPEN** | **S3** PyPI M&V/Camber oracle ports · **S4** SQL twins + Metering UI + FQ MEGA · **S5 remainder** (DM-04..10, SEC-ML, SPARQL-SEM, EQ-*, STRESS-GATE). Master: [`wave_s_master_ecb88a61.plan.md`](../../.cursor/plans/wave_s_master_ecb88a61.plan.md) · evidence [`wave_s_data_model_evidence.md`](../../.cursor/plans/wave_s_data_model_evidence.md) |
 | **Wave S1 FQ closeout** `20260919T195100Z` | Hub `3.5.31+7b81eb810c0f` · gates 00/25/25b/35 **PASS** · `EXPECTED_EDGE_ID=vim-1` · datasets ACL fixed in #951 |
 | **Wave S1 FQ fail** `20260919T152037Z` | Hub `3.5.30+471ef7ab5bde` · **`fully_qualified=false`**: wrong edge `pi-1`; `y.authz.a_foreign_datasets_denied` 200 → fixed 3.5.31 |
 | **Wave S1 audit** `2026-09-19` | Suite expand #950 / `471ef7a` / 3.5.30; Soft-OPEN `acme-oa-t-dup-reject` unchanged |
@@ -49,6 +53,9 @@
 | **local-bacnet-ot-bench** | **Soft-OPEN** · MS/TP/FEC shared-trunk; Waveshare C FTDI `--mstp-passive` @38400: FEC alone silence; +mini MAC2 → PFM heard. Resume when FEC online on isolated trunk. |
 | **edge-kit-soft** | **OPS** · MT kit `./scripts/openfdd_restore_edge_kit.sh ACME pi-1` → `deploy/mqtt/kits/ACME__pi-1/` · live ACME OT edge id `vim-1` |
 | **s1-datasets-mt-acl** | **CLOSED** (#951 / 3.5.31 / `sha-7b81eb8`) · datasets list/delete MT ACL; FQ `20260919T195100Z` gate 25/25b PASS |
+| **wave-s3-pypi-mv-oracle** | **Soft-OPEN** · IPMVP change-point / G14 / Camber→`open_fdd.ecm_engineering` ports + wheel publish. Plan: `wave_s3_pypi_mv_camber_oracle.plan.md`. |
+| **wave-s4-sql-twins-fq** | **Soft-OPEN** · DataFusion M&V twin + Metering UI + model/ECM gate in FQ MEGA. Plan: `wave_s4_sql_oracle_twins_fq.plan.md`. FQ cite only after this tip. |
+| **wave-s5-dm-remainder** | **Soft-OPEN** · DM-04..10, SEC-ML, JSON-PARITY, SPARQL-SEM, PERF-1, EQ-VOCAB/PERSIST, ECM-ADAPT, DOCS-PAGES, STRESS-GATE. P1 IRI CLOSED on `sha-3cd3745`. |
 
 ## Wave R closeout (2026-09-16)
 

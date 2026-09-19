@@ -1,7 +1,9 @@
-## 2026-09-19 — Wave S5 P1 graph IRI v2 (3.5.33)
+## 2026-09-19 — Wave S5 P1 graph IRI v2 (3.5.33 / sha-3cd3745) — smoke pinned
 
-- DM-01/02/03: reserve `enc_`, `ofdd:eq_<b>__<e>` subjects, unmapped-only equipment in TS+Rust.
-- Vitest 9/9 green locally. Full DM-04..10 Soft-OPEN. S3 Camber M&V ports Soft-OPEN (follow-on tip).
+- #954 squash-merge: DM-01/02/03 reserve `enc_`, `ofdd:eq_<b>__<e>`, unmapped-only equipment (TS+Rust). Vitest 9/9 · Rust unit 7/7.
+- GHCR hub tip PASS `sha-3cd3745`; backup `20260919T231221Z`; Railway re-pin central→mqtt→web; health `3.5.33+3cd37451220a`; `vim-1` ingest live; SPARQL **404 unavailable**.
+- **FQ OPS PINNED unchanged:** `3.5.31` / `sha-7b81eb8` / stress `20260919T195100Z` (mid-tip = smoke only).
+- Soft-OPEN: S3 PyPI M&V · S4 SQL/UI/FQ · S5 DM-04..10 / ECM / Pages / model gate. BUG_REPORT_WAVE_P updated.
 
 ## 2026-09-19 — Wave S2 Camber lock + data-model ADR (3.5.32)
 
