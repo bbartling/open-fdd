@@ -28,6 +28,11 @@ description: >-
    No Plotly on Overview. Motor / mech / econ / BAS figures are additive RCx
    presets. CSV overlay lives on **Inspect** (`/inspect`). Empty charts mean
    missing zip roles — see [`openfdd-package-mapping`](../openfdd-package-mapping/SKILL.md).
+7b. **M&V / change-point / savings charts (Wave S):** prefer **Metering**
+   (`/metering`) section radios (extend FuelDashboard families) or add one new
+   left section radio — never Plotly on Overview. Data from DataFusion
+   `/api/analytics/*` (or future M&V SQL routes) only; PyPI/`camber` oracle stays
+   off the SPA request path. Update this skill + `AGENTS.md` when adding radios.
 8. Sidebar brand shows `GET /api/health` `semver+shortsha` (`data-testid="app-revision"`).
    Collapsed sidebar: `+shortsha` only.
 9. After Lab **Update this rule** (`RULES_UPDATED`), FDD Plots / Reports must

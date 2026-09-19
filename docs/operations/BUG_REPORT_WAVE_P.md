@@ -6,7 +6,8 @@
 
 | Item | Status |
 |------|--------|
-| Product tip / **OPS PINNED** | **3.5.29** / **`sha-f727a55`** (#948) · health `3.5.29+f727a55e01a4` · `multi_tenant=true` · backup `20260918T221510Z` · hub stress `reports/nightly-ot-bench_20260918T231541Z/` **`fully_qualified=true`** (gates **19**+**35**+**25**/**25b**, `OPENFDD_SECURITY_EXECUTE=1`) · ACME fieldbus `sha-f727a55` |
+| Product tip / **OPS PINNED** | **3.5.29** / **`sha-f727a55`** (#948) · health `3.5.29+f727a55e01a4` · stress `20260918T231541Z` **`fully_qualified=true`** — **S1 tip 3.5.30 in flight** (suite expand + evidence) |
+| **Wave S1 audit** `2026-09-19` | Hub Online `3.5.29+f727a55e01a4` · edges=`vim-1` telemetry · `ingest_reject` historian_persist Soft-OPEN (`acme-oa-t-dup-reject`) · 0 open PRs · master tip Actions green. Product tip: harness expand + VERSION 3.5.30 (not oa_t catalog — vim-1 Soft-OPEN). |
 | Prior Soft Tip B | **3.5.28** / `sha-4a5c11e` · stress `20260917T215437Z` **`fully_qualified=true`** |
 | **Patch cycle 3.5.29** `2026-09-18` | Merged #948 → GHCR tip PASS → Railway backup+re-pin → fieldbus ACME → MEGA FQ. Soft-OPEN acme-oa-t + local-bacnet unchanged. Follow-on PR: stress QUAL/`set -u` order, Railway security fixtures, ZAP Medium dispositions, gate 25b login 429 reuse. |
 | **Stability audit** `2026-09-18T00:10Z` | **No new tip** — Railway Online on `sha-4a5c11e`; SQL↔pandas oracle OK; ACME FDD `rules_failed=0` |

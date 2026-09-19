@@ -5,8 +5,8 @@
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission.",
   "route_count": 138,
   "disposition_counts": {
-    "IMPLEMENTED": 13,
-    "PLANNED": 96,
+    "IMPLEMENTED": 16,
+    "PLANNED": 93,
     "BLOCKED_POLICY": 29
   },
   "routes": [
@@ -340,7 +340,7 @@
       "section": "csv",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -352,9 +352,13 @@
         "x.preauth.anon401.get_api_csv_import_package_mapping",
         "y.authz.get_api_csv_import_package_mapping"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_mapping",
+        "y.authz.a_foreign_package_mapping_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_csv_import_package_mapping",
+        "y.authz.a_foreign_package_mapping_denied",
         "y.authz.get_api_csv_import_package_mapping"
       ],
       "request_schema": {
@@ -758,7 +762,7 @@
       "section": "csv",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -770,9 +774,13 @@
         "x.preauth.anon401.get_api_datasets",
         "y.authz.get_api_datasets"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_datasets",
+        "y.authz.a_foreign_datasets_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_datasets",
+        "y.authz.a_foreign_datasets_denied",
         "y.authz.get_api_datasets"
       ],
       "request_schema": {
@@ -1819,7 +1827,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -1831,7 +1839,9 @@
         "x.preauth.anon401.get_api_fdd_rules",
         "y.authz.get_api_fdd_rules"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_fdd_rules"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_fdd_rules",
         "y.authz.get_api_fdd_rules"

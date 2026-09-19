@@ -5,6 +5,8 @@ validation, tenant/role authorization, and selected web deployment controls.
 Passing checks mean those named controls held for a specific candidate,
 configuration, and fixture set — not that the application is “secure.”
 
+Tip evidence matrix: [`docs/operations/SECURITY_HARNESS_EVIDENCE_3.5.30.md`](../../docs/operations/SECURITY_HARNESS_EVIDENCE_3.5.30.md).
+
 ## Layout
 
 | Path | Role |
