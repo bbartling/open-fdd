@@ -1,3 +1,11 @@
+## 2026-09-19 — Wave S1 OPS PINNED (3.5.31 / sha-7b81eb8)
+
+- #951 datasets MT ACL (`y.authz.a_foreign_datasets_denied`); prior #950 suite expand 3.5.30.
+- GHCR tip PASS `sha-7b81eb8`; backup `20260919T193923Z`; Railway re-pin; live edge **`vim-1`/ACME**.
+- MEGA `reports/nightly-ot-bench_20260919T195100Z/` **`fully_qualified=true`** (gates 19+35+25/25b, `OPENFDD_SECURITY_EXECUTE=1`, `EXPECTED_EDGE_ID=vim-1`).
+- Hygiene: 0 open PRs; no remote `tip/` branches; tip master Actions green.
+- Next: Wave S2 Camber lock + data-model ADR (smoke only).
+
 ## 2026-09-18 — Security Python harness (offline)
 
 - Shipped `scripts/security/` probe library + CLI, route inventory (138 routes from `routes.rs`), suites X/Y/Z, offline unittest layers A/B + orchestrator sabotage.
@@ -848,3 +856,16 @@ Newest first. Append after non-trivial agent work.
 - ZAP: ACCEPT_ZAP_MEDIUM default 0 + zap_risk_dispositions.json.
 - Live execute / MEGA stress still HOLD until tip merge + pin.
 - Evidence: docs/operations/SECURITY_HARNESS_EVIDENCE_3.5.29.md
+
+## 2026-09-19 — Data model, engineering quantities and ECM handoff audit
+
+- Reviewed source `471ef7ab5bdeaff6e0904c0cc032b252df3af675` while Cursor's Wave S
+  master remained active. Added the local implementation handoff at
+  `.cursor/plans/wave_s_data_model_graph_review_handoff.md` without changing the master.
+- Handoff joins vendor-neutral RDF, tenant isolation, JSON/Turtle/SPARQL fidelity,
+  mechanical schedule quantities/evidence, existing Python ECM adapters, GitHub
+  Pages documentation, measured optimization and evaluated stress-gate integration.
+- Three read-only Node checks of the real TS exporter reproduced identifier and
+  unmapped-metadata failures; remaining source findings need integration evidence.
+  No product implementation, Rust build, live stress, deployment or security
+  qualification was performed in this audit. Cursor owns fixes and execution.
