@@ -1,3 +1,8 @@
+## 2026-09-19 — Wave S5 P1 graph IRI v2 (3.5.33)
+
+- DM-01/02/03: reserve `enc_`, `ofdd:eq_<b>__<e>` subjects, unmapped-only equipment in TS+Rust.
+- Vitest 9/9 green locally. Full DM-04..10 Soft-OPEN. S3 Camber M&V ports Soft-OPEN (follow-on tip).
+
 ## 2026-09-19 — Wave S2 Camber lock + data-model ADR (3.5.32)
 
 - Documented Camber (Apache-2.0) as external PyPI-oracle reference in ARCHITECTURE + `openfdd-pypi-oracle` skill.
