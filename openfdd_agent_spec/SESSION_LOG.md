@@ -1,3 +1,10 @@
+## 2026-09-19 — Wave S2 Camber lock + data-model ADR (3.5.32)
+
+- Documented Camber (Apache-2.0) as external PyPI-oracle reference in ARCHITECTURE + `openfdd-pypi-oracle` skill.
+- ADR `docs/architecture/ADR_data_model_graph.md` — shared vocab vs tenant instances; vendor≠tenant; Parquet/DataFusion vs RDF.
+- Consumer/route matrix `docs/modeling/consumer-route-matrix.md` (DM-06) — central SPARQL honest **unavailable**.
+- Smoke only after GHCR; FQ remains S4.
+
 ## 2026-09-19 — Wave S1 OPS PINNED (3.5.31 / sha-7b81eb8)
 
 - #951 datasets MT ACL (`y.authz.a_foreign_datasets_denied`); prior #950 suite expand 3.5.30.
