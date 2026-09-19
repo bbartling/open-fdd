@@ -115,6 +115,9 @@ def run_suite_x(ctx: SuiteContext) -> None:
         ("/api/fdd/equipment", "x.preauth.anon401.get_api_fdd_equipment"),
         ("/api/fdd/results", "x.preauth.anon401.get_api_fdd_results"),
         ("/api/fdd/session-config", "x.preauth.anon401.get_api_fdd_session_config"),
+        ("/api/fdd/rules", "x.preauth.anon401.get_api_fdd_rules"),
+        ("/api/datasets", "x.preauth.anon401.get_api_datasets"),
+        ("/api/csv/import/package/mapping", "x.preauth.anon401.get_api_csv_import_package_mapping"),
         # Prefer a live analytics GET (overview path is not routed → 404 bypasses auth layer).
         ("/api/analytics/sql-anomaly/status", "x.preauth.anon401.get_api_analytics_overview"),
         ("/api/admin/users", "x.preauth.anon401.get_api_admin_users"),
@@ -920,6 +923,42 @@ def run_suite_y(ctx: SuiteContext) -> None:
             "ERROR",
             detail=str(exc),
         )
+
+    # Datasets + package mapping: foreign building deny (Wave S1 expand).
+    # Own-building 200 is not required for PASS — missing fixtures stay out of FQ.
+    for path, foreign_cid in (
+        ("/api/datasets", "y.authz.a_foreign_datasets_denied"),
+        (
+            "/api/csv/import/package/mapping",
+            "y.authz.a_foreign_package_mapping_denied",
+        ),
+    ):
+        try:
+            q_b = urlencode({"building_id": fx.building_b})
+            r_f = ctx.client.request("GET", f"{path}?{q_b}", token=tok_a)
+            leak = fx.canary_b.encode() in r_f.body
+            if r_f.status == 401:
+                deny_st = "ERROR"
+            elif r_f.status in (403, 404) and not leak:
+                deny_st = "PASS"
+            elif r_f.status == 200 and leak:
+                deny_st = "FAIL"
+            elif r_f.status == 200:
+                deny_st = "FAIL"
+            else:
+                deny_st = "FAIL"
+            ctx.check(
+                foreign_cid,
+                "Y",
+                f"A denied foreign {path}",
+                deny_st,
+                expected="403/404",
+                observed=_status_of(r_f),
+                detail="foreign canary leak" if leak else None,
+                path_template=path,
+            )
+        except TransportError as exc:
+            ctx.check(foreign_cid, "Y", f"{path} foreign", "ERROR", detail=str(exc))
 
 
 def _deny_envelope(body: bytes) -> bool:
