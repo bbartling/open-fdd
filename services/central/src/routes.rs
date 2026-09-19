@@ -2611,20 +2611,63 @@ pub async fn csv_fusion_preview(
     ))
 }
 
-pub async fn csv_list_datasets() -> Json<Value> {
-    Json(open_fdd_edge_prototype::csv_ingest::list_datasets())
+#[derive(Debug, Deserialize)]
+pub struct DatasetsListQuery {
+    /// Optional building/site filter. Required for non-hub-admin when MT is on
+    /// (via [`deny_if_building_out_of_scope`]). Foreign building → 403.
+    pub building_id: Option<String>,
+    /// Alias used by some clients / delete parity (`?id=`).
+    pub id: Option<String>,
+}
+
+pub async fn csv_list_datasets(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<DatasetsListQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let building_id = q
+        .building_id
+        .as_deref()
+        .or(q.id.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id) {
+        return Err(deny);
+    }
+    let mut body = open_fdd_edge_prototype::csv_ingest::list_datasets();
+    // When a building filter is present, only return that building's rows
+    // (defense in depth after ACL). Hub-admin unfiltered list stays full.
+    if let Some(bid) = building_id {
+        if let Some(arr) = body.get_mut("datasets").and_then(|v| v.as_array_mut()) {
+            arr.retain(|d| {
+                d.get("id")
+                    .or_else(|| d.get("building_id"))
+                    .or_else(|| d.get("dataset_id"))
+                    .and_then(|v| v.as_str())
+                    == Some(bid)
+            });
+        }
+    } else if crate::tenant::multi_tenant_enabled() {
+        // Non-admin path never reaches here (deny requires building_id).
+        // Hub admin: still filter to nothing extra — leave registry as-is.
+    }
+    Ok(Json(body))
 }
 
 #[derive(Debug, Deserialize)]
 pub struct DatasetIdQuery {
     pub id: Option<String>,
+    pub building_id: Option<String>,
 }
 
 pub async fn csv_delete_dataset(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Query(q): Query<DatasetIdQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let Some(id) =
         q.id.as_deref()
+            .or(q.building_id.as_deref())
             .filter(|s| !s.is_empty())
             .map(str::to_string)
     else {
@@ -2632,6 +2675,9 @@ pub async fn csv_delete_dataset(
             StatusCode::BAD_REQUEST,
             Json(json!({"ok": false, "error": "id query required"})),
         ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&id)) {
+        return Err(deny);
     };
     let action_id = actions::start_action(
         "dataset_delete",

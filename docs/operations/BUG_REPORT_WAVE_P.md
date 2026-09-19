@@ -6,8 +6,9 @@
 
 | Item | Status |
 |------|--------|
-| Product tip / **OPS PINNED** | **3.5.29** / **`sha-f727a55`** (#948) · health `3.5.29+f727a55e01a4` · stress `20260918T231541Z` **`fully_qualified=true`** — **S1 tip 3.5.30 in flight** (suite expand + evidence) |
-| **Wave S1 audit** `2026-09-19` | Hub Online `3.5.29+f727a55e01a4` · edges=`vim-1` telemetry · `ingest_reject` historian_persist Soft-OPEN (`acme-oa-t-dup-reject`) · 0 open PRs · master tip Actions green. Product tip: harness expand + VERSION 3.5.30 (not oa_t catalog — vim-1 Soft-OPEN). |
+| Product tip / **OPS PINNED** | **3.5.29** / **`sha-f727a55`** (#948) · health `3.5.29+f727a55e01a4` · stress `20260918T231541Z` **`fully_qualified=true`** — **S1 tip 3.5.30 on hub; FQ FAIL → 3.5.31 patch** |
+| **Wave S1 FQ** `20260919T152037Z` | Hub `3.5.30+471ef7ab5bde` · tip gate PASS · backup `20260919T150903Z` · **`fully_qualified=false`**: `00` wrong `EXPECTED_EDGE_ID=pi-1` (live=`vim-1`); `35` same; **`25`/`25b` product FAIL** `y.authz.a_foreign_datasets_denied` observed **200** (expected 403/404) — `GET /api/datasets?building_id=` missing MT ACL |
+| **Wave S1 audit** `2026-09-19` | Hub Online `3.5.29+f727a55e01a4` · edges=`vim-1` telemetry · Soft-OPEN `acme-oa-t-dup-reject` · suite expand shipped #950 / `471ef7a` / 3.5.30 |
 | Prior Soft Tip B | **3.5.28** / `sha-4a5c11e` · stress `20260917T215437Z` **`fully_qualified=true`** |
 | **Patch cycle 3.5.29** `2026-09-18` | Merged #948 → GHCR tip PASS → Railway backup+re-pin → fieldbus ACME → MEGA FQ. Soft-OPEN acme-oa-t + local-bacnet unchanged. Follow-on PR: stress QUAL/`set -u` order, Railway security fixtures, ZAP Medium dispositions, gate 25b login 429 reuse. |
 | **Stability audit** `2026-09-18T00:10Z` | **No new tip** — Railway Online on `sha-4a5c11e`; SQL↔pandas oracle OK; ACME FDD `rules_failed=0` |
@@ -46,6 +47,7 @@
 | **acme-oa-t-dup-reject** | **Soft-OPEN** · ACME live `historian_persist` rejects: duplicate canonical `oa_t` in one equipment envelope. Hub `/api/edges` shows **`vim-1`** (not local `pi-1` stress catalog). Ingest still healthy (`ingest_ok` ≫ reject). Ops/edge package cleanup — not a product tip. |
 | **local-bacnet-ot-bench** | **Soft-OPEN** · MS/TP/FEC shared-trunk; Waveshare C FTDI `--mstp-passive` @38400: FEC alone silence; +mini MAC2 → PFM heard. Resume when FEC online on isolated trunk. |
 | **edge-kit-soft** | **OPS** · MT kit `./scripts/openfdd_restore_edge_kit.sh ACME pi-1` → `deploy/mqtt/kits/ACME__pi-1/` · live ACME OT edge id `vim-1` |
+| **s1-datasets-mt-acl** | **OPEN → tip 3.5.31** · `GET/DELETE /api/datasets` ignored `building_id` ACL; suite Y `y.authz.a_foreign_datasets_denied` observed 200. Stress `20260919T152037Z`. |
 
 ## Wave R closeout (2026-09-16)
 
