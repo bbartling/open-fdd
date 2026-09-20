@@ -1,4 +1,9 @@
-## 2026-09-19 — Wave S5 P1 graph IRI v2 (3.5.33 / sha-3cd3745) — smoke pinned
+## 2026-09-20 — Wave S smoke tip stability (sha-3cd3745)
+
+- ACME MQTTS **PASS**: hub `3.5.33+3cd37451220a`, edge `vim-1`/ACME `has_telemetry=true`, fresh ingest.
+- Soft-OPEN **`acme-fdd-run-hang`**: ACME `fdd_run_all` stuck `running` >20m; clear via `DELETE /api/actions`. Not claimed FQ.
+- Soft-OPEN S3/S4/S5-remainder unchanged. FQ OPS PINNED remains `sha-7b81eb8` / 3.5.31.
+- GH hygiene: 0 open PRs after Soft-OPEN docs #955; Publish fieldbus for `sha-3cd3745` may lag hub.
 
 - #954 squash-merge: DM-01/02/03 reserve `enc_`, `ofdd:eq_<b>__<e>`, unmapped-only equipment (TS+Rust). Vitest 9/9 · Rust unit 7/7.
 - GHCR hub tip PASS `sha-3cd3745`; backup `20260919T231221Z`; Railway re-pin central→mqtt→web; health `3.5.33+3cd37451220a`; `vim-1` ingest live; SPARQL **404 unavailable**.
