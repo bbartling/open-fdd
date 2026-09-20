@@ -1,11 +1,10 @@
 # Railway / low-RAM stress catalog — hosted weather AVs loopback (no Pi / OT LAN).
 # Used by scripts/nightly-ot-bench when RAILWAY_ONLY=1.
 #
-# Quad-publish Open-Meteo AVs (Wave K):
-# - bldg2-zone-loopback: zone_t (9101) + oa_t (9101) + zone_rh (9102)
-# - hosted-weather: web_oa_t (9101)
+# Publish Open-Meteo AVs (Wave U Soft-OPEN acme-oa-t-dup-reject fix):
+# - bldg2-zone-loopback: zone_t (9101) + zone_rh (9102) only — do NOT also map oa_t here
+# - hosted-weather: web_oa_t (9101) is the sole outdoor-air publisher
 # Device name for loopback must NOT contain "weather" (id heuristics).
-# Fieldbus MQTT delta ids must include point_name so dual AV roles both publish.
 
 [[devices]]
 name = "bldg2-zone-loopback"
@@ -15,7 +14,6 @@ host = "127.0.0.1"
 port = 47808
 points = [
   { object_type = "analog-value", object_instance = 9101, point_name = "zone-air-temp", units = "°F" },
-  { object_type = "analog-value", object_instance = 9101, point_name = "outside-air-temperature", units = "°F" },
   { object_type = "analog-value", object_instance = 9102, point_name = "zone-air-humidity", units = "%" },
 ]
 

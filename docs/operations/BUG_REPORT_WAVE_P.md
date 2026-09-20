@@ -7,11 +7,13 @@
 | Item | Status |
 |------|--------|
 | Product tip / **OPS PINNED (FQ)** | **3.5.31** / **`sha-7b81eb8`** (#951) · health `3.5.31+7b81eb810c0f` · backup `20260919T193923Z` · stress `20260919T195100Z` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave S1 CLOSED** |
-| Hub **smoke tip** (no FQ claim) | **3.5.33** / **`sha-3cd3745`** (#954 DM IRI v2) · health `3.5.33+3cd37451220a` · backup `20260919T231221Z` · SPARQL `/api/model/sparql` **404 unavailable** · **ACME MQTTS PASS** (`vim-1` telemetry, fresh `ingest_ok`, reject_buckets Soft-OPEN `oa_t` only) — mid-wave smoke only |
+| **Wave U tip** (this PR) | **3.5.34** · security spine U0–U6 + FDD `OPENFDD_FDD_RUN_TIMEOUT_SECS` (default 900) + fieldbus fail-closed unit tests + stress catalog oa_t dedupe; smoke after GHCR — **no FQ claim** until after-spine MEGA |
+| Hub smoke tip (prior) | **3.5.33** / **`sha-3cd3745`** (#954) · mid-wave smoke only |
 | **Stability audit** `2026-09-20T00:40Z` | Hub `3.5.33+3cd3745` · **MQTTS healthy** · edges=1 `vim-1`/ACME `has_telemetry=true` · ingest climbing after redeploy · **Soft-OPEN `acme-fdd-run-hang`**: `POST /api/fdd/run` `{building_id:ACME}` stays `running` >20m (cleared via `DELETE /api/actions`); not FQ-blocking for smoke tip; next patch cycle candidate. GH: 0 open PRs; no `tip/`/`docs/` remotes; tip Publish fieldbus in flight (hub images PASS). |
 | **Wave S2** `sha-8b0eefe` / 3.5.32 | Camber lock + data-model ADR + DM-06 route matrix (#953). Smoke superseded by S5 tip pin. |
-| **Wave S5 P1** `sha-3cd3745` / 3.5.33 | DM-01/02/03 IRI encoding (`enc_` reserved, `ofdd:eq_<b>__<e>`). Vitest 9/9 + Rust unit 7/7. Soft-OPEN DM-04..10 / ECM / Pages / model gate. |
-| **Wave S Soft-OPEN** | Closed into **Wave T** — see Soft-OPEN rows + [`.cursor/plans/wave_t_soft-open_closeout.plan.md`](../../.cursor/plans/wave_t_soft-open_closeout.plan.md) · takeover [`TESTBED_TAKEOVER.md`](TESTBED_TAKEOVER.md) |
+| **Wave S5 P1** `sha-3cd3745` / 3.5.33 | DM-01/02/03 IRI encoding (`enc_` reserved, `ofdd:eq_<b>__<e>`). Vitest 9/9 + Rust unit 7/7. Soft-OPEN DM-07..10 / ECM FQ / Pages; DM-04/05 + gate 36 **PARTIAL on this tip**. |
+| **Wave S Soft-OPEN** | Closed into Wave T, then **SUPERSEDED by Wave U** — [`WAVE_U_MASTER.md`](WAVE_U_MASTER.md) · takeover [`TESTBED_TAKEOVER.md`](TESTBED_TAKEOVER.md) |
+| **Wave U** | **Active** — security-first spine (U0–U6); product Soft-OPEN after spine; many tiny VERSION+GHCR tips |
 | **Wave S1 FQ closeout** `20260919T195100Z` | Hub `3.5.31+7b81eb810c0f` · gates 00/25/25b/35 **PASS** · `EXPECTED_EDGE_ID=vim-1` · datasets ACL fixed in #951 |
 | **Wave S1 FQ fail** `20260919T152037Z` | Hub `3.5.30+471ef7ab5bde` · **`fully_qualified=false`**: wrong edge `pi-1`; `y.authz.a_foreign_datasets_denied` 200 → fixed 3.5.31 |
 | **Wave S1 audit** `2026-09-19` | Suite expand #950 / `471ef7a` / 3.5.30; Soft-OPEN `acme-oa-t-dup-reject` unchanged |
@@ -34,7 +36,7 @@
 | ACME building | Edge `vim-1` / site `ACME` `has_telemetry=true` · `POST /api/fdd/run` building `ACME` → **`rules_succeeded=39` `rules_failed=0` `rules_skipped=29`** (statuses PASS/FAULT/SKIPPED_MISSING_ROLES/N/A only; **0 ERROR**) |
 | SQL ↔ pandas | Local `sql_pandas_oracle_check.py` **OK (19 seeds)** · `golden_dual_compare.py` **OK (82 pandas fixtures)** · cookbook docs dual-catalog PASS · prior hub soak **OpenFDD SQL target match 59/59** (`01_synth59.log` in FQ stress) |
 | GH tidy | **0 open PRs** · tip `4a5c11e` master workflows **success** (Publish, tip completeness, Rust/FDD CI, AppSec, …) · stale FAIL rows only on deleted Tip B feature branch (pre-fmt) — not master |
-| Soft-OPEN noise | Recurring `mqtt_ingest_reject` / `historian_persist`: **`duplicate canonical live role oa_t`** (~1× per 300 s poll) from ACME stress catalog `config/fieldbus/field_devices.toml` dual AV roles on loopback 9101 — **not** a container error; cite Soft-OPEN below. Brief buffer rejects only at central redeploy. MQTT ACL world-readable warn + rare OpenSSL EOF — non-blocking. |
+| Soft-OPEN noise | Stress catalog `field_devices.toml` dual `oa_t` on AV 9101 **removed** in 3.5.34 tip (`acme-oa-t-dup-reject` CLOSED for repo catalog). Live `vim-1` kit may still need restore/redeploy before hub rejects stop. Brief buffer rejects only at central redeploy. |
 
 ## Soft-OPEN (≤ Stage C)
 
@@ -43,22 +45,31 @@
 | **stage-c-idp-mfa-sku** | Commercial IdP/MFA/SKU |
 | **util-interval** | **CLOSED (branch)** · empty `utility_interval`/`bas_submeter` views when CSV absent → UTIL-INTERVAL plans **0h** (not `rules_failed`); pandas oracle: expect 0h when interval frame empty |
 | **r6-ingest-reject** | **CLOSED (branch)** · count on health + `reject_buckets` on `/api/ingest/stats` (no dead-letter dump API) |
-| **kali-zap-af** | Authenticated ZAP AF remains Kali-owned |
+| **kali-zap-af** | **CLOSED** · alias of `zap-af-authenticated` · disposable High=0 `20260920T150920Z` |
 | **wave-o1-tenant-path-migrate** | Hub-root `building=*` still; optional `tenants/{tid}/` migrate |
-| **p2c-mqtt-acl-staging** | Broker ACL proof = Kali staging |
+| **p2c-mqtt-acl-staging** | **CLOSED** (folded into `mqtt-key-mode-tenant-acl`) · synthetic A/B tenant ACL fixture + observer covers P2c matrix (own write / foreign deny / no edge wildcards) |
 | **historian-n-building-scale** | Small Parquet parts × N buildings; offline H4 now; runtime compaction Soft later |
 | **admin-capacity-gauges** | **CLOSED (branch)** · cgroup memory + workspace `statvfs` + Parquet small-file strip on Admin |
 | **railway-capacity-stress** | **CITED** Tip B FQ `20260917T215437Z` gates 24/24b PASS |
 | **mqtt-pause-ui** | **CLOSED (#947 Tip B)** · MT command topics `tenants/…`; gate **35 PASS** on `sha-4a5c11e` stress `20260917T215437Z` |
-| **acme-oa-t-dup-reject** | **Soft-OPEN** · ACME live `historian_persist` rejects: duplicate canonical `oa_t` in one equipment envelope. Hub `/api/edges` shows **`vim-1`** (not local `pi-1` stress catalog). Ingest still healthy (`ingest_ok` ≫ reject). Ops/edge package cleanup — not a product tip. |
+| **acme-oa-t-dup-reject** | **CLOSED (catalog 3.5.34)** · `config/fieldbus/field_devices.toml`: zone loopback no longer maps `outside-air-temperature` on AV 9101; `hosted-weather` owns `web-outside-air-temp`. Live `vim-1` needs kit restore to clear residual hub rejects. |
 | **local-bacnet-ot-bench** | **Soft-OPEN** · MS/TP/FEC shared-trunk; Waveshare C FTDI `--mstp-passive` @38400: FEC alone silence; +mini MAC2 → PFM heard. Resume when FEC online on isolated trunk. |
 | **edge-kit-soft** | **OPS** · MT kit `./scripts/openfdd_restore_edge_kit.sh ACME pi-1` → `deploy/mqtt/kits/ACME__pi-1/` · live ACME OT edge id `vim-1` |
 | **s1-datasets-mt-acl** | **CLOSED** (#951 / 3.5.31 / `sha-7b81eb8`) · datasets list/delete MT ACL; FQ `20260919T195100Z` gate 25/25b PASS |
-| **wave-s3-pypi-mv-oracle** | **Soft-OPEN** · IPMVP change-point / G14 / Camber→`open_fdd.ecm_engineering` ports + wheel publish. Plan: `wave_s3_pypi_mv_camber_oracle.plan.md`. |
-| **wave-s4-sql-twins-fq** | **Soft-OPEN** · DataFusion M&V twin + Metering UI + model/ECM gate in FQ MEGA. Plan: `wave_s4_sql_oracle_twins_fq.plan.md`. FQ cite only after this tip. |
-| **wave-s5-dm-remainder** | **Soft-OPEN** · DM-04..10, SEC-ML, JSON-PARITY, SPARQL-SEM, PERF-1, EQ-VOCAB/PERSIST, ECM-ADAPT, DOCS-PAGES, STRESS-GATE. P1 IRI CLOSED on `sha-3cd3745`. |
-| **acme-fdd-run-hang** | **Soft-OPEN** · On smoke tip `3.5.33`/`sha-3cd3745`, ACME `fdd_run_all` action remains `running` >20m (proxy curl timeouts; clear with `DELETE /api/actions`). MQTTS ingest unaffected. Diagnose DataFusion memory/spill / rule set before next product tip; do not greenwash. **Wave T T0.** |
-| **sec-harness-mt-breadth** | **Soft-OPEN** · Grow X/Y IMPLEMENTED MT ACL/JWT coverage so Python **beats manual Burp on isolation matrices** (inventory today ~16 IMPLEMENTED / ~93 PLANNED of ~138). Not XSS/SQLi/AF — ZAP baseline + Soft-OPEN `kali-zap-af`. **Wave T T_sec.** |
+| **wave-s3-pypi-mv-oracle** | **PARTIAL (branch tip/wave-u-u0-master)** · IPMVP change-point (`2P`/`3P`/`4P`/`5P`) + G14 NMBE/CVRMSE in `open_fdd.ecm_engineering` (+ analytics re-exports) · cookbook [`docs/ecm/ipmvp-changepoint.md`](../ecm/ipmvp-changepoint.md) · wheel `4.4.3` local build/test · **Soft-OPEN residual:** PyPI publish tip, unfinished Camber families, Wave S4 SQL twin / Metering UI. Plan: `wave_s3_pypi_mv_camber_oracle.plan.md`. |
+| **wave-s4-sql-twins-fq** | **Soft-OPEN (tip prep)** · Thin `POST /api/analytics/mv` (`mv-change-point-v1` 2P OLS) + Metering M&V radio + gate **36** (`scripts/nightly-ot-bench/36_mv_sql_oracle_twin.sh`). Default gate **BLOCKED** without `OPENFDD_SECURITY_EXECUTE=1`. **Do not claim OPS PINNED / FQ PASS** until tip merge + GHCR + MEGA FQ with EXECUTE=1. Plan: `wave_s4_sql_oracle_twins_fq.plan.md`. |
+| **wave-s5-dm-remainder** | **PARTIAL (this tip)** · DM-04 stamped types + inferred-parent honesty + DM-05 tenant storage doc + gate **36** model/ECM wire. Soft-OPEN remains: DM-07..10 SPARQL/PERF, EQ-VOCAB/ECM-ADAPT FQ, Pages publish soak. P1 IRI still CLOSED on `sha-3cd3745`. |
+| **acme-fdd-run-hang** | **CLOSED (3.5.34)** · Stale `running` reclaim **20m** + `list_actions` reclaim + `POST /api/fdd/run` wall timeout via `OPENFDD_FDD_RUN_TIMEOUT_SECS` (default **900s**) finishes action `fail`/`timeout` instead of indefinite hang. Slow ACME DataFusion remains a performance topic, not an action hang. |
+| **sec-harness-mt-breadth** | **PARTIAL (this tip)** · Expanded Y/X: mapping TTL foreign deny + FDD equipment own/foreign; inventory IMPLEMENTED honest. Soft-OPEN: more PLANNED MT routes (analytics POSTs, series, buildings list, …). |
+| **sec-harness-evaluator-integrity** | **CLOSED (3.5.34)** · E01–E08 permanent tests + fixes |
+| **sec-ci-wire** | **CLOSED (3.5.34)** · AppSec `security-harness` job |
+| **standalone-https-bootstrap** | **CLOSED (3.5.34)** · compose + Caddyfile HTTP→HTTPS redir; CI `peer_probe_https.py --selftest`; peer soak PASS `2026-09-20T15:01:25Z` → `reports/security/standalone_https_probe.json` (not Nessus) |
+| **fieldbus-mgmt-failclosed** | **CLOSED (3.5.34)** · `require_api_key_for_bind` + unit tests (`non_loopback_without_key_refused`, loopback/key cases) |
+| **mqtt-key-mode-tenant-acl** | **CLOSED** · key mode 640 (`docker-entrypoint-openfdd.sh`) + generated fixture `scripts/security/fixtures/mqtt_tenant_acl/` + observer `scripts/security/mqtt_tenant_acl_observer.py` · gate `26_security_mqtt_acl` PASS when `OPENFDD_MQTT_ACL_EXECUTE=1` · folds `p2c-mqtt-acl-staging` |
+| **zap-af-authenticated** | **CLOSED (3.5.34)** · Disposable AF PASS High=0 Medium=0 on `sha-4d3a6b0` → `reports/security/zap_af_disposable_20260920T150920Z` (`af_job_status=PASS_WITH_WARNINGS`); runner `run_af_disposable.sh` + `run_isolated_zap_af.sh`; no JWT in git/verdict |
+| **image-digest-trivy** | **TIPPED 3.5.34** · `trivy_ghcr_digests.sh` (run after GHCR publish) |
+| **nessus-pass-readiness** | **CLOSED (3.5.34)** · checklist + importer + fixtures + HTTPS/MQTT/fieldbus evidence cited — **not** a fake Nessus PASS; real scan remains `nessus-isolated-assessment` BLOCKED |
+| **nessus-isolated-assessment** | **Soft-OPEN / BLOCKED** · Real licensed Nessus only |
 
 ## Wave R closeout (2026-09-16)
 
@@ -79,3 +90,41 @@
 ## Exit (P9 / R / Soft UX)
 
 **Done:** tip GHCR + Railway re-pin + hub stress FQ (`20260917T215437Z` on `3.5.28` / `sha-4a5c11e`) + post-pin stability audit (ACME FDD clean, SQL↔pandas oracle OK, 0 open PRs, master Actions green) + Soft-OPEN ≤ Stage C (local BACnet OT bench + ACME `oa_t` dup catalog noise). **No additional product tip required for stability.**
+
+## Wave U enhanced stress (`20260920T152613Z`) + BUGS
+
+**Artifacts:** `reports/wave_u_enhanced_stress_20260920T152613Z/` · oracle twin `reports/wave_u_enhanced_stress_oracle_20260920T153722Z/` · ZAP AF disposable `reports/security/zap_af_disposable_20260920T150920Z/` · HTTPS peer `reports/security/standalone_https_probe.json`
+
+| # | Check | Result |
+|---|--------|--------|
+| 1 | `tests/security` (55) | **PASS** |
+| 2 | `tests/qualification` (ZAP AF hygiene) | **PASS** (selftest BLOCKED honesty) |
+| 3 | HTTPS peer `--selftest` | **PASS** |
+| 4 | Gate 26 MQTT ACL `EXECUTE=1` (live mosquitto observer) | **PASS** (own OK / foreign deny) |
+| 5 | Gate 36 model/ECM | **BLOCKED** (no `OPENFDD_OPS_A/B_PASSWORD` — honesty) |
+| 6 | Gate 36 MV twin vs live Railway hub (`EXECUTE=1` + `OPENFDD_API_BASE`) | **FAIL** — see BUG `wu-mv-404-pre-pin` |
+| 7 | Gate 36 MV twin oracle-only (`EXECUTE=1`, no API base) | **PASS** (intercept=500 slope=2 savings=300) |
+| 8 | Nessus importer `--selftest` | **PASS** |
+| 9 | ECM pytest G14/changepoint/mv | **13 PASS** |
+| 10 | Fieldbus fail-closed unit tests | **4 PASS** |
+| 11 | Disposable ZAP AF (`sha-4d3a6b0`) | **PASS** High=0 Medium=0 |
+| CI | #959 Rust fmt/clippy/tests + fdd-engine | **PASS** on `1ba4f7b6` |
+
+### BUGS found this go-around (log before / with tip)
+
+| ID | Severity | Status | Notes |
+|----|----------|--------|-------|
+| **ci-959-rustfmt** | CI | **FIXED** | `matches!` / package stamp helpers needed `cargo fmt` (`61814cb`, `9a49f4fa`) |
+| **ci-959-react-alert** | CI | **FIXED** | `MvChangePointPanel` used `variant="error"`; AlertVariant is `danger` (`1ba4f7b6`) |
+| **ci-959-pyyaml-qual** | CI | **FIXED** | AppSec qualification imported ZAP runner without PyYAML — install step added |
+| **ci-959-docs-guard** | CI | **FIXED** | Cookbook link edits blocked; reverted — IPMVP lives under `docs/ecm/` |
+| **wu-mv-404-pre-pin** | Soft-OPEN / FQ gate | **OPEN until tip pin** | Hub still on pre-U tip: `POST /api/analytics/mv` → **HTTP 404** when `OPENFDD_SECURITY_EXECUTE=1`. Expected until #959 merge → GHCR → Railway re-pin. Oracle-only twin **PASS**. Gate reason now hints tip re-pin. |
+| **wu-model-ecm-creds** | Soft-OPEN | **BLOCKED honesty** | Gate 36 model/ECM needs ops A/B passwords for live hub; not a product defect |
+| **wu-vim1-oa-t-kit** | Ops | **OPEN (edge)** | Repo catalog fixed; live `vim-1` still needs kit restore to clear residual `oa_t` dup rejects |
+| **wu-acme-fdd-slow** | Perf (not hang) | Soft note | Hang Soft-OPEN **CLOSED** (20m reclaim + 900s timeout). ACME may still be slow/timeout under load — not indefinite `running` |
+| **wu-s4-fq-mega** | Soft-OPEN | **OPEN** | MEGA FQ + OPS PINNED deferred until tip GHCR + hub re-pin + `OPENFDD_SECURITY_EXECUTE=1` full stress |
+| **wu-trivy-tip-digest** | Soft-OPEN | **OPEN** | Run `trivy_ghcr_digests.sh` on post-merge tip sha |
+| **wu-pypi-publish-4.4.3** | Residual | Soft note | Wheel/math landed; PyPI publish not done this tip |
+| **wu-dm-07-10** | Soft-OPEN | Soft note | S5 DM-04/05 landed; SPARQL/PERF/ECM-ADAPT remain |
+
+**Do not claim:** Nessus assessment PASS · MEGA `fully_qualified=true` on this tip · hub `/api/analytics/mv` until re-pin.

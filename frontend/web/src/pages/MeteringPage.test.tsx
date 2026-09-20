@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { MeteringPage } from "./MeteringPage";
 
@@ -22,6 +22,12 @@ vi.mock("../components/FuelDashboard", () => ({
     >
       FuelDashboard stub
     </div>
+  ),
+}));
+
+vi.mock("../components/MvChangePointPanel", () => ({
+  MvChangePointPanel: () => (
+    <div data-testid="mv-change-point-panel">MvChangePointPanel stub</div>
   ),
 }));
 
@@ -53,6 +59,7 @@ describe("MeteringPage", () => {
     expect(
       screen.getByTestId("fuel-dashboard").getAttribute("data-preferred-campus"),
     ).toBe("LAKESIDE_ES");
+    expect(screen.getByTestId("metering-section")).toBeTruthy();
   });
 
   it("still shows Fuel dashboard when no site is locked", async () => {
@@ -63,5 +70,15 @@ describe("MeteringPage", () => {
       /lock a site first/,
     );
     expect(screen.queryByTestId("metering-active-site")).toBeNull();
+  });
+
+  it("switches to M&V radio and hides utilities dashboard", async () => {
+    renderPage();
+    await waitFor(() => screen.getByTestId("metering-page"));
+    const mvRadio = screen.getByLabelText("M&V");
+    fireEvent.click(mvRadio);
+    await waitFor(() => screen.getByTestId("mv-change-point-panel"));
+    expect(screen.queryByTestId("fuel-dashboard")).toBeNull();
+    expect(screen.queryByTestId("metering-scope")).toBeNull();
   });
 });

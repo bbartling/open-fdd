@@ -101,6 +101,14 @@ job.attach_twin_compare({
 job.save("honesty.xlsx")  # Contents, Measures, … (FITTED ≠ independent validation)
 ```
 
+### IPMVP change-point / G14 (4.4.3)
+
+```python
+from open_fdd.ecm_engineering import fit_changepoint, score_g14_monthly, option_c_savings
+```
+
+Docs: [IPMVP change-point & G14](ipmvp-changepoint.md). Requires `numpy` (`pip install "open-fdd[oracle]"`).
+
 ## Independent benchmark
 
 ```python

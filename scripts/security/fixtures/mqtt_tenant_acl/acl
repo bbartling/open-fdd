@@ -1,0 +1,22 @@
+# Generated Open-FDD Wave L tenant ACL fixture (synthetic).
+# Source: scripts/security/fixtures/mqtt_tenant_acl/tenants.json
+# Do not commit live Railway / OT credentials here.
+#
+# Matrix (P2c / Kali O2c folded into mqtt-key-mode-tenant-acl):
+# - Edge A/B: write own tenant/building/edge tree; read own commands only.
+# - Deny: foreign tenant topics, openfdd/v1/tenants/+/… for edges, cross-tenant #.
+# - Central: read tenant trees it serves; write commands to owned edges only.
+
+user edge:tenant_a:bldg_a:fieldbus-1
+topic write openfdd/v1/tenants/tenant_a/buildings/bldg_a/edges/fieldbus-1/#
+topic read openfdd/v1/tenants/tenant_a/buildings/bldg_a/edges/fieldbus-1/commands/#
+
+user edge:tenant_b:bldg_b:fieldbus-1
+topic write openfdd/v1/tenants/tenant_b/buildings/bldg_b/edges/fieldbus-1/#
+topic read openfdd/v1/tenants/tenant_b/buildings/bldg_b/edges/fieldbus-1/commands/#
+
+user central:ci
+topic read openfdd/v1/tenants/tenant_a/buildings/bldg_a/#
+topic write openfdd/v1/tenants/tenant_a/buildings/bldg_a/edges/fieldbus-1/commands/#
+topic read openfdd/v1/tenants/tenant_b/buildings/bldg_b/#
+topic write openfdd/v1/tenants/tenant_b/buildings/bldg_b/edges/fieldbus-1/commands/#

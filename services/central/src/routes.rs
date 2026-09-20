@@ -1,6 +1,7 @@
 //! Central REST + OpenAPI routes.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
@@ -286,6 +287,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(analytics_rcx_presets_list),
         )
         .route("/api/analytics/metering", post(analytics_metering))
+        .route("/api/analytics/mv", post(analytics_mv_change_point))
         .route("/api/analytics/fuel", post(analytics_fuel))
         .route("/api/analytics/setpoints", post(analytics_setpoints))
         .route("/api/analytics/diurnal", post(analytics_diurnal))
@@ -1940,11 +1942,25 @@ pub async fn fdd_run(
         }
     };
 
-    let mut result = tokio::task::spawn_blocking(move || {
+    let fdd_timeout_secs: u64 = std::env::var("OPENFDD_FDD_RUN_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .filter(|&s| s > 0)
+        .unwrap_or(900);
+    let join = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
-    })
-    .await
-    .unwrap_or_else(|e| json!({"ok": false, "error": format!("fdd run task failed: {e}")}));
+    });
+    let mut result = match tokio::time::timeout(Duration::from_secs(fdd_timeout_secs), join).await {
+        Ok(Ok(v)) => v,
+        Ok(Err(e)) => json!({"ok": false, "error": format!("fdd run task failed: {e}")}),
+        Err(_) => json!({
+            "ok": false,
+            "timeout": true,
+            "error": format!(
+                "fdd run timed out after {fdd_timeout_secs}s (OPENFDD_FDD_RUN_TIMEOUT_SECS)"
+            ),
+        }),
+    };
     // Echo the requested building_id when the edge did not surface one, so the
     // UI/MCP always know which site the run was scoped to.
     if let (Some(bid), Some(obj)) = (echo_building_id, result.as_object_mut()) {
@@ -3729,6 +3745,18 @@ async fn analytics_metering(
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::metering::handle_async(&req).await.to_json(),
+    })))
+}
+
+async fn analytics_mv_change_point(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let req = gate_analytics(&state, &headers, req)?;
+    Ok(Json(json!({
+        "ok": true,
+        "analytics": analytics::mv_change_point::handle(&req).to_json(),
     })))
 }
 

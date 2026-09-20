@@ -1,0 +1,25 @@
+{
+  "schema_version": "openfdd_exposure_manifest_v1",
+  "profile": "railway_hub",
+  "note": "Public origin is HTTPS web only. Central/MCP private. Fieldbus never on Railway.",
+  "services": [
+    {
+      "service": "openfdd-web",
+      "interface": "public_https",
+      "ports": [{"proto": "tcp", "port": 443, "auth": "tls+jwt", "purpose": "UI/API"}],
+      "denied": ["fieldbus", "bacnet", "modbus"]
+    },
+    {
+      "service": "openfdd-mqtt",
+      "interface": "broker_proxy_or_private",
+      "ports": [{"proto": "tcp", "port": "proxy", "auth": "mtls+tenant_acl", "purpose": "edge MQTTS ingress"}],
+      "denied": ["anonymous", "public central REST"]
+    },
+    {
+      "service": "openfdd-central",
+      "interface": "private",
+      "ports": [{"proto": "tcp", "port": 8080, "auth": "jwt_private", "purpose": "API"}],
+      "denied": ["public bind"]
+    }
+  ]
+}

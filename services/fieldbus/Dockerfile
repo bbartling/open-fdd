@@ -23,7 +23,7 @@ WORKDIR /app
 COPY --from=builder /src/target/release/openfdd-fieldbus /usr/local/bin/openfdd-fieldbus
 COPY config/fieldbus /app/config
 ENV OPENFDD_FIELDBUS_CONFIG_DIR=/app/config
-ENV OPENFDD_FIELDBUS_HTTP_HOST=0.0.0.0
+ENV OPENFDD_FIELDBUS_HTTP_HOST=127.0.0.1
 ENV OPENFDD_FIELDBUS_HTTP_PORT=8081
 EXPOSE 8081/tcp
 EXPOSE 47808/udp

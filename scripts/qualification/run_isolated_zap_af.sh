@@ -96,11 +96,21 @@ fi
 echo "$TOKEN" >"$ART/admin.jwt"
 echo "OK admin JWT minted"
 
-# Materialize AF plan with concrete target + password (ZAP does not expand host env).
+# Materialize AF plan: expand origin/reportDir only. Authorization stays
+# ${ZAP_AUTH_HEADER_VALUE} and is injected via docker -e (never written to disk).
 sed \
+  -e "s|\${ZAP_TARGET_ORIGIN}|${TARGET_URL%/}|g" \
   -e "s|\${OPENFDD_ZAP_TARGET}|${TARGET_URL}|g" \
-  -e "s|\${OPENFDD_ADMIN_PASSWORD}|${ADMIN_PASS}|g" \
+  -e "s|\${ZAP_REPORT_DIR}|/zap/wrk|g" \
   "$ROOT/scripts/qualification/zap/af_plan.yaml" >"$WRK/af_plan.yaml"
+if ! grep -qF '${ZAP_AUTH_HEADER_VALUE}' "$WRK/af_plan.yaml"; then
+  echo "FAIL: rendered AF plan lost env auth injection" >&2
+  exit 1
+fi
+if grep -qE 'Bearer[[:space:]]+eyJ' "$WRK/af_plan.yaml"; then
+  echo "FAIL: rendered AF plan contains hardcoded JWT" >&2
+  exit 1
+fi
 cp "$WRK/af_plan.yaml" "$ART/af_plan.rendered.yaml"
 
 echo "== ZAP Automation Framework (OpenAPI + passive) =="

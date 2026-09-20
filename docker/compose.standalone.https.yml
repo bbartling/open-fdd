@@ -1,0 +1,31 @@
+# Open-FDD standalone HTTPS overlay (Wave U U3)
+# Combine with compose.standalone.yml + compose.react.yml (or a web service):
+#   OPENFDD_CENTRAL_BIND=127.0.0.1 \
+#   docker compose -f docker/compose.standalone.yml \
+#     -f docker/compose.react.yml \
+#     -f docker/compose.standalone.https.yml up -d
+#
+# Requires deploy/caddy/Caddyfile.standalone.https + certs under deploy/caddy/certs/
+# (or ACME via OPENFDD_CADDY_EMAIL). Central must stay loopback — set OPENFDD_CENTRAL_BIND=127.0.0.1.
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ../deploy/caddy/Caddyfile.standalone.https:/etc/caddy/Caddyfile:ro
+      - ../deploy/caddy/certs:/certs:ro
+      - caddy-data:/data
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  fieldbus:
+    environment:
+      OPENFDD_FIELDBUS_HTTP_HOST: 127.0.0.1
+      OPENFDD_FIELDBUS_API_KEY: ${OPENFDD_FIELDBUS_API_KEY:-}
+
+volumes:
+  caddy-data:

@@ -97,9 +97,9 @@ const JSONL_CAP: usize = 50;
 const DEFAULT_LIST_LIMIT: usize = 10;
 const MAX_LIST_LIMIT: usize = 500;
 /// Orphaned `running` rows after OOM/crash — fail them so single-flight can recover.
-/// 30m is enough for a full hub FDD pass on Railway low-RAM; 2h left synth59 Soft
-/// after dual-run crashes (orphan busy until reclaim).
-const STALE_RUNNING_SECS: i64 = 30 * 60;
+/// Soft-OPEN ACME hangs were observed >20m; reclaim at 20m so list/start recover without
+/// waiting for a second POST (Wave U interrupt).
+const STALE_RUNNING_SECS: i64 = 20 * 60;
 
 fn is_heavy_fdd_kind(kind: &str) -> bool {
     matches!(kind, "fdd_run_all" | "fdd_run_rule") || kind.starts_with("fdd_")
@@ -287,6 +287,7 @@ pub fn list_actions(limit: usize) -> Value {
             });
         }
     };
+    let _ = reclaim_stale_running_unlocked(Utc::now());
     let mut entries = read_all_unlocked();
     entries.reverse();
     entries.truncate(limit);

@@ -1,3 +1,5 @@
+> **Wave U child detail** — product Soft-OPEN scheduled **after** the security spine. Do not treat as active master.
+
 ---
 name: Wave S4 SQL twins FQ closeout
 overview: "DataFusion M&V/analytics twin + Metering UI radio + model/ECM stress gate in FQ MEGA. Final Wave S OPS PINNED."

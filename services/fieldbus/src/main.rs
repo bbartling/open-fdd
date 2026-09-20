@@ -54,6 +54,42 @@ fn init_tracing() {
     }
 }
 
+fn is_loopback_http_host(host: &str) -> bool {
+    matches!(
+        host.trim().to_ascii_lowercase().as_str(),
+        "127.0.0.1" | "localhost" | "::1"
+    )
+}
+
+/// Fail-closed: non-loopback management bind requires OPENFDD_FIELDBUS_API_KEY.
+fn require_api_key_for_bind(
+    http_host: &str,
+    api_key: String,
+) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+    if api_key.is_empty() {
+        if !is_loopback_http_host(http_host) {
+            tracing::error!(
+                target: "security_audit",
+                event = "fieldbus_auth_open_bind_refused",
+                http_host = %http_host,
+                "refusing non-loopback management bind without OPENFDD_FIELDBUS_API_KEY"
+            );
+            return Err(format!(
+                "OPENFDD_FIELDBUS_API_KEY required when HTTP bind is not loopback (host={http_host})"
+            )
+            .into());
+        }
+        tracing::warn!(
+            target: "security_audit",
+            event = "fieldbus_auth_open_loopback",
+            "API key unset — management open on loopback only"
+        );
+        return Ok(None);
+    }
+    info!("API key auth enabled");
+    Ok(Some(api_key))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenvy::dotenv().ok();
@@ -111,13 +147,7 @@ async fn run(
     )
     .await;
 
-    let api_key = auth::api_key();
-    let api_key_opt = if api_key.is_empty() {
-        None
-    } else {
-        info!("API key auth enabled");
-        Some(api_key)
-    };
+    let api_key_opt = require_api_key_for_bind(&settings.http_host, auth::api_key())?;
 
     let state = AppState {
         settings: Arc::clone(&settings),
@@ -255,5 +285,35 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn loopback_hosts_recognized() {
+        assert!(is_loopback_http_host("127.0.0.1"));
+        assert!(is_loopback_http_host("LOCALHOST"));
+        assert!(is_loopback_http_host("::1"));
+        assert!(!is_loopback_http_host("0.0.0.0"));
+        assert!(!is_loopback_http_host("192.168.1.10"));
+    }
+
+    #[test]
+    fn non_loopback_without_key_refused() {
+        let err = require_api_key_for_bind("0.0.0.0", String::new()).unwrap_err();
+        assert!(err.to_string().contains("OPENFDD_FIELDBUS_API_KEY"));
+    }
+
+    #[test]
+    fn loopback_without_key_allowed() {
+        assert!(require_api_key_for_bind("127.0.0.1", String::new())
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn key_present_allows_any_bind() {
+        let key = require_api_key_for_bind("0.0.0.0", "test-key".into())
+            .unwrap()
+            .expect("key");
+        assert_eq!(key, "test-key");
     }
 }

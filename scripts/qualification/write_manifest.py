@@ -50,6 +50,7 @@ SECURITY_GATES = (
     "25_security_python_harness",
     "25b_security_post_stress",
     "26_security_mqtt_acl",
+    "36_model_ecm_qualification",
 )
 
 

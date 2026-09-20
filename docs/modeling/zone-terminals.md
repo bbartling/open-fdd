@@ -51,3 +51,7 @@ UV is **not** ZONE. Do not put UV on the ZONE comfort path just because it serve
 | VAV AHU | `vav_ahu` / `ahu` | ahu |
 
 Authoritative product map: `edge/src/equipment_types.rs`. Agent contract: `openfdd_agent_spec/DATA_CONTRACT.md` + `skills/openfdd-package-mapping/SKILL.md`.
+
+## Opaque ids (DM-04)
+
+Stamp wins over folder/id heuristics. Example: `AC_1` with `equipType: ahu` exports as **AHU** (`equipment_type_source: package`), not GENERAL. Inferred VAV→AHU parents are **proposals** (`parent_ahu_source: inferred`) and are omitted from Turtle `ofdd:parentAhu` facts until confirmed in package metadata.

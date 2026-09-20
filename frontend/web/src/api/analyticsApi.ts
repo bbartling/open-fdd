@@ -136,6 +136,13 @@ export async function postMetering(
   return postAnalytics("/api/analytics/metering", body);
 }
 
+/** Wave S4 thin IPMVP Option C monthly DD-OLS twin (`mv-change-point-v1`). */
+export async function postMvChangePoint(
+  body: AnalyticsRequest,
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/mv", body);
+}
+
 export async function postRcxAhu(
   body: AnalyticsRequest,
 ): Promise<AnalyticsEnvelope> {

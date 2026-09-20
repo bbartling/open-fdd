@@ -45,25 +45,21 @@ if [[ ! -f "$REPORT" ]]; then
 fi
 
 # Subset suites → full_profile=false → not fully_qualified; postcheck still must not FAIL.
+# Reject empty checks, all-BLOCKED, and fabricated counts (E02/E03).
 python3 - <<PY
 import json, sys
 from pathlib import Path
 sys.path.insert(0, "$ROOT/scripts/security")
 from openfdd_security.evidence import validate_report_for_qualification
 report = Path("$REPORT")
-data = json.loads(report.read_text())
-# Postcheck: require executed, matching profile, nonzero checks, no FAIL/ERROR overall
-status = data.get("overall_status")
-counts = data.get("counts") or {}
-ok = (
-    data.get("executed") is True
-    and data.get("dry_run") is False
-    and data.get("profile") == "$PROFILE"
-    and int(counts.get("planned") or 0) > 0
-    and status not in ("FAIL", "ERROR")
-    and int(counts.get("fail") or 0) == 0
+ok, reason = validate_report_for_qualification(
+    report,
+    expected_profile="$PROFILE",
+    require_full_profile=False,
+    postcheck=True,
 )
-reason = data.get("reason") or status
+data = json.loads(report.read_text())
+status = data.get("overall_status")
 verdict = {
     "ok": ok,
     "status": "PASS" if ok else ("FAIL" if status == "FAIL" else "BLOCKED"),

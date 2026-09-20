@@ -3,10 +3,10 @@
   "source_commit_hint": "4a5c11e50b921df83f2ca3a59c52d4e99908157f",
   "source_file": "services/central/src/routes.rs",
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission.",
-  "route_count": 138,
+  "route_count": 139,
   "disposition_counts": {
-    "IMPLEMENTED": 16,
-    "PLANNED": 93,
+    "IMPLEMENTED": 18,
+    "PLANNED": 92,
     "BLOCKED_POLICY": 29
   },
   "routes": [
@@ -382,7 +382,7 @@
       "section": "csv",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -392,12 +392,17 @@
       "source": "services/central/src/routes.rs",
       "planned_check_ids": [
         "x.preauth.anon401.get_api_csv_import_package_mapping_ttl",
-        "y.authz.get_api_csv_import_package_mapping_ttl"
+        "y.authz.get_api_csv_import_package_mapping_ttl",
+        "y.authz.a_foreign_package_mapping_ttl_denied"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_mapping_ttl",
+        "y.authz.a_foreign_package_mapping_ttl_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_csv_import_package_mapping_ttl",
-        "y.authz.get_api_csv_import_package_mapping_ttl"
+        "y.authz.get_api_csv_import_package_mapping_ttl",
+        "y.authz.a_foreign_package_mapping_ttl_denied"
       ],
       "request_schema": {
         "type": "unknown",
@@ -1953,13 +1958,20 @@
       "source": "services/central/src/routes.rs",
       "planned_check_ids": [
         "x.preauth.anon401.get_api_fdd_equipment",
-        "y.authz.get_api_fdd_equipment"
+        "y.authz.get_api_fdd_equipment",
+        "y.authz.a_own_fdd_equipment",
+        "y.authz.a_foreign_fdd_equipment_denied"
       ],
       "implemented_check_ids": [
-        "x.preauth.anon401.get_api_fdd_equipment"
+        "x.preauth.anon401.get_api_fdd_equipment",
+        "y.authz.a_own_fdd_equipment",
+        "y.authz.a_foreign_fdd_equipment_denied"
       ],
       "check_ids": [
-        "x.preauth.anon401.get_api_fdd_equipment"
+        "x.preauth.anon401.get_api_fdd_equipment",
+        "y.authz.get_api_fdd_equipment",
+        "y.authz.a_own_fdd_equipment",
+        "y.authz.a_foreign_fdd_equipment_denied"
       ],
       "request_schema": {
         "type": "unknown",
@@ -1995,7 +2007,9 @@
         "y.authz.get_api_fdd_results"
       ],
       "implemented_check_ids": [
-        "x.preauth.anon401.get_api_fdd_results"
+        "x.preauth.anon401.get_api_fdd_results",
+        "y.authz.a_own_fdd_results",
+        "y.authz.a_foreign_fdd_results_denied"
       ],
       "check_ids": [
         "x.preauth.anon401.get_api_fdd_results"
@@ -2187,7 +2201,8 @@
       ],
       "implemented_check_ids": [
         "x.preauth.anon401.get_api_fdd_session_config",
-        "y.authz.get_api_fdd_session_config"
+        "y.authz.get_api_fdd_session_config",
+        "y.authz.a_foreign_session_config_denied"
       ],
       "check_ids": [
         "x.preauth.anon401.get_api_fdd_session_config",
@@ -4723,7 +4738,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -4735,7 +4750,10 @@
         "x.preauth.anon401.get_api_analytics_rcx_presets",
         "y.authz.get_api_analytics_rcx_presets"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "y.authz.a_own_analytics_rcx_presets",
+        "y.authz.a_foreign_analytics_rcx_presets_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_analytics_rcx_presets",
         "y.authz.get_api_analytics_rcx_presets"
@@ -5134,6 +5152,56 @@
         "identity"
       ],
       "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/mv",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_analytics_mv",
+        "y.authz.post_api_analytics_mv"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_analytics_mv",
+        "y.authz.post_api_analytics_mv"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Wave S3/S4 M&V change-point; keep PLANNED until suite emits checks"
     }
-  ]
+  ],
+  "counts": {
+    "PLANNED": 92,
+    "IMPLEMENTED": 17,
+    "BLOCKED_POLICY": 29,
+    "EXCLUDED": 0
+  },
+  "summary": {
+    "IMPLEMENTED": 18,
+    "PLANNED": 91,
+    "BLOCKED_POLICY": 29,
+    "EXCLUDED": 0
+  }
 }

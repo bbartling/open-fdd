@@ -17,7 +17,11 @@ export interface MappingSampling {
 export interface MappingEquipment {
   equipment_id: string;
   equipment_type: string;
+  equipment_type_raw?: string | null;
+  equipment_type_source?: string | null;
   parent_ahu?: string | null;
+  /** `package` = confirmed; `inferred` = id heuristic proposal (not TTL fact). */
+  parent_ahu_source?: string | null;
   ok: boolean;
   error?: string;
   columns?: MappingColumnRow[];
@@ -218,7 +222,10 @@ export function buildMappingManifest(
       equipment: (inventory.equipment ?? []).map((eq) => ({
         equipment_id: eq.equipment_id,
         equipment_type: eq.equipment_type,
+        equipment_type_raw: eq.equipment_type_raw ?? null,
+        equipment_type_source: eq.equipment_type_source ?? null,
         parent_ahu: eq.parent_ahu ?? null,
+        parent_ahu_source: eq.parent_ahu_source ?? null,
         roles: eq.roles ?? {},
         columns: eq.columns ?? [],
         unmapped_columns: eq.unmapped_columns ?? [],

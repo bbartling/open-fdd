@@ -1,3 +1,5 @@
+> **SUPERSEDED by Wave U** — do not play. Active master: [`docs/operations/WAVE_U_MASTER.md`](../../docs/operations/WAVE_U_MASTER.md) · [`.cursor/plans/wave_u_security_hardening_master.plan.md`](wave_u_security_hardening_master.plan.md). Retained as historical/child detail only.
+
 ---
 name: Wave Soft Park + Data Model TTL
 overview: "Wave R OPS PINNED stays. Soft-OPEN + MQTT pause remain parked. Active work = Wave S Data Model TTL export/view (sidecar from package inventory, not FDD SoT) + unit tests + docs + ONE mega hub stress closeout."

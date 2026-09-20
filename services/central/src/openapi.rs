@@ -213,6 +213,13 @@ mod live_routes {
     pub fn analytics_metering() {}
 
     #[utoipa::path(
+        post, path = "/api/analytics/mv", tag = "analytics",
+        request_body = serde_json::Value,
+        responses((status = 200, description = "IPMVP Option C monthly DD-OLS M&V twin", body = serde_json::Value))
+    )]
+    pub fn analytics_mv_change_point() {}
+
+    #[utoipa::path(
         post, path = "/api/analytics/setpoints", tag = "analytics",
         request_body = serde_json::Value,
         responses((status = 200, description = "Occupied/unoccupied setpoint medians", body = serde_json::Value))
@@ -322,6 +329,7 @@ mod live_routes {
         live_routes::analytics_zone_other_health,
         live_routes::analytics_mechanical_cooling,
         live_routes::analytics_metering,
+        live_routes::analytics_mv_change_point,
         live_routes::analytics_setpoints,
         live_routes::analytics_diurnal,
         live_routes::analytics_topology,

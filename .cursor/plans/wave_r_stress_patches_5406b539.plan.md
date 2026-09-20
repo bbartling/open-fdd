@@ -1,3 +1,5 @@
+> **SUPERSEDED by Wave U** — do not play. Active master: [`docs/operations/WAVE_U_MASTER.md`](../../docs/operations/WAVE_U_MASTER.md) · [`.cursor/plans/wave_u_security_hardening_master.plan.md`](wave_u_security_hardening_master.plan.md). Retained as historical/child detail only.
+
 ---
 name: Wave R Stress Patches
 overview: "CLOSED OPS PINNED 3.5.22 / sha-4d3a6b0. Product FC1 fan_status parity (#936) + harness Soft closeout (#937). Hub stress reports/nightly-ot-bench_20260916T011952Z fully_qualified=true (no SKIP_ZAP). Soft-OPEN ≤ Stage C only (UTIL-INTERVAL, ingest_reject count, Kali AF, IdP/MFA)."

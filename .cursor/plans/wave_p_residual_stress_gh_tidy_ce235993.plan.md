@@ -1,3 +1,5 @@
+> **SUPERSEDED by Wave U** — do not play. Active master: [`docs/operations/WAVE_U_MASTER.md`](../../docs/operations/WAVE_U_MASTER.md) · [`.cursor/plans/wave_u_security_hardening_master.plan.md`](wave_u_security_hardening_master.plan.md). Retained as historical/child detail only.
+
 ---
 name: Wave P Residual Stress GH Tidy
 overview: "Wave P owns Wave O Soft residuals. Local docs/SPA/O2c Mint DONE on branch. Soft: tenant migrate, audit volume assert, synth59, ACME HW expands, Stage C, final stress, GH tidy. No Railway re-pin while Kali owns hub. ≤3 GHCR after unlock."

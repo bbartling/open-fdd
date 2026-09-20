@@ -1,3 +1,5 @@
+> **SUPERSEDED by Wave U** — do not play. Active master: [`docs/operations/WAVE_U_MASTER.md`](../../docs/operations/WAVE_U_MASTER.md) · [`.cursor/plans/wave_u_security_hardening_master.plan.md`](wave_u_security_hardening_master.plan.md). Retained as historical/child detail only.
+
 ---
 name: Wave S master
 overview: "Master Cursor plan for Wave S: security tip 3.5.30 → Camber/ADR → PyPI M&V → data-model/graph/ECM (S5) → SQL twins FQ. Full Railway MEGA FQ only after S1 and S4; mid-tips smoke only. Handoff evidence stays visible until PASS."
