@@ -1,6 +1,7 @@
 //! Central REST + OpenAPI routes.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
@@ -1940,11 +1941,25 @@ pub async fn fdd_run(
         }
     };
 
-    let mut result = tokio::task::spawn_blocking(move || {
+    let fdd_timeout_secs: u64 = std::env::var("OPENFDD_FDD_RUN_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .filter(|&s| s > 0)
+        .unwrap_or(900);
+    let join = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
-    })
-    .await
-    .unwrap_or_else(|e| json!({"ok": false, "error": format!("fdd run task failed: {e}")}));
+    });
+    let mut result = match tokio::time::timeout(Duration::from_secs(fdd_timeout_secs), join).await {
+        Ok(Ok(v)) => v,
+        Ok(Err(e)) => json!({"ok": false, "error": format!("fdd run task failed: {e}")}),
+        Err(_) => json!({
+            "ok": false,
+            "timeout": true,
+            "error": format!(
+                "fdd run timed out after {fdd_timeout_secs}s (OPENFDD_FDD_RUN_TIMEOUT_SECS)"
+            ),
+        }),
+    };
     // Echo the requested building_id when the edge did not surface one, so the
     // UI/MCP always know which site the run was scoped to.
     if let (Some(bid), Some(obj)) = (echo_building_id, result.as_object_mut()) {
