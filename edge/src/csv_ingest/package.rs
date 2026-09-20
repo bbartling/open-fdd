@@ -1172,11 +1172,8 @@ fn resolve_mapping_equipment_type(
     stamped_types: &BTreeMap<String, String>,
 ) -> (String, Option<String>, &'static str) {
     let raw = stamped_types.get(equipment_id).cloned();
-    let display = crate::equipment_types::api_equipment_type_for(
-        equipment_id,
-        raw.as_deref(),
-    )
-    .to_string();
+    let display =
+        crate::equipment_types::api_equipment_type_for(equipment_id, raw.as_deref()).to_string();
     let source = if raw
         .as_deref()
         .and_then(crate::equipment_types::canonical_kind)
@@ -2184,8 +2181,7 @@ mod tests {
         assert_eq!(display, "AHU");
         assert_eq!(raw.as_deref(), Some("ahu"));
         assert_eq!(source, "package");
-        let (display2, _, source2) =
-            resolve_mapping_equipment_type("AC_1", &BTreeMap::new());
+        let (display2, _, source2) = resolve_mapping_equipment_type("AC_1", &BTreeMap::new());
         assert_eq!(display2, "GENERAL");
         assert_eq!(source2, "id");
     }

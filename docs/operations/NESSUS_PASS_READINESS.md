@@ -12,7 +12,7 @@
 | Exposure manifests | `scripts/security/exposure/*.json` | U3 |
 | MQTT private key mode 640 | `services/mqtt/docker-entrypoint-openfdd.sh` | U4 |
 | Generated MQTT ACL observer | `scripts/security/mqtt_tenant_acl_observer.py` + gate 26 (`OPENFDD_MQTT_ACL_EXECUTE=1`) · fixture `scripts/security/fixtures/mqtt_tenant_acl/` | U4 CLOSED |
-| ZAP AF plan + disposable runner (no JWT in git/artifacts) | `af_plan.yaml` + `run_af_disposable.sh` · `--selftest` → BLOCKED | U5 Soft-OPEN until disposable EXECUTE High=0 |
+| ZAP AF plan + disposable runner (no JWT in git/artifacts) | `af_plan.yaml` + `run_isolated_zap_af.sh` · PASS High=0 disposable `20260920T150920Z` | **U5 CLOSED** |
 | Trivy final-image digests | `scripts/security/trivy_ghcr_digests.sh` | U6 |
 | Nessus importer + synthetic fixtures | `scripts/security/nessus/` | U6 |
 | **Real licensed Nessus on isolated host** | `.nessus` import Critical/High=0 | **BLOCKED Soft-OPEN** |
