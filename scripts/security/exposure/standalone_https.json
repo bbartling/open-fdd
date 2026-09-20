@@ -1,0 +1,43 @@
+{
+  "schema_version": "openfdd_exposure_manifest_v1",
+  "profile": "standalone_https",
+  "note": "Expected exposure for docker/compose.standalone.https.yml — not a live scan.",
+  "services": [
+    {
+      "service": "caddy",
+      "interface": "0.0.0.0",
+      "ports": [{"proto": "tcp", "port": 443, "auth": "tls+app_jwt", "purpose": "HTTPS UI/API entry"}],
+      "denied": ["plaintext management bypass of central"]
+    },
+    {
+      "service": "caddy",
+      "interface": "0.0.0.0",
+      "ports": [{"proto": "tcp", "port": 80, "auth": "redirect_or_acme", "purpose": "HTTP→HTTPS redirect / ACME"}],
+      "denied": ["login over plaintext"]
+    },
+    {
+      "service": "central",
+      "interface": "127.0.0.1",
+      "ports": [{"proto": "tcp", "port": 8080, "auth": "jwt", "purpose": "API behind Caddy only"}],
+      "denied": ["public 0.0.0.0:8080"]
+    },
+    {
+      "service": "mqtt",
+      "interface": "127.0.0.1",
+      "ports": [{"proto": "tcp", "port": 8883, "auth": "mtls+acl", "purpose": "MQTTS local"}],
+      "denied": ["anonymous MQTT", "world-readable server.key"]
+    },
+    {
+      "service": "fieldbus",
+      "interface": "127.0.0.1",
+      "ports": [{"proto": "tcp", "port": 8081, "auth": "api_key_or_loopback", "purpose": "management"}],
+      "denied": ["0.0.0.0 management without API key"]
+    },
+    {
+      "service": "fieldbus",
+      "interface": "OT_LAN",
+      "ports": [{"proto": "udp", "port": 47808, "auth": "bacnet_peers", "purpose": "hosted BACnet/IP"}],
+      "denied": ["Internet-facing BACnet"]
+    }
+  ]
+}

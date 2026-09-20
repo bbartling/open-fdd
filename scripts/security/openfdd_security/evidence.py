@@ -119,13 +119,20 @@ class SecurityReport:
                 f"incomplete: error={counts['error']} blocked={counts['blocked']}"
             )
             return
-        if (
-            counts["pass"] == 0
-            and counts["not_applicable"] == counts["planned"]
-        ):
+        # All-SKIPPED (or SKIPPED+N/A with zero PASS) is not qualification evidence.
+        if counts["pass"] == 0:
             self.overall_status = "BLOCKED"
             self.fully_qualified = False
-            self.reason = "all checks NOT_APPLICABLE; no passing evidence"
+            if counts["skipped"] == counts["planned"]:
+                self.reason = "all checks SKIPPED; no passing evidence"
+            elif (
+                counts["skipped"] + counts["not_applicable"]
+            ) == counts["planned"]:
+                self.reason = (
+                    "no PASS evidence (only SKIPPED/NOT_APPLICABLE)"
+                )
+            else:
+                self.reason = "zero PASS checks; cannot qualify"
             return
         if not self.full_profile:
             self.overall_status = "PASS"
@@ -266,8 +273,13 @@ def validate_report_for_qualification(
     require_executed: bool = True,
     expected_sha256: str | None = None,
     require_full_profile: bool = True,
+    postcheck: bool = False,
 ) -> tuple[bool, str]:
-    """Return (ok, reason). Used by gate 25b and sabotage tests."""
+    """Return (ok, reason). Used by gate 25b and sabotage tests.
+
+    Never trust a report's self-declared ``fully_qualified`` or ``counts``
+    alone — recompute from ``checks[]``. Empty checks cannot qualify.
+    """
     if not report_path.is_file():
         return False, "missing security_report.json"
     raw = report_path.read_text(encoding="utf-8")
@@ -284,16 +296,64 @@ def validate_report_for_qualification(
         return False, "profile mismatch"
     if require_executed and (data.get("dry_run") or not data.get("executed")):
         return False, "dry-run artifact cannot qualify"
-    if require_full_profile and not data.get("full_profile", True):
+    if require_full_profile and not postcheck and not data.get("full_profile", True):
         return False, "suite subset cannot claim full-profile qualification"
-    counts = data.get("counts") or {}
-    if int(counts.get("planned") or 0) == 0:
-        return False, "zero checks"
-    if data.get("overall_status") in ("FAIL", "ERROR"):
-        return False, f"overall_status={data.get('overall_status')}"
-    if not data.get("fully_qualified"):
-        return False, data.get("reason") or "not fully_qualified"
-    # Sidecar hash agreement
+
+    checks = data.get("checks")
+    if not isinstance(checks, list) or len(checks) == 0:
+        return False, "empty or missing checks[]"
+    recomputed = {
+        "planned": len(checks),
+        "pass": 0,
+        "fail": 0,
+        "error": 0,
+        "blocked": 0,
+        "skipped": 0,
+        "not_applicable": 0,
+    }
+    ids: set[str] = set()
+    for c in checks:
+        if not isinstance(c, dict):
+            return False, "check entry is not an object"
+        cid = c.get("check_id")
+        if not cid or cid in ids:
+            return False, f"missing or duplicate check_id {cid!r}"
+        ids.add(str(cid))
+        st = str(c.get("status") or "")
+        key = {
+            "PASS": "pass",
+            "FAIL": "fail",
+            "ERROR": "error",
+            "BLOCKED": "blocked",
+            "SKIPPED": "skipped",
+            "NOT_APPLICABLE": "not_applicable",
+        }.get(st)
+        if key is None:
+            return False, f"invalid check status {st!r}"
+        recomputed[key] += 1
+
+    if recomputed["fail"]:
+        return False, f"{recomputed['fail']} check(s) FAIL"
+    if recomputed["error"]:
+        return False, f"{recomputed['error']} check(s) ERROR"
+    if recomputed["pass"] == 0:
+        return False, "zero PASS checks after recompute"
+
+    if postcheck:
+        if recomputed["blocked"] == recomputed["planned"]:
+            return False, "all checks BLOCKED"
+        if data.get("overall_status") in ("FAIL", "ERROR"):
+            return False, f"overall_status={data.get('overall_status')}"
+    else:
+        if recomputed["blocked"]:
+            return False, "blocked checks remain"
+        if recomputed["skipped"] == recomputed["planned"]:
+            return False, "all checks SKIPPED"
+        if data.get("overall_status") in ("FAIL", "ERROR"):
+            return False, f"overall_status={data.get('overall_status')}"
+        if not data.get("fully_qualified"):
+            return False, data.get("reason") or "not fully_qualified"
+
     meta_path = report_path.parent / "security_report.sha256"
     if meta_path.is_file():
         meta = json.loads(meta_path.read_text(encoding="utf-8"))

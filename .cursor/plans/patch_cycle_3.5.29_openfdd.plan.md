@@ -1,3 +1,5 @@
+> **SUPERSEDED by Wave U** — do not play. Active master: [`docs/operations/WAVE_U_MASTER.md`](../../docs/operations/WAVE_U_MASTER.md) · [`.cursor/plans/wave_u_security_hardening_master.plan.md`](wave_u_security_hardening_master.plan.md). Retained as historical/child detail only.
+
 ---
 name: Open-FDD 3.5.29 patch cycle
 overview: "3.5.29 security-harness-ship + audit §§1–7. PR #948 iterating — inventory honesty, layer-C MT fixes, fail-closed qual. Do not merge until requirement-to-evidence table is green for offline/CI layers. Live execute + MEGA stress after tip pin only."

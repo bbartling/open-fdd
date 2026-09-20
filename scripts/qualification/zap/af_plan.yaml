@@ -1,30 +1,58 @@
----
-# Open-FDD isolated ZAP Automation Framework plan (Wave C / 3.3.30).
-# Target must be a disposable CSV stack (central). Never point at live Railway OT.
-# Auth is exercised by the runner (admin login JWT) before this plan; AF focuses on
-# OpenAPI import + passive scan so CI stays deterministic without fragile JSON-auth plugins.
+# Authenticated ZAP Automation Framework plan (Wave U U5)
+# Disposable web+central only — OT drivers disabled/unreachable.
+# Do NOT upload JWT files; inject via env at runtime and delete after.
+#
+# Coverage gates (must be asserted by runner):
+# - at least one authenticated request to /api/auth/me
+# - site[] nonempty
+# - jobs complete without failOnError=false swallowing errors
+#
+# Active scan stays Soft-OPEN until runner proves auth coverage on a disposable candidate.
+
 env:
   contexts:
     - name: openfdd-disposable
       urls:
-        - "${OPENFDD_ZAP_TARGET}"
+        - "${ZAP_TARGET_ORIGIN}"
       includePaths:
-        - "${OPENFDD_ZAP_TARGET}.*"
-  parameters:
-    failOnError: false
-    failOnWarning: false
-    progressToStdout: true
+        - "${ZAP_TARGET_ORIGIN}.*"
+      authentication:
+        method: "manual"
+        # Prefer header injection from env — never commit tokens:
+        # ZAP_AUTH_HEADER_VALUE="Bearer <ephemeral>"
+      sessionManagement:
+        method: "headers"
+        parameters:
+          Authorization: "${ZAP_AUTH_HEADER_VALUE}"
+      users: []
+
 jobs:
   - type: openapi
     parameters:
-      apiFile: /zap/wrk/openapi.yaml
-      targetUrl: "${OPENFDD_ZAP_TARGET}"
+      apiUrl: "${ZAP_TARGET_ORIGIN}/openapi.json"
+      context: openfdd-disposable
+
+  - type: spider
+    parameters:
+      context: openfdd-disposable
+      url: "${ZAP_TARGET_ORIGIN}/"
+      maxDuration: 5
+
   - type: passiveScan-wait
     parameters:
-      maxDuration: 5
+      maxDuration: 10
+
+  # Active scan: enable only when OPENFDD_ZAP_AF_ACTIVE=1 on disposable candidate.
+  # - type: activeScan
+  #   parameters:
+  #     context: openfdd-disposable
+  #     policy: "Default Policy"
+  #     maxRuleDurationInMins: 5
+  #     maxScanDurationInMins: 30
+
   - type: report
     parameters:
       template: traditional-json
-      reportDir: /zap/wrk
+      reportDir: "${ZAP_REPORT_DIR}"
       reportFile: zap-af-report
-      reportTitle: Open-FDD isolated ZAP AF
+      reportTitle: "Open-FDD ZAP AF (disposable)"

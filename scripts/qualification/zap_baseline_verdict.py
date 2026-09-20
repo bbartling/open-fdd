@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -91,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     if args.selftest:
-        empty = summarize({"site": []})
+        empty = summarize({"site": [{"@name": "http://example", "alerts": []}]})
         assert empty["alert_count"] == 0
         high = summarize(
             {
@@ -112,12 +113,25 @@ def main(argv: list[str] | None = None) -> int:
             raise AssertionError("missing site should error")
         except SystemExit:
             pass
+        # Empty site[] must not qualify (E08)
+        with tempfile.TemporaryDirectory() as td:
+            pth = Path(td) / "empty.json"
+            pth.write_text('{"site": []}', encoding="utf-8")
+            rc = main(["--report", str(pth)])
+            assert rc != 0, "empty site[] must not PASS"
         print("selftest OK")
         return 0
 
     if not args.report:
         p.error("--report is required unless --selftest")
     data = load_report(Path(args.report))
+    site = data.get("site")
+    if not isinstance(site, list) or len(site) == 0:
+        print(
+            "FAIL: ZAP report has empty site[] — no crawl/coverage evidence",
+            file=sys.stderr,
+        )
+        return 2
     measured = summarize(data)
     if args.out:
         Path(args.out).write_text(json.dumps(measured, indent=2) + "\n", encoding="utf-8")

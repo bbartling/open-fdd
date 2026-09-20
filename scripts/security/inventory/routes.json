@@ -1995,7 +1995,9 @@
         "y.authz.get_api_fdd_results"
       ],
       "implemented_check_ids": [
-        "x.preauth.anon401.get_api_fdd_results"
+        "x.preauth.anon401.get_api_fdd_results",
+        "y.authz.a_own_fdd_results",
+        "y.authz.a_foreign_fdd_results_denied"
       ],
       "check_ids": [
         "x.preauth.anon401.get_api_fdd_results"
@@ -2187,7 +2189,8 @@
       ],
       "implemented_check_ids": [
         "x.preauth.anon401.get_api_fdd_session_config",
-        "y.authz.get_api_fdd_session_config"
+        "y.authz.get_api_fdd_session_config",
+        "y.authz.a_foreign_session_config_denied"
       ],
       "check_ids": [
         "x.preauth.anon401.get_api_fdd_session_config",
@@ -4723,7 +4726,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -4735,7 +4738,10 @@
         "x.preauth.anon401.get_api_analytics_rcx_presets",
         "y.authz.get_api_analytics_rcx_presets"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "y.authz.a_own_analytics_rcx_presets",
+        "y.authz.a_foreign_analytics_rcx_presets_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_analytics_rcx_presets",
         "y.authz.get_api_analytics_rcx_presets"
@@ -5135,5 +5141,11 @@
       ],
       "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
     }
-  ]
+  ],
+  "counts": {
+    "PLANNED": 92,
+    "IMPLEMENTED": 17,
+    "BLOCKED_POLICY": 29,
+    "EXCLUDED": 0
+  }
 }

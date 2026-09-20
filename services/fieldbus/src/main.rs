@@ -112,7 +112,30 @@ async fn run(
     .await;
 
     let api_key = auth::api_key();
+    let bind_host = settings.http_host.trim().to_ascii_lowercase();
+    let is_loopback = matches!(
+        bind_host.as_str(),
+        "127.0.0.1" | "localhost" | "::1"
+    );
     let api_key_opt = if api_key.is_empty() {
+        if !is_loopback {
+            tracing::error!(
+                target: "security_audit",
+                event = "fieldbus_auth_open_bind_refused",
+                http_host = %settings.http_host,
+                "refusing non-loopback management bind without OPENFDD_FIELDBUS_API_KEY"
+            );
+            return Err(format!(
+                "OPENFDD_FIELDBUS_API_KEY required when HTTP bind is not loopback (host={})",
+                settings.http_host
+            )
+            .into());
+        }
+        tracing::warn!(
+            target: "security_audit",
+            event = "fieldbus_auth_open_loopback",
+            "API key unset — management open on loopback only"
+        );
         None
     } else {
         info!("API key auth enabled");

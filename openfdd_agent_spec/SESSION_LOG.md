@@ -1,3 +1,18 @@
+## 2026-09-20 — Wave U security spine tip (3.5.34)
+
+- Master `WAVE_U_MASTER.md` SUPERSEDES Wave T; Soft-OPEN inventory; assurance child plan.
+- U1 E01–E08 + CI AppSec security-harness; U2 MT results/rcx; U3 HTTPS+fieldbus fail-closed;
+  U4 MQTT key 640; U5 ZAP AF plan; U6 Nessus readiness + Trivy script.
+- Hang interrupt: stale running reclaim 20m + list_actions reclaim.
+- Product Soft-OPEN (S5/PyPI/SQL/FQ) scheduled **after** this tip’s GHCR smoke.
+
+## 2026-09-20 — Wave U master (supersedes Wave T)
+
+- Active master: `docs/operations/WAVE_U_MASTER.md` + `.cursor/plans/wave_u_security_hardening_master.plan.md`.
+- Soft-OPEN inventory (product + security + ops); Nessus-pass readiness vs assessment (no fake scans).
+- SUPERSEDED banners on Wave T / incomplete wave plans; assurance child copied under `.cursor/plans/`.
+- TESTBED_TAKEOVER + AI_CONTEXT_HANDOFF retarget Wave U; BUG_REPORT Wave U Soft-OPEN rows.
+
 ## 2026-09-20 — Wave T takeover docs + security Burp-contract
 
 - Added `docs/operations/TESTBED_TAKEOVER.md` (pins, tip loop, harness vs Burp/ZAP).

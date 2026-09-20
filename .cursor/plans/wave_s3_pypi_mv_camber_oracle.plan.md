@@ -1,3 +1,5 @@
+> **Wave U child detail** — product Soft-OPEN scheduled **after** the security spine. Do not treat as active master.
+
 ---
 name: Wave S3 PyPI M&V Camber oracle
 overview: "PyPI open_fdd M&V/change-point ports + cookbook; coordinate ECM adapter contracts with S5. GHCR + smoke; no FQ MEGA."

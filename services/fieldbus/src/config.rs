@@ -335,7 +335,7 @@ impl Default for Settings {
             haystack: HaystackSettings::default(),
             rest: RestSettings::default(),
             poll: PollSettings::default(),
-            http_host: "0.0.0.0".into(),
+            http_host: "127.0.0.1".into(),
             http_port: 8080,
             objects_csv: config_dir.join("objects.csv"),
             field_devices_toml: config_dir.join("field_devices.toml"),

@@ -7,11 +7,13 @@
 | Item | Status |
 |------|--------|
 | Product tip / **OPS PINNED (FQ)** | **3.5.31** / **`sha-7b81eb8`** (#951) · health `3.5.31+7b81eb810c0f` · backup `20260919T193923Z` · stress `20260919T195100Z` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave S1 CLOSED** |
-| Hub **smoke tip** (no FQ claim) | **3.5.33** / **`sha-3cd3745`** (#954 DM IRI v2) · health `3.5.33+3cd37451220a` · backup `20260919T231221Z` · SPARQL `/api/model/sparql` **404 unavailable** · **ACME MQTTS PASS** (`vim-1` telemetry, fresh `ingest_ok`, reject_buckets Soft-OPEN `oa_t` only) — mid-wave smoke only |
+| **Wave U tip** (this PR) | **3.5.34** · security spine U0–U6 land + hang reclaim 20m; smoke after GHCR — **no FQ claim** until after-spine MEGA |
+| Hub smoke tip (prior) | **3.5.33** / **`sha-3cd3745`** (#954) · mid-wave smoke only |
 | **Stability audit** `2026-09-20T00:40Z` | Hub `3.5.33+3cd3745` · **MQTTS healthy** · edges=1 `vim-1`/ACME `has_telemetry=true` · ingest climbing after redeploy · **Soft-OPEN `acme-fdd-run-hang`**: `POST /api/fdd/run` `{building_id:ACME}` stays `running` >20m (cleared via `DELETE /api/actions`); not FQ-blocking for smoke tip; next patch cycle candidate. GH: 0 open PRs; no `tip/`/`docs/` remotes; tip Publish fieldbus in flight (hub images PASS). |
 | **Wave S2** `sha-8b0eefe` / 3.5.32 | Camber lock + data-model ADR + DM-06 route matrix (#953). Smoke superseded by S5 tip pin. |
 | **Wave S5 P1** `sha-3cd3745` / 3.5.33 | DM-01/02/03 IRI encoding (`enc_` reserved, `ofdd:eq_<b>__<e>`). Vitest 9/9 + Rust unit 7/7. Soft-OPEN DM-04..10 / ECM / Pages / model gate. |
-| **Wave S Soft-OPEN** | Closed into **Wave T** — see Soft-OPEN rows + [`.cursor/plans/wave_t_soft-open_closeout.plan.md`](../../.cursor/plans/wave_t_soft-open_closeout.plan.md) · takeover [`TESTBED_TAKEOVER.md`](TESTBED_TAKEOVER.md) |
+| **Wave S Soft-OPEN** | Closed into Wave T, then **SUPERSEDED by Wave U** — [`WAVE_U_MASTER.md`](WAVE_U_MASTER.md) · takeover [`TESTBED_TAKEOVER.md`](TESTBED_TAKEOVER.md) |
+| **Wave U** | **Active** — security-first spine (U0–U6); product Soft-OPEN after spine; many tiny VERSION+GHCR tips |
 | **Wave S1 FQ closeout** `20260919T195100Z` | Hub `3.5.31+7b81eb810c0f` · gates 00/25/25b/35 **PASS** · `EXPECTED_EDGE_ID=vim-1` · datasets ACL fixed in #951 |
 | **Wave S1 FQ fail** `20260919T152037Z` | Hub `3.5.30+471ef7ab5bde` · **`fully_qualified=false`**: wrong edge `pi-1`; `y.authz.a_foreign_datasets_denied` 200 → fixed 3.5.31 |
 | **Wave S1 audit** `2026-09-19` | Suite expand #950 / `471ef7a` / 3.5.30; Soft-OPEN `acme-oa-t-dup-reject` unchanged |
@@ -43,9 +45,9 @@
 | **stage-c-idp-mfa-sku** | Commercial IdP/MFA/SKU |
 | **util-interval** | **CLOSED (branch)** · empty `utility_interval`/`bas_submeter` views when CSV absent → UTIL-INTERVAL plans **0h** (not `rules_failed`); pandas oracle: expect 0h when interval frame empty |
 | **r6-ingest-reject** | **CLOSED (branch)** · count on health + `reject_buckets` on `/api/ingest/stats` (no dead-letter dump API) |
-| **kali-zap-af** | Authenticated ZAP AF remains Kali-owned |
+| **kali-zap-af** | **→ Wave U U5** `zap-af-authenticated` · Soft-OPEN until AF evidence on disposable candidate |
 | **wave-o1-tenant-path-migrate** | Hub-root `building=*` still; optional `tenants/{tid}/` migrate |
-| **p2c-mqtt-acl-staging** | Broker ACL proof = Kali staging |
+| **p2c-mqtt-acl-staging** | **→ Wave U U4** merge into `mqtt-key-mode-tenant-acl` where possible |
 | **historian-n-building-scale** | Small Parquet parts × N buildings; offline H4 now; runtime compaction Soft later |
 | **admin-capacity-gauges** | **CLOSED (branch)** · cgroup memory + workspace `statvfs` + Parquet small-file strip on Admin |
 | **railway-capacity-stress** | **CITED** Tip B FQ `20260917T215437Z` gates 24/24b PASS |
@@ -54,11 +56,20 @@
 | **local-bacnet-ot-bench** | **Soft-OPEN** · MS/TP/FEC shared-trunk; Waveshare C FTDI `--mstp-passive` @38400: FEC alone silence; +mini MAC2 → PFM heard. Resume when FEC online on isolated trunk. |
 | **edge-kit-soft** | **OPS** · MT kit `./scripts/openfdd_restore_edge_kit.sh ACME pi-1` → `deploy/mqtt/kits/ACME__pi-1/` · live ACME OT edge id `vim-1` |
 | **s1-datasets-mt-acl** | **CLOSED** (#951 / 3.5.31 / `sha-7b81eb8`) · datasets list/delete MT ACL; FQ `20260919T195100Z` gate 25/25b PASS |
-| **wave-s3-pypi-mv-oracle** | **Soft-OPEN** · IPMVP change-point / G14 / Camber→`open_fdd.ecm_engineering` ports + wheel publish. Plan: `wave_s3_pypi_mv_camber_oracle.plan.md`. |
-| **wave-s4-sql-twins-fq** | **Soft-OPEN** · DataFusion M&V twin + Metering UI + model/ECM gate in FQ MEGA. Plan: `wave_s4_sql_oracle_twins_fq.plan.md`. FQ cite only after this tip. |
-| **wave-s5-dm-remainder** | **Soft-OPEN** · DM-04..10, SEC-ML, JSON-PARITY, SPARQL-SEM, PERF-1, EQ-VOCAB/PERSIST, ECM-ADAPT, DOCS-PAGES, STRESS-GATE. P1 IRI CLOSED on `sha-3cd3745`. |
-| **acme-fdd-run-hang** | **Soft-OPEN** · On smoke tip `3.5.33`/`sha-3cd3745`, ACME `fdd_run_all` action remains `running` >20m (proxy curl timeouts; clear with `DELETE /api/actions`). MQTTS ingest unaffected. Diagnose DataFusion memory/spill / rule set before next product tip; do not greenwash. **Wave T T0.** |
-| **sec-harness-mt-breadth** | **Soft-OPEN** · Grow X/Y IMPLEMENTED MT ACL/JWT coverage so Python **beats manual Burp on isolation matrices** (inventory today ~16 IMPLEMENTED / ~93 PLANNED of ~138). Not XSS/SQLi/AF — ZAP baseline + Soft-OPEN `kali-zap-af`. **Wave T T_sec.** |
+| **wave-s3-pypi-mv-oracle** | **Soft-OPEN** · After Wave U spine · IPMVP change-point / G14 / Camber→`open_fdd.ecm_engineering`. Plan: `wave_s3_pypi_mv_camber_oracle.plan.md` (child detail). |
+| **wave-s4-sql-twins-fq** | **Soft-OPEN** · After Wave U spine · DataFusion M&V twin + Metering UI + FQ MEGA. Plan: `wave_s4_sql_oracle_twins_fq.plan.md`. |
+| **wave-s5-dm-remainder** | **Soft-OPEN** · After Wave U spine · DM-04..10, SEC-ML, … P1 IRI CLOSED on `sha-3cd3745`. |
+| **acme-fdd-run-hang** | **PATCHED in 3.5.34 (partial)** · Stale `running` heavy FDD reclaim **20m** + reclaim on `list_actions`. Soft-OPEN: ACME may still be slow — root-cause DataFusion/spill if runs exceed 20m without finish. |
+| **sec-harness-mt-breadth** | **TIPPED 3.5.34** · U2 results/rcx presets own+foreign; inventory honesty. Continue expanding on later tips. |
+| **sec-harness-evaluator-integrity** | **CLOSED (3.5.34)** · E01–E08 permanent tests + fixes |
+| **sec-ci-wire** | **CLOSED (3.5.34)** · AppSec `security-harness` job |
+| **standalone-https-bootstrap** | **TIPPED 3.5.34** · compose + Caddyfile landed; isolated peer soak Soft-OPEN |
+| **fieldbus-mgmt-failclosed** | **TIPPED 3.5.34** · loopback default + API key required off-loopback |
+| **mqtt-key-mode-tenant-acl** | **PARTIAL 3.5.34** · key mode 640; generated ACL observer Soft-OPEN |
+| **zap-af-authenticated** | **PARTIAL 3.5.34** · AF plan YAML; disposable active run Soft-OPEN |
+| **image-digest-trivy** | **TIPPED 3.5.34** · `trivy_ghcr_digests.sh` (run after GHCR publish) |
+| **nessus-pass-readiness** | **TIPPED 3.5.34** · checklist + importer + fixtures |
+| **nessus-isolated-assessment** | **Soft-OPEN / BLOCKED** · Real licensed Nessus only |
 
 ## Wave R closeout (2026-09-16)
 
