@@ -2,6 +2,9 @@
 name: Wave U security hardening master
 overview: "Security-first Wave U master — Soft-OPEN inventory, supersedes Wave T, many tiny VERSION+GHCR tips, Nessus-pass readiness (no fake scans). Play this; see docs/operations/WAVE_U_MASTER.md."
 todos:
+  - id: independent-acceptance-audit
+    content: Apply wave_u_independent_acceptance_audit.plan.md UA-01 through UA-10 before Wave U acceptance; readiness remains required without a Nessus license.
+    status: pending
   - id: u0-master-md
     content: WAVE_U_MASTER + SUPERSEDE + Soft-OPEN inventory + assurance child + TESTBED retarget
     status: completed
@@ -33,6 +36,12 @@ isProject: false
 ---
 
 # Wave U — Security-first master (supersedes Wave T)
+
+## Acceptance correction — 2026-09-20
+
+Read [the independent acceptance audit](wave_u_independent_acceptance_audit.plan.md) and [root milestones](../../MILESTONES.md) before continuing closeout. The audit reproduced 14 additional false qualifications despite 55 security and 16 qualification tests passing. Existing E01–E08 fixes remain useful, but do not establish complete evaluator integrity.
+
+Readiness is required now: standalone/field-only hardening, image remediation, TLS/exposure/host checks and importer tests need no Nessus license. Only the actual licensed assessment remains BLOCKED. Reconcile any descendant plan that cancels readiness, calls scan acquisition remediation, or closes candidate acceptance from stub/reference-image evidence. Keep Wave U as the master; the audit adds exit criteria and reopens insufficiently verified scope. Both gate 36 checks must be required for the promised final closeout.
 
 **Operator start:** [`TESTBED_TAKEOVER.md`](TESTBED_TAKEOVER.md)  
 **Cursor play target:** [`.cursor/plans/wave_u_security_hardening_master.plan.md`](../../.cursor/plans/wave_u_security_hardening_master.plan.md)  

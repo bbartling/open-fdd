@@ -24,8 +24,14 @@
     {
       "service": "mqtt",
       "interface": "127.0.0.1",
-      "ports": [{"proto": "tcp", "port": 8883, "auth": "mtls+acl", "purpose": "MQTTS local"}],
-      "denied": ["anonymous MQTT", "world-readable server.key"]
+      "ports": [{"proto": "tcp", "port": 8883, "auth": "mtls+acl", "purpose": "MQTTS local (OPENFDD_MQTT_BIND override for LAN edges)"}],
+      "denied": ["anonymous MQTT", "world-readable server.key", "default 0.0.0.0:8883 under HTTPS recipe"]
+    },
+    {
+      "service": "web",
+      "interface": "internal",
+      "ports": [],
+      "denied": ["0.0.0.0:3000 plaintext SPA when HTTPS overlay is applied"]
     },
     {
       "service": "fieldbus",

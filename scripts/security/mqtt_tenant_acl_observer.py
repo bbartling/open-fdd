@@ -427,7 +427,13 @@ def run_live_broker(acl_text: str, art: Path) -> dict:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def observe(*, out_dir: Path, require_live: bool, skip_live: bool) -> dict:
+def observe(
+    *,
+    out_dir: Path,
+    require_live: bool,
+    skip_live: bool,
+    allow_skip_live: bool = False,
+) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     # Ensure committed fixture matches generator.
     write_acl(DEFAULT_ACL)
@@ -440,7 +446,16 @@ def observe(*, out_dir: Path, require_live: bool, skip_live: bool) -> dict:
     ]
 
     live_status = "SKIPPED"
-    if skip_live:
+    if require_live and skip_live:
+        checks.append(
+            {
+                "check": "mqtt.acl.live_broker_observer",
+                "status": "FAIL",
+                "detail": "--require-live and --skip-live are mutually exclusive",
+            }
+        )
+        live_status = "FAIL"
+    elif skip_live:
         checks.append(
             {
                 "check": "mqtt.acl.live_broker_observer",
@@ -485,13 +500,16 @@ def observe(*, out_dir: Path, require_live: bool, skip_live: bool) -> dict:
     elif live and live["status"] == "ERROR":
         overall = "FAIL"
         ok = False
-    elif live and live["status"] == "BLOCKED" and require_live:
+    elif live and live["status"] == "BLOCKED":
         overall = "BLOCKED"
         ok = False
-    elif hard_ok and live and live["status"] in ("PASS", "SKIPPED"):
-        overall = "PASS"
-        ok = True
-    elif hard_ok:
+    elif live and live["status"] == "SKIPPED" and not allow_skip_live:
+        overall = "BLOCKED"
+        ok = False
+    elif hard_ok and live and (
+        live["status"] == "PASS"
+        or (live["status"] == "SKIPPED" and allow_skip_live and not require_live)
+    ):
         overall = "PASS"
         ok = True
     else:
@@ -531,11 +549,17 @@ def main() -> int:
         action="store_true",
         help="content + key-mode only (document live as SKIPPED)",
     )
+    ap.add_argument(
+        "--allow-skip-live",
+        action="store_true",
+        help="explicitly allow content-only PASS when live is SKIPPED",
+    )
     args = ap.parse_args()
     report = observe(
         out_dir=args.out_dir,
         require_live=args.require_live,
         skip_live=args.skip_live,
+        allow_skip_live=args.allow_skip_live,
     )
     print(json.dumps(report, indent=2))
     if report["status"] == "PASS":

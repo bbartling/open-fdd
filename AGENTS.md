@@ -18,6 +18,8 @@ OpenClaw, Claude Desktop, or any MCP host — connect via **JWT REST** and optio
 
 **Software-engineering agent OS:** [`openfdd_agent_spec/`](openfdd_agent_spec/) — architecture locks, skills, Milestone A.
 
+**Release outcomes:** [`MILESTONES.md`](MILESTONES.md) separates implementation, candidate verification and release. Wave U's 2026-09-20 independent acceptance audit is the local Cursor handoff at `.cursor/plans/wave_u_independent_acceptance_audit.plan.md`; follow its reopened acceptance criteria under the Wave U master. A missing Nessus license blocks the actual assessment, not standalone/field readiness work.
+
 **Active recovery / Vibe 21 twin program:** [`tools/open-fdd-vibe21-production/`](tools/open-fdd-vibe21-production/README.md) · capability ledger [`docs/migration/react-rust/capabilities.yaml`](docs/migration/react-rust/capabilities.yaml). Modernization Phase 1+2 exit is **architecture direction**; Vibe 21 recovery is the active qualification program (not “Phase 1 complete”).
 
 **PyPI (`open-fdd`):** ECM engineering + pandas oracle (`open_fdd.rules` / `analytics` / `reporting`) for **third-party tooling** outside the product app. Product FDD is DataFusion on GHCR.

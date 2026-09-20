@@ -22,7 +22,8 @@ OBS_OUT="$ART/observer"
 mkdir -p "$OBS_OUT"
 set +e
 python3 -B "$ROOT/scripts/security/mqtt_tenant_acl_observer.py" \
-  --out-dir "$OBS_OUT" | tee "$ART/observer_stdout.json"
+  --out-dir "$OBS_OUT" \
+  --require-live | tee "$ART/observer_stdout.json"
 rc=${PIPESTATUS[0]}
 set -e
 

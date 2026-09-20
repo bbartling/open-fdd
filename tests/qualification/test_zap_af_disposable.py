@@ -5,9 +5,12 @@ Run: python3 -B -m unittest discover -s tests/qualification -v
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
 import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -81,6 +84,80 @@ class ZapAfSelftestTest(unittest.TestCase):
             verdict = json.loads(out.read_text(encoding="utf-8"))
             self.assertEqual(verdict["status"], "BLOCKED")
             self.assertFalse(verdict.get("execute_requested"))
+
+
+class ZapAfExecuteVerdictTest(unittest.TestCase):
+    def run_synthetic(self, report, *, scanner_rc=0, target="http://fixture.invalid", stale=False):
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td)
+            report_path = work / "zap-af-report.json"
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+            if stale:
+                os.utime(report_path, (1, 1))
+            else:
+                future = time.time() + 5
+                os.utime(report_path, (future, future))
+            out = work / "verdict.json"
+            env = {
+                "ZAP_TARGET_ORIGIN": target,
+                "ZAP_AUTH_HEADER_VALUE": "Bearer synthetic",
+                "ZAP_AF_WORK_DIR": str(work),
+            }
+            with (
+                mock.patch.dict(os.environ, env, clear=True),
+                mock.patch.object(af, "detect_zap", return_value=("zap.sh", "synthetic-zap")),
+                mock.patch.object(af, "_run_zap_sh", return_value=scanner_rc),
+                contextlib.redirect_stdout(io.StringIO()),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                rc = af.run_execute(out)
+            return rc, json.loads(out.read_text(encoding="utf-8"))
+
+    def test_scanner_error_cannot_pass_with_existing_report(self):
+        rc, verdict = self.run_synthetic(
+            {"site": [{"@name": "http://fixture.invalid", "alerts": []}]},
+            scanner_rc=1,
+        )
+        self.assertNotEqual(rc, 0)
+        self.assertEqual(verdict["status"], "FAIL")
+
+    def test_empty_site_object_is_rejected(self):
+        rc, verdict = self.run_synthetic({"site": [{}]})
+        self.assertNotEqual(rc, 0)
+        self.assertNotEqual(verdict["status"], "PASS")
+
+    def test_undispositioned_medium_fails(self):
+        rc, verdict = self.run_synthetic(
+            {
+                "site": [
+                    {
+                        "@name": "http://fixture.invalid",
+                        "alerts": [{"riskcode": "2", "alert": "synthetic-medium"}],
+                    }
+                ]
+            }
+        )
+        self.assertNotEqual(rc, 0)
+        self.assertEqual(verdict["status"], "FAIL")
+
+    def test_stale_or_wrong_target_report_is_rejected(self):
+        cases = (
+            (
+                {"site": [{"@name": "http://fixture.invalid", "alerts": []}]},
+                "http://fixture.invalid",
+                True,
+            ),
+            (
+                {"site": [{"@name": "http://previous.invalid", "alerts": []}]},
+                "http://fixture.invalid",
+                False,
+            ),
+        )
+        for report, target, stale in cases:
+            with self.subTest(stale=stale):
+                rc, verdict = self.run_synthetic(report, target=target, stale=stale)
+                self.assertNotEqual(rc, 0)
+                self.assertNotEqual(verdict["status"], "PASS")
 
 
 if __name__ == "__main__":

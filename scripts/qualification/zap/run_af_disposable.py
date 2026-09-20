@@ -23,9 +23,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 try:
     import yaml
@@ -137,17 +139,27 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(sites, list):
         sites = []
     alerts: list[dict[str, Any]] = []
+    site_names: list[str] = []
+    malformed_sites = 0
     for site in sites:
-        if isinstance(site, dict):
-            for a in site.get("alerts") or []:
-                if isinstance(a, dict):
-                    alerts.append(a)
+        if not isinstance(site, dict):
+            malformed_sites += 1
+            continue
+        name = str(site.get("@name") or site.get("name") or "").strip()
+        if not name and not (site.get("alerts") or []):
+            malformed_sites += 1
+        if name:
+            site_names.append(name)
+        for a in site.get("alerts") or []:
+            if isinstance(a, dict):
+                alerts.append(a)
     for a in data.get("alerts") or []:
         if isinstance(a, dict):
             alerts.append(a)
 
     by_risk = {"High": 0, "Medium": 0, "Low": 0, "Informational": 0, "other": 0}
     high_names: list[str] = []
+    medium_names: list[str] = []
     for a in alerts:
         risk = str(a.get("riskdesc") or a.get("risk") or "").split(" ", 1)[0]
         code = str(a.get("riskcode") or "")
@@ -156,14 +168,46 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
                 code, "other"
             )
         by_risk[risk] = by_risk.get(risk, 0) + 1
+        label = str(a.get("name") or a.get("alert") or "unknown")
         if risk == "High":
-            high_names.append(str(a.get("name") or a.get("alert") or "unknown"))
+            high_names.append(label)
+        if risk == "Medium":
+            medium_names.append(label)
     return {
         "site_count": len(sites),
+        "malformed_sites": malformed_sites,
+        "site_names": site_names,
         "alert_count": len(alerts),
         "by_risk": by_risk,
         "high_alert_names": sorted(set(high_names)),
+        "medium_alert_names": sorted(set(medium_names)),
     }
+
+
+def validate_report_sites(data: dict[str, Any], target_origin: str) -> list[str]:
+    """Require nonempty site objects belonging to the configured target."""
+    sites = data.get("site") or data.get("sites") or []
+    if isinstance(sites, dict):
+        sites = [sites]
+    if not isinstance(sites, list) or not sites:
+        return ["report has no site objects"]
+
+    target = urlsplit(target_origin.rstrip("/"))
+    target_key = (target.scheme.lower(), target.netloc.lower())
+    errors: list[str] = []
+    for index, site in enumerate(sites):
+        if not isinstance(site, dict) or not site:
+            errors.append(f"site[{index}] must be a nonempty object")
+            continue
+        raw_name = str(site.get("@name") or site.get("name") or "").strip()
+        parsed = urlsplit(raw_name)
+        if not raw_name or not parsed.scheme or not parsed.netloc:
+            errors.append(f"site[{index}] missing valid target name")
+        elif (parsed.scheme.lower(), parsed.netloc.lower()) != target_key:
+            errors.append(
+                f"site[{index}] target does not match configured target origin"
+            )
+    return errors
 
 
 def verdict_schema_ok(verdict: dict[str, Any]) -> list[str]:
@@ -371,6 +415,7 @@ def run_selftest(verdict_path: Path) -> int:
 
 
 def run_execute(verdict_path: Path) -> int:
+    os.environ.setdefault("ZAP_AF_RUN_STARTED_EPOCH", str(time.time()))
     hygiene = validate_af_plan(PLAN_PATH)
     if hygiene:
         v = build_verdict(
@@ -461,6 +506,7 @@ def run_execute(verdict_path: Path) -> int:
         dest=plan_dest,
     )
 
+    scan_started_ns = time.time_ns()
     if mode == "docker":
         # Ensure image exists (pull if missing) — low-RAM hosts may already have it.
         try:
@@ -503,6 +549,25 @@ def run_execute(verdict_path: Path) -> int:
         candidates = sorted(work_root.glob("zap-af-report*.json"))
         report_path = candidates[0] if candidates else report_path
 
+    if rc != 0:
+        v = build_verdict(
+            status="FAIL",
+            mode="execute",
+            plan_hygiene_ok=True,
+            high_alerts=0,
+            medium_alerts=0,
+            site_count=0,
+            zap_available=True,
+            zap_detection=mode,
+            zap_exit_code=rc,
+            active_scan=active,
+            execute_requested=True,
+            notes=f"FAIL: ZAP scanner exited nonzero (rc={rc})",
+        )
+        write_verdict(verdict_path, v)
+        print(json.dumps(v, indent=2))
+        return 1
+
     if not report_path.is_file() or report_path.stat().st_size == 0:
         v = build_verdict(
             status="BLOCKED",
@@ -526,6 +591,25 @@ def run_execute(verdict_path: Path) -> int:
         print(json.dumps(v, indent=2))
         return 2
 
+    if report_path.stat().st_mtime_ns < scan_started_ns:
+        v = build_verdict(
+            status="ERROR",
+            mode="execute",
+            plan_hygiene_ok=True,
+            high_alerts=0,
+            medium_alerts=0,
+            site_count=0,
+            zap_available=True,
+            zap_detection=mode,
+            zap_exit_code=rc,
+            active_scan=active,
+            execute_requested=True,
+            notes="ERROR: ZAP report predates this scan run; stale evidence rejected",
+        )
+        write_verdict(verdict_path, v)
+        print(json.dumps(v, indent=2))
+        return 1
+
     try:
         data = json.loads(report_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
@@ -546,31 +630,106 @@ def run_execute(verdict_path: Path) -> int:
         return 1
 
     if not isinstance(data, dict):
-        print("ERROR: ZAP report root must be object", file=sys.stderr)
+        v = build_verdict(
+            status="ERROR",
+            mode="execute",
+            plan_hygiene_ok=True,
+            high_alerts=0,
+            medium_alerts=0,
+            site_count=0,
+            zap_available=True,
+            active_scan=active,
+            execute_requested=True,
+            notes="ERROR: ZAP report root must be object",
+        )
+        write_verdict(verdict_path, v)
+        print(json.dumps(v, indent=2))
+        return 1
+
+    site_errors = validate_report_sites(data, origin)
+    if site_errors:
+        v = build_verdict(
+            status="ERROR",
+            mode="execute",
+            plan_hygiene_ok=True,
+            high_alerts=0,
+            medium_alerts=0,
+            site_count=0,
+            zap_available=True,
+            zap_detection=mode,
+            zap_exit_code=rc,
+            active_scan=active,
+            execute_requested=True,
+            notes="ERROR: invalid ZAP report sites: " + "; ".join(site_errors),
+        )
+        write_verdict(verdict_path, v)
+        print(json.dumps(v, indent=2))
         return 1
 
     summary = summarize_zap_json(data)
     high = int(summary["by_risk"].get("High", 0))
     med = int(summary["by_risk"].get("Medium", 0))
     sites = int(summary["site_count"])
+    malformed_sites = summary.get("malformed_sites", 0)
+
+    # Reject reused/stale reports or wrong-target crawls.
+    report_mtime = report_path.stat().st_mtime
+    run_started = float(os.environ.get("ZAP_AF_RUN_STARTED_EPOCH", "0") or "0")
+    if run_started <= 0:
+        # Infer: if report mtime is far older than process start, treat as stale.
+        run_started = time.time() - 2.0
+    stale = report_mtime + 1.0 < run_started
+    site_names = summary.get("site_names") or []
+    wrong_target = bool(site_names) and not any(
+        origin.rstrip("/") in str(name).rstrip("/")
+        or str(name).rstrip("/") in origin.rstrip("/")
+        for name in site_names
+    )
 
     # Archive report under reports/security without secrets (ZAP JSON usually
     # has URLs, not Authorization headers — still redact defensively).
     archive = verdict_path.parent / "zap_af_report.json"
     archive.write_text(redact(report_path.read_text(encoding="utf-8")), encoding="utf-8")
 
-    if sites == 0:
-        status = "BLOCKED"
-        notes = "BLOCKED: empty site[] — no crawl/auth coverage evidence"
-        exit_code = 2
+    if rc != 0:
+        status = "FAIL"
+        notes = f"FAIL: ZAP scanner exit rc={rc} (report present is not a PASS)"
+        exit_code = 1
+    elif stale:
+        status = "FAIL"
+        notes = "FAIL: ZAP report mtime predates this run (stale/reused artifact)"
+        exit_code = 1
+    elif wrong_target:
+        status = "FAIL"
+        notes = f"FAIL: report site names {site_names!r} do not match target {origin}"
+        exit_code = 1
+    elif malformed_sites or sites == 0:
+        status = "FAIL" if malformed_sites else "BLOCKED"
+        notes = (
+            "FAIL: malformed empty site objects — no crawl/auth coverage"
+            if malformed_sites
+            else "BLOCKED: empty site[] — no crawl/auth coverage evidence"
+        )
+        exit_code = 1 if malformed_sites else 2
     elif high > 0:
         status = "FAIL"
         notes = f"FAIL: High={high} ({', '.join(summary['high_alert_names'][:8])})"
         exit_code = 1
+    elif med > 0:
+        status = "FAIL"
+        notes = f"FAIL: Medium={med} without dispositions"
+        exit_code = 1
+    elif med > 0:
+        status = "FAIL"
+        notes = (
+            f"FAIL: Medium={med} undispositioned "
+            f"({', '.join(summary.get('medium_alert_names', [])[:8])})"
+        )
+        exit_code = 1
     else:
         status = "PASS"
         notes = (
-            f"PASS: disposable AF High=0 Medium={med} site_count={sites} "
+            f"PASS: disposable AF High=0 Medium=0 site_count={sites} "
             f"active_scan={active} zap_rc={rc}"
         )
         exit_code = 0

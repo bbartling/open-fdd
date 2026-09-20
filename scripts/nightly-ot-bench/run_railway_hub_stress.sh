@@ -151,7 +151,9 @@ python3 "$MANIFEST_PY" create \
   --required 25_security_python_harness \
   --required 25b_security_post_stress \
   --required 26_security_mqtt_acl \
-  --required 35_mqtt_telemetry_pause_resume
+  --required 35_mqtt_telemetry_pause_resume \
+  --required 36_mv_sql_oracle_twin \
+  --required 36_model_ecm_qualification
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"
@@ -506,8 +508,7 @@ else
     "MQTT_PAUSE_RESUME=0"
 fi
 
-# --- 36 M&V SQL↔PyPI oracle twin (Wave S4 Soft-OPEN; EXECUTE=1 for live /api compare) ---
-# Not --required until after tip merge + FQ MEGA; default BLOCKED honesty.
+# --- 36 M&V SQL↔PyPI oracle twin (EXECUTE=1 for live /api compare) ---
 set +e
 env ARTIFACT_DIR="$ART/gate36_mv_sql_oracle_twin" \
   bash "$DIR/36_mv_sql_oracle_twin.sh" 2>&1 | tee "$ART/36_mv_sql_oracle_twin.log"

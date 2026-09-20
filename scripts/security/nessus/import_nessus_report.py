@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -39,16 +40,23 @@ def parse_nessus(path: Path) -> dict[str, Any]:
     root = tree.getroot()
     hosts: list[dict[str, Any]] = []
     crit = high = med = low = info = 0
-    plugin_19506 = False
     for report_host in root.iter("ReportHost"):
         name = report_host.get("name") or ""
         items = []
+        credentialed_checks: bool | None = None
         for item in report_host.findall("ReportItem"):
             severity = int(item.get("severity") or 0)
             plugin_id = item.get("pluginID") or ""
             plugin_name = item.get("pluginName") or item.get("plugin_name") or ""
             if plugin_id == "19506":
-                plugin_19506 = True
+                output = item.findtext("plugin_output") or ""
+                match = re.search(
+                    r"Credentialed\s+checks\s*:\s*(yes|no)\b",
+                    output,
+                    re.IGNORECASE,
+                )
+                if match:
+                    credentialed_checks = match.group(1).lower() == "yes"
             if severity >= 4:
                 crit += 1
             elif severity == 3:
@@ -68,7 +76,13 @@ def parse_nessus(path: Path) -> dict[str, Any]:
                     "protocol": item.get("protocol"),
                 }
             )
-        hosts.append({"name": name, "items": items})
+        hosts.append(
+            {
+                "name": name,
+                "items": items,
+                "credentialed_checks": credentialed_checks,
+            }
+        )
     if not hosts:
         raise SystemExit("ERROR: no ReportHost entries — incomplete scan")
     return {
@@ -80,7 +94,8 @@ def parse_nessus(path: Path) -> dict[str, Any]:
             "low": low,
             "info": info,
         },
-        "credentialed_linux_evidence": plugin_19506,
+        "credentialed_linux_evidence": bool(hosts)
+        and all(host.get("credentialed_checks") is True for host in hosts),
         "source_sha256": _sha256(path),
     }
 
@@ -92,12 +107,40 @@ def evaluate(
     allow_medium: bool,
 ) -> tuple[bool, str]:
     c = measured["counts"]
+    empty_hosts = [
+        str(host.get("name") or "<unnamed>")
+        for host in measured.get("hosts") or []
+        if not host.get("items")
+    ]
+    if empty_hosts:
+        return False, "empty ReportHost entries: " + ", ".join(empty_hosts)
     if c["critical"] or c["high"]:
         return False, f"unresolved Critical={c['critical']} High={c['high']}"
     if c["medium"] and not allow_medium:
         return False, f"Medium={c['medium']} without dispositions"
-    if require_credentialed and not measured.get("credentialed_linux_evidence"):
-        return False, "missing plugin 19506 credentialed-check evidence"
+    hosts = measured.get("hosts") or []
+    if not hosts:
+        return False, "no ReportHost entries — incomplete scan"
+    empty_hosts = [
+        str(host.get("name") or "<unnamed>")
+        for host in hosts
+        if not (host.get("items") or []) and host.get("credentialed_checks") is not True
+    ]
+    if empty_hosts:
+        return False, "empty/unassessed ReportHost(s): " + ", ".join(empty_hosts)
+    if require_credentialed:
+        unassessed = [
+            str(host.get("name") or "<unnamed>")
+            for host in hosts
+            if not str(host.get("name") or "").strip()
+            or host.get("credentialed_checks") is not True
+        ]
+        if unassessed:
+            return (
+                False,
+                "hosts missing positive plugin 19506 'Credentialed checks : yes': "
+                + ", ".join(unassessed),
+            )
     return True, "ok"
 
 
