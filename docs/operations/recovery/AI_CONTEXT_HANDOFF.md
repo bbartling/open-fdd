@@ -22,16 +22,16 @@ nav_exclude: true
 
 | # | Path | Why |
 |---|------|-----|
-| 1 | [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../BUG_REPORT_OT_MODBUS_HAYSTACK.md) | Living verdicts + Upcoming trains |
-| 2 | [`patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md`](../patch_trains/openfdd_nightly_bug_train_3.3.27_plus_program.plan.md) | **Active** master — TODOs `ship-327`…`ship-332` link each child in order |
-| 3 | Active child under [`patch_trains/`](../patch_trains/) | One concern per nightly |
-| 4 | [`scripts/qualification/README.md`](../../../scripts/qualification/README.md) | Stress entry; cite `fully_qualified` |
-| 5 | [`STRESS_CLOSEOUT.md`](../STRESS_CLOSEOUT.md) · [`PATCH_CYCLE.md`](../PATCH_CYCLE.md) | Handbook + rev template |
+| 1 | [`TESTBED_TAKEOVER.md`](../TESTBED_TAKEOVER.md) | **Start here** — pins, Wave T order, security tools, tip loop |
+| 2 | [`BUG_REPORT_WAVE_P.md`](../BUG_REPORT_WAVE_P.md) | Living Soft-OPEN + tip / FQ cites |
+| 3 | [`.cursor/plans/wave_t_soft-open_closeout.plan.md`](../../.cursor/plans/wave_t_soft-open_closeout.plan.md) | Active master plan TODOs |
+| 4 | [`scripts/security/README.md`](../../../scripts/security/README.md) | Python harness (MT ACL/JWT) vs ZAP/Burp |
+| 5 | [`STRESS_CLOSEOUT.md`](../STRESS_CLOSEOUT.md) · [`PATCH_CYCLE.md`](../PATCH_CYCLE.md) | Handbook |
 | 6 | [`RAILWAY_DEPLOYMENT.md`](../RAILWAY_DEPLOYMENT.md) | Hub re-pin |
 | 7 | [`openfdd_agent_spec/AGENTS.md`](../../openfdd_agent_spec/AGENTS.md) · [`CONTAINER_AGENT.md`](../../openfdd_agent_spec/CONTAINER_AGENT.md) | Agent rules |
-| 8 | Predecessor (CLOSED): [`patch_trains/openfdd_patch_series_3.3.21_to_3.3.26_program.plan.md`](../patch_trains/openfdd_patch_series_3.3.21_to_3.3.26_program.plan.md) | Historical series |
+| 8 | Predecessor Wave S: [`.cursor/plans/wave_s_master_ecb88a61.plan.md`](../../.cursor/plans/wave_s_master_ecb88a61.plan.md) | Historical Soft-OPEN close |
 
-Mirror Cursor UI plans from `docs/operations/patch_trains/` → `~/.cursor/plans/` (GitHub is source of truth).
+Mirror Cursor UI plans: commit under `.cursor/plans/` on tip PRs; copy to `~/.cursor/plans/` for the plan UI if needed. **GitHub is source of truth.**
 
 ## Locked decisions
 

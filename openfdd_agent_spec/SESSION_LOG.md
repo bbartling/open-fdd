@@ -1,3 +1,9 @@
+## 2026-09-20 — Wave T takeover docs + security Burp-contract
+
+- Added `docs/operations/TESTBED_TAKEOVER.md` (pins, tip loop, harness vs Burp/ZAP).
+- Committed `.cursor/plans/wave_t_soft-open_closeout.plan.md` with **T_sec** MT-breadth (Python must beat manual Burp on isolation; ZAP/Kali keep AF).
+- BUG_REPORT Soft-OPEN `sec-harness-mt-breadth`; AI_CONTEXT_HANDOFF points at Wave T.
+
 ## 2026-09-20 — Wave S smoke tip stability (sha-3cd3745)
 
 - ACME MQTTS **PASS**: hub `3.5.33+3cd37451220a`, edge `vim-1`/ACME `has_telemetry=true`, fresh ingest.

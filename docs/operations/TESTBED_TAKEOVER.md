@@ -1,0 +1,123 @@
+# Test-bed takeover — Open-FDD (Railway hub + local fieldbus)
+
+**Read this first** if you are new to this checkout, machine, or Cursor session.
+Prefer in-repo docs over chat memory. This is the operator path for the current
+Wave T Soft-OPEN closeout.
+
+## Current pins (re-check live before acting)
+
+| Kind | Cite |
+|------|------|
+| **FQ OPS PINNED** | `3.5.31` / `sha-7b81eb8` · stress `reports/nightly-ot-bench_20260919T195100Z/` · edge **`vim-1`** |
+| **Hub smoke tip** (no FQ claim) | `3.5.33` / `sha-3cd3745` · backup `20260919T231221Z` |
+| Living Soft-OPEN / tip log | [`BUG_REPORT_WAVE_P.md`](BUG_REPORT_WAVE_P.md) |
+| Active master plan | [`.cursor/plans/wave_t_soft-open_closeout.plan.md`](../../.cursor/plans/wave_t_soft-open_closeout.plan.md) |
+| Agent law | [`openfdd_agent_spec/AGENTS.md`](../../openfdd_agent_spec/AGENTS.md) · [`CONTAINER_AGENT.md`](../../openfdd_agent_spec/CONTAINER_AGENT.md) |
+| Patch handbook | [`PATCH_CYCLE.md`](PATCH_CYCLE.md) · [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) |
+
+Confirm hub before any tip work:
+
+```bash
+curl -sf https://openfdd-web-production-af99.up.railway.app/api/health \
+  | jq -c '{ok,version,edges,ingest_ok,last_ingest_at,multi_tenant}'
+# edges ≥ 1, edge id vim-1 via JWT /api/edges — see railway-cli skill for login
+```
+
+## Topology (do not invent)
+
+```text
+bensbench x86 fieldbus  --MQTTS-->  Railway openfdd-mqtt
+                                      |
+                                 openfdd-central  <-- JWT REST/SPA
+                                      |
+                                 openfdd-web (Caddy/nginx)
+```
+
+- **Never** local `docker build` of central/web/mqtt/fieldbus on low-RAM hosts — pull GHCR `sha-*`.
+- Fieldbus **not** on Railway. Live OT edge id is **`vim-1`** (not local kit `pi-1` unless that is registered).
+- One open product PR at a time; squash-merge `--delete-branch`; 0 stale `tip/` / `docs/` remotes.
+
+## Wave T execution order
+
+Follow [`.cursor/plans/wave_t_soft-open_closeout.plan.md`](../../.cursor/plans/wave_t_soft-open_closeout.plan.md):
+
+1. **H0** hygiene + ACME MQTTS live + confirm Soft-OPEN hang if still present  
+2. **T0** fix `acme-fdd-run-hang` → `3.5.34` → GHCR → smoke (ACME FDD completes)  
+3. **T1** S5 data-model remainder + model gate → smoke  
+4. **T2** PyPI M&V oracle → smoke  
+5. **T_sec** security harness MT-breadth expand (see below) — may fold into T0 or T1 tip  
+6. **T3** SQL twins + Metering UI → GHCR → fieldbus → **MEGA FQ** `OPENFDD_SECURITY_EXECUTE=1`  
+7. Closeout: BUG_REPORT OPS PINNED + agent_spec pins + Soft-OPEN CLOSED/remainders  
+
+Child detail: `wave_s3_*` / `wave_s4_*` / `wave_s5_*` plans under `.cursor/plans/`.
+
+## Tip loop (every product tip)
+
+```bash
+gh pr list --state open   # must be empty before starting a tip branch
+# … implement + local unit tests (no stack image build) …
+gh pr create && # wait CI green (ignore Copilot AI-scan license fail only)
+gh pr merge --squash --delete-branch
+TIP=$(git rev-parse --short=7 origin/master)
+# wait Publish Open-FDD stack; then:
+./scripts/check_ghcr_tip_stack.sh "sha-$TIP"   # or --hub-only then fieldbus later
+./scripts/railway_central_workspace_backup.sh
+# re-pin central → mqtt → web (openfdd-railway-cli skill); EXPECTED_EDGE_ID=vim-1
+./scripts/openfdd_fieldbus_railway_up.sh "sha-$TIP"
+# smoke or (T3 only) MEGA:
+export OPENFDD_API_BASE=https://openfdd-web-production-af99.up.railway.app
+export OPENFDD_SECURITY_EXECUTE=1   # T3 FQ only
+./scripts/nightly-ot-bench/run_railway_hub_stress.sh
+```
+
+Update [`BUG_REPORT_WAVE_P.md`](BUG_REPORT_WAVE_P.md) + `SESSION_LOG` + ops pin on every tip PR.
+
+## Security tools — what to run (and what Burp is for)
+
+### Division of labor (honest)
+
+| Tool | Owns | Does **not** replace |
+|------|------|----------------------|
+| **Python harness** (`scripts/security/`) | Repeatable **authn / JWT / tenant ACL A/B / role / CSP-CORS / security.txt** evidence → gates **25** / **25b** / **26** | Broad vuln classes (XSS/SQLi/SSRF fuzz), interactive exploration |
+| **ZAP baseline** in hub stress | Passive public URL High=0; Medium via `zap_risk_dispositions.json` only | Authenticated active scan (Kali Soft-OPEN `kali-zap-af`) |
+| **Burp Suite / human AF** | Exploratory, novel payloads, UI-driven flows, AF when Soft-OPEN Kali window opens | Nightly regression (use harness for that) |
+
+**Target for our product:** the Python suite must **outperform a human Burp session on multi-tenant isolation and JWT/role matrices** — more routes, more A/B canaries, deterministic detectors, CI + FQ gates, no click fatigue. It must **not** claim “better than Burp at everything”; ZAP/Burp/Kali still own active-scan breadth until Soft-OPEN AF lands.
+
+Inventory honesty today (~138 routes): only a minority are `IMPLEMENTED` with suite emission — rest `PLANNED` / `BLOCKED_POLICY`. Wave T **T_sec** expands IMPLEMENTED on high-value authenticated GETs + foreign deny (session-config / mapping / datasets / analytics) without marking PLANNED as tested.
+
+### Commands (offline first)
+
+```bash
+python3 -B -m unittest discover -s tests/security -v
+python3 scripts/security/openfdd_security_probe.py --list-suites
+python3 scripts/security/openfdd_security_probe.py \
+  --config scripts/security/config/example_security_fixtures.json \
+  --base-url http://127.0.0.1:18080 \
+  --profile isolated_full --dry-run \
+  --output-dir reports/security/dry-run-demo
+```
+
+Live hub (authorized window only — secrets via Railway env refs, never print):
+
+```bash
+export OPENFDD_SECURITY_EXECUTE=1
+# fixtures: scripts/security/config/railway_hub_security_fixtures.json
+# wired by gates 25/25b inside run_railway_hub_stress.sh
+```
+
+Evidence matrix: [`SECURITY_HARNESS_EVIDENCE_3.5.30.md`](SECURITY_HARNESS_EVIDENCE_3.5.30.md) (refresh tip SHA on Wave T closeout).  
+README: [`scripts/security/README.md`](../../scripts/security/README.md).
+
+## Soft-OPEN that stay Soft-OPEN (do not tip as “done”)
+
+Stage C IdP/MFA · Kali ZAP AF · MQTT ACL staging · local BACnet FEC · `acme-oa-t-dup-reject` catalog noise · RDF-authoritative migration.
+
+## Anti-patterns
+
+- Greenwashing empty SPARQL or PLANNED routes as PASS  
+- Mid-wave FQ MEGA  
+- Citing older `sha-*` stress for a newer tip  
+- Local stack image builds on bensbench  
+- Leaving open PRs / feature branches after merge  
+- Claiming “100% secure” or “Burp obsolete”
