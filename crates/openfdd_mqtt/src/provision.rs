@@ -1,6 +1,7 @@
 //! AWS-IoT-style edge certificate kit generation.
 
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use openfdd_contracts::TopicBuilder;
@@ -8,6 +9,31 @@ use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair, KeyUsagePurpose,
 };
 use serde::Serialize;
+
+/// Write a private key PEM with mode `0600` (owner read/write only).
+///
+/// Uses create+truncate with an explicit unix mode so a permissive umask cannot
+/// leave world-readable key material on disk.
+fn write_private_key_pem(path: &Path, pem: &str) -> anyhow::Result<()> {
+    let mut opts = fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut file = opts.open(path)?;
+    file.write_all(pem.as_bytes())?;
+    file.sync_all()?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = file.metadata()?.permissions();
+        perms.set_mode(0o600);
+        fs::set_permissions(path, perms)?;
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone)]
 pub struct ProvisionRequest {
@@ -49,7 +75,7 @@ pub fn provision_edge_kit(req: &ProvisionRequest) -> anyhow::Result<ProvisionRes
         KeyPair::from_pem(&fs::read_to_string(&ca_key_path)?)?
     } else {
         let key = KeyPair::generate()?;
-        fs::write(&ca_key_path, key.serialize_pem())?;
+        write_private_key_pem(&ca_key_path, &key.serialize_pem())?;
         key
     };
 
@@ -237,7 +263,7 @@ fn issue_client_cert(
     let key = KeyPair::generate()?;
     let cert = params.signed_by(&key, ca_cert, ca_key)?;
     fs::write(cert_out, cert.pem())?;
-    fs::write(key_out, key.serialize_pem())?;
+    write_private_key_pem(key_out, &key.serialize_pem())?;
     Ok(())
 }
 
@@ -287,5 +313,64 @@ mod tests {
             .unwrap();
         assert!(edge_json.contains("mqtt.example.com"));
         assert!(edge_json.contains("fieldbus-1"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_keys_are_mode_600() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let result = provision_edge_kit(&ProvisionRequest {
+            out_dir: tmp.path().to_path_buf(),
+            site_id: "lab".into(),
+            edge_id: "fieldbus-1".into(),
+            broker_host: "mqtt.example.com".into(),
+            broker_port: 8883,
+            ca_dir: None,
+            tenant_id: Some("acme".into()),
+        })
+        .unwrap();
+        for path in [
+            &result.edge_key,
+            &result.central_key,
+            &tmp.path().join("ca/ca.key.pem"),
+        ] {
+            let mode = fs::metadata(path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "{} mode={mode:o}", path.display());
+        }
+    }
+
+    #[test]
+    fn identical_site_edge_ids_isolate_by_tenant() {
+        let tmp = tempfile::tempdir().unwrap();
+        let a = provision_edge_kit(&ProvisionRequest {
+            out_dir: tmp.path().join("tenant-a"),
+            site_id: "bldg1".into(),
+            edge_id: "edge-1".into(),
+            broker_host: "mqtt.example.com".into(),
+            broker_port: 8883,
+            ca_dir: None,
+            tenant_id: Some("tenantA".into()),
+        })
+        .unwrap();
+        let b = provision_edge_kit(&ProvisionRequest {
+            out_dir: tmp.path().join("tenant-b"),
+            site_id: "bldg1".into(),
+            edge_id: "edge-1".into(),
+            broker_host: "mqtt.example.com".into(),
+            broker_port: 8883,
+            ca_dir: None,
+            tenant_id: Some("tenantB".into()),
+        })
+        .unwrap();
+        assert_ne!(a.kit_dir, b.kit_dir);
+        let acl_a = fs::read_to_string(&a.mosquitto_acl).unwrap();
+        let acl_b = fs::read_to_string(&b.mosquitto_acl).unwrap();
+        assert!(acl_a.contains("user edge:tenantA:edge-1"));
+        assert!(acl_b.contains("user edge:tenantB:edge-1"));
+        assert!(!acl_a.contains("edge:tenantB:edge-1"));
+        assert!(!acl_b.contains("edge:tenantA:edge-1"));
+        assert!(acl_a.contains("tenants/tenantA/"));
+        assert!(acl_b.contains("tenants/tenantB/"));
     }
 }

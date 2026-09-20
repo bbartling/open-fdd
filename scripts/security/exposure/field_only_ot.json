@@ -1,0 +1,57 @@
+{
+  "schema_version": "openfdd_exposure_manifest_v1",
+  "profile": "field_only_ot",
+  "note": "Expected exposure for docker/compose.edge.yml (+ optional compose.edge.railway.yml) — fieldbus only, no local central/web/broker. Not a live scan.",
+  "compose": [
+    "docker/compose.edge.yml"
+  ],
+  "requires_local": [],
+  "forbids_local": ["central", "web", "mqtt", "caddy"],
+  "services": [
+    {
+      "service": "fieldbus",
+      "interface": "127.0.0.1",
+      "ports": [
+        {
+          "proto": "tcp",
+          "port": 8081,
+          "auth": "api_key_or_loopback",
+          "purpose": "management (loopback default; remote admin requires TLS tunnel, not bare LAN HTTP)"
+        }
+      ],
+      "denied": [
+        "0.0.0.0 management without API key",
+        "plaintext remote management without TLS-protected tunnel"
+      ]
+    },
+    {
+      "service": "fieldbus",
+      "interface": "OT_LAN",
+      "ports": [
+        {
+          "proto": "udp",
+          "port": 47808,
+          "auth": "bacnet_peers",
+          "purpose": "hosted BACnet/IP"
+        }
+      ],
+      "denied": ["Internet-facing BACnet", "cloud-exposed Modbus"]
+    },
+    {
+      "service": "mqtt_client",
+      "interface": "WAN_outbound",
+      "ports": [
+        {
+          "proto": "tcp",
+          "port": 8883,
+          "auth": "mtls+acl",
+          "purpose": "outbound MQTTS only to cloud/hub broker"
+        }
+      ],
+      "denied": [
+        "local MQTT broker listen",
+        "inbound MQTTS publish without mTLS client kit"
+      ]
+    }
+  ]
+}
