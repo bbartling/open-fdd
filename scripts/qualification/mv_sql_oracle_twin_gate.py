@@ -214,10 +214,17 @@ def main() -> int:
                 _write_verdict(verdict_path, payload)
                 return 1
         except urllib.error.HTTPError as exc:
+            body = exc.read()[:400]
+            tip_hint = ""
+            if exc.code == 404:
+                tip_hint = (
+                    " — hub pin likely predates Wave U /api/analytics/mv; "
+                    "re-pin tip sha after #959 merge before FQ MEGA"
+                )
             payload = {
                 "ok": False,
                 "status": "FAIL",
-                "reason": f"API HTTP {exc.code}: {exc.read()[:400]!r}",
+                "reason": f"API HTTP {exc.code}: {body!r}{tip_hint}",
                 "gate": "36_mv_sql_oracle_twin",
             }
             _write_verdict(verdict_path, payload)
