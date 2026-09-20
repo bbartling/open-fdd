@@ -909,3 +909,10 @@ Newest first. Append after non-trivial agent work.
   unmapped-metadata failures; remaining source findings need integration evidence.
   No product implementation, Rust build, live stress, deployment or security
   qualification was performed in this audit. Cursor owns fixes and execution.
+
+## 2026-09-20 — Wave U independent acceptance audit and milestone index
+
+- Reviewed #959/#960 merged and #961 in flight at source `dc808c8acb315ca9feada97faa21b65ba7773d0f`; inspected plans, actual evaluators/deployment configuration and local scan/stress evidence.
+- Reran 55 security and 16 qualification tests successfully. Fourteen additional synthetic negative cases reproduced false qualification; private audit output records source hashes. Rendered the supported Compose merge with synthetic environment values only. No production credentials, live scans, OT writes, product builds, deployment, merge or publishing performed.
+- Added `.cursor/plans/wave_u_independent_acceptance_audit.plan.md` and root `MILESTONES.md`. Corrected Wave U master/patch/active external FQ handoffs, current acceptance rows in BUG_REPORT, and the readiness checklist; preserved historical runs and unrelated in-flight edits.
+- Reopened insufficient acceptance scope and restored license-free standalone/field readiness as required. Only the actual licensed Nessus assessment remains externally BLOCKED. Cursor owns permanent test/product fixes, candidate integration and final enhanced MEGA evidence.

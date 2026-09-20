@@ -1,5 +1,11 @@
 # Wave U — Security-first master (supersedes Wave T)
 
+## Acceptance correction — 2026-09-20
+
+The independent acceptance review reopened qualification, standalone, MQTT, ZAP and image/readiness acceptance. Existing component fixes and historical runs remain recorded. See [milestones](../../MILESTONES.md), [the living tracker](BUG_REPORT_WAVE_P.md) and the local Cursor handoff `.cursor/plans/wave_u_independent_acceptance_audit.plan.md` for execution criteria. Wave U remains the master.
+
+**A Nessus license is not required for readiness work.** Complete supported standalone and field-only hardening, evaluated tooling, host/image/port/TLS evidence and importer fixtures now. Only the actual licensed assessment is BLOCKED. Both gate 36 tests must govern final product qualification. Scan completion is distinct from remediation; a PR merge is distinct from candidate acceptance. Descendant plans may not cancel this scope or substitute earlier/component evidence for the final candidate.
+
 **Operator start:** [`TESTBED_TAKEOVER.md`](TESTBED_TAKEOVER.md)  
 **Cursor play target:** [`.cursor/plans/wave_u_security_hardening_master.plan.md`](../../.cursor/plans/wave_u_security_hardening_master.plan.md)  
 **Findings child:** [`.cursor/plans/security_railway_ot_nessus_assurance.plan.md`](../../.cursor/plans/security_railway_ot_nessus_assurance.plan.md)  
@@ -40,7 +46,7 @@
 | `sec-harness-evaluator-integrity` | U1 | E01–E08 false-PASS + S01 identity |
 | `sec-ci-wire` | U1 | CI runs `tests/security` + `tests/qualification` |
 | `sec-harness-mt-breadth` | U2 | X/Y IMPLEMENTED MT ACL/JWT (beat Burp on isolation) |
-| `standalone-https-bootstrap` | U3 **CLOSED** | Compose + Caddy HTTP→HTTPS; `peer_probe_https.py` selftest + optional peer soak |
+| `standalone-https-bootstrap` | U3 **REOPENED** | Supported merged deployment plus actual candidate and peer evidence required; component checks are partial |
 | `fieldbus-mgmt-failclosed` | U3 | Loopback default; no silent open without key |
 | `mqtt-key-mode-tenant-acl` | U4 | Private keys not world-readable; generated ACL + observer |
 | `zap-af-authenticated` | U5 | Was `kali-zap-af` — AF on disposable candidate |

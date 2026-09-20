@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +19,7 @@ from generate_acl import (  # noqa: E402
     semantic_errors,
     write_acl,
 )
+import mqtt_tenant_acl_observer as observer  # noqa: E402
 
 
 class MqttTenantAclFixtureTest(unittest.TestCase):
@@ -61,6 +63,41 @@ class MqttTenantAclFixtureTest(unittest.TestCase):
         text = ep.read_text(encoding="utf-8")
         self.assertIn("chmod 640", text)
         self.assertIn("server.key.pem", text)
+
+    def test_skipped_live_is_not_ok_by_default(self):
+        with tempfile.TemporaryDirectory() as td, mock.patch.object(
+            observer, "docker_available", return_value=False
+        ):
+            verdict = observer.observe(
+                out_dir=Path(td), require_live=False, skip_live=False
+            )
+        self.assertFalse(verdict["ok"])
+        self.assertNotEqual(verdict["status"], "PASS")
+
+    def test_require_live_plus_skip_live_fails_closed(self):
+        with tempfile.TemporaryDirectory() as td:
+            verdict = observer.observe(
+                out_dir=Path(td), require_live=True, skip_live=True
+            )
+        self.assertFalse(verdict["ok"])
+        self.assertNotEqual(verdict["status"], "PASS")
+
+    def test_live_blocked_is_never_ok(self):
+        blocked = {
+            "check": "mqtt.acl.live_broker_observer",
+            "status": "BLOCKED",
+            "detail": "synthetic dependency unavailable",
+        }
+        with (
+            tempfile.TemporaryDirectory() as td,
+            mock.patch.object(observer, "docker_available", return_value=True),
+            mock.patch.object(observer, "run_live_broker", return_value=blocked),
+        ):
+            verdict = observer.observe(
+                out_dir=Path(td), require_live=False, skip_live=False
+            )
+        self.assertFalse(verdict["ok"])
+        self.assertNotEqual(verdict["status"], "PASS")
 
 
 if __name__ == "__main__":

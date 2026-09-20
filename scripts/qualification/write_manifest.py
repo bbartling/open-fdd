@@ -163,6 +163,32 @@ def finalize(manifest: dict[str, Any]) -> dict[str, Any]:
 
     blockers: list[str] = []
     fails: list[str] = []
+    if manifest.get("environment_class") == "railway_field":
+        candidate_sha = str(
+            ((manifest.get("candidate") or {}).get("source_sha")) or ""
+        ).strip()
+        if not candidate_sha:
+            blockers.append("railway_field missing candidate_sha")
+
+    for gid, gate in (manifest.get("gates") or {}).items():
+        if gate.get("status") != "PASS":
+            continue
+        contradictions: list[str] = []
+        hashes = gate.get("artifact_hashes") or {}
+        for raw_path in gate.get("artifact_paths") or []:
+            path = Path(raw_path)
+            current = _sha256_file(path)
+            recorded = hashes.get(raw_path)
+            if current is None:
+                contradictions.append(f"artifact missing: {raw_path}")
+            elif not recorded:
+                contradictions.append(f"artifact hash missing: {raw_path}")
+            elif current != recorded:
+                contradictions.append(f"artifact changed after recording: {raw_path}")
+        if contradictions:
+            gate["status"] = "ERROR"
+            gate["failure_reason"] = "; ".join(contradictions)
+
     if not required:
         blockers.append("no required gates declared")
     for gid in required:

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<NessusClientData_v2>
+  <Report name="synthetic">
+    <ReportHost name="synthetic-host"/>
+  </Report>
+</NessusClientData_v2>

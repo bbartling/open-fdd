@@ -480,29 +480,38 @@ def _login_me(
             return
         expected_tenants = list(getattr(ident, "tenant_ids", None) or [])
         if expected_tenants:
-            got_tenant = str(
-                me_data.get("tenant_id")
-                or me_data.get("tenant")
-                or ""
-            ).strip()
-            got_list = me_data.get("tenants") if isinstance(me_data.get("tenants"), list) else []
-            ok_tenant = False
-            if got_tenant and got_tenant in expected_tenants:
-                ok_tenant = True
-            if any(str(t) in expected_tenants for t in got_list):
-                ok_tenant = True
-            if got_tenant or got_list:
-                if not ok_tenant:
-                    ctx.check(
-                        check_id,
-                        "X",
-                        f"login/me {alias}",
-                        "FAIL",
-                        detail=f"tenant mismatch expected={expected_tenants} got={got_tenant or got_list}",
-                        identity_alias=alias,
-                        detector_id="wrong_identity",
-                    )
-                    return
+            raw_tenants = me_data.get("tenant_ids")
+            if raw_tenants is None:
+                raw_tenants = me_data.get("tenants")
+            if raw_tenants is None:
+                raw_tenants = me_data.get("tenant_id") or me_data.get("tenant")
+            if isinstance(raw_tenants, list):
+                got_tenants = [
+                    str(tenant).strip()
+                    for tenant in raw_tenants
+                    if str(tenant).strip()
+                ]
+            elif raw_tenants is None:
+                got_tenants = []
+            else:
+                tenant = str(raw_tenants).strip()
+                got_tenants = [tenant] if tenant else []
+            expected_set = {str(tenant).strip() for tenant in expected_tenants}
+            got_set = set(got_tenants)
+            if got_set != expected_set:
+                ctx.check(
+                    check_id,
+                    "X",
+                    f"login/me {alias}",
+                    "FAIL",
+                    detail=(
+                        f"tenant membership mismatch expected={sorted(expected_set)} "
+                        f"got={sorted(got_set)}"
+                    ),
+                    identity_alias=alias,
+                    detector_id="wrong_identity",
+                )
+                return
         ctx.check(
             check_id,
             "X",

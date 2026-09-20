@@ -35,7 +35,8 @@ jobs:
         env:
           DISPATCH_TAG: ${{ inputs.image_tag }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          FALLBACK_TAG: sha-10d1ec5
+          # Last known published Wave U tip (update when master GHCR lags PR base).
+          FALLBACK_TAG: sha-f44b45f
         run: |
           set -euo pipefail
           tag_exists() {
@@ -53,12 +54,13 @@ jobs:
             [[ "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
             tag="sha-${PR_BASE_SHA:0:7}"
             if ! tag_exists "$tag"; then
-              echo "base tip $tag not published; trying Wave B product fallback $FALLBACK_TAG" >&2
+              echo "base tip $tag not published; trying published fallback $FALLBACK_TAG" >&2
               tag="$FALLBACK_TAG"
             fi
           fi
           if [[ ! "$tag" =~ ^sha-[0-9a-f]{7}$ ]] || ! tag_exists "$tag"; then
             echo "no usable published mqtt tip (tried $tag)" >&2
+            echo "re-run after master GHCR publish or workflow_dispatch with an existing sha-*" >&2
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"

@@ -25,7 +25,10 @@ ART="${ARTIFACT_DIR:-$ROOT/reports/waveC_zap_af_$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$ART"
 WRK="$ART/zap_wrk"
 mkdir -p "$WRK"
-chmod -R a+rwX "$ART" "$WRK"
+# Restrict artifact tree (no JWT on disk). ZAP image often runs as uid 1000 —
+# make wrk world-accessible for the mount only (plan/report; never secrets).
+chmod 700 "$ART"
+chmod 777 "$WRK"
 cp "$ROOT/docs/openapi.yaml" "$WRK/openapi.yaml"
 
 NET="openfdd-zap-af-${RANDOM}"
@@ -93,8 +96,9 @@ if [[ -z "$TOKEN" ]]; then
   echo "FAIL: could not mint admin JWT for ZAP context" >&2
   exit 1
 fi
-echo "$TOKEN" >"$ART/admin.jwt"
-echo "OK admin JWT minted"
+# UA-04: never persist JWT to artifact disk (env injection only).
+rm -f "$ART/admin.jwt" "$WRK/admin.jwt" 2>/dev/null || true
+echo "OK admin JWT minted (ephemeral env only)"
 
 # Materialize AF plan: expand origin/reportDir only. Authorization stays
 # ${ZAP_AUTH_HEADER_VALUE} and is injected via docker -e (never written to disk).
@@ -115,8 +119,8 @@ cp "$WRK/af_plan.yaml" "$ART/af_plan.rendered.yaml"
 
 echo "== ZAP Automation Framework (OpenAPI + passive) =="
 set +e
-# Run as root in CI so mounted report dir is writable regardless of host uid mapping.
-docker run --rm --network "$NET" \
+# Run as root so mounted wrk is readable/writable regardless of host uid mapping.
+docker run --rm --user 0:0 --network "$NET" \
   -v "$WRK:/zap/wrk:rw" \
   -e ZAP_AUTH_HEADER_VALUE="Bearer ${TOKEN}" \
   "$ZAP_IMAGE" \
@@ -124,7 +128,7 @@ docker run --rm --network "$NET" \
   >"$ART/zap_af.stdout.log" 2>"$ART/zap_af.stderr.log"
 ZAP_RC=$?
 set -e
-chmod -R a+rwX "$WRK" 2>/dev/null || true
+chmod -R u+rwX,g+rwX,o-rwx "$WRK" 2>/dev/null || true
 
 # Prefer AF report even when ZAP exits non-zero (warnings / auth soft-fail).
 AF_STATUS="PASS"
@@ -137,7 +141,7 @@ ${TARGET_URL}api/datasets
 ${TARGET_URL}api/agent/tools
 EOF
   set +e
-  docker run --rm --network "$NET" \
+  docker run --rm --user 0:0 --network "$NET" \
     -v "$WRK:/zap/wrk:rw" \
     -w /zap/wrk \
     "$ZAP_IMAGE" \
@@ -151,7 +155,7 @@ EOF
   FB_RC=$?
   set -e
   echo "fallback_rc=$FB_RC" | tee "$ART/fallback_rc.txt"
-  chmod -R a+rwX "$WRK" 2>/dev/null || true
+  chmod -R u+rwX,g+rwX,o-rwx "$WRK" 2>/dev/null || true
   # baseline exits 2 on warnings — still accept JSON report with 0 High
   if [[ -f "$WRK/zap-fallback-report.json" ]]; then
     AF_STATUS="FALLBACK"
@@ -206,6 +210,10 @@ fi
 SUITE_PASS=true
 [[ "$HIGH" == "0" ]] || SUITE_PASS=false
 [[ -n "$REPORT" ]] || SUITE_PASS=false
+# UA-04: fallback/warning-only reports cannot satisfy authenticated acceptance.
+if [[ "$AF_STATUS" == "FALLBACK" || "$AF_STATUS" == "BLOCKED" ]]; then
+  SUITE_PASS=false
+fi
 
 jq -n \
   --arg tag "$TAG" \
@@ -224,7 +232,7 @@ jq -n \
     high_alerts: $high,
     medium_alerts: $med,
     pass: $pass,
-    notes: "Disposable central only; no live OT activeScan. Field Railway stress remains public zap-baseline."
+    notes: "Disposable central only; no live OT activeScan. Fallback reports do not satisfy authenticated acceptance."
   }' | tee "$ART/verdict.json"
 
 if [[ "$SUITE_PASS" != "true" ]]; then

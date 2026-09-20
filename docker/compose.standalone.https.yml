@@ -1,12 +1,13 @@
-# Open-FDD standalone HTTPS overlay (Wave U U3)
-# Combine with compose.standalone.yml + compose.react.yml (or a web service):
+# Open-FDD standalone HTTPS overlay (Wave U U3 / UA-02)
+# Combine with compose.standalone.yml + compose.react.yml:
 #   OPENFDD_CENTRAL_BIND=127.0.0.1 \
 #   docker compose -f docker/compose.standalone.yml \
 #     -f docker/compose.react.yml \
-#     -f docker/compose.standalone.https.yml up -d
+#     -f docker/compose.standalone.https.yml config
 #
+# Secure recipe: Caddy owns LAN entry (80/443). Web and central are not published
+# on the LAN; MQTT binds loopback unless OPENFDD_MQTT_BIND is set for edge clients.
 # Requires deploy/caddy/Caddyfile.standalone.https + certs under deploy/caddy/certs/
-# (or ACME via OPENFDD_CADDY_EMAIL). Central must stay loopback — set OPENFDD_CENTRAL_BIND=127.0.0.1.
 
 services:
   caddy:
@@ -21,6 +22,26 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    depends_on:
+      - web
+      - central
+
+  # Remove plaintext SPA / API publication from merged base files.
+  # Compose v2 `!reset` clears inherited ports so only Caddy is the LAN HTTP(S) entry.
+  web:
+    ports: !reset []
+    expose:
+      - "8080"
+
+  central:
+    ports: !reset []
+    expose:
+      - "8080"
+
+  mqtt:
+    # Replace base publication; loopback by default (LAN edges set OPENFDD_MQTT_BIND=0.0.0.0).
+    ports: !override
+      - "${OPENFDD_MQTT_BIND:-127.0.0.1}:8883:8883"
 
   fieldbus:
     environment:
