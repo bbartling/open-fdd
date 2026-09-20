@@ -28,6 +28,13 @@ set -e
 
 if [[ -f "$OBS_OUT/mqtt_acl_observer.json" ]]; then
   cp "$OBS_OUT/mqtt_acl_observer.json" "$ART/mqtt_acl_verdict.json"
+  # run_security_gate records from security_gate_verdict.json (not mqtt_acl_verdict).
+  jq '{
+    ok: (.ok // (.status=="PASS")),
+    status: (.status // (if .ok==true then "PASS" else "FAIL" end)),
+    reason: (.reason // .detail // .live_broker // ""),
+    source: "mqtt_acl_observer.json"
+  }' "$ART/mqtt_acl_verdict.json" | tee "$ART/security_gate_verdict.json" >/dev/null
 else
   jq -n --argjson rc "$rc" '{
     ok:false,
@@ -35,7 +42,7 @@ else
     reason:"observer did not write mqtt_acl_observer.json",
     exit_code:$rc,
     soft_open:"mqtt-key-mode-tenant-acl"
-  }' | tee "$ART/mqtt_acl_verdict.json"
+  }' | tee "$ART/mqtt_acl_verdict.json" | tee "$ART/security_gate_verdict.json"
   exit 1
 fi
 
@@ -51,10 +58,19 @@ if [[ "$ut_rc" -ne 0 ]]; then
   jq --argjson ut "$ut_rc" '.ok=false | .status="FAIL" | .unittest_rc=$ut' \
     "$ART/mqtt_acl_verdict.json" >"$ART/mqtt_acl_verdict.json.tmp"
   mv "$ART/mqtt_acl_verdict.json.tmp" "$ART/mqtt_acl_verdict.json"
+  cp "$ART/mqtt_acl_verdict.json" "$ART/security_gate_verdict.json"
   exit 1
 fi
 
 if [[ "$rc" -eq 0 ]]; then
+  # Refresh structured verdict after unittest PASS path.
+  jq '{
+    ok: (.ok // (.status=="PASS")),
+    status: (.status // (if .ok==true then "PASS" else "FAIL" end)),
+    reason: (.reason // .detail // .live_broker // "PASS"),
+    source: "mqtt_acl_observer.json",
+    unittest_rc: 0
+  }' "$ART/mqtt_acl_verdict.json" >"$ART/security_gate_verdict.json"
   exit 0
 fi
 exit "$rc"

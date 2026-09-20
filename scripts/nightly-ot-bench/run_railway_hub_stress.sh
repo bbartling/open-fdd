@@ -77,6 +77,11 @@ if [[ -z "${OPENFDD_USER_B_OPS_PASSWORD:-}" ]] && command -v railway >/dev/null 
   OPENFDD_USER_B_OPS_PASSWORD="$(_fetch_railway_var OPENFDD_USER_B100_OPS_PASSWORD || true)"
   export OPENFDD_USER_B_OPS_PASSWORD
 fi
+# Gate 36 model/ECM reads OPENFDD_OPS_A/B_PASSWORD — alias Railway ops names.
+export OPENFDD_OPS_A_PASSWORD="${OPENFDD_OPS_A_PASSWORD:-${OPENFDD_USER_A_OPS_PASSWORD:-}}"
+export OPENFDD_OPS_B_PASSWORD="${OPENFDD_OPS_B_PASSWORD:-${OPENFDD_USER_B_OPS_PASSWORD:-}}"
+export OPENFDD_OPS_A_USER="${OPENFDD_OPS_A_USER:-${OPENFDD_USER_A_OPS_USER:-acme-ops}}"
+export OPENFDD_OPS_B_USER="${OPENFDD_OPS_B_USER:-${OPENFDD_USER_B_OPS_USER:-b100-ops}}"
 if [[ -z "${OPENFDD_SECURITY_CONFIG:-}" && "$RAILWAY_BASE" == https://openfdd-web-production-af99.up.railway.app* ]]; then
   export OPENFDD_SECURITY_CONFIG="$ROOT/scripts/security/config/railway_hub_security_fixtures.json"
 fi
