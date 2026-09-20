@@ -1,0 +1,22 @@
+{
+  "baseline_end": "2023-12",
+  "dd_kind": "hdd",
+  "rows": [
+    {"period": "2023-01", "energy": 2100.0, "degree_days": 800.0},
+    {"period": "2023-02", "energy": 1900.0, "degree_days": 700.0},
+    {"period": "2023-03", "energy": 1500.0, "degree_days": 500.0},
+    {"period": "2023-04", "energy": 1100.0, "degree_days": 300.0},
+    {"period": "2023-05", "energy": 700.0, "degree_days": 100.0},
+    {"period": "2023-06", "energy": 600.0, "degree_days": 50.0},
+    {"period": "2023-07", "energy": 540.0, "degree_days": 20.0},
+    {"period": "2023-08", "energy": 560.0, "degree_days": 30.0},
+    {"period": "2023-09", "energy": 660.0, "degree_days": 80.0},
+    {"period": "2023-10", "energy": 1000.0, "degree_days": 250.0},
+    {"period": "2023-11", "energy": 1400.0, "degree_days": 450.0},
+    {"period": "2023-12", "energy": 2000.0, "degree_days": 750.0},
+    {"period": "2024-01", "energy": 1960.0, "degree_days": 780.0},
+    {"period": "2024-02", "energy": 1780.0, "degree_days": 690.0},
+    {"period": "2024-03", "energy": 1360.0, "degree_days": 480.0}
+  ],
+  "notes": "energy = 500 + 2*DD; reporting months −100 each → savings_reporting_total ≈ 300"
+}

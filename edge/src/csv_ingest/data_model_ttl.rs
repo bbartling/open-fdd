@@ -102,10 +102,17 @@ pub fn package_mapping_to_turtle(inventory: &Value) -> String {
             .map(str::trim)
             .filter(|s| !s.is_empty())
         {
-            out.push_str(&format!(
-                " ;\n  ofdd:parentAhu {}",
-                equipment_subject(building_id, parent)
-            ));
+            // DM-04: only emit confirmed/package parent edges — skip id-heuristic proposals.
+            let source = eq
+                .get("parent_ahu_source")
+                .and_then(|v| v.as_str())
+                .unwrap_or("package");
+            if source != "inferred" {
+                out.push_str(&format!(
+                    " ;\n  ofdd:parentAhu {}",
+                    equipment_subject(building_id, parent)
+                ));
+            }
         }
 
         let mut bindings: Vec<(String, String)> = Vec::new();
@@ -162,6 +169,23 @@ pub fn package_mapping_to_turtle(inventory: &Value) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn turtle_skips_inferred_parent_ahu() {
+        let inv = json!({
+            "building_id": "B1",
+            "equipment": [{
+                "equipment_id": "VAV_9",
+                "equipment_type": "VAV",
+                "parent_ahu": "AHU_1",
+                "parent_ahu_source": "inferred",
+                "roles": { "ZONE_T": "zone_t" }
+            }]
+        });
+        let ttl = package_mapping_to_turtle(&inv);
+        assert!(ttl.contains("ofdd:eq_B1__VAV_9"));
+        assert!(!ttl.contains("ofdd:parentAhu"), "{ttl}");
+    }
 
     #[test]
     fn turtle_includes_prefix_and_ahu_role_not_phantom() {

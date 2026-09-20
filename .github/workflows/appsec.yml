@@ -106,3 +106,5 @@ jobs:
         run: python3 scripts/qualification/zap_baseline_verdict.py --selftest
       - name: Nessus importer selftest
         run: python3 scripts/security/nessus/import_nessus_report.py --selftest
+      - name: Standalone HTTPS bootstrap selftest
+        run: python3 scripts/security/peer_probe_https.py --selftest

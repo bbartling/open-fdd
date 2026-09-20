@@ -1,4 +1,6 @@
 # Example Mosquitto ACL — copy/generate into deploy/mqtt/acl/ (directory) or kit path.
+# Synthetic Wave L A/B fixture (no live secrets): scripts/security/fixtures/mqtt_tenant_acl/
+# Observer: scripts/security/mqtt_tenant_acl_observer.py · gate 26 OPENFDD_MQTT_ACL_EXECUTE=1
 # Legacy (mode OFF):
 # user edge:local:fieldbus-1
 # topic write openfdd/v1/sites/local/edges/fieldbus-1/#

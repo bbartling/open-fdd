@@ -421,6 +421,15 @@ else
     "WAVE_O_ADMIN_ACL=0"
 fi
 
+# --- 36 model/ECM qualification (S5 wire; FQ evidence on S4) ---
+if [[ "${MODEL_ECM_GATE:-1}" == "1" ]]; then
+  run_gate "36_model_ecm_qualification" "36 model/ECM qualification" \
+    env ARTIFACT_DIR="$ART" bash "$DIR/36_model_ecm_qualification.sh"
+else
+  record_gate "36_model_ecm_qualification" SKIPPED "36 model/ECM qualification" \
+    "MODEL_ECM_GATE=0"
+fi
+
 # --- 23 Wave O security headers / security.txt / CORS / login throttle ---
 if [[ "${WAVE_O_SECURITY:-1}" == "1" ]]; then
   run_gate "23_wave_o_security" "23 Wave O security surface" \
@@ -490,6 +499,28 @@ if [[ "${MQTT_PAUSE_RESUME:-1}" == "1" ]]; then
 else
   record_gate "35_mqtt_telemetry_pause_resume" SKIPPED "35 MQTT telemetry pause/resume" \
     "MQTT_PAUSE_RESUME=0"
+fi
+
+# --- 36 M&V SQL↔PyPI oracle twin (Wave S4 Soft-OPEN; EXECUTE=1 for live /api compare) ---
+# Not --required until after tip merge + FQ MEGA; default BLOCKED honesty.
+set +e
+env ARTIFACT_DIR="$ART/gate36_mv_sql_oracle_twin" \
+  bash "$DIR/36_mv_sql_oracle_twin.sh" 2>&1 | tee "$ART/36_mv_sql_oracle_twin.log"
+MV_RC=${PIPESTATUS[0]}
+set -e
+if [[ "$MV_RC" -eq 0 ]]; then
+  record_gate "36_mv_sql_oracle_twin" PASS "36 M&V SQL↔PyPI twin" "" \
+    "$ART/36_mv_sql_oracle_twin.log" \
+    "$ART/gate36_mv_sql_oracle_twin/mv_sql_oracle_twin_verdict.json"
+elif [[ "$MV_RC" -eq 2 ]]; then
+  record_gate "36_mv_sql_oracle_twin" BLOCKED "36 M&V SQL↔PyPI twin" \
+    "OPENFDD_SECURITY_EXECUTE!=1; Soft-OPEN until FQ MEGA" \
+    "$ART/36_mv_sql_oracle_twin.log" \
+    "$ART/gate36_mv_sql_oracle_twin/mv_sql_oracle_twin_verdict.json"
+else
+  record_gate "36_mv_sql_oracle_twin" FAIL "36 M&V SQL↔PyPI twin" "exit=$MV_RC" \
+    "$ART/36_mv_sql_oracle_twin.log" \
+    "$ART/gate36_mv_sql_oracle_twin/mv_sql_oracle_twin_verdict.json"
 fi
 
 # --- 25b security postcheck (re-auth + bounded reads). Runs even after prior fails. ---

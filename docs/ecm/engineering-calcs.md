@@ -144,6 +144,11 @@ See module table above (`schedule_align`, `optimal_start`, `dat_reset`/`sat_rese
 - Label **FITTED** if hours were reverse-fitted; **NO_EP** when no patch; **FAIL_SIGN** is a model/measure problem.
 - Never greenwash fitted exact matches as independent BALLPARK.
 
+### IPMVP change-point / G14 (Wave S3 oracle)
+
+Pandas helpers (not product HTTP): `score_g14_monthly`, `fit_changepoint`, `select_changepoint`,
+`option_c_savings` — see [IPMVP change-point & G14]({{ site.baseurl }}/ecm/ipmvp-changepoint.html).
+
 Full workflow: [Purpose — Excel + EnergyPlus]({{ site.baseurl }}/ecm/purpose-excel-energyplus.html) · [AI agents & skills]({{ site.baseurl }}/ecm/agent-context.html).
 
 ## Related skills (repo)

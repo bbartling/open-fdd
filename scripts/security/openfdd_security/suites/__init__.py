@@ -3,7 +3,11 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
+import tempfile
 import time
+from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlencode
 
@@ -145,6 +149,10 @@ def run_suite_x(ctx: SuiteContext) -> None:
         ("/api/fdd/rules", "x.preauth.anon401.get_api_fdd_rules"),
         ("/api/datasets", "x.preauth.anon401.get_api_datasets"),
         ("/api/csv/import/package/mapping", "x.preauth.anon401.get_api_csv_import_package_mapping"),
+        (
+            "/api/csv/import/package/mapping/ttl",
+            "x.preauth.anon401.get_api_csv_import_package_mapping_ttl",
+        ),
         # Prefer a live analytics GET (overview path is not routed → 404 bypasses auth layer).
         ("/api/analytics/sql-anomaly/status", "x.preauth.anon401.get_api_analytics_overview"),
         ("/api/admin/users", "x.preauth.anon401.get_api_admin_users"),
@@ -1031,6 +1039,10 @@ def run_suite_y(ctx: SuiteContext) -> None:
             "/api/csv/import/package/mapping",
             "y.authz.a_foreign_package_mapping_denied",
         ),
+        (
+            "/api/csv/import/package/mapping/ttl",
+            "y.authz.a_foreign_package_mapping_ttl_denied",
+        ),
     ):
         try:
             q_b = urlencode({"building_id": fx.building_b})
@@ -1059,10 +1071,11 @@ def run_suite_y(ctx: SuiteContext) -> None:
         except TransportError as exc:
             ctx.check(foreign_cid, "Y", f"{path} foreign", "ERROR", detail=str(exc))
 
-    # Additional high-value GETs: FDD results + RCx presets (Wave U U2).
+    # Additional high-value GETs: FDD results + RCx presets + equipment (Wave U MT breadth).
     for path, foreign_cid in (
         ("/api/fdd/results", "y.authz.a_foreign_fdd_results_denied"),
         ("/api/analytics/rcx/presets", "y.authz.a_foreign_analytics_rcx_presets_denied"),
+        ("/api/fdd/equipment", "y.authz.a_foreign_fdd_equipment_denied"),
     ):
         try:
             q_own = urlencode({"building_id": fx.building_a})
@@ -1321,20 +1334,155 @@ def run_suite_z(ctx: SuiteContext) -> None:
 
 
 def run_suite_mqtt_acl(ctx: SuiteContext) -> None:
-    """Optional broker ACL suite — BLOCKED without isolated broker evidence."""
+    """Optional broker ACL suite — generated fixture + observer evidence."""
+    root = Path(__file__).resolve().parents[4]
+    fixture_acl = (
+        root / "scripts" / "security" / "fixtures" / "mqtt_tenant_acl" / "acl"
+    )
+    entrypoint = root / "services" / "mqtt" / "docker-entrypoint-openfdd.sh"
+    observer = root / "scripts" / "security" / "mqtt_tenant_acl_observer.py"
+    gen = (
+        root
+        / "scripts"
+        / "security"
+        / "fixtures"
+        / "mqtt_tenant_acl"
+        / "generate_acl.py"
+    )
+
+    # Key mode 640 (static entrypoint evidence).
+    if entrypoint.is_file() and "chmod 640" in entrypoint.read_text(encoding="utf-8"):
+        ctx.check(
+            "mqtt.key_mode_640",
+            "mqtt_acl",
+            "MQTT private key chmod 640 (not world-readable)",
+            "PASS",
+            detail=str(entrypoint.relative_to(root)),
+        )
+    else:
+        ctx.check(
+            "mqtt.key_mode_640",
+            "mqtt_acl",
+            "MQTT private key chmod 640 (not world-readable)",
+            "FAIL",
+            detail="entrypoint missing chmod 640",
+        )
+
+    # Content semantics via generator (always; no live broker required).
+    if fixture_acl.is_file() and gen.is_file():
+        try:
+            sys_path_hack = str(gen.parent)
+            if sys_path_hack not in sys.path:
+                sys.path.insert(0, sys_path_hack)
+            from generate_acl import semantic_errors  # type: ignore
+
+            errs = semantic_errors(fixture_acl.read_text(encoding="utf-8"))
+            ctx.check(
+                "mqtt.acl.content_semantics",
+                "mqtt_acl",
+                "generated tenant ACL content (A/B own + foreign deny)",
+                "PASS" if not errs else "FAIL",
+                detail=None if not errs else "; ".join(errs),
+            )
+        except Exception as exc:  # noqa: BLE001 — suite must not crash probe
+            ctx.check(
+                "mqtt.acl.content_semantics",
+                "mqtt_acl",
+                "generated tenant ACL content (A/B own + foreign deny)",
+                "ERROR",
+                detail=str(exc),
+            )
+    else:
+        ctx.check(
+            "mqtt.acl.content_semantics",
+            "mqtt_acl",
+            "generated tenant ACL content (A/B own + foreign deny)",
+            "BLOCKED",
+            detail="fixture missing",
+        )
+
+    # Live / positive observer: only when EXECUTE env set (gate 26 owns full run).
+    execute = os.environ.get("OPENFDD_MQTT_ACL_EXECUTE", "0") == "1"
+    evidence = os.environ.get("OPENFDD_MQTT_ACL_EVIDENCE_JSON", "").strip()
+    allowed = ("PASS", "FAIL", "BLOCKED", "SKIPPED", "ERROR")
+    if evidence and Path(evidence).is_file():
+        try:
+            report = json.loads(Path(evidence).read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            report = {"ok": False, "status": "ERROR", "detail": str(exc)}
+        live = (
+            "PASS"
+            if report.get("ok") and report.get("status") == "PASS"
+            else (report.get("status") or "FAIL")
+        )
+        if live not in allowed:
+            live = "FAIL"
+        detail = f"evidence={evidence}"
+        for cid, title in (
+            ("mqtt.acl.own_topic_control", "own topic publish control"),
+            ("mqtt.acl.foreign_topic_denied", "foreign tenant topic denied"),
+        ):
+            ctx.check(cid, "mqtt_acl", title, live, detail=detail)
+        return
+
+    if execute and observer.is_file():
+        out = Path(tempfile.mkdtemp(prefix="mqtt_acl_suite_"))
+        try:
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    str(observer),
+                    "--out-dir",
+                    str(out),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                check=False,
+            )
+            report_path = out / "mqtt_acl_observer.json"
+            if report_path.is_file():
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+            else:
+                report = {
+                    "ok": False,
+                    "status": "ERROR",
+                    "detail": proc.stderr or proc.stdout or "no report",
+                }
+            st = report.get("status") or ("PASS" if report.get("ok") else "FAIL")
+            if st not in allowed:
+                st = "FAIL"
+            detail = f"observer_rc={proc.returncode}"
+            for cid, title in (
+                ("mqtt.acl.own_topic_control", "own topic publish control"),
+                ("mqtt.acl.foreign_topic_denied", "foreign tenant topic denied"),
+            ):
+                ctx.check(cid, "mqtt_acl", title, st, detail=detail)
+        except Exception as exc:  # noqa: BLE001
+            for cid, title in (
+                ("mqtt.acl.own_topic_control", "own topic publish control"),
+                ("mqtt.acl.foreign_topic_denied", "foreign tenant topic denied"),
+            ):
+                ctx.check(cid, "mqtt_acl", title, "ERROR", detail=str(exc))
+        return
+
     ctx.check(
         "mqtt.acl.own_topic_control",
         "mqtt_acl",
-        "own topic pub/sub control",
+        "own topic publish control",
         "BLOCKED",
-        detail="isolated broker fixture not configured; continuity gate is not ACL proof",
+        detail=(
+            "set OPENFDD_MQTT_ACL_EXECUTE=1 or OPENFDD_MQTT_ACL_EVIDENCE_JSON; "
+            "continuity gate is not ACL proof"
+        ),
     )
     ctx.check(
         "mqtt.acl.foreign_topic_denied",
         "mqtt_acl",
-        "foreign topic denied",
+        "foreign tenant topic denied",
         "BLOCKED",
-        detail="isolated broker fixture not configured",
+        detail="set OPENFDD_MQTT_ACL_EXECUTE=1 or OPENFDD_MQTT_ACL_EVIDENCE_JSON",
     )
 
 

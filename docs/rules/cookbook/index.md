@@ -43,6 +43,7 @@ Product UI is the React SPA. Pandas stays on PyPI for third-party tooling.
 | [Prerequisite macros](prerequisite-macros.html) | Occupancy, fan proven, override / operational gates |
 | [Benchmark strategy](benchmark-strategy.html) | Fixtures + regression (`scripts/cookbook_parity_check.py`) |
 | [Doc template](doc-template.html) | Standard per-rule documentation |
+| [IPMVP change-point & G14](../../ecm/ipmvp-changepoint.html) | PyPI M&V oracle (not SQL FDD) — Camber↔role alias table |
 
 ## Rule inventory (validated)
 

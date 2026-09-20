@@ -287,6 +287,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(analytics_rcx_presets_list),
         )
         .route("/api/analytics/metering", post(analytics_metering))
+        .route("/api/analytics/mv", post(analytics_mv_change_point))
         .route("/api/analytics/fuel", post(analytics_fuel))
         .route("/api/analytics/setpoints", post(analytics_setpoints))
         .route("/api/analytics/diurnal", post(analytics_diurnal))
@@ -3744,6 +3745,18 @@ async fn analytics_metering(
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::metering::handle_async(&req).await.to_json(),
+    })))
+}
+
+async fn analytics_mv_change_point(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let req = gate_analytics(&state, &headers, req)?;
+    Ok(Json(json!({
+        "ok": true,
+        "analytics": analytics::mv_change_point::handle(&req).to_json(),
     })))
 }
 

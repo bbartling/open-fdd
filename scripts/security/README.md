@@ -55,7 +55,19 @@ password arguments and never secrets in fixture JSON.
 - **X** — preauth, login/me, JWT integrity/alg/expiry
 - **Y** — A/B own+foreign, viewer/admin differences, detector controls
 - **Z** — security.txt, CSP, CORS, redirect credential policy, body caps
-- **mqtt_acl** — optional isolated broker ACL (not MQTT continuity)
+- **mqtt_acl** — generated tenant ACL fixture + observer (not MQTT continuity); live broker when `OPENFDD_MQTT_ACL_EXECUTE=1`
+
+## Standalone HTTPS bootstrap (U3)
+
+```bash
+# CI / config lint (no Docker)
+python3 scripts/security/peer_probe_https.py --selftest
+
+# Isolated peer soak (official caddy + stub web, self-signed; not Nessus)
+OPENFDD_HTTPS_PEER_PROBE=1 ./scripts/security/probe_standalone_https.sh
+```
+
+Verdict: `reports/security/standalone_https_probe.json`.
 
 ## Offline tests
 
@@ -69,7 +81,7 @@ Gate scripts (IDs, not Wave L script numbers):
 
 - `scripts/nightly-ot-bench/25_security_python_harness.sh` → gate `25_security_python_harness`
 - `scripts/nightly-ot-bench/25b_security_post_stress.sh` → gate `25b_security_post_stress`
-- `scripts/nightly-ot-bench/26_security_mqtt_acl.sh` → gate `26_security_mqtt_acl` (optional/BLOCKED without broker fixture)
+- `scripts/nightly-ot-bench/26_security_mqtt_acl.sh` → gate `26_security_mqtt_acl` (BLOCKED unless `OPENFDD_MQTT_ACL_EXECUTE=1`; then runs `mqtt_tenant_acl_observer.py`)
 
 Distinct from existing `25_wave_l_tenant_ui_session.sh` (Wave L OFF smoke).
 

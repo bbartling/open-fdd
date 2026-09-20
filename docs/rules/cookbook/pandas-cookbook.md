@@ -12,7 +12,7 @@ This cookbook is **intentionally maintained**. Production Open-FDD FDD math runs
 
 See also the [DataFusion SQL cookbook](datafusion-sql-cookbook.html), [parity matrix](parity-matrix.html), [generated parity report](generated-parity-report.html), and [P0 rule catalog](p0-rule-catalog.html).
 
-**Updated:** 2026-08-15 · PyPI `open-fdd` 4.4.1 (`open_fdd.rules`)
+**Updated:** 2026-09-20 · PyPI `open-fdd` 4.4.3 (`open_fdd.rules`) · M&V oracle: [IPMVP change-point & G14](../../ecm/ipmvp-changepoint.html)
 
 
 ---

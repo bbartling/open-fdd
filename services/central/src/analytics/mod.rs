@@ -8,6 +8,7 @@ pub mod economizer;
 pub mod historian;
 pub mod mechanical_cooling;
 pub mod metering;
+pub mod mv_change_point;
 pub mod plant;
 pub mod plant_health;
 pub mod rcx;
@@ -37,6 +38,8 @@ pub const QV_ECONOMIZER: &str = "economizer-diagnostics-v1";
 pub const QV_RCX_AHU: &str = "rcx-ahu-v1";
 pub const QV_RCX_VAV: &str = "rcx-vav-v1";
 pub const QV_METERING: &str = "metering-v1";
+/// Thin IPMVP Option C monthly DD-OLS twin (Wave S4 Soft-OPEN).
+pub const QV_MV_CHANGE_POINT: &str = "mv-change-point-v1";
 pub const QV_SETPOINTS: &str = "setpoints-v1";
 pub const QV_DIURNAL: &str = "sensor-diurnal-v1";
 pub const QV_TOPOLOGY: &str = "topology-v1";

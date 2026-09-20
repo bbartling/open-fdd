@@ -1,0 +1,19 @@
+{
+  "schema_version": "openfdd_mqtt_tenant_acl_v1",
+  "note": "Synthetic Wave L tenant ACL fixture — no live credentials or Railway secrets.",
+  "tenants": [
+    {
+      "tenant_id": "tenant_a",
+      "building_id": "bldg_a",
+      "edge_id": "fieldbus-1",
+      "edge_user": "edge:tenant_a:bldg_a:fieldbus-1"
+    },
+    {
+      "tenant_id": "tenant_b",
+      "building_id": "bldg_b",
+      "edge_id": "fieldbus-1",
+      "edge_user": "edge:tenant_b:bldg_b:fieldbus-1"
+    }
+  ],
+  "central_user": "central:ci"
+}

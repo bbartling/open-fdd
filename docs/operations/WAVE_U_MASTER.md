@@ -40,7 +40,7 @@
 | `sec-harness-evaluator-integrity` | U1 | E01–E08 false-PASS + S01 identity |
 | `sec-ci-wire` | U1 | CI runs `tests/security` + `tests/qualification` |
 | `sec-harness-mt-breadth` | U2 | X/Y IMPLEMENTED MT ACL/JWT (beat Burp on isolation) |
-| `standalone-https-bootstrap` | U3 | No plaintext login path for standalone |
+| `standalone-https-bootstrap` | U3 **CLOSED** | Compose + Caddy HTTP→HTTPS; `peer_probe_https.py` selftest + optional peer soak |
 | `fieldbus-mgmt-failclosed` | U3 | Loopback default; no silent open without key |
 | `mqtt-key-mode-tenant-acl` | U4 | Private keys not world-readable; generated ACL + observer |
 | `zap-af-authenticated` | U5 | Was `kali-zap-af` — AF on disposable candidate |
