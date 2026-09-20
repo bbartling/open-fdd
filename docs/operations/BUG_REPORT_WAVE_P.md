@@ -66,7 +66,7 @@
 | **standalone-https-bootstrap** | **CLOSED (3.5.34)** · compose + Caddyfile HTTP→HTTPS redir; CI `peer_probe_https.py --selftest`; peer soak PASS `2026-09-20T15:01:25Z` → `reports/security/standalone_https_probe.json` (not Nessus) |
 | **fieldbus-mgmt-failclosed** | **CLOSED (3.5.34)** · `require_api_key_for_bind` + unit tests (`non_loopback_without_key_refused`, loopback/key cases) |
 | **mqtt-key-mode-tenant-acl** | **CLOSED** · key mode 640 (`docker-entrypoint-openfdd.sh`) + generated fixture `scripts/security/fixtures/mqtt_tenant_acl/` + observer `scripts/security/mqtt_tenant_acl_observer.py` · gate `26_security_mqtt_acl` PASS when `OPENFDD_MQTT_ACL_EXECUTE=1` · folds `p2c-mqtt-acl-staging` |
-| **zap-af-authenticated** | **Soft-OPEN / BLOCKED** · `scripts/qualification/zap/run_af_disposable.sh` + unit tests; `--selftest` proves plan hygiene + verdict schema and exits **BLOCKED** (not PASS). Real PASS only with `OPENFDD_ZAP_AF_EXECUTE=1` + `ZAP_TARGET_ORIGIN` + `ZAP_AUTH_HEADER_VALUE` against disposable target and High=0 — no fake High=0 without a scan. |
+| **zap-af-authenticated** | **CLOSED (3.5.34)** · Disposable AF PASS High=0 Medium=0 on `sha-4d3a6b0` → `reports/security/zap_af_disposable_20260920T150920Z` (`af_job_status=PASS_WITH_WARNINGS`); runner `run_af_disposable.sh` + `run_isolated_zap_af.sh`; no JWT in git/verdict |
 | **image-digest-trivy** | **TIPPED 3.5.34** · `trivy_ghcr_digests.sh` (run after GHCR publish) |
 | **nessus-pass-readiness** | **CLOSED (3.5.34)** · checklist + importer + fixtures + HTTPS/MQTT/fieldbus evidence cited — **not** a fake Nessus PASS; real scan remains `nessus-isolated-assessment` BLOCKED |
 | **nessus-isolated-assessment** | **Soft-OPEN / BLOCKED** · Real licensed Nessus only |
