@@ -90,7 +90,12 @@ pub fn provision_edge_kit(req: &ProvisionRequest) -> anyhow::Result<ProvisionRes
         fs::write(&ca_cert_path, ca_cert.pem())?;
     }
 
-    let edge_mqtt_user = match req.tenant_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    let edge_mqtt_user = match req
+        .tenant_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         Some(tid) => format!("edge:{tid}:{}", req.edge_id),
         None => format!("edge:{}:{}", req.site_id, req.edge_id),
     };

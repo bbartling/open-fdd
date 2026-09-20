@@ -102,7 +102,7 @@
 | 00–24, 36 MV twin | **PASS** (12–17 N/A MT) | MV `api_compared` path live after re-pin |
 | **25 / 25b** | **FAIL** | `y.authz.a_foreign_analytics_rcx_presets_denied` observed **200** — static presets list ignored building ACL |
 | **26** | **ERROR** | Observer **PASS** but missing `security_gate_verdict.json` (script wrote `mqtt_acl_verdict.json` only) |
-| **35** | **FAIL** | Command `published:true` but no ack / `suspended=false` — Railway MQTT ACL `central:bldg2` lacked `tenants/+/…/commands/#` write (only `sites/bldg2`) |
+| **35** | **FAIL** | Command `published:true` but no ack / `suspended=false` — (1) Railway MQTT ACL `central:bldg2` lacked `tenants/+/…/commands/#` write (patched live + HUP); (2) kit CN `edge:ACME:vim-1` ≠ ACL `edge:acme:vim-1` — commands never delivered (ops alias + tip CN uses `tenant_id`) |
 | **36 model/ECM** | **FAIL/BLOCKED** | Gate looked for `OPENFDD_OPS_A/B_PASSWORD`; Railway vars are `OPENFDD_USER_*_OPS_PASSWORD` — alias missing |
 
 **Follow-up tip `3.5.35`:** rcx presets building ACL · gate26 structured verdict · OPS password aliases · live ACL patch for `central:bldg2` (+ HUP). Then backup+re-pin + **full** re-stress.
