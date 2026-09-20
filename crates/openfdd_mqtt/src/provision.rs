@@ -90,12 +90,18 @@ pub fn provision_edge_kit(req: &ProvisionRequest) -> anyhow::Result<ProvisionRes
         fs::write(&ca_cert_path, ca_cert.pem())?;
     }
 
+    let edge_mqtt_user = match req.tenant_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(tid) => format!("edge:{tid}:{}", req.edge_id),
+        None => format!("edge:{}:{}", req.site_id, req.edge_id),
+    };
+    // Hub central identity remains site-scoped (`central:{site}`) for existing Railway certs.
+    let central_mqtt_user = format!("central:{}", req.site_id);
     let edge_cert_path = kit.join("edge.cert.pem");
     let edge_key_path = kit.join("edge.key.pem");
     issue_client_cert(
         &ca_cert,
         &ca_key,
-        &format!("edge:{}:{}", req.site_id, req.edge_id),
+        &edge_mqtt_user,
         &edge_cert_path,
         &edge_key_path,
     )?;
@@ -105,7 +111,7 @@ pub fn provision_edge_kit(req: &ProvisionRequest) -> anyhow::Result<ProvisionRes
     issue_client_cert(
         &ca_cert,
         &ca_key,
-        &format!("central:{}", req.site_id),
+        &central_mqtt_user,
         &central_cert_path,
         &central_key_path,
     )?;
@@ -127,7 +133,7 @@ pub fn provision_edge_kit(req: &ProvisionRequest) -> anyhow::Result<ProvisionRes
         "ca_pem": "ca.pem",
         "cert_pem": "edge.cert.pem",
         "key_pem": "edge.key.pem",
-        "topic_base": topics.base(),
+        "mqtt_username": edge_mqtt_user,
         "note": "CA private key is NOT included. Outbound TCP 8883 only."
     });
     let edge_config = kit.join("edge.json");
@@ -135,7 +141,7 @@ pub fn provision_edge_kit(req: &ProvisionRequest) -> anyhow::Result<ProvisionRes
 
     let mut acl = String::new();
     acl.push_str(&format!("# Edge {}\n", req.edge_id));
-    acl.push_str(&format!("user edge:{}:{}\n", req.site_id, req.edge_id));
+    acl.push_str(&format!("user {edge_mqtt_user}\n"));
     for t in edge_pub {
         acl.push_str(&format!("topic write {t}\n"));
     }
@@ -143,7 +149,7 @@ pub fn provision_edge_kit(req: &ProvisionRequest) -> anyhow::Result<ProvisionRes
         acl.push_str(&format!("topic read {t}\n"));
     }
     acl.push('\n');
-    acl.push_str(&format!("user central:{}\n", req.site_id));
+    acl.push_str(&format!("user {central_mqtt_user}\n"));
     for t in central_pub {
         acl.push_str(&format!("topic write {t}\n"));
     }
