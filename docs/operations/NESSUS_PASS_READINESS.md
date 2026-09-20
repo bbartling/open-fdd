@@ -7,7 +7,7 @@
 | Empty/skipped security reports cannot FQ | `tests/security/test_evaluator_integrity_e01_e08.py` | U1 |
 | MT ACL/JWT matrix expand | inventory IMPLEMENTED + suite Y | U2 |
 | Standalone HTTPS recipe | `docker/compose.standalone.https.yml` + Caddyfile | U3 |
-| Fieldbus mgmt fail-closed | default loopback; API key required off-loopback | U3 |
+| Fieldbus mgmt fail-closed | default loopback; API key required off-loopback; unit tests in `services/fieldbus/src/main.rs` | **CLOSED U3** |
 | Exposure manifests | `scripts/security/exposure/*.json` | U3 |
 | MQTT private key mode 640 | `services/mqtt/docker-entrypoint-openfdd.sh` | U4 |
 | Generated MQTT ACL observer | Soft-OPEN until fixture green (`mqtt-key-mode-tenant-acl`) | U4 |

@@ -7,7 +7,7 @@
 | Item | Status |
 |------|--------|
 | Product tip / **OPS PINNED (FQ)** | **3.5.31** / **`sha-7b81eb8`** (#951) · health `3.5.31+7b81eb810c0f` · backup `20260919T193923Z` · stress `20260919T195100Z` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave S1 CLOSED** |
-| **Wave U tip** (this PR) | **3.5.34** · security spine U0–U6 land + hang reclaim 20m; smoke after GHCR — **no FQ claim** until after-spine MEGA |
+| **Wave U tip** (this PR) | **3.5.34** · security spine U0–U6 + FDD `OPENFDD_FDD_RUN_TIMEOUT_SECS` (default 900) + fieldbus fail-closed unit tests + stress catalog oa_t dedupe; smoke after GHCR — **no FQ claim** until after-spine MEGA |
 | Hub smoke tip (prior) | **3.5.33** / **`sha-3cd3745`** (#954) · mid-wave smoke only |
 | **Stability audit** `2026-09-20T00:40Z` | Hub `3.5.33+3cd3745` · **MQTTS healthy** · edges=1 `vim-1`/ACME `has_telemetry=true` · ingest climbing after redeploy · **Soft-OPEN `acme-fdd-run-hang`**: `POST /api/fdd/run` `{building_id:ACME}` stays `running` >20m (cleared via `DELETE /api/actions`); not FQ-blocking for smoke tip; next patch cycle candidate. GH: 0 open PRs; no `tip/`/`docs/` remotes; tip Publish fieldbus in flight (hub images PASS). |
 | **Wave S2** `sha-8b0eefe` / 3.5.32 | Camber lock + data-model ADR + DM-06 route matrix (#953). Smoke superseded by S5 tip pin. |
@@ -36,7 +36,7 @@
 | ACME building | Edge `vim-1` / site `ACME` `has_telemetry=true` · `POST /api/fdd/run` building `ACME` → **`rules_succeeded=39` `rules_failed=0` `rules_skipped=29`** (statuses PASS/FAULT/SKIPPED_MISSING_ROLES/N/A only; **0 ERROR**) |
 | SQL ↔ pandas | Local `sql_pandas_oracle_check.py` **OK (19 seeds)** · `golden_dual_compare.py` **OK (82 pandas fixtures)** · cookbook docs dual-catalog PASS · prior hub soak **OpenFDD SQL target match 59/59** (`01_synth59.log` in FQ stress) |
 | GH tidy | **0 open PRs** · tip `4a5c11e` master workflows **success** (Publish, tip completeness, Rust/FDD CI, AppSec, …) · stale FAIL rows only on deleted Tip B feature branch (pre-fmt) — not master |
-| Soft-OPEN noise | Recurring `mqtt_ingest_reject` / `historian_persist`: **`duplicate canonical live role oa_t`** (~1× per 300 s poll) from ACME stress catalog `config/fieldbus/field_devices.toml` dual AV roles on loopback 9101 — **not** a container error; cite Soft-OPEN below. Brief buffer rejects only at central redeploy. MQTT ACL world-readable warn + rare OpenSSL EOF — non-blocking. |
+| Soft-OPEN noise | Stress catalog `field_devices.toml` dual `oa_t` on AV 9101 **removed** in 3.5.34 tip (`acme-oa-t-dup-reject` CLOSED for repo catalog). Live `vim-1` kit may still need restore/redeploy before hub rejects stop. Brief buffer rejects only at central redeploy. |
 
 ## Soft-OPEN (≤ Stage C)
 
@@ -52,19 +52,19 @@
 | **admin-capacity-gauges** | **CLOSED (branch)** · cgroup memory + workspace `statvfs` + Parquet small-file strip on Admin |
 | **railway-capacity-stress** | **CITED** Tip B FQ `20260917T215437Z` gates 24/24b PASS |
 | **mqtt-pause-ui** | **CLOSED (#947 Tip B)** · MT command topics `tenants/…`; gate **35 PASS** on `sha-4a5c11e` stress `20260917T215437Z` |
-| **acme-oa-t-dup-reject** | **Soft-OPEN** · ACME live `historian_persist` rejects: duplicate canonical `oa_t` in one equipment envelope. Hub `/api/edges` shows **`vim-1`** (not local `pi-1` stress catalog). Ingest still healthy (`ingest_ok` ≫ reject). Ops/edge package cleanup — not a product tip. |
+| **acme-oa-t-dup-reject** | **CLOSED (catalog 3.5.34)** · `config/fieldbus/field_devices.toml`: zone loopback no longer maps `outside-air-temperature` on AV 9101; `hosted-weather` owns `web-outside-air-temp`. Live `vim-1` needs kit restore to clear residual hub rejects. |
 | **local-bacnet-ot-bench** | **Soft-OPEN** · MS/TP/FEC shared-trunk; Waveshare C FTDI `--mstp-passive` @38400: FEC alone silence; +mini MAC2 → PFM heard. Resume when FEC online on isolated trunk. |
 | **edge-kit-soft** | **OPS** · MT kit `./scripts/openfdd_restore_edge_kit.sh ACME pi-1` → `deploy/mqtt/kits/ACME__pi-1/` · live ACME OT edge id `vim-1` |
 | **s1-datasets-mt-acl** | **CLOSED** (#951 / 3.5.31 / `sha-7b81eb8`) · datasets list/delete MT ACL; FQ `20260919T195100Z` gate 25/25b PASS |
 | **wave-s3-pypi-mv-oracle** | **Soft-OPEN** · After Wave U spine · IPMVP change-point / G14 / Camber→`open_fdd.ecm_engineering`. Plan: `wave_s3_pypi_mv_camber_oracle.plan.md` (child detail). |
 | **wave-s4-sql-twins-fq** | **Soft-OPEN** · After Wave U spine · DataFusion M&V twin + Metering UI + FQ MEGA. Plan: `wave_s4_sql_oracle_twins_fq.plan.md`. |
 | **wave-s5-dm-remainder** | **Soft-OPEN** · After Wave U spine · DM-04..10, SEC-ML, … P1 IRI CLOSED on `sha-3cd3745`. |
-| **acme-fdd-run-hang** | **PATCHED in 3.5.34 (partial)** · Stale `running` heavy FDD reclaim **20m** + reclaim on `list_actions`. Soft-OPEN: ACME may still be slow — root-cause DataFusion/spill if runs exceed 20m without finish. |
+| **acme-fdd-run-hang** | **CLOSED (3.5.34)** · Stale `running` reclaim **20m** + `list_actions` reclaim + `POST /api/fdd/run` wall timeout via `OPENFDD_FDD_RUN_TIMEOUT_SECS` (default **900s**) finishes action `fail`/`timeout` instead of indefinite hang. Slow ACME DataFusion remains a performance topic, not an action hang. |
 | **sec-harness-mt-breadth** | **TIPPED 3.5.34** · U2 results/rcx presets own+foreign; inventory honesty. Continue expanding on later tips. |
 | **sec-harness-evaluator-integrity** | **CLOSED (3.5.34)** · E01–E08 permanent tests + fixes |
 | **sec-ci-wire** | **CLOSED (3.5.34)** · AppSec `security-harness` job |
 | **standalone-https-bootstrap** | **TIPPED 3.5.34** · compose + Caddyfile landed; isolated peer soak Soft-OPEN |
-| **fieldbus-mgmt-failclosed** | **TIPPED 3.5.34** · loopback default + API key required off-loopback |
+| **fieldbus-mgmt-failclosed** | **CLOSED (3.5.34)** · `require_api_key_for_bind` + unit tests (`non_loopback_without_key_refused`, loopback/key cases) |
 | **mqtt-key-mode-tenant-acl** | **PARTIAL 3.5.34** · key mode 640; generated ACL observer Soft-OPEN |
 | **zap-af-authenticated** | **PARTIAL 3.5.34** · AF plan YAML; disposable active run Soft-OPEN |
 | **image-digest-trivy** | **TIPPED 3.5.34** · `trivy_ghcr_digests.sh` (run after GHCR publish) |
