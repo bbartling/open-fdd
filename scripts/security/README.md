@@ -89,3 +89,13 @@ Dispositions:
 
 Never use COVERED. See `inventory/implemented_checks.json` and
 `tests/security/test_inventory_integrity.py`.
+
+## Burp Suite / ZAP vs this harness
+
+| Concern | Prefer |
+| --- | --- |
+| Tenant A/B isolation, JWT alg/expiry, role deny matrices, security.txt/CSP/CORS regression | **This harness** (X/Y/Z) — must stay **broader and more repeatable than a human Burp click-path** on those controls |
+| Passive URL crawl / High finding baseline | ZAP in `run_railway_hub_stress.sh` |
+| Authenticated active scan, novel payloads, UI-driven AF | Soft-OPEN Kali / Burp (`kali-zap-af`) — not replaced by this probe |
+
+Do not claim the probe “replaces Burp.” Claim: for Open-FDD multi-tenant authz/authn evidence in FQ, Python must dominate. Operator path: [`docs/operations/TESTBED_TAKEOVER.md`](../../docs/operations/TESTBED_TAKEOVER.md).
