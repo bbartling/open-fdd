@@ -25,9 +25,10 @@ ART="${ARTIFACT_DIR:-$ROOT/reports/waveC_zap_af_$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$ART"
 WRK="$ART/zap_wrk"
 mkdir -p "$WRK"
-# Restrict artifact tree; ZAP container needs write on wrk only (never world-writable JWT).
+# Restrict artifact tree (no JWT on disk). ZAP image often runs as uid 1000 —
+# make wrk world-accessible for the mount only (plan/report; never secrets).
 chmod 700 "$ART"
-chmod 770 "$WRK"
+chmod 777 "$WRK"
 cp "$ROOT/docs/openapi.yaml" "$WRK/openapi.yaml"
 
 NET="openfdd-zap-af-${RANDOM}"
@@ -118,8 +119,8 @@ cp "$WRK/af_plan.yaml" "$ART/af_plan.rendered.yaml"
 
 echo "== ZAP Automation Framework (OpenAPI + passive) =="
 set +e
-# Run as root in CI so mounted report dir is writable regardless of host uid mapping.
-docker run --rm --network "$NET" \
+# Run as root so mounted wrk is readable/writable regardless of host uid mapping.
+docker run --rm --user 0:0 --network "$NET" \
   -v "$WRK:/zap/wrk:rw" \
   -e ZAP_AUTH_HEADER_VALUE="Bearer ${TOKEN}" \
   "$ZAP_IMAGE" \
@@ -140,7 +141,7 @@ ${TARGET_URL}api/datasets
 ${TARGET_URL}api/agent/tools
 EOF
   set +e
-  docker run --rm --network "$NET" \
+  docker run --rm --user 0:0 --network "$NET" \
     -v "$WRK:/zap/wrk:rw" \
     -w /zap/wrk \
     "$ZAP_IMAGE" \

@@ -23,6 +23,8 @@ class IsolatedZapJwtHygieneTest(unittest.TestCase):
         text = SCRIPT.read_text(encoding="utf-8")
         self.assertNotIn("chmod -R a+rwX", text)
         self.assertIn('chmod 700 "$ART"', text)
+        # wrk may be 777 for ZAP uid mapping; ART must stay 700 (no JWT).
+        self.assertIn('chmod 777 "$WRK"', text)
 
     def test_fallback_does_not_satisfy_acceptance(self):
         text = SCRIPT.read_text(encoding="utf-8")
