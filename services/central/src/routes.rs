@@ -3641,11 +3641,20 @@ async fn analytics_rcx_boiler(
     })))
 }
 
-async fn analytics_rcx_presets_list() -> Json<Value> {
-    Json(json!({
+async fn analytics_rcx_presets_list(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<BuildingScopeQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    // Catalog is static, but inventory policy is tenant_building_acl — foreign
+    // building_id must 403 (same posture as GET /api/fdd/results).
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "presets": analytics::rcx_presets::presets_json(),
-    }))
+    })))
 }
 
 async fn analytics_rcx_preset(

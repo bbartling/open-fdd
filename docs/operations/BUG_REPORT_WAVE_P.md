@@ -6,9 +6,10 @@
 
 | Item | Status |
 |------|--------|
-| Product tip / **OPS PINNED (FQ)** | **3.5.31** / **`sha-7b81eb8`** (#951) · health `3.5.31+7b81eb810c0f` · backup `20260919T193923Z` · stress `20260919T195100Z` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave S1 CLOSED** |
-| **Wave U tip** (this PR) | **3.5.34** · security spine U0–U6 + FDD `OPENFDD_FDD_RUN_TIMEOUT_SECS` (default 900) + fieldbus fail-closed unit tests + stress catalog oa_t dedupe; smoke after GHCR — **no FQ claim** until after-spine MEGA |
-| Hub smoke tip (prior) | **3.5.33** / **`sha-3cd3745`** (#954) · mid-wave smoke only |
+| Product tip / **OPS PINNED (FQ)** | **3.5.31** / **`sha-7b81eb8`** (#951) · health `3.5.31+7b81eb810c0f` · backup `20260919T193923Z` · stress `20260919T195100Z` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave S1 CLOSED** until Wave U MEGA finishes |
+| **Wave U hub tip (smoke + MEGA in flight)** | **3.5.34** / **`sha-f44b45f`** (#959) · health `3.5.34+f44b45f6f58d` · backup **`20260920T193429Z`** · fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1` kit restored · MEGA `reports/nightly-ot-bench_20260920T194610Z/` · **no FQ / OPS PINNED claim until `fully_qualified=true`** |
+| Hub smoke tip (prior) | **3.5.33** / **`sha-3cd3745`** (#954) · mid-wave smoke only · superseded by `sha-f44b45f` re-pin |
+| **Wave U FQ closeout notes** `2026-09-20` | H0: required Actions green on `f44b45f`; Optional BACnet FAIL = fail-closed without CI key → **#960 FIXED** (`bacnet-mqtt-e2e` PASS). H1: #958 HOLD (baud docs); `tip/wave-u-u0-master` deleted; only `docs/diy-baud-hold-ai-context` remote. P1: `check_ghcr_tip_stack sha-f44b45f` PASS; Trivy cite `reports/trivy-wave-u/sha-f44b45f/SUMMARY.md` (mqtt 0; Debian/Alpine OS High residual — not greenwashed). Smoke: `POST /api/analytics/mv` **200** (clears `wu-mv-404-pre-pin`); edges=1 `vim-1` telemetry; ingest climbing (residual `ingest_reject` post kit restore). |
 | **Stability audit** `2026-09-20T00:40Z` | Hub `3.5.33+3cd3745` · **MQTTS healthy** · edges=1 `vim-1`/ACME `has_telemetry=true` · ingest climbing after redeploy · **Soft-OPEN `acme-fdd-run-hang`**: `POST /api/fdd/run` `{building_id:ACME}` stays `running` >20m (cleared via `DELETE /api/actions`); not FQ-blocking for smoke tip; next patch cycle candidate. GH: 0 open PRs; no `tip/`/`docs/` remotes; tip Publish fieldbus in flight (hub images PASS). |
 | **Wave S2** `sha-8b0eefe` / 3.5.32 | Camber lock + data-model ADR + DM-06 route matrix (#953). Smoke superseded by S5 tip pin. |
 | **Wave S5 P1** `sha-3cd3745` / 3.5.33 | DM-01/02/03 IRI encoding (`enc_` reserved, `ofdd:eq_<b>__<e>`). Vitest 9/9 + Rust unit 7/7. Soft-OPEN DM-07..10 / ECM FQ / Pages; DM-04/05 + gate 36 **PARTIAL on this tip**. |
@@ -57,7 +58,7 @@
 | **edge-kit-soft** | **OPS** · MT kit `./scripts/openfdd_restore_edge_kit.sh ACME pi-1` → `deploy/mqtt/kits/ACME__pi-1/` · live ACME OT edge id `vim-1` |
 | **s1-datasets-mt-acl** | **CLOSED** (#951 / 3.5.31 / `sha-7b81eb8`) · datasets list/delete MT ACL; FQ `20260919T195100Z` gate 25/25b PASS |
 | **wave-s3-pypi-mv-oracle** | **PARTIAL (branch tip/wave-u-u0-master)** · IPMVP change-point (`2P`/`3P`/`4P`/`5P`) + G14 NMBE/CVRMSE in `open_fdd.ecm_engineering` (+ analytics re-exports) · cookbook [`docs/ecm/ipmvp-changepoint.md`](../ecm/ipmvp-changepoint.md) · wheel `4.4.3` local build/test · **Soft-OPEN residual:** PyPI publish tip, unfinished Camber families, Wave S4 SQL twin / Metering UI. Plan: `wave_s3_pypi_mv_camber_oracle.plan.md`. |
-| **wave-s4-sql-twins-fq** | **Soft-OPEN (tip prep)** · Thin `POST /api/analytics/mv` (`mv-change-point-v1` 2P OLS) + Metering M&V radio + gate **36** (`scripts/nightly-ot-bench/36_mv_sql_oracle_twin.sh`). Default gate **BLOCKED** without `OPENFDD_SECURITY_EXECUTE=1`. **Do not claim OPS PINNED / FQ PASS** until tip merge + GHCR + MEGA FQ with EXECUTE=1. Plan: `wave_s4_sql_oracle_twins_fq.plan.md`. |
+| **wave-s4-sql-twins-fq** | **IN FLIGHT** · Hub MV 200 on `sha-f44b45f`; MEGA `20260920T194610Z` EXECUTE=1 — OPS PINNED only if `fully_qualified=true` |
 | **wave-s5-dm-remainder** | **PARTIAL (this tip)** · DM-04 stamped types + inferred-parent honesty + DM-05 tenant storage doc + gate **36** model/ECM wire. Soft-OPEN remains: DM-07..10 SPARQL/PERF, EQ-VOCAB/ECM-ADAPT FQ, Pages publish soak. P1 IRI still CLOSED on `sha-3cd3745`. |
 | **acme-fdd-run-hang** | **CLOSED (3.5.34)** · Stale `running` reclaim **20m** + `list_actions` reclaim + `POST /api/fdd/run` wall timeout via `OPENFDD_FDD_RUN_TIMEOUT_SECS` (default **900s**) finishes action `fail`/`timeout` instead of indefinite hang. Slow ACME DataFusion remains a performance topic, not an action hang. |
 | **sec-harness-mt-breadth** | **PARTIAL (this tip)** · Expanded Y/X: mapping TTL foreign deny + FDD equipment own/foreign; inventory IMPLEMENTED honest. Soft-OPEN: more PLANNED MT routes (analytics POSTs, series, buildings list, …). |
@@ -67,7 +68,7 @@
 | **fieldbus-mgmt-failclosed** | **CLOSED (3.5.34)** · `require_api_key_for_bind` + unit tests (`non_loopback_without_key_refused`, loopback/key cases) |
 | **mqtt-key-mode-tenant-acl** | **CLOSED** · key mode 640 (`docker-entrypoint-openfdd.sh`) + generated fixture `scripts/security/fixtures/mqtt_tenant_acl/` + observer `scripts/security/mqtt_tenant_acl_observer.py` · gate `26_security_mqtt_acl` PASS when `OPENFDD_MQTT_ACL_EXECUTE=1` · folds `p2c-mqtt-acl-staging` |
 | **zap-af-authenticated** | **CLOSED (3.5.34)** · Disposable AF PASS High=0 Medium=0 on `sha-4d3a6b0` → `reports/security/zap_af_disposable_20260920T150920Z` (`af_job_status=PASS_WITH_WARNINGS`); runner `run_af_disposable.sh` + `run_isolated_zap_af.sh`; no JWT in git/verdict |
-| **image-digest-trivy** | **TIPPED 3.5.34** · `trivy_ghcr_digests.sh` (run after GHCR publish) |
+| **image-digest-trivy** | **CLOSED (evidence)** · tip `sha-f44b45f` scanned `2026-09-20` → `reports/trivy-wave-u/sha-f44b45f/SUMMARY.md` (mqtt HIGH+CRITICAL=0; central/fieldbus/mcp Debian OS residual FixedVersion `-`; web Alpine fixable base bumps). Not a zero-CVE claim. |
 | **nessus-pass-readiness** | **CLOSED (3.5.34)** · checklist + importer + fixtures + HTTPS/MQTT/fieldbus evidence cited — **not** a fake Nessus PASS; real scan remains `nessus-isolated-assessment` BLOCKED |
 | **nessus-isolated-assessment** | **Soft-OPEN / BLOCKED** · Real licensed Nessus only |
 
@@ -91,7 +92,22 @@
 
 **Done:** tip GHCR + Railway re-pin + hub stress FQ (`20260917T215437Z` on `3.5.28` / `sha-4a5c11e`) + post-pin stability audit (ACME FDD clean, SQL↔pandas oracle OK, 0 open PRs, master Actions green) + Soft-OPEN ≤ Stage C (local BACnet OT bench + ACME `oa_t` dup catalog noise). **No additional product tip required for stability.**
 
-## Wave U enhanced stress (`20260920T152613Z`) + BUGS
+## Wave U MEGA FQ attempt `20260920T194610Z` — **FAIL** (not OPS PINNED)
+
+**Tip under test:** `sha-f44b45f` / `3.5.34+f44b45f6f58d` · backup `20260920T193429Z` · edge `vim-1` · EXECUTE=1 · MQTT_ACL_EXECUTE=1 · ACCEPT_ZAP_MEDIUM=1  
+**Artifact:** `reports/nightly-ot-bench_20260920T194610Z/` · `fully_qualified=false`
+
+| Gate | Result | Root cause |
+|------|--------|------------|
+| 00–24, 36 MV twin | **PASS** (12–17 N/A MT) | MV `api_compared` path live after re-pin |
+| **25 / 25b** | **FAIL** | `y.authz.a_foreign_analytics_rcx_presets_denied` observed **200** — static presets list ignored building ACL |
+| **26** | **ERROR** | Observer **PASS** but missing `security_gate_verdict.json` (script wrote `mqtt_acl_verdict.json` only) |
+| **35** | **FAIL** | Command `published:true` but no ack / `suspended=false` — (1) Railway MQTT ACL `central:bldg2` lacked `tenants/+/…/commands/#` write (patched live + HUP); (2) kit CN `edge:ACME:vim-1` ≠ ACL `edge:acme:vim-1` — commands never delivered (ops alias + tip CN uses `tenant_id`) |
+| **36 model/ECM** | **FAIL/BLOCKED** | Gate looked for `OPENFDD_OPS_A/B_PASSWORD`; Railway vars are `OPENFDD_USER_*_OPS_PASSWORD` — alias missing |
+
+**Follow-up tip `3.5.35`:** rcx presets building ACL · gate26 structured verdict · OPS password aliases · live ACL patch for `central:bldg2` (+ HUP). Then backup+re-pin + **full** re-stress.
+
+
 
 **Artifacts:** `reports/wave_u_enhanced_stress_20260920T152613Z/` · oracle twin `reports/wave_u_enhanced_stress_oracle_20260920T153722Z/` · ZAP AF disposable `reports/security/zap_af_disposable_20260920T150920Z/` · HTTPS peer `reports/security/standalone_https_probe.json`
 
@@ -118,13 +134,15 @@
 | **ci-959-react-alert** | CI | **FIXED** | `MvChangePointPanel` used `variant="error"`; AlertVariant is `danger` (`1ba4f7b6`) |
 | **ci-959-pyyaml-qual** | CI | **FIXED** | AppSec qualification imported ZAP runner without PyYAML — install step added |
 | **ci-959-docs-guard** | CI | **FIXED** | Cookbook link edits blocked; reverted — IPMVP lives under `docs/ecm/` |
-| **wu-mv-404-pre-pin** | Soft-OPEN / FQ gate | **OPEN until tip pin** | Hub still on pre-U tip: `POST /api/analytics/mv` → **HTTP 404** when `OPENFDD_SECURITY_EXECUTE=1`. Expected until #959 merge → GHCR → Railway re-pin. Oracle-only twin **PASS**. Gate reason now hints tip re-pin. |
-| **wu-model-ecm-creds** | Soft-OPEN | **BLOCKED honesty** | Gate 36 model/ECM needs ops A/B passwords for live hub; not a product defect |
-| **wu-vim1-oa-t-kit** | Ops | **OPEN (edge)** | Repo catalog fixed; live `vim-1` still needs kit restore to clear residual `oa_t` dup rejects |
+| **wu-mv-404-pre-pin** | Soft-OPEN / FQ gate | **FIXED** | Hub re-pin `sha-f44b45f` · `POST /api/analytics/mv` → **HTTP 200** `ok:true` (smoke 2026-09-20T19:45Z). Gate 36 twin still must PASS under MEGA. |
+| **wu-model-ecm-creds** | Soft-OPEN | **CLEARED for MEGA** | Railway has `OPENFDD_USER_ACME_OPS_PASSWORD` / `OPENFDD_USER_B100_OPS_PASSWORD` (stress fetches ops_a/ops_b len=32). Prior BLOCKED was missing fetch names. |
+| **wu-vim1-oa-t-kit** | Ops | **PARTIAL** | Kit restored `deploy/mqtt/kits/ACME__vim-1/` + fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1`. Telemetry live; residual `ingest_reject` still climbing briefly after redeploy — Soft-OPEN until rejects quiet. |
 | **wu-acme-fdd-slow** | Perf (not hang) | Soft note | Hang Soft-OPEN **CLOSED** (20m reclaim + 900s timeout). ACME may still be slow/timeout under load — not indefinite `running` |
-| **wu-s4-fq-mega** | Soft-OPEN | **OPEN** | MEGA FQ + OPS PINNED deferred until tip GHCR + hub re-pin + `OPENFDD_SECURITY_EXECUTE=1` full stress |
-| **wu-trivy-tip-digest** | Soft-OPEN | **OPEN** | Run `trivy_ghcr_digests.sh` on post-merge tip sha |
-| **wu-pypi-publish-4.4.3** | Residual | Soft note | Wheel/math landed; PyPI publish not done this tip |
-| **wu-dm-07-10** | Soft-OPEN | Soft note | S5 DM-04/05 landed; SPARQL/PERF/ECM-ADAPT remain |
+| **wu-s4-fq-mega** | Soft-OPEN | **IN FLIGHT** | MEGA `20260920T194610Z` EXECUTE=1 EXPECTED_EDGE_ID=vim-1 — await `fully_qualified` before OPS PINNED |
+| **wu-trivy-tip-digest** | Soft-OPEN | **FIXED / CLOSED** | Cite `reports/trivy-wave-u/sha-f44b45f/SUMMARY.md` |
+| **wu-bacnet-ci-api-key** | CI | **FIXED #960** | Optional BACnet smoke supplies `OPENFDD_FIELDBUS_API_KEY` after fail-closed |
+| **wu-pypi-publish-4.4.3** | Residual | Soft-OPEN honesty | Math CLOSED on tip; PyPI publish `open-fdd` 4.4.3 not done |
+| **wu-dm-07-10** | Soft-OPEN | Soft-OPEN honesty | DM-04/05 landed; DM-07..10 SPARQL/PERF/ECM-ADAPT remain |
+| **wu-mt-breadth** | Soft-OPEN | Soft-OPEN honesty | Continue IMPLEMENTED matrix later; inventory cited on tip |
 
-**Do not claim:** Nessus assessment PASS · MEGA `fully_qualified=true` on this tip · hub `/api/analytics/mv` until re-pin.
+**Do not claim:** Nessus assessment PASS · MEGA `fully_qualified=true` until manifest says so · OPS PINNED bump until FQ artifact. |
