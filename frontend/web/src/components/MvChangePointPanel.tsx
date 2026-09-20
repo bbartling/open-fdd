@@ -164,7 +164,7 @@ export function MvChangePointPanel() {
       </div>
 
       {error ? (
-        <InlineAlert id="mv-error" variant="error" testId="mv-error">
+        <InlineAlert id="mv-error" variant="danger" testId="mv-error">
           {error}
         </InlineAlert>
       ) : null}
