@@ -7,7 +7,8 @@
 | Item | Status |
 |------|--------|
 | Product tip / **OPS PINNED (FQ)** | **3.5.31** / **`sha-7b81eb8`** (#951) · health `3.5.31+7b81eb810c0f` · backup `20260919T193923Z` · stress `20260919T195100Z` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave S1 CLOSED** |
-| Hub **smoke tip** (no FQ claim) | **3.5.33** / **`sha-3cd3745`** (#954 DM IRI v2) · health `3.5.33+3cd37451220a` · backup `20260919T231221Z` · SPARQL `/api/model/sparql` **404 unavailable** · ingest live `vim-1` — mid-wave smoke only |
+| Hub **smoke tip** (no FQ claim) | **3.5.33** / **`sha-3cd3745`** (#954 DM IRI v2) · health `3.5.33+3cd37451220a` · backup `20260919T231221Z` · SPARQL `/api/model/sparql` **404 unavailable** · **ACME MQTTS PASS** (`vim-1` telemetry, fresh `ingest_ok`, reject_buckets Soft-OPEN `oa_t` only) — mid-wave smoke only |
+| **Stability audit** `2026-09-20T00:40Z` | Hub `3.5.33+3cd3745` · **MQTTS healthy** · edges=1 `vim-1`/ACME `has_telemetry=true` · ingest climbing after redeploy · **Soft-OPEN `acme-fdd-run-hang`**: `POST /api/fdd/run` `{building_id:ACME}` stays `running` >20m (cleared via `DELETE /api/actions`); not FQ-blocking for smoke tip; next patch cycle candidate. GH: 0 open PRs; no `tip/`/`docs/` remotes; tip Publish fieldbus in flight (hub images PASS). |
 | **Wave S2** `sha-8b0eefe` / 3.5.32 | Camber lock + data-model ADR + DM-06 route matrix (#953). Smoke superseded by S5 tip pin. |
 | **Wave S5 P1** `sha-3cd3745` / 3.5.33 | DM-01/02/03 IRI encoding (`enc_` reserved, `ofdd:eq_<b>__<e>`). Vitest 9/9 + Rust unit 7/7. Soft-OPEN DM-04..10 / ECM / Pages / model gate. |
 | **Wave S Soft-OPEN** | **S3** PyPI M&V/Camber oracle ports · **S4** SQL twins + Metering UI + FQ MEGA · **S5 remainder** (DM-04..10, SEC-ML, SPARQL-SEM, EQ-*, STRESS-GATE). Master: [`wave_s_master_ecb88a61.plan.md`](../../.cursor/plans/wave_s_master_ecb88a61.plan.md) · evidence [`wave_s_data_model_evidence.md`](../../.cursor/plans/wave_s_data_model_evidence.md) |
@@ -56,6 +57,7 @@
 | **wave-s3-pypi-mv-oracle** | **Soft-OPEN** · IPMVP change-point / G14 / Camber→`open_fdd.ecm_engineering` ports + wheel publish. Plan: `wave_s3_pypi_mv_camber_oracle.plan.md`. |
 | **wave-s4-sql-twins-fq** | **Soft-OPEN** · DataFusion M&V twin + Metering UI + model/ECM gate in FQ MEGA. Plan: `wave_s4_sql_oracle_twins_fq.plan.md`. FQ cite only after this tip. |
 | **wave-s5-dm-remainder** | **Soft-OPEN** · DM-04..10, SEC-ML, JSON-PARITY, SPARQL-SEM, PERF-1, EQ-VOCAB/PERSIST, ECM-ADAPT, DOCS-PAGES, STRESS-GATE. P1 IRI CLOSED on `sha-3cd3745`. |
+| **acme-fdd-run-hang** | **Soft-OPEN** · On smoke tip `3.5.33`/`sha-3cd3745`, ACME `fdd_run_all` action remains `running` >20m (proxy curl timeouts; clear with `DELETE /api/actions`). MQTTS ingest unaffected. Diagnose DataFusion memory/spill / rule set before next product tip; do not greenwash. |
 
 ## Wave R closeout (2026-09-16)
 
