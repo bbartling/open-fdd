@@ -25,7 +25,9 @@ ART="${ARTIFACT_DIR:-$ROOT/reports/waveC_zap_af_$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$ART"
 WRK="$ART/zap_wrk"
 mkdir -p "$WRK"
-chmod -R a+rwX "$ART" "$WRK"
+# Restrict artifact tree; ZAP container needs write on wrk only (never world-writable JWT).
+chmod 700 "$ART"
+chmod 770 "$WRK"
 cp "$ROOT/docs/openapi.yaml" "$WRK/openapi.yaml"
 
 NET="openfdd-zap-af-${RANDOM}"
@@ -93,8 +95,9 @@ if [[ -z "$TOKEN" ]]; then
   echo "FAIL: could not mint admin JWT for ZAP context" >&2
   exit 1
 fi
-echo "$TOKEN" >"$ART/admin.jwt"
-echo "OK admin JWT minted"
+# UA-04: never persist JWT to artifact disk (env injection only).
+rm -f "$ART/admin.jwt" "$WRK/admin.jwt" 2>/dev/null || true
+echo "OK admin JWT minted (ephemeral env only)"
 
 # Materialize AF plan: expand origin/reportDir only. Authorization stays
 # ${ZAP_AUTH_HEADER_VALUE} and is injected via docker -e (never written to disk).
