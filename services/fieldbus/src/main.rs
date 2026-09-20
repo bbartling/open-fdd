@@ -113,10 +113,7 @@ async fn run(
 
     let api_key = auth::api_key();
     let bind_host = settings.http_host.trim().to_ascii_lowercase();
-    let is_loopback = matches!(
-        bind_host.as_str(),
-        "127.0.0.1" | "localhost" | "::1"
-    );
+    let is_loopback = matches!(bind_host.as_str(), "127.0.0.1" | "localhost" | "::1");
     let api_key_opt = if api_key.is_empty() {
         if !is_loopback {
             tracing::error!(
