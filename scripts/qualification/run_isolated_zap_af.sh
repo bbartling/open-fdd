@@ -127,7 +127,7 @@ docker run --rm --network "$NET" \
   >"$ART/zap_af.stdout.log" 2>"$ART/zap_af.stderr.log"
 ZAP_RC=$?
 set -e
-chmod -R a+rwX "$WRK" 2>/dev/null || true
+chmod -R u+rwX,g+rwX,o-rwx "$WRK" 2>/dev/null || true
 
 # Prefer AF report even when ZAP exits non-zero (warnings / auth soft-fail).
 AF_STATUS="PASS"
@@ -154,7 +154,7 @@ EOF
   FB_RC=$?
   set -e
   echo "fallback_rc=$FB_RC" | tee "$ART/fallback_rc.txt"
-  chmod -R a+rwX "$WRK" 2>/dev/null || true
+  chmod -R u+rwX,g+rwX,o-rwx "$WRK" 2>/dev/null || true
   # baseline exits 2 on warnings — still accept JSON report with 0 High
   if [[ -f "$WRK/zap-fallback-report.json" ]]; then
     AF_STATUS="FALLBACK"
@@ -209,6 +209,10 @@ fi
 SUITE_PASS=true
 [[ "$HIGH" == "0" ]] || SUITE_PASS=false
 [[ -n "$REPORT" ]] || SUITE_PASS=false
+# UA-04: fallback/warning-only reports cannot satisfy authenticated acceptance.
+if [[ "$AF_STATUS" == "FALLBACK" || "$AF_STATUS" == "BLOCKED" ]]; then
+  SUITE_PASS=false
+fi
 
 jq -n \
   --arg tag "$TAG" \
@@ -227,7 +231,7 @@ jq -n \
     high_alerts: $high,
     medium_alerts: $med,
     pass: $pass,
-    notes: "Disposable central only; no live OT activeScan. Field Railway stress remains public zap-baseline."
+    notes: "Disposable central only; no live OT activeScan. Fallback reports do not satisfy authenticated acceptance."
   }' | tee "$ART/verdict.json"
 
 if [[ "$SUITE_PASS" != "true" ]]; then
