@@ -27,6 +27,8 @@
 | Prior OPS PINNED | Wave R **3.5.22** / `sha-4d3a6b0` (#936) · stress `20260916T011952Z` **`fully_qualified=true`** |
 | Soft Park S5 | Stress `reports/nightly-ot-bench_20260916T215804Z/` · **22 PASS / 4 FAIL** · not `fully_qualified` |
 | Closed this cycle | #940 busy/sign-out · #944 tip YAML · Soft UX #946 · Tip B #947 MT `tenants/…` commands · AFDD flood building default · fieldbus Railway MT ACME identity · Soft UX master hub stress FQ · post-pin stability audit (no tip) |
+| **Wave U hub tip** | **3.5.36** / **`sha-812bd92`** (#962) · health `3.5.36+812bd925bab3` · backup **`20260920T230554Z`** · fieldbus `vim-1` · MEGA `reports/nightly-ot-bench_20260920T231407Z/` · **`fully_qualified=false`** (logged before tip fix) |
+| **#962 merged** | **3.5.36** independent acceptance UA evaluators + HTTPS/field keys/ZAP hygiene |
 | **#961 merged** | **3.5.35** `e23c9ac` — rcx presets building ACL · gate26 verdict · OPS password aliases · MT edge CN uses tenant_id |
 | **#962 tip** | **3.5.36** `tip/wave-u-acceptance-ua` — UA evaluator gates + HTTPS compose; follow-on: key mode 0600, field-only exposure, host/runtime selftest, web Alpine base bump, isolated FALLBACK `sha-f44b45f` |
 | **Wave U independent acceptance** `2026-09-20` | Audit UA-01..10 **REOPENED** insufficient Soft-OPEN closes. Permanent negatives for 14 false-pass evaluators landed on tip (identity `tenant_ids`, ZAP AF fail-closed, MQTT require-live, Nessus per-host completeness, both gate **36** required + railway_field provenance). Offline audit reproducer **false_pass=0**. **Not VERIFIED / not OPS PINNED** until green CI → GHCR tip → candidate MEGA. Nessus licensed assessment remains BLOCKED. |

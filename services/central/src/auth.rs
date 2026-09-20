@@ -106,8 +106,12 @@ pub struct AuthConfig {
     /// Prefer this on Railway over sharing the admin password with MCP hosts.
     pub agent_password: Option<String>,
     /// Optional viewer password (`username=viewer` → viewer JWT, read-only RBAC).
-    /// Deployment-wide — not tenant isolation. Unset → viewer password login disabled.
+    /// When MT ON, set `OPENFDD_VIEWER_TENANT_IDS` (comma-separated) for scoped membership;
+    /// empty list remains deny-all under MT (not hub-wide). Prefer file users for multi-viewer sites.
+    /// Unset password → viewer password login disabled.
     pub viewer_password: Option<String>,
+    /// Optional tenant membership for the env `viewer` password identity.
+    pub viewer_tenant_ids: Vec<String>,
 }
 
 pub fn is_loopback_bind(host: &str) -> bool {
@@ -176,6 +180,16 @@ impl AuthConfig {
         let viewer_password = std::env::var("OPENFDD_VIEWER_PASSWORD")
             .ok()
             .filter(|s| !s.trim().is_empty());
+        let viewer_tenant_ids: Vec<String> = std::env::var("OPENFDD_VIEWER_TENANT_IDS")
+            .ok()
+            .map(|s| {
+                s.split(',')
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty())
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
         if secret.is_none() {
             warn!("auth_enabled=false (OPENFDD_JWT_SECRET unset) — open mode is loopback-only");
         } else {
@@ -204,6 +218,7 @@ impl AuthConfig {
             admin_password,
             agent_password,
             viewer_password,
+            viewer_tenant_ids,
         }
     }
 
@@ -244,7 +259,7 @@ impl AuthConfig {
     /// Returns `(subject, role, tenant_ids)`.
     /// - `admin` + `OPENFDD_ADMIN_PASSWORD` → Admin, empty tenant_ids (hub_admin when MT ON)
     /// - `agent` + `OPENFDD_AGENT_PASSWORD` → Operator, empty tenant_ids (deployment-wide; prefer file users when MT ON)
-    /// - `viewer` + `OPENFDD_VIEWER_PASSWORD` → Viewer, empty tenant_ids
+    /// - `viewer` + `OPENFDD_VIEWER_PASSWORD` → Viewer, tenant_ids from `OPENFDD_VIEWER_TENANT_IDS` (may be empty)
     /// - Wave N file users (`control_plane/users.json`) → role + non-empty tenant_ids
     pub fn authenticate_password(
         &self,
@@ -278,7 +293,11 @@ impl AuthConfig {
             if !constant_time_eq(expected.as_bytes(), password.as_bytes()) {
                 return Err("invalid credentials".into());
             }
-            return Ok(("viewer".into(), Role::Viewer, vec![]));
+            return Ok((
+                "viewer".into(),
+                Role::Viewer,
+                self.viewer_tenant_ids.clone(),
+            ));
         }
         let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
         if let Some((sub, role, tids)) =
@@ -363,6 +382,7 @@ mod tests {
             admin_password: None,
             agent_password: None,
             viewer_password: None,
+            viewer_tenant_ids: vec![],
         };
         let claims = JwtClaims {
             sub: "operator".into(),
@@ -389,6 +409,7 @@ mod tests {
             admin_password: None,
             agent_password: None,
             viewer_password: None,
+            viewer_tenant_ids: vec![],
         };
         let claims = JwtClaims {
             sub: "x".into(),
@@ -448,6 +469,7 @@ mod tests {
             admin_password: Some("admin-pw".into()),
             agent_password: Some("agent-pw".into()),
             viewer_password: Some("viewer-pw".into()),
+            viewer_tenant_ids: vec![],
         };
         let (sub, role, tids) = cfg.authenticate_password("agent", "agent-pw").unwrap();
         assert_eq!(sub, "agent");
@@ -466,6 +488,16 @@ mod tests {
         assert_eq!(viewer_role, Role::Viewer);
         assert!(viewer_tids.is_empty());
         assert!(cfg.authenticate_password("viewer", "admin-pw").is_err());
+
+        let scoped = AuthConfig {
+            secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: Some("viewer-pw".into()),
+            viewer_tenant_ids: vec!["acme".into()],
+        };
+        let (_, _, scoped_tids) = scoped.authenticate_password("viewer", "viewer-pw").unwrap();
+        assert_eq!(scoped_tids, vec!["acme".to_string()]);
     }
 
     #[test]
@@ -475,6 +507,7 @@ mod tests {
             admin_password: Some("admin-pw".into()),
             agent_password: None,
             viewer_password: None,
+            viewer_tenant_ids: vec![],
         };
         assert!(cfg.authenticate_password("agent", "anything").is_err());
         assert!(cfg.authenticate_password("viewer", "anything").is_err());
