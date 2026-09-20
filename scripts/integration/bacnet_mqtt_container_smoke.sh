@@ -24,6 +24,8 @@ COMPOSE=(docker compose -p "$PROJECT" -f docker/compose.bacnet-mqtt-ci.yml)
 export OPENFDD_BACNET_MQTT_CERT_DIR="$TMP/mqtt"
 export OPENFDD_JWT_SECRET="bacnet-mqtt-ci-jwt-${PROJECT}"
 export OPENFDD_ADMIN_PASSWORD="bacnet-mqtt-ci-admin"
+export OPENFDD_FIELDBUS_API_KEY="${OPENFDD_FIELDBUS_API_KEY:-bacnet-mqtt-ci-fieldbus-key}"
+FB_AUTH=(-H "Authorization: Bearer ${OPENFDD_FIELDBUS_API_KEY}")
 
 cleanup() {
   "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
@@ -149,7 +151,7 @@ done
 echo "== BACnet read =="
 READ_JSON='{"device_instance":3456,"object_type":"analog-value","object_instance":1,"property_id":"present-value"}'
 READ_RESPONSE="$(curl -fsS -X POST http://127.0.0.1:18081/bacnet/read \
-  -H 'Content-Type: application/json' -d "$READ_JSON")"
+  "${FB_AUTH[@]}" -H 'Content-Type: application/json' -d "$READ_JSON")"
 echo "$READ_RESPONSE" | jq -e '
   .ok == true and
   .device_instance == 3456 and
@@ -160,9 +162,11 @@ echo "$READ_RESPONSE" | jq -e '
 echo "OK BACnet analog-value:1 present-value=$(echo "$READ_RESPONSE" | jq -r '.value')"
 
 # Force a poll immediately and prove the configured BACnet rows reached poll state before MQTT.
-POLL_RESPONSE="$(curl -fsS -X POST http://127.0.0.1:18081/bacnet/poll/once)"
+POLL_RESPONSE="$(curl -fsS -X POST http://127.0.0.1:18081/bacnet/poll/once \
+  "${FB_AUTH[@]}")"
 echo "$POLL_RESPONSE" | jq -e '.ok == true and (.points_polled >= 1)' >/dev/null
-POLL_STATUS="$(curl -fsS http://127.0.0.1:18081/bacnet/poll/status)"
+POLL_STATUS="$(curl -fsS http://127.0.0.1:18081/bacnet/poll/status \
+  "${FB_AUTH[@]}")"
 echo "$POLL_STATUS" | jq -e '
   .ok == true and
   (.last_values | any(

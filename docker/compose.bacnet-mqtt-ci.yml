@@ -61,6 +61,8 @@ services:
       OPENFDD_FIELDBUS_CONFIG_DIR: /app/config
       OPENFDD_FIELDBUS_HTTP_HOST: 0.0.0.0
       OPENFDD_FIELDBUS_HTTP_PORT: "8081"
+      # Wave U fail-closed: non-loopback bind requires API key (CI binds 0.0.0.0).
+      OPENFDD_FIELDBUS_API_KEY: ${OPENFDD_FIELDBUS_API_KEY:-bacnet-mqtt-ci-fieldbus-key}
       OPENFDD_MQTT_ENABLED: "1"
       OPENFDD_MQTT_HOST: mqtt
       OPENFDD_MQTT_PORT: "8883"
