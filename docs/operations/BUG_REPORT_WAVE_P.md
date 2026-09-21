@@ -120,6 +120,20 @@ The current closure rows above are corrected prospectively. Earlier scan/test ac
 
 For each fix append candidate/harness SHA, image/config/fixture hashes, profile, actual CI/run/artifact references, expected/observed outcomes and retest result. Do not mark these rows FIXED merely because a plan or test file was added. These owner labels identify responsibility; assign an actual maintainer when scheduling.
 
+
+## Wave U MEGA FQ attempt `20260921T014908Z` — **FAIL** (not OPS PINNED)
+
+**Tip under test:** `sha-1677c33` / `3.5.37+1677c33047bd` · backup `20260921T013819Z` · edge `vim-1` · EXECUTE=1 · `OPENFDD_MQTT_ACL_EXECUTE=1`  
+**Artifact:** `reports/nightly-ot-bench_20260921T014908Z/` · `fully_qualified=false`
+
+| Gate | Result | Root cause |
+|------|--------|------------|
+| 25 / 25b / **26** / **both 36** | **PASS** | Viewer `OPENFDD_VIEWER_TENANT_IDS=acme` + MQTT ACL execute alias fixed |
+| **08 MCP** | **FAIL** | Sticky repo `.env` `OPENFDD_IMAGE_TAG=sha-c1b1aa5` clobbered tip before `RAILWAY_ONLY` restore |
+| **35 pause/resume** | **FAIL** | MQTT ack `executed` but local fieldbus `suspended=false` (REST suspend works) — likely command path / timing under tip |
+
+**Follow-up:** set `RAILWAY_ONLY=1` before `load_bench_env`; refresh local `.env` tip; re-stress after login rate-limit cool-down.
+
 ## Wave U MEGA FQ attempt `20260920T231407Z` — **FAIL** (not OPS PINNED)
 
 **Tip under test:** `sha-812bd92` / `3.5.36+812bd925bab3` · backup `20260920T230554Z` · edge `vim-1` · EXECUTE=1 · `MQTT_ACL_EXECUTE` alias (missed `OPENFDD_` prefix) · ACCEPT_ZAP_MEDIUM=1  
