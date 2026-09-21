@@ -73,11 +73,11 @@
 | **sec-harness-mt-breadth** | **PARTIAL** · Expanded Y/X mapping/FDD; Soft-OPEN more PLANNED MT routes — **V3** [wave_u_v3_mt_field_host.plan.md](../../.cursor/plans/wave_u_v3_mt_field_host.plan.md) |
 | **sec-harness-evaluator-integrity** | **CLOSED for UA-01/03/04/06/07 contract (tip)** · Permanent negatives + MEGA required gates; Soft-OPEN remains for breadth (MT routes) and product MQTT image vs fixture broker |
 | **sec-ci-wire** | **CLOSED (3.5.34)** · AppSec `security-harness` job |
-| **standalone-https-bootstrap** | **PARTIAL (UA-02)** · Compose hide web:3000 + stub trusted-CA peer `20260921T023714Z`; product-image candidate soak Soft-OPEN — **V1** [wave_u_v1_images_https.plan.md](../../.cursor/plans/wave_u_v1_images_https.plan.md) |
+| **standalone-https-bootstrap** | **PARTIAL→candidate PASS (UA-02)** · Product soak `reports/security/standalone_https_peer_20260921T134930Z` on `sha-af4086f`; stub peer retained; Soft-OPEN until tip includes V1 probe in GHCR docs tip |
 | **fieldbus-mgmt-failclosed** | **CLOSED (3.5.34)** · `require_api_key_for_bind` + unit tests (`non_loopback_without_key_refused`, loopback/key cases) |
 | **mqtt-key-mode-tenant-acl** | **PARTIAL (UA-03/08)** · provisioner `0600` + dual-tenant tests; product MQTT ACL Soft-OPEN — **V2** [wave_u_v2_mqtt_zap.plan.md](../../.cursor/plans/wave_u_v2_mqtt_zap.plan.md) |
 | **zap-af-authenticated** | **PARTIAL (UA-04)** · evaluator fail-closed + JWT hygiene; disposable candidate AF Soft-OPEN — **V2** |
-| **image-digest-trivy** | **REMEDIATION OPEN (UA-05)** · rescan `sha-1677c33`; nginx force-upgrade on **3.5.38** — tip digest acceptance **V1** |
+| **image-digest-trivy** | **REMEDIATION OPEN (UA-05)** · rescan `reports/trivy-wave-u/sha-af4086f/SUMMARY.md`; nginx still 1.28.2 on 3.5.38; **V1/3.5.39** del modules + nginx>=1.28.3 |
 | **nessus-pass-readiness** | **REOPENED / REQUIRED without license (UA-02–09)** · evaluated tooling plus standalone/field-only host, image, TLS, exposure and runtime acceptance remain. Checklist/importer delivery is partial; actual licensed scan is separately BLOCKED. |
 | **nessus-isolated-assessment** | **Soft-OPEN / BLOCKED** · Real licensed Nessus only |
 
@@ -210,7 +210,7 @@ Prior FAILs `20260920T194610Z` / `20260920T231407Z` / `20260921T014908Z` retaine
 | **wu-vim1-oa-t-kit** | Ops | **PARTIAL** | Kit restored `deploy/mqtt/kits/ACME__vim-1/` + fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1`. Telemetry live; residual `ingest_reject` still climbing briefly after redeploy — Soft-OPEN until rejects quiet. |
 | **wu-acme-fdd-slow** | Perf (not hang) | Soft note | Hang Soft-OPEN **CLOSED** (20m reclaim + 900s timeout). ACME may still be slow/timeout under load — not indefinite `running` |
 | **wu-s4-fq-mega** | Soft-OPEN | **CLOSED** | MEGA `20260921T021332Z` `fully_qualified=true` · OPS PINNED `sha-1677c33` / 3.5.37 |
-| **wu-trivy-tip-digest** | Soft-OPEN | **RESCAN OPEN** | Tip `reports/trivy-wave-u/sha-1677c33/`; nginx force-upgrade in 3.5.38 |
+| **wu-trivy-tip-digest** | Soft-OPEN | **RESCAN OPEN / V1** | `reports/trivy-wave-u/sha-af4086f/SUMMARY.md`; nginx FixedVersion on 3.5.38; fix 3.5.39 |
 | **wu-bacnet-ci-api-key** | CI | **FIXED #960** | Optional BACnet smoke supplies `OPENFDD_FIELDBUS_API_KEY` after fail-closed |
 | **wu-bacnet-ci-ro-key-mode** | CI | **FIXED (#966)** | Keys 640 + writable broker mount; e2e PASS on tip `sha-af4086f` / 3.5.38 |
 | **wu-pypi-publish-4.4.3** | Residual | Soft-OPEN honesty | Math CLOSED on tip; PyPI publish `open-fdd` 4.4.3 not done |

@@ -32,10 +32,16 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # Read-only rootfs friendly: html owned by nginx user (UID 101). Also validate
 # the base image's template entrypoint and a Railway-style upstream at build time.
 USER root
-# UA-05: pick Alpine security fixes available in the base (openssl/libxml2/…).
-# Force nginx package past 1.28.2-r1 when Alpine publishes 1.28.3+ (Trivy High/Critical).
-RUN apk upgrade --no-cache \
-  && apk add --no-cache --upgrade nginx \
+# UA-05: refresh index, drop base nginx-module-* (they pin 1.28.2 and block
+# apk upgrade), then install nginx>=1.28.3 so Trivy FixedVersion High/Critical clear.
+# SPA reverse-proxy does not need geoip/image-filter/njs/xslt modules.
+RUN apk update \
+  && apk del --no-cache \
+       nginx-module-geoip nginx-module-image-filter \
+       nginx-module-njs nginx-module-xslt \
+  && apk upgrade --no-cache \
+  && apk add --no-cache "nginx>=1.28.3" \
+  && nginx -v 2>&1 | grep -F 'nginx/1.28.3' \
   && chown -R 101:0 /usr/share/nginx/html \
   && chmod 0755 /docker-entrypoint.d/15-openfdd-resolver.envsh \
   && test -x /docker-entrypoint.d/15-openfdd-resolver.envsh \
