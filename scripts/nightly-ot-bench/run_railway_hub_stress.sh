@@ -11,6 +11,9 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$DIR/lib.sh"
 # shellcheck disable=SC1091
 source "$DIR/lib_capacity_sample.sh"
+# RAILWAY_ONLY before load_bench_env so sticky .env tip pins cannot clobber
+# OPENFDD_IMAGE_TAG / OPENFDD_MCP_IMAGE for hub stress.
+export RAILWAY_ONLY=1
 load_bench_env
 cd "$ROOT"
 
