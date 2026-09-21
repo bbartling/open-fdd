@@ -22,9 +22,19 @@ Open-source, **standards-first** HVAC fault detection. Production rules are **Da
 | Guide | Content |
 |-------|---------|
 | [**Cookbook hub**](cookbook/) | SQL + Pandas dual expression |
+| [**SQL anomaly detection**](sql-anomaly-detection.html) | Overview rolling Z-score screen + Lab tuners for `SV-*` / `PID-HUNT-1` / `WX-1` |
 | [DataFusion SQL cookbook](cookbook/datafusion-sql-cookbook.html) | Copy-paste production rules |
 | [Pandas cookbook](cookbook/pandas-cookbook.html) | Same recipes for analyst workflows outside Open-FDD |
 | [Taxonomy](cookbook/taxonomy.html) | Families and naming |
+
+## Anomaly & sensor quality (quick map)
+
+| Surface | Rules / API | Tuners |
+|---------|-------------|--------|
+| Overview **Anomaly screening (SQL)** | `POST /api/analytics/sql-anomaly` | `window_rows`, `z_threshold`, `method` (`zscore`\|`robust`), `transition_events` |
+| Lab / FDD run | `SV-RANGE`, `SV-FLATLINE`, `SV-SPIKE`, `SV-STALE`, `SV-RATE`, `PID-HUNT-1`, `WX-1` | Lab sliders from `sql_rules/registry.yaml` |
+
+Details, defaults, and hub flag (`OPENFDD_SQL_ANOMALY_SCREENING`): **[SQL anomaly detection](sql-anomaly-detection.html)**.
 
 ## Reference
 
@@ -34,4 +44,4 @@ Open-source, **standards-first** HVAC fault detection. Production rules are **Da
 | [Examples](examples.html) | Short illustrative queries |
 | [SQL rules → Haystack map]({{ site.baseurl }}/modeling/sql-rules-haystack-map.html) | Every registry rule → Haystack tags / SQL roles |
 
-UI: **SQL FDD Rules** (`/sql-fdd`) · **Lab** for tuners · **FDD Plots** for series overlays.
+UI: **SQL FDD Rules** (`/sql-fdd`) · **Lab** for tuners · **FDD Plots** for series overlays · Overview for the Z-score anomaly table.
