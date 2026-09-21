@@ -582,6 +582,21 @@ fn resolve_tenant_context(state: &AppState, headers: &HeaderMap) -> crate::tenan
     crate::tenant::TenantContext::resolve_fail_closed(&user, &plane)
 }
 
+/// Wave U V7: prefer dual-read tenant partition when present for a building.
+fn preferred_tenant_for_building_read(
+    ctx: &crate::tenant::TenantContext,
+    building_id: Option<&str>,
+) -> Option<String> {
+    let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return ctx.tenant_id.clone();
+    };
+    let hub = crate::analytics::historian::parquet_root_base();
+    match ctx.historian_read_root_for_building(&hub, bid) {
+        Ok(resolved) => resolved.tenant_id.or_else(|| ctx.tenant_id.clone()),
+        Err(_) => ctx.tenant_id.clone(),
+    }
+}
+
 fn require_hub_admin(
     state: &AppState,
     headers: &HeaderMap,
@@ -2025,10 +2040,11 @@ pub async fn fdd_equipment(
         return Err(deny);
     }
     let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, q.scoped());
     Ok(Json(
         open_fdd_edge_prototype::fdd::registry_api::equipment_response_scoped(
             q.scoped(),
-            ctx.tenant_id.as_deref(),
+            preferred.as_deref(),
         ),
     ))
 }
@@ -2078,13 +2094,13 @@ pub async fn fdd_series(
         return Err(deny);
     }
     let ctx = resolve_tenant_context(&state, &headers);
-    let tenant_id = ctx.tenant_id.clone();
+    let preferred = preferred_tenant_for_building_read(&ctx, query.building_id.as_deref());
     let result = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::fdd::registry_api::series_response_scoped(
             &query.equipment_id,
             &query.rule_id,
             query.building_id.as_deref(),
-            tenant_id.as_deref(),
+            preferred.as_deref(),
         )
     })
     .await
