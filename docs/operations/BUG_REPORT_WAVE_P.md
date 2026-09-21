@@ -212,7 +212,7 @@ Prior FAILs `20260920T194610Z` / `20260920T231407Z` / `20260921T014908Z` retaine
 | **wu-s4-fq-mega** | Soft-OPEN | **CLOSED** | MEGA `20260921T021332Z` `fully_qualified=true` · OPS PINNED `sha-1677c33` / 3.5.37 |
 | **wu-trivy-tip-digest** | Soft-OPEN | **RESCAN OPEN** | Tip `reports/trivy-wave-u/sha-1677c33/`; nginx force-upgrade in 3.5.38 |
 | **wu-bacnet-ci-api-key** | CI | **FIXED #960** | Optional BACnet smoke supplies `OPENFDD_FIELDBUS_API_KEY` after fail-closed |
-| **wu-bacnet-ci-ro-key-mode** | CI | **FIXING 3.5.38** | RO-mounted keys must be 640 before mqtt start (smoke no longer `chmod 644 *.pem`) |
+| **wu-bacnet-ci-ro-key-mode** | CI | **FIXED (#966)** | Keys 640 + writable broker mount; e2e PASS on tip `sha-af4086f` / 3.5.38 |
 | **wu-pypi-publish-4.4.3** | Residual | Soft-OPEN honesty | Math CLOSED on tip; PyPI publish `open-fdd` 4.4.3 not done |
 | **wu-dm-07-10** | Soft-OPEN | Soft-OPEN honesty | DM-04/05 landed; DM-07..10 SPARQL/PERF/ECM-ADAPT remain |
 | **wu-mt-breadth** | Soft-OPEN | Soft-OPEN honesty | Continue IMPLEMENTED matrix later; inventory cited on tip |
