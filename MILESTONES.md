@@ -28,6 +28,25 @@ The independent audit reopened acceptance checks. Statuses below do not erase ea
 | **U-G — Qualified release and handoff** | Release maintainer + operator | RELEASED (hub FQ) | OPS PINNED **`sha-1677c33` / 3.5.37** · stress `20260921T021332Z`. Follow-on tip **3.5.38** (BACnet CI keys + nginx/trivy/HTTPS trust) not yet OPS-repinned. Soft remainders: UA-02 product soak, UA-05 Debian/caddy, UA-10 S3/S5, U-H Nessus. |
 | **U-H — Licensed Nessus assessment** | Operator/customer security | BLOCKED — licensed scanner and isolated assessment host | Actual external and credentialed assessment of representative standalone/field hosts, verified scan completeness and policy, remediations and retest. Never substitute Python/ZAP/Trivy or synthetic XML for this result. |
 
+## Wave U remainder cycles (V1–V8) — 2026-09-21
+
+Execution master: [`.cursor/plans/wave_u_remainder_patch_cycles.plan.md`](.cursor/plans/wave_u_remainder_patch_cycles.plan.md). Hub FQ on **3.5.37** remains RELEASED; these cycles close Soft-OPEN / PARTIAL acceptance without cancelling U-H or Stage C IdP.
+
+| Cycle | Scope | Status | Soft-OPEN / UA | Subplan |
+| --- | --- | --- | --- | --- |
+| **V1** | Tip Trivy + product HTTPS candidate soak | PLANNED | UA-02, UA-05 | [wave_u_v1_images_https.plan.md](.cursor/plans/wave_u_v1_images_https.plan.md) |
+| **V2** | Product MQTT ACL + disposable ZAP AF | PLANNED | UA-03, UA-04 | [wave_u_v2_mqtt_zap.plan.md](.cursor/plans/wave_u_v2_mqtt_zap.plan.md) |
+| **V3** | MT breadth batch + field/host live evidence | PLANNED | UA-07/08, `sec-harness-mt-breadth` | [wave_u_v3_mt_field_host.plan.md](.cursor/plans/wave_u_v3_mt_field_host.plan.md) |
+| **V4** | PyPI `open-fdd` **4.4.3** publish | PLANNED | `wave-s3-pypi-mv-oracle` | [wave_u_v4_pypi_publish.plan.md](.cursor/plans/wave_u_v4_pypi_publish.plan.md) |
+| **V5** | S5 DM-07..10 / EQ-VOCAB / ECM-ADAPT / Pages | PLANNED | `wave-s5-dm-remainder` | [wave_u_v5_s5_dm_ecm.plan.md](.cursor/plans/wave_u_v5_s5_dm_ecm.plan.md) |
+| **V6** | Single final MEGA FQ + OPS PINNED bump | PLANNED | U-G re-pin after V1–V5 tip | [wave_u_v6_final_mega.plan.md](.cursor/plans/wave_u_v6_final_mega.plan.md) |
+| **V7** | Tenant path migrate `tenants/{tid}/…` | PLANNED | `wave-o1-tenant-path-migrate` | [wave_u_v7_tenant_path_migrate.plan.md](.cursor/plans/wave_u_v7_tenant_path_migrate.plan.md) |
+| **V8** | Historian H4 + runtime compaction coordinator | PLANNED | `historian-n-building-scale` | [wave_u_v8_historian_compaction.plan.md](.cursor/plans/wave_u_v8_historian_compaction.plan.md) |
+
+**Deferred outside V1–V8:** `stage-c-idp-mfa-sku` (commercial) · U-H Nessus · `local-bacnet-ot-bench` · #958 HOLD baud docs.
+
+Rules: smoke-only between cycles; **one MEGA at V6** (do not wait for V7/V8); log FAIL in BUG_REPORT before fix.
+
 These owner labels are responsibilities, not assigned GitHub usernames. Name the actual owner when scheduling the milestone. Set due dates when capacity and external dependencies are known; do not invent dates to create apparent commitment.
 
 ## Evidence record required before verification
