@@ -48,7 +48,9 @@ pub fn execute(body: &Value) -> Value {
     }
 }
 
-fn bindings_to_response(bindings: Vec<std::collections::HashMap<String, rdf::SparqlBinding>>) -> Value {
+fn bindings_to_response(
+    bindings: Vec<std::collections::HashMap<String, rdf::SparqlBinding>>,
+) -> Value {
     let truncated = bindings.len() > MAX_ROWS;
     let rows: Vec<Value> = bindings
         .into_iter()

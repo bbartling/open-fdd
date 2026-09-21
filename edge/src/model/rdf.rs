@@ -534,11 +534,7 @@ pub fn sparql_select_lexical(
 ) -> Result<Vec<std::collections::HashMap<String, String>>, String> {
     Ok(sparql_select(query_text)?
         .into_iter()
-        .map(|row| {
-            row.into_iter()
-                .map(|(k, b)| (k, b.value))
-                .collect()
-        })
+        .map(|row| row.into_iter().map(|(k, b)| (k, b.value)).collect())
         .collect())
 }
 
@@ -721,14 +717,12 @@ mod tests {
     #[test]
     fn dm07_sparql_bindings_preserve_iri_and_typed_literals() {
         invalidate_store();
-        let rows = vec![
-            json!({
-                "id": "site:lab",
-                "dis": "Lab",
-                "site": "M",
-                "count": 7_i64
-            }),
-        ];
+        let rows = vec![json!({
+            "id": "site:lab",
+            "dis": "Lab",
+            "site": "M",
+            "count": 7_i64
+        })];
         // Build store from fixture turtle directly via haystack path is process-global;
         // assert term_to_binding on constructed terms instead + round-trip SELECT haystackId.
         use oxigraph::model::{Literal, NamedNode};
