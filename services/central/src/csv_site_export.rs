@@ -40,10 +40,10 @@ async fn build_site_csv_bytes(
 
 async fn historian_csv_async(building_id: &str) -> Result<Option<Vec<u8>>, JobError> {
     let ctx = SessionContext::new();
-    if !historian::try_register_history_scoped(&ctx, Some(building_id))
+    let (ok, _scan) = historian::open_history_scan(&ctx, Some(building_id))
         .await
-        .map_err(|e| JobError::Io(e.to_string()))?
-    {
+        .map_err(|e| JobError::Io(e.to_string()))?;
+    if !ok {
         return Ok(None);
     }
     let sql = "SELECT * FROM history";

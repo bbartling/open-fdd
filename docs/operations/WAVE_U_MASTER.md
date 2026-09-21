@@ -61,7 +61,7 @@ The independent acceptance review reopened qualification, standalone, MQTT, ZAP 
 | `stage-c-idp-mfa-sku` | Commercial IdP/MFA |
 | `wave-o1-tenant-path-migrate` | **CLOSED (3.5.41)** dual-read + additive migrate helper |
 | `p2c-mqtt-acl-staging` | Merge into U4 where possible |
-| `historian-n-building-scale` | Parquet compaction later |
+| `historian-n-building-scale` | **CLOSED (V8)** · offline H4 CLI + runtime coordinator; Railway live compact soak residual |
 | `acme-oa-t-dup-reject` | Ops catalog noise |
 | `local-bacnet-ot-bench` | FEC/MS/TP shared trunk |
 | `edge-kit-soft` | Kit restore ops |

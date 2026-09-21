@@ -40,8 +40,8 @@ Execution master: [`.cursor/plans/wave_u_remainder_patch_cycles.plan.md`](.curso
 | **V4** | PyPI `open-fdd` **4.4.3** publish | PLANNED | `wave-s3-pypi-mv-oracle` | [wave_u_v4_pypi_publish.plan.md](.cursor/plans/wave_u_v4_pypi_publish.plan.md) |
 | **V5** | S5 DM-07..10 / EQ-VOCAB / ECM-ADAPT / Pages | PLANNED | `wave-s5-dm-remainder` | [wave_u_v5_s5_dm_ecm.plan.md](.cursor/plans/wave_u_v5_s5_dm_ecm.plan.md) |
 | **V6** | Single final MEGA FQ + OPS PINNED bump | PLANNED | U-G re-pin after V1–V5 tip | [wave_u_v6_final_mega.plan.md](.cursor/plans/wave_u_v6_final_mega.plan.md) |
-| **V7** | Tenant path migrate `tenants/{tid}/…` | **IN FLIGHT** (3.5.41 dual-read + migrate script) | `wave-o1-tenant-path-migrate` **CLOSED (product)** | [wave_u_v7_tenant_path_migrate.plan.md](.cursor/plans/wave_u_v7_tenant_path_migrate.plan.md) |
-| **V8** | Historian H4 + runtime compaction coordinator | PLANNED | `historian-n-building-scale` | [wave_u_v8_historian_compaction.plan.md](.cursor/plans/wave_u_v8_historian_compaction.plan.md) |
+| **V7** | Tenant path migrate `tenants/{tid}/…` | **LANDED** (3.5.41 dual-read + migrate script) | `wave-o1-tenant-path-migrate` **CLOSED (product)** | [wave_u_v7_tenant_path_migrate.plan.md](.cursor/plans/wave_u_v7_tenant_path_migrate.plan.md) |
+| **V8** | Historian H4 + runtime compaction coordinator | **BRANCH** | `historian-n-building-scale` CLOSED (CI); Railway live compact soak residual | [wave_u_v8_historian_compaction.plan.md](.cursor/plans/wave_u_v8_historian_compaction.plan.md) |
 
 **Deferred outside V1–V8:** `stage-c-idp-mfa-sku` (commercial) · U-H Nessus · `local-bacnet-ot-bench` · #958 HOLD baud docs.
 

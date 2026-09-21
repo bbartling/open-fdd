@@ -58,7 +58,7 @@
 | **kali-zap-af** | **REOPENED acceptance (UA-04)** · alias of `zap-af-authenticated` — **V2** |
 | **wave-o1-tenant-path-migrate** | **CLOSED (3.5.41 / V7)** · Dual-read prefers `tenants/{tid}/…` then hub-root; additive migrate script `scripts/ops/wave_u_v7_tenant_path_migrate.sh` (ACME / BUILDING_100 / LAKESIDE_ES); permanent ACL regressions foreign deny + hub_admin sees all. Live hub APPLY still requires Railway backup + `CONFIRM_BACKUP=1` — not run in this PR. #958 HOLD unchanged. |
 | **p2c-mqtt-acl-staging** | **REOPENED acceptance (UA-03)** · folded into `mqtt-key-mode-tenant-acl`; product-generated runtime ACL matrix still required — **V2** |
-| **historian-n-building-scale** | Small Parquet parts × N buildings; offline H4 now; runtime compaction Soft later — **V8** [wave_u_v8_historian_compaction.plan.md](../../.cursor/plans/wave_u_v8_historian_compaction.plan.md) |
+| **historian-n-building-scale** | **CLOSED (V8 branch)** · H4 offline CLI `compact-history` (validate-before-publish) + runtime `CompactionCoordinator` (fail-closed/wait) + hub-admin `GET\|POST /api/historian/compaction` + Admin capacity Compact controls · CI: multi-building fixture + concurrent scan+compact negative · Residual Soft: Railway maintenance-window live compact soak (no MEGA) |
 | **admin-capacity-gauges** | **CLOSED (branch)** · cgroup memory + workspace `statvfs` + Parquet small-file strip on Admin |
 | **railway-capacity-stress** | **CITED** Tip B FQ `20260917T215437Z` gates 24/24b PASS |
 | **mqtt-pause-ui** | **CLOSED (#947 Tip B)** · MT command topics `tenants/…`; gate **35 PASS** on `sha-4a5c11e` stress `20260917T215437Z` |

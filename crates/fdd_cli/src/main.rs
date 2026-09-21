@@ -11,7 +11,10 @@ use fdd_sql::{
     new_historian_session, register_parquet_tree, run_sql_file_bounded,
     DEFAULT_INTERACTIVE_MAX_ROWS,
 };
-use fdd_store::{ingest_building, HistorianConfig};
+use fdd_store::{
+    assert_compaction_safe_for_offline, compact_history_fail_closed, compact_history_wait,
+    ingest_building, HistorianConfig, LocalStorage, ParquetCompactor,
+};
 use inventory::write_inventory;
 
 #[derive(Parser)]
@@ -97,6 +100,28 @@ enum Commands {
         rule_out: PathBuf,
         #[arg(long, default_value = "docs/BUILDING_100_BENCHMARK.md")]
         report: PathBuf,
+    },
+    /// H4 offline historian compaction (validate-before-publish).
+    ///
+    /// Stop Central DataFusion work first, or pass `--wait` so the runtime
+    /// coordinator drains active scans. Never overlap raw compaction with live
+    /// scans — that creates duplicate-row or read-gap windows.
+    CompactHistory {
+        /// Canonical storage root containing `history/` (file path, not file:// URL).
+        #[arg(long)]
+        storage_root: PathBuf,
+        /// Plan only — print compaction groups without mutating files.
+        #[arg(long, default_value_t = false)]
+        plan_only: bool,
+        /// Wait for DataFusion scan leases to drain instead of failing closed.
+        #[arg(long, default_value_t = false)]
+        wait: bool,
+        /// Override OPENFDD_COMPACTION_MIN_FILES for this invocation.
+        #[arg(long)]
+        min_files: Option<usize>,
+        /// Override OPENFDD_PARQUET_TARGET_FILE_MB for this invocation.
+        #[arg(long)]
+        target_file_mb: Option<u64>,
     },
 }
 
@@ -198,6 +223,49 @@ async fn main() -> Result<()> {
             std::fs::write(&report, &md)?;
             println!("{}", serde_json::to_string_pretty(&bench)?);
             println!("report: {}", report.display());
+        }
+        Commands::CompactHistory {
+            storage_root,
+            plan_only,
+            wait,
+            min_files,
+            target_file_mb,
+        } => {
+            let min_files = min_files.unwrap_or_else(|| {
+                HistorianConfig::from_env()
+                    .map(|c| c.compaction_min_files)
+                    .unwrap_or(8)
+            });
+            let target_file_mb = target_file_mb.unwrap_or_else(|| {
+                HistorianConfig::from_env()
+                    .map(|c| c.target_file_mb)
+                    .unwrap_or(128)
+            });
+            let storage = LocalStorage::new(&storage_root);
+            let compactor = ParquetCompactor::new(storage, min_files, target_file_mb)?;
+            if plan_only {
+                let plans = compactor.plan_history()?;
+                println!("{}", serde_json::to_string_pretty(&plans)?);
+            } else if wait {
+                let (results, summary) = compact_history_wait(&compactor)?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "results": results,
+                        "summary": summary,
+                    }))?
+                );
+            } else {
+                assert_compaction_safe_for_offline()?;
+                let (results, summary) = compact_history_fail_closed(&compactor)?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "results": results,
+                        "summary": summary,
+                    }))?
+                );
+            }
         }
     }
     Ok(())

@@ -145,14 +145,10 @@ fn safe_building_segment(building_id: Option<&str>) -> Option<String> {
 /// Wave U V7 dual-read: prefers `tenants/{tid}/…` when present, else hub-root.
 /// Does **not** fall back to the whole tree (that would mix other buildings).
 /// Returns `Ok(false)` when nothing usable is present.
-pub async fn try_register_history_scoped(
-    ctx: &SessionContext,
-    building_id: Option<&str>,
-) -> Result<bool> {
-    try_register_history_scoped_for_tenant(ctx, building_id, None).await
-}
-
-/// Same as [`try_register_history_scoped`] with an explicit preferred tenant id.
+///
+/// Prefer [`open_history_scan`] / [`open_history_scan_for_tenant`] when the
+/// caller will run DataFusion SQL — those APIs return a scan permit that must
+/// be held for the full query lifetime.
 pub async fn try_register_history_scoped_for_tenant(
     ctx: &SessionContext,
     building_id: Option<&str>,
@@ -202,6 +198,27 @@ pub async fn try_register_history_scoped_for_tenant(
             }
         },
     }
+}
+
+/// Register historian scope and return a scan permit the caller must hold until
+/// DataFusion collect/stream completes (serializes vs runtime H4 compaction).
+pub async fn open_history_scan(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+) -> Result<(bool, fdd_store::ScanPermit)> {
+    open_history_scan_for_tenant(ctx, building_id, None).await
+}
+
+/// Tenant-aware variant of [`open_history_scan`].
+pub async fn open_history_scan_for_tenant(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+) -> Result<(bool, fdd_store::ScanPermit)> {
+    let scan = fdd_store::try_historian_scan_permit()
+        .or_else(|_| Ok::<_, anyhow::Error>(fdd_store::historian_scan_permit_wait()))?;
+    let ok = try_register_history_scoped_for_tenant(ctx, building_id, preferred_tenant).await?;
+    Ok((ok, scan))
 }
 
 async fn history_columns_async(ctx: &SessionContext) -> Result<HashSet<String>> {
@@ -605,7 +622,8 @@ pub async fn runtime_from_history(
     end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let ctx = SessionContext::new();
-    if !try_register_history_scoped(&ctx, building_id).await? {
+    let (ok, _scan) = open_history_scan(&ctx, building_id).await?;
+    if !ok {
         return Ok(None);
     }
 
@@ -964,14 +982,16 @@ ORDER BY week_start, equipment_id
     Ok(out)
 }
 
-/// Register `history` and return `(ctx, columns, row_count)` when the parquet
-/// tree exists and has rows; `Ok(None)` when missing/empty (caller falls back).
+/// Register `history` and return `(ctx, columns, row_count, scan_permit)` when
+/// the parquet tree exists and has rows; `Ok(None)` when missing/empty.
 /// Optional `building_id` scopes the hive path (OFDD-070).
+/// The scan permit must stay alive for subsequent DataFusion work on `ctx`.
 async fn open_history_scoped(
     building_id: Option<&str>,
-) -> Result<Option<(SessionContext, HashSet<String>, i64)>> {
+) -> Result<Option<(SessionContext, HashSet<String>, i64, fdd_store::ScanPermit)>> {
     let ctx = SessionContext::new();
-    if !try_register_history_scoped(&ctx, building_id).await? {
+    let (ok, scan) = open_history_scan(&ctx, building_id).await?;
+    if !ok {
         return Ok(None);
     }
     let count = run_sql(&ctx, "SELECT COUNT(*) AS n FROM history").await?;
@@ -985,7 +1005,7 @@ async fn open_history_scoped(
         return Ok(None);
     }
     let cols = history_columns_async(&ctx).await?;
-    Ok(Some((ctx, cols, n)))
+    Ok(Some((ctx, cols, n, scan)))
 }
 
 fn as_f64(v: Option<&serde_json::Value>) -> Option<f64> {
@@ -1006,7 +1026,7 @@ pub async fn sensor_health_from_history(
     equipment_filter: Option<&[String]>,
     building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
 
@@ -1175,7 +1195,7 @@ pub async fn sensor_stats_from_history(
     building_id: Option<&str>,
     fan_state: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let role_cols: Vec<&str> = NUMERIC_ROLE_COLS
@@ -1264,7 +1284,7 @@ pub async fn setpoints_from_history(
     equipment_filter: Option<&[String]>,
     building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let present: Vec<&str> = SP_ROLES
@@ -1357,7 +1377,7 @@ pub async fn diurnal_from_history(
     equipment_filter: Option<&[String]>,
     building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -1431,7 +1451,7 @@ pub async fn diurnal_from_history(
 
 /// Equipment topology (feeds / fedBy) inferred from equipment ids.
 pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, _cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, _cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let result = run_sql(
@@ -1538,7 +1558,7 @@ pub async fn schedule_from_history(
     max_gap_seconds: f64,
     building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     if !cols.contains("occ_mode") {
@@ -1630,7 +1650,7 @@ pub async fn economizer_from_history(
     building_id: Option<&str>,
     max_points: usize,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     // OFDD-070 / ENH-OFDD-001: Liberty packages expose web_oa_t (not oa_t).
@@ -1863,7 +1883,7 @@ LIMIT {limit}
 
 /// Diagnostic warnings when mechanical-cooling OAT bins cannot be computed.
 pub async fn mech_cooling_evidence_warnings(building_id: Option<&str>) -> Result<Vec<String>> {
-    let Some((_ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((_ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(vec![
             "mechanical_cooling: no historian parquet for this building — ingest history first"
                 .into(),
@@ -1896,7 +1916,7 @@ pub async fn mech_oat_bins_from_history(
     max_gap_seconds: f64,
     building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2138,7 +2158,7 @@ pub async fn bas_vs_web_from_history(
     max_points: usize,
     building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2311,7 +2331,7 @@ pub async fn inspect_from_history(
     if eq.is_empty() {
         return Ok(None);
     }
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2526,7 +2546,7 @@ pub async fn rcx_timeseries_from_history(
     filter_fan_on: bool,
     max_points: usize,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2661,7 +2681,7 @@ pub async fn rcx_oat_scatter_from_history(
     prefer_wetbulb: bool,
     max_points: usize,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2777,7 +2797,7 @@ pub async fn rcx_box_from_history(
     filter_fan_on: bool,
     max_points: usize,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     if !cols.contains(role_col) {
@@ -2836,7 +2856,7 @@ pub async fn rcx_zone_comfort_rank_from_history(
     comfort_low_f: f64,
     comfort_high_f: f64,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     if !cols.contains("zone_t") {
@@ -2925,7 +2945,7 @@ pub async fn rcx_metering_from_history(
     eq_kinds: &[&str],
     kind: &str,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -3065,7 +3085,7 @@ pub async fn descriptive_counts_from_history_filtered(
     building_id: Option<&str>,
     extra_equipment_sql: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, _cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, _cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let eq_filter = equipment_filter_sql(equipment_filter);
@@ -3124,7 +3144,7 @@ pub async fn sql_anomaly_from_history(
     method: &str,
     transition_events: bool,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let ts_col = pick_ts_col(&cols).unwrap_or("timestamp_utc");

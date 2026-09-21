@@ -2631,6 +2631,82 @@
     },
     {
       "method": "GET",
+      "path": "/api/historian/compaction",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "admin_only",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_historian_compaction",
+        "y.authz.get_api_historian_compaction"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_historian_compaction",
+        "y.authz.get_api_historian_compaction"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Hub-admin compaction coordinator status (Wave U V8)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/historian/compaction",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "admin_only",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_historian_compaction",
+        "y.authz.post_api_historian_compaction"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_historian_compaction",
+        "y.authz.post_api_historian_compaction"
+      ],
+      "request_schema": {
+        "type": "object",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Hub-admin H4 compact via CompactionCoordinator; confirm:true required (Wave U V8)"
+    },
+    {
+      "method": "GET",
       "path": "/api/fdd-schema/tables",
       "section": "protected",
       "auth": "jwt_required",

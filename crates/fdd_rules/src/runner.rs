@@ -210,6 +210,12 @@ pub async fn run_all_rules_with_overrides(
     overrides: &HashMap<String, HashMap<String, f64>>,
     options: RunOptions<'_>,
 ) -> Result<RuleRunReport> {
+    // Serialize FDD DataFusion scans against runtime H4 compaction.
+    let _scan_permit = fdd_store::try_historian_scan_permit().or_else(|_| {
+        // Prefer waiting briefly rather than failing an operator Run-all mid-request
+        // when compaction is finishing; exclusive compact still blocks new scans.
+        Ok::<_, anyhow::Error>(fdd_store::historian_scan_permit_wait())
+    })?;
     let started = std::time::Instant::now();
     std::fs::create_dir_all(out_dir)?;
     let poll_seconds = read_poll_from_cache(parquet_root)

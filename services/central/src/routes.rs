@@ -154,6 +154,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/export/meta", get(export_meta))
         .route("/api/data-management/summary", get(data_management_summary))
         .route("/api/host/stats", get(host_stats))
+        .route(
+            "/api/historian/compaction",
+            get(historian_compaction_status).post(historian_compaction_run),
+        )
         .route("/api/fdd-schema/tables", get(fdd_schema_tables))
         .route("/api/fdd-rules", get(fdd_rules_list))
         .route("/api/reports", get(reports_list))
@@ -982,6 +986,7 @@ pub async fn capabilities() -> Json<Value> {
             "export": true,
             "data_management": true,
             "host_stats": true,
+            "historian_compaction": true,
             "faults": true,
             "health_stack": true,
             "fdd_rules_authoring": true,
@@ -2827,7 +2832,141 @@ pub async fn data_management_summary() -> Json<Value> {
 }
 
 pub async fn host_stats() -> Json<Value> {
-    Json(open_fdd_edge_prototype::ops::host_stats::stats_json())
+    let mut body = open_fdd_edge_prototype::ops::host_stats::stats_json();
+    if let Some(obj) = body.as_object_mut() {
+        let status = fdd_store::shared_compaction_coordinator().status();
+        obj.insert(
+            "compaction_coordinator".to_string(),
+            json!({
+                "mode": status.mode,
+                "scanners": status.scanners,
+                "compacting": status.compacting,
+            }),
+        );
+        if let Some(dm) = obj
+            .get_mut("data_management")
+            .and_then(|v| v.as_object_mut())
+        {
+            if let Some(parquet) = dm.get_mut("parquet").and_then(|v| v.as_object_mut()) {
+                parquet.insert("compaction_status".to_string(), json!(status.mode));
+            }
+        }
+    }
+    Json(body)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HistorianCompactionBody {
+    /// Required write confirm (matches other mutating admin APIs).
+    #[serde(default)]
+    pub confirm: bool,
+    /// Wait for DataFusion scan leases to drain (default: fail closed).
+    #[serde(default)]
+    pub wait: bool,
+    /// Plan only — do not mutate Parquet.
+    #[serde(default)]
+    pub plan_only: bool,
+}
+
+pub async fn historian_compaction_status(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let _admin = require_hub_admin(&state, &headers)?;
+    let coord = fdd_store::shared_compaction_coordinator().status();
+    let stats = fdd_store::HistorianConfig::from_env()
+        .ok()
+        .and_then(|cfg| fdd_store::local_historian_stats_from_config(&cfg).ok());
+    Ok(Json(json!({
+        "ok": true,
+        "coordinator": {
+            "mode": coord.mode,
+            "scanners": coord.scanners,
+            "compacting": coord.compacting,
+        },
+        "historian": stats,
+    })))
+}
+
+pub async fn historian_compaction_run(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<HistorianCompactionBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let admin = require_hub_admin(&state, &headers)?;
+    if !body.confirm {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "confirm:true required"})),
+        ));
+    }
+    tracing::info!(
+        target: "security_audit",
+        event = "historian_compaction_requested",
+        subject = %admin.sub,
+        plan_only = body.plan_only,
+        wait = body.wait,
+        "hub admin requested historian compaction"
+    );
+
+    let config = fdd_store::HistorianConfig::from_env().map_err(|e| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"ok": false, "error": e.to_string()})),
+        )
+    })?;
+    let compactor = fdd_store::ParquetCompactor::from_config(&config).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": e.to_string()})),
+        )
+    })?;
+
+    if body.plan_only {
+        let plans = compactor.plan_history().map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": e.to_string()})),
+            )
+        })?;
+        return Ok(Json(json!({
+            "ok": true,
+            "plan_only": true,
+            "plans": plans,
+            "coordinator": fdd_store::shared_compaction_coordinator().status(),
+        })));
+    }
+
+    let run = if body.wait {
+        tokio::task::spawn_blocking(move || fdd_store::compact_history_wait(&compactor))
+    } else {
+        tokio::task::spawn_blocking(move || fdd_store::compact_history_fail_closed(&compactor))
+    }
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": format!("compaction join: {e}")})),
+        )
+    })?;
+
+    match run {
+        Ok((results, summary)) => Ok(Json(json!({
+            "ok": true,
+            "results": results,
+            "summary": summary,
+            "coordinator": fdd_store::shared_compaction_coordinator().status(),
+        }))),
+        Err(e) => {
+            let msg = e.to_string();
+            let status = if msg.contains("scan") || msg.contains("compaction in progress") {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            Err((status, Json(json!({"ok": false, "error": msg}))))
+        }
+    }
 }
 
 pub async fn fdd_schema_tables() -> Json<Value> {

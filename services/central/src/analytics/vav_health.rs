@@ -7,7 +7,7 @@ use datafusion::prelude::SessionContext;
 use fdd_sql::run_sql;
 use serde_json::{json, Value};
 
-use super::historian::try_register_history_scoped;
+use super::historian::open_history_scan;
 use super::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest, DF_ENGINE};
 
 pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
@@ -122,7 +122,8 @@ pub async fn vav_health_from_history(
         return Ok(Some(env));
     };
     let ctx = SessionContext::new();
-    if !try_register_history_scoped(&ctx, Some(bid)).await? {
+    let (ok, _scan) = open_history_scan(&ctx, Some(bid)).await?;
+    if !ok {
         let q = AnalyticsQuery {
             building_id: Some(bid.to_string()),
             ..Default::default()

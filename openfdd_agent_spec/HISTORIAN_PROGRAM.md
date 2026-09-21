@@ -84,7 +84,8 @@ H3 merged only after its exact changed head passed FDD engine, Rust stack, AppSe
 - [x] surface rollback failures and report cleanup-pending tombstones
 - [x] lightweight serializable plan/result/summary metrics with distinct partition accounting
 - [x] unit coverage for partition-local planning, row preservation, nullable schema evolution, duplicate inputs, summary accounting, and failure safety
-- [x] local H4 compaction is offline-only; it is not scheduled from the product runtime and must not overlap DataFusion scans of the same local historian
+- [x] local H4 compaction is offline-only by default; runtime Wave U V8 adds `CompactionCoordinator` + hub-admin `/api/historian/compaction` so compact cannot overlap DataFusion scans (fail closed or wait)
+- [x] operator CLI: `openfdd_cli compact-history --storage-root … [--plan-only] [--wait]`
 
 The older stacked PR #759 remains closed historical context only. H4 merged only after exact-head FDD engine, Rust stack, AppSec, docs/security, and review gates were green.
 
