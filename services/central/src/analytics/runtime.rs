@@ -170,27 +170,38 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         let filter = req.query.equipment_ids.as_deref();
         // ACME-scale historians: unbounded LEAD over full Parquet exceeds edge
         // timeouts (~180s → 502). Default to a 90-day lookback when start omitted.
+        // Synthetic/CSV packages often sit outside wall-clock 90d (e.g. Jan fixture
+        // weeks) — if the defaulted window is empty, retry unbounded once.
         let defaulted_start = req.query.start.is_none();
         let start = req
             .query
             .start
             .or_else(|| Some(Utc::now() - chrono::Duration::days(90)));
         let end = req.query.end;
-        match historian::runtime_from_history(
-            filter,
-            max_gap,
-            req.query.building_id.as_deref(),
-            start,
-            end,
-        )
-        .await
+        let building = req.query.building_id.as_deref();
+        let mut used_unbounded_fallback = false;
+        let hist = match historian::runtime_from_history(filter, max_gap, building, start, end)
+            .await
         {
+            Ok(Some(env)) if env_has_runtime_rows(&env) => Ok(Some(env)),
+            Ok(Some(_)) | Ok(None) if defaulted_start => {
+                used_unbounded_fallback = true;
+                historian::runtime_from_history(filter, max_gap, building, None, end).await
+            }
+            other => other,
+        };
+        match hist {
             Ok(Some(mut env)) => {
                 let (qv, mut warnings) = resolve_query_version(req, QV_RUNTIME);
                 env.query_version = qv;
                 env.job_id = req.query.job_id.clone().or(env.job_id);
                 env.run_id = req.query.run_id.clone().or(env.run_id);
-                if defaulted_start {
+                if used_unbounded_fallback {
+                    warnings.push(
+                        "runtime 90-day default window was empty; expanded to full historian range — pass query.start/end to bound"
+                            .into(),
+                    );
+                } else if defaulted_start {
                     warnings.push(
                         "runtime defaulted start to last 90 days; pass query.start for a custom window"
                             .into(),
@@ -212,6 +223,10 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 
 fn round2(x: f64) -> f64 {
     (x * 100.0).round() / 100.0
+}
+
+fn env_has_runtime_rows(env: &AnalyticsEnvelope) -> bool {
+    !env.equipment.is_empty() || !env.rows.is_empty()
 }
 
 #[cfg(test)]

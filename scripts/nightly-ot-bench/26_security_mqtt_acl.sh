@@ -26,6 +26,32 @@ if [[ -z "${OPENFDD_MQTT_ACL_IMAGE:-}" && -n "${OPENFDD_IMAGE_TAG:-}" ]]; then
   export OPENFDD_MQTT_ACL_IMAGE="ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_IMAGE_TAG}"
 fi
 
+write_structured_verdict() {
+  # Always emit security_gate_verdict.json for run_security_gate (exit alone is insufficient).
+  local src="${1:-$ART/mqtt_acl_verdict.json}"
+  local extra_rc="${2:-}"
+  if [[ -n "$extra_rc" ]]; then
+    jq --argjson ut "$extra_rc" '{
+      ok: (.ok // (.status=="PASS")),
+      status: (.status // (if .ok==true then "PASS" else "FAIL" end)),
+      reason: (.reason // .detail // .live_broker // ""),
+      image: (.image // null),
+      acl_source: (.acl_source // null),
+      source: "mqtt_acl_observer.json",
+      unittest_rc: $ut
+    }' "$src" | tee "$ART/security_gate_verdict.json" >/dev/null
+  else
+    jq '{
+      ok: (.ok // (.status=="PASS")),
+      status: (.status // (if .ok==true then "PASS" else "FAIL" end)),
+      reason: (.reason // .detail // .live_broker // ""),
+      image: (.image // null),
+      acl_source: (.acl_source // null),
+      source: "mqtt_acl_observer.json"
+    }' "$src" | tee "$ART/security_gate_verdict.json" >/dev/null
+  fi
+}
+
 OBS_OUT="$ART/observer"
 mkdir -p "$OBS_OUT"
 set +e
@@ -39,8 +65,13 @@ if [[ -f "$OBS_OUT/mqtt_acl_observer.json" ]]; then
   cp "$OBS_OUT/mqtt_acl_observer.json" "$ART/mqtt_acl_verdict.json"
   # Permanent negative: EXECUTE path must not silently use fixture broker.
   if [[ "${OPENFDD_MQTT_ACL_ALLOW_FIXTURE_BROKER:-0}" != "1" ]]; then
-    img=$(jq -r '.image // .checks[]?|select(.check=="mqtt.acl.live_broker_observer")|.image // empty' "$ART/mqtt_acl_verdict.json" 2>/dev/null | head -1)
-    src=$(jq -r '.acl_source // empty' "$ART/mqtt_acl_verdict.json")
+    # Prefer top-level image; fall back to live_broker_observer check (safe jq).
+    img=$(jq -r '.image // empty' "$ART/mqtt_acl_verdict.json" 2>/dev/null || true)
+    if [[ -z "$img" ]]; then
+      img=$(jq -r '[.checks[]? | select(.check=="mqtt.acl.live_broker_observer") | .image] | first // empty' \
+        "$ART/mqtt_acl_verdict.json" 2>/dev/null || true)
+    fi
+    src=$(jq -r '.acl_source // empty' "$ART/mqtt_acl_verdict.json" 2>/dev/null || true)
     if [[ "$src" == "fixture" ]] || [[ "$img" == eclipse-mosquitto* ]]; then
       jq -n --arg img "${img:-}" --arg src "${src:-}" '{
         ok:false,
@@ -53,15 +84,7 @@ if [[ -f "$OBS_OUT/mqtt_acl_observer.json" ]]; then
       exit 1
     fi
   fi
-  # run_security_gate records from security_gate_verdict.json (not mqtt_acl_verdict).
-  jq '{
-    ok: (.ok // (.status=="PASS")),
-    status: (.status // (if .ok==true then "PASS" else "FAIL" end)),
-    reason: (.reason // .detail // .live_broker // ""),
-    image: (.image // null),
-    acl_source: (.acl_source // null),
-    source: "mqtt_acl_observer.json"
-  }' "$ART/mqtt_acl_verdict.json" | tee "$ART/security_gate_verdict.json" >/dev/null
+  write_structured_verdict "$ART/mqtt_acl_verdict.json"
 else
   jq -n --argjson rc "$rc" '{
     ok:false,
@@ -85,19 +108,15 @@ if [[ "$ut_rc" -ne 0 ]]; then
   jq --argjson ut "$ut_rc" '.ok=false | .status="FAIL" | .unittest_rc=$ut' \
     "$ART/mqtt_acl_verdict.json" >"$ART/mqtt_acl_verdict.json.tmp"
   mv "$ART/mqtt_acl_verdict.json.tmp" "$ART/mqtt_acl_verdict.json"
-  cp "$ART/mqtt_acl_verdict.json" "$ART/security_gate_verdict.json"
+  write_structured_verdict "$ART/mqtt_acl_verdict.json" "$ut_rc"
   exit 1
 fi
 
-if [[ "$rc" -eq 0 ]]; then
-  # Refresh structured verdict after unittest PASS path.
-  jq '{
-    ok: (.ok // (.status=="PASS")),
-    status: (.status // (if .ok==true then "PASS" else "FAIL" end)),
-    reason: (.reason // .detail // .live_broker // "PASS"),
-    source: "mqtt_acl_observer.json",
-    unittest_rc: 0
-  }' "$ART/mqtt_acl_verdict.json" >"$ART/security_gate_verdict.json"
+# Prefer structured PASS over observer process exit (cleanup/docker can be non-zero
+# after a truthful mqtt_acl_observer.json PASS — MEGA 20260921T204702Z exit=5 flake).
+obs_ok=$(jq -r '(.ok == true) or (.status == "PASS")' "$ART/mqtt_acl_verdict.json" 2>/dev/null || echo false)
+write_structured_verdict "$ART/mqtt_acl_verdict.json" 0
+if [[ "$obs_ok" == "true" ]]; then
   exit 0
 fi
 exit "$rc"
