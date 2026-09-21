@@ -2,33 +2,33 @@
 @prefix ofdd: <https://open-fdd.dev/model#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
-ofdd:site_school_kw_merged
+ofdd:enc_736974653a7363686f6f6c2d6b772d6d6572676564
   a hs:Site ;
   ofdd:haystackId "site:school-kw-merged" ;
   hs:dis "school_kw_merged" .
 
-ofdd:source_csv_school_kw_merged
+ofdd:enc_736f757263653a6373763a7363686f6f6c2d6b772d6d6572676564
   ofdd:haystackId "source:csv:school-kw-merged" ;
   hs:dis "CSV source (school-kw-merged)" ;
   ofdd:importJob "dataset-school_kw_merged" ;
   ofdd:protocol "csv" .
 
-ofdd:equip_school_kw_merged
+ofdd:enc_65717569703a7363686f6f6c2d6b772d6d6572676564
   a hs:Equip ;
   ofdd:haystackId "equip:school-kw-merged" ;
   ofdd:equipType "generic" ;
   hs:dis "school_kw_merged" ;
-  hs:siteRef ofdd:site_school_kw_merged ;
-  hs:sourceRef ofdd:source_csv_school_kw_merged .
+  hs:siteRef ofdd:enc_736974653a7363686f6f6c2d6b772d6d6572676564 ;
+  hs:sourceRef ofdd:enc_736f757263653a6373763a7363686f6f6c2d6b772d6d6572676564 .
 
-ofdd:point_school_kw_merged_temp_f
+ofdd:enc_706f696e743a7363686f6f6c2d6b772d6d65726765642d74656d705f66
   a hs:Point ;
   ofdd:haystackId "point:school-kw-merged-temp_f" ;
   hs:dis "temp_f" ;
-  hs:siteRef ofdd:site_school_kw_merged ;
-  hs:equipRef ofdd:equip_school_kw_merged ;
-  hs:sourceRef ofdd:source_csv_school_kw_merged ;
-  ofdd:csvRef ofdd:csv_source_csv_school_kw_merged_temp_f ;
+  hs:siteRef ofdd:enc_736974653a7363686f6f6c2d6b772d6d6572676564 ;
+  hs:equipRef ofdd:enc_65717569703a7363686f6f6c2d6b772d6d6572676564 ;
+  hs:sourceRef ofdd:enc_736f757263653a6373763a7363686f6f6c2d6b772d6d6572676564 ;
+  ofdd:csvRef ofdd:enc_6373763a736f757263653a6373763a7363686f6f6c2d6b772d6d65726765643a74656d705f66 ;
   ofdd:fddInput "temp_f" ;
   hs:sensor true ;
   hs:kind "Number" ;

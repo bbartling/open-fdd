@@ -1,6 +1,6 @@
 [package]
 name = "open_fdd_edge_prototype"
-version = "3.5.39"
+version = "3.5.40"
 edition = "2021"
 
 [[bin]]
@@ -41,6 +41,8 @@ reqwest = { version = "0.13.4", default-features = false, features = ["blocking"
 rusty-modbus-client = { git = "https://github.com/jscott3201/rusty-modbus", rev = "57135620af03f291f85d71eca76f4c8fbe83b2c1", version = "0.1.1" }
 rusty-modbus-types = { git = "https://github.com/jscott3201/rusty-modbus", rev = "57135620af03f291f85d71eca76f4c8fbe83b2c1", version = "0.1.1" }
 oxigraph = "0.5"
+# Pin matches oxigraph 0.5.x transitive spargebra (DM-08 SELECT algebra allowlist).
+spargebra = "=0.4.6"
 fdd_core = { path = "../crates/fdd_core" }
 fdd_rules = { path = "../crates/fdd_rules" }
 fdd_sql = { path = "../crates/fdd_sql" }
