@@ -36,6 +36,7 @@ else
     -f frontend/web/Dockerfile \
     -t "$WEB_IMAGE" \
     frontend/web >/dev/null
+  docker run --rm --entrypoint sh "$WEB_IMAGE" -c 'test -f /usr/share/nginx/html/index.html'
 fi
 
 "${COMPOSE[@]}" up -d --no-build central web
