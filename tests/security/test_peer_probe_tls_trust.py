@@ -16,6 +16,8 @@ from peer_probe_https import (  # noqa: E402
     _http_probe,
     _openssl_self_signed,
     _ssl_trust_ca,
+    assert_product_images,
+    resolve_candidate_images,
 )
 
 
@@ -31,6 +33,26 @@ class PeerProbeTlsTrustTest(unittest.TestCase):
             ctx = _ssl_trust_ca(cert_dir / "server.crt")
             self.assertEqual(ctx.verify_mode, ssl.CERT_REQUIRED)
             self.assertTrue(ctx.check_hostname)
+
+    def test_candidate_rejects_stub_web(self) -> None:
+        errs = assert_product_images(
+            {
+                "central": "ghcr.io/bbartling/openfdd-central:sha-abc1234",
+                "web": "python:3.12-alpine",
+                "mqtt": "ghcr.io/bbartling/openfdd-mqtt:sha-abc1234",
+                "caddy": "caddy:2.8-alpine",
+            }
+        )
+        self.assertTrue(errs)
+        self.assertTrue(any("web" in e for e in errs))
+
+    def test_candidate_accepts_product_refs(self) -> None:
+        images = resolve_candidate_images("sha-af4086f")
+        self.assertEqual(assert_product_images(images), [])
+
+    def test_candidate_requires_tag(self) -> None:
+        with self.assertRaises(ValueError):
+            resolve_candidate_images("")
 
 
 if __name__ == "__main__":

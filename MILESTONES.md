@@ -34,7 +34,7 @@ Execution master: [`.cursor/plans/wave_u_remainder_patch_cycles.plan.md`](.curso
 
 | Cycle | Scope | Status | Soft-OPEN / UA | Subplan |
 | --- | --- | --- | --- | --- |
-| **V1** | Tip Trivy + product HTTPS candidate soak | PLANNED | UA-02, UA-05 | [wave_u_v1_images_https.plan.md](.cursor/plans/wave_u_v1_images_https.plan.md) |
+| **V1** | Tip Trivy + product HTTPS candidate soak | **IN FLIGHT** (3.5.39 nginx + candidate probe) | UA-02, UA-05 | [wave_u_v1_images_https.plan.md](.cursor/plans/wave_u_v1_images_https.plan.md) |
 | **V2** | Product MQTT ACL + disposable ZAP AF | PLANNED | UA-03, UA-04 | [wave_u_v2_mqtt_zap.plan.md](.cursor/plans/wave_u_v2_mqtt_zap.plan.md) |
 | **V3** | MT breadth batch + field/host live evidence | PLANNED | UA-07/08, `sec-harness-mt-breadth` | [wave_u_v3_mt_field_host.plan.md](.cursor/plans/wave_u_v3_mt_field_host.plan.md) |
 | **V4** | PyPI `open-fdd` **4.4.3** publish | PLANNED | `wave-s3-pypi-mv-oracle` | [wave_u_v4_pypi_publish.plan.md](.cursor/plans/wave_u_v4_pypi_publish.plan.md) |
