@@ -112,7 +112,10 @@ impl CompactionCoordinator {
     pub fn begin_scan_wait(self: &Arc<Self>) -> ScanPermit {
         let mut state = self.state.lock().expect("compaction coordinator poisoned");
         while state.compacting {
-            state = self.cv.wait(state).expect("compaction coordinator poisoned");
+            state = self
+                .cv
+                .wait(state)
+                .expect("compaction coordinator poisoned");
         }
         state.scanners = state.scanners.saturating_add(1);
         ScanPermit {
@@ -141,7 +144,10 @@ impl CompactionCoordinator {
     pub fn begin_compact_wait(self: &Arc<Self>) -> CompactPermit {
         let mut state = self.state.lock().expect("compaction coordinator poisoned");
         while state.compacting || state.scanners > 0 {
-            state = self.cv.wait(state).expect("compaction coordinator poisoned");
+            state = self
+                .cv
+                .wait(state)
+                .expect("compaction coordinator poisoned");
         }
         state.compacting = true;
         CompactPermit {
@@ -211,9 +217,7 @@ static SHARED: OnceLock<Arc<CompactionCoordinator>> = OnceLock::new();
 
 /// Process-global coordinator (one local historian per Central/CLI process).
 pub fn shared_compaction_coordinator() -> Arc<CompactionCoordinator> {
-    SHARED
-        .get_or_init(CompactionCoordinator::new)
-        .clone()
+    SHARED.get_or_init(CompactionCoordinator::new).clone()
 }
 
 /// Run compaction under an exclusive coordinator lease (fail closed if busy).

@@ -174,9 +174,8 @@ pub async fn open_history_scan(
     ctx: &SessionContext,
     building_id: Option<&str>,
 ) -> Result<(bool, fdd_store::ScanPermit)> {
-    let scan = fdd_store::try_historian_scan_permit().or_else(|_| {
-        Ok::<_, anyhow::Error>(fdd_store::historian_scan_permit_wait())
-    })?;
+    let scan = fdd_store::try_historian_scan_permit()
+        .or_else(|_| Ok::<_, anyhow::Error>(fdd_store::historian_scan_permit_wait()))?;
     let ok = try_register_history_scoped_unlocked(ctx, building_id).await?;
     Ok((ok, scan))
 }

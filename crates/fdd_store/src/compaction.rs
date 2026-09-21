@@ -869,10 +869,7 @@ mod tests {
                     .write_history_batch(
                         building,
                         "AHU_1",
-                        &numeric_batch(
-                            &[&format!("2026-08-20T12:{minute:02}:00Z")],
-                            false,
-                        ),
+                        &numeric_batch(&[&format!("2026-08-20T12:{minute:02}:00Z")], false),
                     )
                     .unwrap();
             }

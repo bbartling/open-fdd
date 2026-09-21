@@ -2843,12 +2843,12 @@ pub async fn host_stats() -> Json<Value> {
                 "compacting": status.compacting,
             }),
         );
-        if let Some(dm) = obj.get_mut("data_management").and_then(|v| v.as_object_mut()) {
+        if let Some(dm) = obj
+            .get_mut("data_management")
+            .and_then(|v| v.as_object_mut())
+        {
             if let Some(parquet) = dm.get_mut("parquet").and_then(|v| v.as_object_mut()) {
-                parquet.insert(
-                    "compaction_status".to_string(),
-                    json!(status.mode),
-                );
+                parquet.insert("compaction_status".to_string(), json!(status.mode));
             }
         }
     }
