@@ -60,8 +60,31 @@ jobs:
               ;;
             pull_request)
               [[ "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-              # PR runs validate changes to this harness against the already-published base/master generation.
-              tag="sha-${PR_BASE_SHA:0:7}"
+              # Prefer already-published base/master generation; fall back when
+              # base is docs-only / publish still in flight (manifest unknown).
+              candidate="sha-${PR_BASE_SHA:0:7}"
+              if docker manifest inspect "ghcr.io/bbartling/openfdd-mqtt:${candidate}" >/dev/null 2>&1 \
+                && docker manifest inspect "ghcr.io/bbartling/openfdd-central:${candidate}" >/dev/null 2>&1 \
+                && docker manifest inspect "ghcr.io/bbartling/openfdd-fieldbus:${candidate}" >/dev/null 2>&1; then
+                tag="$candidate"
+              else
+                echo "base tag ${candidate} not published yet; resolving newest-by-created common sha-*" >&2
+                data="$(timeout 90 python3 scripts/ghcr_newest_by_created.py --json openfdd-central openfdd-mqtt openfdd-fieldbus || true)"
+                tag=""
+                if [[ -n "$data" ]]; then
+                  tag="$(jq -r '
+                    [.[0].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $a |
+                    [.[1].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $b |
+                    [.[2].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $c |
+                    [$a[] as $t | select(($b | index($t)) != null and ($c | index($t)) != null) | $t][0] // empty
+                  ' <<<"$data")"
+                fi
+                # Last-known FQ OPS PINNED when GHCR listing is unavailable.
+                if [[ -z "$tag" ]]; then
+                  tag="sha-1677c33"
+                  echo "newest-by-created unavailable; falling back to OPS PINNED ${tag}" >&2
+                fi
+              fi
               ;;
             schedule)
               data="$(python3 scripts/ghcr_newest_by_created.py --json openfdd-central openfdd-mqtt openfdd-fieldbus)"
