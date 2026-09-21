@@ -19,13 +19,13 @@ The independent audit reopened acceptance checks. Statuses below do not erase ea
 
 | ID / suggested GitHub milestone | Scope and owner | Status | Exit criteria |
 | --- | --- | --- | --- |
-| **U-A — Evaluated qualification** | Security/test maintainer | IN PROGRESS (3.5.37 tip) | #962 landed 3.5.36 evaluators; MEGA `20260920T231407Z` FAIL logged (viewer tenant_ids + MCP tip derive + MQTT ACL execute alias). Tip 3.5.37 in flight. |
+| **U-A — Evaluated qualification** | Security/test maintainer | VERIFIED (evaluator contract on tip) | Permanent negatives + required gate 36s; MEGA `20260921T021332Z` `fully_qualified=true` on `sha-1677c33`. Standalone peer/image remediations remain under U-B/U-E. |
 | **U-B — Standalone OT readiness** | Deployment/security maintainer | REOPENED / PARTIAL code | HTTPS compose contract + exposure lint on tip; peer candidate soak and trusted TLS still required. |
 | **U-C — Field gateway readiness** | Field/MQTT maintainer | REOPENED / PARTIAL code | Field-only exposure + edge compose lint; provisioner key `0600` + dual-tenant isolation tests; MQTT entrypoint fail-closed. Live runtime delivery/host probe still required. |
 | **U-D — Web application assurance** | App/security maintainer | REOPENED | Auth/tenant/role matrix and browser regressions; authenticated ZAP candidate coverage and reviewed findings; private artifacts; bounded pre/post-stress checks; documented exploratory-review remainder. |
 | **U-E — Image and host acceptance** | Release/deployment maintainer | REOPENED / PARTIAL | Web Alpine base bump + disposition table; Debian unfixed tracked; Caddy added to Trivy all-scope. Rescan of published tip digests still required before VERIFIED. |
 | **U-F — Modeling, engineering and twins** | Data-model/PyPI/product maintainer | PARTIAL | Remaining Wave S requirements reconciled: DM-06..10 as applicable, tenant-safe graph/JSON/SPARQL, units and provenance for engineering quantities, ECM tools/docs, published wheel validation, SQL/API oracle and model/ECM gates. |
-| **U-G — Qualified release and handoff** | Release maintainer + operator | IN PROGRESS | Hub tip `sha-812bd92` / 3.5.36 deployed; MEGA `20260920T231407Z` not FQ; 3.5.37 tip + re-pin + full re-stress required before OPS PINNED. |
+| **U-G — Qualified release and handoff** | Release maintainer + operator | RELEASED (hub FQ) | OPS PINNED **`sha-1677c33` / 3.5.37** · stress `20260921T021332Z` `fully_qualified=true` · backup `20260921T013819Z`. Soft remainders: UA-02 peer HTTPS, UA-05 Debian/image rescan, UA-10 S3/S5, U-H Nessus. |
 | **U-H — Licensed Nessus assessment** | Operator/customer security | BLOCKED — licensed scanner and isolated assessment host | Actual external and credentialed assessment of representative standalone/field hosts, verified scan completeness and policy, remediations and retest. Never substitute Python/ZAP/Trivy or synthetic XML for this result. |
 
 These owner labels are responsibilities, not assigned GitHub usernames. Name the actual owner when scheduling the milestone. Set due dates when capacity and external dependencies are known; do not invent dates to create apparent commitment.

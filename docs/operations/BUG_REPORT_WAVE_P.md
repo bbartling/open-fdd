@@ -6,7 +6,7 @@
 
 | Item | Status |
 |------|--------|
-| Product tip / **OPS PINNED (FQ)** | **3.5.31** / **`sha-7b81eb8`** (#951) · health `3.5.31+7b81eb810c0f` · backup `20260919T193923Z` · stress `20260919T195100Z` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave S1 CLOSED** until Wave U MEGA finishes |
+| Product tip / **OPS PINNED (FQ)** | **3.5.37** / **`sha-1677c33`** (#963+#964) · health `3.5.37+1677c33047bd` · backup **`20260921T013819Z`** · stress `reports/nightly-ot-bench_20260921T021332Z/` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave U FQ** |
 | **Wave U hub tip (smoke + MEGA in flight)** | **3.5.34** / **`sha-f44b45f`** (#959) · health `3.5.34+f44b45f6f58d` · backup **`20260920T193429Z`** · fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1` kit restored · MEGA `reports/nightly-ot-bench_20260920T194610Z/` · **no FQ / OPS PINNED claim until `fully_qualified=true`** |
 | Hub smoke tip (prior) | **3.5.33** / **`sha-3cd3745`** (#954) · mid-wave smoke only · superseded by `sha-f44b45f` re-pin |
 | **Wave U FQ closeout notes** `2026-09-20` | H0: required Actions green on `f44b45f`; Optional BACnet FAIL = fail-closed without CI key → **#960 FIXED** (`bacnet-mqtt-e2e` PASS). H1: #958 HOLD (baud docs); `tip/wave-u-u0-master` deleted; only `docs/diy-baud-hold-ai-context` remote. P1: `check_ghcr_tip_stack sha-f44b45f` PASS; Trivy cite `reports/trivy-wave-u/sha-f44b45f/SUMMARY.md` (mqtt 0; Debian/Alpine OS High residual — not greenwashed). Smoke: `POST /api/analytics/mv` **200** (clears `wu-mv-404-pre-pin`); edges=1 `vim-1` telemetry; ingest climbing (residual `ingest_reject` post kit restore). |
@@ -27,7 +27,7 @@
 | Prior OPS PINNED | Wave R **3.5.22** / `sha-4d3a6b0` (#936) · stress `20260916T011952Z` **`fully_qualified=true`** |
 | Soft Park S5 | Stress `reports/nightly-ot-bench_20260916T215804Z/` · **22 PASS / 4 FAIL** · not `fully_qualified` |
 | Closed this cycle | #940 busy/sign-out · #944 tip YAML · Soft UX #946 · Tip B #947 MT `tenants/…` commands · AFDD flood building default · fieldbus Railway MT ACME identity · Soft UX master hub stress FQ · post-pin stability audit (no tip) |
-| **Wave U hub tip** | **3.5.36** / **`sha-812bd92`** (#962) · health `3.5.36+812bd925bab3` · backup **`20260920T230554Z`** · fieldbus `vim-1` · MEGA `reports/nightly-ot-bench_20260920T231407Z/` · **`fully_qualified=false`** (logged before tip fix) |
+| **Wave U hub tip (superseded)** | **3.5.36** / **`sha-812bd92`** (#962) · health `3.5.36+812bd925bab3` · backup **`20260920T230554Z`** · fieldbus `vim-1` · MEGA `reports/nightly-ot-bench_20260920T231407Z/` · **`fully_qualified=false`** (logged before tip fix) |
 | **#962 merged** | **3.5.36** independent acceptance UA evaluators + HTTPS/field keys/ZAP hygiene |
 | **#961 merged** | **3.5.35** `e23c9ac` — rcx presets building ACL · gate26 verdict · OPS password aliases · MT edge CN uses tenant_id |
 | **#962 tip** | **3.5.36** `tip/wave-u-acceptance-ua` — UA evaluator gates + HTTPS compose; follow-on: key mode 0600, field-only exposure, host/runtime selftest, web Alpine base bump, isolated FALLBACK `sha-f44b45f` |
@@ -120,6 +120,14 @@ The current closure rows above are corrected prospectively. Earlier scan/test ac
 
 For each fix append candidate/harness SHA, image/config/fixture hashes, profile, actual CI/run/artifact references, expected/observed outcomes and retest result. Do not mark these rows FIXED merely because a plan or test file was added. These owner labels identify responsibility; assign an actual maintainer when scheduling.
 
+
+
+## Wave U MEGA FQ attempt `20260921T021332Z` — **PASS / OPS PINNED**
+
+**Tip:** `sha-1677c33` / `3.5.37+1677c33047bd` · backup `20260921T013819Z` · edge `vim-1` · EXECUTE=1 · `OPENFDD_MQTT_ACL_EXECUTE=1` · `OPENFDD_IMAGE_TAG`/`OPENFDD_MCP_IMAGE=sha-1677c33`  
+**Artifact:** `reports/nightly-ot-bench_20260921T021332Z/` · **`fully_qualified=true`**
+
+Prior FAILs `20260920T194610Z` / `20260920T231407Z` / `20260921T014908Z` retained. Security 25/25b/26 PASS; both gate 36 PASS; 35 PASS after tip pin preserve.
 
 ## Wave U MEGA FQ attempt `20260921T014908Z` — **FAIL** (not OPS PINNED)
 
