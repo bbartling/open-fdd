@@ -552,7 +552,11 @@ pub fn equipment_response_scoped(building_id: Option<&str>, tenant_id: Option<&s
     match building_id.map(str::trim).filter(|s| !s.is_empty()) {
         Some(bid) => {
             let root = storage_root_for_building(&pq, bid, tenant_id);
-            collect_equipment_prefix(&root.join(format!("building={bid}")), "equipment=", &mut ids);
+            collect_equipment_prefix(
+                &root.join(format!("building={bid}")),
+                "equipment=",
+                &mut ids,
+            );
             collect_equipment_prefix(
                 &root.join("history").join(format!("building_id={bid}")),
                 "equipment_id=",
