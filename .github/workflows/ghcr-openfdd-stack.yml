@@ -74,7 +74,13 @@ jobs:
             -f frontend/web/Dockerfile \
             frontend/web
           docker run --rm --entrypoint cat openfdd-web:ci /usr/share/nginx/html/version.json | grep openfdd-web
+          docker run --rm --entrypoint sh openfdd-web:ci -c 'test -f /usr/share/nginx/html/index.html'
           ! docker run --rm --entrypoint sh openfdd-web:ci -c 'command -v python3 || command -v python' 2>/dev/null
+
+      - name: Build openfdd-central image (no push)
+        run: |
+          docker build -f services/central/Dockerfile -t openfdd-central:ci .
+          docker run --rm --entrypoint sh openfdd-central:ci -c 'test -x /usr/local/bin/openfdd-central'
 
       - name: Compose config check (all recipes)
         env:
@@ -96,8 +102,16 @@ jobs:
           bash -n scripts/openfdd_stack_pull.sh
 
       - name: CSV recipe boot smoke (central + React web)
+        env:
+          # Prior steps already built openfdd-central:ci / openfdd-web:ci; skip
+          # a second silent rebuild (can race cache and leave empty nginx html).
+          OPENFDD_SMOKE_SKIP_BUILD: "1"
+          OPENFDD_CENTRAL_IMAGE: openfdd-central:ci
+          OPENFDD_WEB_IMAGE: openfdd-web:ci
         run: |
           chmod +x scripts/release/smoke_csv_central_boot.sh
+          docker image inspect openfdd-central:ci openfdd-web:ci >/dev/null
+          docker run --rm --entrypoint sh openfdd-web:ci -c 'test -f /usr/share/nginx/html/index.html'
           ./scripts/release/smoke_csv_central_boot.sh
 
   # Railway hub tip: central + web + mqtt (amd64). Must not wait on multi-arch fieldbus.
