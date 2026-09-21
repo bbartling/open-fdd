@@ -4,6 +4,7 @@ pub mod afdd;
 pub mod afdd_scheduler;
 pub mod append;
 pub mod compaction;
+pub mod compaction_coord;
 pub mod historian;
 pub mod ingest;
 pub(crate) mod legacy_formats;
@@ -25,6 +26,12 @@ pub use afdd_scheduler::{
 };
 pub use append::{merge_history_wide_csv, merge_history_wide_text, MergeReport};
 pub use compaction::{CompactionPlan, CompactionResult, CompactionSummary, ParquetCompactor};
+pub use compaction_coord::{
+    assert_compaction_safe_for_offline, compact_history_fail_closed, compact_history_wait,
+    historian_scan_permit_wait, shared_compaction_coordinator, try_historian_scan_permit,
+    CompactPermit, CompactionCoordinator, CompactionCoordinatorStatus, HistorianIoBusy,
+    ScanPermit,
+};
 pub use historian::{
     building_history_present, history_partition_path, list_building_ids, local_file_root_from_env,
     resolve_building_read_root, safe_partition_value, tenant_storage_prefix, tenant_storage_root,

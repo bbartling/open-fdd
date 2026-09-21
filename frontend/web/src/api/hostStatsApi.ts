@@ -26,7 +26,14 @@ export type HostParquetStats = {
   small_file_count?: number;
   estimated_bytes?: number;
   target_file_mb?: number;
+  compaction_status?: string;
   note?: string;
+};
+
+export type CompactionCoordinatorStatus = {
+  mode?: string;
+  scanners?: number;
+  compacting?: boolean;
 };
 
 export type HostStatsResponse = {
@@ -36,10 +43,48 @@ export type HostStatsResponse = {
   data_management?: {
     parquet?: HostParquetStats;
   };
+  compaction_coordinator?: CompactionCoordinatorStatus;
+};
+
+export type HistorianCompactionResponse = {
+  ok?: boolean;
+  error?: string;
+  plan_only?: boolean;
+  plans?: unknown;
+  results?: unknown;
+  summary?: {
+    partitions?: number;
+    input_files?: number;
+    output_files?: number;
+    rows?: number;
+    cleanup_pending_files?: number;
+  };
+  coordinator?: CompactionCoordinatorStatus;
+  historian?: {
+    parquet_files?: number;
+    small_files?: number;
+    rows?: number;
+  };
 };
 
 export async function getHostStats(): Promise<HostStatsResponse> {
   return apiFetch<HostStatsResponse>("/api/host/stats");
+}
+
+export async function getHistorianCompactionStatus(): Promise<HistorianCompactionResponse> {
+  return apiFetch<HistorianCompactionResponse>("/api/historian/compaction");
+}
+
+export async function runHistorianCompaction(opts: {
+  confirm: boolean;
+  wait?: boolean;
+  plan_only?: boolean;
+}): Promise<HistorianCompactionResponse> {
+  return apiFetch<HistorianCompactionResponse>("/api/historian/compaction", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
+  });
 }
 
 export function formatBytes(value: number | null | undefined): string {

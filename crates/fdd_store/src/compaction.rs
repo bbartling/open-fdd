@@ -8,12 +8,11 @@
 //! This keeps write/validation failures non-destructive and avoids materializing
 //! an entire partition in memory.
 //!
-//! H4 exposes compaction as an offline maintenance primitive only; it is not
-//! scheduled from the product runtime. Callers must not overlap compaction with
-//! DataFusion scans of the same local historian. Publishing the replacement
-//! first would create a duplicate-row window, while retiring inputs first creates
-//! a short read gap; a future runtime coordinator must serialize those operations
-//! before continuous compaction is enabled.
+//! H4 is the partition-local compaction engine (validate-before-publish,
+//! tombstone retire, fsync, then delete). Offline operators invoke it via
+//! `openfdd_cli compact-history`. Runtime callers must hold an exclusive
+//! [`crate::CompactPermit`] from [`crate::CompactionCoordinator`] so DataFusion
+//! scans cannot overlap the retire/publish window.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -857,5 +856,65 @@ mod tests {
         assert!(!objects.iter().any(|object| {
             object.relative_path.contains(".pending") || object.relative_path.contains(".retired-")
         }));
+    }
+
+    #[test]
+    fn multi_building_small_file_fixture_compacts_stable_rows() {
+        let tmp = TempDir::new().unwrap();
+        let storage = LocalStorage::new(tmp.path());
+        let writer = ParquetPartWriter::new(storage.clone());
+        for building in ["B1", "B2"] {
+            for minute in 0..3 {
+                writer
+                    .write_history_batch(
+                        building,
+                        "AHU_1",
+                        &numeric_batch(
+                            &[&format!("2026-08-20T12:{minute:02}:00Z")],
+                            false,
+                        ),
+                    )
+                    .unwrap();
+            }
+        }
+        let before = crate::local_historian_stats(&storage, 128).unwrap();
+        assert_eq!(before.rows, 6);
+        assert!(before.small_files >= 6);
+
+        let coord = crate::CompactionCoordinator::new();
+        let _compact = coord.try_begin_compact().unwrap();
+        let compactor = ParquetCompactor::new(storage.clone(), 3, 128).unwrap();
+        let (results, summary) = compactor.compact_history().unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(summary.partitions, 2);
+        assert_eq!(summary.rows, 6);
+
+        let after = crate::local_historian_stats(&storage, 128).unwrap();
+        assert_eq!(after.rows, 6);
+        assert!(after.parquet_files < before.parquet_files);
+    }
+
+    #[test]
+    fn coordinated_compact_refuses_while_scan_held() {
+        let tmp = TempDir::new().unwrap();
+        let storage = LocalStorage::new(tmp.path());
+        let writer = ParquetPartWriter::new(storage.clone());
+        write_part(&writer, "2026-08-20T12:00:00Z");
+        write_part(&writer, "2026-08-20T12:05:00Z");
+        write_part(&writer, "2026-08-20T12:10:00Z");
+
+        let coord = crate::CompactionCoordinator::new();
+        let _scan = coord.try_begin_scan().unwrap();
+        assert!(coord.try_begin_compact().is_err());
+        // Sources must remain untouched when compact is refused.
+        assert_eq!(
+            storage
+                .list_recursive(Path::new("history"))
+                .unwrap()
+                .into_iter()
+                .filter(|o| o.relative_path.ends_with(".parquet"))
+                .count(),
+            3
+        );
     }
 }

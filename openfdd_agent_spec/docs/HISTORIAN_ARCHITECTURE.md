@@ -106,9 +106,31 @@ OPENFDD_COMPACTION_MIN_FILES=8
 OPENFDD_PARQUET_TARGET_FILE_MB=128
 ```
 
-H4 local compaction is an **offline maintenance primitive**. It compacts one canonical building/equipment/year/month partition at a time with bounded memory, validates the replacement before changing the query surface, retires source `.parquet` files to hidden tombstones, publishes the validated replacement, fsyncs the partition directory, and only then deletes retired sources. Rollback and cleanup failures must be surfaced to the operator.
+H4 local compaction is an **offline maintenance primitive** with a **runtime coordinator**.
+It compacts one canonical building/equipment/year/month partition at a time with bounded
+memory, validates the replacement before changing the query surface, retires source
+`.parquet` files to hidden tombstones, publishes the validated replacement, fsyncs the
+partition directory, and only then deletes retired sources. Rollback and cleanup failures
+must be surfaced to the operator.
 
-Do **not** overlap H4 local compaction with DataFusion scans of the same historian. A local filesystem cannot atomically exchange an arbitrary set of source files for one replacement: publish-first creates a duplicate-row window, while retire-first creates a short read gap. Continuous/runtime compaction therefore requires a later coordinator that serializes compaction with reads before it is enabled from the product runtime. H4 itself has no runtime scheduler/entry point.
+**Operator offline surface (H4):**
+
+```bash
+# Plan only (no mutation)
+cargo run -p fdd_cli -- compact-history --storage-root /data/openfdd --plan-only
+
+# Fail closed if DataFusion scans are active
+cargo run -p fdd_cli -- compact-history --storage-root /data/openfdd
+
+# Wait for scan leases to drain, then compact
+cargo run -p fdd_cli -- compact-history --storage-root /data/openfdd --wait
+```
+
+**Runtime coordinator (Wave U V8):** `fdd_store::CompactionCoordinator` serializes
+many concurrent scan permits **or** one exclusive compact permit — never both.
+Admin `GET|POST /api/historian/compaction` (hub_admin, `confirm:true`) and FDD /
+analytics scan entry points take leases so Central cannot publish-first or retire-first
+under live DataFusion reads. Prefer maintenance windows for live Railway compact.
 
 ## DataFusion/query contract
 
