@@ -28,13 +28,12 @@ ENV OPENFDD_NGINX_RESOLVER=auto
 ENV NGINX_ENVSUBST_FILTER=OPENFDD_
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY docker-entrypoint.d/15-openfdd-resolver.envsh /docker-entrypoint.d/15-openfdd-resolver.envsh
-COPY --from=build /app/dist /usr/share/nginx/html
-# Read-only rootfs friendly: html owned by nginx user (UID 101). Also validate
-# the base image's template entrypoint and a Railway-style upstream at build time.
-USER root
 # UA-05: refresh index, drop base nginx-module-* (they pin 1.28.2 and block
 # apk upgrade), then install nginx>=1.28.3 so Trivy FixedVersion High/Critical clear.
 # SPA reverse-proxy does not need geoip/image-filter/njs/xslt modules.
+# IMPORTANT: apk upgrade of nginx can reset /usr/share/nginx/html — copy SPA
+# dist *after* the package refresh, then chown for the nginx user (UID 101).
+USER root
 RUN apk update \
   && apk del --no-cache \
        nginx-module-geoip nginx-module-image-filter \
@@ -42,7 +41,6 @@ RUN apk update \
   && apk upgrade --no-cache \
   && apk add --no-cache "nginx>=1.28.3" \
   && nginx -v 2>&1 | grep -F 'nginx/1.28.3' \
-  && chown -R 101:0 /usr/share/nginx/html \
   && chmod 0755 /docker-entrypoint.d/15-openfdd-resolver.envsh \
   && test -x /docker-entrypoint.d/15-openfdd-resolver.envsh \
   && test -x /docker-entrypoint.d/20-envsubst-on-templates.sh \
@@ -54,5 +52,9 @@ RUN apk update \
   && grep -q 'set \$openfdd_central' /etc/nginx/conf.d/default.conf \
   && grep -q 'resolver 127.0.0.11' /etc/nginx/conf.d/default.conf \
   && rm -f /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+RUN chown -R 101:0 /usr/share/nginx/html \
+  && test -f /usr/share/nginx/html/index.html \
+  && test -f /usr/share/nginx/html/version.json
 USER 101
 EXPOSE 8080
