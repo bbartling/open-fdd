@@ -149,14 +149,6 @@ fn safe_building_segment(building_id: Option<&str>) -> Option<String> {
 /// Prefer [`open_history_scan`] / [`open_history_scan_for_tenant`] when the
 /// caller will run DataFusion SQL — those APIs return a scan permit that must
 /// be held for the full query lifetime.
-pub async fn try_register_history_scoped(
-    ctx: &SessionContext,
-    building_id: Option<&str>,
-) -> Result<bool> {
-    try_register_history_scoped_for_tenant(ctx, building_id, None).await
-}
-
-/// Same as [`try_register_history_scoped`] with an explicit preferred tenant id.
 pub async fn try_register_history_scoped_for_tenant(
     ctx: &SessionContext,
     building_id: Option<&str>,
