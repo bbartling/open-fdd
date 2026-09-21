@@ -8,24 +8,25 @@ permalink: /web-app/
 
 # Web application
 
-**Current default:** a **single React app** (`frontend/web` → `openfdd-web` on
-port **3000**) uniting vibe19 FDD / RCx / Jobs with WattLab dump export.
+The product UI is the **React SPA** (`frontend/web` → `openfdd-web`). It talks only to **central** over same-origin **`/api`** (JWT). There is no Python UI path.
 
-**Phase 1 target:** React + TypeScript SPA (feature-flagged) talking only to
-central Rust `/api` — see [ADR-001](../architecture/adr-001-react-rust-modernization.md)
-and [React/Rust modernization](../migration/react-rust/README.md). React SPA
-remains the behavioral reference and rollback path until Phase 2. No FastAPI
-sidecar.
+| Area | Path | What you get |
+|------|------|----------------|
+| Overview | `/` | Tables + plant / VAV health matrices (no Plotly) |
+| Lab / SQL FDD | `/lab`, `/sql-fdd` | Rule tuners, run all rules, registry SQL |
+| RCx Plots | `/rcx` | Plotly presets by HVAC family |
+| FDD Plots / Reports | `/fdd`, `/reports` | Series overlays and findings |
+| Inspect | `/inspect` | CSV / historian series radio |
+| Mapping / Admin | `/mapping`, `/admin` | Package map, capacity, ops |
 
-Central REST (`:8080`) owns JWT auth, historian, and **DataFusion SQL** FDD
-(`POST /api/fdd/run`). Most central APIs require JWT when auth is enabled.
+Central (`:8080` in-container) owns auth, Parquet historian, and DataFusion FDD (`POST /api/fdd/run`).
 
 | Guide | Content |
 |-------|---------|
-| [Routes](routes.html) | Historical route notes (prefer React sections) |
-| [SQL FDD Rules](sql-fdd-rules.html) | Registry SQL FDD on central |
-| [CSV batch import](csv-batch-import.html) | Headless CSV ingest API |
-| [Plots & reports](plots-and-reports.html) | Trends and reports |
-| [**RCx & FDD plot examples**](rcx-plots-by-hvac.html) | Presets by HVAC type + screenshot gallery (old `/RCX_PLOTS_BY_HVAC.html` redirects here) |
+| [Routes](routes.html) | SPA path map |
+| [SQL FDD Rules](sql-fdd-rules.html) | Registry workbench |
+| [CSV batch import](csv-batch-import.html) | Package / append ingest API |
+| [Plots & reports](plots-and-reports.html) | Trends and exports |
+| [**RCx & FDD plot examples**](rcx-plots-by-hvac.html) | Presets + screenshot gallery |
 
 See [Architecture → Services](../architecture/services.html) and the [Rule Cookbook]({{ site.baseurl }}/rules/).

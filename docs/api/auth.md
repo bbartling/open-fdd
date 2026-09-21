@@ -1,6 +1,6 @@
 ---
 title: Authentication
-parent: API Reference
+parent: API & Security
 nav_order: 1
 ---
 

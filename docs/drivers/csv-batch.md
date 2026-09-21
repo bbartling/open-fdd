@@ -1,10 +1,10 @@
 ---
-title: CSV batch import
+title: CSV driver
 parent: Drivers
 nav_order: 5
 ---
 
-# CSV batch import
+# CSV driver
 
 CSV is a **headless batch driver** — load pre-shaped telemetry into the historian for DataFusion FDD. Large CSV analysis, merges, and RCx studies belong in the [Pandas cookbook](../rules/cookbook/pandas-cookbook.html) outside the edge app.
 
@@ -27,7 +27,7 @@ Execute requires preflight `verdict: pass` (or `warn` when strict mode allows).
 
 Hourly append after a seeded package: `POST /api/csv/import/package/append` (JWT, `confirm: true`). See [CSV batch import](../web-app/csv-batch-import.html).
 
-**AFDD routine sim (BUILDING_50):** [`scripts/csv_flood_afdd_routine_sim.py`](../scripts/csv_flood_afdd_routine_sim.py) — seed + hourly append + `PUT /api/fdd/session-config` patches + `POST /api/fdd/run`. Doc: [CSV flood + AFDD routine](../agent/CSV_FLOOD_AFDD_ROUTINE.md).
+**AFDD routine sim (BUILDING_50):** [`scripts/csv_flood_afdd_routine_sim.py`](https://github.com/bbartling/open-fdd/blob/master/scripts/csv_flood_afdd_routine_sim.py) — seed + hourly append + session-config patches + `POST /api/fdd/run`.
 
 ## Host batch (daily pull example)
 

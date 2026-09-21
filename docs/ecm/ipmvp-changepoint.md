@@ -45,27 +45,29 @@ both = score_g14_fuels(
 assert both["pass"]
 ```
 
-Formulas (ASHRAE G14):
+Formulas (ASHRAE Guideline 14):
 
-\[
+$$
 \mathrm{NMBE} = 100 \cdot \frac{\sum (m_i - \hat{m}_i)}{(n-p)\,\bar{m}}
-\quad
-\mathrm{CV(RMSE)} = 100 \cdot \frac{\sqrt{\sum (m_i - \hat{m}_i)^2 / (n-p)}}{\bar{m}}
-\]
+$$
 
+$$
+\mathrm{CV(RMSE)} = 100 \cdot \frac{\sqrt{\sum (m_i - \hat{m}_i)^2 / (n-p)}}{\bar{m}}
+$$
+
+where \(m_i\) is measured, \(\hat{m}_i\) predicted, \(n\) samples, \(p\) model parameters, and \(\bar{m}\) the mean of measured.
 ---
 
 ## Change-point models (2P / 3P / 4P / 5P)
 
-Independent variable \(X\) is usually outdoor dry-bulb (°F); dependent \(Y\) is
-period energy (kWh, therms, …).
+Independent variable is usually outdoor dry-bulb (°F); dependent is period energy (kWh, therms, …).
 
 | Kind | Shape |
 |------|--------|
-| `2P` | \(Y = a + b X\) |
-| `3PH` | \(Y = a + b(\beta - X)_+\) |
-| `3PC` | \(Y = a + b(X - \beta)_+\) |
-| `4P` | dual slope, one \(\beta\) |
+| `2P` | linear: Y = a + b·X |
+| `3PH` | heating: Y = a + b·(β − X)₊ |
+| `3PC` | cooling: Y = a + b·(X − β)₊ |
+| `4P` | dual slope, one change-point β |
 | `5P` | dual slope, heating + cooling change-points |
 
 ```python

@@ -1,27 +1,36 @@
 ---
-title: VAV health matrix v1
+title: VAV health matrix
 parent: Architecture
-nav_order: 40
+nav_order: 12
+permalink: /architecture/adr-vav-health.html
 ---
 
-# ADR — `vav_health_matrix_v1`
+# VAV health matrix
 
-VAV Health is a **cohort analytic**, not a cookbook diagnostic. Catalog remains **62 pandas + 4 SQL analytics = 66**.
+A **building-scoped cohort score** for VAV / zone terminals — not a single cookbook rule. Overview and RCx use it to rank boxes that need attention.
 
-## Three independent dimensions
+## Three dimensions (each PASS / FAIL / unknown)
 
-| Dimension | Meaning | Unknown when |
-| --- | --- | --- |
-| Broken box | Confirmed VAV-3/4/5/7/REHEAT/AHU-LEAVE (configurable) | No FDD results / missing roles |
-| Comfort | Occupied zone temperature outside the same band as VAV-1 / SCHED-1 / Overview | Missing occupancy or `zone_t` |
-| Rogue damper | Damper ≥ 0.975 on a **proven operating** denominator (occupied + air-on preferred) | Fan-off overnight, coverage or hours below default |
+| Dimension | Question | Typical inputs |
+|-----------|----------|----------------|
+| **Broken box** | Did confirmed terminal FDD rules fire (VAV-3/4/5/7, reheat, AHU-leave, …)? | FDD results + mapped roles |
+| **Comfort** | Is occupied zone temperature outside the comfort band? | `zone_t` + occupancy (same band as VAV-1 / SCHED-1) |
+| **Rogue damper** | Is the damper essentially full-open while air should be serving? | Damper % on an **operating** denominator (occupied + air-on) |
 
-Unknown is **not PASS**. Score labels: `3/3` … `0/3` and `?/3` (insufficient).
+Scores render as `3/3` … `0/3`, or `?/3` when evidence is insufficient. **Unknown is not a pass.**
 
-## Rogue vs failed actuator
+## How to read it
 
-Full-open prevalence (≥95% of ≥20 operating hours, ≥80% coverage, weekly defaults) is a **starvation / tracking** screen. It does **not** by itself prove a stuck actuator.
+- Prefer **weekly** windows with decent coverage; overnight fan-off should not invent rogue dampers.
+- Full-open prevalence is a **starvation / tracking** screen — it does not by itself prove a stuck actuator.
+- Missing package roles → empty or `?/3` cells. Fix the map; do not invent points in product code.
 
-## Engines
+## Where it runs
 
-Pandas (`open_fdd.analytics.vav_health`) is the oracle library. Rust/DataFusion serves `POST /api/analytics/vav-health` **scoped by `building_id`**. Mixed-site queries are refused.
+| Surface | API / UI |
+|---------|----------|
+| Product | `POST /api/analytics/vav-health` (requires `building_id`; mixed-site refused) |
+| Overview / RCx | Health matrix + `vav_health_matrix` plot preset |
+| Oracle (PyPI) | `open_fdd.analytics.vav_health` for notebooks |
+
+Related: [Rule Cookbook]({{ site.baseurl }}/rules/) · [RCx plot examples]({{ site.baseurl }}/web-app/rcx-plots-by-hvac.html) · [Package authoring](https://github.com/bbartling/open-fdd/blob/master/docs/agent/PACKAGE_AUTHORING.md)

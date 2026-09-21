@@ -1,18 +1,19 @@
 ---
-title: API Reference
+title: API & Security
 layout: default
 nav_order: 8
 has_children: true
 permalink: /api/
 ---
 
-# API reference
+# API & Security
 
-REST API served by the bridge on port **8080**. Most routes require `Authorization: Bearer <JWT>`.
+JWT-protected REST on **central** (`/api/*`). The React SPA proxies same-origin. Optional **MCP** stdio tools call the same API.
 
 | Guide | Content |
 |-------|---------|
-| [Authentication](auth.html) | Login, tokens, public routes |
-| [Routes](routes.html) | Route map by category |
+| [Authentication](auth.html) | Login, roles, agent tokens |
+| [Routes](routes.html) | REST route map |
+| [Security reporting](../security.html) | Private vulnerability reporting + posture |
 
-OpenAPI stub: [openapi.yaml](https://github.com/bbartling/open-fdd/blob/master/docs/openapi.yaml) in the repository.
+Discover agent tools: `GET /api/agent/tools` (Bearer JWT).

@@ -22,7 +22,7 @@ ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
 | Container | Image | Role |
 |-----------|-------|------|
 | `central` | `openfdd-central` | REST API (`:8080`), JWT auth, historian, DataFusion FDD engine, reports, MCP API surface |
-| `ui` | `openfdd-web` | React vibe19 lab (`:3000`); talks to central REST for SQL FDD |
+| `ui` | `openfdd-web` | React product SPA (`:3000`); talks to central REST for SQL FDD |
 | `fieldbus` | `openfdd-fieldbus` | BACnet/IP poll (`network_mode: host`), publishes over MQTTS |
 | `mqtt` | `openfdd-mqtt` | Mosquitto broker, MQTTS on `:8883` |
 | `mcp` | `openfdd-mcp` | Slim Rust MCP server for external agents |

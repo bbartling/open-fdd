@@ -125,7 +125,7 @@ No dedicated RCx preset family. Covered on **Overview** via **Generic zone monit
 
 | Surface | Role |
 |---------|------|
-| **Overview** | Health matrices per family (AHU temp/pressure/econ, chiller, tower, HP, PID, sensors, zone-other) — see [`OVERVIEW_HEALTH_API.md`](OVERVIEW_HEALTH_API.md) |
+| **Overview** | Health matrices per family (AHU temp/pressure/econ, chiller, tower, HP, PID, sensors, zone-other) |
 | **FDD Plots** (`/reports`) | Per-equipment FDD/fault-oriented Plotly |
 | **Inspect** (`/inspect`) | CSV / historian column overlay timeseries |
 

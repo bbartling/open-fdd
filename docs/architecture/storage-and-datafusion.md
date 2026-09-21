@@ -6,9 +6,9 @@ nav_order: 3
 
 # Storage & DataFusion
 
-## Apache Arrow / Feather historian
+## Apache Parquet historian
 
-Telemetry is stored as **columnar Feather** partitions under `workspace/data/historian/`. The bridge writes Arrow RecordBatches from driver polls and CSV imports.
+Telemetry is stored as **canonical Parquet** partitions under the configured storage root (`OPENFDD_STORAGE_URL` / workspace historian). Drivers and CSV/package import write columnar batches; DataFusion SQL FDD and Overview analytics scan those files.
 
 Benefits at the edge:
 

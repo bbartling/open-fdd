@@ -9,51 +9,65 @@ permalink: /
 
 **Open-FDD is a local-first Rust edge platform for building telemetry, semantic modeling, supervisory fault detection, and HVAC analytics.**
 
-Open-FDD is open-source building analytics software for operators, integrators, and engineers who need vendor-neutral fault detection on premises — without sending BACnet traffic or historian data to the public internet.
+Open-source building analytics for operators, integrators, and engineers who need vendor-neutral fault detection on premises — without sending BACnet traffic or historian data to the public internet.
+
+## Field to cloud
+
+Secure HVAC data collection, fault detection, and portfolio access for mechanical systems integrators.
+
+![Open-FDD field-to-cloud architecture — BACnet/Modbus at the building, MQTTS to the hub, HTTPS/JWT for office and AI agents]({{ site.baseurl }}/assets/open-fdd-field-to-cloud.jpg)
+
+| Path | Protocol |
+|------|----------|
+| Building OT → field edge | BACnet / Modbus (+ Haystack model) |
+| Field → hub | MQTTS |
+| Office browser | HTTPS → React SPA |
+| AI / automation agents | JWT REST (+ optional MCP) |
+| Weather assist | HTTPS Open-Meteo fetch at the edge |
+| Offline import | CSV / JSON package |
 
 ## What it does
 
 - Collects live data from **BACnet**, **Modbus**, **Haystack**, **JSON API**, and **CSV** imports
-- Stores telemetry in an **Apache Parquet** historian (Arrow/DataFusion) at the edge
-- Models sites, equipment, and points with **Project Haystack** semantics
-- Runs **DataFusion SQL** rules for supervisory fault detection (`sql_rules/` registry)
-- Serves a **React** SPA (`openfdd-web`) — Overview, FDD, RCx, and findings against central `/api` only
-- Exposes a **JWT-protected REST API** and **MCP** tools for AI-assisted engineering workflows
+- Stores telemetry in an **Apache Parquet** historian (Arrow/DataFusion)
+- Models sites with **Project Haystack** semantics
+- Runs **DataFusion SQL** rules (`sql_rules/` registry)
+- Serves a **React** SPA — Overview, FDD, RCx, findings against central `/api` only
+- Exposes **JWT REST** and optional **MCP** for engineering agents
 
-Pandas rule recipes remain published in the [Pandas cookbook](rules/cookbook/pandas-cookbook.html) for notebooks and PyPI/oracle tooling. Production Open-FDD FDD and Overview analytics are DataFusion SQL only.
+Pandas recipes stay in the [Pandas cookbook](rules/cookbook/pandas-cookbook.html) for notebooks / PyPI. Production FDD is DataFusion SQL only.
 
 ## Who it is for
 
 | Role | Typical use |
 |------|-------------|
-| **OT / BAS integrators** | Live edge on a LAN or VPN — BACnet/Modbus commissioning, historian, FDD |
-| **Energy / RCx engineers** | Offline CSV analytics on a workstation — import, merge, SQL rules, reports |
-| **Developers & agents** | API + MCP for scripted commissioning, validation, and documentation |
+| **OT / BAS integrators** | Live edge on LAN/VPN — BACnet/Modbus, historian, FDD |
+| **Energy / RCx engineers** | CSV analytics on a workstation — import, SQL rules, reports |
+| **Developers & agents** | API + MCP for commissioning and validation |
 
 ## Deployment models
 
 ### Live OT edge
 
-Run on a Linux edge host (industrial PC, VM, or Raspberry Pi) on the building LAN. Pull the published image, bind-mount `workspace/` for site state, and keep the API on loopback or behind a reverse proxy.
+Linux edge host on the building LAN. Pull GHCR images, bind-mount `workspace/`, keep API on loopback or behind a reverse proxy.
 
 ### Offline engineering
 
-Run the same stack in Docker on a laptop. Import vendor CSV exports, build the Haystack model, run SQL FDD rules, and generate reports without live field buses.
+Same stack in Docker on a laptop. Import CSVs, map Haystack roles, run SQL FDD — no live field bus required.
 
 {: .important }
-Open-FDD is intended for **LAN, VPN, or OT-network deployment**. Do not expose the API directly on the public internet.
+Intended for **LAN, VPN, or OT-network** deployment. Do not expose the API on the public internet without an independent security review.
 
 ## Get started
 
-1. [Quick Start]({{ site.baseurl }}/quick-start/) — local Compose + Railway hub + GHCR bootstrap
-2. [**Rule Cookbook**]({{ site.baseurl }}/rules/) — **DataFusion SQL + Pandas** HVAC fault patterns
-3. [Haystack modeling]({{ site.baseurl }}/modeling/) — packages, SQL roles, zone terminals
-4. [Architecture]({{ site.baseurl }}/architecture/) — services, data flow, storage
-5. [API Reference]({{ site.baseurl }}/api/) — REST route map
-6. [MCP & Agents]({{ site.baseurl }}/mcp-agents/) — Cursor / OpenClaw integration
-7. [PyPI agent tools]({{ site.baseurl }}/ecm/) — ECM workbooks + pandas oracle (`pip install open-fdd`) — not GHCR FDD
-8. [Web App]({{ site.baseurl }}/web-app/) — SPA routes, RCx / FDD plot examples
-9. [Security](https://github.com/bbartling/open-fdd/blob/master/SECURITY.md) — auth, secrets, BACnet write safety (repo)
+1. [Quick Start]({{ site.baseurl }}/quick-start/) — Compose + Railway + GHCR
+2. [**Rule Cookbook**]({{ site.baseurl }}/rules/) — DataFusion SQL + Pandas patterns (+ [anomaly screening]({{ site.baseurl }}/rules/sql-anomaly-detection.html))
+3. [Haystack modeling]({{ site.baseurl }}/modeling/) — packages and SQL roles
+4. [Architecture]({{ site.baseurl }}/architecture/) — services and data flow
+5. [API & Security]({{ site.baseurl }}/api/) — REST + vulnerability reporting
+6. [MCP & Agents]({{ site.baseurl }}/mcp-agents/) — Cursor / OpenClaw
+7. [PyPI agent tools]({{ site.baseurl }}/ecm/) — ECM + oracle (`pip install open-fdd`)
+8. [Web App]({{ site.baseurl }}/web-app/) — SPA routes and RCx examples
 
 ## Stack images
 
@@ -65,6 +79,4 @@ ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_IMAGE_TAG:-nightly}
 ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
 ```
 
-See [Build recipes]({{ site.baseurl }}/operations/build-recipes.html) for how to
-compose them and [Release channels]({{ site.baseurl }}/operations/release-channels.html)
-for `:beta` and `:latest` promotion policy.
+See [Build recipes]({{ site.baseurl }}/operations/build-recipes.html) and [Release channels]({{ site.baseurl }}/operations/release-channels.html).
