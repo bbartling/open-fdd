@@ -216,5 +216,6 @@ Prior FAILs `20260920T194610Z` / `20260920T231407Z` / `20260921T014908Z` retaine
 | **wu-pypi-publish-4.4.3** | Residual | Soft-OPEN honesty | Math CLOSED on tip; PyPI publish `open-fdd` 4.4.3 not done |
 | **wu-dm-07-10** | Soft-OPEN | **PARTIAL (V5 tip)** | DM-07/08 CLOSED (injective IRI + W3C bindings; spargebra SELECT allowlist; no empty-ok). Residual: DM-09 PERF · DM-10 versioned projection · EQ-VOCAB · ECM-ADAPT · Pages |
 | **wu-mt-breadth** | Soft-OPEN | Soft-OPEN honesty | Continue IMPLEMENTED matrix later; inventory cited on tip |
+| **wu-v6-mega-20260921T204702Z** | Soft-OPEN / tip | **OPEN → tip 3.5.43** | MEGA on `sha-f1adfbd` / 3.5.42 `fully_qualified=false`: (1) gate 17 runtime empty — Jan-2026 synth-59 outside ACME 90d default; (2) gate 25 `fdd/series` 400 without equipment/rule + `package/buildings` foreign 200; (3) gate 26 observer rc≠0 after PASS + missing structured verdict; (4) 25b budget ERROR. Tip fixes runtime unbounded fallback + series/buildings ACL + gate26 verdict. |
 
 **Do not claim:** Nessus assessment PASS · readiness VERIFIED while Critical/High unresolved · Soft-OPEN CLOSED without measured evidence. |

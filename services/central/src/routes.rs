@@ -2082,8 +2082,11 @@ pub async fn fdd_results_readiness(
 
 #[derive(Debug, Deserialize)]
 pub struct FddSeriesQuery {
-    equipment_id: String,
-    rule_id: String,
+    /// Optional for MT authz probes (`?building_id=` only → empty ok envelope).
+    #[serde(default)]
+    equipment_id: Option<String>,
+    #[serde(default)]
+    rule_id: Option<String>,
     #[serde(default)]
     building_id: Option<String>,
 }
@@ -2098,13 +2101,38 @@ pub async fn fdd_series(
     {
         return Err(deny);
     }
+    let equipment_id = query
+        .equipment_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let rule_id = query
+        .rule_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    // Authz / inventory probes pass building_id alone — return an empty ok
+    // envelope (200) rather than 400 from missing required query fields.
+    let (Some(equipment_id), Some(rule_id)) = (equipment_id, rule_id) else {
+        return Ok(Json(json!({
+            "ok": true,
+            "rows": [],
+            "roles": [],
+            "building_id": query.building_id,
+            "equipment_id": query.equipment_id,
+            "rule_id": query.rule_id,
+        })));
+    };
+    let equipment_id = equipment_id.to_string();
+    let rule_id = rule_id.to_string();
+    let building_id = query.building_id.clone();
     let ctx = resolve_tenant_context(&state, &headers);
-    let preferred = preferred_tenant_for_building_read(&ctx, query.building_id.as_deref());
+    let preferred = preferred_tenant_for_building_read(&ctx, building_id.as_deref());
     let result = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::fdd::registry_api::series_response_scoped(
-            &query.equipment_id,
-            &query.rule_id,
-            query.building_id.as_deref(),
+            &equipment_id,
+            &rule_id,
+            building_id.as_deref(),
             preferred.as_deref(),
         )
     })
@@ -2568,18 +2596,29 @@ pub async fn csv_import_package_mapping_ttl(
         .into_response())
 }
 
+#[derive(Debug, Deserialize)]
+pub struct PackageBuildingsQuery {
+    #[serde(default)]
+    pub building_id: Option<String>,
+}
+
 /// List ingested package buildings under workspace csv_buildings.
+/// Multi-tenant: optional `building_id` must be in scope (foreign → 403).
 pub async fn csv_import_package_buildings(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-) -> Json<Value> {
+    Query(q): Query<PackageBuildingsQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
+        return Err(deny);
+    }
     let result = tokio::task::spawn_blocking(
         open_fdd_edge_prototype::csv_ingest::package::list_package_buildings_handler,
     )
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package buildings task: {e}")}));
     if !crate::tenant::multi_tenant_enabled() {
-        return Json(result);
+        return Ok(Json(result));
     }
     let ctx = resolve_tenant_context(&state, &headers);
     let mut filtered = result;
@@ -2593,7 +2632,7 @@ pub async fn csv_import_package_buildings(
             id.is_empty() || ctx.allow_building(id)
         });
     }
-    Json(filtered)
+    Ok(Json(filtered))
 }
 
 pub async fn csv_plan(Json(body): Json<Value>) -> Json<Value> {
