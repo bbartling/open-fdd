@@ -5,7 +5,14 @@ set -euo pipefail
 TAG="${1:?usage: $0 sha-<7> [central|web|mqtt|fieldbus|mcp|caddy|all]}"
 SCOPE="${2:-all}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OUT="${ARTIFACT_DIR:-$ROOT/reports/trivy}/$TAG"
+# Absolute out dir — docker-run Trivy mounts fail on relative ARTIFACT_DIR.
+_raw_out="${ARTIFACT_DIR:-$ROOT/reports/trivy}/$TAG"
+if [[ "$_raw_out" = /* ]]; then
+  OUT="$_raw_out"
+else
+  mkdir -p "$(dirname "$_raw_out")"
+  OUT="$(cd "$(dirname "$_raw_out")" && pwd)/$(basename "$_raw_out")"
+fi
 mkdir -p "$OUT"
 
 images=()
@@ -33,7 +40,8 @@ fail=0
 missing=0
 for name in "${images[@]}"; do
   if [[ "$name" == "caddy" ]]; then
-    ref="docker.io/library/caddy:2.9-alpine"
+    # Match docker/compose.standalone.https.yml (not a newer floating tag).
+    ref="docker.io/library/caddy:2.8-alpine"
   else
     ref="ghcr.io/bbartling/openfdd-${name}:${TAG}"
   fi

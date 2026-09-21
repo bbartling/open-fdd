@@ -88,8 +88,16 @@ cp "$TMP/edge.key.pem" "$TMP/mqtt/edge/edge.key.pem"
 
 # Product containers intentionally run non-root. These are one-run ephemeral CI credentials
 # under a private mktemp directory; make mounted files readable by those container users.
+# Broker mounts certs :ro — openfdd-mqtt fail-closed requires keys already 600/640 (cannot chmod on RO).
 chmod 755 "$TMP" "$TMP/mqtt" "$TMP/mqtt"/{broker,central,edge}
-chmod 644 "$TMP/mqtt/acl" "$TMP/mqtt"/*/*.pem
+chmod 644 "$TMP/mqtt/acl" \
+  "$TMP/mqtt/broker/ca.pem" "$TMP/mqtt/broker/server.cert.pem" \
+  "$TMP/mqtt/central/ca.pem" "$TMP/mqtt/central/central.cert.pem" \
+  "$TMP/mqtt/edge/ca.pem" "$TMP/mqtt/edge/edge.cert.pem"
+chmod 640 \
+  "$TMP/mqtt/broker/server.key.pem" \
+  "$TMP/mqtt/central/central.key.pem" \
+  "$TMP/mqtt/edge/edge.key.pem"
 
 echo "== Pull exact Open-FDD images: $TAG =="
 for image in openfdd-mqtt openfdd-central openfdd-fieldbus; do
