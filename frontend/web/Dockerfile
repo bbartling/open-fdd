@@ -33,7 +33,9 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # the base image's template entrypoint and a Railway-style upstream at build time.
 USER root
 # UA-05: pick Alpine security fixes available in the base (openssl/libxml2/…).
+# Force nginx package past 1.28.2-r1 when Alpine publishes 1.28.3+ (Trivy High/Critical).
 RUN apk upgrade --no-cache \
+  && apk add --no-cache --upgrade nginx \
   && chown -R 101:0 /usr/share/nginx/html \
   && chmod 0755 /docker-entrypoint.d/15-openfdd-resolver.envsh \
   && test -x /docker-entrypoint.d/15-openfdd-resolver.envsh \

@@ -65,17 +65,17 @@
 | **edge-kit-soft** | **OPS** · MT kit `./scripts/openfdd_restore_edge_kit.sh ACME pi-1` → `deploy/mqtt/kits/ACME__pi-1/` · live ACME OT edge id `vim-1` |
 | **s1-datasets-mt-acl** | **CLOSED** (#951 / 3.5.31 / `sha-7b81eb8`) · datasets list/delete MT ACL; FQ `20260919T195100Z` gate 25/25b PASS |
 | **wave-s3-pypi-mv-oracle** | **PARTIAL (branch tip/wave-u-u0-master)** · IPMVP change-point (`2P`/`3P`/`4P`/`5P`) + G14 NMBE/CVRMSE in `open_fdd.ecm_engineering` (+ analytics re-exports) · cookbook [`docs/ecm/ipmvp-changepoint.md`](../ecm/ipmvp-changepoint.md) · wheel `4.4.3` local build/test · **Soft-OPEN residual:** PyPI publish tip, unfinished Camber families, Wave S4 SQL twin / Metering UI. Plan: `wave_s3_pypi_mv_camber_oracle.plan.md`. |
-| **wave-s4-sql-twins-fq** | **IN FLIGHT** · Hub MV 200 on `sha-f44b45f`; MEGA `20260920T194610Z` EXECUTE=1 — OPS PINNED only if `fully_qualified=true` |
+| **wave-s4-sql-twins-fq** | **CLOSED (FQ)** · MEGA `20260921T021332Z` `fully_qualified=true` on `sha-1677c33` / 3.5.37 · both gate 36 PASS · OPS PINNED |
 | **wave-s5-dm-remainder** | **PARTIAL (this tip)** · DM-04 stamped types + inferred-parent honesty + DM-05 tenant storage doc + gate **36** model/ECM wire. Soft-OPEN remains: DM-07..10 SPARQL/PERF, EQ-VOCAB/ECM-ADAPT FQ, Pages publish soak. P1 IRI still CLOSED on `sha-3cd3745`. |
 | **acme-fdd-run-hang** | **CLOSED (3.5.34)** · Stale `running` reclaim **20m** + `list_actions` reclaim + `POST /api/fdd/run` wall timeout via `OPENFDD_FDD_RUN_TIMEOUT_SECS` (default **900s**) finishes action `fail`/`timeout` instead of indefinite hang. Slow ACME DataFusion remains a performance topic, not an action hang. |
 | **sec-harness-mt-breadth** | **PARTIAL (this tip)** · Expanded Y/X: mapping TTL foreign deny + FDD equipment own/foreign; inventory IMPLEMENTED honest. Soft-OPEN: more PLANNED MT routes (analytics POSTs, series, buildings list, …). |
-| **sec-harness-evaluator-integrity** | **PARTIAL / REOPENED (UA-01/03/04/06/07)** · E01–E08 fixes retained; independent audit found additional acceptance failures needing permanent regressions |
+| **sec-harness-evaluator-integrity** | **CLOSED for UA-01/03/04/06/07 contract (tip)** · Permanent negatives + MEGA required gates; Soft-OPEN remains for breadth (MT routes) and product MQTT image vs fixture broker |
 | **sec-ci-wire** | **CLOSED (3.5.34)** · AppSec `security-harness` job |
-| **standalone-https-bootstrap** | **REOPENED acceptance (UA-02)** · overlay/component checks delivered; actual candidate with resolved deployment, trusted TLS and peer exposure must qualify. Current cited probe JSON is selftest-only. |
+| **standalone-https-bootstrap** | **PARTIAL (UA-02)** · Compose `!reset` hides web:3000 (unittest); peer soak `reports/security/standalone_https_peer_20260921T023714Z/` trusted-CA HTTPS + untrusted-store reject + HTTP redirect. Soft-OPEN residual: product-image candidate soak (not stub web). |
 | **fieldbus-mgmt-failclosed** | **CLOSED (3.5.34)** · `require_api_key_for_bind` + unit tests (`non_loopback_without_key_refused`, loopback/key cases) |
 | **mqtt-key-mode-tenant-acl** | **REOPENED acceptance (UA-03/08) / PARTIAL tip** · provisioner writes keys `0600` + dual-tenant ACL isolation tests; MQTT entrypoint fail-closed on insecure key mode; runtime delivery observer with product-generated ACLs still required |
 | **zap-af-authenticated** | **REOPENED acceptance (UA-04) / PARTIAL tip** · evaluator fail-closed + isolated runner no longer persists `admin.jwt`; historical `sha-4d3a6b0` scan retained; disposable candidate AF with auth/route coverage still required before VERIFIED |
-| **image-digest-trivy** | **SCAN ACQUIRED / REMEDIATION PARTIAL (UA-05)** · `sha-f44b45f` reports retained; web Dockerfile `1.28-alpine`+`apk upgrade`; dispositions in [`IMAGE_FINDING_DISPOSITIONS.md`](IMAGE_FINDING_DISPOSITIONS.md); Debian unfixed + Caddy/tip rescan still required before readiness VERIFIED |
+| **image-digest-trivy** | **RESCAN `sha-1677c33` / REMEDIATION OPEN (UA-05)** · `reports/trivy-wave-u/sha-1677c33/SUMMARY.md` (mqtt 0; web nginx 1.28.2→need 1.28.3; Debian TRACKED UNFIXED; caddy High residual). Tip **3.5.38** forces `apk upgrade nginx` + trivy absolute ARTIFACT_DIR + caddy 2.8 tag align. |
 | **nessus-pass-readiness** | **REOPENED / REQUIRED without license (UA-02–09)** · evaluated tooling plus standalone/field-only host, image, TLS, exposure and runtime acceptance remain. Checklist/importer delivery is partial; actual licensed scan is separately BLOCKED. |
 | **nessus-isolated-assessment** | **Soft-OPEN / BLOCKED** · Real licensed Nessus only |
 
@@ -107,16 +107,21 @@ The current closure rows above are corrected prospectively. Earlier scan/test ac
 
 | Bug / audit ID | Priority | Status | Required acceptance / owner |
 | --- | --- | --- | --- |
-| `wu-audit-ua01-qualification` | P1 | OPEN | Test maintainer: required gate/profile contract, candidate provenance, artifact validation and both gate 36 acceptance |
-| `wu-audit-ua02-standalone` | P1 | OPEN | Deployment maintainer: actual standalone candidate, verified TLS and peer exposure against resolved configuration |
-| `wu-audit-ua03-mqtt` | P1 | OPEN | Field/security maintainer: product-generated runtime identity/ACL and healthy positive/negative delivery controls |
-| `wu-audit-ua04-zap` | P1 | OPEN | Security maintainer: consolidated evaluated runner, candidate/auth/coverage proof and private artifact lifecycle |
-| `wu-audit-ua05-images` | P1 | PARTIAL | Web base bump + disposition doc on tip; Debian unfixed + rescan of next tip digests (incl. Caddy) still required |
+| `wu-audit-ua01-qualification` | P1 | FIXED (contract) | Both gate 36 required + provenance; MEGA `20260921T021332Z` FQ |
+| `wu-audit-ua02-standalone` | P1 | PARTIAL | Trusted-CA peer soak + compose hide web:3000; product-image candidate soak still Soft-OPEN |
+| `wu-audit-ua03-mqtt` | P1 | PARTIAL | require-live + gate 26 PASS on tip; product MQTT image vs eclipse-mosquitto fixture still Soft-OPEN |
+| `wu-audit-ua04-zap` | P1 | PARTIAL | Evaluator fail-closed + JWT hygiene; disposable auth AF on candidate still Soft-OPEN |
+| `wu-audit-ua05-images` | P1 | PARTIAL | Tip rescan `sha-1677c33`; nginx force-upgrade in 3.5.38; Debian/caddy residual OPEN |
 | `wu-audit-ua06-importer` | P1 | FIXED (code) / assessment BLOCKED | Per-host credentialed/completeness validation + permanent negatives on tip; licensed scan still BLOCKED |
 | `wu-audit-ua07-identity` | P1 | FIXED (code) | `tenant_ids` membership enforcement + permanent negatives on tip; broader MT route matrix remains Soft-OPEN |
 | `wu-audit-ua08-field-host` | P1 | PARTIAL | Key `0600`, dual-tenant kits, field-only exposure, host selftest on tip; live host probe + runtime container evidence still required |
 | `wu-audit-ua09-readiness-scope` | P1 | DOCS CORRECTED / VERIFICATION OPEN | Release maintainer: license-free readiness retained as required; close only after measured profile evidence |
-| `wu-audit-ua10-product-closeout` | P2 | PARTIAL | RCx presets ACL source guard + harness; S5/S3 residuals and final twin/FQ still open |
+| `wu-audit-ua10-product-closeout` | P2 | PARTIAL | RCx presets ACL + hub FQ twins CLOSED; Soft-OPEN: S5 DM-07..10, S3 PyPI publish, MT breadth |
+| `wu-bacnet-ci-ro-key-mode` | CI | **FIXING 3.5.38** | Optional BACnet FAIL on `sha-1677c33`: smoke `chmod 644 *.pem` + RO mqtt mount → fail-closed; smoke now stages keys 640 |
+| `wu-s4-fq-mega` | Soft-OPEN | **CLOSED** | MEGA `20260921T021332Z` `fully_qualified=true` → OPS PINNED `sha-1677c33` / 3.5.37 |
+| `wu-trivy-tip-digest` | Soft-OPEN | **RESCAN OPEN** | Tip rescan `reports/trivy-wave-u/sha-1677c33/`; nginx force-upgrade on 3.5.38; Debian/caddy residual tracked |
+
+**Do not claim:** Nessus assessment PASS · readiness VERIFIED while Critical/High unresolved · Soft-OPEN CLOSED without measured evidence. |
 
 For each fix append candidate/harness SHA, image/config/fixture hashes, profile, actual CI/run/artifact references, expected/observed outcomes and retest result. Do not mark these rows FIXED merely because a plan or test file was added. These owner labels identify responsibility; assign an actual maintainer when scheduling.
 
@@ -202,11 +207,12 @@ Prior FAILs `20260920T194610Z` / `20260920T231407Z` / `20260921T014908Z` retaine
 | **wu-model-ecm-creds** | Soft-OPEN | **CLEARED for MEGA** | Railway has `OPENFDD_USER_ACME_OPS_PASSWORD` / `OPENFDD_USER_B100_OPS_PASSWORD` (stress fetches ops_a/ops_b len=32). Prior BLOCKED was missing fetch names. |
 | **wu-vim1-oa-t-kit** | Ops | **PARTIAL** | Kit restored `deploy/mqtt/kits/ACME__vim-1/` + fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1`. Telemetry live; residual `ingest_reject` still climbing briefly after redeploy — Soft-OPEN until rejects quiet. |
 | **wu-acme-fdd-slow** | Perf (not hang) | Soft note | Hang Soft-OPEN **CLOSED** (20m reclaim + 900s timeout). ACME may still be slow/timeout under load — not indefinite `running` |
-| **wu-s4-fq-mega** | Soft-OPEN | **IN FLIGHT** | MEGA `20260920T194610Z` EXECUTE=1 EXPECTED_EDGE_ID=vim-1 — await `fully_qualified` before OPS PINNED |
-| **wu-trivy-tip-digest** | Soft-OPEN | **SCAN ACQUIRED / REMEDIATION OPEN** | Historical scan `reports/trivy-wave-u/sha-f44b45f/SUMMARY.md`; acceptance follows `wu-audit-ua05-images` |
+| **wu-s4-fq-mega** | Soft-OPEN | **CLOSED** | MEGA `20260921T021332Z` `fully_qualified=true` · OPS PINNED `sha-1677c33` / 3.5.37 |
+| **wu-trivy-tip-digest** | Soft-OPEN | **RESCAN OPEN** | Tip `reports/trivy-wave-u/sha-1677c33/`; nginx force-upgrade in 3.5.38 |
 | **wu-bacnet-ci-api-key** | CI | **FIXED #960** | Optional BACnet smoke supplies `OPENFDD_FIELDBUS_API_KEY` after fail-closed |
+| **wu-bacnet-ci-ro-key-mode** | CI | **FIXING 3.5.38** | RO-mounted keys must be 640 before mqtt start (smoke no longer `chmod 644 *.pem`) |
 | **wu-pypi-publish-4.4.3** | Residual | Soft-OPEN honesty | Math CLOSED on tip; PyPI publish `open-fdd` 4.4.3 not done |
 | **wu-dm-07-10** | Soft-OPEN | Soft-OPEN honesty | DM-04/05 landed; DM-07..10 SPARQL/PERF/ECM-ADAPT remain |
 | **wu-mt-breadth** | Soft-OPEN | Soft-OPEN honesty | Continue IMPLEMENTED matrix later; inventory cited on tip |
 
-**Do not claim:** Nessus assessment PASS · MEGA `fully_qualified=true` until manifest says so · OPS PINNED bump until FQ artifact. |
+**Do not claim:** Nessus assessment PASS · readiness VERIFIED while Critical/High unresolved · Soft-OPEN CLOSED without measured evidence. |

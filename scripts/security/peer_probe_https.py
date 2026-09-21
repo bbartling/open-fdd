@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Standalone HTTPS bootstrap probe (Wave U U3 Soft-OPEN closeout).
+"""Standalone HTTPS bootstrap probe (Wave U U3 Soft-OPEN / UA-02).
 
 Default / --selftest: lint compose + Caddyfile + exposure manifest (no Docker).
 Optional peer soak: OPENFDD_HTTPS_PEER_PROBE=1 or --peer-probe brings up an
 isolated Compose project (official caddy + stub web, self-signed certs) and
-asserts TLS health plus HTTP login refusal/redirect.
+asserts TLS health with a trusted CA context, untrusted-store rejection, and
+HTTP login refusal/redirect.
 
-Never claims a Nessus PASS.
+Never claims a Nessus PASS. Stub peer soak ≠ product-image candidate qualification.
 """
 from __future__ import annotations
 
@@ -247,6 +248,7 @@ services:
 
 
 def _ssl_unverified():
+    """Negative-control only — never use for qualifying HTTPS success paths."""
     import ssl
 
     ctx = ssl._create_unverified_context()
@@ -254,9 +256,26 @@ def _ssl_unverified():
     return ctx
 
 
-def _http_probe(url: str, *, timeout: float = 5.0) -> dict[str, Any]:
+def _ssl_trust_ca(ca_pem: Path):
+    """Positive path: trust the probe-generated CA/self-signed PEM (no verify=False)."""
+    import ssl
+
+    ctx = ssl.create_default_context(cafile=str(ca_pem))
+    ctx.check_hostname = True
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    return ctx
+
+
+def _http_probe(
+    url: str,
+    *,
+    timeout: float = 5.0,
+    ssl_context=None,
+) -> dict[str, Any]:
     req = urllib.request.Request(url, method="GET")
-    ctx = _ssl_unverified() if url.startswith("https://") else None
+    ctx = ssl_context
+    if ctx is None and url.startswith("https://"):
+        raise ValueError("https probes require an explicit ssl_context (trusted CA or negative)")
     try:
         with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
             body = resp.read(512)
@@ -280,7 +299,7 @@ def _http_probe(url: str, *, timeout: float = 5.0) -> dict[str, Any]:
         return {"ok": False, "url": url, "error": str(e)}
 
 
-def _http_headers(url: str, *, timeout: float = 5.0) -> dict[str, Any]:
+def _http_headers(url: str, *, timeout: float = 5.0, ssl_context=None) -> dict[str, Any]:
     """GET without following redirects — measure Location."""
     import http.client
     from urllib.parse import urlparse
@@ -292,10 +311,12 @@ def _http_headers(url: str, *, timeout: float = 5.0) -> dict[str, Any]:
     if parsed.query:
         path = f"{path}?{parsed.query}"
     if parsed.scheme == "https":
+        if ssl_context is None:
+            raise ValueError("https header probe requires ssl_context")
         conn: http.client.HTTPConnection = http.client.HTTPSConnection(
             host,
             port,
-            context=_ssl_unverified(),
+            context=ssl_context,
             timeout=timeout,
         )
     else:
@@ -371,19 +392,35 @@ def run_peer_probe(
             return _peer_result(False, checks, tmp, project, keep, http_port, https_port)
 
         # Wait for caddy + stub (localhost SNI matches self-signed CN + Caddy site).
+        # Positive HTTPS must trust the probe-generated PEM (no verify=False).
+        trust = _ssl_trust_ca(cert_dir / "server.crt")
         https_url = f"https://localhost:{https_port}/api/health"
         deadline = time.time() + 45
         health: dict[str, Any] = {}
         while time.time() < deadline:
-            health = _http_probe(https_url)
+            health = _http_probe(https_url, ssl_context=trust)
             if health.get("ok") and health.get("status") == 200:
                 break
             time.sleep(1.5)
         checks.append(
             {
-                "id": "https_api_health",
+                "id": "https_api_health_trusted_ca",
                 "ok": bool(health.get("ok") and health.get("status") == 200),
                 "detail": health,
+            }
+        )
+
+        # Negative: default trust store must reject the self-signed cert.
+        import ssl as _ssl
+
+        default_ctx = _ssl.create_default_context()
+        untrusted = _http_probe(https_url, ssl_context=default_ctx)
+        untrusted_ok = not untrusted.get("ok")
+        checks.append(
+            {
+                "id": "https_rejects_untrusted_default_store",
+                "ok": untrusted_ok,
+                "detail": untrusted,
             }
         )
 
@@ -480,7 +517,8 @@ def _peer_result(
         "checks": checks,
         "note": (
             "Isolated Compose peer soak (caddy official + stub web, self-signed). "
-            "Not a Nessus PASS. Product images were not built."
+            "HTTPS success path trusts the probe PEM (no verify=False). "
+            "Not a Nessus PASS and not a full product-image candidate soak."
         ),
     }
 
