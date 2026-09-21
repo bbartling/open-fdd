@@ -180,16 +180,15 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         let end = req.query.end;
         let building = req.query.building_id.as_deref();
         let mut used_unbounded_fallback = false;
-        let hist = match historian::runtime_from_history(filter, max_gap, building, start, end)
-            .await
-        {
-            Ok(Some(env)) if env_has_runtime_rows(&env) => Ok(Some(env)),
-            Ok(Some(_)) | Ok(None) if defaulted_start => {
-                used_unbounded_fallback = true;
-                historian::runtime_from_history(filter, max_gap, building, None, end).await
-            }
-            other => other,
-        };
+        let hist =
+            match historian::runtime_from_history(filter, max_gap, building, start, end).await {
+                Ok(Some(env)) if env_has_runtime_rows(&env) => Ok(Some(env)),
+                Ok(Some(_)) | Ok(None) if defaulted_start => {
+                    used_unbounded_fallback = true;
+                    historian::runtime_from_history(filter, max_gap, building, None, end).await
+                }
+                other => other,
+            };
         match hist {
             Ok(Some(mut env)) => {
                 let (qv, mut warnings) = resolve_query_version(req, QV_RUNTIME);

@@ -2609,9 +2609,7 @@ pub async fn csv_import_package_buildings(
     headers: HeaderMap,
     Query(q): Query<PackageBuildingsQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) =
-        deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref())
-    {
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
         return Err(deny);
     }
     let result = tokio::task::spawn_blocking(
