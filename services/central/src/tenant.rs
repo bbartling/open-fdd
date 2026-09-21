@@ -109,8 +109,8 @@ impl TenantContext {
 
     /// Resolve Parquet historian root for this context.
     ///
-    /// Mode OFF ? `base` unchanged (today's single-hub layout).
-    /// Mode ON ? `{base}/tenants/{tenant_id}` (hub_admin without a selected
+    /// Mode OFF: `base` unchanged (today's single-hub layout).
+    /// Mode ON: `{base}/tenants/{tenant_id}` (hub_admin without a selected
     /// tenant must pass an explicit tid; otherwise fail closed).
     pub fn historian_root(&self, base: &std::path::Path) -> Result<std::path::PathBuf, String> {
         if !self.multi_tenant {
@@ -120,6 +120,27 @@ impl TenantContext {
             "multi-tenant historian root requires an active tenant_id".to_string()
         })?;
         fdd_store::tenant_storage_root(base, Some(tid)).map_err(|e| e.to_string())
+    }
+
+    /// Dual-read storage root for a building (Wave U V7).
+    ///
+    /// Prefers `tenants/{tid}/…` when that tree has the building; falls back to
+    /// hub-root. Hub admins without an active tenant use unique-tenant scan /
+    /// hub fallback (see [`fdd_store::resolve_building_read_root`]).
+    pub fn historian_read_root_for_building(
+        &self,
+        base: &std::path::Path,
+        building_id: &str,
+    ) -> Result<fdd_store::BuildingReadRoot, String> {
+        if !self.multi_tenant {
+            return Ok(fdd_store::BuildingReadRoot {
+                root: base.to_path_buf(),
+                source: fdd_store::BuildingReadSource::HubRoot,
+                tenant_id: None,
+            });
+        }
+        fdd_store::resolve_building_read_root(base, self.tenant_id.as_deref(), building_id)
+            .map_err(|e| e.to_string())
     }
 
     /// Relative prefix under the hub storage root (empty when mode OFF).
@@ -409,6 +430,90 @@ mod tests {
         assert!(root_b.ends_with("tenants/tenant_b"));
         assert!(!root_a.starts_with(&root_b));
         assert!(!root_b.starts_with(&root_a));
+        std::env::remove_var("OPENFDD_MULTI_TENANT");
+    }
+
+    /// Permanent ACL regression: foreign tenant building denied; hub_admin sees all.
+    #[test]
+    fn permanent_acl_foreign_deny_hub_admin_sees_all() {
+        let _g = lock_env();
+        std::env::set_var("OPENFDD_MULTI_TENANT", "1");
+        let plane = ControlPlane {
+            tenants: vec![
+                TenantRecord {
+                    id: "acme".into(),
+                    name: "ACME".into(),
+                    building_ids: vec!["ACME".into()],
+                },
+                TenantRecord {
+                    id: "building_100".into(),
+                    name: "B100".into(),
+                    building_ids: vec!["BUILDING_100".into()],
+                },
+                TenantRecord {
+                    id: "lakeside_sd".into(),
+                    name: "Lakeside".into(),
+                    building_ids: vec!["LAKESIDE_ES".into()],
+                },
+            ],
+        };
+        let acme_ops = AuthUser {
+            sub: "acme-ops".into(),
+            role: Role::Operator,
+            tenant_ids: vec!["acme".into()],
+        };
+        let ctx = TenantContext::resolve(&acme_ops, &plane).expect("acme");
+        assert!(ctx.allow_building("ACME"));
+        assert!(!ctx.allow_building("BUILDING_100"));
+        assert!(!ctx.allow_building("LAKESIDE_ES"));
+
+        let hub = AuthUser {
+            sub: "admin".into(),
+            role: Role::Admin,
+            tenant_ids: vec![],
+        };
+        let admin = TenantContext::resolve(&hub, &plane).expect("hub");
+        assert!(admin.hub_admin);
+        assert!(admin.allow_building("ACME"));
+        assert!(admin.allow_building("BUILDING_100"));
+        assert!(admin.allow_building("LAKESIDE_ES"));
+        std::env::remove_var("OPENFDD_MULTI_TENANT");
+    }
+
+    #[test]
+    fn historian_read_root_dual_read_prefers_tenant() {
+        let _g = lock_env();
+        std::env::set_var("OPENFDD_MULTI_TENANT", "1");
+        let tmp = tempfile::TempDir::new().unwrap();
+        let hub = tmp.path();
+        let tenant_tree = hub.join("tenants/acme/building=ACME/equipment=rtu_01");
+        std::fs::create_dir_all(&tenant_tree).unwrap();
+        std::fs::write(tenant_tree.join("history.parquet"), b"pq").unwrap();
+        let hub_tree = hub.join("building=BUILDING_100/equipment=AHU_1");
+        std::fs::create_dir_all(&hub_tree).unwrap();
+        std::fs::write(hub_tree.join("history.parquet"), b"pq").unwrap();
+
+        let plane = ControlPlane {
+            tenants: vec![TenantRecord {
+                id: "acme".into(),
+                name: "ACME".into(),
+                building_ids: vec!["ACME".into(), "BUILDING_100".into()],
+            }],
+        };
+        let user = AuthUser {
+            sub: "eng".into(),
+            role: Role::Operator,
+            tenant_ids: vec!["acme".into()],
+        };
+        let ctx = TenantContext::resolve(&user, &plane).expect("resolve");
+        let acme = ctx
+            .historian_read_root_for_building(hub, "ACME")
+            .expect("acme");
+        assert_eq!(acme.source, fdd_store::BuildingReadSource::TenantPartition);
+        let b100 = ctx
+            .historian_read_root_for_building(hub, "BUILDING_100")
+            .expect("b100");
+        assert_eq!(b100.source, fdd_store::BuildingReadSource::HubRoot);
         std::env::remove_var("OPENFDD_MULTI_TENANT");
     }
 }

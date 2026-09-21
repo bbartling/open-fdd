@@ -142,33 +142,62 @@ fn safe_building_segment(building_id: Option<&str>) -> Option<String> {
 ///
 /// When `building_id` is set, prefers canonical live Hive
 /// `history/building_id={id}/`, then legacy package sidecars `building={id}/`.
+/// Wave U V7 dual-read: prefers `tenants/{tid}/…` when present, else hub-root.
 /// Does **not** fall back to the whole tree (that would mix other buildings).
 /// Returns `Ok(false)` when nothing usable is present.
 pub async fn try_register_history_scoped(
     ctx: &SessionContext,
     building_id: Option<&str>,
 ) -> Result<bool> {
-    let root = parquet_root();
-    if !root.is_dir() {
+    try_register_history_scoped_for_tenant(ctx, building_id, None).await
+}
+
+/// Same as [`try_register_history_scoped`] with an explicit preferred tenant id.
+pub async fn try_register_history_scoped_for_tenant(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+) -> Result<bool> {
+    let hub = parquet_root_base();
+    if !hub.is_dir() {
         return Ok(false);
     }
     match safe_building_segment(building_id) {
-        Some(bid) => match fdd_sql::register_historian_building(ctx, &root, &bid).await {
-            Ok(_) => Ok(true),
-            Err(e) => {
+        Some(bid) => {
+            let resolved = match fdd_store::resolve_building_read_root(&hub, preferred_tenant, &bid)
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::debug!(error = %e, building = %bid, "unsafe building dual-read");
+                    return Ok(false);
+                }
+            };
+            if !fdd_store::building_history_present(&resolved.root, &bid) {
                 tracing::debug!(
-                    error = %e,
                     building = %bid,
-                    root = %root.display(),
+                    root = %resolved.root.display(),
+                    source = ?resolved.source,
                     "no building-scoped parquet; historian scope empty"
                 );
-                Ok(false)
+                return Ok(false);
             }
-        },
-        None => match register_parquet_tree(ctx, &root).await {
+            match fdd_sql::register_historian_building(ctx, &resolved.root, &bid).await {
+                Ok(_) => Ok(true),
+                Err(e) => {
+                    tracing::debug!(
+                        error = %e,
+                        building = %bid,
+                        root = %resolved.root.display(),
+                        "no building-scoped parquet; historian scope empty"
+                    );
+                    Ok(false)
+                }
+            }
+        }
+        None => match register_parquet_tree(ctx, &hub).await {
             Ok(_) => Ok(true),
             Err(e) => {
-                tracing::debug!(error = %e, root = %root.display(), "historian parquet register skipped");
+                tracing::debug!(error = %e, root = %hub.display(), "historian parquet register skipped");
                 Ok(false)
             }
         },

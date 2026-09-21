@@ -1716,38 +1716,10 @@ pub fn list_package_buildings_handler() -> Value {
         }
     }
     // Union live / package historian partitions so MQTT sites appear like CSV.
+    // Wave U V7: also scan tenants/{tid}/building=* and tenants/{tid}/history/…
     let pq = crate::fdd::registry_api::parquet_root();
-    if let Ok(rd) = std::fs::read_dir(pq.join("history")) {
-        for e in rd.flatten() {
-            if !e.path().is_dir() {
-                continue;
-            }
-            if let Some(name) = e
-                .file_name()
-                .to_str()
-                .and_then(|n| n.strip_prefix("building_id="))
-            {
-                if !name.is_empty() {
-                    buildings.push(name.to_string());
-                }
-            }
-        }
-    }
-    if let Ok(rd) = std::fs::read_dir(&pq) {
-        for e in rd.flatten() {
-            if !e.path().is_dir() {
-                continue;
-            }
-            if let Some(name) = e
-                .file_name()
-                .to_str()
-                .and_then(|n| n.strip_prefix("building="))
-            {
-                if !name.is_empty() {
-                    buildings.push(name.to_string());
-                }
-            }
-        }
+    for bid in fdd_store::list_building_ids(&pq) {
+        buildings.push(bid);
     }
     buildings.sort();
     buildings.dedup();
