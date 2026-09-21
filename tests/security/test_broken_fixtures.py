@@ -53,7 +53,9 @@ def _run(mode: str, td: str) -> dict:
                 suites=None,
                 execute=True,
                 dry_run=False,
-                max_requests=80,
+                # V3 MT breadth (+buildings/series/analytics POSTs) needs ~74;
+                # leave headroom above cleanup_reserved (10).
+                max_requests=120,
                 timeout=5.0,
                 deadline=60.0,
                 rate=20.0,
