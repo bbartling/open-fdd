@@ -5,8 +5,8 @@
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission.",
   "route_count": 139,
   "disposition_counts": {
-    "IMPLEMENTED": 18,
-    "PLANNED": 92,
+    "IMPLEMENTED": 24,
+    "PLANNED": 86,
     "BLOCKED_POLICY": 29
   },
   "routes": [
@@ -425,7 +425,7 @@
       "section": "csv",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -437,7 +437,11 @@
         "x.preauth.anon401.get_api_csv_import_package_buildings",
         "y.authz.get_api_csv_import_package_buildings"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_buildings",
+        "y.authz.a_own_package_buildings",
+        "y.authz.a_foreign_package_buildings_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_csv_import_package_buildings",
         "y.authz.get_api_csv_import_package_buildings"
@@ -2073,7 +2077,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -2085,7 +2089,11 @@
         "x.preauth.anon401.get_api_fdd_series",
         "y.authz.get_api_fdd_series"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_fdd_series",
+        "y.authz.a_own_fdd_series",
+        "y.authz.a_foreign_fdd_series_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_fdd_series",
         "y.authz.get_api_fdd_series"
@@ -3864,7 +3872,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -3876,7 +3884,11 @@
         "x.preauth.anon401.post_api_analytics_vav_health",
         "y.authz.post_api_analytics_vav_health"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.post_api_analytics_vav_health",
+        "y.authz.a_own_analytics_vav_health",
+        "y.authz.a_foreign_analytics_vav_health_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.post_api_analytics_vav_health",
         "y.authz.post_api_analytics_vav_health"
@@ -3902,7 +3914,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -3914,7 +3926,11 @@
         "x.preauth.anon401.post_api_analytics_ahu_health",
         "y.authz.post_api_analytics_ahu_health"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.post_api_analytics_ahu_health",
+        "y.authz.a_own_analytics_ahu_health",
+        "y.authz.a_foreign_analytics_ahu_health_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.post_api_analytics_ahu_health",
         "y.authz.post_api_analytics_ahu_health"
@@ -4130,7 +4146,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -4142,7 +4158,11 @@
         "x.preauth.anon401.post_api_analytics_sensor_faults",
         "y.authz.post_api_analytics_sensor_faults"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.post_api_analytics_sensor_faults",
+        "y.authz.a_own_analytics_sensor_faults",
+        "y.authz.a_foreign_analytics_sensor_faults_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.post_api_analytics_sensor_faults",
         "y.authz.post_api_analytics_sensor_faults"
@@ -4548,7 +4568,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -4560,7 +4580,11 @@
         "x.preauth.anon401.post_api_analytics_rcx_ahu",
         "y.authz.post_api_analytics_rcx_ahu"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.post_api_analytics_rcx_ahu",
+        "y.authz.a_own_analytics_rcx_ahu",
+        "y.authz.a_foreign_analytics_rcx_ahu_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.post_api_analytics_rcx_ahu",
         "y.authz.post_api_analytics_rcx_ahu"

@@ -26,7 +26,8 @@ ALLOWED_CONFIG_KEYS = frozenset(
 
 DEFAULT_BUDGETS = {
     "live_readonly": {
-        "max_requests": 80,
+        # V3 MT breadth (+buildings/series/analytics POSTs) exceeds prior 80.
+        "max_requests": 120,
         "timeout_s": 10.0,
         "deadline_s": 300.0,
         "rate_rps": 1.0,
