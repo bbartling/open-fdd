@@ -2024,8 +2024,12 @@ pub async fn fdd_equipment(
     if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
         return Err(deny);
     }
+    let ctx = resolve_tenant_context(&state, &headers);
     Ok(Json(
-        open_fdd_edge_prototype::fdd::registry_api::equipment_response(q.scoped()),
+        open_fdd_edge_prototype::fdd::registry_api::equipment_response_scoped(
+            q.scoped(),
+            ctx.tenant_id.as_deref(),
+        ),
     ))
 }
 
@@ -2073,11 +2077,14 @@ pub async fn fdd_series(
     {
         return Err(deny);
     }
+    let ctx = resolve_tenant_context(&state, &headers);
+    let tenant_id = ctx.tenant_id.clone();
     let result = tokio::task::spawn_blocking(move || {
-        open_fdd_edge_prototype::fdd::registry_api::series_response(
+        open_fdd_edge_prototype::fdd::registry_api::series_response_scoped(
             &query.equipment_id,
             &query.rule_id,
             query.building_id.as_deref(),
+            tenant_id.as_deref(),
         )
     })
     .await

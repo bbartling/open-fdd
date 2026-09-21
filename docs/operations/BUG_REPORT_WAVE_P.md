@@ -56,7 +56,7 @@
 | **util-interval** | **CLOSED (branch)** · empty `utility_interval`/`bas_submeter` views when CSV absent → UTIL-INTERVAL plans **0h** (not `rules_failed`); pandas oracle: expect 0h when interval frame empty |
 | **r6-ingest-reject** | **CLOSED (branch)** · count on health + `reject_buckets` on `/api/ingest/stats` (no dead-letter dump API) |
 | **kali-zap-af** | **REOPENED acceptance (UA-04)** · alias of `zap-af-authenticated` — **V2** |
-| **wave-o1-tenant-path-migrate** | Hub-root `building=*` still; optional `tenants/{tid}/` migrate — **V7** [wave_u_v7_tenant_path_migrate.plan.md](../../.cursor/plans/wave_u_v7_tenant_path_migrate.plan.md) |
+| **wave-o1-tenant-path-migrate** | **CLOSED (3.5.41 / V7)** · Dual-read prefers `tenants/{tid}/…` then hub-root; additive migrate script `scripts/ops/wave_u_v7_tenant_path_migrate.sh` (ACME / BUILDING_100 / LAKESIDE_ES); permanent ACL regressions foreign deny + hub_admin sees all. Live hub APPLY still requires Railway backup + `CONFIRM_BACKUP=1` — not run in this PR. #958 HOLD unchanged. |
 | **p2c-mqtt-acl-staging** | **REOPENED acceptance (UA-03)** · folded into `mqtt-key-mode-tenant-acl`; product-generated runtime ACL matrix still required — **V2** |
 | **historian-n-building-scale** | Small Parquet parts × N buildings; offline H4 now; runtime compaction Soft later — **V8** [wave_u_v8_historian_compaction.plan.md](../../.cursor/plans/wave_u_v8_historian_compaction.plan.md) |
 | **admin-capacity-gauges** | **CLOSED (branch)** · cgroup memory + workspace `statvfs` + Parquet small-file strip on Admin |

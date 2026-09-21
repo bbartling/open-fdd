@@ -141,28 +141,26 @@ pub(crate) fn parquet_root() -> PathBuf {
     PathBuf::from(".cache/parquet")
 }
 
-fn dir_has_parquet(root: &Path) -> bool {
-    if !root.is_dir() {
-        return false;
-    }
-    walkdir::WalkDir::new(root)
-        .into_iter()
-        .filter_map(Result::ok)
-        .any(|e| {
-            e.file_type().is_file()
-                && e.path()
-                    .extension()
-                    .and_then(|x| x.to_str())
-                    .map(|x| x.eq_ignore_ascii_case("parquet"))
-                    .unwrap_or(false)
-        })
+fn preferred_tenant_from_env() -> Option<String> {
+    std::env::var("OPENFDD_TENANT_ID")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
-/// True when a building has CSV sidecar and/or canonical MQTT historian parquet.
-fn building_has_history(pq: &Path, bid: &str) -> bool {
-    let canonical = pq.join("history").join(format!("building_id={bid}"));
-    let legacy = pq.join(format!("building={bid}"));
-    dir_has_parquet(&canonical) || dir_has_parquet(&legacy) || legacy.is_dir()
+/// Wave U V7 dual-read: prefer `tenants/{tid}/…` when present, else hub-root.
+fn building_has_history_for_tenant(pq: &Path, bid: &str, preferred_tenant: Option<&str>) -> bool {
+    match fdd_store::resolve_building_read_root(pq, preferred_tenant, bid) {
+        Ok(resolved) => fdd_store::building_history_present(&resolved.root, bid),
+        Err(_) => false,
+    }
+}
+
+/// Storage root for a building-scoped FDD/analytics read (tenant partition or hub).
+fn storage_root_for_building(pq: &Path, bid: &str, preferred_tenant: Option<&str>) -> PathBuf {
+    fdd_store::resolve_building_read_root(pq, preferred_tenant, bid)
+        .map(|r| r.root)
+        .unwrap_or_else(|_| pq.to_path_buf())
 }
 
 fn collect_equipment_prefix(root: &Path, prefix: &str, ids: &mut Vec<String>) {
@@ -541,15 +539,22 @@ fn rule_applies_to_kind(kinds: &[String], kind: &str) -> bool {
 ///
 /// When `building_id` is set, walk both legacy `building={id}/equipment=*` and
 /// canonical MQTT `history/building_id={id}/equipment_id=*` so Overview / AFDD
-/// see live sites the same as CSV packages (3.3.33).
+/// see live sites the same as CSV packages (3.3.33). Wave U V7 dual-reads
+/// `tenants/{tid}/…` when present.
 pub fn equipment_response(building_id: Option<&str>) -> Value {
+    equipment_response_scoped(building_id, preferred_tenant_from_env().as_deref())
+}
+
+/// Same as [`equipment_response`] with an explicit preferred tenant for MT dual-read.
+pub fn equipment_response_scoped(building_id: Option<&str>, tenant_id: Option<&str>) -> Value {
     let pq = parquet_root();
     let mut ids = Vec::new();
     match building_id.map(str::trim).filter(|s| !s.is_empty()) {
         Some(bid) => {
-            collect_equipment_prefix(&pq.join(format!("building={bid}")), "equipment=", &mut ids);
+            let root = storage_root_for_building(&pq, bid, tenant_id);
+            collect_equipment_prefix(&root.join(format!("building={bid}")), "equipment=", &mut ids);
             collect_equipment_prefix(
-                &pq.join("history").join(format!("building_id={bid}")),
+                &root.join("history").join(format!("building_id={bid}")),
                 "equipment_id=",
                 &mut ids,
             );
@@ -557,11 +562,32 @@ pub fn equipment_response(building_id: Option<&str>) -> Value {
         None => {
             collect_equipment_prefix(&pq, "equipment=", &mut ids);
             collect_equipment_prefix(&pq.join("history"), "equipment_id=", &mut ids);
+            // Also surface equipment under tenant partitions (post-migrate).
+            let tenants = pq.join("tenants");
+            if tenants.is_dir() {
+                if let Ok(rd) = std::fs::read_dir(&tenants) {
+                    for entry in rd.flatten() {
+                        if entry.path().is_dir() {
+                            collect_equipment_prefix(&entry.path(), "equipment=", &mut ids);
+                            collect_equipment_prefix(
+                                &entry.path().join("history"),
+                                "equipment_id=",
+                                &mut ids,
+                            );
+                        }
+                    }
+                }
+            }
         }
     }
     ids.sort();
     ids.dedup();
-    let stamped_types = crate::equipment_types::load_type_map(&parquet_root(), building_id);
+    let type_root = building_id
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|bid| storage_root_for_building(&pq, bid, tenant_id))
+        .unwrap_or_else(|| pq.clone());
+    let stamped_types = crate::equipment_types::load_type_map(&type_root, building_id);
     let equipment: Vec<Value> = ids
         .iter()
         .map(|id| {
@@ -711,6 +737,21 @@ fn series_plot_columns(rule: &RuleSpec) -> Vec<&str> {
 /// Downsampled history series for one equipment/rule. Rule math continues to
 /// use full-resolution parquet; only this display response is capped.
 pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&str>) -> Value {
+    series_response_scoped(
+        equipment_id,
+        rule_id,
+        building_id,
+        preferred_tenant_from_env().as_deref(),
+    )
+}
+
+/// Same as [`series_response`] with an explicit preferred tenant for MT dual-read.
+pub fn series_response_scoped(
+    equipment_id: &str,
+    rule_id: &str,
+    building_id: Option<&str>,
+    tenant_id: Option<&str>,
+) -> Value {
     let reg = match load_reg() {
         Ok(r) => r,
         Err(e) => return json!({"ok": false, "error": e}),
@@ -729,11 +770,12 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
     let escaped_equipment = equipment_id.replace('\'', "''");
     let pq = parquet_root();
     // Prefer OFDD-070 registration (canonical history/building_id= then legacy)
-    // so MQTT live sites plot the same as CSV packages (3.3.33).
+    // so MQTT live sites plot the same as CSV packages (3.3.33). Wave U V7
+    // dual-reads tenants/{tid}/ when present.
     let (storage_root, weather_root, scoped_bid): (PathBuf, PathBuf, Option<String>) =
         match building_id.map(str::trim).filter(|s| !s.is_empty()) {
             Some(bid) => {
-                if !building_has_history(&pq, bid) {
+                if !building_has_history_for_tenant(&pq, bid, tenant_id) {
                     return json!({
                         "ok": false,
                         "error": format!(
@@ -747,7 +789,8 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                         "rows": [],
                     });
                 }
-                (pq.clone(), pq.clone(), Some(bid.to_string()))
+                let root = storage_root_for_building(&pq, bid, tenant_id);
+                (root.clone(), root, Some(bid.to_string()))
             }
             None => (pq.clone(), pq.clone(), None),
         };
@@ -1342,9 +1385,10 @@ pub fn run_registry(payload: &Value) -> Value {
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|s| !s.is_empty());
+    let preferred = preferred_tenant_from_env();
     let (history_root, weather_root): (PathBuf, PathBuf) = match building_id {
         Some(bid) => {
-            if !building_has_history(&pq, bid) {
+            if !building_has_history_for_tenant(&pq, bid, preferred.as_deref()) {
                 return json!({
                     "ok": false,
                     "error": format!(
@@ -1355,8 +1399,9 @@ pub fn run_registry(payload: &Value) -> Value {
                     "building_id": bid,
                 });
             }
-            // Pass storage root; runner scopes with register_historian_building.
-            (pq.clone(), pq.clone())
+            // Dual-read root; runner scopes with register_historian_building.
+            let root = storage_root_for_building(&pq, bid, preferred.as_deref());
+            (root.clone(), root)
         }
         None => (pq.clone(), pq.clone()),
     };

@@ -59,7 +59,7 @@ The independent acceptance review reopened qualification, standalone, MQTT, ZAP 
 | ID | Note |
 |----|------|
 | `stage-c-idp-mfa-sku` | Commercial IdP/MFA |
-| `wave-o1-tenant-path-migrate` | Optional `tenants/{tid}/` paths |
+| `wave-o1-tenant-path-migrate` | **CLOSED (3.5.41)** dual-read + additive migrate helper |
 | `p2c-mqtt-acl-staging` | Merge into U4 where possible |
 | `historian-n-building-scale` | Parquet compaction later |
 | `acme-oa-t-dup-reject` | Ops catalog noise |
