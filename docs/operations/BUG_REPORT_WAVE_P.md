@@ -7,6 +7,8 @@
 | Item | Status |
 |------|--------|
 | Product tip / **OPS PINNED (FQ)** | **3.5.37** / **`sha-1677c33`** (#963+#964) · health `3.5.37+1677c33047bd` · backup **`20260921T013819Z`** · stress `reports/nightly-ot-bench_20260921T021332Z/` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave U FQ** |
+| **Follow-on tip (not OPS PINNED)** | **3.5.38** / **`sha-af4086f`** (#966) · BACnet CI key modes + writable broker certs · nginx force-upgrade · HTTPS trusted-CA stub peer · Trivy absolute ARTIFACT_DIR — GHCR publish may lag; remainder cycles V1–V8 in [`.cursor/plans/wave_u_remainder_patch_cycles.plan.md`](../../.cursor/plans/wave_u_remainder_patch_cycles.plan.md) |
+| **Wave U remainder cycles** `2026-09-21` | Master [wave_u_remainder_patch_cycles.plan.md](../../.cursor/plans/wave_u_remainder_patch_cycles.plan.md) · MILESTONES V1–V8 index · Soft-OPEN mapped to cycles; Stage C IdP deferred · #958 HOLD |
 | **Wave U hub tip (smoke + MEGA in flight)** | **3.5.34** / **`sha-f44b45f`** (#959) · health `3.5.34+f44b45f6f58d` · backup **`20260920T193429Z`** · fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1` kit restored · MEGA `reports/nightly-ot-bench_20260920T194610Z/` · **no FQ / OPS PINNED claim until `fully_qualified=true`** |
 | Hub smoke tip (prior) | **3.5.33** / **`sha-3cd3745`** (#954) · mid-wave smoke only · superseded by `sha-f44b45f` re-pin |
 | **Wave U FQ closeout notes** `2026-09-20` | H0: required Actions green on `f44b45f`; Optional BACnet FAIL = fail-closed without CI key → **#960 FIXED** (`bacnet-mqtt-e2e` PASS). H1: #958 HOLD (baud docs); `tip/wave-u-u0-master` deleted; only `docs/diy-baud-hold-ai-context` remote. P1: `check_ghcr_tip_stack sha-f44b45f` PASS; Trivy cite `reports/trivy-wave-u/sha-f44b45f/SUMMARY.md` (mqtt 0; Debian/Alpine OS High residual — not greenwashed). Smoke: `POST /api/analytics/mv` **200** (clears `wu-mv-404-pre-pin`); edges=1 `vim-1` telemetry; ingest climbing (residual `ingest_reject` post kit restore). |
@@ -53,10 +55,10 @@
 | **stage-c-idp-mfa-sku** | Commercial IdP/MFA/SKU |
 | **util-interval** | **CLOSED (branch)** · empty `utility_interval`/`bas_submeter` views when CSV absent → UTIL-INTERVAL plans **0h** (not `rules_failed`); pandas oracle: expect 0h when interval frame empty |
 | **r6-ingest-reject** | **CLOSED (branch)** · count on health + `reject_buckets` on `/api/ingest/stats` (no dead-letter dump API) |
-| **kali-zap-af** | **REOPENED acceptance (UA-04)** · alias of `zap-af-authenticated`; prior scan retained as historical limited evidence |
-| **wave-o1-tenant-path-migrate** | Hub-root `building=*` still; optional `tenants/{tid}/` migrate |
-| **p2c-mqtt-acl-staging** | **REOPENED acceptance (UA-03)** · folded into `mqtt-key-mode-tenant-acl`; product-generated runtime ACL matrix still required |
-| **historian-n-building-scale** | Small Parquet parts × N buildings; offline H4 now; runtime compaction Soft later |
+| **kali-zap-af** | **REOPENED acceptance (UA-04)** · alias of `zap-af-authenticated` — **V2** |
+| **wave-o1-tenant-path-migrate** | Hub-root `building=*` still; optional `tenants/{tid}/` migrate — **V7** [wave_u_v7_tenant_path_migrate.plan.md](../../.cursor/plans/wave_u_v7_tenant_path_migrate.plan.md) |
+| **p2c-mqtt-acl-staging** | **REOPENED acceptance (UA-03)** · folded into `mqtt-key-mode-tenant-acl`; product-generated runtime ACL matrix still required — **V2** |
+| **historian-n-building-scale** | Small Parquet parts × N buildings; offline H4 now; runtime compaction Soft later — **V8** [wave_u_v8_historian_compaction.plan.md](../../.cursor/plans/wave_u_v8_historian_compaction.plan.md) |
 | **admin-capacity-gauges** | **CLOSED (branch)** · cgroup memory + workspace `statvfs` + Parquet small-file strip on Admin |
 | **railway-capacity-stress** | **CITED** Tip B FQ `20260917T215437Z` gates 24/24b PASS |
 | **mqtt-pause-ui** | **CLOSED (#947 Tip B)** · MT command topics `tenants/…`; gate **35 PASS** on `sha-4a5c11e` stress `20260917T215437Z` |
@@ -64,18 +66,18 @@
 | **local-bacnet-ot-bench** | **Soft-OPEN** · MS/TP/FEC shared-trunk; Waveshare C FTDI `--mstp-passive` @38400: FEC alone silence; +mini MAC2 → PFM heard. Resume when FEC online on isolated trunk. |
 | **edge-kit-soft** | **OPS** · MT kit `./scripts/openfdd_restore_edge_kit.sh ACME pi-1` → `deploy/mqtt/kits/ACME__pi-1/` · live ACME OT edge id `vim-1` |
 | **s1-datasets-mt-acl** | **CLOSED** (#951 / 3.5.31 / `sha-7b81eb8`) · datasets list/delete MT ACL; FQ `20260919T195100Z` gate 25/25b PASS |
-| **wave-s3-pypi-mv-oracle** | **PARTIAL (branch tip/wave-u-u0-master)** · IPMVP change-point (`2P`/`3P`/`4P`/`5P`) + G14 NMBE/CVRMSE in `open_fdd.ecm_engineering` (+ analytics re-exports) · cookbook [`docs/ecm/ipmvp-changepoint.md`](../ecm/ipmvp-changepoint.md) · wheel `4.4.3` local build/test · **Soft-OPEN residual:** PyPI publish tip, unfinished Camber families, Wave S4 SQL twin / Metering UI. Plan: `wave_s3_pypi_mv_camber_oracle.plan.md`. |
+| **wave-s3-pypi-mv-oracle** | **PARTIAL** · IPMVP change-point + G14 in `open_fdd.ecm_engineering` · wheel `4.4.3` local · PyPI still **4.4.1** · unfinished Camber Soft-OPEN — **V4** [wave_u_v4_pypi_publish.plan.md](../../.cursor/plans/wave_u_v4_pypi_publish.plan.md) |
 | **wave-s4-sql-twins-fq** | **CLOSED (FQ)** · MEGA `20260921T021332Z` `fully_qualified=true` on `sha-1677c33` / 3.5.37 · both gate 36 PASS · OPS PINNED |
-| **wave-s5-dm-remainder** | **PARTIAL (this tip)** · DM-04 stamped types + inferred-parent honesty + DM-05 tenant storage doc + gate **36** model/ECM wire. Soft-OPEN remains: DM-07..10 SPARQL/PERF, EQ-VOCAB/ECM-ADAPT FQ, Pages publish soak. P1 IRI still CLOSED on `sha-3cd3745`. |
+| **wave-s5-dm-remainder** | **PARTIAL** · DM-04/05 + gate 36 wire landed; Soft-OPEN DM-07..10 / EQ-VOCAB / ECM-ADAPT / Pages — **V5** [wave_u_v5_s5_dm_ecm.plan.md](../../.cursor/plans/wave_u_v5_s5_dm_ecm.plan.md) |
 | **acme-fdd-run-hang** | **CLOSED (3.5.34)** · Stale `running` reclaim **20m** + `list_actions` reclaim + `POST /api/fdd/run` wall timeout via `OPENFDD_FDD_RUN_TIMEOUT_SECS` (default **900s**) finishes action `fail`/`timeout` instead of indefinite hang. Slow ACME DataFusion remains a performance topic, not an action hang. |
-| **sec-harness-mt-breadth** | **PARTIAL (this tip)** · Expanded Y/X: mapping TTL foreign deny + FDD equipment own/foreign; inventory IMPLEMENTED honest. Soft-OPEN: more PLANNED MT routes (analytics POSTs, series, buildings list, …). |
+| **sec-harness-mt-breadth** | **PARTIAL** · Expanded Y/X mapping/FDD; Soft-OPEN more PLANNED MT routes — **V3** [wave_u_v3_mt_field_host.plan.md](../../.cursor/plans/wave_u_v3_mt_field_host.plan.md) |
 | **sec-harness-evaluator-integrity** | **CLOSED for UA-01/03/04/06/07 contract (tip)** · Permanent negatives + MEGA required gates; Soft-OPEN remains for breadth (MT routes) and product MQTT image vs fixture broker |
 | **sec-ci-wire** | **CLOSED (3.5.34)** · AppSec `security-harness` job |
-| **standalone-https-bootstrap** | **PARTIAL (UA-02)** · Compose `!reset` hides web:3000 (unittest); peer soak `reports/security/standalone_https_peer_20260921T023714Z/` trusted-CA HTTPS + untrusted-store reject + HTTP redirect. Soft-OPEN residual: product-image candidate soak (not stub web). |
+| **standalone-https-bootstrap** | **PARTIAL (UA-02)** · Compose hide web:3000 + stub trusted-CA peer `20260921T023714Z`; product-image candidate soak Soft-OPEN — **V1** [wave_u_v1_images_https.plan.md](../../.cursor/plans/wave_u_v1_images_https.plan.md) |
 | **fieldbus-mgmt-failclosed** | **CLOSED (3.5.34)** · `require_api_key_for_bind` + unit tests (`non_loopback_without_key_refused`, loopback/key cases) |
-| **mqtt-key-mode-tenant-acl** | **REOPENED acceptance (UA-03/08) / PARTIAL tip** · provisioner writes keys `0600` + dual-tenant ACL isolation tests; MQTT entrypoint fail-closed on insecure key mode; runtime delivery observer with product-generated ACLs still required |
-| **zap-af-authenticated** | **REOPENED acceptance (UA-04) / PARTIAL tip** · evaluator fail-closed + isolated runner no longer persists `admin.jwt`; historical `sha-4d3a6b0` scan retained; disposable candidate AF with auth/route coverage still required before VERIFIED |
-| **image-digest-trivy** | **RESCAN `sha-1677c33` / REMEDIATION OPEN (UA-05)** · `reports/trivy-wave-u/sha-1677c33/SUMMARY.md` (mqtt 0; web nginx 1.28.2→need 1.28.3; Debian TRACKED UNFIXED; caddy High residual). Tip **3.5.38** forces `apk upgrade nginx` + trivy absolute ARTIFACT_DIR + caddy 2.8 tag align. |
+| **mqtt-key-mode-tenant-acl** | **PARTIAL (UA-03/08)** · provisioner `0600` + dual-tenant tests; product MQTT ACL Soft-OPEN — **V2** [wave_u_v2_mqtt_zap.plan.md](../../.cursor/plans/wave_u_v2_mqtt_zap.plan.md) |
+| **zap-af-authenticated** | **PARTIAL (UA-04)** · evaluator fail-closed + JWT hygiene; disposable candidate AF Soft-OPEN — **V2** |
+| **image-digest-trivy** | **REMEDIATION OPEN (UA-05)** · rescan `sha-1677c33`; nginx force-upgrade on **3.5.38** — tip digest acceptance **V1** |
 | **nessus-pass-readiness** | **REOPENED / REQUIRED without license (UA-02–09)** · evaluated tooling plus standalone/field-only host, image, TLS, exposure and runtime acceptance remain. Checklist/importer delivery is partial; actual licensed scan is separately BLOCKED. |
 | **nessus-isolated-assessment** | **Soft-OPEN / BLOCKED** · Real licensed Nessus only |
 
@@ -117,9 +119,9 @@ The current closure rows above are corrected prospectively. Earlier scan/test ac
 | `wu-audit-ua08-field-host` | P1 | PARTIAL | Key `0600`, dual-tenant kits, field-only exposure, host selftest on tip; live host probe + runtime container evidence still required |
 | `wu-audit-ua09-readiness-scope` | P1 | DOCS CORRECTED / VERIFICATION OPEN | Release maintainer: license-free readiness retained as required; close only after measured profile evidence |
 | `wu-audit-ua10-product-closeout` | P2 | PARTIAL | RCx presets ACL + hub FQ twins CLOSED; Soft-OPEN: S5 DM-07..10, S3 PyPI publish, MT breadth |
-| `wu-bacnet-ci-ro-key-mode` | CI | **FIXING 3.5.38** | Optional BACnet FAIL on `sha-1677c33`: smoke `chmod 644 *.pem` + RO mqtt mount → fail-closed; smoke now stages keys 640 |
+| `wu-bacnet-ci-ro-key-mode` | CI | **FIXED (#966)** | Smoke stages keys 640; broker cert mount writable for mosquitto chown; e2e PASS on tip |
 | `wu-s4-fq-mega` | Soft-OPEN | **CLOSED** | MEGA `20260921T021332Z` `fully_qualified=true` → OPS PINNED `sha-1677c33` / 3.5.37 |
-| `wu-trivy-tip-digest` | Soft-OPEN | **RESCAN OPEN** | Tip rescan `reports/trivy-wave-u/sha-1677c33/`; nginx force-upgrade on 3.5.38; Debian/caddy residual tracked |
+| `wu-trivy-tip-digest` | Soft-OPEN | **RESCAN OPEN / V1** | Tip rescan `sha-1677c33`; nginx on 3.5.38; digest acceptance on published tip |
 
 **Do not claim:** Nessus assessment PASS · readiness VERIFIED while Critical/High unresolved · Soft-OPEN CLOSED without measured evidence. |
 
