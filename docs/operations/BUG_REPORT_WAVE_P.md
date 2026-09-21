@@ -70,7 +70,7 @@
 | **wave-s4-sql-twins-fq** | **CLOSED (FQ)** · MEGA `20260921T021332Z` `fully_qualified=true` on `sha-1677c33` / 3.5.37 · both gate 36 PASS · OPS PINNED |
 | **wave-s5-dm-remainder** | **PARTIAL** · DM-04/05 + gate 36 wire landed; Soft-OPEN DM-07..10 / EQ-VOCAB / ECM-ADAPT / Pages — **V5** [wave_u_v5_s5_dm_ecm.plan.md](../../.cursor/plans/wave_u_v5_s5_dm_ecm.plan.md) |
 | **acme-fdd-run-hang** | **CLOSED (3.5.34)** · Stale `running` reclaim **20m** + `list_actions` reclaim + `POST /api/fdd/run` wall timeout via `OPENFDD_FDD_RUN_TIMEOUT_SECS` (default **900s**) finishes action `fail`/`timeout` instead of indefinite hang. Slow ACME DataFusion remains a performance topic, not an action hang. |
-| **sec-harness-mt-breadth** | **PARTIAL** · Expanded Y/X mapping/FDD; Soft-OPEN more PLANNED MT routes — **V3** [wave_u_v3_mt_field_host.plan.md](../../.cursor/plans/wave_u_v3_mt_field_host.plan.md) |
+| **sec-harness-mt-breadth** | **ADVANCED (V3)** · +6 routes IMPLEMENTED (buildings, fdd/series, ahu/vav-health, sensor-faults, rcx/ahu); residual PLANNED remain ·  **PARTIAL** · Expanded Y/X mapping/FDD; Soft-OPEN more PLANNED MT routes — **V3** [wave_u_v3_mt_field_host.plan.md](../../.cursor/plans/wave_u_v3_mt_field_host.plan.md) |
 | **sec-harness-evaluator-integrity** | **CLOSED for UA-01/03/04/06/07 contract (tip)** · Permanent negatives + MEGA required gates; Soft-OPEN remains for breadth (MT routes) and product MQTT image vs fixture broker |
 | **sec-ci-wire** | **CLOSED (3.5.34)** · AppSec `security-harness` job |
 | **standalone-https-bootstrap** | **PARTIAL→candidate PASS (UA-02)** · Product soak `reports/security/standalone_https_peer_20260921T134930Z` on `sha-af4086f`; stub peer retained; Soft-OPEN until tip includes V1 probe in GHCR docs tip |
@@ -78,7 +78,7 @@
 | **mqtt-key-mode-tenant-acl** | **PARTIAL→product live PASS (UA-03)** · Gate/observer default `openfdd-mqtt` + provisioner ACL; tip live PASS on `sha-af4086f`; fixture broker requires ALLOW_FIXTURE — **V2** |
 | **zap-af-authenticated** | **PARTIAL (UA-04)** · disposable plan adds `/api/auth/me` request; runner requires `auth_me_hit` for PASS — execute Soft-OPEN until disposable AF run — **V2** |
 | **image-digest-trivy** | **REMEDIATION OPEN (UA-05)** · rescan `reports/trivy-wave-u/sha-af4086f/SUMMARY.md`; nginx still 1.28.2 on 3.5.38; **V1/3.5.39** del modules + nginx>=1.28.3 |
-| **nessus-pass-readiness** | **REOPENED / REQUIRED without license (UA-02–09)** · evaluated tooling plus standalone/field-only host, image, TLS, exposure and runtime acceptance remain. Checklist/importer delivery is partial; actual licensed scan is separately BLOCKED. |
+| **nessus-pass-readiness** | **PARTIAL (UA-08/09)** · host_runtime_probe PASS `reports/security/host_runtime_probe_v3.json` (field_only_ot) + field-only lint; Nessus still BLOCKED |
 | **nessus-isolated-assessment** | **Soft-OPEN / BLOCKED** · Real licensed Nessus only |
 
 ## Wave R closeout (2026-09-16)

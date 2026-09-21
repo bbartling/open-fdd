@@ -155,12 +155,27 @@ def run_suite_x(ctx: SuiteContext) -> None:
         ),
         # Prefer a live analytics GET (overview path is not routed → 404 bypasses auth layer).
         ("/api/analytics/sql-anomaly/status", "x.preauth.anon401.get_api_analytics_overview"),
+        ("/api/csv/import/package/buildings", "x.preauth.anon401.get_api_csv_import_package_buildings"),
+        ("/api/fdd/series", "x.preauth.anon401.get_api_fdd_series"),
         ("/api/admin/users", "x.preauth.anon401.get_api_admin_users"),
         ("/api/jobs", "x.preauth.anon401.get_api_jobs"),
         ("/api/agent/tools", "x.preauth.anon401.get_api_agent_tools"),
+        ("/api/analytics/ahu-health", "x.preauth.anon401.post_api_analytics_ahu_health"),
+        ("/api/analytics/vav-health", "x.preauth.anon401.post_api_analytics_vav_health"),
+        ("/api/analytics/sensor-faults", "x.preauth.anon401.post_api_analytics_sensor_faults"),
+        ("/api/analytics/rcx/ahu", "x.preauth.anon401.post_api_analytics_rcx_ahu"),
     ):
         try:
-            r = ctx.client.request("GET", path)
+            # Explicit POST for analytics mutations in this batch.
+            if path in (
+                "/api/analytics/ahu-health",
+                "/api/analytics/vav-health",
+                "/api/analytics/sensor-faults",
+                "/api/analytics/rcx/ahu",
+            ):
+                r = ctx.client.request("POST", path, json_body={})
+            else:
+                r = ctx.client.request("GET", path)
             # local_open auth-off may 200 — mark N/A for that profile
             if ctx.profile == "local_open":
                 ctx.check(
@@ -1080,11 +1095,16 @@ def run_suite_y(ctx: SuiteContext) -> None:
         except TransportError as exc:
             ctx.check(foreign_cid, "Y", f"{path} foreign", "ERROR", detail=str(exc))
 
-    # Additional high-value GETs: FDD results + RCx presets + equipment (Wave U MT breadth).
+    # Additional high-value GETs: FDD results + RCx presets + equipment + series + buildings (Wave U V3).
     for path, foreign_cid in (
         ("/api/fdd/results", "y.authz.a_foreign_fdd_results_denied"),
         ("/api/analytics/rcx/presets", "y.authz.a_foreign_analytics_rcx_presets_denied"),
         ("/api/fdd/equipment", "y.authz.a_foreign_fdd_equipment_denied"),
+        ("/api/fdd/series", "y.authz.a_foreign_fdd_series_denied"),
+        (
+            "/api/csv/import/package/buildings",
+            "y.authz.a_foreign_package_buildings_denied",
+        ),
     ):
         try:
             q_own = urlencode({"building_id": fx.building_a})
@@ -1137,6 +1157,56 @@ def run_suite_y(ctx: SuiteContext) -> None:
             )
         except TransportError as exc:
             ctx.check(foreign_cid, "Y", f"{path} foreign", "ERROR", detail=str(exc))
+
+    # Analytics POSTs (Wave U V3): own building accepted or empty-ok; foreign denied.
+    for path, foreign_cid in (
+        ("/api/analytics/ahu-health", "y.authz.a_foreign_analytics_ahu_health_denied"),
+        ("/api/analytics/vav-health", "y.authz.a_foreign_analytics_vav_health_denied"),
+        ("/api/analytics/sensor-faults", "y.authz.a_foreign_analytics_sensor_faults_denied"),
+        ("/api/analytics/rcx/ahu", "y.authz.a_foreign_analytics_rcx_ahu_denied"),
+    ):
+        try:
+            body_own = {"building_id": fx.building_a}
+            r_own = ctx.client.request("POST", path, token=tok_a, json_body=body_own)
+            own_cid = foreign_cid.replace("_foreign_", "_own_").replace("_denied", "")
+            if r_own.status == 401:
+                own_st = "ERROR"
+            elif r_own.status in (200, 204):
+                own_st = "PASS"
+            elif r_own.status in (400, 422):
+                # Authz passed; payload/schema rejected — still own-path success for MT.
+                own_st = "PASS"
+            else:
+                own_st = "BLOCKED" if r_own.status in (403, 404) else "FAIL"
+            ctx.check(
+                own_cid,
+                "Y",
+                f"A own POST {path}",
+                own_st,
+                observed=_status_of(r_own),
+                path_template=path,
+            )
+            body_b = {"building_id": fx.building_b}
+            r_f = ctx.client.request("POST", path, token=tok_a, json_body=body_b)
+            leak = fx.canary_b.encode() in r_f.body
+            if r_f.status == 401:
+                deny_st = "ERROR"
+            elif r_f.status in (403, 404) and not leak:
+                deny_st = "PASS"
+            else:
+                deny_st = "FAIL"
+            ctx.check(
+                foreign_cid,
+                "Y",
+                f"A denied foreign POST {path}",
+                deny_st,
+                expected="403/404",
+                observed=_status_of(r_f),
+                detail="foreign canary leak" if leak else None,
+                path_template=path,
+            )
+        except TransportError as exc:
+            ctx.check(foreign_cid, "Y", f"{path} foreign POST", "ERROR", detail=str(exc))
 
 
 def _deny_envelope(body: bytes) -> bool:
