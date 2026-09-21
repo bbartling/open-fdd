@@ -329,10 +329,17 @@ run_gate "07_auth_role_matrix" "07 auth role matrix" \
 
 # --- 08 MCP accuracy (Railway-only; no local central fallback) ---
 if [[ -z "${OPENFDD_MCP_IMAGE:-}" ]]; then
-  # Derive from hub version tag when possible
-  TAG="$(jq -r '.version // empty' "$ART/health.json" 2>/dev/null | sed -n 's/.*+\([a-f0-9]\{7,\}\).*/sha-\1/p' | head -c 11 || true)"
-  if [[ -n "$TAG" && ${#TAG} -ge 11 ]]; then
-    export OPENFDD_MCP_IMAGE="ghcr.io/bbartling/openfdd-mcp:${TAG}"
+  # Prefer explicit tip pin; else derive sha-<7> from hub health version+sha.
+  if [[ "${OPENFDD_IMAGE_TAG:-}" =~ ^sha-[0-9a-f]{7}$ ]]; then
+    export OPENFDD_MCP_IMAGE="ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG}"
+  else
+    TAG="$(jq -r '.version // empty' "$ART/health.json" 2>/dev/null \
+      | sed -n 's/.*+\([0-9a-f]\{7,\}\).*/\1/p' \
+      | head -1 \
+      | cut -c1-7 || true)"
+    if [[ -n "$TAG" && "$TAG" =~ ^[0-9a-f]{7}$ ]]; then
+      export OPENFDD_MCP_IMAGE="ghcr.io/bbartling/openfdd-mcp:sha-${TAG}"
+    fi
   fi
 fi
 if [[ -z "${OPENFDD_MCP_IMAGE:-}" ]]; then

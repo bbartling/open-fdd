@@ -27,6 +27,8 @@
 | Prior OPS PINNED | Wave R **3.5.22** / `sha-4d3a6b0` (#936) · stress `20260916T011952Z` **`fully_qualified=true`** |
 | Soft Park S5 | Stress `reports/nightly-ot-bench_20260916T215804Z/` · **22 PASS / 4 FAIL** · not `fully_qualified` |
 | Closed this cycle | #940 busy/sign-out · #944 tip YAML · Soft UX #946 · Tip B #947 MT `tenants/…` commands · AFDD flood building default · fieldbus Railway MT ACME identity · Soft UX master hub stress FQ · post-pin stability audit (no tip) |
+| **Wave U hub tip** | **3.5.36** / **`sha-812bd92`** (#962) · health `3.5.36+812bd925bab3` · backup **`20260920T230554Z`** · fieldbus `vim-1` · MEGA `reports/nightly-ot-bench_20260920T231407Z/` · **`fully_qualified=false`** (logged before tip fix) |
+| **#962 merged** | **3.5.36** independent acceptance UA evaluators + HTTPS/field keys/ZAP hygiene |
 | **#961 merged** | **3.5.35** `e23c9ac` — rcx presets building ACL · gate26 verdict · OPS password aliases · MT edge CN uses tenant_id |
 | **#962 tip** | **3.5.36** `tip/wave-u-acceptance-ua` — UA evaluator gates + HTTPS compose; follow-on: key mode 0600, field-only exposure, host/runtime selftest, web Alpine base bump, isolated FALLBACK `sha-f44b45f` |
 | **Wave U independent acceptance** `2026-09-20` | Audit UA-01..10 **REOPENED** insufficient Soft-OPEN closes. Permanent negatives for 14 false-pass evaluators landed on tip (identity `tenant_ids`, ZAP AF fail-closed, MQTT require-live, Nessus per-host completeness, both gate **36** required + railway_field provenance). Offline audit reproducer **false_pass=0**. **Not VERIFIED / not OPS PINNED** until green CI → GHCR tip → candidate MEGA. Nessus licensed assessment remains BLOCKED. |
@@ -117,6 +119,20 @@ The current closure rows above are corrected prospectively. Earlier scan/test ac
 | `wu-audit-ua10-product-closeout` | P2 | PARTIAL | RCx presets ACL source guard + harness; S5/S3 residuals and final twin/FQ still open |
 
 For each fix append candidate/harness SHA, image/config/fixture hashes, profile, actual CI/run/artifact references, expected/observed outcomes and retest result. Do not mark these rows FIXED merely because a plan or test file was added. These owner labels identify responsibility; assign an actual maintainer when scheduling.
+
+## Wave U MEGA FQ attempt `20260920T231407Z` — **FAIL** (not OPS PINNED)
+
+**Tip under test:** `sha-812bd92` / `3.5.36+812bd925bab3` · backup `20260920T230554Z` · edge `vim-1` · EXECUTE=1 · `MQTT_ACL_EXECUTE` alias (missed `OPENFDD_` prefix) · ACCEPT_ZAP_MEDIUM=1  
+**Artifact:** `reports/nightly-ot-bench_20260920T231407Z/` · `fully_qualified=false`
+
+| Gate | Result | Root cause |
+|------|--------|------------|
+| 00–07, 09–24, **35**, **both 36** | **PASS** | Pause/resume OK after ACL/CN tip; MV + model/ECM both PASS on repaired contract |
+| **08 MCP** | **FAIL** | Derived MCP tip `sha-c1b1aa5` missing; `sha-812bd92` MCP exists — pin/`OPENFDD_IMAGE_TAG` derive fix |
+| **25 / 25b** | **FAIL** | `y.authz._login_viewer` expected `tenant_ids=['acme']` got `[]` — env viewer login empty membership |
+| **26 MQTT ACL** | **BLOCKED→FAIL** | Gate requires `OPENFDD_MQTT_ACL_EXECUTE=1`; alias + BLOCKED `security_gate_verdict.json` in tip 3.5.37 |
+
+**Follow-up tip `3.5.37`:** `OPENFDD_VIEWER_TENANT_IDS` · MCP tip from `OPENFDD_IMAGE_TAG` / shortsha · MQTT ACL execute alias + BLOCKED verdict file · Railway set `OPENFDD_VIEWER_TENANT_IDS=acme`.
 
 ## Wave U MEGA FQ attempt `20260920T194610Z` — **FAIL** (not OPS PINNED)
 
