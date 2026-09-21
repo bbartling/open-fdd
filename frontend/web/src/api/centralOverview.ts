@@ -700,7 +700,13 @@ export async function fetchCentralOverview(opts: {
   const building_id = opts.building_id;
   const oatErr = opts.oat_err ?? 5;
   const dtMin = opts.dt_min_f ?? 10;
-  const body = { building_id, max_points: 4000, dt_min_f: dtMin };
+  const body = {
+    building_id,
+    max_points: 4000,
+    dt_min_f: dtMin,
+    // ACME-scale historians: unbounded runtime LEAD exceeds edge timeouts.
+    start: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+  };
   const signal = opts.signal;
 
   // Mapping is cheap; keep it concurrent with the first analytics call only.

@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
 use datafusion::prelude::SessionContext;
 use fdd_sql::{register_parquet_tree, run_sql};
 use serde_json::{json, Value};
@@ -510,6 +511,31 @@ fn equipment_filter_sql(equipment_filter: Option<&[String]>) -> String {
     }
 }
 
+/// SQL fragment for optional inclusive-start / exclusive-end historian window.
+///
+/// Literals match `fdd_rules` / DataFusion Parquet timestamp comparisons
+/// (`timestamp_utc >= '2026-01-01T00:00:00Z'`).
+fn time_range_sql(
+    ts_col: &str,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+) -> String {
+    let mut out = String::new();
+    if let Some(t) = start {
+        out.push_str(&format!(
+            " AND {ts_col} >= '{}'",
+            t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        ));
+    }
+    if let Some(t) = end {
+        out.push_str(&format!(
+            " AND {ts_col} < '{}'",
+            t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        ));
+    }
+    out
+}
+
 /// SQL fragment restricting to chiller/DX/tower-like equipment ids.
 /// Kept aligned with [`plant_group_for`] (no bare `CT%` — that matches CTRL_*).
 pub fn chiller_like_equipment_sql() -> &'static str {
@@ -538,17 +564,27 @@ pub fn chiller_like_equipment_sql() -> &'static str {
 /// envelope with `engine=datafusion` and a warning that column-mapped runtime is next.
 ///
 /// When `building_id` is set, scopes the Parquet read like economizer (OFDD-070).
+///
+/// `start` / `end` bound the Δt window (inclusive start, exclusive end). Callers
+/// should set a lookback on large historians — full-history LEAD over ACME-scale
+/// Parquet exceeds Railway edge timeouts (~180s) and surfaces as nginx 502.
 pub async fn runtime_from_history(
     equipment_filter: Option<&[String]>,
     max_gap_seconds: f64,
     building_id: Option<&str>,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let ctx = SessionContext::new();
     if !try_register_history_scoped(&ctx, building_id).await? {
         return Ok(None);
     }
 
-    let count = run_sql(&ctx, "SELECT COUNT(*) AS n FROM history").await?;
+    let cols = history_columns_async(&ctx).await?;
+    let ts_col_probe = pick_ts_col(&cols).unwrap_or("timestamp_utc");
+    let range_filter = time_range_sql(ts_col_probe, start, end);
+    let count_sql = format!("SELECT COUNT(*) AS n FROM history WHERE 1=1{range_filter}");
+    let count = run_sql(&ctx, &count_sql).await?;
     let n = count
         .rows
         .first()
@@ -559,8 +595,12 @@ pub async fn runtime_from_history(
         return Ok(None);
     }
 
-    let cols = history_columns_async(&ctx).await?;
-    let query = AnalyticsQuery::default();
+    let query = AnalyticsQuery {
+        building_id: building_id.map(str::to_string),
+        start,
+        end,
+        ..AnalyticsQuery::default()
+    };
     let max_gap = max_gap_seconds.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
     let stamped_types =
@@ -569,6 +609,7 @@ pub async fn runtime_from_history(
     if cols.contains("equipment_id") {
         // Fan for air handlers; chiller/boiler/pump status for plant motors.
         if let (Some(ts_col), Some(on_sql)) = (pick_ts_col(&cols), plant_runtime_on_expr(&cols)) {
+            let range_sql = time_range_sql(ts_col, start, end);
             let sql = format!(
                 r#"
 WITH ordered AS (
@@ -578,7 +619,7 @@ WITH ordered AS (
     {on_sql} AS is_on,
     LEAD({ts_col}) OVER (PARTITION BY equipment_id ORDER BY {ts_col}) AS next_ts
   FROM history
-  WHERE equipment_id IS NOT NULL{eq_filter}
+  WHERE equipment_id IS NOT NULL{eq_filter}{range_sql}
 ),
 raw_intervals AS (
   SELECT
@@ -676,6 +717,7 @@ ORDER BY i.equipment_id
                         weekly_oat_col(&cols),
                         max_gap,
                         &eq_filter,
+                        &range_sql,
                         (plant_signal_label(&cols), &stamped_types),
                     )
                     .await
@@ -703,6 +745,8 @@ ORDER BY i.equipment_id
                         "max_gap_seconds": max_gap,
                         "source": "historian_parquet",
                         "building_id": safe_building_segment(building_id),
+                        "start": start.map(|t| t.to_rfc3339()),
+                        "end": end.map(|t| t.to_rfc3339()),
                         "query_versions": ["runtime-v1", "runtime-weekly-v1"],
                     }));
                     return Ok(Some(env));
@@ -726,6 +770,8 @@ ORDER BY i.equipment_id
         "max_gap_seconds": max_gap,
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
+        "start": start.map(|t| t.to_rfc3339()),
+        "end": end.map(|t| t.to_rfc3339()),
     }));
     Ok(Some(env))
 }
@@ -742,6 +788,7 @@ async fn runtime_weekly_plant_rows(
     oat: Option<&str>,
     max_gap: f64,
     eq_filter: &str,
+    range_sql: &str,
     metadata: (&str, &BTreeMap<String, String>),
 ) -> Result<Vec<Value>> {
     let (signal_label, stamped_types) = metadata;
@@ -751,7 +798,7 @@ async fn runtime_weekly_plant_rows(
 oat_by_ts AS (
   SELECT {ts_col} AS ts, AVG({c}) AS oat_f
   FROM history
-  WHERE {c} IS NOT NULL
+  WHERE {c} IS NOT NULL{range_sql}
   GROUP BY {ts_col}
 ),"#
         ),
@@ -783,7 +830,7 @@ ordered AS (
       {ts_col} AS ts,
       {on_sql} AS is_on
     FROM history
-    WHERE equipment_id IS NOT NULL{eq_filter}
+    WHERE equipment_id IS NOT NULL{eq_filter}{range_sql}
   ) h
   {oat_join}
 ),
@@ -3274,7 +3321,9 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let missing = tmp.path().join("no_such_parquet");
         std::env::set_var("OPENFDD_PARQUET_ROOT", &missing);
-        let out = runtime_from_history(None, 900.0, None).await.unwrap();
+        let out = runtime_from_history(None, 900.0, None, None, None)
+            .await
+            .unwrap();
         assert!(out.is_none());
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
     }
@@ -3303,7 +3352,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_TEST", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = runtime_from_history(None, 900.0, None)
+        let env = runtime_from_history(None, 900.0, None, None, None)
             .await
             .unwrap()
             .expect("expected historian envelope");
@@ -3316,6 +3365,14 @@ mod tests {
         let cov = env.equipment[0]["coverage_pct"].as_f64().unwrap();
         assert!((cov - 100.0).abs() < 1.0, "coverage={cov}");
 
+        // Start after all samples → empty window → Ok(None).
+        let after = chrono::DateTime::parse_from_rfc3339("2026-02-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let empty = runtime_from_history(None, 900.0, None, Some(after), None)
+            .await
+            .unwrap();
+        assert!(empty.is_none(), "expected no rows after start filter");
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
     }
 
@@ -3980,7 +4037,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_AIR", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = runtime_from_history(None, 900.0, Some("BUILDING_AIR"))
+        let env = runtime_from_history(None, 900.0, Some("BUILDING_AIR"), None, None)
             .await
             .unwrap()
             .expect("runtime envelope");

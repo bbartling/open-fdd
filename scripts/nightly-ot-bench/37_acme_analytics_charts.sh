@@ -128,9 +128,12 @@ echo "ahu_id=${AHU_ID:-none}" | tee -a "$LOG"
 
 # Sequential Overview / charts matrix (UI-shaped). One at a time — do not
 # parallelize; concurrent agent probes can themselves trip nginx 502s.
-HARD_TIMEOUT="${ACME_ANALYTICS_HARD_TIMEOUT_SECS:-120}"
+HARD_TIMEOUT="${ACME_ANALYTICS_HARD_TIMEOUT_SECS:-180}"
 PROBES_FILE="$ART/37_probes.jsonl"
 : >"$PROBES_FILE"
+
+# Overview-shaped lookback (matches SPA). Unbounded runtime LEAD times out on ACME.
+START_ISO="$(python3 -c 'from datetime import datetime,timedelta,timezone; print((datetime.now(timezone.utc)-timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ"))')"
 
 probe() {
   local name="$1" method="$2" path="$3" body="${4:-}"
@@ -185,9 +188,10 @@ probe() {
   fi
 }
 
-BID_JSON="$(jq -nc --arg b "$BUILDING" '{building_id:$b}')"
-INSPECT_JSON="$(jq -nc --arg b "$BUILDING" --arg e "$AHU_ID" \
-  '{building_id:$b, equipment_ids: (if $e=="" then [] else [$e] end), max_points:500}')"
+BID_JSON="$(jq -nc --arg b "$BUILDING" --arg s "$START_ISO" \
+  '{building_id:$b, max_points:4000, start:$s}')"
+INSPECT_JSON="$(jq -nc --arg b "$BUILDING" --arg e "$AHU_ID" --arg s "$START_ISO" \
+  '{building_id:$b, equipment_ids: (if $e=="" then [] else [$e] end), max_points:500, start:$s}')"
 
 # Order mirrors Overview load + health matrices + a chart-ish inspect.
 probe "package_buildings" GET "/api/csv/import/package/buildings"
