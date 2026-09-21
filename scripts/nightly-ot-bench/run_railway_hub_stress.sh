@@ -76,6 +76,8 @@ if [[ -z "${OPENFDD_USER_A_OPS_PASSWORD:-}" ]] && command -v railway >/dev/null 
   OPENFDD_USER_A_OPS_PASSWORD="$(_fetch_railway_var OPENFDD_USER_ACME_OPS_PASSWORD || true)"
   export OPENFDD_USER_A_OPS_PASSWORD
 fi
+# Alias for gate 37 (ACME charts) — same Railway secret, never print.
+export OPENFDD_USER_ACME_OPS_PASSWORD="${OPENFDD_USER_ACME_OPS_PASSWORD:-${OPENFDD_USER_A_OPS_PASSWORD:-}}"
 if [[ -z "${OPENFDD_USER_B_OPS_PASSWORD:-}" ]] && command -v railway >/dev/null 2>&1; then
   OPENFDD_USER_B_OPS_PASSWORD="$(_fetch_railway_var OPENFDD_USER_B100_OPS_PASSWORD || true)"
   export OPENFDD_USER_B_OPS_PASSWORD
@@ -156,7 +158,8 @@ python3 "$MANIFEST_PY" create \
   --required 26_security_mqtt_acl \
   --required 35_mqtt_telemetry_pause_resume \
   --required 36_mv_sql_oracle_twin \
-  --required 36_model_ecm_qualification
+  --required 36_model_ecm_qualification \
+  --required 37_acme_analytics_charts
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"
@@ -485,6 +488,12 @@ fi
 # --- 24 capacity pressure (S5a; sampler already running) ---
 run_gate "24_capacity_pressure" "24 capacity pressure" \
   bash "$DIR/24_capacity_pressure.sh"
+
+# --- 37 ACME Overview/charts analytics sequential break-finder (nginx 502) ---
+run_gate "37_acme_analytics_charts" "37 ACME analytics charts break-finder" \
+  env ARTIFACT_DIR="$ART/gate37_acme_analytics_charts" \
+    OPENFDD_USER_ACME_OPS_PASSWORD="${OPENFDD_USER_ACME_OPS_PASSWORD:-${OPENFDD_USER_A_OPS_PASSWORD:-}}" \
+    bash "$DIR/37_acme_analytics_charts.sh"
 
 capacity_sampler_stop || true
 trap - EXIT

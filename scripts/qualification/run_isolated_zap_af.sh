@@ -148,6 +148,7 @@ if [[ ! -f "$WRK/zap-af-report.json" ]]; then
   echo "WARN: ZAP AF exited rc=$ZAP_RC without report — running OpenAPI-aware fallback crawl" | tee "$ART/af_fallback.txt"
   cat >"$WRK/urls.txt" <<EOF
 ${TARGET_URL}api/health
+${TARGET_URL}api/auth/me
 ${TARGET_URL}api/datasets
 ${TARGET_URL}api/agent/tools
 EOF
