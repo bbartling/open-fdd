@@ -28,3 +28,15 @@ class BacnetMqttCiKeyModesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BacnetMqttCiComposeMountTest(unittest.TestCase):
+    def test_broker_certs_mount_writable_for_chown(self) -> None:
+        compose = (ROOT / "docker" / "compose.bacnet-mqtt-ci.yml").read_text(encoding="utf-8")
+        self.assertIn("/mosquitto/certs", compose)
+        # Broker certs must not be :ro — entrypoint chowns to mosquitto 1883.
+        self.assertNotRegex(
+            compose,
+            r"broker:/mosquitto/certs:ro",
+            "broker cert mount must be writable for key chown",
+        )
