@@ -1,3 +1,18 @@
+## 2026-09-20 — Wave U security spine tip (3.5.34)
+
+- Master `WAVE_U_MASTER.md` SUPERSEDES Wave T; Soft-OPEN inventory; assurance child plan.
+- U1 E01–E08 + CI AppSec security-harness; U2 MT results/rcx; U3 HTTPS+fieldbus fail-closed;
+  U4 MQTT key 640; U5 ZAP AF plan; U6 Nessus readiness + Trivy script.
+- Hang interrupt: stale running reclaim 20m + list_actions reclaim.
+- Product Soft-OPEN (S5/PyPI/SQL/FQ) scheduled **after** this tip’s GHCR smoke.
+
+## 2026-09-20 — Wave U master (supersedes Wave T)
+
+- Active master: `docs/operations/WAVE_U_MASTER.md` + `.cursor/plans/wave_u_security_hardening_master.plan.md`.
+- Soft-OPEN inventory (product + security + ops); Nessus-pass readiness vs assessment (no fake scans).
+- SUPERSEDED banners on Wave T / incomplete wave plans; assurance child copied under `.cursor/plans/`.
+- TESTBED_TAKEOVER + AI_CONTEXT_HANDOFF retarget Wave U; BUG_REPORT Wave U Soft-OPEN rows.
+
 ## 2026-09-20 — Wave T takeover docs + security Burp-contract
 
 - Added `docs/operations/TESTBED_TAKEOVER.md` (pins, tip loop, harness vs Burp/ZAP).
@@ -894,3 +909,10 @@ Newest first. Append after non-trivial agent work.
   unmapped-metadata failures; remaining source findings need integration evidence.
   No product implementation, Rust build, live stress, deployment or security
   qualification was performed in this audit. Cursor owns fixes and execution.
+
+## 2026-09-20 — Wave U independent acceptance audit and milestone index
+
+- Reviewed #959/#960 merged and #961 in flight at source `dc808c8acb315ca9feada97faa21b65ba7773d0f`; inspected plans, actual evaluators/deployment configuration and local scan/stress evidence.
+- Reran 55 security and 16 qualification tests successfully. Fourteen additional synthetic negative cases reproduced false qualification; private audit output records source hashes. Rendered the supported Compose merge with synthetic environment values only. No production credentials, live scans, OT writes, product builds, deployment, merge or publishing performed.
+- Added `.cursor/plans/wave_u_independent_acceptance_audit.plan.md` and root `MILESTONES.md`. Corrected Wave U master/patch/active external FQ handoffs, current acceptance rows in BUG_REPORT, and the readiness checklist; preserved historical runs and unrelated in-flight edits.
+- Reopened insufficient acceptance scope and restored license-free standalone/field readiness as required. Only the actual licensed Nessus assessment remains externally BLOCKED. Cursor owns permanent test/product fixes, candidate integration and final enhanced MEGA evidence.

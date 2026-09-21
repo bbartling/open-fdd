@@ -76,7 +76,9 @@ export function buildDataModelTurtle(inventory: PackageMappingResponse): string 
     );
     lines.push(`  ofdd:inBuilding ${bSubj} ;`);
     const parent = eq.parent_ahu?.trim();
-    if (parent) {
+    const parentSource = (eq.parent_ahu_source ?? "package").trim();
+    // DM-04: guessed parents stay out of Turtle fact edges.
+    if (parent && parentSource !== "inferred") {
       lines.push(
         `  ofdd:parentAhu ${turtleEquipmentSubject(buildingId, parent)} ;`,
       );

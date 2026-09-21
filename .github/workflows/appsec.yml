@@ -89,3 +89,24 @@ jobs:
           dockerfile: Dockerfile.mcp
           failure-threshold: error
           ignore: DL3008
+
+  security-harness:
+    name: Security + qualification unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PyYAML (ZAP AF plan hygiene)
+        run: python3 -m pip install --quiet pyyaml
+      - name: Offline security unittests (E01–E08 + inventory)
+        run: python3 -B -m unittest discover -s tests/security -v
+      - name: Qualification unittests
+        run: python3 -B -m unittest discover -s tests/qualification -v
+      - name: ZAP baseline verdict selftest
+        run: python3 scripts/qualification/zap_baseline_verdict.py --selftest
+      - name: Nessus importer selftest
+        run: python3 scripts/security/nessus/import_nessus_report.py --selftest
+      - name: Standalone HTTPS bootstrap selftest
+        run: python3 scripts/security/peer_probe_https.py --selftest

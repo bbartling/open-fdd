@@ -18,5 +18,8 @@ def test_analytics_public_exports():
         "vav_health_matrix",
         "mech_cooling_oat_bins",
         "dump_tables",
+        "fit_changepoint",
+        "score_g14_monthly",
+        "ChangePointModel",
     ):
         assert hasattr(a, name), name

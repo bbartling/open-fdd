@@ -48,14 +48,16 @@ pub fn execute(body: &Value) -> Value {
     }
 }
 
-fn bindings_to_response(bindings: Vec<HashMap<String, String>>) -> Value {
+fn bindings_to_response(
+    bindings: Vec<std::collections::HashMap<String, rdf::SparqlBinding>>,
+) -> Value {
     let truncated = bindings.len() > MAX_ROWS;
     let rows: Vec<Value> = bindings
         .into_iter()
         .take(MAX_ROWS)
         .map(|m| {
             let obj: serde_json::Map<String, Value> =
-                m.into_iter().map(|(k, v)| (k, Value::String(v))).collect();
+                m.into_iter().map(|(k, v)| (k, v.to_json())).collect();
             Value::Object(obj)
         })
         .collect();
@@ -65,7 +67,8 @@ fn bindings_to_response(bindings: Vec<HashMap<String, String>>) -> Value {
         "bindings": rows,
         "row_count": count,
         "truncated": truncated,
-        "query_engine": "sparql"
+        "query_engine": "sparql",
+        "binding_format": "sparql-results-json-v1"
     })
 }
 
@@ -149,7 +152,7 @@ pub fn run_predefined(id: &str) -> Result<Vec<HashMap<String, String>>, String> 
         .get("query")
         .and_then(|v| v.as_str())
         .ok_or_else(|| "query missing".to_string())?;
-    rdf::sparql_select(query)
+    rdf::sparql_select_lexical(query)
 }
 
 #[cfg(test)]
@@ -176,11 +179,33 @@ mod tests {
             out.get("query_engine").and_then(|v| v.as_str()),
             Some("sparql")
         );
+        assert_eq!(
+            out.get("binding_format").and_then(|v| v.as_str()),
+            Some("sparql-results-json-v1")
+        );
     }
 
     #[test]
     fn rejects_update_queries() {
         let out = execute(&json!({"query": "DELETE WHERE { ?s ?p ?o }"}));
+        assert_eq!(out.get("ok").and_then(|v| v.as_bool()), Some(false));
+    }
+
+    #[test]
+    fn dm08_allows_select_with_load_and_address() {
+        let out = execute(&json!({
+            "query": "SELECT ?address ?load WHERE { VALUES (?address ?load) { (\"a1\" \"load\") } }"
+        }));
+        assert_eq!(out.get("ok").and_then(|v| v.as_bool()), Some(true));
+        let row = &out["bindings"][0];
+        assert_eq!(row["address"]["type"], "literal");
+        assert_eq!(row["address"]["value"], "a1");
+        assert_eq!(row["load"]["value"], "load");
+    }
+
+    #[test]
+    fn dm08_rejects_ask() {
+        let out = execute(&json!({"query": "ASK { ?s ?p ?o }"}));
         assert_eq!(out.get("ok").and_then(|v| v.as_bool()), Some(false));
     }
 }

@@ -142,6 +142,54 @@ class ManifestVerdictsTest(unittest.TestCase):
                 self.assertEqual(saved["overall"]["fully_qualified"], expected_exit == 0)
                 self.assertIn(f"Status: **{saved['overall']['status']}**", summary.read_text())
 
+    def test_required_gate36_failure_prevents_full_qualification(self):
+        for gate in ("36_mv_sql_oracle_twin", "36_model_ecm_qualification"):
+            with self.subTest(gate=gate):
+                m = self.make_manifest(
+                    ["00_hub_health_edges", "36_mv_sql_oracle_twin", "36_model_ecm_qualification"]
+                )
+                for required in m["required_gates"]:
+                    self.record(m, required, "FAIL" if required == gate else "PASS")
+                manifest_tool.finalize(m)
+                self.assertEqual(m["overall"]["status"], "FAIL")
+                self.assertFalse(m["overall"]["fully_qualified"])
+
+    def test_railway_field_requires_candidate_sha(self):
+        m = manifest_tool.new_manifest(
+            run_id="unit",
+            environment_class="railway_field",
+            hub_base="https://example.test",
+            candidate_sha=None,
+            harness_sha="abc123",
+            required_gates=["00_hub_health_edges"],
+        )
+        self.record(m, "00_hub_health_edges", "PASS")
+        manifest_tool.finalize(m)
+        self.assertFalse(m["overall"]["fully_qualified"])
+        self.assertIn("candidate_sha", m["overall"]["reason"])
+
+    def test_missing_artifact_turns_pass_gate_into_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            missing = Path(td) / "missing.json"
+            m = self.make_manifest(["00_hub_health_edges"])
+            manifest_tool.record_gate(
+                m,
+                "00_hub_health_edges",
+                "PASS",
+                artifact_paths=[str(missing)],
+            )
+            manifest_tool.finalize(m)
+            self.assertEqual(m["gates"]["00_hub_health_edges"]["status"], "ERROR")
+            self.assertFalse(m["overall"]["fully_qualified"])
+
+    def test_railway_runner_requires_both_gate36_variants(self):
+        runner = (
+            Path(__file__).resolve().parents[2]
+            / "scripts/nightly-ot-bench/run_railway_hub_stress.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("--required 36_mv_sql_oracle_twin", runner)
+        self.assertIn("--required 36_model_ecm_qualification", runner)
+
 
 if __name__ == "__main__":
     unittest.main()

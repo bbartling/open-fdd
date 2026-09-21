@@ -1,3 +1,5 @@
+> **SUPERSEDED by Wave U** — do not play. Active master: [`docs/operations/WAVE_U_MASTER.md`](../../docs/operations/WAVE_U_MASTER.md) · [`.cursor/plans/wave_u_security_hardening_master.plan.md`](wave_u_security_hardening_master.plan.md). Retained as historical/child detail only.
+
 ---
 name: Wave O Known Bugs Patch
 overview: "Wave O product bake CLOSED on master through 3.5.20 (#934). Soft residuals + final stress/GH tidy owned by Wave P. Kali owns live hub — Mint does not Railway re-pin. O2c Kali V1–V3 + MT matrix land on Wave P tip branch."

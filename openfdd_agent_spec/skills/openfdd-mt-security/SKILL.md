@@ -58,8 +58,11 @@ not ActiveScan OT).
 Brief: `.cursor/agents/openfdd-security-python-harness.md`;
 contract: `.cursor/plans/security_stress_integration_audit.md`.
 CLI: `scripts/security/openfdd_security_probe.py`. Stress gates **25** / **25b** /
-**26** (`OPENFDD_SECURITY_EXECUTE=1` for live; **26** only with
-`OPENFDD_SECURITY_MQTT_ACL=1` + isolated broker — else N/A).
+**26** (`OPENFDD_SECURITY_EXECUTE=1` for live; gate **26** uses
+`OPENFDD_MQTT_ACL_EXECUTE=1` and candidate runtime broker evidence in the Wave U
+field profile). Missing fixtures/tools are BLOCKED, not N/A. The independent
+acceptance audit identifies repairs required before the current gate can qualify
+that profile: `.cursor/plans/wave_u_independent_acceptance_audit.plan.md`.
 
 - A valid tenant identity and successful own-object control must accompany a
   foreign-object denial. A 401 from failed authentication is not authorization proof.
@@ -69,6 +72,9 @@ CLI: `scripts/security/openfdd_security_probe.py`. Stress gates **25** / **25b**
   middleware/storage separately. Offline manifest tests only verify reporting.
 - Keep MQTT continuity in transport; broker identity/topic denial needs its own
   evidence. Scope any PASS to candidate, configuration, fixtures and checked controls.
+- Validate the actual `/api/auth/me` `tenant_ids` schema and positive object
+  controls. The Wave U acceptance audit and root `MILESTONES.md` govern reopened
+  qualification scope; component/source-string checks do not close runtime claims.
 
 ## Never
 

@@ -10,12 +10,20 @@ PREFIX hs: <https://project-haystack.org/def/>
 PREFIX ofdd: <https://open-fdd.dev/model#>
 "#;
 
-fn sparql_rows(query: &str) -> Vec<HashMap<String, String>> {
-    rdf::sparql_select(query).unwrap_or_default()
+fn sparql_rows(query: &str) -> Result<Vec<HashMap<String, String>>, String> {
+    rdf::sparql_select_lexical(query)
 }
 
-fn sparql_predefined(id: &str) -> Vec<HashMap<String, String>> {
-    sparql::run_predefined(id).unwrap_or_default()
+fn sparql_predefined(id: &str) -> Result<Vec<HashMap<String, String>>, String> {
+    sparql::run_predefined(id)
+}
+
+fn sparql_fail(error: String) -> Value {
+    json!({
+        "ok": false,
+        "error": error,
+        "query_engine": "sparql"
+    })
 }
 
 fn sparql_opt(row: &HashMap<String, String>, key: &str) -> Value {
@@ -34,7 +42,10 @@ pub fn haystack_rows() -> Vec<Value> {
 }
 
 pub fn list_sites() -> Value {
-    let rows = sparql_predefined("eng_sites");
+    let rows = match sparql_predefined("eng_sites") {
+        Ok(rows) => rows,
+        Err(e) => return sparql_fail(e),
+    };
     let sites: Vec<Value> = rows
         .into_iter()
         .map(|row| {
@@ -119,7 +130,19 @@ pub fn list_equips(site_id: Option<&str>) -> Value {
           {filter}
         }}"
     );
-    let equips: Vec<Value> = sparql_rows(&query)
+    let rows = match sparql_rows(&query) {
+        Ok(rows) => rows,
+        Err(e) => {
+            let mut fail = sparql_fail(e);
+            if let Some(obj) = fail.as_object_mut() {
+                obj.insert("site_id".into(), json!(sid));
+                obj.insert("equips".into(), json!([]));
+                obj.insert("count".into(), json!(0));
+            }
+            return fail;
+        }
+    };
+    let equips: Vec<Value> = rows
         .into_iter()
         .map(|row| {
             json!({
@@ -159,7 +182,19 @@ pub fn list_points(site_id: Option<&str>) -> Value {
           {filter}
         }}"
     );
-    let points: Vec<Value> = sparql_rows(&query)
+    let rows = match sparql_rows(&query) {
+        Ok(rows) => rows,
+        Err(e) => {
+            let mut fail = sparql_fail(e);
+            if let Some(obj) = fail.as_object_mut() {
+                obj.insert("site_id".into(), json!(sid));
+                obj.insert("points".into(), json!([]));
+                obj.insert("count".into(), json!(0));
+            }
+            return fail;
+        }
+    };
+    let points: Vec<Value> = rows
         .into_iter()
         .map(|row| {
             let mapped = row.contains_key("fdd_input")
@@ -185,9 +220,18 @@ pub fn list_points(site_id: Option<&str>) -> Value {
 }
 
 pub fn model_coverage() -> Value {
-    let equip_rows = sparql_predefined("hvac_equipment");
-    let point_rows = sparql_predefined("hvac_points");
-    let unmapped_rows = sparql_predefined("hvac_unmapped_points");
+    let equip_rows = match sparql_predefined("hvac_equipment") {
+        Ok(rows) => rows,
+        Err(e) => return sparql_fail(e),
+    };
+    let point_rows = match sparql_predefined("hvac_points") {
+        Ok(rows) => rows,
+        Err(e) => return sparql_fail(e),
+    };
+    let unmapped_rows = match sparql_predefined("hvac_unmapped_points") {
+        Ok(rows) => rows,
+        Err(e) => return sparql_fail(e),
+    };
     let point_count = point_rows.len();
     let unmapped = unmapped_rows.len();
     let mapped = point_count.saturating_sub(unmapped);
@@ -225,7 +269,17 @@ pub fn source_coverage() -> Value {
           OPTIONAL {{ ?p ofdd:fddInput ?fdd . }}
         }} GROUP BY ?protocol"
     );
-    let protocols: Vec<Value> = sparql_rows(&query)
+    let rows = match sparql_rows(&query) {
+        Ok(rows) => rows,
+        Err(e) => {
+            let mut fail = sparql_fail(e);
+            if let Some(obj) = fail.as_object_mut() {
+                obj.insert("protocols".into(), json!([]));
+            }
+            return fail;
+        }
+    };
+    let protocols: Vec<Value> = rows
         .into_iter()
         .map(|row| {
             json!({
@@ -238,7 +292,10 @@ pub fn source_coverage() -> Value {
 }
 
 pub fn unmapped_points() -> Value {
-    let rows = sparql_predefined("hvac_unmapped_points");
+    let rows = match sparql_predefined("hvac_unmapped_points") {
+        Ok(rows) => rows,
+        Err(e) => return sparql_fail(e),
+    };
     let points: Vec<Value> = rows
         .into_iter()
         .map(|row| {
@@ -273,8 +330,18 @@ pub fn group_points_by_equip() -> Value {
             AS ?mapped)
         }}"
     );
+    let rows = match sparql_rows(&query) {
+        Ok(rows) => rows,
+        Err(e) => {
+            let mut fail = sparql_fail(e);
+            if let Some(obj) = fail.as_object_mut() {
+                obj.insert("groups".into(), json!([]));
+            }
+            return fail;
+        }
+    };
     let mut groups: HashMap<String, Vec<Value>> = HashMap::new();
-    for row in sparql_rows(&query) {
+    for row in rows {
         let equip = row
             .get("equip_ref")
             .cloned()
@@ -295,7 +362,10 @@ pub fn group_points_by_equip() -> Value {
 
 /// HVAC equipment counts and feeds chains for public dashboard context (SPARQL over RDF).
 pub fn equipment_model_summary() -> Value {
-    let type_rows = sparql_predefined("hvac_equipment_types");
+    let type_rows = match sparql_predefined("hvac_equipment_types") {
+        Ok(rows) => rows,
+        Err(e) => return sparql_fail(e),
+    };
     let mut by_type: HashMap<String, usize> = HashMap::new();
     for row in type_rows {
         if let (Some(etype), Some(count)) = (row.get("equipType"), row.get("count")) {
@@ -303,8 +373,14 @@ pub fn equipment_model_summary() -> Value {
         }
     }
 
-    let equip_rows = sparql_predefined("hvac_equipment");
-    let feeds_rows = sparql_predefined("hvac_feeds");
+    let equip_rows = match sparql_predefined("hvac_equipment") {
+        Ok(rows) => rows,
+        Err(e) => return sparql_fail(e),
+    };
+    let feeds_rows = match sparql_predefined("hvac_feeds") {
+        Ok(rows) => rows,
+        Err(e) => return sparql_fail(e),
+    };
     let feeds_chains: Vec<String> = feeds_rows
         .into_iter()
         .filter_map(|row| {
@@ -342,7 +418,10 @@ pub fn network_graph(site_id: Option<&str>) -> Value {
           {site_filter}
         }}"
     );
-    let equip_rows = sparql_rows(&equip_query);
+    let equip_rows = match sparql_rows(&equip_query) {
+        Ok(rows) => rows,
+        Err(e) => return sparql_fail(e),
+    };
     let mut labels: HashMap<String, String> = HashMap::new();
     let equipment: Vec<Value> = equip_rows
         .iter()
@@ -366,7 +445,11 @@ pub fn network_graph(site_id: Option<&str>) -> Value {
         .collect();
 
     let equip_ids: HashSet<String> = labels.keys().cloned().collect();
-    let feeds: Vec<Value> = sparql_predefined("hvac_feeds")
+    let feeds_rows = match sparql_predefined("hvac_feeds") {
+        Ok(rows) => rows,
+        Err(e) => return sparql_fail(e),
+    };
+    let feeds: Vec<Value> = feeds_rows
         .into_iter()
         .filter_map(|row| {
             let from = row.get("from")?.clone();
@@ -396,8 +479,12 @@ pub fn network_graph(site_id: Option<&str>) -> Value {
           {site_filter}
         }}"
     );
+    let point_rows = match sparql_rows(&points_query) {
+        Ok(rows) => rows,
+        Err(e) => return sparql_fail(e),
+    };
     let mut points_by_equipment: HashMap<String, Vec<Value>> = HashMap::new();
-    for row in sparql_rows(&points_query) {
+    for row in point_rows {
         let equip_ref = row.get("equip_ref").cloned().unwrap_or_default();
         if equip_ref.is_empty() || !equip_ids.contains(&equip_ref) {
             continue;

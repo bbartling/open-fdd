@@ -11,7 +11,7 @@ use datafusion::prelude::SessionContext;
 use fdd_sql::run_sql;
 use serde_json::{json, Map, Value};
 
-use super::historian::try_register_history_scoped;
+use super::historian::open_history_scan;
 use super::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest, DF_ENGINE};
 
 pub const QV_AHU_HEALTH: &str = "ahu-health-v1";
@@ -696,7 +696,8 @@ fn spec_rule_ids(spec: &MatrixSpec) -> BTreeSet<&'static str> {
 
 async fn historian_equipment_ids(bid: &str) -> Result<Vec<String>> {
     let ctx = SessionContext::new();
-    if !try_register_history_scoped(&ctx, Some(bid)).await? {
+    let (ok, _scan) = open_history_scan(&ctx, Some(bid)).await?;
+    if !ok {
         return Ok(Vec::new());
     }
     let result = run_sql(

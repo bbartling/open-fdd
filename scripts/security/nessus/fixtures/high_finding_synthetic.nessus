@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<NessusClientData_v2>
+  <Report name="openfdd-synthetic-high">
+    <ReportHost name="192.0.2.11">
+      <HostProperties>
+        <tag name="host-ip">192.0.2.11</tag>
+      </HostProperties>
+      <ReportItem port="22" protocol="tcp" severity="3" pluginID="99999" pluginName="Synthetic High Finding"/>
+    </ReportHost>
+  </Report>
+</NessusClientData_v2>

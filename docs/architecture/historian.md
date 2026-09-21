@@ -116,7 +116,12 @@ fsync partition directory
 delete retired tombstones
 ```
 
-**H4 compaction is offline-only.** It must not overlap DataFusion scans of the same local historian. Local filesystems do not provide an atomic transaction that exchanges an arbitrary set of source files for one replacement: publishing first creates a duplicate-row window, while retiring first creates a short read gap. A later runtime coordinator must serialize compaction with reads before continuous/runtime compaction is enabled. H4 itself has no product scheduler or runtime compaction entry point.
+**H4 compaction** validates before publish and retires via tombstones. Operators use
+`openfdd_cli compact-history` offline (or hub-admin `POST /api/historian/compaction`
+with `confirm:true`). The **runtime coordinator** (`CompactionCoordinator`) serializes
+compaction against DataFusion scans — fail closed or wait — so Central never creates a
+publish-first duplicate-row window or a retire-first read gap. Prefer a Railway
+maintenance window for live compact. Continuous auto-scheduling remains opt-in later.
 
 ## Canonical dataset layout
 

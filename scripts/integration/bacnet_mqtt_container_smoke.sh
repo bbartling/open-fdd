@@ -24,6 +24,8 @@ COMPOSE=(docker compose -p "$PROJECT" -f docker/compose.bacnet-mqtt-ci.yml)
 export OPENFDD_BACNET_MQTT_CERT_DIR="$TMP/mqtt"
 export OPENFDD_JWT_SECRET="bacnet-mqtt-ci-jwt-${PROJECT}"
 export OPENFDD_ADMIN_PASSWORD="bacnet-mqtt-ci-admin"
+export OPENFDD_FIELDBUS_API_KEY="${OPENFDD_FIELDBUS_API_KEY:-bacnet-mqtt-ci-fieldbus-key}"
+FB_AUTH=(-H "Authorization: Bearer ${OPENFDD_FIELDBUS_API_KEY}")
 
 cleanup() {
   "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
@@ -86,8 +88,16 @@ cp "$TMP/edge.key.pem" "$TMP/mqtt/edge/edge.key.pem"
 
 # Product containers intentionally run non-root. These are one-run ephemeral CI credentials
 # under a private mktemp directory; make mounted files readable by those container users.
+# Broker mounts certs :ro — openfdd-mqtt fail-closed requires keys already 600/640 (cannot chmod on RO).
 chmod 755 "$TMP" "$TMP/mqtt" "$TMP/mqtt"/{broker,central,edge}
-chmod 644 "$TMP/mqtt/acl" "$TMP/mqtt"/*/*.pem
+chmod 644 "$TMP/mqtt/acl" \
+  "$TMP/mqtt/broker/ca.pem" "$TMP/mqtt/broker/server.cert.pem" \
+  "$TMP/mqtt/central/ca.pem" "$TMP/mqtt/central/central.cert.pem" \
+  "$TMP/mqtt/edge/ca.pem" "$TMP/mqtt/edge/edge.cert.pem"
+chmod 640 \
+  "$TMP/mqtt/broker/server.key.pem" \
+  "$TMP/mqtt/central/central.key.pem" \
+  "$TMP/mqtt/edge/edge.key.pem"
 
 echo "== Pull exact Open-FDD images: $TAG =="
 for image in openfdd-mqtt openfdd-central openfdd-fieldbus; do
@@ -149,7 +159,7 @@ done
 echo "== BACnet read =="
 READ_JSON='{"device_instance":3456,"object_type":"analog-value","object_instance":1,"property_id":"present-value"}'
 READ_RESPONSE="$(curl -fsS -X POST http://127.0.0.1:18081/bacnet/read \
-  -H 'Content-Type: application/json' -d "$READ_JSON")"
+  "${FB_AUTH[@]}" -H 'Content-Type: application/json' -d "$READ_JSON")"
 echo "$READ_RESPONSE" | jq -e '
   .ok == true and
   .device_instance == 3456 and
@@ -160,9 +170,11 @@ echo "$READ_RESPONSE" | jq -e '
 echo "OK BACnet analog-value:1 present-value=$(echo "$READ_RESPONSE" | jq -r '.value')"
 
 # Force a poll immediately and prove the configured BACnet rows reached poll state before MQTT.
-POLL_RESPONSE="$(curl -fsS -X POST http://127.0.0.1:18081/bacnet/poll/once)"
+POLL_RESPONSE="$(curl -fsS -X POST http://127.0.0.1:18081/bacnet/poll/once \
+  "${FB_AUTH[@]}")"
 echo "$POLL_RESPONSE" | jq -e '.ok == true and (.points_polled >= 1)' >/dev/null
-POLL_STATUS="$(curl -fsS http://127.0.0.1:18081/bacnet/poll/status)"
+POLL_STATUS="$(curl -fsS http://127.0.0.1:18081/bacnet/poll/status \
+  "${FB_AUTH[@]}")"
 echo "$POLL_STATUS" | jq -e '
   .ok == true and
   (.last_values | any(

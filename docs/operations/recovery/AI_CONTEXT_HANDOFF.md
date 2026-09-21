@@ -22,9 +22,10 @@ nav_exclude: true
 
 | # | Path | Why |
 |---|------|-----|
-| 1 | [`TESTBED_TAKEOVER.md`](../TESTBED_TAKEOVER.md) | **Start here** — pins, Wave T order, security tools, tip loop |
-| 2 | [`BUG_REPORT_WAVE_P.md`](../BUG_REPORT_WAVE_P.md) | Living Soft-OPEN + tip / FQ cites |
-| 3 | [`.cursor/plans/wave_t_soft-open_closeout.plan.md`](../../.cursor/plans/wave_t_soft-open_closeout.plan.md) | Active master plan TODOs |
+| 1 | [`TESTBED_TAKEOVER.md`](../TESTBED_TAKEOVER.md) | **Start here** — pins, Wave U order, security tools, tip loop |
+| 2 | [`WAVE_U_MASTER.md`](../WAVE_U_MASTER.md) | **Active master** Soft-OPEN inventory + security spine |
+| 3 | [`BUG_REPORT_WAVE_P.md`](../BUG_REPORT_WAVE_P.md) | Living Soft-OPEN + tip / FQ cites |
+| 3b | [`.cursor/plans/wave_u_security_hardening_master.plan.md`](../../.cursor/plans/wave_u_security_hardening_master.plan.md) | Cursor play target (Wave T SUPERSEDED) |
 | 4 | [`scripts/security/README.md`](../../../scripts/security/README.md) | Python harness (MT ACL/JWT) vs ZAP/Burp |
 | 5 | [`STRESS_CLOSEOUT.md`](../STRESS_CLOSEOUT.md) · [`PATCH_CYCLE.md`](../PATCH_CYCLE.md) | Handbook |
 | 6 | [`RAILWAY_DEPLOYMENT.md`](../RAILWAY_DEPLOYMENT.md) | Hub re-pin |

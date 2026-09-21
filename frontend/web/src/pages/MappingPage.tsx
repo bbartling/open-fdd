@@ -492,6 +492,9 @@ export function MappingPage() {
                 <>
                   {" "}
                   · parent AHU <code>{selectedEq.parent_ahu}</code>
+                  {selectedEq.parent_ahu_source === "inferred" ? (
+                    <> (proposed)</>
+                  ) : null}
                 </>
               ) : null}
             </p>

@@ -1,0 +1,22 @@
+# Standalone HTTPS front door — Wave U U3
+# Replace {$DOMAIN} or use tls /certs/server.crt /certs/server.key for offline labs.
+# Port 80 is redirect-only — never reverse_proxy login over plaintext.
+
+http://{$OPENFDD_PUBLIC_HOST:localhost} {
+	redir https://{host}{uri} permanent
+}
+
+{$OPENFDD_PUBLIC_HOST:localhost} {
+	encode gzip
+	# Offline / customer CA:
+	tls /certs/server.crt /certs/server.key
+
+	reverse_proxy web:8080
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+}

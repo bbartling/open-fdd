@@ -1,6 +1,7 @@
 //! Central REST + OpenAPI routes.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
@@ -153,6 +154,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/export/meta", get(export_meta))
         .route("/api/data-management/summary", get(data_management_summary))
         .route("/api/host/stats", get(host_stats))
+        .route(
+            "/api/historian/compaction",
+            get(historian_compaction_status).post(historian_compaction_run),
+        )
         .route("/api/fdd-schema/tables", get(fdd_schema_tables))
         .route("/api/fdd-rules", get(fdd_rules_list))
         .route("/api/reports", get(reports_list))
@@ -286,6 +291,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(analytics_rcx_presets_list),
         )
         .route("/api/analytics/metering", post(analytics_metering))
+        .route("/api/analytics/mv", post(analytics_mv_change_point))
         .route("/api/analytics/fuel", post(analytics_fuel))
         .route("/api/analytics/setpoints", post(analytics_setpoints))
         .route("/api/analytics/diurnal", post(analytics_diurnal))
@@ -578,6 +584,21 @@ fn resolve_tenant_context(state: &AppState, headers: &HeaderMap) -> crate::tenan
         .user_from_headers(headers)
         .unwrap_or_else(|_| auth::AuthUser::dev_anonymous());
     crate::tenant::TenantContext::resolve_fail_closed(&user, &plane)
+}
+
+/// Wave U V7: prefer dual-read tenant partition when present for a building.
+fn preferred_tenant_for_building_read(
+    ctx: &crate::tenant::TenantContext,
+    building_id: Option<&str>,
+) -> Option<String> {
+    let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return ctx.tenant_id.clone();
+    };
+    let hub = crate::analytics::historian::parquet_root_base();
+    match ctx.historian_read_root_for_building(&hub, bid) {
+        Ok(resolved) => resolved.tenant_id.or_else(|| ctx.tenant_id.clone()),
+        Err(_) => ctx.tenant_id.clone(),
+    }
 }
 
 fn require_hub_admin(
@@ -965,6 +986,7 @@ pub async fn capabilities() -> Json<Value> {
             "export": true,
             "data_management": true,
             "host_stats": true,
+            "historian_compaction": true,
             "faults": true,
             "health_stack": true,
             "fdd_rules_authoring": true,
@@ -1940,11 +1962,25 @@ pub async fn fdd_run(
         }
     };
 
-    let mut result = tokio::task::spawn_blocking(move || {
+    let fdd_timeout_secs: u64 = std::env::var("OPENFDD_FDD_RUN_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .filter(|&s| s > 0)
+        .unwrap_or(900);
+    let join = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
-    })
-    .await
-    .unwrap_or_else(|e| json!({"ok": false, "error": format!("fdd run task failed: {e}")}));
+    });
+    let mut result = match tokio::time::timeout(Duration::from_secs(fdd_timeout_secs), join).await {
+        Ok(Ok(v)) => v,
+        Ok(Err(e)) => json!({"ok": false, "error": format!("fdd run task failed: {e}")}),
+        Err(_) => json!({
+            "ok": false,
+            "timeout": true,
+            "error": format!(
+                "fdd run timed out after {fdd_timeout_secs}s (OPENFDD_FDD_RUN_TIMEOUT_SECS)"
+            ),
+        }),
+    };
     // Echo the requested building_id when the edge did not surface one, so the
     // UI/MCP always know which site the run was scoped to.
     if let (Some(bid), Some(obj)) = (echo_building_id, result.as_object_mut()) {
@@ -2008,8 +2044,13 @@ pub async fn fdd_equipment(
     if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
         return Err(deny);
     }
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, q.scoped());
     Ok(Json(
-        open_fdd_edge_prototype::fdd::registry_api::equipment_response(q.scoped()),
+        open_fdd_edge_prototype::fdd::registry_api::equipment_response_scoped(
+            q.scoped(),
+            preferred.as_deref(),
+        ),
     ))
 }
 
@@ -2057,11 +2098,14 @@ pub async fn fdd_series(
     {
         return Err(deny);
     }
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, query.building_id.as_deref());
     let result = tokio::task::spawn_blocking(move || {
-        open_fdd_edge_prototype::fdd::registry_api::series_response(
+        open_fdd_edge_prototype::fdd::registry_api::series_response_scoped(
             &query.equipment_id,
             &query.rule_id,
             query.building_id.as_deref(),
+            preferred.as_deref(),
         )
     })
     .await
@@ -2788,7 +2832,141 @@ pub async fn data_management_summary() -> Json<Value> {
 }
 
 pub async fn host_stats() -> Json<Value> {
-    Json(open_fdd_edge_prototype::ops::host_stats::stats_json())
+    let mut body = open_fdd_edge_prototype::ops::host_stats::stats_json();
+    if let Some(obj) = body.as_object_mut() {
+        let status = fdd_store::shared_compaction_coordinator().status();
+        obj.insert(
+            "compaction_coordinator".to_string(),
+            json!({
+                "mode": status.mode,
+                "scanners": status.scanners,
+                "compacting": status.compacting,
+            }),
+        );
+        if let Some(dm) = obj
+            .get_mut("data_management")
+            .and_then(|v| v.as_object_mut())
+        {
+            if let Some(parquet) = dm.get_mut("parquet").and_then(|v| v.as_object_mut()) {
+                parquet.insert("compaction_status".to_string(), json!(status.mode));
+            }
+        }
+    }
+    Json(body)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HistorianCompactionBody {
+    /// Required write confirm (matches other mutating admin APIs).
+    #[serde(default)]
+    pub confirm: bool,
+    /// Wait for DataFusion scan leases to drain (default: fail closed).
+    #[serde(default)]
+    pub wait: bool,
+    /// Plan only — do not mutate Parquet.
+    #[serde(default)]
+    pub plan_only: bool,
+}
+
+pub async fn historian_compaction_status(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let _admin = require_hub_admin(&state, &headers)?;
+    let coord = fdd_store::shared_compaction_coordinator().status();
+    let stats = fdd_store::HistorianConfig::from_env()
+        .ok()
+        .and_then(|cfg| fdd_store::local_historian_stats_from_config(&cfg).ok());
+    Ok(Json(json!({
+        "ok": true,
+        "coordinator": {
+            "mode": coord.mode,
+            "scanners": coord.scanners,
+            "compacting": coord.compacting,
+        },
+        "historian": stats,
+    })))
+}
+
+pub async fn historian_compaction_run(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<HistorianCompactionBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let admin = require_hub_admin(&state, &headers)?;
+    if !body.confirm {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "confirm:true required"})),
+        ));
+    }
+    tracing::info!(
+        target: "security_audit",
+        event = "historian_compaction_requested",
+        subject = %admin.sub,
+        plan_only = body.plan_only,
+        wait = body.wait,
+        "hub admin requested historian compaction"
+    );
+
+    let config = fdd_store::HistorianConfig::from_env().map_err(|e| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"ok": false, "error": e.to_string()})),
+        )
+    })?;
+    let compactor = fdd_store::ParquetCompactor::from_config(&config).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": e.to_string()})),
+        )
+    })?;
+
+    if body.plan_only {
+        let plans = compactor.plan_history().map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": e.to_string()})),
+            )
+        })?;
+        return Ok(Json(json!({
+            "ok": true,
+            "plan_only": true,
+            "plans": plans,
+            "coordinator": fdd_store::shared_compaction_coordinator().status(),
+        })));
+    }
+
+    let run = if body.wait {
+        tokio::task::spawn_blocking(move || fdd_store::compact_history_wait(&compactor))
+    } else {
+        tokio::task::spawn_blocking(move || fdd_store::compact_history_fail_closed(&compactor))
+    }
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": format!("compaction join: {e}")})),
+        )
+    })?;
+
+    match run {
+        Ok((results, summary)) => Ok(Json(json!({
+            "ok": true,
+            "results": results,
+            "summary": summary,
+            "coordinator": fdd_store::shared_compaction_coordinator().status(),
+        }))),
+        Err(e) => {
+            let msg = e.to_string();
+            let status = if msg.contains("scan") || msg.contains("compaction in progress") {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            Err((status, Json(json!({"ok": false, "error": msg}))))
+        }
+    }
 }
 
 pub async fn fdd_schema_tables() -> Json<Value> {
@@ -3625,11 +3803,20 @@ async fn analytics_rcx_boiler(
     })))
 }
 
-async fn analytics_rcx_presets_list() -> Json<Value> {
-    Json(json!({
+async fn analytics_rcx_presets_list(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<BuildingScopeQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    // Catalog is static, but inventory policy is tenant_building_acl — foreign
+    // building_id must 403 (same posture as GET /api/fdd/results).
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
+        return Err(deny);
+    }
+    Ok(Json(json!({
         "ok": true,
         "presets": analytics::rcx_presets::presets_json(),
-    }))
+    })))
 }
 
 async fn analytics_rcx_preset(
@@ -3729,6 +3916,18 @@ async fn analytics_metering(
     Ok(Json(json!({
         "ok": true,
         "analytics": analytics::metering::handle_async(&req).await.to_json(),
+    })))
+}
+
+async fn analytics_mv_change_point(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<AnalyticsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let req = gate_analytics(&state, &headers, req)?;
+    Ok(Json(json!({
+        "ok": true,
+        "analytics": analytics::mv_change_point::handle(&req).to_json(),
     })))
 }
 

@@ -247,6 +247,190 @@ pub fn tenant_storage_prefix(tenant_id: Option<&str>) -> Result<String> {
     Ok(format!("tenants/{tid}"))
 }
 
+/// Where a building-scoped Parquet read resolved under Wave U V7 dual-read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildingReadSource {
+    /// `{hub}/tenants/{tid}/…`
+    TenantPartition,
+    /// Hub-root `building=*` / `history/building_id=*` (pre-migrate layout).
+    HubRoot,
+}
+
+/// Resolved storage root for [`register_historian_building`]-style callers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BuildingReadRoot {
+    pub root: PathBuf,
+    pub source: BuildingReadSource,
+    /// Tenant id when [`BuildingReadSource::TenantPartition`].
+    pub tenant_id: Option<String>,
+}
+
+/// True when `storage_root` has canonical Hive and/or legacy sidecar Parquet for `building_id`.
+pub fn building_history_present(storage_root: &Path, building_id: &str) -> bool {
+    let Ok(bid) = safe_partition_value(building_id.trim(), "building_id") else {
+        return false;
+    };
+    let canonical = storage_root
+        .join("history")
+        .join(format!("building_id={bid}"));
+    let legacy = storage_root.join(format!("building={bid}"));
+    dir_has_parquet(&canonical) || dir_has_parquet(&legacy) || legacy.is_dir()
+}
+
+fn dir_has_parquet(root: &Path) -> bool {
+    if !root.is_dir() {
+        return false;
+    }
+    fn walk(dir: &Path, depth: usize) -> bool {
+        if depth > 8 {
+            return false;
+        }
+        let Ok(rd) = fs::read_dir(dir) else {
+            return false;
+        };
+        for entry in rd.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if path
+                    .extension()
+                    .and_then(|x| x.to_str())
+                    .map(|x| x.eq_ignore_ascii_case("parquet"))
+                    .unwrap_or(false)
+                {
+                    return true;
+                }
+            } else if path.is_dir() && walk(&path, depth + 1) {
+                return true;
+            }
+        }
+        false
+    }
+    walk(root, 0)
+}
+
+/// Dual-read resolver (Wave U V7 / Soft-OPEN `wave-o1-tenant-path-migrate`).
+///
+/// Preference order:
+/// 1. `preferred_tenant` → `{hub}/tenants/{tid}/…` when that tree has the building
+/// 2. Unique `tenants/*/…` hit for the building (hub_admin / unscoped migrate)
+/// 3. Hub-root `{hub}/building=…` / `history/building_id=…`
+///
+/// Ambiguous multi-tenant hits without a preferred tenant fall through to hub-root
+/// (fail closed for cross-tenant label collisions — do not pick a random tenant).
+pub fn resolve_building_read_root(
+    hub_base: &Path,
+    preferred_tenant: Option<&str>,
+    building_id: &str,
+) -> Result<BuildingReadRoot> {
+    let bid = safe_partition_value(building_id.trim(), "building_id")?;
+
+    if let Some(raw) = preferred_tenant.map(str::trim).filter(|s| !s.is_empty()) {
+        let tid = safe_partition_value(raw, "tenant_id")?;
+        let tenant_root = hub_base.join("tenants").join(&tid);
+        if building_history_present(&tenant_root, &bid) {
+            return Ok(BuildingReadRoot {
+                root: tenant_root,
+                source: BuildingReadSource::TenantPartition,
+                tenant_id: Some(tid),
+            });
+        }
+    }
+
+    let mut tenant_hits: Vec<(String, PathBuf)> = Vec::new();
+    let tenants_dir = hub_base.join("tenants");
+    if tenants_dir.is_dir() {
+        if let Ok(rd) = fs::read_dir(&tenants_dir) {
+            for entry in rd.flatten() {
+                if !entry.path().is_dir() {
+                    continue;
+                }
+                let Some(name) = entry.file_name().to_str().map(str::to_string) else {
+                    continue;
+                };
+                if name.starts_with('.') {
+                    continue;
+                }
+                if safe_partition_value(&name, "tenant_id").is_err() {
+                    continue;
+                }
+                let root = entry.path();
+                if building_history_present(&root, &bid) {
+                    tenant_hits.push((name, root));
+                }
+            }
+        }
+    }
+    tenant_hits.sort_by(|a, b| a.0.cmp(&b.0));
+    if tenant_hits.len() == 1 {
+        let (tid, root) = tenant_hits.remove(0);
+        return Ok(BuildingReadRoot {
+            root,
+            source: BuildingReadSource::TenantPartition,
+            tenant_id: Some(tid),
+        });
+    }
+
+    Ok(BuildingReadRoot {
+        root: hub_base.to_path_buf(),
+        source: BuildingReadSource::HubRoot,
+        tenant_id: None,
+    })
+}
+
+/// Inventory hub-root `building=*` / `history/building_id=*` plus `tenants/{tid}/…`.
+pub fn list_building_ids(hub_base: &Path) -> Vec<String> {
+    let mut buildings = Vec::new();
+    collect_building_ids_under(hub_base, &mut buildings);
+    let tenants_dir = hub_base.join("tenants");
+    if tenants_dir.is_dir() {
+        if let Ok(rd) = fs::read_dir(&tenants_dir) {
+            for entry in rd.flatten() {
+                if entry.path().is_dir() {
+                    collect_building_ids_under(&entry.path(), &mut buildings);
+                }
+            }
+        }
+    }
+    buildings.sort();
+    buildings.dedup();
+    buildings
+}
+
+fn collect_building_ids_under(root: &Path, out: &mut Vec<String>) {
+    if let Ok(rd) = fs::read_dir(root.join("history")) {
+        for e in rd.flatten() {
+            if !e.path().is_dir() {
+                continue;
+            }
+            if let Some(name) = e
+                .file_name()
+                .to_str()
+                .and_then(|n| n.strip_prefix("building_id="))
+            {
+                if !name.is_empty() && safe_partition_value(name, "building_id").is_ok() {
+                    out.push(name.to_string());
+                }
+            }
+        }
+    }
+    if let Ok(rd) = fs::read_dir(root) {
+        for e in rd.flatten() {
+            if !e.path().is_dir() {
+                continue;
+            }
+            if let Some(name) = e
+                .file_name()
+                .to_str()
+                .and_then(|n| n.strip_prefix("building="))
+            {
+                if !name.is_empty() && safe_partition_value(name, "building_id").is_ok() {
+                    out.push(name.to_string());
+                }
+            }
+        }
+    }
+}
+
 fn validate_segment(value: &str, field: &str) -> Result<()> {
     if value.contains('/')
         || value.contains('\\')
@@ -499,6 +683,65 @@ mod tests {
         assert!(!a.join(&rel).starts_with(&b));
         assert!(tenant_storage_root(&base, Some("../x")).is_err());
         assert!(tenant_storage_root(&base, Some("a=b")).is_err());
+    }
+
+    #[test]
+    fn dual_read_prefers_tenant_partition_then_hub_fallback() {
+        let tmp = TempDir::new().unwrap();
+        let hub = tmp.path();
+        let tenant = hub.join("tenants/acme/building=ACME/equipment=rtu_01");
+        fs::create_dir_all(&tenant).unwrap();
+        fs::write(tenant.join("history.parquet"), b"pq").unwrap();
+        let hub_only = hub.join("building=BUILDING_100/equipment=AHU_1");
+        fs::create_dir_all(&hub_only).unwrap();
+        fs::write(hub_only.join("history.parquet"), b"pq").unwrap();
+
+        let acme = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        assert_eq!(acme.source, BuildingReadSource::TenantPartition);
+        assert_eq!(acme.tenant_id.as_deref(), Some("acme"));
+        assert!(acme.root.ends_with("tenants/acme"));
+
+        // Preferred tenant missing tree → hub-root fallback (additive migrate window).
+        let b100 = resolve_building_read_root(hub, Some("building_100"), "BUILDING_100").unwrap();
+        assert_eq!(b100.source, BuildingReadSource::HubRoot);
+        assert_eq!(b100.root, hub);
+
+        // Unique tenants/* hit without preferred tid.
+        let via_scan = resolve_building_read_root(hub, None, "ACME").unwrap();
+        assert_eq!(via_scan.source, BuildingReadSource::TenantPartition);
+        assert_eq!(via_scan.tenant_id.as_deref(), Some("acme"));
+    }
+
+    #[test]
+    fn dual_read_ambiguous_tenant_labels_fall_to_hub() {
+        let tmp = TempDir::new().unwrap();
+        let hub = tmp.path();
+        for tid in ["tenant_a", "tenant_b"] {
+            let dir = hub
+                .join("tenants")
+                .join(tid)
+                .join("building=site_x")
+                .join("equipment=e1");
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("history.parquet"), b"pq").unwrap();
+        }
+        let resolved = resolve_building_read_root(hub, None, "site_x").unwrap();
+        assert_eq!(resolved.source, BuildingReadSource::HubRoot);
+        let preferred = resolve_building_read_root(hub, Some("tenant_b"), "site_x").unwrap();
+        assert_eq!(preferred.source, BuildingReadSource::TenantPartition);
+        assert_eq!(preferred.tenant_id.as_deref(), Some("tenant_b"));
+    }
+
+    #[test]
+    fn list_building_ids_unions_hub_and_tenant_trees() {
+        let tmp = TempDir::new().unwrap();
+        let hub = tmp.path();
+        fs::create_dir_all(hub.join("building=LAKESIDE_ES")).unwrap();
+        fs::create_dir_all(hub.join("tenants/lakeside_sd/building=LAKESIDE_ES")).unwrap();
+        fs::create_dir_all(hub.join("tenants/acme/history/building_id=ACME")).unwrap();
+        let ids = list_building_ids(hub);
+        assert!(ids.contains(&"LAKESIDE_ES".to_string()));
+        assert!(ids.contains(&"ACME".to_string()));
     }
 
     #[test]

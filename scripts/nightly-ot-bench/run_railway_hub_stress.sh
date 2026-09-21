@@ -11,6 +11,9 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$DIR/lib.sh"
 # shellcheck disable=SC1091
 source "$DIR/lib_capacity_sample.sh"
+# RAILWAY_ONLY before load_bench_env so sticky .env tip pins cannot clobber
+# OPENFDD_IMAGE_TAG / OPENFDD_MCP_IMAGE for hub stress.
+export RAILWAY_ONLY=1
 load_bench_env
 cd "$ROOT"
 
@@ -73,10 +76,17 @@ if [[ -z "${OPENFDD_USER_A_OPS_PASSWORD:-}" ]] && command -v railway >/dev/null 
   OPENFDD_USER_A_OPS_PASSWORD="$(_fetch_railway_var OPENFDD_USER_ACME_OPS_PASSWORD || true)"
   export OPENFDD_USER_A_OPS_PASSWORD
 fi
+# Alias for gate 37 (ACME charts) — same Railway secret, never print.
+export OPENFDD_USER_ACME_OPS_PASSWORD="${OPENFDD_USER_ACME_OPS_PASSWORD:-${OPENFDD_USER_A_OPS_PASSWORD:-}}"
 if [[ -z "${OPENFDD_USER_B_OPS_PASSWORD:-}" ]] && command -v railway >/dev/null 2>&1; then
   OPENFDD_USER_B_OPS_PASSWORD="$(_fetch_railway_var OPENFDD_USER_B100_OPS_PASSWORD || true)"
   export OPENFDD_USER_B_OPS_PASSWORD
 fi
+# Gate 36 model/ECM reads OPENFDD_OPS_A/B_PASSWORD — alias Railway ops names.
+export OPENFDD_OPS_A_PASSWORD="${OPENFDD_OPS_A_PASSWORD:-${OPENFDD_USER_A_OPS_PASSWORD:-}}"
+export OPENFDD_OPS_B_PASSWORD="${OPENFDD_OPS_B_PASSWORD:-${OPENFDD_USER_B_OPS_PASSWORD:-}}"
+export OPENFDD_OPS_A_USER="${OPENFDD_OPS_A_USER:-${OPENFDD_USER_A_OPS_USER:-acme-ops}}"
+export OPENFDD_OPS_B_USER="${OPENFDD_OPS_B_USER:-${OPENFDD_USER_B_OPS_USER:-b100-ops}}"
 if [[ -z "${OPENFDD_SECURITY_CONFIG:-}" && "$RAILWAY_BASE" == https://openfdd-web-production-af99.up.railway.app* ]]; then
   export OPENFDD_SECURITY_CONFIG="$ROOT/scripts/security/config/railway_hub_security_fixtures.json"
 fi
@@ -146,7 +156,10 @@ python3 "$MANIFEST_PY" create \
   --required 25_security_python_harness \
   --required 25b_security_post_stress \
   --required 26_security_mqtt_acl \
-  --required 35_mqtt_telemetry_pause_resume
+  --required 35_mqtt_telemetry_pause_resume \
+  --required 36_mv_sql_oracle_twin \
+  --required 36_model_ecm_qualification \
+  --required 37_acme_analytics_charts
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"
@@ -322,10 +335,17 @@ run_gate "07_auth_role_matrix" "07 auth role matrix" \
 
 # --- 08 MCP accuracy (Railway-only; no local central fallback) ---
 if [[ -z "${OPENFDD_MCP_IMAGE:-}" ]]; then
-  # Derive from hub version tag when possible
-  TAG="$(jq -r '.version // empty' "$ART/health.json" 2>/dev/null | sed -n 's/.*+\([a-f0-9]\{7,\}\).*/sha-\1/p' | head -c 11 || true)"
-  if [[ -n "$TAG" && ${#TAG} -ge 11 ]]; then
-    export OPENFDD_MCP_IMAGE="ghcr.io/bbartling/openfdd-mcp:${TAG}"
+  # Prefer explicit tip pin; else derive sha-<7> from hub health version+sha.
+  if [[ "${OPENFDD_IMAGE_TAG:-}" =~ ^sha-[0-9a-f]{7}$ ]]; then
+    export OPENFDD_MCP_IMAGE="ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG}"
+  else
+    TAG="$(jq -r '.version // empty' "$ART/health.json" 2>/dev/null \
+      | sed -n 's/.*+\([0-9a-f]\{7,\}\).*/\1/p' \
+      | head -1 \
+      | cut -c1-7 || true)"
+    if [[ -n "$TAG" && "$TAG" =~ ^[0-9a-f]{7}$ ]]; then
+      export OPENFDD_MCP_IMAGE="ghcr.io/bbartling/openfdd-mcp:sha-${TAG}"
+    fi
   fi
 fi
 if [[ -z "${OPENFDD_MCP_IMAGE:-}" ]]; then
@@ -421,6 +441,15 @@ else
     "WAVE_O_ADMIN_ACL=0"
 fi
 
+# --- 36 model/ECM qualification (S5 wire; FQ evidence on S4) ---
+if [[ "${MODEL_ECM_GATE:-1}" == "1" ]]; then
+  run_gate "36_model_ecm_qualification" "36 model/ECM qualification" \
+    env ARTIFACT_DIR="$ART" bash "$DIR/36_model_ecm_qualification.sh"
+else
+  record_gate "36_model_ecm_qualification" SKIPPED "36 model/ECM qualification" \
+    "MODEL_ECM_GATE=0"
+fi
+
 # --- 23 Wave O security headers / security.txt / CORS / login throttle ---
 if [[ "${WAVE_O_SECURITY:-1}" == "1" ]]; then
   run_gate "23_wave_o_security" "23 Wave O security surface" \
@@ -460,6 +489,12 @@ fi
 run_gate "24_capacity_pressure" "24 capacity pressure" \
   bash "$DIR/24_capacity_pressure.sh"
 
+# --- 37 ACME Overview/charts analytics sequential break-finder (nginx 502) ---
+run_gate "37_acme_analytics_charts" "37 ACME analytics charts break-finder" \
+  env ARTIFACT_DIR="$ART/gate37_acme_analytics_charts" \
+    OPENFDD_USER_ACME_OPS_PASSWORD="${OPENFDD_USER_ACME_OPS_PASSWORD:-${OPENFDD_USER_A_OPS_PASSWORD:-}}" \
+    bash "$DIR/37_acme_analytics_charts.sh"
+
 capacity_sampler_stop || true
 trap - EXIT
 set +e
@@ -490,6 +525,27 @@ if [[ "${MQTT_PAUSE_RESUME:-1}" == "1" ]]; then
 else
   record_gate "35_mqtt_telemetry_pause_resume" SKIPPED "35 MQTT telemetry pause/resume" \
     "MQTT_PAUSE_RESUME=0"
+fi
+
+# --- 36 M&V SQL↔PyPI oracle twin (EXECUTE=1 for live /api compare) ---
+set +e
+env ARTIFACT_DIR="$ART/gate36_mv_sql_oracle_twin" \
+  bash "$DIR/36_mv_sql_oracle_twin.sh" 2>&1 | tee "$ART/36_mv_sql_oracle_twin.log"
+MV_RC=${PIPESTATUS[0]}
+set -e
+if [[ "$MV_RC" -eq 0 ]]; then
+  record_gate "36_mv_sql_oracle_twin" PASS "36 M&V SQL↔PyPI twin" "" \
+    "$ART/36_mv_sql_oracle_twin.log" \
+    "$ART/gate36_mv_sql_oracle_twin/mv_sql_oracle_twin_verdict.json"
+elif [[ "$MV_RC" -eq 2 ]]; then
+  record_gate "36_mv_sql_oracle_twin" BLOCKED "36 M&V SQL↔PyPI twin" \
+    "OPENFDD_SECURITY_EXECUTE!=1; Soft-OPEN until FQ MEGA" \
+    "$ART/36_mv_sql_oracle_twin.log" \
+    "$ART/gate36_mv_sql_oracle_twin/mv_sql_oracle_twin_verdict.json"
+else
+  record_gate "36_mv_sql_oracle_twin" FAIL "36 M&V SQL↔PyPI twin" "exit=$MV_RC" \
+    "$ART/36_mv_sql_oracle_twin.log" \
+    "$ART/gate36_mv_sql_oracle_twin/mv_sql_oracle_twin_verdict.json"
 fi
 
 # --- 25b security postcheck (re-auth + bounded reads). Runs even after prior fails. ---

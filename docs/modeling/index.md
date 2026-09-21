@@ -6,7 +6,7 @@ has_children: true
 permalink: /modeling/
 ---
 
-See also: [consumer / route matrix (DM-06)](consumer-route-matrix.md) · [ADR data model graph](../architecture/ADR_data_model_graph.md).
+See also: [consumer / route matrix (DM-06)](consumer-route-matrix.md) · [tenant storage honesty (DM-05)](tenant-storage-honesty.md) · [ADR data model graph](../architecture/ADR_data_model_graph.md).
 
 
 # Haystack modeling
@@ -29,6 +29,7 @@ in the package**, not a broken engine. See
 | [Package schema](package-schema.html) | Compact ingest maps vs rich (SCAFFOLD) evidence |
 | [Heat-pump buildings](heat-pump-buildings.html) | WSHP topology, role tiers, anti-patterns |
 | [Zone terminals / FCU / UV](zone-terminals.html) | ZONE = FCU or standalone DDC; UV = CV AHU |
+| [Tenant storage honesty](tenant-storage-honesty.html) | DM-05 hub-root paths vs optional `tenants/{tid}/` |
 | [Rule readiness](rule-readiness.html) | Runnable / missing / not applicable |
 | [Haystack model](haystack-model.html) | Sites, equipment, points, RDF APIs |
 | [Assignments](assignments.html) | Bind drivers → Haystack → FDD |

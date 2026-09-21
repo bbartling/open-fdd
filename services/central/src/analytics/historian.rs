@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
 use datafusion::prelude::SessionContext;
 use fdd_sql::{register_parquet_tree, run_sql};
 use serde_json::{json, Value};
@@ -141,37 +142,83 @@ fn safe_building_segment(building_id: Option<&str>) -> Option<String> {
 ///
 /// When `building_id` is set, prefers canonical live Hive
 /// `history/building_id={id}/`, then legacy package sidecars `building={id}/`.
+/// Wave U V7 dual-read: prefers `tenants/{tid}/…` when present, else hub-root.
 /// Does **not** fall back to the whole tree (that would mix other buildings).
 /// Returns `Ok(false)` when nothing usable is present.
-pub async fn try_register_history_scoped(
+///
+/// Prefer [`open_history_scan`] / [`open_history_scan_for_tenant`] when the
+/// caller will run DataFusion SQL — those APIs return a scan permit that must
+/// be held for the full query lifetime.
+pub async fn try_register_history_scoped_for_tenant(
     ctx: &SessionContext,
     building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
 ) -> Result<bool> {
-    let root = parquet_root();
-    if !root.is_dir() {
+    let hub = parquet_root_base();
+    if !hub.is_dir() {
         return Ok(false);
     }
     match safe_building_segment(building_id) {
-        Some(bid) => match fdd_sql::register_historian_building(ctx, &root, &bid).await {
-            Ok(_) => Ok(true),
-            Err(e) => {
+        Some(bid) => {
+            let resolved = match fdd_store::resolve_building_read_root(&hub, preferred_tenant, &bid)
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::debug!(error = %e, building = %bid, "unsafe building dual-read");
+                    return Ok(false);
+                }
+            };
+            if !fdd_store::building_history_present(&resolved.root, &bid) {
                 tracing::debug!(
-                    error = %e,
                     building = %bid,
-                    root = %root.display(),
+                    root = %resolved.root.display(),
+                    source = ?resolved.source,
                     "no building-scoped parquet; historian scope empty"
                 );
-                Ok(false)
+                return Ok(false);
             }
-        },
-        None => match register_parquet_tree(ctx, &root).await {
+            match fdd_sql::register_historian_building(ctx, &resolved.root, &bid).await {
+                Ok(_) => Ok(true),
+                Err(e) => {
+                    tracing::debug!(
+                        error = %e,
+                        building = %bid,
+                        root = %resolved.root.display(),
+                        "no building-scoped parquet; historian scope empty"
+                    );
+                    Ok(false)
+                }
+            }
+        }
+        None => match register_parquet_tree(ctx, &hub).await {
             Ok(_) => Ok(true),
             Err(e) => {
-                tracing::debug!(error = %e, root = %root.display(), "historian parquet register skipped");
+                tracing::debug!(error = %e, root = %hub.display(), "historian parquet register skipped");
                 Ok(false)
             }
         },
     }
+}
+
+/// Register historian scope and return a scan permit the caller must hold until
+/// DataFusion collect/stream completes (serializes vs runtime H4 compaction).
+pub async fn open_history_scan(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+) -> Result<(bool, fdd_store::ScanPermit)> {
+    open_history_scan_for_tenant(ctx, building_id, None).await
+}
+
+/// Tenant-aware variant of [`open_history_scan`].
+pub async fn open_history_scan_for_tenant(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+) -> Result<(bool, fdd_store::ScanPermit)> {
+    let scan = fdd_store::try_historian_scan_permit()
+        .or_else(|_| Ok::<_, anyhow::Error>(fdd_store::historian_scan_permit_wait()))?;
+    let ok = try_register_history_scoped_for_tenant(ctx, building_id, preferred_tenant).await?;
+    Ok((ok, scan))
 }
 
 async fn history_columns_async(ctx: &SessionContext) -> Result<HashSet<String>> {
@@ -510,6 +557,31 @@ fn equipment_filter_sql(equipment_filter: Option<&[String]>) -> String {
     }
 }
 
+/// SQL fragment for optional inclusive-start / exclusive-end historian window.
+///
+/// Literals match `fdd_rules` / DataFusion Parquet timestamp comparisons
+/// (`timestamp_utc >= '2026-01-01T00:00:00Z'`).
+fn time_range_sql(
+    ts_col: &str,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+) -> String {
+    let mut out = String::new();
+    if let Some(t) = start {
+        out.push_str(&format!(
+            " AND {ts_col} >= '{}'",
+            t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        ));
+    }
+    if let Some(t) = end {
+        out.push_str(&format!(
+            " AND {ts_col} < '{}'",
+            t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        ));
+    }
+    out
+}
+
 /// SQL fragment restricting to chiller/DX/tower-like equipment ids.
 /// Kept aligned with [`plant_group_for`] (no bare `CT%` — that matches CTRL_*).
 pub fn chiller_like_equipment_sql() -> &'static str {
@@ -538,17 +610,28 @@ pub fn chiller_like_equipment_sql() -> &'static str {
 /// envelope with `engine=datafusion` and a warning that column-mapped runtime is next.
 ///
 /// When `building_id` is set, scopes the Parquet read like economizer (OFDD-070).
+///
+/// `start` / `end` bound the Δt window (inclusive start, exclusive end). Callers
+/// should set a lookback on large historians — full-history LEAD over ACME-scale
+/// Parquet exceeds Railway edge timeouts (~180s) and surfaces as nginx 502.
 pub async fn runtime_from_history(
     equipment_filter: Option<&[String]>,
     max_gap_seconds: f64,
     building_id: Option<&str>,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let ctx = SessionContext::new();
-    if !try_register_history_scoped(&ctx, building_id).await? {
+    let (ok, _scan) = open_history_scan(&ctx, building_id).await?;
+    if !ok {
         return Ok(None);
     }
 
-    let count = run_sql(&ctx, "SELECT COUNT(*) AS n FROM history").await?;
+    let cols = history_columns_async(&ctx).await?;
+    let ts_col_probe = pick_ts_col(&cols).unwrap_or("timestamp_utc");
+    let range_filter = time_range_sql(ts_col_probe, start, end);
+    let count_sql = format!("SELECT COUNT(*) AS n FROM history WHERE 1=1{range_filter}");
+    let count = run_sql(&ctx, &count_sql).await?;
     let n = count
         .rows
         .first()
@@ -559,8 +642,12 @@ pub async fn runtime_from_history(
         return Ok(None);
     }
 
-    let cols = history_columns_async(&ctx).await?;
-    let query = AnalyticsQuery::default();
+    let query = AnalyticsQuery {
+        building_id: building_id.map(str::to_string),
+        start,
+        end,
+        ..AnalyticsQuery::default()
+    };
     let max_gap = max_gap_seconds.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
     let stamped_types =
@@ -569,6 +656,7 @@ pub async fn runtime_from_history(
     if cols.contains("equipment_id") {
         // Fan for air handlers; chiller/boiler/pump status for plant motors.
         if let (Some(ts_col), Some(on_sql)) = (pick_ts_col(&cols), plant_runtime_on_expr(&cols)) {
+            let range_sql = time_range_sql(ts_col, start, end);
             let sql = format!(
                 r#"
 WITH ordered AS (
@@ -578,7 +666,7 @@ WITH ordered AS (
     {on_sql} AS is_on,
     LEAD({ts_col}) OVER (PARTITION BY equipment_id ORDER BY {ts_col}) AS next_ts
   FROM history
-  WHERE equipment_id IS NOT NULL{eq_filter}
+  WHERE equipment_id IS NOT NULL{eq_filter}{range_sql}
 ),
 raw_intervals AS (
   SELECT
@@ -671,11 +759,14 @@ ORDER BY i.equipment_id
                     }
                     let weekly_rows = runtime_weekly_plant_rows(
                         &ctx,
-                        ts_col,
-                        &on_sql,
-                        weekly_oat_col(&cols),
-                        max_gap,
-                        &eq_filter,
+                        RuntimeWeeklyParams {
+                            ts_col,
+                            on_sql: &on_sql,
+                            oat: weekly_oat_col(&cols),
+                            max_gap,
+                            eq_filter: &eq_filter,
+                            range_sql: &range_sql,
+                        },
                         (plant_signal_label(&cols), &stamped_types),
                     )
                     .await
@@ -703,6 +794,8 @@ ORDER BY i.equipment_id
                         "max_gap_seconds": max_gap,
                         "source": "historian_parquet",
                         "building_id": safe_building_segment(building_id),
+                        "start": start.map(|t| t.to_rfc3339()),
+                        "end": end.map(|t| t.to_rfc3339()),
                         "query_versions": ["runtime-v1", "runtime-weekly-v1"],
                     }));
                     return Ok(Some(env));
@@ -726,6 +819,8 @@ ORDER BY i.equipment_id
         "max_gap_seconds": max_gap,
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
+        "start": start.map(|t| t.to_rfc3339()),
+        "end": end.map(|t| t.to_rfc3339()),
     }));
     Ok(Some(env))
 }
@@ -735,15 +830,28 @@ ORDER BY i.equipment_id
 /// vibe19 `motor_run_hours_weekly` — does **not** fold equipment into plant totals.
 /// Site OAT is broadcast by timestamp so avg-while-on works when OAT lives on
 /// weather/web rows rather than on the motor equipment itself.
+struct RuntimeWeeklyParams<'a> {
+    ts_col: &'a str,
+    on_sql: &'a str,
+    oat: Option<&'a str>,
+    max_gap: f64,
+    eq_filter: &'a str,
+    range_sql: &'a str,
+}
+
 async fn runtime_weekly_plant_rows(
     ctx: &SessionContext,
-    ts_col: &str,
-    on_sql: &str,
-    oat: Option<&str>,
-    max_gap: f64,
-    eq_filter: &str,
+    params: RuntimeWeeklyParams<'_>,
     metadata: (&str, &BTreeMap<String, String>),
 ) -> Result<Vec<Value>> {
+    let RuntimeWeeklyParams {
+        ts_col,
+        on_sql,
+        oat,
+        max_gap,
+        eq_filter,
+        range_sql,
+    } = params;
     let (signal_label, stamped_types) = metadata;
     let oat_by_ts_cte = match oat {
         Some(c) => format!(
@@ -751,7 +859,7 @@ async fn runtime_weekly_plant_rows(
 oat_by_ts AS (
   SELECT {ts_col} AS ts, AVG({c}) AS oat_f
   FROM history
-  WHERE {c} IS NOT NULL
+  WHERE {c} IS NOT NULL{range_sql}
   GROUP BY {ts_col}
 ),"#
         ),
@@ -783,7 +891,7 @@ ordered AS (
       {ts_col} AS ts,
       {on_sql} AS is_on
     FROM history
-    WHERE equipment_id IS NOT NULL{eq_filter}
+    WHERE equipment_id IS NOT NULL{eq_filter}{range_sql}
   ) h
   {oat_join}
 ),
@@ -874,14 +982,16 @@ ORDER BY week_start, equipment_id
     Ok(out)
 }
 
-/// Register `history` and return `(ctx, columns, row_count)` when the parquet
-/// tree exists and has rows; `Ok(None)` when missing/empty (caller falls back).
+/// Register `history` and return `(ctx, columns, row_count, scan_permit)` when
+/// the parquet tree exists and has rows; `Ok(None)` when missing/empty.
 /// Optional `building_id` scopes the hive path (OFDD-070).
+/// The scan permit must stay alive for subsequent DataFusion work on `ctx`.
 async fn open_history_scoped(
     building_id: Option<&str>,
-) -> Result<Option<(SessionContext, HashSet<String>, i64)>> {
+) -> Result<Option<(SessionContext, HashSet<String>, i64, fdd_store::ScanPermit)>> {
     let ctx = SessionContext::new();
-    if !try_register_history_scoped(&ctx, building_id).await? {
+    let (ok, scan) = open_history_scan(&ctx, building_id).await?;
+    if !ok {
         return Ok(None);
     }
     let count = run_sql(&ctx, "SELECT COUNT(*) AS n FROM history").await?;
@@ -895,7 +1005,7 @@ async fn open_history_scoped(
         return Ok(None);
     }
     let cols = history_columns_async(&ctx).await?;
-    Ok(Some((ctx, cols, n)))
+    Ok(Some((ctx, cols, n, scan)))
 }
 
 fn as_f64(v: Option<&serde_json::Value>) -> Option<f64> {
@@ -916,7 +1026,7 @@ pub async fn sensor_health_from_history(
     equipment_filter: Option<&[String]>,
     building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
 
@@ -1085,7 +1195,7 @@ pub async fn sensor_stats_from_history(
     building_id: Option<&str>,
     fan_state: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let role_cols: Vec<&str> = NUMERIC_ROLE_COLS
@@ -1174,7 +1284,7 @@ pub async fn setpoints_from_history(
     equipment_filter: Option<&[String]>,
     building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let present: Vec<&str> = SP_ROLES
@@ -1267,7 +1377,7 @@ pub async fn diurnal_from_history(
     equipment_filter: Option<&[String]>,
     building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -1341,7 +1451,7 @@ pub async fn diurnal_from_history(
 
 /// Equipment topology (feeds / fedBy) inferred from equipment ids.
 pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, _cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, _cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let result = run_sql(
@@ -1448,7 +1558,7 @@ pub async fn schedule_from_history(
     max_gap_seconds: f64,
     building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     if !cols.contains("occ_mode") {
@@ -1540,7 +1650,7 @@ pub async fn economizer_from_history(
     building_id: Option<&str>,
     max_points: usize,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     // OFDD-070 / ENH-OFDD-001: Liberty packages expose web_oa_t (not oa_t).
@@ -1773,7 +1883,7 @@ LIMIT {limit}
 
 /// Diagnostic warnings when mechanical-cooling OAT bins cannot be computed.
 pub async fn mech_cooling_evidence_warnings(building_id: Option<&str>) -> Result<Vec<String>> {
-    let Some((_ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((_ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(vec![
             "mechanical_cooling: no historian parquet for this building — ingest history first"
                 .into(),
@@ -1806,7 +1916,7 @@ pub async fn mech_oat_bins_from_history(
     max_gap_seconds: f64,
     building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2048,7 +2158,7 @@ pub async fn bas_vs_web_from_history(
     max_points: usize,
     building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2221,7 +2331,7 @@ pub async fn inspect_from_history(
     if eq.is_empty() {
         return Ok(None);
     }
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2436,7 +2546,7 @@ pub async fn rcx_timeseries_from_history(
     filter_fan_on: bool,
     max_points: usize,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2571,7 +2681,7 @@ pub async fn rcx_oat_scatter_from_history(
     prefer_wetbulb: bool,
     max_points: usize,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2687,7 +2797,7 @@ pub async fn rcx_box_from_history(
     filter_fan_on: bool,
     max_points: usize,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     if !cols.contains(role_col) {
@@ -2746,7 +2856,7 @@ pub async fn rcx_zone_comfort_rank_from_history(
     comfort_low_f: f64,
     comfort_high_f: f64,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     if !cols.contains("zone_t") {
@@ -2835,7 +2945,7 @@ pub async fn rcx_metering_from_history(
     eq_kinds: &[&str],
     kind: &str,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2975,7 +3085,7 @@ pub async fn descriptive_counts_from_history_filtered(
     building_id: Option<&str>,
     extra_equipment_sql: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, _cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, _cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let eq_filter = equipment_filter_sql(equipment_filter);
@@ -3034,7 +3144,7 @@ pub async fn sql_anomaly_from_history(
     method: &str,
     transition_events: bool,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let ts_col = pick_ts_col(&cols).unwrap_or("timestamp_utc");
@@ -3274,7 +3384,9 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let missing = tmp.path().join("no_such_parquet");
         std::env::set_var("OPENFDD_PARQUET_ROOT", &missing);
-        let out = runtime_from_history(None, 900.0, None).await.unwrap();
+        let out = runtime_from_history(None, 900.0, None, None, None)
+            .await
+            .unwrap();
         assert!(out.is_none());
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
     }
@@ -3303,7 +3415,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_TEST", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = runtime_from_history(None, 900.0, None)
+        let env = runtime_from_history(None, 900.0, None, None, None)
             .await
             .unwrap()
             .expect("expected historian envelope");
@@ -3316,6 +3428,14 @@ mod tests {
         let cov = env.equipment[0]["coverage_pct"].as_f64().unwrap();
         assert!((cov - 100.0).abs() < 1.0, "coverage={cov}");
 
+        // Start after all samples → empty window → Ok(None).
+        let after = chrono::DateTime::parse_from_rfc3339("2026-02-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let empty = runtime_from_history(None, 900.0, None, Some(after), None)
+            .await
+            .unwrap();
+        assert!(empty.is_none(), "expected no rows after start filter");
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
     }
 
@@ -3980,7 +4100,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_AIR", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = runtime_from_history(None, 900.0, Some("BUILDING_AIR"))
+        let env = runtime_from_history(None, 900.0, Some("BUILDING_AIR"), None, None)
             .await
             .unwrap()
             .expect("runtime envelope");

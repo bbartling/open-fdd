@@ -1,3 +1,5 @@
+> **SUPERSEDED by Wave U** — do not play. Active master: [`docs/operations/WAVE_U_MASTER.md`](../../docs/operations/WAVE_U_MASTER.md) · [`.cursor/plans/wave_u_security_hardening_master.plan.md`](wave_u_security_hardening_master.plan.md). Retained as historical/child detail only.
+
 ---
 name: Wave T Soft-OPEN closeout
 overview: "Close Wave S Soft-OPEN from BUG_REPORT: acme-fdd-run-hang, S5 remainder, PyPI M&V, MT-security harness breadth (Burp-class authz matrix), then S4 SQL/UI + one MEGA FQ. Mid-tips smoke; GH tidy every tip."

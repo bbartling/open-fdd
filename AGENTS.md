@@ -18,6 +18,8 @@ OpenClaw, Claude Desktop, or any MCP host — connect via **JWT REST** and optio
 
 **Software-engineering agent OS:** [`openfdd_agent_spec/`](openfdd_agent_spec/) — architecture locks, skills, Milestone A.
 
+**Release outcomes:** [`MILESTONES.md`](MILESTONES.md) separates implementation, candidate verification and release. Wave U's 2026-09-20 independent acceptance audit is the local Cursor handoff at `.cursor/plans/wave_u_independent_acceptance_audit.plan.md`; follow its reopened acceptance criteria under the Wave U master. A missing Nessus license blocks the actual assessment, not standalone/field readiness work.
+
 **Active recovery / Vibe 21 twin program:** [`tools/open-fdd-vibe21-production/`](tools/open-fdd-vibe21-production/README.md) · capability ledger [`docs/migration/react-rust/capabilities.yaml`](docs/migration/react-rust/capabilities.yaml). Modernization Phase 1+2 exit is **architecture direction**; Vibe 21 recovery is the active qualification program (not “Phase 1 complete”).
 
 **PyPI (`open-fdd`):** ECM engineering + pandas oracle (`open_fdd.rules` / `analytics` / `reporting`) for **third-party tooling** outside the product app. Product FDD is DataFusion on GHCR.
@@ -116,7 +118,7 @@ Aliases: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](docs/migration/vibe19/
 
 Railway is an **experimental cloud path**, not a replacement for the LAN/VPN/OT deployment contract or a claim of production public-internet hardening.
 
-**Agent ops (bensbench):** use the **Railway CLI** for backup + hub tip re-pin — [`openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md`](openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md) · [`docs/operations/RAILWAY_DEPLOYMENT.md`](docs/operations/RAILWAY_DEPLOYMENT.md). Do **not** confuse Railway CLI / Railway MCP with **`openfdd-mcp`** FDD tools. **FQ OPS PINNED:** **`sha-7b81eb8`** / **3.5.31** (Wave S1). **Hub smoke tip (no FQ):** **`sha-3cd3745`** / **3.5.33** (#954). Rollback **`sha-f727a55`** / **3.5.29** or Soft Tip B **`sha-4a5c11e`** / **3.5.28** or Wave N **`sha-9072e0b`** / **3.5.10**.
+**Agent ops (bensbench):** use the **Railway CLI** for backup + hub tip re-pin — [`openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md`](openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md) · [`docs/operations/RAILWAY_DEPLOYMENT.md`](docs/operations/RAILWAY_DEPLOYMENT.md). Do **not** confuse Railway CLI / Railway MCP with **`openfdd-mcp`** FDD tools. **FQ OPS PINNED:** **`sha-1677c33`** / **3.5.37** (Wave U · stress `20260921T021332Z`). Rollback **`sha-7b81eb8`** / **3.5.31** (Wave S1) or Soft Tip B **`sha-4a5c11e`** / **3.5.28**.
 
 - **CSV-only lab:** `openfdd-central` + `openfdd-web`.
 - **Cloud MQTTS hub (preferred when live OT is the goal):** `openfdd-central` + `openfdd-web` + **`openfdd-mqtt`** on Railway private networking; keep **`openfdd-fieldbus` on-prem** publishing MQTTS into the cloud broker. MQTTS is the point of the hub — do not leave mqtt off by default for live sites.

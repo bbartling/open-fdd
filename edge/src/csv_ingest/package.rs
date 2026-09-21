@@ -1142,24 +1142,48 @@ fn find_equipment_dir(building_root: &Path, equipment_id: &str) -> Option<PathBu
 }
 
 fn infer_equipment_type_local(equipment_id: &str) -> &'static str {
-    let id = equipment_id.to_ascii_uppercase();
-    if id.contains("VAV") || id.contains("ZONE") {
-        "VAV"
-    } else if id.contains("AHU") || id.contains("RTU") || id.contains("MAU") {
-        "AHU"
-    } else if id.contains("CHILL")
-        || id.contains("BOILER")
-        || id.contains("PUMP")
-        || id.contains("TOWER")
-    {
-        "PLANT"
-    } else if id.contains("HP") || id.contains("HEAT_PUMP") {
-        "HEAT_PUMP"
-    } else if id.contains("METER") {
-        "METER"
-    } else {
-        "GENERAL"
+    // Display label fallback when no package stamp is present (DM-04 prefers stamps).
+    crate::equipment_types::api_equipment_type_for(equipment_id, None)
+}
+
+/// Load package stamps from csv_buildings and/or Parquet `equipment_types.json`.
+fn load_stamped_types_for_building(
+    building_id: &str,
+    building_root: Option<&Path>,
+) -> BTreeMap<String, String> {
+    let mut types = BTreeMap::new();
+    if let Some(root) = building_root {
+        let path = root.join(crate::equipment_types::EQUIPMENT_TYPES_FILE);
+        if let Ok(text) = std::fs::read_to_string(path) {
+            if let Ok(m) = serde_json::from_str::<BTreeMap<String, String>>(&text) {
+                types.extend(m);
+            }
+        }
     }
+    for (k, v) in crate::equipment_types::load_type_map(&parquet_out_dir(), Some(building_id)) {
+        types.entry(k).or_insert(v);
+    }
+    types
+}
+
+/// Resolve display type + provenance for mapping inventory (DM-04).
+fn resolve_mapping_equipment_type(
+    equipment_id: &str,
+    stamped_types: &BTreeMap<String, String>,
+) -> (String, Option<String>, &'static str) {
+    let raw = stamped_types.get(equipment_id).cloned();
+    let display =
+        crate::equipment_types::api_equipment_type_for(equipment_id, raw.as_deref()).to_string();
+    let source = if raw
+        .as_deref()
+        .and_then(crate::equipment_types::canonical_kind)
+        .is_some()
+    {
+        "package"
+    } else {
+        "id"
+    };
+    (display, raw, source)
 }
 
 /// Infer VAV→AHU parent from equipment id tokens (e.g. `VAV_1_AHU_2` → `AHU_2`).
@@ -1327,6 +1351,7 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
     }
 
     let all_ids = list_equipment_ids(&building_root);
+    let stamped_types = load_stamped_types_for_building(&building_id, Some(&building_root));
     let selected: Vec<String> = match equipment_id.map(str::trim).filter(|s| !s.is_empty()) {
         Some(eq) => match validate_id(eq) {
             Ok(id) => {
@@ -1361,6 +1386,15 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
         let Some(eq_dir) = find_equipment_dir(&building_root, eq_id) else {
             continue;
         };
+        let (eq_type, eq_type_raw, eq_type_source) =
+            resolve_mapping_equipment_type(eq_id, &stamped_types);
+        let parent_proposal = infer_parent_ahu(eq_id, &all_ids);
+        // Guessed parent is a reviewable proposal only — never a confirmed feeds edge (DM-04).
+        let (parent_ahu, parent_ahu_source): (Option<String>, Option<&'static str>) =
+            match &parent_proposal {
+                Some(p) => (Some(p.clone()), Some("inferred")),
+                None => (None, None),
+            };
         let cols_path = eq_dir.join("columns.csv");
         let history_path = eq_dir.join("history_wide.csv");
         let (columns_order, roles) = match read_columns_csv_raw(&cols_path) {
@@ -1369,8 +1403,11 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
                 blocker_count += 1;
                 equipment.push(json!({
                     "equipment_id": eq_id,
-                    "equipment_type": infer_equipment_type_local(eq_id),
-                    "parent_ahu": infer_parent_ahu(eq_id, &all_ids),
+                    "equipment_type": eq_type,
+                    "equipment_type_raw": eq_type_raw,
+                    "equipment_type_source": eq_type_source,
+                    "parent_ahu": parent_ahu,
+                    "parent_ahu_source": parent_ahu_source,
                     "ok": false,
                     "error": e,
                     "blockers": ["columns.csv unreadable"],
@@ -1412,11 +1449,16 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
         if !unmapped.is_empty() {
             warnings.push(format!("{} unmapped column(s)", unmapped.len()));
         }
-        let parent_ahu = infer_parent_ahu(eq_id, &all_ids);
-        let eq_type = infer_equipment_type_local(eq_id);
-        if eq_type == "VAV" && parent_ahu.is_none() {
+        let kind = crate::equipment_types::kind_for(eq_id, eq_type_raw.as_deref());
+        if kind == "vav" && parent_ahu.is_none() {
             warnings.push(
                 "VAV has no inferred parent AHU — set relationship in session role_map when known"
+                    .into(),
+            );
+        }
+        if parent_ahu_source == Some("inferred") {
+            warnings.push(
+                "parent_ahu is an id-heuristic proposal (parent_ahu_source=inferred) — not confirmed topology"
                     .into(),
             );
         }
@@ -1446,7 +1488,10 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
         equipment.push(json!({
             "equipment_id": eq_id,
             "equipment_type": eq_type,
+            "equipment_type_raw": eq_type_raw,
+            "equipment_type_source": eq_type_source,
             "parent_ahu": parent_ahu,
+            "parent_ahu_source": parent_ahu_source,
             "ok": blockers.is_empty(),
             "columns": column_rows,
             "roles": roles,
@@ -1671,38 +1716,10 @@ pub fn list_package_buildings_handler() -> Value {
         }
     }
     // Union live / package historian partitions so MQTT sites appear like CSV.
+    // Wave U V7: also scan tenants/{tid}/building=* and tenants/{tid}/history/…
     let pq = crate::fdd::registry_api::parquet_root();
-    if let Ok(rd) = std::fs::read_dir(pq.join("history")) {
-        for e in rd.flatten() {
-            if !e.path().is_dir() {
-                continue;
-            }
-            if let Some(name) = e
-                .file_name()
-                .to_str()
-                .and_then(|n| n.strip_prefix("building_id="))
-            {
-                if !name.is_empty() {
-                    buildings.push(name.to_string());
-                }
-            }
-        }
-    }
-    if let Ok(rd) = std::fs::read_dir(&pq) {
-        for e in rd.flatten() {
-            if !e.path().is_dir() {
-                continue;
-            }
-            if let Some(name) = e
-                .file_name()
-                .to_str()
-                .and_then(|n| n.strip_prefix("building="))
-            {
-                if !name.is_empty() {
-                    buildings.push(name.to_string());
-                }
-            }
-        }
+    for bid in fdd_store::list_building_ids(&pq) {
+        buildings.push(bid);
     }
     buildings.sort();
     buildings.dedup();
@@ -2124,6 +2141,64 @@ mod tests {
             "single AHU sibling fallback"
         );
         assert_eq!(infer_parent_ahu("AHU_1", &siblings), None);
+    }
+
+    #[test]
+    fn dm04_stamped_opaque_id_beats_id_heuristic() {
+        // AC_1 has no AHU token; stamp must win (DM-04).
+        let (display, raw, source) = resolve_mapping_equipment_type(
+            "AC_1",
+            &BTreeMap::from([("AC_1".into(), "ahu".into())]),
+        );
+        assert_eq!(display, "AHU");
+        assert_eq!(raw.as_deref(), Some("ahu"));
+        assert_eq!(source, "package");
+        let (display2, _, source2) = resolve_mapping_equipment_type("AC_1", &BTreeMap::new());
+        assert_eq!(display2, "GENERAL");
+        assert_eq!(source2, "id");
+    }
+
+    #[test]
+    fn dm04_mapping_inventory_honors_equipment_types_json() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd_dm04_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::env::remove_var("OPENFDD_STORAGE_URL");
+        std::env::set_var("OPENFDD_WORKSPACE", &tmp);
+        std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.join(".cache/parquet"));
+
+        let bid = "DM04_STAMP_BLDG";
+        let broot = tmp.join("data/csv_buildings").join(bid);
+        let eq_dir = broot.join("AC_1");
+        std::fs::create_dir_all(&eq_dir).unwrap();
+        std::fs::write(
+            eq_dir.join("history_wide.csv"),
+            "timestamp_utc,SF_SPD\n2024-01-01T00:00:00Z,1.0\n",
+        )
+        .unwrap();
+        std::fs::write(eq_dir.join("columns.csv"), "column,role\nSF_SPD,fan_cmd\n").unwrap();
+        std::fs::write(
+            broot.join(crate::equipment_types::EQUIPMENT_TYPES_FILE),
+            r#"{"AC_1":"ahu"}"#,
+        )
+        .unwrap();
+
+        let inv = get_package_mapping_handler(bid, Some("AC_1"));
+        assert_eq!(inv["ok"], json!(true), "{inv}");
+        let eq0 = &inv["equipment"][0];
+        assert_eq!(eq0["equipment_id"], json!("AC_1"));
+        assert_eq!(eq0["equipment_type"], json!("AHU"), "{eq0}");
+        assert_eq!(eq0["equipment_type_raw"], json!("ahu"));
+        assert_eq!(eq0["equipment_type_source"], json!("package"));
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]

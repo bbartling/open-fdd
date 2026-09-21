@@ -2,7 +2,7 @@
 
 **Read this first** if you are new to this checkout, machine, or Cursor session.
 Prefer in-repo docs over chat memory. This is the operator path for the current
-Wave T Soft-OPEN closeout.
+**Wave U** security-first spine (supersedes Wave T).
 
 ## Current pins (re-check live before acting)
 
@@ -11,7 +11,8 @@ Wave T Soft-OPEN closeout.
 | **FQ OPS PINNED** | `3.5.31` / `sha-7b81eb8` · stress `reports/nightly-ot-bench_20260919T195100Z/` · edge **`vim-1`** |
 | **Hub smoke tip** (no FQ claim) | `3.5.33` / `sha-3cd3745` · backup `20260919T231221Z` |
 | Living Soft-OPEN / tip log | [`BUG_REPORT_WAVE_P.md`](BUG_REPORT_WAVE_P.md) |
-| Active master plan | [`.cursor/plans/wave_t_soft-open_closeout.plan.md`](../../.cursor/plans/wave_t_soft-open_closeout.plan.md) |
+| **Active master** | [`WAVE_U_MASTER.md`](WAVE_U_MASTER.md) · [`.cursor/plans/wave_u_security_hardening_master.plan.md`](../../.cursor/plans/wave_u_security_hardening_master.plan.md) |
+| Findings child | [`.cursor/plans/security_railway_ot_nessus_assurance.plan.md`](../../.cursor/plans/security_railway_ot_nessus_assurance.plan.md) |
 | Agent law | [`openfdd_agent_spec/AGENTS.md`](../../openfdd_agent_spec/AGENTS.md) · [`CONTAINER_AGENT.md`](../../openfdd_agent_spec/CONTAINER_AGENT.md) |
 | Patch handbook | [`PATCH_CYCLE.md`](PATCH_CYCLE.md) · [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) |
 
@@ -37,19 +38,21 @@ bensbench x86 fieldbus  --MQTTS-->  Railway openfdd-mqtt
 - Fieldbus **not** on Railway. Live OT edge id is **`vim-1`** (not local kit `pi-1` unless that is registered).
 - One open product PR at a time; squash-merge `--delete-branch`; 0 stale `tip/` / `docs/` remotes.
 
-## Wave T execution order
+## Wave U execution order
 
-Follow [`.cursor/plans/wave_t_soft-open_closeout.plan.md`](../../.cursor/plans/wave_t_soft-open_closeout.plan.md):
+Follow [`WAVE_U_MASTER.md`](WAVE_U_MASTER.md) (security spine first; many tiny VERSION bumps OK):
 
-1. **H0** hygiene + ACME MQTTS live + confirm Soft-OPEN hang if still present  
-2. **T0** fix `acme-fdd-run-hang` → `3.5.34` → GHCR → smoke (ACME FDD completes)  
-3. **T1** S5 data-model remainder + model gate → smoke  
-4. **T2** PyPI M&V oracle → smoke  
-5. **T_sec** security harness MT-breadth expand (see below) — may fold into T0 or T1 tip  
-6. **T3** SQL twins + Metering UI → GHCR → fieldbus → **MEGA FQ** `OPENFDD_SECURITY_EXECUTE=1`  
-7. Closeout: BUG_REPORT OPS PINNED + agent_spec pins + Soft-OPEN CLOSED/remainders  
+1. **U0** master MD + Soft-OPEN inventory + SUPERSEDE prior plans  
+2. **U1** evaluator integrity (E01–E08) + CI wire  
+3. **U2** MT harness breadth (Burp-class isolation)  
+4. **U3** standalone HTTPS + fieldbus management fail-closed  
+5. **U4** MQTT key modes + generated tenant ACL  
+6. **U5** authenticated ZAP AF on disposable candidate  
+7. **U6** Trivy digests + Nessus-pass readiness (real Nessus Soft-OPEN/BLOCKED until licensed scan)  
+8. **Interrupt** `acme-fdd-run-hang` whenever it blocks ops  
+9. **After spine** S5 → PyPI → SQL twins → **MEGA FQ** `OPENFDD_SECURITY_EXECUTE=1`  
 
-Child detail: `wave_s3_*` / `wave_s4_*` / `wave_s5_*` plans under `.cursor/plans/`.
+Wave T plans are **SUPERSEDED** — do not play them. Product child detail: `wave_s3_*` / `wave_s4_*` / `wave_s5_*`.
 
 ## Tip loop (every product tip)
 
@@ -84,7 +87,7 @@ Update [`BUG_REPORT_WAVE_P.md`](BUG_REPORT_WAVE_P.md) + `SESSION_LOG` + ops pin 
 
 **Target for our product:** the Python suite must **outperform a human Burp session on multi-tenant isolation and JWT/role matrices** — more routes, more A/B canaries, deterministic detectors, CI + FQ gates, no click fatigue. It must **not** claim “better than Burp at everything”; ZAP/Burp/Kali still own active-scan breadth until Soft-OPEN AF lands.
 
-Inventory honesty today (~138 routes): only a minority are `IMPLEMENTED` with suite emission — rest `PLANNED` / `BLOCKED_POLICY`. Wave T **T_sec** expands IMPLEMENTED on high-value authenticated GETs + foreign deny (session-config / mapping / datasets / analytics) without marking PLANNED as tested.
+Inventory honesty today (~138 routes): only a minority are `IMPLEMENTED` with suite emission — rest `PLANNED` / `BLOCKED_POLICY`. Wave U **U2** expands IMPLEMENTED on high-value authenticated GETs + foreign deny (session-config / mapping / datasets / analytics) without marking PLANNED as tested.
 
 ### Commands (offline first)
 
@@ -106,12 +109,13 @@ export OPENFDD_SECURITY_EXECUTE=1
 # wired by gates 25/25b inside run_railway_hub_stress.sh
 ```
 
-Evidence matrix: [`SECURITY_HARNESS_EVIDENCE_3.5.30.md`](SECURITY_HARNESS_EVIDENCE_3.5.30.md) (refresh tip SHA on Wave T closeout).  
-README: [`scripts/security/README.md`](../../scripts/security/README.md).
+Evidence matrix: [`SECURITY_HARNESS_EVIDENCE_3.5.30.md`](SECURITY_HARNESS_EVIDENCE_3.5.30.md) (refresh tip SHA on Wave U tips).  
+README: [`scripts/security/README.md`](../../scripts/security/README.md).  
+Full Soft-OPEN table: [`WAVE_U_MASTER.md`](WAVE_U_MASTER.md).
 
 ## Soft-OPEN that stay Soft-OPEN (do not tip as “done”)
 
-Stage C IdP/MFA · Kali ZAP AF · MQTT ACL staging · local BACnet FEC · `acme-oa-t-dup-reject` catalog noise · RDF-authoritative migration.
+Stage C IdP/MFA · real Nessus assessment (until licensed isolated scan) · local BACnet FEC · `acme-oa-t-dup-reject` catalog noise · historian N-building scale · RDF-authoritative migration. ZAP AF and MQTT ACL are **Wave U U4/U5 tips**, not greenwash CLOSED without evidence.
 
 ## Companion diy-bacnet-router lab (bensbench MS/TP)
 

@@ -122,6 +122,25 @@ describe("dataModelTurtle", () => {
     expect(ttl).not.toMatch(/phantom/);
   });
 
+  it("DM-04: skips inferred parent_ahu in Turtle facts", () => {
+    const ttl = buildDataModelTurtle({
+      ok: true,
+      building_id: "B1",
+      equipment: [
+        {
+          equipment_id: "VAV_9",
+          equipment_type: "VAV",
+          parent_ahu: "AHU_1",
+          parent_ahu_source: "inferred",
+          ok: true,
+          roles: { ZONE_T: "zone_t" },
+        },
+      ],
+    });
+    expect(ttl).toContain("ofdd:eq_B1__VAV_9");
+    expect(ttl).not.toContain("ofdd:parentAhu");
+  });
+
   it("DM-03: unmapped-only equipment still emits unmappedColumn", () => {
     const ttl = buildDataModelTurtle({
       ok: true,

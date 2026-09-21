@@ -168,14 +168,34 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     if !has_inline {
         let max_gap = req.max_gap_seconds.unwrap_or(900.0);
         let filter = req.query.equipment_ids.as_deref();
-        match historian::runtime_from_history(filter, max_gap, req.query.building_id.as_deref())
-            .await
+        // ACME-scale historians: unbounded LEAD over full Parquet exceeds edge
+        // timeouts (~180s → 502). Default to a 90-day lookback when start omitted.
+        let defaulted_start = req.query.start.is_none();
+        let start = req
+            .query
+            .start
+            .or_else(|| Some(Utc::now() - chrono::Duration::days(90)));
+        let end = req.query.end;
+        match historian::runtime_from_history(
+            filter,
+            max_gap,
+            req.query.building_id.as_deref(),
+            start,
+            end,
+        )
+        .await
         {
             Ok(Some(mut env)) => {
                 let (qv, mut warnings) = resolve_query_version(req, QV_RUNTIME);
                 env.query_version = qv;
                 env.job_id = req.query.job_id.clone().or(env.job_id);
                 env.run_id = req.query.run_id.clone().or(env.run_id);
+                if defaulted_start {
+                    warnings.push(
+                        "runtime defaulted start to last 90 days; pass query.start for a custom window"
+                            .into(),
+                    );
+                }
                 warnings.append(&mut env.warnings);
                 env.warnings = warnings;
                 return env;

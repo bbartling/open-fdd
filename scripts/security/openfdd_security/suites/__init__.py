@@ -3,7 +3,11 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
+import tempfile
 import time
+from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlencode
 
@@ -35,6 +39,33 @@ def _is_json_object(body: bytes) -> bool:
 def _looks_html(body: bytes) -> bool:
     t = body[:200].lower()
     return b"<html" in t or b"<!doctype" in t
+
+
+def _nonempty_own_control(body: bytes, canary: str = "") -> bool:
+    """Positive own-object control: nonempty schema, not {} / [] / HTML."""
+    if not body or body.strip() in (b"", b"[]", b"{}"):
+        return False
+    if _looks_html(body):
+        return False
+    if canary and canary.encode() in body:
+        return True
+    try:
+        data = json.loads(body.decode("utf-8"))
+    except Exception:
+        return False
+    if isinstance(data, list):
+        return len(data) > 0
+    if isinstance(data, dict):
+        if not data:
+            return False
+        for key in ("equipment", "items", "buildings", "data", "rows"):
+            val = data.get(key)
+            if isinstance(val, list) and len(val) > 0:
+                return True
+            if isinstance(val, dict) and val:
+                return True
+        return any(v not in (None, "", [], {}) for v in data.values())
+    return False
 
 
 class SuiteContext:
@@ -118,14 +149,33 @@ def run_suite_x(ctx: SuiteContext) -> None:
         ("/api/fdd/rules", "x.preauth.anon401.get_api_fdd_rules"),
         ("/api/datasets", "x.preauth.anon401.get_api_datasets"),
         ("/api/csv/import/package/mapping", "x.preauth.anon401.get_api_csv_import_package_mapping"),
+        (
+            "/api/csv/import/package/mapping/ttl",
+            "x.preauth.anon401.get_api_csv_import_package_mapping_ttl",
+        ),
         # Prefer a live analytics GET (overview path is not routed → 404 bypasses auth layer).
         ("/api/analytics/sql-anomaly/status", "x.preauth.anon401.get_api_analytics_overview"),
+        ("/api/csv/import/package/buildings", "x.preauth.anon401.get_api_csv_import_package_buildings"),
+        ("/api/fdd/series", "x.preauth.anon401.get_api_fdd_series"),
         ("/api/admin/users", "x.preauth.anon401.get_api_admin_users"),
         ("/api/jobs", "x.preauth.anon401.get_api_jobs"),
         ("/api/agent/tools", "x.preauth.anon401.get_api_agent_tools"),
+        ("/api/analytics/ahu-health", "x.preauth.anon401.post_api_analytics_ahu_health"),
+        ("/api/analytics/vav-health", "x.preauth.anon401.post_api_analytics_vav_health"),
+        ("/api/analytics/sensor-faults", "x.preauth.anon401.post_api_analytics_sensor_faults"),
+        ("/api/analytics/rcx/ahu", "x.preauth.anon401.post_api_analytics_rcx_ahu"),
     ):
         try:
-            r = ctx.client.request("GET", path)
+            # Explicit POST for analytics mutations in this batch.
+            if path in (
+                "/api/analytics/ahu-health",
+                "/api/analytics/vav-health",
+                "/api/analytics/sensor-faults",
+                "/api/analytics/rcx/ahu",
+            ):
+                r = ctx.client.request("POST", path, json_body={})
+            else:
+                r = ctx.client.request("GET", path)
             # local_open auth-off may 200 — mark N/A for that profile
             if ctx.profile == "local_open":
                 ctx.check(
@@ -410,18 +460,29 @@ def _login_me(
         role = (me_data.get("role") or "").lower()
         expected_role = (ident.role or "").lower()
         sub = str(me_data.get("sub") or me_data.get("username") or "")
-        if expected_role and role and role != expected_role:
+        if expected_role and role != expected_role:
             ctx.check(
                 check_id,
                 "X",
                 f"login/me {alias}",
                 "FAIL",
-                detail=f"role mismatch expected={expected_role} got={role}",
+                detail=f"role mismatch expected={expected_role} got={role or 'missing'}",
                 identity_alias=alias,
                 detector_id="wrong_identity",
             )
             return
-        if username and sub and sub != username and sub.lower() != username.lower():
+        if not sub:
+            ctx.check(
+                check_id,
+                "X",
+                f"login/me {alias}",
+                "FAIL",
+                detail="missing subject on /api/auth/me",
+                identity_alias=alias,
+                detector_id="wrong_identity",
+            )
+            return
+        if username and sub != username and sub.lower() != username.lower():
             ctx.check(
                 check_id,
                 "X",
@@ -432,13 +493,47 @@ def _login_me(
                 detector_id="wrong_identity",
             )
             return
+        expected_tenants = list(getattr(ident, "tenant_ids", None) or [])
+        if expected_tenants:
+            raw_tenants = me_data.get("tenant_ids")
+            if raw_tenants is None:
+                raw_tenants = me_data.get("tenants")
+            if raw_tenants is None:
+                raw_tenants = me_data.get("tenant_id") or me_data.get("tenant")
+            if isinstance(raw_tenants, list):
+                got_tenants = [
+                    str(tenant).strip()
+                    for tenant in raw_tenants
+                    if str(tenant).strip()
+                ]
+            elif raw_tenants is None:
+                got_tenants = []
+            else:
+                tenant = str(raw_tenants).strip()
+                got_tenants = [tenant] if tenant else []
+            expected_set = {str(tenant).strip() for tenant in expected_tenants}
+            got_set = set(got_tenants)
+            if got_set != expected_set:
+                ctx.check(
+                    check_id,
+                    "X",
+                    f"login/me {alias}",
+                    "FAIL",
+                    detail=(
+                        f"tenant membership mismatch expected={sorted(expected_set)} "
+                        f"got={sorted(got_set)}"
+                    ),
+                    identity_alias=alias,
+                    detector_id="wrong_identity",
+                )
+                return
         ctx.check(
             check_id,
             "X",
             f"login/me {alias}",
             "PASS",
             identity_alias=alias,
-            observed=f"role={role or 'present'} sub={sub or 'present'}",
+            observed=f"role={role or 'present'} sub={sub}",
         )
     except TransportError as exc:
         ctx.check(check_id, "X", f"login/me {alias}", "ERROR", detail=str(exc))
@@ -447,14 +542,15 @@ def _login_me(
 def run_suite_y(ctx: SuiteContext) -> None:
     """Authorization: own success + foreign denial + detectors."""
     fx = ctx.fx
-    tok_a = ctx.tokens.get("operator_a") or ctx.tokens.get("admin")
+    # Never fall back to admin for tenant operator A (S01).
+    tok_a = ctx.tokens.get("operator_a")
     tok_b = ctx.tokens.get("operator_b")
     tok_viewer = ctx.tokens.get("viewer_a") or ctx.tokens.get("viewer")
 
     if not tok_a:
         # Attempt login if credentials exist
         _login_me(ctx, "operator_a", "y.authz._login_a", default_user="acme-ops")
-        tok_a = ctx.tokens.get("operator_a") or ctx.tokens.get("admin")
+        tok_a = ctx.tokens.get("operator_a")
     if not tok_b and "operator_b" in ctx.cfg.identities:
         _login_me(ctx, "operator_b", "y.authz._login_b", default_user="b100-ops")
         tok_b = ctx.tokens.get("operator_b")
@@ -472,7 +568,7 @@ def run_suite_y(ctx: SuiteContext) -> None:
             "y.detector.html_200_not_deny",
             "y.detector.foreign_canary_leak",
         ):
-            ctx.check(cid, "Y", cid, "BLOCKED", detail="no operator_a/admin token")
+            ctx.check(cid, "Y", cid, "BLOCKED", detail="no operator_a token (admin fallback removed)")
         return
 
     # Positive own control for A
@@ -491,33 +587,23 @@ def run_suite_y(ctx: SuiteContext) -> None:
                 detector_id="always_401",
                 identity_alias="operator_a",
             )
-        elif r.status == 200 and _looks_html(r.body):
-            ctx.check(
-                "y.authz.a_own_building_control",
-                "Y",
-                "A own building equipment",
-                "FAIL",
-                detail="HTML 200 is not equipment schema",
-                detector_id="html_200",
-            )
-        elif r.status == 200 and _is_json_object(r.body):
-            # Empty list without schema markers may be soft — require object
+        elif r.status == 200 and _nonempty_own_control(r.body, fx.canary_a):
             ctx.check(
                 "y.authz.a_own_building_control",
                 "Y",
                 "A own building equipment",
                 "PASS",
-                expected="200+json",
+                expected="200+nonempty schema",
                 observed="200",
                 identity_alias="operator_a",
             )
-        elif r.status == 200 and r.body.strip() in (b"", b"[]", b"{}"):
+        elif r.status == 200:
             ctx.check(
                 "y.authz.a_own_building_control",
                 "Y",
                 "A own building equipment",
                 "FAIL",
-                detail="empty 200 is not positive own-object control",
+                detail="empty/soft 200 is not positive own-object control",
                 detector_id="empty_200",
             )
         else:
@@ -736,29 +822,49 @@ def run_suite_y(ctx: SuiteContext) -> None:
             r = ctx.client.request(
                 "GET", f"/api/fdd/equipment?{q_b}", token=tok_b
             )
+            own_ok = r.status == 200 and _nonempty_own_control(r.body, fx.canary_b)
             ctx.check(
                 "y.authz.b_own_building_control",
                 "Y",
                 "B own building equipment",
-                "PASS" if r.status == 200 and not _looks_html(r.body) else "FAIL",
+                "PASS" if own_ok else "FAIL",
                 observed=_status_of(r),
+                detail=None if own_ok else "empty/soft 200 is not positive own-object control",
+                detector_id=None if own_ok else "empty_200",
             )
             r2 = ctx.client.request(
                 "GET", f"/api/fdd/equipment?{q}", token=tok_b
             )
+            leak = fx.canary_a.encode() in r2.body
             if r2.status == 401:
                 st = "ERROR"
+                detail = "401 with nominally valid token"
+            elif leak:
+                st = "FAIL"
+                detail = "foreign canary present in deny/response body"
             elif r2.status in (403, 404):
                 st = "PASS"
+                detail = None
             else:
                 st = "FAIL"
+                detail = f"unexpected status {r2.status}"
             ctx.check(
                 "y.authz.b_foreign_building_denied",
                 "Y",
                 "B denied foreign building",
                 st,
                 observed=_status_of(r2),
+                detail=detail,
+                detector_id="foreign_canary" if leak else None,
             )
+            if leak:
+                ctx.check(
+                    "y.detector.foreign_canary_leak",
+                    "Y",
+                    "detector: foreign canary",
+                    "FAIL",
+                    detector_id="foreign_canary",
+                )
         except TransportError as exc:
             ctx.check("y.authz.b_own_building_control", "Y", "B own", "ERROR", detail=str(exc))
             ctx.check("y.authz.b_foreign_building_denied", "Y", "B foreign", "ERROR", detail=str(exc))
@@ -778,27 +884,52 @@ def run_suite_y(ctx: SuiteContext) -> None:
             detail="operator_b credentials missing",
         )
 
-    # Viewer mutation
+    # Viewer mutation: prove authenticated viewer read first; 401 ≠ role deny (E07).
     if not tok_viewer and "viewer_a" in ctx.cfg.identities:
         _login_me(ctx, "viewer_a", "y.authz._login_viewer", default_user="viewer")
         tok_viewer = ctx.tokens.get("viewer_a")
     if tok_viewer:
         try:
-            r = ctx.client.request(
-                "POST",
-                "/api/auth/agent-token",
-                token=tok_viewer,
-                json_body={},
-            )
-            ctx.check(
-                "y.authz.viewer_mutation_denied",
-                "Y",
-                "viewer cannot mint agent-token",
-                "PASS" if r.status in (403, 401) else "FAIL",
-                expected="403",
-                observed=_status_of(r),
-                detector_id="viewer_mutation",
-            )
+            me = ctx.client.request("GET", "/api/auth/me", token=tok_viewer)
+            if me.status != 200 or not _is_json_object(me.body):
+                ctx.check(
+                    "y.authz.viewer_mutation_denied",
+                    "Y",
+                    "viewer cannot mint agent-token",
+                    "ERROR",
+                    detail="viewer identity not confirmed via /api/auth/me",
+                    detector_id="viewer_mutation",
+                )
+            else:
+                role = str((me.json() or {}).get("role") or "").lower()
+                if role and role not in ("viewer", "read", "readonly"):
+                    ctx.check(
+                        "y.authz.viewer_mutation_denied",
+                        "Y",
+                        "viewer cannot mint agent-token",
+                        "FAIL",
+                        detail=f"expected viewer role, got {role}",
+                        detector_id="wrong_identity",
+                    )
+                else:
+                    r = ctx.client.request(
+                        "POST",
+                        "/api/auth/agent-token",
+                        token=tok_viewer,
+                        json_body={},
+                    )
+                    # 401 = auth failure, not role proof; require authorization deny.
+                    st = "PASS" if r.status == 403 else "FAIL"
+                    ctx.check(
+                        "y.authz.viewer_mutation_denied",
+                        "Y",
+                        "viewer cannot mint agent-token",
+                        st,
+                        expected="403",
+                        observed=_status_of(r),
+                        detector_id="viewer_mutation",
+                        detail=None if r.status == 403 else "401 is not viewer-role denial proof",
+                    )
         except TransportError as exc:
             ctx.check(
                 "y.authz.viewer_mutation_denied",
@@ -932,6 +1063,10 @@ def run_suite_y(ctx: SuiteContext) -> None:
             "/api/csv/import/package/mapping",
             "y.authz.a_foreign_package_mapping_denied",
         ),
+        (
+            "/api/csv/import/package/mapping/ttl",
+            "y.authz.a_foreign_package_mapping_ttl_denied",
+        ),
     ):
         try:
             q_b = urlencode({"building_id": fx.building_b})
@@ -959,6 +1094,119 @@ def run_suite_y(ctx: SuiteContext) -> None:
             )
         except TransportError as exc:
             ctx.check(foreign_cid, "Y", f"{path} foreign", "ERROR", detail=str(exc))
+
+    # Additional high-value GETs: FDD results + RCx presets + equipment + series + buildings (Wave U V3).
+    for path, foreign_cid in (
+        ("/api/fdd/results", "y.authz.a_foreign_fdd_results_denied"),
+        ("/api/analytics/rcx/presets", "y.authz.a_foreign_analytics_rcx_presets_denied"),
+        ("/api/fdd/equipment", "y.authz.a_foreign_fdd_equipment_denied"),
+        ("/api/fdd/series", "y.authz.a_foreign_fdd_series_denied"),
+        (
+            "/api/csv/import/package/buildings",
+            "y.authz.a_foreign_package_buildings_denied",
+        ),
+    ):
+        try:
+            q_own = urlencode({"building_id": fx.building_a})
+            r_own = ctx.client.request("GET", f"{path}?{q_own}", token=tok_a)
+            own_cid = foreign_cid.replace("_foreign_", "_own_").replace("_denied", "")
+            if r_own.status == 401:
+                own_st = "ERROR"
+            elif r_own.status == 200 and _nonempty_own_control(r_own.body, fx.canary_a):
+                own_st = "PASS"
+            elif r_own.status == 200:
+                # Empty list can be a healthy empty building; {} is not.
+                try:
+                    data = json.loads(r_own.body.decode())
+                    if isinstance(data, list):
+                        own_st = "PASS"
+                    elif isinstance(data, dict) and data:
+                        own_st = "PASS"
+                    else:
+                        own_st = "BLOCKED"
+                except Exception:
+                    own_st = "BLOCKED"
+            else:
+                own_st = "BLOCKED" if r_own.status in (403, 404) else "FAIL"
+            ctx.check(
+                own_cid,
+                "Y",
+                f"A own {path}",
+                own_st,
+                observed=_status_of(r_own),
+                path_template=path,
+            )
+            q_b = urlencode({"building_id": fx.building_b})
+            r_f = ctx.client.request("GET", f"{path}?{q_b}", token=tok_a)
+            leak = fx.canary_b.encode() in r_f.body
+            if r_f.status == 401:
+                deny_st = "ERROR"
+            elif r_f.status in (403, 404) and not leak:
+                deny_st = "PASS"
+            else:
+                deny_st = "FAIL"
+            ctx.check(
+                foreign_cid,
+                "Y",
+                f"A denied foreign {path}",
+                deny_st,
+                expected="403/404",
+                observed=_status_of(r_f),
+                detail="foreign canary leak" if leak else None,
+                path_template=path,
+            )
+        except TransportError as exc:
+            ctx.check(foreign_cid, "Y", f"{path} foreign", "ERROR", detail=str(exc))
+
+    # Analytics POSTs (Wave U V3): own building accepted or empty-ok; foreign denied.
+    for path, foreign_cid in (
+        ("/api/analytics/ahu-health", "y.authz.a_foreign_analytics_ahu_health_denied"),
+        ("/api/analytics/vav-health", "y.authz.a_foreign_analytics_vav_health_denied"),
+        ("/api/analytics/sensor-faults", "y.authz.a_foreign_analytics_sensor_faults_denied"),
+        ("/api/analytics/rcx/ahu", "y.authz.a_foreign_analytics_rcx_ahu_denied"),
+    ):
+        try:
+            body_own = {"building_id": fx.building_a}
+            r_own = ctx.client.request("POST", path, token=tok_a, json_body=body_own)
+            own_cid = foreign_cid.replace("_foreign_", "_own_").replace("_denied", "")
+            if r_own.status == 401:
+                own_st = "ERROR"
+            elif r_own.status in (200, 204):
+                own_st = "PASS"
+            elif r_own.status in (400, 422):
+                # Authz passed; payload/schema rejected — still own-path success for MT.
+                own_st = "PASS"
+            else:
+                own_st = "BLOCKED" if r_own.status in (403, 404) else "FAIL"
+            ctx.check(
+                own_cid,
+                "Y",
+                f"A own POST {path}",
+                own_st,
+                observed=_status_of(r_own),
+                path_template=path,
+            )
+            body_b = {"building_id": fx.building_b}
+            r_f = ctx.client.request("POST", path, token=tok_a, json_body=body_b)
+            leak = fx.canary_b.encode() in r_f.body
+            if r_f.status == 401:
+                deny_st = "ERROR"
+            elif r_f.status in (403, 404) and not leak:
+                deny_st = "PASS"
+            else:
+                deny_st = "FAIL"
+            ctx.check(
+                foreign_cid,
+                "Y",
+                f"A denied foreign POST {path}",
+                deny_st,
+                expected="403/404",
+                observed=_status_of(r_f),
+                detail="foreign canary leak" if leak else None,
+                path_template=path,
+            )
+        except TransportError as exc:
+            ctx.check(foreign_cid, "Y", f"{path} foreign POST", "ERROR", detail=str(exc))
 
 
 def _deny_envelope(body: bytes) -> bool:
@@ -1165,20 +1413,155 @@ def run_suite_z(ctx: SuiteContext) -> None:
 
 
 def run_suite_mqtt_acl(ctx: SuiteContext) -> None:
-    """Optional broker ACL suite — BLOCKED without isolated broker evidence."""
+    """Optional broker ACL suite — generated fixture + observer evidence."""
+    root = Path(__file__).resolve().parents[4]
+    fixture_acl = (
+        root / "scripts" / "security" / "fixtures" / "mqtt_tenant_acl" / "acl"
+    )
+    entrypoint = root / "services" / "mqtt" / "docker-entrypoint-openfdd.sh"
+    observer = root / "scripts" / "security" / "mqtt_tenant_acl_observer.py"
+    gen = (
+        root
+        / "scripts"
+        / "security"
+        / "fixtures"
+        / "mqtt_tenant_acl"
+        / "generate_acl.py"
+    )
+
+    # Key mode 640 (static entrypoint evidence).
+    if entrypoint.is_file() and "chmod 640" in entrypoint.read_text(encoding="utf-8"):
+        ctx.check(
+            "mqtt.key_mode_640",
+            "mqtt_acl",
+            "MQTT private key chmod 640 (not world-readable)",
+            "PASS",
+            detail=str(entrypoint.relative_to(root)),
+        )
+    else:
+        ctx.check(
+            "mqtt.key_mode_640",
+            "mqtt_acl",
+            "MQTT private key chmod 640 (not world-readable)",
+            "FAIL",
+            detail="entrypoint missing chmod 640",
+        )
+
+    # Content semantics via generator (always; no live broker required).
+    if fixture_acl.is_file() and gen.is_file():
+        try:
+            sys_path_hack = str(gen.parent)
+            if sys_path_hack not in sys.path:
+                sys.path.insert(0, sys_path_hack)
+            from generate_acl import semantic_errors  # type: ignore
+
+            errs = semantic_errors(fixture_acl.read_text(encoding="utf-8"))
+            ctx.check(
+                "mqtt.acl.content_semantics",
+                "mqtt_acl",
+                "generated tenant ACL content (A/B own + foreign deny)",
+                "PASS" if not errs else "FAIL",
+                detail=None if not errs else "; ".join(errs),
+            )
+        except Exception as exc:  # noqa: BLE001 — suite must not crash probe
+            ctx.check(
+                "mqtt.acl.content_semantics",
+                "mqtt_acl",
+                "generated tenant ACL content (A/B own + foreign deny)",
+                "ERROR",
+                detail=str(exc),
+            )
+    else:
+        ctx.check(
+            "mqtt.acl.content_semantics",
+            "mqtt_acl",
+            "generated tenant ACL content (A/B own + foreign deny)",
+            "BLOCKED",
+            detail="fixture missing",
+        )
+
+    # Live / positive observer: only when EXECUTE env set (gate 26 owns full run).
+    execute = os.environ.get("OPENFDD_MQTT_ACL_EXECUTE", "0") == "1"
+    evidence = os.environ.get("OPENFDD_MQTT_ACL_EVIDENCE_JSON", "").strip()
+    allowed = ("PASS", "FAIL", "BLOCKED", "SKIPPED", "ERROR")
+    if evidence and Path(evidence).is_file():
+        try:
+            report = json.loads(Path(evidence).read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            report = {"ok": False, "status": "ERROR", "detail": str(exc)}
+        live = (
+            "PASS"
+            if report.get("ok") and report.get("status") == "PASS"
+            else (report.get("status") or "FAIL")
+        )
+        if live not in allowed:
+            live = "FAIL"
+        detail = f"evidence={evidence}"
+        for cid, title in (
+            ("mqtt.acl.own_topic_control", "own topic publish control"),
+            ("mqtt.acl.foreign_topic_denied", "foreign tenant topic denied"),
+        ):
+            ctx.check(cid, "mqtt_acl", title, live, detail=detail)
+        return
+
+    if execute and observer.is_file():
+        out = Path(tempfile.mkdtemp(prefix="mqtt_acl_suite_"))
+        try:
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    str(observer),
+                    "--out-dir",
+                    str(out),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                check=False,
+            )
+            report_path = out / "mqtt_acl_observer.json"
+            if report_path.is_file():
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+            else:
+                report = {
+                    "ok": False,
+                    "status": "ERROR",
+                    "detail": proc.stderr or proc.stdout or "no report",
+                }
+            st = report.get("status") or ("PASS" if report.get("ok") else "FAIL")
+            if st not in allowed:
+                st = "FAIL"
+            detail = f"observer_rc={proc.returncode}"
+            for cid, title in (
+                ("mqtt.acl.own_topic_control", "own topic publish control"),
+                ("mqtt.acl.foreign_topic_denied", "foreign tenant topic denied"),
+            ):
+                ctx.check(cid, "mqtt_acl", title, st, detail=detail)
+        except Exception as exc:  # noqa: BLE001
+            for cid, title in (
+                ("mqtt.acl.own_topic_control", "own topic publish control"),
+                ("mqtt.acl.foreign_topic_denied", "foreign tenant topic denied"),
+            ):
+                ctx.check(cid, "mqtt_acl", title, "ERROR", detail=str(exc))
+        return
+
     ctx.check(
         "mqtt.acl.own_topic_control",
         "mqtt_acl",
-        "own topic pub/sub control",
+        "own topic publish control",
         "BLOCKED",
-        detail="isolated broker fixture not configured; continuity gate is not ACL proof",
+        detail=(
+            "set OPENFDD_MQTT_ACL_EXECUTE=1 or OPENFDD_MQTT_ACL_EVIDENCE_JSON; "
+            "continuity gate is not ACL proof"
+        ),
     )
     ctx.check(
         "mqtt.acl.foreign_topic_denied",
         "mqtt_acl",
-        "foreign topic denied",
+        "foreign tenant topic denied",
         "BLOCKED",
-        detail="isolated broker fixture not configured",
+        detail="set OPENFDD_MQTT_ACL_EXECUTE=1 or OPENFDD_MQTT_ACL_EVIDENCE_JSON",
     )
 
 

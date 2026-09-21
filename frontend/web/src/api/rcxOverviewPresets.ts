@@ -49,7 +49,12 @@ export async function loadOverviewRcxPreset(
   tables: RcxPresetTable[];
   error?: string;
 }> {
-  const body = { building_id: buildingId, max_points: 4000, dt_min_f: 10 };
+  const body = {
+    building_id: buildingId,
+    max_points: 4000,
+    dt_min_f: 10,
+    start: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+  };
   if (presetId in PLANT_FOR) {
     const env = await postRuntime(body);
     const plants = weeklyPlantFigures(env.rows ?? []);

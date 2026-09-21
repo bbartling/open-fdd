@@ -1,3 +1,5 @@
+> **Wave U child detail** — product Soft-OPEN scheduled **after** the security spine. Do not treat as active master.
+
 ---
 name: Wave S2 Camber agent_spec lock
 overview: "Docs tip — Camber Apache-2.0 lock + ADR for one data-model contract (vocab vs tenant instances) + consumer/route matrix (DM-06). GHCR + smoke only."

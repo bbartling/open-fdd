@@ -1,3 +1,5 @@
+> **Wave U child detail** — product Soft-OPEN scheduled **after** the security spine. Do not treat as active master.
+
 ---
 name: Wave S5 data model graph ECM
 overview: "Bounded tip after S2/S3: fix DM-01..10 graph/tenant defects, engineering quantities + ECM adapter, Pages docs, model stress gate for S4 FQ. Smoke after GHCR; FQ only on S4."

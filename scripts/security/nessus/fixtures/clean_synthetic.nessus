@@ -1,0 +1,12 @@
+<?xml version="1.0" ?>
+<NessusClientData_v2>
+  <Report name="openfdd-synthetic-clean">
+    <ReportHost name="192.0.2.10">
+      <HostProperties>
+        <tag name="host-ip">192.0.2.10</tag>
+      </HostProperties>
+      <ReportItem port="0" protocol="tcp" severity="0" pluginID="19506" pluginName="Nessus Scan Information"/>
+      <ReportItem port="443" protocol="tcp" severity="0" pluginID="11219" pluginName="Nessus SYN scanner"/>
+    </ReportHost>
+  </Report>
+</NessusClientData_v2>
