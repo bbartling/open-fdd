@@ -146,13 +146,13 @@ fn safe_building_segment(building_id: Option<&str>) -> Option<String> {
 /// Does **not** fall back to the whole tree (that would mix other buildings).
 /// Returns `Ok(false)` when nothing usable is present.
 ///
-/// Prefer [`open_history_scan`] when the caller will run DataFusion SQL — that
-/// API returns a scan permit that must be held for the full query lifetime.
+/// Prefer [`open_history_scan`] / [`open_history_scan_for_tenant`] when the
+/// caller will run DataFusion SQL — those APIs return a scan permit that must
+/// be held for the full query lifetime.
 pub async fn try_register_history_scoped(
     ctx: &SessionContext,
     building_id: Option<&str>,
 ) -> Result<bool> {
-<<<<<<< HEAD
     try_register_history_scoped_for_tenant(ctx, building_id, None).await
 }
 
@@ -164,29 +164,6 @@ pub async fn try_register_history_scoped_for_tenant(
 ) -> Result<bool> {
     let hub = parquet_root_base();
     if !hub.is_dir() {
-=======
-    try_register_history_scoped_unlocked(ctx, building_id).await
-}
-
-/// Register historian scope and return a scan permit the caller must hold until
-/// DataFusion collect/stream completes (serializes vs runtime H4 compaction).
-pub async fn open_history_scan(
-    ctx: &SessionContext,
-    building_id: Option<&str>,
-) -> Result<(bool, fdd_store::ScanPermit)> {
-    let scan = fdd_store::try_historian_scan_permit()
-        .or_else(|_| Ok::<_, anyhow::Error>(fdd_store::historian_scan_permit_wait()))?;
-    let ok = try_register_history_scoped_unlocked(ctx, building_id).await?;
-    Ok((ok, scan))
-}
-
-async fn try_register_history_scoped_unlocked(
-    ctx: &SessionContext,
-    building_id: Option<&str>,
-) -> Result<bool> {
-    let root = parquet_root();
-    if !root.is_dir() {
->>>>>>> 1355876c (feat(wave-u): V8 historian compaction coordinator (3.5.42))
         return Ok(false);
     }
     match safe_building_segment(building_id) {
@@ -229,6 +206,27 @@ async fn try_register_history_scoped_unlocked(
             }
         },
     }
+}
+
+/// Register historian scope and return a scan permit the caller must hold until
+/// DataFusion collect/stream completes (serializes vs runtime H4 compaction).
+pub async fn open_history_scan(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+) -> Result<(bool, fdd_store::ScanPermit)> {
+    open_history_scan_for_tenant(ctx, building_id, None).await
+}
+
+/// Tenant-aware variant of [`open_history_scan`].
+pub async fn open_history_scan_for_tenant(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+) -> Result<(bool, fdd_store::ScanPermit)> {
+    let scan = fdd_store::try_historian_scan_permit()
+        .or_else(|_| Ok::<_, anyhow::Error>(fdd_store::historian_scan_permit_wait()))?;
+    let ok = try_register_history_scoped_for_tenant(ctx, building_id, preferred_tenant).await?;
+    Ok((ok, scan))
 }
 
 async fn history_columns_async(ctx: &SessionContext) -> Result<HashSet<String>> {
