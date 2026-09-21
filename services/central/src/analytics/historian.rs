@@ -712,12 +712,14 @@ ORDER BY i.equipment_id
                     }
                     let weekly_rows = runtime_weekly_plant_rows(
                         &ctx,
-                        ts_col,
-                        &on_sql,
-                        weekly_oat_col(&cols),
-                        max_gap,
-                        &eq_filter,
-                        &range_sql,
+                        RuntimeWeeklyParams {
+                            ts_col,
+                            on_sql: &on_sql,
+                            oat: weekly_oat_col(&cols),
+                            max_gap,
+                            eq_filter: &eq_filter,
+                            range_sql: &range_sql,
+                        },
                         (plant_signal_label(&cols), &stamped_types),
                     )
                     .await
@@ -781,16 +783,28 @@ ORDER BY i.equipment_id
 /// vibe19 `motor_run_hours_weekly` — does **not** fold equipment into plant totals.
 /// Site OAT is broadcast by timestamp so avg-while-on works when OAT lives on
 /// weather/web rows rather than on the motor equipment itself.
+struct RuntimeWeeklyParams<'a> {
+    ts_col: &'a str,
+    on_sql: &'a str,
+    oat: Option<&'a str>,
+    max_gap: f64,
+    eq_filter: &'a str,
+    range_sql: &'a str,
+}
+
 async fn runtime_weekly_plant_rows(
     ctx: &SessionContext,
-    ts_col: &str,
-    on_sql: &str,
-    oat: Option<&str>,
-    max_gap: f64,
-    eq_filter: &str,
-    range_sql: &str,
+    params: RuntimeWeeklyParams<'_>,
     metadata: (&str, &BTreeMap<String, String>),
 ) -> Result<Vec<Value>> {
+    let RuntimeWeeklyParams {
+        ts_col,
+        on_sql,
+        oat,
+        max_gap,
+        eq_filter,
+        range_sql,
+    } = params;
     let (signal_label, stamped_types) = metadata;
     let oat_by_ts_cte = match oat {
         Some(c) => format!(
