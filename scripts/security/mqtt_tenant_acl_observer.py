@@ -26,13 +26,54 @@ from generate_acl import (  # noqa: E402
     FIXTURE_DIR,
     edge_topic_prefix,
     load_tenants,
+    product_edge_user,
     render_acl,
+    render_product_acl,
     semantic_errors,
     write_acl,
 )
 
 ENTRYPOINT = ROOT / "services" / "mqtt" / "docker-entrypoint-openfdd.sh"
-MOSQUITTO_IMAGE = os.environ.get("OPENFDD_MQTT_ACL_IMAGE", "eclipse-mosquitto:2")
+
+
+def resolve_mqtt_acl_image() -> tuple[str, str]:
+    """Return (image_ref, acl_source) for the live observer.
+
+    Product path (default when EXECUTE / tip pin present): openfdd-mqtt + provisioner ACL.
+    Fixture broker (eclipse-mosquitto) only when explicitly allowed.
+    """
+    allow_fixture = os.environ.get("OPENFDD_MQTT_ACL_ALLOW_FIXTURE_BROKER", "").strip() in (
+        "1",
+        "true",
+        "yes",
+    )
+    explicit = (os.environ.get("OPENFDD_MQTT_ACL_IMAGE") or "").strip()
+    tag = (
+        os.environ.get("OPENFDD_IMAGE_TAG")
+        or os.environ.get("OPENFDD_MQTT_ACL_TAG")
+        or "nightly"
+    ).strip()
+    product = f"ghcr.io/bbartling/openfdd-mqtt:{tag}"
+
+    if allow_fixture and (not explicit or "eclipse-mosquitto" in explicit):
+        return (explicit or "eclipse-mosquitto:2", "fixture")
+    if explicit:
+        if "eclipse-mosquitto" in explicit and not allow_fixture:
+            raise ValueError(
+                "OPENFDD_MQTT_ACL_IMAGE is eclipse-mosquitto but "
+                "OPENFDD_MQTT_ACL_ALLOW_FIXTURE_BROKER!=1 — refuse fixture broker for product gate"
+            )
+        source = "provisioner" if "openfdd-mqtt" in explicit else "custom"
+        return (explicit, source)
+    return (product, "provisioner")
+
+
+# Module-level default for tests / legacy imports; live path re-resolves.
+try:
+    MOSQUITTO_IMAGE, _ACL_SOURCE_DEFAULT = resolve_mqtt_acl_image()
+except ValueError:
+    MOSQUITTO_IMAGE = os.environ.get("OPENFDD_MQTT_ACL_IMAGE", "eclipse-mosquitto:2")
+    _ACL_SOURCE_DEFAULT = "fixture"
 
 
 def now_iso() -> str:
@@ -83,22 +124,30 @@ def _run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=False, capture_output=True, text=True, **kwargs)
 
 
-def run_live_broker(acl_text: str, art: Path) -> dict:
+def run_live_broker(acl_text: str, art: Path, *, image: str, acl_source: str) -> dict:
     """Disposable mosquitto: mTLS identity + ACL; own OK / foreign deny.
 
     Password auth cannot use ':' in usernames; production edge identities use
     colon-separated CNs, so the live observer issues ephemeral client certs
-    whose CN matches the fixture ACL ``user`` lines.
+    whose CN matches the ACL ``user`` lines.
     """
     cfg = load_tenants()
     tenants = cfg["tenants"]
     a, b = tenants[0], tenants[1]
+    # Product CN grammar omits building; fixture ACL uses full edge_user.
+    if acl_source == "provisioner":
+        cn_a = product_edge_user(a["tenant_id"], a["edge_id"])
+        cn_b = product_edge_user(b["tenant_id"], b["edge_id"])
+    else:
+        cn_a = a["edge_user"]
+        cn_b = b["edge_user"]
     name = f"openfdd-mqtt-acl-obs-{os.getpid()}-{int(time.time())}"
     tmp = Path(tempfile.mkdtemp(prefix="mqtt_acl_obs_"))
     result: dict = {
         "check": "mqtt.acl.live_broker_observer",
         "status": "ERROR",
-        "image": MOSQUITTO_IMAGE,
+        "image": image,
+        "acl_source": acl_source,
         "container": name,
         "auth": "mtls_cn",
     }
@@ -184,8 +233,8 @@ def run_live_broker(acl_text: str, art: Path) -> dict:
             )
 
         issue("server", "mqtt", server=True)
-        issue("edge_a", a["edge_user"])
-        issue("edge_b", b["edge_user"])
+        issue("edge_a", cn_a)
+        issue("edge_b", cn_b)
         # Mosquitto runs non-root; disposable certs must be group/world-readable.
         for p in tmp.glob("*.pem"):
             p.chmod(0o644)
@@ -209,7 +258,7 @@ def run_live_broker(acl_text: str, art: Path) -> dict:
             encoding="utf-8",
         )
 
-        _run(["docker", "pull", MOSQUITTO_IMAGE], timeout=180)
+        _run(["docker", "pull", image], timeout=180)
 
         run = _run(
             [
@@ -230,7 +279,7 @@ def run_live_broker(acl_text: str, art: Path) -> dict:
                 f"{tmp}/server.cert.pem:/mosquitto/config/server.cert.pem:ro",
                 "-v",
                 f"{tmp}/server.key.pem:/mosquitto/config/server.key.pem:ro",
-                MOSQUITTO_IMAGE,
+                image,
             ],
             timeout=60,
         )
@@ -294,6 +343,12 @@ def run_live_broker(acl_text: str, art: Path) -> dict:
         allow_payload.write_text("", encoding="utf-8")
         deny_payload.write_text("", encoding="utf-8")
 
+        # Client tools: always use upstream mosquitto image (product entrypoint
+        # is broker-oriented). Broker container uses ``image`` (product when gated).
+        client_image = os.environ.get(
+            "OPENFDD_MQTT_ACL_CLIENT_IMAGE", "eclipse-mosquitto:2"
+        )
+
         def start_sub(cname: str, topic: str, out_file: Path) -> None:
             # Background subscriber; -C 1 exits after one message or we kill it.
             _run(
@@ -307,7 +362,7 @@ def run_live_broker(acl_text: str, art: Path) -> dict:
                     "host",
                     "-v",
                     f"{tmp}:/certs:ro",
-                    MOSQUITTO_IMAGE,
+                    client_image,
                     "mosquitto_sub",
                     "-h",
                     "127.0.0.1",
@@ -339,7 +394,7 @@ def run_live_broker(acl_text: str, art: Path) -> dict:
                     "host",
                     "-v",
                     f"{tmp}:/certs:ro",
-                    MOSQUITTO_IMAGE,
+                    client_image,
                     "mosquitto_pub",
                     "-h",
                     "127.0.0.1",
@@ -435,14 +490,46 @@ def observe(
     allow_skip_live: bool = False,
 ) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
-    # Ensure committed fixture matches generator.
+    # Ensure committed fixture matches generator (static lint).
     write_acl(DEFAULT_ACL)
-    acl_text = render_acl()
+
+    try:
+        image, acl_source = resolve_mqtt_acl_image()
+    except ValueError as e:
+        report = {
+            "ok": False,
+            "status": "FAIL",
+            "soft_open": "mqtt-key-mode-tenant-acl",
+            "folded": ["p2c-mqtt-acl-staging"],
+            "started_at": now_iso(),
+            "error": str(e),
+            "checks": [],
+        }
+        (out_dir / "mqtt_acl_observer.json").write_text(
+            json.dumps(report, indent=2) + "\n", encoding="utf-8"
+        )
+        return report
+
+    if acl_source == "provisioner":
+        acl_text = render_product_acl()
+    else:
+        acl_text = render_acl()
     (out_dir / "acl").write_text(acl_text, encoding="utf-8")
 
     checks = [
         check_key_mode_640(),
         check_acl_content(DEFAULT_ACL),
+        {
+            "check": "mqtt.acl.broker_image_policy",
+            "status": "PASS",
+            "image": image,
+            "acl_source": acl_source,
+            "detail": (
+                "product openfdd-mqtt + provisioner ACL"
+                if acl_source == "provisioner"
+                else "fixture broker allowed via OPENFDD_MQTT_ACL_ALLOW_FIXTURE_BROKER"
+            ),
+        },
     ]
 
     live_status = "SKIPPED"
@@ -464,7 +551,7 @@ def observe(
             }
         )
     elif docker_available():
-        live = run_live_broker(acl_text, out_dir)
+        live = run_live_broker(acl_text, out_dir, image=image, acl_source=acl_source)
         checks.append(live)
         live_status = live["status"]
     else:
@@ -488,7 +575,12 @@ def observe(
             )
             live_status = "SKIPPED"
 
-    hard = [c for c in checks if c["check"] != "mqtt.acl.live_broker_observer"]
+    hard = [
+        c
+        for c in checks
+        if c["check"]
+        not in ("mqtt.acl.live_broker_observer",)
+    ]
     hard_ok = all(c["status"] == "PASS" for c in hard)
     live = next(
         (c for c in checks if c["check"] == "mqtt.acl.live_broker_observer"),
@@ -523,6 +615,8 @@ def observe(
         "folded": ["p2c-mqtt-acl-staging"],
         "started_at": now_iso(),
         "fixture_dir": str(FIXTURE_DIR.relative_to(ROOT)),
+        "image": image,
+        "acl_source": acl_source,
         "live_broker": live_status,
         "checks": checks,
     }

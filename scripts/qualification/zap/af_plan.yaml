@@ -38,6 +38,12 @@ jobs:
       url: "${ZAP_TARGET_ORIGIN}/"
       maxDuration: 5
 
+  # Authenticated coverage proof (UA-04): runner requires /api/auth/me in report.
+  - type: request
+    parameters:
+      url: "${ZAP_TARGET_ORIGIN}/api/auth/me"
+      method: GET
+
   - type: passiveScan-wait
     parameters:
       maxDuration: 10

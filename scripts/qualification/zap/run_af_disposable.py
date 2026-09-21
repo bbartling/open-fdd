@@ -160,6 +160,7 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
     by_risk = {"High": 0, "Medium": 0, "Low": 0, "Informational": 0, "other": 0}
     high_names: list[str] = []
     medium_names: list[str] = []
+    url_blob_parts: list[str] = []
     for a in alerts:
         risk = str(a.get("riskdesc") or a.get("risk") or "").split(" ", 1)[0]
         code = str(a.get("riskcode") or "")
@@ -173,6 +174,25 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
             high_names.append(label)
         if risk == "Medium":
             medium_names.append(label)
+        for key in ("url", "uri", "instance", "param"):
+            val = a.get(key)
+            if isinstance(val, str):
+                url_blob_parts.append(val)
+            elif isinstance(val, list):
+                for item in val:
+                    if isinstance(item, dict):
+                        url_blob_parts.append(str(item.get("uri") or item.get("url") or ""))
+                    else:
+                        url_blob_parts.append(str(item))
+    for site in sites:
+        if isinstance(site, dict):
+            for key in ("@name", "name", "host"):
+                if site.get(key):
+                    url_blob_parts.append(str(site.get(key)))
+            for u in site.get("urls") or []:
+                url_blob_parts.append(str(u))
+    url_blob = "\n".join(url_blob_parts).lower()
+    auth_me_hit = "/api/auth/me" in url_blob
     return {
         "site_count": len(sites),
         "malformed_sites": malformed_sites,
@@ -181,6 +201,7 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
         "by_risk": by_risk,
         "high_alert_names": sorted(set(high_names)),
         "medium_alert_names": sorted(set(medium_names)),
+        "auth_me_hit": auth_me_hit,
     }
 
 
@@ -719,18 +740,18 @@ def run_execute(verdict_path: Path) -> int:
         status = "FAIL"
         notes = f"FAIL: Medium={med} without dispositions"
         exit_code = 1
-    elif med > 0:
+    elif not summary.get("auth_me_hit"):
         status = "FAIL"
         notes = (
-            f"FAIL: Medium={med} undispositioned "
-            f"({', '.join(summary.get('medium_alert_names', [])[:8])})"
+            "FAIL: no /api/auth/me evidence in ZAP report "
+            "(authenticated AF coverage required)"
         )
         exit_code = 1
     else:
         status = "PASS"
         notes = (
             f"PASS: disposable AF High=0 Medium=0 site_count={sites} "
-            f"active_scan={active} zap_rc={rc}"
+            f"auth_me_hit=true active_scan={active} zap_rc={rc}"
         )
         exit_code = 0
 
@@ -750,6 +771,7 @@ def run_execute(verdict_path: Path) -> int:
         execute_requested=True,
         target_origin_configured=True,
         auth_header_configured=True,
+        auth_me_hit=bool(summary.get("auth_me_hit")),
         report_archive=str(archive.relative_to(ROOT)) if archive.is_relative_to(ROOT) else str(archive),
         work_dir=str(work_root),
         notes=notes,

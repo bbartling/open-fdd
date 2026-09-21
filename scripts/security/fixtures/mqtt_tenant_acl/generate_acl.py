@@ -34,6 +34,48 @@ def edge_topic_prefix(tenant_id: str, building_id: str, edge_id: str) -> str:
     )
 
 
+def product_edge_user(tenant_id: str, edge_id: str) -> str:
+    """Production CN grammar: edge:{tenant}:{edge_id} (no building in CN)."""
+    return f"edge:{tenant_id}:{edge_id}"
+
+
+def render_product_acl(cfg: dict[str, Any] | None = None) -> str:
+    """ACL matching TopicBuilder::edge_acl_patterns / central_acl_patterns.
+
+    Used by the live product-image observer. Static fixture lint keeps
+    ``render_acl`` (broader write grant) for historical fixture honesty.
+    """
+    data = cfg or load_tenants()
+    lines = [
+        "# Generated Open-FDD product-shaped tenant ACL (provisioner twin).",
+        "# CN: edge:{tenant}:{edge_id}; writes: telemetry/metadata/discovery/status/acks only.",
+        "",
+    ]
+    for t in data["tenants"]:
+        prefix = edge_topic_prefix(t["tenant_id"], t["building_id"], t["edge_id"])
+        user = product_edge_user(t["tenant_id"], t["edge_id"])
+        lines.append(f"user {user}")
+        lines.append(f"topic write {prefix}/telemetry/#")
+        lines.append(f"topic write {prefix}/metadata/#")
+        lines.append(f"topic write {prefix}/discovery/#")
+        lines.append(f"topic write {prefix}/status")
+        lines.append(f"topic write {prefix}/acks/#")
+        lines.append(f"topic read {prefix}/commands/#")
+        lines.append("")
+    central = data.get("central_user") or "central:ci"
+    lines.append(f"user {central}")
+    for t in data["tenants"]:
+        tid = t["tenant_id"]
+        bid = t["building_id"]
+        eid = t["edge_id"]
+        tree = f"openfdd/v1/tenants/{tid}/buildings/{bid}/#"
+        cmd = f"openfdd/v1/tenants/{tid}/buildings/{bid}/edges/{eid}/commands/#"
+        lines.append(f"topic read {tree}")
+        lines.append(f"topic write {cmd}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def render_acl(cfg: dict[str, Any] | None = None) -> str:
     data = cfg or load_tenants()
     lines = [HEADER.rstrip(), ""]
