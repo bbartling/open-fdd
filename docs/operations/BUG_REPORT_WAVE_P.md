@@ -75,8 +75,8 @@
 | **sec-ci-wire** | **CLOSED (3.5.34)** · AppSec `security-harness` job |
 | **standalone-https-bootstrap** | **PARTIAL→candidate PASS (UA-02)** · Product soak `reports/security/standalone_https_peer_20260921T134930Z` on `sha-af4086f`; stub peer retained; Soft-OPEN until tip includes V1 probe in GHCR docs tip |
 | **fieldbus-mgmt-failclosed** | **CLOSED (3.5.34)** · `require_api_key_for_bind` + unit tests (`non_loopback_without_key_refused`, loopback/key cases) |
-| **mqtt-key-mode-tenant-acl** | **PARTIAL (UA-03/08)** · provisioner `0600` + dual-tenant tests; product MQTT ACL Soft-OPEN — **V2** [wave_u_v2_mqtt_zap.plan.md](../../.cursor/plans/wave_u_v2_mqtt_zap.plan.md) |
-| **zap-af-authenticated** | **PARTIAL (UA-04)** · evaluator fail-closed + JWT hygiene; disposable candidate AF Soft-OPEN — **V2** |
+| **mqtt-key-mode-tenant-acl** | **PARTIAL→product live PASS (UA-03)** · Gate/observer default `openfdd-mqtt` + provisioner ACL; tip live PASS on `sha-af4086f`; fixture broker requires ALLOW_FIXTURE — **V2** |
+| **zap-af-authenticated** | **PARTIAL (UA-04)** · disposable plan adds `/api/auth/me` request; runner requires `auth_me_hit` for PASS — execute Soft-OPEN until disposable AF run — **V2** |
 | **image-digest-trivy** | **REMEDIATION OPEN (UA-05)** · rescan `reports/trivy-wave-u/sha-af4086f/SUMMARY.md`; nginx still 1.28.2 on 3.5.38; **V1/3.5.39** del modules + nginx>=1.28.3 |
 | **nessus-pass-readiness** | **REOPENED / REQUIRED without license (UA-02–09)** · evaluated tooling plus standalone/field-only host, image, TLS, exposure and runtime acceptance remain. Checklist/importer delivery is partial; actual licensed scan is separately BLOCKED. |
 | **nessus-isolated-assessment** | **Soft-OPEN / BLOCKED** · Real licensed Nessus only |

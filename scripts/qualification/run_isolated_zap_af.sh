@@ -100,6 +100,17 @@ fi
 rm -f "$ART/admin.jwt" "$WRK/admin.jwt" 2>/dev/null || true
 echo "OK admin JWT minted (ephemeral env only)"
 
+# UA-04: authenticated /api/auth/me preflight (never log the token).
+ME_CODE="$(docker run --rm --network "$NET" curlimages/curl:8.5.0 -sS -o /dev/null -w '%{http_code}' \
+  -H "Authorization: Bearer ${TOKEN}" \
+  "${TARGET_URL}api/auth/me" || echo 000)"
+if [[ "$ME_CODE" != "200" ]]; then
+  echo "FAIL: authenticated GET /api/auth/me returned HTTP $ME_CODE" >&2
+  exit 1
+fi
+echo "OK /api/auth/me preflight HTTP 200"
+echo '{"auth_me_preflight":true,"status":200}' >"$ART/auth_me_preflight.json"
+
 # Materialize AF plan: expand origin/reportDir only. Authorization stays
 # ${ZAP_AUTH_HEADER_VALUE} and is injected via docker -e (never written to disk).
 sed \

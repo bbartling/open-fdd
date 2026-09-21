@@ -38,6 +38,10 @@ jobs:
       url: "${ZAP_TARGET_ORIGIN}/"
       maxDuration: 5
 
+  # Authenticated /api/auth/me coverage is asserted by run_af_disposable.py
+  # preflight (UA-04). Do not use ZAP job type "request" — older zaproxydocker
+  # digests reject it ("Unrecognised job type: request").
+
   - type: passiveScan-wait
     parameters:
       maxDuration: 10

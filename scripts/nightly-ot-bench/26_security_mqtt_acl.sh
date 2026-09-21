@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Gate 26 — generated tenant MQTT ACL + positive observer (Wave U U4).
-# BLOCKED honesty when OPENFDD_MQTT_ACL_EXECUTE!=1.
-# When EXECUTE=1: runs scripts/security/mqtt_tenant_acl_observer.py (content +
-# key-mode 640; live disposable mosquitto when Docker is available).
+# Gate 26 — product openfdd-mqtt + provisioner ACL observer (Wave U V2 / UA-03).
+# BLOCKED when OPENFDD_MQTT_ACL_EXECUTE!=1.
+# Fixture eclipse-mosquitto only with OPENFDD_MQTT_ACL_ALLOW_FIXTURE_BROKER=1.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ART="${ARTIFACT_DIR:-$(pwd)/reports/security/gate26_$(date -u +%Y%m%dT%H%M%SZ)}"
@@ -22,6 +21,11 @@ if [[ "${OPENFDD_MQTT_ACL_EXECUTE:-0}" != "1" ]]; then
   exit 2
 fi
 
+# Prefer tip pin for product broker image.
+if [[ -z "${OPENFDD_MQTT_ACL_IMAGE:-}" && -n "${OPENFDD_IMAGE_TAG:-}" ]]; then
+  export OPENFDD_MQTT_ACL_IMAGE="ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_IMAGE_TAG}"
+fi
+
 OBS_OUT="$ART/observer"
 mkdir -p "$OBS_OUT"
 set +e
@@ -33,11 +37,29 @@ set -e
 
 if [[ -f "$OBS_OUT/mqtt_acl_observer.json" ]]; then
   cp "$OBS_OUT/mqtt_acl_observer.json" "$ART/mqtt_acl_verdict.json"
+  # Permanent negative: EXECUTE path must not silently use fixture broker.
+  if [[ "${OPENFDD_MQTT_ACL_ALLOW_FIXTURE_BROKER:-0}" != "1" ]]; then
+    img=$(jq -r '.image // .checks[]?|select(.check=="mqtt.acl.live_broker_observer")|.image // empty' "$ART/mqtt_acl_verdict.json" 2>/dev/null | head -1)
+    src=$(jq -r '.acl_source // empty' "$ART/mqtt_acl_verdict.json")
+    if [[ "$src" == "fixture" ]] || [[ "$img" == eclipse-mosquitto* ]]; then
+      jq -n --arg img "${img:-}" --arg src "${src:-}" '{
+        ok:false,
+        status:"FAIL",
+        reason:"EXECUTE gate used fixture broker/ACL; set product openfdd-mqtt or OPENFDD_MQTT_ACL_ALLOW_FIXTURE_BROKER=1",
+        soft_open:"mqtt-key-mode-tenant-acl",
+        image:$img,
+        acl_source:$src
+      }' | tee "$ART/mqtt_acl_verdict.json" "$ART/security_gate_verdict.json"
+      exit 1
+    fi
+  fi
   # run_security_gate records from security_gate_verdict.json (not mqtt_acl_verdict).
   jq '{
     ok: (.ok // (.status=="PASS")),
     status: (.status // (if .ok==true then "PASS" else "FAIL" end)),
     reason: (.reason // .detail // .live_broker // ""),
+    image: (.image // null),
+    acl_source: (.acl_source // null),
     source: "mqtt_acl_observer.json"
   }' "$ART/mqtt_acl_verdict.json" | tee "$ART/security_gate_verdict.json" >/dev/null
 else

@@ -1,6 +1,7 @@
 """MQTT tenant ACL fixture semantics + generator honesty."""
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
@@ -98,6 +99,41 @@ class MqttTenantAclFixtureTest(unittest.TestCase):
             )
         self.assertFalse(verdict["ok"])
         self.assertNotEqual(verdict["status"], "PASS")
+
+    def test_product_acl_narrow_writes(self):
+        from generate_acl import product_edge_user, render_product_acl
+
+        text = render_product_acl()
+        cfg = load_tenants()
+        a = cfg["tenants"][0]
+        user = product_edge_user(a["tenant_id"], a["edge_id"])
+        self.assertIn(f"user {user}", text)
+        pref = edge_topic_prefix(a["tenant_id"], a["building_id"], a["edge_id"])
+        self.assertIn(f"topic write {pref}/telemetry/#", text)
+        self.assertNotIn(f"topic write {pref}/#\n", text + "\n")
+
+    def test_resolve_refuses_fixture_broker_without_allow(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "OPENFDD_MQTT_ACL_IMAGE": "eclipse-mosquitto:2",
+                "OPENFDD_MQTT_ACL_ALLOW_FIXTURE_BROKER": "0",
+            },
+            clear=False,
+        ):
+            with self.assertRaises(ValueError):
+                observer.resolve_mqtt_acl_image()
+
+    def test_resolve_product_default(self):
+        env = {
+            "OPENFDD_IMAGE_TAG": "sha-af4086f",
+            "PATH": os.environ.get("PATH", ""),
+            "HOME": os.environ.get("HOME", ""),
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            img, src = observer.resolve_mqtt_acl_image()
+        self.assertEqual(img, "ghcr.io/bbartling/openfdd-mqtt:sha-af4086f")
+        self.assertEqual(src, "provisioner")
 
 
 if __name__ == "__main__":
