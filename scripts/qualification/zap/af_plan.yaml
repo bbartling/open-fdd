@@ -38,11 +38,9 @@ jobs:
       url: "${ZAP_TARGET_ORIGIN}/"
       maxDuration: 5
 
-  # Authenticated coverage proof (UA-04): runner requires /api/auth/me in report.
-  - type: request
-    parameters:
-      url: "${ZAP_TARGET_ORIGIN}/api/auth/me"
-      method: GET
+  # Authenticated /api/auth/me coverage is asserted by run_af_disposable.py
+  # preflight (UA-04). Do not use ZAP job type "request" — older zaproxydocker
+  # digests reject it ("Unrecognised job type: request").
 
   - type: passiveScan-wait
     parameters:
