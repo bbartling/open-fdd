@@ -86,3 +86,14 @@ flowchart TD
 ## Order
 
 Execute subplans in order **V1 → V2 → V3 → V4 → V5 → V6 → V7 → V8**. Update BUG_REPORT + MILESTONES after each cycle.
+
+## Pages human cleanup (PR #958)
+
+In flight on `docs/diy-baud-hold-ai-context`:
+
+- Hide `docs/migration/` (+ maintenance/legacy root) from GH Pages; keep in git for agents/MCP
+- Merge **API & Security** nav; fix duplicate CSV titles; home field-to-cloud image
+- Rewrite Architecture / VAV health / Web App as current-product summaries
+- Fix G14 MathJax; expand ECM engineering-calcs formulas; SQL anomaly page under `/rules/`
+
+Do not merge #958 while GHCR publish for tip `f1adfbd` is still running (cancel-in-progress).

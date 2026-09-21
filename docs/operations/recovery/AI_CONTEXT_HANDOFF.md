@@ -37,6 +37,7 @@ Mirror Cursor UI plans: commit under `.cursor/plans/` on tip PRs; copy to `~/.cu
 ## Locked decisions
 
 - **Topology:** Railway hub (central→mqtt→web) + bensbench **x86 fieldbus** → MQTTS; **no Pi** on closeout; **no** local `react-ot` as AFDD head-end
+- **Local MS/TP stress trunk (diy-bacnet-router):** hold **38400** (+ optional FEC read-only). Full baud matrix 2026-09-20: 57600/76800/115200 lab-supported FEC-off; **9600/19200 not claimed**. See [`TESTBED_TAKEOVER.md`](../TESTBED_TAKEOVER.md) § Companion diy-bacnet-router · [rusty-bacnet#707](https://github.com/jscott3201/rusty-bacnet/issues/707#issuecomment-5750151731)
 - **Stress LAST:** `./scripts/nightly-ot-bench/run_railway_hub_stress.sh` → `qualification_manifest.json` `fully_qualified`
 - **Skip:** only **DEFERRED** in BUG_REPORT
 - **Hygiene:** 0 open PRs / only `master` / tip Actions green at END

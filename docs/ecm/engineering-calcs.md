@@ -111,7 +111,7 @@ $$
 \Delta E \approx (P_{\mathrm{base}} - P_{\mathrm{prop}}) \times h
 $$
 
-Module: `static_pressure_reset` · Calculator: `fan_affinity`.
+Module: `static_pressure_reset` · Calculator: `fan_affinity`. Same cube-law form for **pump VFD** (`pump_vfd`) with flow fraction as \(N\).
 
 ### Boiler / heating efficiency
 
@@ -123,14 +123,67 @@ Modules: `boiler_reset`, `boiler_replace` · Calculator: `boiler_efficiency_impr
 
 ### Outside-air sensible / total cooling
 
-Sensible: $$1.08 \times \mathrm{CFM} \times \Delta T \times h$$ (÷ efficiency → therms or kWh).  
-Latent/total cooling: $$4.5 \times \mathrm{CFM} \times \Delta h \times h$$ → kWh via COP.
+Sensible load (Btu/h·h → energy):
 
-Calculators: `outside_air_sensible`, `outside_air_total_cooling` · Modules: `dcv`, `energy_recovery`, `unoccupied_oa_*`.
+$$
+Q_{\mathrm{sens}} = 1.08 \times \mathrm{CFM} \times \Delta T \times h
+$$
 
-### Economizer runtime / CHW / CW proxies
+Total / latent-style cooling via enthalpy difference:
 
-Calculators: `economizer_runtime_cap`, `chws_reset_proxy`, `condenser_water_proxy`, `kw_per_ton_improvement`, `schedule_reduction`. Prefer manufacturer curves for client-grade chiller/tower work.
+$$
+Q_{\mathrm{tot}} = 4.5 \times \mathrm{CFM} \times \Delta h \times h
+$$
+
+Convert to kWh with COP / efficiency as in the workbook. Calculators: `outside_air_sensible`, `outside_air_total_cooling` · Modules: `dcv`, `energy_recovery`, `unoccupied_oa_*`.
+
+### Dirty filter / fan static
+
+Extra fan power from filter ΔP (simplified affinity / fan law screen in `dirty_filter`):
+
+$$
+P \propto \mathrm{CFM} \times \Delta P / (\eta_{\mathrm{fan}} \cdot \eta_{\mathrm{motor}})
+$$
+
+Tune with measured CFM, ΔP, and efficiencies — do not invent site CFM.
+
+### kW/ton plant improvement
+
+$$
+\Delta \mathrm{kWh} \approx (kW/\mathrm{ton}_{\mathrm{base}} - kW/\mathrm{ton}_{\mathrm{prop}}) \times \mathrm{tonhours}
+$$
+
+Calculator: `kw_per_ton_improvement`. Prefer manufacturer curves for client-grade chillers.
+
+### CHW / CW reset proxies
+
+Linear efficiency-gain screens (not full plant models):
+
+$$
+\Delta \mathrm{kWh}_{\mathrm{CHW}} \approx E_{\mathrm{chiller}} \times g_{\mathrm{per\circ F}} \times \Delta T_{\mathrm{reset}}
+$$
+
+Calculators: `chws_reset_proxy`, `condenser_water_proxy` · Modules: `chw_reset`, `condenser_water_reset`.
+
+### Economizer runtime cap
+
+$$
+\Delta \mathrm{kWh} \approx \mathrm{tons} \times (kW/\mathrm{ton}) \times h_{\mathrm{eligible}} \times f_{\mathrm{load}} \times f_{\mathrm{realize}}
+$$
+
+Calculator: `economizer_runtime_cap` · Modules: `enthalpy_economizer`, `dewpoint_economizer`.
+
+### Schedule reduction
+
+$$
+\Delta \mathrm{kWh} = P_{\mathrm{equip}} \times (h_{\mathrm{base}} - h_{\mathrm{prop}})
+$$
+
+Calculator: `schedule_reduction` · Modules: `fan_schedule`, `cooling_schedule`, `heating_schedule`, `schedule_align`.
+
+### G14 / change-point (oracle)
+
+ASHRAE Guideline 14 NMBE and CV(RMSE) plus 2P–5P change-point fits live in [IPMVP change-point & G14]({{ site.baseurl }}/ecm/ipmvp-changepoint.html) (`score_g14_monthly`, `fit_changepoint`, `option_c_savings`).
 
 ### Schedule / opt-start / DAT / DSP / lighting / motors / WSHP
 

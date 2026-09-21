@@ -117,6 +117,22 @@ Full Soft-OPEN table: [`WAVE_U_MASTER.md`](WAVE_U_MASTER.md).
 
 Stage C IdP/MFA · real Nessus assessment (until licensed isolated scan) · local BACnet FEC · `acme-oa-t-dup-reject` catalog noise · historian N-building scale · RDF-authoritative migration. ZAP AF and MQTT ACL are **Wave U U4/U5 tips**, not greenwash CLOSED without evidence.
 
+## Companion diy-bacnet-router lab (bensbench MS/TP)
+
+Shared OT stress trunk for Open-FDD fieldbus / MQTT soaks. **Do not retune baud during Open-FDD work.**
+
+| Item | Cite |
+|------|------|
+| **Live trunk baud** | **38400** (FEC read-only when attached) |
+| Lab-supported (FEC off, dual mini) | 57600 / 76800 / 115200 |
+| **Not claimed** | 9600 / 19200 (USB timing — [rusty-bacnet#707](https://github.com/jscott3201/rusty-bacnet/issues/707)) |
+| Full matrix evidence | diy-bacnet-router `docs/evidence/CLAUSE9_BAUD_MATRIX_FULL_FEC_OFF_20260920T132700Z/` |
+| Tip pin | rusty-bacnet `9e5168c5` (PR https://github.com/bbartling/diy-bacnet-router/pull/73) |
+| Maintainer reply + our update | [#707 comment](https://github.com/jscott3201/rusty-bacnet/issues/707#issuecomment-5750151731) |
+| Deferred | 19200 `#715` diagnostics delta; 9600 same-chipset controls — not an Open-FDD product gate |
+
+Agent law for that repo: diy-bacnet-router `AGENTS.md` § Lab trunk baud.
+
 ## Anti-patterns
 
 - Greenwashing empty SPARQL or PLANNED routes as PASS  
@@ -125,3 +141,4 @@ Stage C IdP/MFA · real Nessus assessment (until licensed isolated scan) · loca
 - Local stack image builds on bensbench  
 - Leaving open PRs / feature branches after merge  
 - Claiming “100% secure” or “Burp obsolete”
+- Chasing 9600/19200 on the Open-FDD stress trunk (hold 38400)

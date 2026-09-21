@@ -1,6 +1,8 @@
 ---
 title: Security
-nav_order: 8
+parent: API & Security
+nav_order: 3
+permalink: /security.html
 ---
 
 # Security

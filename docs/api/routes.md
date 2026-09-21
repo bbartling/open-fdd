@@ -1,6 +1,6 @@
 ---
 title: Routes
-parent: API Reference
+parent: API & Security
 nav_order: 2
 ---
 

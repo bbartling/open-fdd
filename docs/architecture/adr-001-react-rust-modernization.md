@@ -2,6 +2,8 @@
 title: ADR — React + Rust modernization
 parent: Architecture
 nav_order: 2
+nav_exclude: true
+# Kept in-repo for agents / historical ADR; hidden from human Pages nav.
 ---
 
 # ADR-001 — React SPA and Python exit (Phase 1)

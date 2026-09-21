@@ -48,7 +48,7 @@ Product UI is the React SPA. Pandas stays on PyPI for third-party tooling.
 
 | Family | Count | Examples |
 |--------|------:|----------|
-| Sensor validation (sweep) | 5 | SV-RANGE, SV-FLATLINE, SV-SPIKE, SV-STALE, SV-RATE |
+| Sensor validation (sweep) | 5 | SV-RANGE, SV-FLATLINE, SV-SPIKE, SV-STALE, SV-RATE — Lab tuners + Overview statistical screen: [SQL anomaly detection]({{ site.baseurl }}/rules/sql-anomaly-detection.html) |
 | Control hunting | 1 | PID-HUNT-1 |
 | Air handling / economizer | 32 | FC1–FC15, ECON-1–7, OAT-METEO, VLV-1, DMP-1, CMD-1, RESET-1 |
 | VAV terminals | 9 | VAV-1–7, VAV-REHEAT, VAV-AHU-LEAVE |

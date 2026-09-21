@@ -42,6 +42,17 @@ exclude:
   - verification
   - agent
   - ai-agent-context.md
+  # Historical ledgers — stay in git for agents/MCP; not human Pages nav.
+  - migration
+  - maintenance
+  - PORT_FINISH_PLAN.md
+  - PORT_FROM_VIBE19_INVENTORY.md
+  - PORT_FROM_VIBE19_REMOVALS.md
+  - COOKBOOK_OWNERSHIP.md
+  - central-fieldbus-cutover.md
+  - BUILDING_100_BENCHMARK.md
+  - OVERVIEW_HEALTH_API.md
+  - RUST_DATAFUSION_ENGINE.md
   - rules/cookbook/fixtures
   - Gemfile
   - Gemfile.lock

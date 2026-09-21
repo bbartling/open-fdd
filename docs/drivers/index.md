@@ -16,6 +16,6 @@ Open-FDD supports live field protocols and CSV import. Each driver exposes a tre
 | [Modbus](modbus.html) | TCP register reads |
 | [Haystack](haystack.html) | Remote Haystack server client |
 | [JSON API](json-api.html) | HTTP polling sources |
-| [CSV](csv-batch.html) | Offline / engineering imports |
+| [CSV driver](csv-batch.html) | Offline / engineering imports |
 
 Unified tree: `GET /api/drivers/tree`
