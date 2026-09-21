@@ -12,7 +12,9 @@ services:
   mqtt:
     image: ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG to sha-xxxxxxx}
     volumes:
-      - ${OPENFDD_BACNET_MQTT_CERT_DIR:?set OPENFDD_BACNET_MQTT_CERT_DIR}/broker:/mosquitto/certs:ro
+      # Writable: entrypoint must chown keys to mosquitto (1883) then chmod 640.
+      # Read-only host staging with mode 640 still fails OpenSSL (wrong owner).
+      - ${OPENFDD_BACNET_MQTT_CERT_DIR:?set OPENFDD_BACNET_MQTT_CERT_DIR}/broker:/mosquitto/certs
       - ${OPENFDD_BACNET_MQTT_CERT_DIR}/acl:/mosquitto/config/acl:ro
       - mqtt-data:/mosquitto/data
     healthcheck:
