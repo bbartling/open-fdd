@@ -16,10 +16,10 @@ Tracks [wave_s_data_model_graph_review_handoff.md](wave_s_data_model_graph_revie
 | DM-04 | §2 | Honor stamped type/parent; no guessed feeds as fact | S5 | `package.rs` + stamps | fixture `AC_1`+`equipType:ahu` | | | Soft-OPEN |
 | DM-05 | §2 | Tenant-scoped model storage/cache/exports | S5 | central handlers+storage | gate 31-style A/B | | | Soft-OPEN |
 | DM-06 | §2 | Consumer/route matrix; SPARQL capability honesty | S2/S5 | `docs/modeling/consumer-route-matrix.md` | curl SPARQL → 404 | `8b0eefe`+`3cd3745` | matrix + live 404 | PASS (docs); live SPARQL unavailable |
-| DM-07 | §2 | Exact IRI/literal SPARQL bindings | S5 | `rdf.rs` | SPARQL JSON results tests | | | Soft-OPEN |
-| DM-08 | §2 | Parser allowlist for SPARQL; no empty-ok on error | S5 | `sparql_select`/`query.rs` | `?address`/`"load"` cases | | | Soft-OPEN |
-| DM-09 | §2/§6 | Bound rebuild/query CPU/RAM; measure first | S5 | oxigraph path | bench table § PERF-1 | | | Soft-OPEN |
-| DM-10 | §2 | Versioned projection; no false markers / lossless claims | S5 | vocab+shapes | SHACL/fixture | | | Soft-OPEN |
+| DM-07 | §2 | Exact IRI/literal SPARQL bindings | S5 | `rdf.rs` injective `enc_` + W3C bindings | `cargo test -p open_fdd_edge_prototype rdf:: --lib` | tip V5 | unit dm07_* | **PASS (tip)** |
+| DM-08 | §2 | Parser allowlist for SPARQL; no empty-ok on error | S5 | `spargebra` SELECT allowlist; `query.rs` propagates Err | `cargo test -p open_fdd_edge_prototype sparql:: --lib` + query Err path | tip V5 | unit dm08_* | **PASS (tip)** |
+| DM-09 | §2/§6 | Bound rebuild/query CPU/RAM; measure first | S5 | oxigraph path | bench table § PERF-1 | | | Soft-OPEN / PARTIAL |
+| DM-10 | §2 | Versioned projection; no false markers / lossless claims | S5 | vocab+shapes | SHACL/fixture | | | Soft-OPEN / PARTIAL |
 | SEC-ML | §3 | Full model lifecycle authz (JSON/TTL/query/MCP) | S5 | ACL + inventory checks | security harness + CI | | | Soft-OPEN |
 | JSON-PARITY | §4 | JSON↔TTL declared field crosswalk | S5 | exporters | isomorphism tests | | | Soft-OPEN |
 | AI-TOOLS | §4 | Scoped model tools; SCAFFOLD vs shipped honesty | S5 | MCP/central | capability smoke | | | Soft-OPEN |

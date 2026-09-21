@@ -68,7 +68,7 @@
 | **s1-datasets-mt-acl** | **CLOSED** (#951 / 3.5.31 / `sha-7b81eb8`) · datasets list/delete MT ACL; FQ `20260919T195100Z` gate 25/25b PASS |
 | **wave-s3-pypi-mv-oracle** | **PARTIAL** · IPMVP change-point + G14 in `open_fdd.ecm_engineering` · wheel `4.4.3` local · PyPI still **4.4.1** · unfinished Camber Soft-OPEN — **V4** [wave_u_v4_pypi_publish.plan.md](../../.cursor/plans/wave_u_v4_pypi_publish.plan.md) |
 | **wave-s4-sql-twins-fq** | **CLOSED (FQ)** · MEGA `20260921T021332Z` `fully_qualified=true` on `sha-1677c33` / 3.5.37 · both gate 36 PASS · OPS PINNED |
-| **wave-s5-dm-remainder** | **PARTIAL** · DM-04/05 + gate 36 wire landed; Soft-OPEN DM-07..10 / EQ-VOCAB / ECM-ADAPT / Pages — **V5** [wave_u_v5_s5_dm_ecm.plan.md](../../.cursor/plans/wave_u_v5_s5_dm_ecm.plan.md) |
+| **wave-s5-dm-remainder** | **PARTIAL** · DM-07/08 CLOSED on V5 tip (SPARQL bindings + SELECT allowlist); Soft-OPEN residual DM-09/10 · EQ-VOCAB · ECM-ADAPT · Pages — **V5** [wave_u_v5_s5_dm_ecm.plan.md](../../.cursor/plans/wave_u_v5_s5_dm_ecm.plan.md) |
 | **acme-fdd-run-hang** | **CLOSED (3.5.34)** · Stale `running` reclaim **20m** + `list_actions` reclaim + `POST /api/fdd/run` wall timeout via `OPENFDD_FDD_RUN_TIMEOUT_SECS` (default **900s**) finishes action `fail`/`timeout` instead of indefinite hang. Slow ACME DataFusion remains a performance topic, not an action hang. |
 | **sec-harness-mt-breadth** | **ADVANCED (V3)** · +6 routes IMPLEMENTED (buildings, fdd/series, ahu/vav-health, sensor-faults, rcx/ahu); residual PLANNED remain ·  **PARTIAL** · Expanded Y/X mapping/FDD; Soft-OPEN more PLANNED MT routes — **V3** [wave_u_v3_mt_field_host.plan.md](../../.cursor/plans/wave_u_v3_mt_field_host.plan.md) |
 | **sec-harness-evaluator-integrity** | **CLOSED for UA-01/03/04/06/07 contract (tip)** · Permanent negatives + MEGA required gates; Soft-OPEN remains for breadth (MT routes) and product MQTT image vs fixture broker |
@@ -118,7 +118,7 @@ The current closure rows above are corrected prospectively. Earlier scan/test ac
 | `wu-audit-ua07-identity` | P1 | FIXED (code) | `tenant_ids` membership enforcement + permanent negatives on tip; broader MT route matrix remains Soft-OPEN |
 | `wu-audit-ua08-field-host` | P1 | PARTIAL | Key `0600`, dual-tenant kits, field-only exposure, host selftest on tip; live host probe + runtime container evidence still required |
 | `wu-audit-ua09-readiness-scope` | P1 | DOCS CORRECTED / VERIFICATION OPEN | Release maintainer: license-free readiness retained as required; close only after measured profile evidence |
-| `wu-audit-ua10-product-closeout` | P2 | PARTIAL | RCx presets ACL + hub FQ twins CLOSED; Soft-OPEN: S5 DM-07..10, S3 PyPI publish, MT breadth |
+| `wu-audit-ua10-product-closeout` | P2 | PARTIAL | RCx presets ACL + hub FQ twins CLOSED; Soft-OPEN: S5 DM-09/10 + EQ/ECM/Pages (DM-07/08 closed on V5), S3 PyPI publish, MT breadth |
 | `wu-bacnet-ci-ro-key-mode` | CI | **FIXED (#966)** | Smoke stages keys 640; broker cert mount writable for mosquitto chown; e2e PASS on tip |
 | `wu-s4-fq-mega` | Soft-OPEN | **CLOSED** | MEGA `20260921T021332Z` `fully_qualified=true` → OPS PINNED `sha-1677c33` / 3.5.37 |
 | `wu-trivy-tip-digest` | Soft-OPEN | **RESCAN OPEN / V1** | Tip rescan `sha-1677c33`; nginx on 3.5.38; digest acceptance on published tip |
@@ -214,7 +214,7 @@ Prior FAILs `20260920T194610Z` / `20260920T231407Z` / `20260921T014908Z` retaine
 | **wu-bacnet-ci-api-key** | CI | **FIXED #960** | Optional BACnet smoke supplies `OPENFDD_FIELDBUS_API_KEY` after fail-closed |
 | **wu-bacnet-ci-ro-key-mode** | CI | **FIXED (#966)** | Keys 640 + writable broker mount; e2e PASS on tip `sha-af4086f` / 3.5.38 |
 | **wu-pypi-publish-4.4.3** | Residual | Soft-OPEN honesty | Math CLOSED on tip; PyPI publish `open-fdd` 4.4.3 not done |
-| **wu-dm-07-10** | Soft-OPEN | Soft-OPEN honesty | DM-04/05 landed; DM-07..10 SPARQL/PERF/ECM-ADAPT remain |
+| **wu-dm-07-10** | Soft-OPEN | **PARTIAL (V5 tip)** | DM-07/08 CLOSED (injective IRI + W3C bindings; spargebra SELECT allowlist; no empty-ok). Residual: DM-09 PERF · DM-10 versioned projection · EQ-VOCAB · ECM-ADAPT · Pages |
 | **wu-mt-breadth** | Soft-OPEN | Soft-OPEN honesty | Continue IMPLEMENTED matrix later; inventory cited on tip |
 
 **Do not claim:** Nessus assessment PASS · readiness VERIFIED while Critical/High unresolved · Soft-OPEN CLOSED without measured evidence. |
