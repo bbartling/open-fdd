@@ -700,18 +700,28 @@ export async function fetchCentralOverview(opts: {
   const building_id = opts.building_id;
   const oatErr = opts.oat_err ?? 5;
   const dtMin = opts.dt_min_f ?? 10;
-  const body = { building_id, max_points: 4000, dt_min_f: dtMin };
+  const body = {
+    building_id,
+    max_points: 4000,
+    dt_min_f: dtMin,
+    // ACME-scale historians: unbounded runtime LEAD exceeds edge timeouts.
+    start: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+  };
   const signal = opts.signal;
 
-  const [runtime, mech, econ, bas, mapping] = await Promise.all([
-    postRuntime(body, { signal }),
-    postMechanicalCooling(body, { signal }),
-    postEconomizer(body, { signal }),
-    postBasVsWebOat(body, { signal }),
-    building_id
-      ? getPackageMapping(building_id).catch(() => null)
-      : Promise.resolve(null),
-  ]);
+  // Mapping is cheap; keep it concurrent with the first analytics call only.
+  // Heavy DataFusion POSTs must not run in parallel on large historians (ACME):
+  // Promise.all of runtime+mech+econ+bas starved central and surfaced as nginx
+  // 502 "Central analytics unavailable" in Overview.
+  const mappingPromise = building_id
+    ? getPackageMapping(building_id).catch(() => null)
+    : Promise.resolve(null);
+
+  const runtime = await postRuntime(body, { signal });
+  const mech = await postMechanicalCooling(body, { signal });
+  const econ = await postEconomizer(body, { signal });
+  const bas = await postBasVsWebOat(body, { signal });
+  const mapping = await mappingPromise;
 
   const runtimeRows = runtime.rows?.length ? runtime.rows : runtime.equipment;
   const equipmentTotals =
