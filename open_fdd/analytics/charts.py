@@ -1231,32 +1231,21 @@ def vav_comfort_donut(
     return fig
 
 
-def _is_status_like(series: pd.Series) -> bool:
-    """True for 0/1 / boolean status traces (draw as step lines)."""
-    if pd.api.types.is_bool_dtype(series):
-        return True
-    num = pd.to_numeric(series, errors="coerce").dropna()
-    if num.empty:
-        return False
-    uniq = set(float(x) for x in num.unique())
-    return uniq.issubset({0.0, 1.0})
-
-
 def equipment_inspection_chart(
     df: pd.DataFrame,
     *,
     equipment_id: str = "",
     columns: list[str] | None = None,
-    max_height: int = 4000,
-    row_height: int = 160,
+    max_height: int = 2400,
+    row_height: int = 140,
 ) -> go.Figure | None:
     """Tall stacked Plotly line chart of all plottable columns in a raw equipment CSV.
 
-    Keeps numeric / boolean columns only. One subplot row per column, shared x-axis.
-    Downsamples for rendering via :func:`downsample_frame_index`.
+    React SoT: ``frontend/web/src/api/inspectChart.ts`` — stacked **domain**
+    axes (yaxis title = column), title ``Inspection — {id}``, linear lines
+    (no subplot_titles / no status ``shape=hv``). Downsamples via
+    :func:`downsample_frame_index`.
     """
-    from plotly.subplots import make_subplots
-
     if df is None or df.empty:
         return None
     if columns is None:
@@ -1281,46 +1270,60 @@ def equipment_inspection_chart(
 
     idx = downsample_frame_index(df.index, max_points=max_plot_points())
     n = len(plot_cols)
-    height = min(max_height, max(700, int(row_height) * n + 80))
-    titles = [str(c) for c in plot_cols]
-    fig = make_subplots(
-        rows=n,
-        cols=1,
-        shared_xaxes=True,
-        vertical_spacing=min(0.02, 0.5 / max(n, 1)),
-        subplot_titles=titles,
-    )
-    for i, col in enumerate(plot_cols, start=1):
+    height = min(max_height, max(420, int(row_height) * n + 80))
+    fig = go.Figure()
+    layout: dict[str, Any] = {
+        "title": (
+            f"Inspection — {equipment_id}" if equipment_id else "Inspection"
+        ),
+        "height": height,
+        "showlegend": False,
+        "paper_bgcolor": "white",
+        "plot_bgcolor": "white",
+        "margin": dict(l=56, r=24, t=48, b=40),
+        "template": "plotly_white",
+        "hovermode": "x unified",
+    }
+    for i, col in enumerate(plot_cols):
         raw = df[col]
         if pd.api.types.is_bool_dtype(raw):
             y = raw.astype(float).reindex(idx)
-            step = True
         else:
             y = pd.to_numeric(raw, errors="coerce").reindex(idx)
-            step = _is_status_like(raw)
-        color = RAINBOW_PALETTE[(i - 1) % len(RAINBOW_PALETTE)]
+        color = RAINBOW_PALETTE[i % len(RAINBOW_PALETTE)]
+        yaxis = "y" if i == 0 else f"y{i + 1}"
+        xaxis = "x" if i == 0 else f"x{i + 1}"
         fig.add_trace(
             go.Scatter(
                 x=y.index,
                 y=y,
                 name=str(col),
                 mode="lines",
-                line=dict(width=1.2, color=color, shape="hv" if step else "linear"),
+                line=dict(width=1.4, color=color, shape="linear"),
                 showlegend=False,
-            ),
-            row=i,
-            col=1,
+                xaxis=xaxis,
+                yaxis=yaxis,
+            )
         )
-        fig.update_yaxes(title_text="", row=i, col=1)
-    title = f"Data inspection — {equipment_id}" if equipment_id else "Data inspection"
-    fig.update_layout(
-        title=title,
-        template="plotly_white",
-        height=height,
-        margin=dict(l=50, r=20, t=60, b=40),
-        hovermode="x unified",
-    )
-    fig.update_xaxes(showticklabels=True, row=n, col=1)
+        domain_h = 1.0 / n
+        y0 = 1.0 - (i + 1) * domain_h + 0.02
+        y1 = 1.0 - i * domain_h - 0.01
+        layout["yaxis" if i == 0 else f"yaxis{i + 1}"] = dict(
+            title=str(col),
+            domain=[max(0.0, y0), min(1.0, y1)],
+            autorange=True,
+            showgrid=True,
+        )
+        x_layout: dict[str, Any] = dict(
+            anchor=yaxis,
+            domain=[0, 1],
+            showticklabels=(i == n - 1),
+            autorange=True,
+        )
+        if i > 0:
+            x_layout["matches"] = "x"
+        layout["xaxis" if i == 0 else f"xaxis{i + 1}"] = x_layout
+    fig.update_layout(**layout)
     return fig
 
 

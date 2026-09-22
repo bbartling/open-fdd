@@ -10,10 +10,10 @@ todos:
     status: completed
   - id: w1-nginx-https
     content: "W1: nginx>=1.28.3 tip + Trivy rescan + HTTPS product soak; smoke re-pin"
-    status: in_progress
+    status: completed
   - id: w2-zap-mt
     content: "W2: disposable ZAP AF execute + next MT breadth IMPLEMENTED batch"
-    status: in_progress
+    status: completed
   - id: w3-mega-reliability
     content: "W3: gate-00/login throttle + railway_repin positional TAG; smoke only (no mid-cycle MEGA)"
     status: completed
@@ -25,10 +25,10 @@ todos:
     status: pending
   - id: w5-railway-soaks
     content: "W5: V7 live tenant-path APPLY + V8 live compaction soak"
-    status: pending
+    status: completed
   - id: w6-vim1-kit
     content: "W6: vim-1 kit quiet ingest_reject; close wu-vim1-oa-t-kit"
-    status: pending
+    status: completed
   - id: w7-rev-mega
     content: "W7: final VERSION patch bump → GHCR → Railway re-pin → full MEGA stress → OPS PINNED + Soft-OPEN closeout"
     status: pending

@@ -7,7 +7,7 @@
 | Item | Status |
 |------|--------|
 | Product tip / **OPS PINNED (FQ)** | **3.5.43** / **`sha-7ad6479`** (#978) · health `3.5.43+7ad6479c924a` · backup **`20260921T233725Z`** · stress `reports/nightly-ot-bench_20260921T234148Z/` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave U V6 FQ** |
-| **Follow-on tip (not OPS PINNED)** | **3.5.44** / merge #980 quiet SPA · **GHCR lag** (#980 publish cancelled; W0/master publish `35746652594` in flight) · **W7** MEGA before OPS re-pin · [wave_u_post-fq_remainder.plan.md](../../.cursor/plans/wave_u_post-fq_remainder.plan.md) |
+| **Follow-on tip (not OPS PINNED)** | **3.5.44** / **`sha-bcacee6`** (#984 chart palette + W1/W2 Soft-OPEN) · hub still **OPS** `sha-7ad6479` / 3.5.43 until **W7** MEGA · [wave_u_post-fq_remainder.plan.md](../../.cursor/plans/wave_u_post-fq_remainder.plan.md) |
 | **Wave U post-FQ remainder** `2026-09-22` | Master W-UI→W0–W7 · ECM [ecm_context_hardening.plan.md](../../.cursor/plans/ecm_context_hardening.plan.md) · V1–V8 scheduling **SUPERSEDED** |
 | **Wave U remainder cycles** `2026-09-21` | **SUPERSEDED** [wave_u_remainder_patch_cycles.plan.md](../../.cursor/plans/wave_u_remainder_patch_cycles.plan.md) · historical V1–V8 only |
 | **Wave U hub tip (smoke + MEGA in flight)** | **3.5.34** / **`sha-f44b45f`** (#959) · health `3.5.34+f44b45f6f58d` · backup **`20260920T193429Z`** · fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1` kit restored · MEGA `reports/nightly-ot-bench_20260920T194610Z/` · **no FQ / OPS PINNED claim until `fully_qualified=true`** |
@@ -57,9 +57,9 @@
 | **util-interval** | **CLOSED (branch)** · empty `utility_interval`/`bas_submeter` views when CSV absent → UTIL-INTERVAL plans **0h** (not `rules_failed`); pandas oracle: expect 0h when interval frame empty |
 | **r6-ingest-reject** | **CLOSED (branch)** · count on health + `reject_buckets` on `/api/ingest/stats` (no dead-letter dump API) |
 | **kali-zap-af** | **CLOSED (UA-04 / W2)** · alias of `zap-af-authenticated` — disposable AF PASS `reports/security/zap_af_disposable_20260922T151322Z/` |
-| **wave-o1-tenant-path-migrate** | **CLOSED (3.5.41 / V7)** · Dual-read prefers `tenants/{tid}/…` then hub-root; additive migrate script `scripts/ops/wave_u_v7_tenant_path_migrate.sh` (ACME / BUILDING_100 / LAKESIDE_ES); permanent ACL regressions foreign deny + hub_admin sees all. Live hub APPLY still requires Railway backup + `CONFIRM_BACKUP=1` — not run in this PR. #958 HOLD unchanged. |
+| **wave-o1-tenant-path-migrate** | **CLOSED (3.5.41 / V7 + W5 live)** · Dual-read prefers `tenants/{tid}/…` then hub-root; migrate script additive. Live hub dry-run `reports/wave_u_v7_tenant_path_migrate_hub_20260922T185532Z/` — ACME/BUILDING_100/LAKESIDE_ES already `skip_already_migrated` (eq counts match); dual-read smoke `GET /api/tenants` + `GET /api/fdd/equipment` (49 / 71). APPLY noop — no `CONFIRM_BACKUP` copy needed. |
 | **p2c-mqtt-acl-staging** | **REOPENED acceptance (UA-03)** · folded into `mqtt-key-mode-tenant-acl`; product-generated runtime ACL matrix still required — **V2** |
-| **historian-n-building-scale** | **CLOSED (V8 branch)** · H4 offline CLI `compact-history` (validate-before-publish) + runtime `CompactionCoordinator` (fail-closed/wait) + hub-admin `GET\|POST /api/historian/compaction` + Admin capacity Compact controls · CI: multi-building fixture + concurrent scan+compact negative · Residual Soft: Railway maintenance-window live compact soak (no MEGA) |
+| **historian-n-building-scale** | **CLOSED (V8 + W5 live soak)** · H4 + `CompactionCoordinator` + hub-admin `GET\|POST /api/historian/compaction`. Live soak `reports/wave_u_v8_compaction_soak_20260922T185707Z/` on hub `3.5.43+7ad6479`: fail-closed no-confirm **HTTP 400**; `plan_only` + `confirm:true wait:true` **ok** with **0** eligible hive partitions (equipment trees are single-file — honest empty compact, not a silent skip of the API). Soft residual: multi-part hive compact only when parts accumulate. |
 | **admin-capacity-gauges** | **CLOSED (branch)** · cgroup memory + workspace `statvfs` + Parquet small-file strip on Admin |
 | **railway-capacity-stress** | **CITED** Tip B FQ `20260917T215437Z` gates 24/24b PASS |
 | **mqtt-pause-ui** | **CLOSED (#947 Tip B)** · MT command topics `tenants/…`; gate **35 PASS** on `sha-4a5c11e` stress `20260917T215437Z` |
@@ -210,7 +210,7 @@ Prior FAILs `20260920T194610Z` / `20260920T231407Z` / `20260921T014908Z` retaine
 | **ci-959-docs-guard** | CI | **FIXED** | Cookbook link edits blocked; reverted — IPMVP lives under `docs/ecm/` |
 | **wu-mv-404-pre-pin** | Soft-OPEN / FQ gate | **FIXED** | Hub re-pin `sha-f44b45f` · `POST /api/analytics/mv` → **HTTP 200** `ok:true` (smoke 2026-09-20T19:45Z). Gate 36 twin still must PASS under MEGA. |
 | **wu-model-ecm-creds** | Soft-OPEN | **CLEARED for MEGA** | Railway has `OPENFDD_USER_ACME_OPS_PASSWORD` / `OPENFDD_USER_B100_OPS_PASSWORD` (stress fetches ops_a/ops_b len=32). Prior BLOCKED was missing fetch names. |
-| **wu-vim1-oa-t-kit** | Ops | **PARTIAL** | Kit restored `deploy/mqtt/kits/ACME__vim-1/` + fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1`. Telemetry live; residual `ingest_reject` still climbing briefly after redeploy — Soft-OPEN until rejects quiet. |
+| **wu-vim1-oa-t-kit** | Ops | **CLOSED (W6)** | Kit restored `deploy/mqtt/kits/ACME__vim-1/` + fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1`. Hub health `ingest_reject=0` under steady poll (edges=1, last_ingest fresh) — Soft-OPEN closed. |
 | **wu-acme-fdd-slow** | Perf (not hang) | Soft note | Hang Soft-OPEN **CLOSED** (20m reclaim + 900s timeout). ACME may still be slow/timeout under load — not indefinite `running` |
 | **wu-s4-fq-mega** | Soft-OPEN | **CLOSED** | MEGA `20260921T021332Z` `fully_qualified=true` · OPS PINNED `sha-1677c33` / 3.5.37 |
 | **wu-trivy-tip-digest** | Soft-OPEN | **W1 RESCANED** | `reports/trivy-wave-u/sha-7ad6479/SUMMARY.md` — web nginx H/C 0/0 (`1.28.3-r7`); Debian/caddy TRACKED; prior `sha-af4086f` historical |

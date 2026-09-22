@@ -32,21 +32,32 @@ def _is_vav_candidate(c: dict[str, Any]) -> bool:
     )
 
 
+def _rainbow_bar_colors(n: int) -> list[str]:
+    """Per-bar colors matching React ``rankingBars`` (``rainbowColor(i)``)."""
+    from open_fdd.analytics.charts import RAINBOW_PALETTE
+
+    return [RAINBOW_PALETTE[i % len(RAINBOW_PALETTE)] for i in range(max(0, n))]
+
+
 def _horizontal_fault_hours_fig(
     rows: list[dict[str, Any]],
     *,
     title: str,
     go,
-    marker_color: str = "#2b6cb0",
 ):
-    """Readable horizontal bar chart; layout height/margins sized for Kaleido export."""
+    """Readable horizontal bar chart; layout height/margins sized for Kaleido export.
+
+    Colors cycle ``RAINBOW_PALETTE`` like React ``rankingBars`` (highest-first index 0).
+    """
+    # rows are ranked highest-first; reverse so the top of the plot is highest.
     labels = [_detection_label(c) for c in rows][::-1]
     hours = [float(c.get("fault_hours") or 0) for c in rows][::-1]
+    colors = _rainbow_bar_colors(len(rows))[::-1]
     longest = max((len(lbl) for lbl in labels), default=10)
     left_margin = min(320, max(140, int(longest * 7.2)))
     height = max(380, 32 * len(rows) + 100)
     fig = go.Figure(
-        data=[go.Bar(y=labels, x=hours, orientation="h", marker_color=marker_color)]
+        data=[go.Bar(y=labels, x=hours, orientation="h", marker_color=colors)]
     )
     fig.update_layout(
         title=title,
@@ -109,12 +120,13 @@ def build_report_charts(
     counts = Counter(f.effective_classification.value for f in artifacts.findings)
     for s in artifacts.suppressed:
         counts[s.get("classification") or "SUPPRESSED"] += 0  # don't inflate
+    conf_x = list(counts.keys())
     fig = go.Figure(
         data=[
             go.Bar(
-                x=list(counts.keys()),
-                y=list(counts.values()),
-                marker_color="#2c5282",
+                x=conf_x,
+                y=[counts[k] for k in conf_x],
+                marker_color=_rainbow_bar_colors(len(conf_x)),
             )
         ]
     )
@@ -141,7 +153,6 @@ def build_report_charts(
             top,
             title="Top detections by fault hours",
             go=go,
-            marker_color="#2b6cb0",
         )
         charts.append(_export(fig_top, "top_detections", out_dir))
 
@@ -152,7 +163,6 @@ def build_report_charts(
             vav_top,
             title="Top VAV / zone box detections by fault hours",
             go=go,
-            marker_color="#805ad5",
         )
         charts.append(_export(fig_vav, "top_vav_detections", out_dir))
 
@@ -167,6 +177,7 @@ def build_report_charts(
     ]
     valid = sorted(valid, key=lambda r: float(r.get("in_band_pct") or r.get("in_band_%") or 0))[:15]
     if valid:
+        # valid is worst-first (lowest in-band %); reverse for top-of-plot = worst.
         y_labels = [str(r.get("equipment_id") or "?") for r in valid][::-1]
         left = min(280, max(100, int(max(len(x) for x in y_labels) * 7.2)))
         fig2 = go.Figure(
@@ -175,7 +186,7 @@ def build_report_charts(
                     y=y_labels,
                     x=[float(r.get("in_band_pct") or r.get("in_band_%") or 0) for r in valid][::-1],
                     orientation="h",
-                    marker_color="#c05621",
+                    marker_color=_rainbow_bar_colors(len(valid))[::-1],
                 )
             ]
         )
@@ -272,6 +283,7 @@ def _figure_for_finding(f: EngineeringFinding, go):
                 go.Bar(
                     x=[f"{spec.get('equipment_id')} / {spec.get('rule_id')}"],
                     y=[float(spec.get("fault_hours"))],
+                    marker_color=_rainbow_bar_colors(1),
                 )
             ]
         )

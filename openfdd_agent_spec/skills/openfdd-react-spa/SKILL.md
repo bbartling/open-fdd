@@ -21,6 +21,10 @@ description: >-
    via `fetchCentralOverview` — never invent a pandas/oracle product path.
 2. FDD math stays in DataFusion SQL (`sql_rules/`). TypeScript builds figures only.
 3. Shared palette: `frontend/web/src/api/plotlyTheme.ts` (`RAINBOW_PALETTE`).
+   Chart contract: `charts.contract.json` (FDD fault axis, Inspect title/domains,
+   Overview-RCx / fuel PNG stems). Overview-RCx downloads use bare stems
+   (`mech_cooling_oat_bins`, …); generic RCx keeps `rcx_*` via `plotDownloadStem`.
+   Fuel Metering hosts must set `downloadFilename` (`fuel_*`).
 4. No bench secrets, credential paths, or privileged username prefill on login.
 5. Prefer Vitest unit tests next to changed modules; Playwright for smoke when needed.
 6. Do not add Python to the product SPA or depend on `open_fdd` at runtime.
@@ -81,6 +85,8 @@ description: >-
 | RCx Overview presets | `frontend/web/src/api/rcxOverviewPresets.ts` |
 | RCx / FDD charts | `frontend/web/src/api/vibeCharts.ts` |
 | Theme | `frontend/web/src/api/plotlyTheme.ts` |
+| Chart contract / PNG stems | `frontend/web/src/api/charts.contract.json` |
+| Inspect chart | `frontend/web/src/api/inspectChart.ts` |
 | Rule labels | `frontend/web/src/lib/cookbookRuleCatalog.ts`; planned `lib/ruleLabels.ts` |
 | SPA shell | `frontend/web/src/App.tsx`, `components/` |
 

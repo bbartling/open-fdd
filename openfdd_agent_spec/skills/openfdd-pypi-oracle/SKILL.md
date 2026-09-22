@@ -36,3 +36,10 @@ product UI. Role alias Camber↔SQL is a **doc table only** until twin SQL lands
 3. Shim pattern in apps: `sys.modules[__name__] = open_fdd...` for private imports.
 4. Keep custom rules local to vibe19/UI (`CUSTOM-*`).
 5. Camber-inspired ports stay outside the product HTTP path (this skill + ECM engineering).
+6. **Chart parity (W-CHART):** React Plotly is visual SoT. Keep
+   `open_fdd.analytics.charts.RAINBOW_PALETTE` + `equipment_inspection_chart`
+   aligned with `frontend/web/src/api/charts.contract.json` /
+   `inspectChart.ts`. Permanent tests:
+   `tests/analytics/test_chart_palette_parity.py` +
+   `tests/reporting/test_report_chart_palette.py` (Findings chrome bars).
+   PyPI overview PNG names keep Soft-OPEN `overview_*` prefix vs React bare stems.
