@@ -53,3 +53,17 @@ Keepers: playground `vibe_code_apps_20/docs/OPENFDD_ECM_TWINS.md` (historical).
 Return enough detail (summary, bins, assumptions, warnings, provenance,
 `fitted` vs `industry` status) so adapters do not recompute formulas and UI
 never green-checks fitted exact matches as independent validation.
+
+## Context envelope (`ecm_context_v1`)
+
+Use `open_fdd.ecm_engineering.context_envelope` for agent-facing context:
+
+- `EcmContext` / `validate_ecm_context` — schema + fan-pair command provenance
+- `assess_screening_gaps` — missing nameplate/tariff → structured gaps (not invented $)
+- `combine_schedule_then_fan_reset` — schedule first, fan affinity on remaining hours
+- Readiness: `screening` | `validated` | `submission_ready` (human_review required)
+
+Plan: `.cursor/plans/ecm_context_hardening.plan.md` · agent brief:
+`.cursor/agents/openfdd-generic-ecm-context-hardening.md`.
+
+Do **not** add Python ECM to central/web request paths.

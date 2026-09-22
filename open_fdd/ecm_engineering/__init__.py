@@ -12,6 +12,14 @@ from .contracts import (
     validate_engineering_inputs,
     validate_simulation_evidence,
 )
+from .context_envelope import (
+    ECM_CONTEXT_SCHEMA_VERSION,
+    EcmContext,
+    ReadinessStatus,
+    assess_screening_gaps,
+    combine_schedule_then_fan_reset,
+    validate_ecm_context,
+)
 from .calc_trace import CalculationTrace
 from .stage2_workbook import build_stage2_workbook
 from .g14 import (
@@ -65,6 +73,12 @@ __all__ = [
     "MeasureResultMeta",
     "validate_engineering_inputs",
     "validate_simulation_evidence",
+    "ECM_CONTEXT_SCHEMA_VERSION",
+    "EcmContext",
+    "ReadinessStatus",
+    "assess_screening_gaps",
+    "combine_schedule_then_fan_reset",
+    "validate_ecm_context",
     "CalculationTrace",
     "build_stage2_workbook",
     "build_honesty_workbook",

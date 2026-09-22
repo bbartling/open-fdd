@@ -49,6 +49,10 @@ Open-FDD does **not** ship an embedded chatbot. External agents (Cursor, Codex, 
 2. Never overwrite Excel formula cells.  
 3. Python `calculate(...)` is a referee, not hidden sheet math.  
 4. Preserve provenance; do not stack interacting ECM savings blindly.  
+5. Prefer the versioned **`ecm_context_v1`** envelope (`open_fdd.ecm_engineering.context_envelope`) for agent context: assets with distinct command/power points, tariff gaps → monetary UNAVAILABLE, readiness `screening` \| `validated` \| `submission_ready` (human review required for the last).  
+6. Combined schedule + fan reset: use `combine_schedule_then_fan_reset` (reset on **remaining** hours) — never sum standalone savings for the same end-use.
+
+Executable plan: [`.cursor/plans/ecm_context_hardening.plan.md`](https://github.com/bbartling/open-fdd/blob/master/.cursor/plans/ecm_context_hardening.plan.md).
 
 Full calc catalog: [Engineering calcs](engineering-calcs.html).
 

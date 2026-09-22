@@ -4,22 +4,22 @@ overview: After OPS PINNED sha-7ad6479 / 3.5.43 FQ, close leftover Soft-OPEN wit
 todos:
   - id: w-ui-quiet
     content: "W-UI: quiet SPA copy — strip grey captions; nest Results/Sites; clean left rail; agent-spec UX rule; tip PR + GH tidy"
-    status: in_progress
+    status: completed
   - id: w0-hygiene
-    content: "W0: MILESTONES/BUG_REPORT refresh; supersede old V1–V8 master; verify PyPI 4.4.3"
-    status: pending
+    content: "W0: MILESTONES/BUG_REPORT refresh; supersede old V1–V8 master; verify PyPI 4.4.3; railway_repin positional TAG"
+    status: completed
   - id: w1-nginx-https
     content: "W1: nginx>=1.28.3 tip + Trivy rescan + HTTPS product soak; smoke re-pin"
-    status: pending
+    status: in_progress
   - id: w2-zap-mt
     content: "W2: disposable ZAP AF execute + next MT breadth IMPLEMENTED batch"
     status: pending
   - id: w3-mega-reliability
     content: "W3: gate-00/login throttle + railway_repin positional TAG; smoke only (no mid-cycle MEGA)"
-    status: pending
+    status: completed
   - id: w4-s5-residual
-    content: "W4: DM-09/10 + EQ-VOCAB + ECM-ADAPT tip (+ PyPI if needed)"
-    status: pending
+    content: "W4: DM-09/10 + EQ-VOCAB + ECM-ADAPT tip (+ PyPI 4.4.4 context envelope)"
+    status: in_progress
   - id: w5-railway-soaks
     content: "W5: V7 live tenant-path APPLY + V8 live compaction soak"
     status: pending

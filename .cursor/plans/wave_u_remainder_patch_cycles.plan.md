@@ -1,6 +1,6 @@
 ---
 name: Wave U remainder patch cycles
-overview: "Master inventory after Wave U hub FQ (sha-1677c33 / 3.5.37). Cycles V1–V8: security/product Soft-OPEN, one MEGA, then tenant-path migrate + historian compaction. Stage C IdP/MFA stays commercial-deferred."
+overview: "SUPERSEDED 2026-09-22 by wave_u_post-fq_remainder.plan.md (W-UI → W0–W7). Historical V1–V8 inventory only."
 todos:
   - id: v1-images-https
     content: "V1: tip Trivy + product HTTPS candidate soak"
@@ -30,6 +30,11 @@ isProject: false
 ---
 
 # Wave U remainder — multi-cycle closeout inventory
+
+> **SUPERSEDED 2026-09-22** — Do not schedule from this file. Active master:
+> [`.cursor/plans/wave_u_post-fq_remainder.plan.md`](wave_u_post-fq_remainder.plan.md)
+> (W-UI → W0–W7). V1–V8 product landings are closed; residual Soft-OPEN continues under W1–W7 /
+> [`ecm_context_hardening.plan.md`](ecm_context_hardening.plan.md).
 
 **Living trackers:** [`docs/operations/BUG_REPORT_WAVE_P.md`](../../docs/operations/BUG_REPORT_WAVE_P.md) · [`MILESTONES.md`](../../MILESTONES.md) · audit [`.cursor/plans/wave_u_independent_acceptance_audit.plan.md`](wave_u_independent_acceptance_audit.plan.md)
 
