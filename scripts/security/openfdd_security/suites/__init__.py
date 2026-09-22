@@ -164,6 +164,19 @@ def run_suite_x(ctx: SuiteContext) -> None:
         ("/api/analytics/vav-health", "x.preauth.anon401.post_api_analytics_vav_health"),
         ("/api/analytics/sensor-faults", "x.preauth.anon401.post_api_analytics_sensor_faults"),
         ("/api/analytics/rcx/ahu", "x.preauth.anon401.post_api_analytics_rcx_ahu"),
+        # Wave U W2 plant-health breadth (same POST anon401 pattern as V3).
+        ("/api/analytics/chiller-health", "x.preauth.anon401.post_api_analytics_chiller_health"),
+        (
+            "/api/analytics/cooling-tower-health",
+            "x.preauth.anon401.post_api_analytics_cooling_tower_health",
+        ),
+        ("/api/analytics/boiler-health", "x.preauth.anon401.post_api_analytics_boiler_health"),
+        ("/api/analytics/hp-health", "x.preauth.anon401.post_api_analytics_hp_health"),
+        (
+            "/api/analytics/zone-other-health",
+            "x.preauth.anon401.post_api_analytics_zone_other_health",
+        ),
+        ("/api/analytics/sensor-health", "x.preauth.anon401.post_api_analytics_sensor_health"),
     ):
         try:
             # Explicit POST for analytics mutations in this batch.
@@ -172,6 +185,12 @@ def run_suite_x(ctx: SuiteContext) -> None:
                 "/api/analytics/vav-health",
                 "/api/analytics/sensor-faults",
                 "/api/analytics/rcx/ahu",
+                "/api/analytics/chiller-health",
+                "/api/analytics/cooling-tower-health",
+                "/api/analytics/boiler-health",
+                "/api/analytics/hp-health",
+                "/api/analytics/zone-other-health",
+                "/api/analytics/sensor-health",
             ):
                 r = ctx.client.request("POST", path, json_body={})
             else:
@@ -1158,12 +1177,33 @@ def run_suite_y(ctx: SuiteContext) -> None:
         except TransportError as exc:
             ctx.check(foreign_cid, "Y", f"{path} foreign", "ERROR", detail=str(exc))
 
-    # Analytics POSTs (Wave U V3): own building accepted or empty-ok; foreign denied.
+    # Analytics POSTs (Wave U V3 + W2 plant-health): own ok / foreign denied.
     for path, foreign_cid in (
         ("/api/analytics/ahu-health", "y.authz.a_foreign_analytics_ahu_health_denied"),
         ("/api/analytics/vav-health", "y.authz.a_foreign_analytics_vav_health_denied"),
         ("/api/analytics/sensor-faults", "y.authz.a_foreign_analytics_sensor_faults_denied"),
         ("/api/analytics/rcx/ahu", "y.authz.a_foreign_analytics_rcx_ahu_denied"),
+        (
+            "/api/analytics/chiller-health",
+            "y.authz.a_foreign_analytics_chiller_health_denied",
+        ),
+        (
+            "/api/analytics/cooling-tower-health",
+            "y.authz.a_foreign_analytics_cooling_tower_health_denied",
+        ),
+        (
+            "/api/analytics/boiler-health",
+            "y.authz.a_foreign_analytics_boiler_health_denied",
+        ),
+        ("/api/analytics/hp-health", "y.authz.a_foreign_analytics_hp_health_denied"),
+        (
+            "/api/analytics/zone-other-health",
+            "y.authz.a_foreign_analytics_zone_other_health_denied",
+        ),
+        (
+            "/api/analytics/sensor-health",
+            "y.authz.a_foreign_analytics_sensor_health_denied",
+        ),
     ):
         try:
             body_own = {"building_id": fx.building_a}
