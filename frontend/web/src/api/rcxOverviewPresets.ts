@@ -5,6 +5,7 @@ import {
   postRuntime,
   type AnalyticsEnvelope,
 } from "./analyticsApi";
+import chartContract from "./charts.contract.json";
 import {
   basHist,
   basOverlay,
@@ -30,6 +31,22 @@ export const OVERVIEW_RCX_PRESET_IDS = [
 
 export function isOverviewRcxPreset(id: string): boolean {
   return (OVERVIEW_RCX_PRESET_IDS as readonly string[]).includes(id);
+}
+
+/** Canonical Plotly PNG stem for Overview-mirrored RCx presets. */
+export function overviewRcxPngStem(presetId: string): string {
+  const map = chartContract.png_stem_vocabulary.react_overview_rcx as Record<
+    string,
+    string
+  >;
+  return map[presetId] ?? presetId;
+}
+
+/** Companion PNG stem (BAS hist) when Overview preset has a side chart. */
+export function overviewRcxCompanionPngStem(presetId: string): string | null {
+  const map = chartContract.png_stem_vocabulary
+    .react_overview_rcx_companion as Record<string, string>;
+  return map[presetId] ?? null;
 }
 
 const PLANT_FOR: Record<string, string> = {

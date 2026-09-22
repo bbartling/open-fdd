@@ -434,6 +434,7 @@ export function FuelDashboard({
                   figure={bulletFig ?? summaryFig}
                   loading={loadingAnalytics}
                   height={420}
+                  downloadFilename="fuel_summary_bullet"
                   testId="fuel-chart-summary"
                 />
                 <div
@@ -450,6 +451,7 @@ export function FuelDashboard({
                     figure={elecHeatFig}
                     loading={loadingAnalytics}
                     height={360}
+                    downloadFilename="fuel_intensity_elec"
                     testId="fuel-chart-intensity-elec"
                   />
                   <PlotlyHost
@@ -458,6 +460,7 @@ export function FuelDashboard({
                     figure={gasHeatFig}
                     loading={loadingAnalytics}
                     height={360}
+                    downloadFilename="fuel_intensity_gas"
                     testId="fuel-chart-intensity-gas"
                   />
                 </div>
@@ -467,6 +470,7 @@ export function FuelDashboard({
                   figure={rankedFig}
                   loading={loadingAnalytics}
                   height={360}
+                  downloadFilename="fuel_ranked_eui"
                   testId="fuel-chart-ranked"
                 />
                 {summary?.rows?.length ? (
@@ -510,6 +514,7 @@ export function FuelDashboard({
                   figure={stackedFig}
                   loading={loadingAnalytics}
                   height={420}
+                  downloadFilename="fuel_stacked"
                   testId="fuel-chart-stacked"
                 />
                 <PlotlyHost
@@ -518,6 +523,7 @@ export function FuelDashboard({
                   figure={monthlyFig}
                   loading={loadingAnalytics}
                   height={400}
+                  downloadFilename="fuel_monthly"
                   testId="fuel-chart-monthly"
                 />
                 <PlotlyHost
@@ -526,6 +532,7 @@ export function FuelDashboard({
                   figure={roll12Fig}
                   loading={loadingAnalytics}
                   height={320}
+                  downloadFilename="fuel_roll12"
                   testId="fuel-chart-roll12"
                 />
               </div>
@@ -570,6 +577,7 @@ export function FuelDashboard({
                   figure={weatherFig}
                   loading={loadingAnalytics || fetchingWeather}
                   height={420}
+                  downloadFilename="fuel_weather"
                   testId="fuel-chart-weather"
                 />
                 {residualFigs.map(({ fuel, fig }) => (
@@ -580,6 +588,7 @@ export function FuelDashboard({
                     figure={fig}
                     loading={loadingAnalytics}
                     height={280}
+                    downloadFilename={`fuel_resid_${fuel}`}
                     testId={`fuel-chart-resid-${fuel}`}
                   />
                 ))}
@@ -617,6 +626,7 @@ export function FuelDashboard({
                   figure={demandFig}
                   loading={loadingAnalytics}
                   height={400}
+                  downloadFilename="fuel_demand"
                   testId="fuel-chart-demand"
                 />
                 <PlotlyHost
@@ -625,6 +635,7 @@ export function FuelDashboard({
                   figure={demandPeakFig}
                   loading={loadingAnalytics}
                   height={380}
+                  downloadFilename="fuel_demand_peak"
                   testId="fuel-chart-demand-peak"
                 />
                 <PlotlyHost
@@ -633,6 +644,7 @@ export function FuelDashboard({
                   figure={peakCoolFig}
                   loading={loadingAnalytics}
                   height={360}
+                  downloadFilename="fuel_peak_cool"
                   testId="fuel-chart-peak-cool"
                 />
               </div>

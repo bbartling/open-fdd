@@ -1,3 +1,18 @@
+## 2026-09-22 — W-CHART findings chrome rainbow (#986 follow-on)
+
+- `reporting/charts.py` top/VAV/comfort/confidence bars → `RAINBOW_PALETTE` (React `rankingBars`).
+- Permanent test: `tests/reporting/test_report_chart_palette.py`.
+- Soft-OPEN residual: `overview_*` alias, React-only heatmaps/VAV/donut, PDF DPI, econ polish.
+- Still PyPI **4.4.6** on tip (no 4.4.7); tag after #986 merge.
+
+## 2026-09-22 — W-CHART Inspect/stems tip (PyPI 4.4.6)
+
+- Align `equipment_inspection_chart` to React stacked domains + `Inspection —` title.
+- Expand `charts.contract.json` PNG stem vocabulary; Overview-RCx + fuel `downloadFilename`.
+- Permanent tests: `test_chart_palette_parity.py` + `inspectChart.test.ts`.
+- Skills: typst-rcx-report / react-spa / pypi-oracle brief W-CHART notes.
+- Soft-OPEN: report chrome blues (closed in follow-on), PyPI `overview_*` alias, React-only heatmaps/VAV twin.
+
 ## 2026-09-20 — Wave U security spine tip (3.5.34)
 
 - Master `WAVE_U_MASTER.md` SUPERSEDES Wave T; Soft-OPEN inventory; assurance child plan.
