@@ -138,47 +138,61 @@ START_ISO="$(python3 -c 'from datetime import datetime,timedelta,timezone; print
 probe() {
   local name="$1" method="$2" path="$3" body="${4:-}"
   local out="$ART/37_probe_${name}.json"
-  local code elapsed start end
-  start="$(date +%s)"
-  set +e
-  if [[ "$method" == "GET" ]]; then
-    code="$(curl -sS -o "$out" -w '%{http_code}' --max-time "$HARD_TIMEOUT" \
-      -H "Authorization: Bearer $TOK" "$BASE$path")"
-  else
-    code="$(curl -sS -o "$out" -w '%{http_code}' --max-time "$HARD_TIMEOUT" \
-      -X POST -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
-      -d "$body" "$BASE$path")"
-  fi
-  local curl_rc=$?
-  set -e
-  end="$(date +%s)"
-  elapsed=$((end - start))
-  # curl timeout/connect fail → empty or 000; never concatenate with || echo.
-  if [[ "$curl_rc" -ne 0 || -z "$code" || "$code" =~ ^0+$ ]]; then
-    code="000"
-  fi
-  # Truncate body artifact if huge HTML 502 page.
-  if [[ -f "$out" ]] && [[ "$(wc -c <"$out")" -gt 8192 ]]; then
-    head -c 4096 "$out" >"$out.tmp"
-    echo "…(truncated)" >>"$out.tmp"
-    mv "$out.tmp" "$out"
-  fi
-  jq -nc --arg n "$name" --arg m "$method" --arg p "$path" --arg c "$code" \
-    --argjson s "$elapsed" --argjson rc "$curl_rc" \
-    '{name:$n,method:$m,path:$p,http_code:$c,elapsed_s:$s,curl_rc:$rc}' >>"$PROBES_FILE"
-  echo "probe $name $method $path → HTTP $code (${elapsed}s curl_rc=$curl_rc)" | tee -a "$LOG"
+  local code elapsed start end curl_rc
+  local settle="${ANALYTICS_SETTLE_SECS:-45}"
+  local attempt=0
+  local max_attempts=2
 
-  if [[ "$code" == "502" || "$code" == "503" || "$code" == "504" || "$code" == "000" ]]; then
-    local health_after="dead"
-    if health_ok; then health_after="ok"; else health_after="FAIL"; fi
-    jq -n \
-      --arg n "$name" --arg p "$path" --arg c "$code" --arg h "$health_after" \
-      --argjson s "$elapsed" \
-      '{ok:false,broke_at:$n,path:$p,http_code:$c,elapsed_s:$s,health_after:$h,building:"'"$BUILDING"'"}' \
-      >"$SUMMARY"
-    echo "FAIL: broke at $name HTTP $code health_after=$health_after" | tee -a "$LOG"
-    exit 1
-  fi
+  while true; do
+    attempt=$((attempt + 1))
+    start="$(date +%s)"
+    set +e
+    if [[ "$method" == "GET" ]]; then
+      code="$(curl -sS -o "$out" -w '%{http_code}' --max-time "$HARD_TIMEOUT" \
+        -H "Authorization: Bearer $TOK" "$BASE$path")"
+    else
+      code="$(curl -sS -o "$out" -w '%{http_code}' --max-time "$HARD_TIMEOUT" \
+        -X POST -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
+        -d "$body" "$BASE$path")"
+    fi
+    curl_rc=$?
+    set -e
+    end="$(date +%s)"
+    elapsed=$((end - start))
+    # curl timeout/connect fail → empty or 000; never concatenate with || echo.
+    if [[ "$curl_rc" -ne 0 || -z "$code" || "$code" =~ ^0+$ ]]; then
+      code="000"
+    fi
+    # Truncate body artifact if huge HTML 502 page.
+    if [[ -f "$out" ]] && [[ "$(wc -c <"$out")" -gt 8192 ]]; then
+      head -c 4096 "$out" >"$out.tmp"
+      echo "…(truncated)" >>"$out.tmp"
+      mv "$out.tmp" "$out"
+    fi
+    jq -nc --arg n "$name" --arg m "$method" --arg p "$path" --arg c "$code" \
+      --argjson s "$elapsed" --argjson rc "$curl_rc" --argjson a "$attempt" \
+      '{name:$n,method:$m,path:$p,http_code:$c,elapsed_s:$s,curl_rc:$rc,attempt:$a}' >>"$PROBES_FILE"
+    echo "probe $name $method $path → HTTP $code (${elapsed}s curl_rc=$curl_rc attempt=$attempt)" | tee -a "$LOG"
+
+    if [[ "$code" == "502" || "$code" == "503" || "$code" == "504" || "$code" == "000" ]]; then
+      if [[ "$attempt" -lt "$max_attempts" ]]; then
+        echo "WARN: $name HTTP $code — settle ${settle}s then one retry (nginx Bad Gateway under DataFusion pressure)" \
+          | tee -a "$LOG"
+        sleep "$settle"
+        continue
+      fi
+      local health_after="dead"
+      if health_ok; then health_after="ok"; else health_after="FAIL"; fi
+      jq -n \
+        --arg n "$name" --arg p "$path" --arg c "$code" --arg h "$health_after" \
+        --argjson s "$elapsed" \
+        '{ok:false,broke_at:$n,path:$p,http_code:$c,elapsed_s:$s,health_after:$h,building:"'"$BUILDING"'",retried:true}' \
+        >"$SUMMARY"
+      echo "FAIL: broke at $name HTTP $code health_after=$health_after (after retry)" | tee -a "$LOG"
+      exit 1
+    fi
+    break
+  done
   if ! health_ok; then
     jq -n --arg n "$name" --arg c "$code" \
       '{ok:false,broke_at:$n,http_code:$c,health_after:"FAIL",note:"health died after probe"}' \

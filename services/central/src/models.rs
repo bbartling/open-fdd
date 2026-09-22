@@ -33,7 +33,8 @@ pub struct OkHealthResponse {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct EdgeSummary {
     pub edge_id: String,
-    /// Site from latest telemetry envelope when known (multi-building / cloud-sim).
+    /// Site from latest telemetry, else last MQTT topic registration (status/metadata/…).
+    /// Omitted only when truly unknown — never invented as `lab`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub site_id: Option<String>,
     pub has_telemetry: bool,

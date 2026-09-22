@@ -21,11 +21,25 @@ const MQTT_PREVIEW_BYTES: usize = 4096;
 pub struct EdgeShadow {
     pub last_status: Option<serde_json::Value>,
     pub last_telemetry: Option<TelemetryEnvelope>,
+    /// Site/building from MQTT topic path (status/metadata/discovery/telemetry).
+    /// Retained when `last_telemetry` is absent so `/api/edges` still attributes site.
+    pub registered_site_id: Option<String>,
     /// protocol slug → last metadata payload
     pub last_metadata: HashMap<String, serde_json::Value>,
     /// protocol slug → last discovery payload
     pub last_discovery: HashMap<String, serde_json::Value>,
     pub sequences: HashMap<String, u64>,
+}
+
+impl EdgeShadow {
+    /// Prefer latest telemetry site; else last known topic registration. Never invents `lab`.
+    pub fn known_site_id(&self) -> Option<String> {
+        self.last_telemetry
+            .as_ref()
+            .map(|t| t.site_id.clone())
+            .filter(|s| !s.is_empty())
+            .or_else(|| self.registered_site_id.clone().filter(|s| !s.is_empty()))
+    }
 }
 
 #[derive(Debug, Clone)]

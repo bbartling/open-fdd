@@ -36,6 +36,11 @@ if [[ "${OPENFDD_SECURITY_EXECUTE:-0}" == "1" ]]; then
   if [[ "$PROFILE" == "isolated_full" && "${OPENFDD_SECURITY_ALLOW_WRITES:-0}" == "1" ]]; then
     ARGS+=(--allow-fixture-writes)
   fi
+  # Railway field / live hub: foreign analytics authz POSTs can exceed the default
+  # 10s transport budget under concurrent stress (idle still returns 403 in ~300ms).
+  if [[ "${RAILWAY_ONLY:-0}" == "1" || "$PROFILE" == "live_readonly" ]]; then
+    ARGS+=(--timeout "${OPENFDD_SECURITY_TIMEOUT_S:-30}")
+  fi
 else
   ARGS+=(--dry-run)
 fi

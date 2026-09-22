@@ -7,7 +7,8 @@
 | Item | Status |
 |------|--------|
 | Product tip / **OPS PINNED (FQ)** | **3.5.43** / **`sha-7ad6479`** (#978) · health `3.5.43+7ad6479c924a` · backup **`20260921T233725Z`** · stress `reports/nightly-ot-bench_20260921T234148Z/` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave U V6 FQ** |
-| **Follow-on tip (not OPS PINNED)** | **3.5.45** / **`sha-9da9902`** (#988 W4+3.5.45) · hub re-pinned · backup **`20260922T213028Z`** · W7 MEGA `reports/nightly-ot-bench_20260922T213831Z/` **`fully_qualified=false`** — Soft-OPEN below · [wave_u_post-fq_remainder.plan.md](../../.cursor/plans/wave_u_post-fq_remainder.plan.md) |
+| **W7 MEGA FAIL (not OPS PINNED)** | Hub tip under test **3.5.45** / **`sha-9da9902`** · backup **`20260922T213028Z`** · artifact `reports/nightly-ot-bench_20260922T213831Z/` · **`fully_qualified=false`** — Soft-OPEN rows below; follow-up tip **3.5.46** (list_edges site_id + harness) |
+| **Follow-on tip (not OPS PINNED)** | **3.5.45** / **`sha-9da9902`** (#988 W4 EQ-VOCAB) · prior **3.5.44** / `sha-bcacee6` · hub OPS still `sha-7ad6479` / 3.5.43 until W7 FQ · [wave_u_post-fq_remainder.plan.md](../../.cursor/plans/wave_u_post-fq_remainder.plan.md) |
 | **Wave U post-FQ remainder** `2026-09-22` | Master W-UI→W0–W7 · ECM [ecm_context_hardening.plan.md](../../.cursor/plans/ecm_context_hardening.plan.md) · V1–V8 scheduling **SUPERSEDED** |
 | **Wave U remainder cycles** `2026-09-21` | **SUPERSEDED** [wave_u_remainder_patch_cycles.plan.md](../../.cursor/plans/wave_u_remainder_patch_cycles.plan.md) · historical V1–V8 only |
 | **Wave U hub tip (smoke + MEGA in flight)** | **3.5.34** / **`sha-f44b45f`** (#959) · health `3.5.34+f44b45f6f58d` · backup **`20260920T193429Z`** · fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1` kit restored · MEGA `reports/nightly-ot-bench_20260920T194610Z/` · **no FQ / OPS PINNED claim until `fully_qualified=true`** |
@@ -63,6 +64,12 @@
 | **admin-capacity-gauges** | **CLOSED (branch)** · cgroup memory + workspace `statvfs` + Parquet small-file strip on Admin |
 | **railway-capacity-stress** | **CITED** Tip B FQ `20260917T215437Z` gates 24/24b PASS |
 | **mqtt-pause-ui** | **CLOSED (#947 Tip B)** · MT command topics `tenants/…`; gate **35 PASS** on `sha-4a5c11e` stress `20260917T215437Z` |
+| **w7-mega-20260922T213831Z** | **Soft-OPEN / FAIL** · MEGA on `sha-9da9902` / 3.5.45 · `fully_qualified=false` — see section below; tip **3.5.46** patch pending re-MEGA |
+| **w7-gate35-pick-edge-lab** | **Soft-OPEN (patched tip)** · Gate 35 published `buildings/lab/…` while fieldbus on `ACME`; fixed in harness `resolve_edge_target` + product `registered_site_id` — Soft-OPEN until re-MEGA |
+| **w7-list-edges-site-id** | **Soft-OPEN (patched tip)** · `list_edges` now keeps MQTT topic `site_id` when telemetry absent — Soft-OPEN until re-MEGA |
+| **w7-gate25-analytics-timeout** | **Soft-OPEN (patched tip)** · settle + `--timeout 30` on railway live_readonly EXECUTE — Soft-OPEN until re-MEGA |
+| **w7-gate37-analytics-502** | **Soft-OPEN (patched tip)** · settle before gate 37 + one 502 retry — Soft-OPEN until re-MEGA |
+| **w7-gate26-acl-execute** | **Soft-OPEN (patched tip)** · auto `OPENFDD_MQTT_ACL_EXECUTE=1` when `OPENFDD_SECURITY_EXECUTE=1` — Soft-OPEN until re-MEGA |
 | **acme-oa-t-dup-reject** | **CLOSED (catalog 3.5.34)** · `config/fieldbus/field_devices.toml`: zone loopback no longer maps `outside-air-temperature` on AV 9101; `hosted-weather` owns `web-outside-air-temp`. Live `vim-1` needs kit restore to clear residual hub rejects. |
 | **local-bacnet-ot-bench** | **Soft-OPEN** · MS/TP/FEC shared-trunk; Waveshare C FTDI `--mstp-passive` @38400: FEC alone silence; +mini MAC2 → PFM heard. Resume when FEC online on isolated trunk. |
 | **edge-kit-soft** | **OPS** · MT kit `./scripts/openfdd_restore_edge_kit.sh ACME pi-1` → `deploy/mqtt/kits/ACME__pi-1/` · live ACME OT edge id `vim-1` |
@@ -131,6 +138,21 @@ The current closure rows above are corrected prospectively. Earlier scan/test ac
 For each fix append candidate/harness SHA, image/config/fixture hashes, profile, actual CI/run/artifact references, expected/observed outcomes and retest result. Do not mark these rows FIXED merely because a plan or test file was added. These owner labels identify responsibility; assign an actual maintainer when scheduling.
 
 
+
+## Wave U W7 MEGA attempt `20260922T213831Z` — **FAIL** (not OPS PINNED)
+
+**Tip under test:** `sha-9da9902` / `3.5.45+9da9902` · backup `20260922T213028Z` · edge `vim-1` · EXECUTE=1 · **`OPENFDD_MQTT_ACL_EXECUTE` unset**  
+**Artifact:** `reports/nightly-ot-bench_20260922T213831Z/` · **`fully_qualified=false`**
+
+| Gate | Result | Root cause |
+|------|--------|------------|
+| **35 pause/resume** | **FAIL** | Harness `pick_edge`: edges JSON had `vim-1` with `has_telemetry:false` and **no `site_id`** → silent fallback `OPENFDD_SITE_ID=lab` from `bench.env.example`. Command → `…/buildings/lab/edges/vim-1/commands/…` while fieldbus subscribes `…/buildings/ACME/…`. Evidence: `cmd_suspend.json` `site_id: lab`; live edges later show `site_id: ACME`. Product: `list_edges` only emits site from `last_telemetry`. |
+| **25 security python** | **FAIL** | 4× `TimeoutError` on foreign analytics authz POSTs (`ahu-health` / `vav-health` / `rcx/ahu` / `sensor-health`) at 10s transport budget. Same endpoints return **403 in ~300ms** when hub idle → overload under concurrent stress, not wrong ACL. |
+| **37 ACME analytics** | **FAIL** | `POST /api/analytics/runtime` HTTP **502** (~35s) under load after capacity/AFDD; idle probe **200** with data. |
+| **25b** | **BLOCKED** | Downstream of gate 25 errors. |
+| **26 MQTT ACL** | **BLOCKED** | `OPENFDD_MQTT_ACL_EXECUTE!=1` (prior FQ MEGA set it; this run did not auto-enable). |
+
+**Follow-up tip `3.5.46` (this PR):** product `list_edges` retains registered MQTT topic `site_id`; harness `pick_edge` prefers `EXPECTED_SITE_ID` / fail-closed (never silent `lab`); auto `OPENFDD_MQTT_ACL_EXECUTE=1` when `OPENFDD_SECURITY_EXECUTE=1`; settle + foreign-analytics timeout bump; gate 37 one 502 retry after settle. **Do not claim FIXED Soft-OPEN until re-MEGA `fully_qualified=true`.**
 
 ## Wave U MEGA FQ attempt `20260921T021332Z` — **PASS / OPS PINNED**
 
@@ -223,5 +245,6 @@ Prior FAILs `20260920T194610Z` / `20260920T231407Z` / `20260921T014908Z` retaine
 | **wu-dm-07-10** | Soft-OPEN | **PARTIAL (W4 tip)** | DM-07/08 CLOSED (V5). **CLOSED on W4:** EQ-VOCAB · ECM-ADAPT · DM-10 narrow (`ofdd_haystack_projection_v1`, no false `hs:sensor`) · Pages. **PARTIAL:** DM-09 SELECT cap + baseline doc. **Soft-OPEN residual:** PERF-1 scale RSS · EQ-PERSIST · ECM REST/MCP |
 | **wu-mt-breadth** | Soft-OPEN | Soft-OPEN honesty | Continue IMPLEMENTED matrix later; inventory cited on tip |
 | **wu-v6-mega-20260921T204702Z** | Soft-OPEN / tip | **CLOSED FQ** | Tip **3.5.43** / `sha-7ad6479` (#978). MEGA `20260921T234148Z` `fully_qualified=true` (gate 00 retest after login throttle; all 25/25b/26/17/36/37 PASS). |
+| **w7-mega-20260922T213831Z** | Soft-OPEN / tip | **OPEN (FAIL logged)** | Tip **3.5.45** / `sha-9da9902`. MEGA `20260922T213831Z` `fully_qualified=false` (35 lab site / 25 timeout / 37 502 / 26 ACL unset). Patch tip **3.5.46** in flight — Soft-OPEN stays OPEN until re-MEGA. |
 
 **Do not claim:** Nessus assessment PASS · readiness VERIFIED while Critical/High unresolved · Soft-OPEN CLOSED without measured evidence. |

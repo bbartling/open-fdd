@@ -79,3 +79,4 @@ workspace/vibe21_jobs/
 # Local Railway/workspace backups (never commit)
 openfdd-backups/
 .secrets/
+.worktrees/
