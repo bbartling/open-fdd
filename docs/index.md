@@ -15,7 +15,16 @@ Open-source building analytics for operators, integrators, and engineers who nee
 
 Secure HVAC data collection, fault detection, and portfolio access for mechanical systems integrators.
 
-![Open-FDD field-to-cloud architecture — BACnet/Modbus at the building, MQTTS to the hub, HTTPS/JWT for office and AI agents]({{ site.baseurl }}/assets/open-fdd-field-to-cloud.jpg)
+<figure class="architecture-diagram">
+  <img
+    src="{{ site.baseurl }}/assets/open-fdd-field-to-cloud.png"
+    alt="Open-FDD field-to-cloud architecture — BACnet/Modbus at the building, MQTTS to the hub, HTTPS/JWT for office and AI agents"
+    width="1672"
+    height="941"
+    loading="eager"
+    decoding="async"
+  />
+</figure>
 
 | Path | Protocol |
 |------|----------|
