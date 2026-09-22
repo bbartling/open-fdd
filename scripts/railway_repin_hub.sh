@@ -7,8 +7,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-TAG="${OPENFDD_IMAGE_TAG:-}"
-[[ -n "$TAG" ]] || { echo "ERROR: set OPENFDD_IMAGE_TAG=sha-<7>" >&2; exit 2; }
+TAG="${1:-${OPENFDD_IMAGE_TAG:-}}"
+[[ -n "$TAG" ]] || {
+  echo "ERROR: pass sha-<7> as \$1 or set OPENFDD_IMAGE_TAG (refuse sticky silent default)" >&2
+  exit 2
+}
+# Never silently re-use an ambient .env pin without an explicit arg or env.
 CENTRAL_SVC="${OPENFDD_RAILWAY_CENTRAL_SVC:-openfdd-central-cQ-F}"
 WEB_SVC="${OPENFDD_RAILWAY_WEB_SVC:-openfdd-web}"
 MQTT_SVC="${OPENFDD_RAILWAY_MQTT_SVC:-openfdd-mqtt}"

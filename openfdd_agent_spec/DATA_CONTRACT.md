@@ -53,6 +53,16 @@ cookbook catalog metadata. Custom rules:
 rendering without recomputing formulas (summary + bins/detail + assumptions +
 warnings + provenance). Adapters may translate field names only.
 
+Agent-facing screening context uses schema **`ecm_context_v1`**
+(`open_fdd.ecm_engineering.context_envelope.EcmContext`): tenant/building scope,
+equipment assets with distinct command/power provenance, roles/DQ, baselines,
+scenario, tariff (missing → monetary UNAVAILABLE), calc result + readiness
+(`screening` | `validated` | `submission_ready` with human_review for the last),
+interactions, and structured `missing_evidence` / `assumptions_required` /
+`blocking_issues` / `recommended_measurements`. Combined schedule + fan reset
+must apply reset on remaining runtime (`combine_schedule_then_fan_reset`).
+Python stays on PyPI — not on central/web request paths.
+
 Target shape (Phase 4 hardening):
 
 ```json

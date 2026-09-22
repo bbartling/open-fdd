@@ -7,8 +7,9 @@
 | Item | Status |
 |------|--------|
 | Product tip / **OPS PINNED (FQ)** | **3.5.43** / **`sha-7ad6479`** (#978) · health `3.5.43+7ad6479c924a` · backup **`20260921T233725Z`** · stress `reports/nightly-ot-bench_20260921T234148Z/` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave U V6 FQ** |
-| **Follow-on tip (not OPS PINNED)** | **3.5.38** / **`sha-af4086f`** (#966) · BACnet CI key modes + writable broker certs · nginx force-upgrade · HTTPS trusted-CA stub peer · Trivy absolute ARTIFACT_DIR — GHCR publish may lag; remainder cycles V1–V8 in [`.cursor/plans/wave_u_remainder_patch_cycles.plan.md`](../../.cursor/plans/wave_u_remainder_patch_cycles.plan.md) |
-| **Wave U remainder cycles** `2026-09-21` | Master [wave_u_remainder_patch_cycles.plan.md](../../.cursor/plans/wave_u_remainder_patch_cycles.plan.md) · MILESTONES V1–V8 index · Soft-OPEN mapped to cycles; Stage C IdP deferred · #958 HOLD |
+| **Follow-on tip (not OPS PINNED)** | **3.5.44** / merge #980 quiet SPA · GHCR after merge · **W7** MEGA before OPS re-pin · [wave_u_post-fq_remainder.plan.md](../../.cursor/plans/wave_u_post-fq_remainder.plan.md) |
+| **Wave U post-FQ remainder** `2026-09-22` | Master W-UI→W0–W7 · ECM [ecm_context_hardening.plan.md](../../.cursor/plans/ecm_context_hardening.plan.md) · V1–V8 scheduling **SUPERSEDED** |
+| **Wave U remainder cycles** `2026-09-21` | **SUPERSEDED** [wave_u_remainder_patch_cycles.plan.md](../../.cursor/plans/wave_u_remainder_patch_cycles.plan.md) · historical V1–V8 only |
 | **Wave U hub tip (smoke + MEGA in flight)** | **3.5.34** / **`sha-f44b45f`** (#959) · health `3.5.34+f44b45f6f58d` · backup **`20260920T193429Z`** · fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1` kit restored · MEGA `reports/nightly-ot-bench_20260920T194610Z/` · **no FQ / OPS PINNED claim until `fully_qualified=true`** |
 | Hub smoke tip (prior) | **3.5.33** / **`sha-3cd3745`** (#954) · mid-wave smoke only · superseded by `sha-f44b45f` re-pin |
 | **Wave U FQ closeout notes** `2026-09-20` | H0: required Actions green on `f44b45f`; Optional BACnet FAIL = fail-closed without CI key → **#960 FIXED** (`bacnet-mqtt-e2e` PASS). H1: #958 HOLD (baud docs); `tip/wave-u-u0-master` deleted; only `docs/diy-baud-hold-ai-context` remote. P1: `check_ghcr_tip_stack sha-f44b45f` PASS; Trivy cite `reports/trivy-wave-u/sha-f44b45f/SUMMARY.md` (mqtt 0; Debian/Alpine OS High residual — not greenwashed). Smoke: `POST /api/analytics/mv` **200** (clears `wu-mv-404-pre-pin`); edges=1 `vim-1` telemetry; ingest climbing (residual `ingest_reject` post kit restore). |
@@ -66,9 +67,10 @@
 | **local-bacnet-ot-bench** | **Soft-OPEN** · MS/TP/FEC shared-trunk; Waveshare C FTDI `--mstp-passive` @38400: FEC alone silence; +mini MAC2 → PFM heard. Resume when FEC online on isolated trunk. |
 | **edge-kit-soft** | **OPS** · MT kit `./scripts/openfdd_restore_edge_kit.sh ACME pi-1` → `deploy/mqtt/kits/ACME__pi-1/` · live ACME OT edge id `vim-1` |
 | **s1-datasets-mt-acl** | **CLOSED** (#951 / 3.5.31 / `sha-7b81eb8`) · datasets list/delete MT ACL; FQ `20260919T195100Z` gate 25/25b PASS |
-| **wave-s3-pypi-mv-oracle** | **PARTIAL** · IPMVP change-point + G14 in `open_fdd.ecm_engineering` · wheel `4.4.3` local · PyPI still **4.4.1** · unfinished Camber Soft-OPEN — **V4** [wave_u_v4_pypi_publish.plan.md](../../.cursor/plans/wave_u_v4_pypi_publish.plan.md) |
+| **wave-s3-pypi-mv-oracle** | **CLOSED (PyPI)** · `open-fdd==4.4.3` live; tip **4.4.4** adds `ecm_context_v1` envelope (W4 / [ecm_context_hardening.plan.md](../../.cursor/plans/ecm_context_hardening.plan.md)) |
+| **wu-pypi-publish-4.4.3** | **CLOSED** · verified PyPI 4.4.3 live 2026-09-22 |
+| **wave-s5-dm-remainder** | **PARTIAL** · DM-07/08 CLOSED; Soft-OPEN residual DM-09/10 · EQ-VOCAB · ECM-ADAPT → **W4** + ECM context plan · Pages done (#958) |
 | **wave-s4-sql-twins-fq** | **CLOSED (FQ)** · MEGA `20260921T021332Z` `fully_qualified=true` on `sha-1677c33` / 3.5.37 · both gate 36 PASS · OPS PINNED |
-| **wave-s5-dm-remainder** | **PARTIAL** · DM-07/08 CLOSED on V5 tip (SPARQL bindings + SELECT allowlist); Soft-OPEN residual DM-09/10 · EQ-VOCAB · ECM-ADAPT · Pages — **V5** [wave_u_v5_s5_dm_ecm.plan.md](../../.cursor/plans/wave_u_v5_s5_dm_ecm.plan.md) |
 | **acme-fdd-run-hang** | **CLOSED (3.5.34)** · Stale `running` reclaim **20m** + `list_actions` reclaim + `POST /api/fdd/run` wall timeout via `OPENFDD_FDD_RUN_TIMEOUT_SECS` (default **900s**) finishes action `fail`/`timeout` instead of indefinite hang. Slow ACME DataFusion remains a performance topic, not an action hang. |
 | **sec-harness-mt-breadth** | **ADVANCED (V3)** · +6 routes IMPLEMENTED (buildings, fdd/series, ahu/vav-health, sensor-faults, rcx/ahu); residual PLANNED remain ·  **PARTIAL** · Expanded Y/X mapping/FDD; Soft-OPEN more PLANNED MT routes — **V3** [wave_u_v3_mt_field_host.plan.md](../../.cursor/plans/wave_u_v3_mt_field_host.plan.md) |
 | **sec-harness-evaluator-integrity** | **CLOSED for UA-01/03/04/06/07 contract (tip)** · Permanent negatives + MEGA required gates; Soft-OPEN remains for breadth (MT routes) and product MQTT image vs fixture broker |
@@ -76,8 +78,8 @@
 | **standalone-https-bootstrap** | **PARTIAL→candidate PASS (UA-02)** · Product soak `reports/security/standalone_https_peer_20260921T134930Z` on `sha-af4086f`; stub peer retained; Soft-OPEN until tip includes V1 probe in GHCR docs tip |
 | **fieldbus-mgmt-failclosed** | **CLOSED (3.5.34)** · `require_api_key_for_bind` + unit tests (`non_loopback_without_key_refused`, loopback/key cases) |
 | **mqtt-key-mode-tenant-acl** | **PARTIAL→product live PASS (UA-03)** · Gate/observer default `openfdd-mqtt` + provisioner ACL; tip live PASS on `sha-af4086f`; fixture broker requires ALLOW_FIXTURE — **V2** |
-| **zap-af-authenticated** | **PARTIAL (UA-04)** · disposable plan adds `/api/auth/me` request; runner requires `auth_me_hit` for PASS — execute Soft-OPEN until disposable AF run — **V2** |
-| **image-digest-trivy** | **REMEDIATION OPEN (UA-05)** · rescan `reports/trivy-wave-u/sha-af4086f/SUMMARY.md`; nginx still 1.28.2 on 3.5.38; **V1/3.5.39** del modules + nginx>=1.28.3 |
+| **zap-af-authenticated** | **PARTIAL (UA-04)** · disposable AF execute Soft-OPEN → **W2** [wave_u_post-fq_remainder.plan.md](../../.cursor/plans/wave_u_post-fq_remainder.plan.md) |
+| **image-digest-trivy** | **REMEDIATION IN TIP (UA-05)** · Dockerfile already `nginx>=1.28.3`; tip rescan after 3.5.44 GHCR → **W1** |
 | **nessus-pass-readiness** | **PARTIAL (UA-08/09)** · host_runtime_probe PASS `reports/security/host_runtime_probe_v3.json` (field_only_ot) + field-only lint; Nessus still BLOCKED |
 | **nessus-isolated-assessment** | **Soft-OPEN / BLOCKED** · Real licensed Nessus only |
 

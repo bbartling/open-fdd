@@ -28,24 +28,26 @@ The independent audit reopened acceptance checks. Statuses below do not erase ea
 | **U-G — Qualified release and handoff** | Release maintainer + operator | RELEASED (hub FQ) | OPS PINNED **`sha-7ad6479` / 3.5.43** · stress `20260921T234148Z` (V6). Prior **`sha-1677c33` / 3.5.37**. Soft remainders: UA-02/05/08/09, UA-10 S5 residual, U-H Nessus. |
 | **U-H — Licensed Nessus assessment** | Operator/customer security | BLOCKED — licensed scanner and isolated assessment host | Actual external and credentialed assessment of representative standalone/field hosts, verified scan completeness and policy, remediations and retest. Never substitute Python/ZAP/Trivy or synthetic XML for this result. |
 
-## Wave U remainder cycles (V1–V8) — 2026-09-21
+## Wave U remainder cycles (V1–V8) — SUPERSEDED 2026-09-22
 
-Execution master: [`.cursor/plans/wave_u_remainder_patch_cycles.plan.md`](.cursor/plans/wave_u_remainder_patch_cycles.plan.md). Hub FQ on **3.5.37** remains RELEASED; these cycles close Soft-OPEN / PARTIAL acceptance without cancelling U-H or Stage C IdP.
+**SUPERSEDED** by post-FQ master [`.cursor/plans/wave_u_post-fq_remainder.plan.md`](.cursor/plans/wave_u_post-fq_remainder.plan.md) (W-UI → W0–W7). Historical V1–V8 rows below are closed for product landing; residual Soft-OPEN continues under W1–W7 / ECM plan.
 
 | Cycle | Scope | Status | Soft-OPEN / UA | Subplan |
 | --- | --- | --- | --- | --- |
-| **V1** | Tip Trivy + product HTTPS candidate soak | **IN FLIGHT** (3.5.39 nginx + candidate probe) | UA-02, UA-05 | [wave_u_v1_images_https.plan.md](.cursor/plans/wave_u_v1_images_https.plan.md) |
-| **V2** | Product MQTT ACL + disposable ZAP AF | **IN FLIGHT** | UA-03, UA-04 | [wave_u_v2_mqtt_zap.plan.md](.cursor/plans/wave_u_v2_mqtt_zap.plan.md) |
-| **V3** | MT breadth batch + field/host live evidence | **IN FLIGHT** (host PASS + 6 routes) | UA-07/08, `sec-harness-mt-breadth` | [wave_u_v3_mt_field_host.plan.md](.cursor/plans/wave_u_v3_mt_field_host.plan.md) |
-| **V4** | PyPI `open-fdd` **4.4.3** publish | PLANNED | `wave-s3-pypi-mv-oracle` | [wave_u_v4_pypi_publish.plan.md](.cursor/plans/wave_u_v4_pypi_publish.plan.md) |
-| **V5** | S5 DM-07..10 / EQ-VOCAB / ECM-ADAPT / Pages | PLANNED | `wave-s5-dm-remainder` | [wave_u_v5_s5_dm_ecm.plan.md](.cursor/plans/wave_u_v5_s5_dm_ecm.plan.md) |
-| **V6** | Single final MEGA FQ + OPS PINNED bump | PLANNED | U-G re-pin after V1–V5 tip | [wave_u_v6_final_mega.plan.md](.cursor/plans/wave_u_v6_final_mega.plan.md) |
-| **V7** | Tenant path migrate `tenants/{tid}/…` | **LANDED** (3.5.41 dual-read + migrate script) | `wave-o1-tenant-path-migrate` **CLOSED (product)** | [wave_u_v7_tenant_path_migrate.plan.md](.cursor/plans/wave_u_v7_tenant_path_migrate.plan.md) |
-| **V8** | Historian H4 + runtime compaction coordinator | **BRANCH** | `historian-n-building-scale` CLOSED (CI); Railway live compact soak residual | [wave_u_v8_historian_compaction.plan.md](.cursor/plans/wave_u_v8_historian_compaction.plan.md) |
+| **V1** | Tip Trivy + product HTTPS candidate soak | **LANDED** (nginx≥1.28.3 in Dockerfile; soak residual → W1) | UA-02/05 residual tip rescan | [wave_u_v1_images_https.plan.md](.cursor/plans/wave_u_v1_images_https.plan.md) |
+| **V2** | Product MQTT ACL + disposable ZAP AF | **LANDED** (MQTT ACL); ZAP AF execute → W2 | UA-04 residual | [wave_u_v2_mqtt_zap.plan.md](.cursor/plans/wave_u_v2_mqtt_zap.plan.md) |
+| **V3** | MT breadth batch + field/host live evidence | **LANDED** (+6 routes); residual PLANNED → W2 | `sec-harness-mt-breadth` residual | [wave_u_v3_mt_field_host.plan.md](.cursor/plans/wave_u_v3_mt_field_host.plan.md) |
+| **V4** | PyPI `open-fdd` **4.4.3** publish | **CLOSED** (PyPI live 4.4.3) | — | [wave_u_v4_pypi_publish.plan.md](.cursor/plans/wave_u_v4_pypi_publish.plan.md) |
+| **V5** | S5 DM-07..10 / EQ-VOCAB / ECM-ADAPT / Pages | **PARTIAL** (DM-07/08 + Pages); residual → W4 + [ecm_context_hardening.plan.md](.cursor/plans/ecm_context_hardening.plan.md) | DM-09/10 · EQ · ECM | [wave_u_v5_s5_dm_ecm.plan.md](.cursor/plans/wave_u_v5_s5_dm_ecm.plan.md) |
+| **V6** | Single final MEGA FQ + OPS PINNED bump | **CLOSED FQ** | OPS PINNED `sha-7ad6479` / 3.5.43 | [wave_u_v6_final_mega.plan.md](.cursor/plans/wave_u_v6_final_mega.plan.md) |
+| **V7** | Tenant path migrate `tenants/{tid}/…` | **LANDED** (dual-read); live APPLY → W5 | live APPLY residual | [wave_u_v7_tenant_path_migrate.plan.md](.cursor/plans/wave_u_v7_tenant_path_migrate.plan.md) |
+| **V8** | Historian H4 + runtime compaction | **LANDED** (product); live compact soak → W5 | live soak residual | [wave_u_v8_historian_compaction.plan.md](.cursor/plans/wave_u_v8_historian_compaction.plan.md) |
 
-**Deferred outside V1–V8:** `stage-c-idp-mfa-sku` (commercial) · U-H Nessus · `local-bacnet-ot-bench` · #958 HOLD baud docs.
+**Follow-on tip:** W-UI quiet SPA **3.5.44** (#980) landed. Next: W0 hygiene (this docs tip) → W1 tip rescan → … → W7 MEGA.
 
-Rules: smoke-only between cycles; **one MEGA at V6** (do not wait for V7/V8); log FAIL in BUG_REPORT before fix.
+**Deferred:** `stage-c-idp-mfa-sku` · U-H Nessus · `local-bacnet-ot-bench`.
+
+Rules: smoke-only between cycles; **one MEGA at W7** (post-FQ plan); log FAIL in BUG_REPORT before fix.
 
 These owner labels are responsibilities, not assigned GitHub usernames. Name the actual owner when scheduling the milestone. Set due dates when capacity and external dependencies are known; do not invent dates to create apparent commitment.
 
