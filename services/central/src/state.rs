@@ -38,11 +38,7 @@ impl EdgeShadow {
             .as_ref()
             .map(|t| t.site_id.clone())
             .filter(|s| !s.is_empty())
-            .or_else(|| {
-                self.registered_site_id
-                    .clone()
-                    .filter(|s| !s.is_empty())
-            })
+            .or_else(|| self.registered_site_id.clone().filter(|s| !s.is_empty()))
     }
 }
 
