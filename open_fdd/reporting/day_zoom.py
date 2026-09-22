@@ -150,7 +150,9 @@ def render_day_zoom_png(
         sharex=True,
         gridspec_kw={"height_ratios": [3.2, 0.8], "hspace": 0.08},
     )
-    colors = ["#2b6cb0", "#c05621", "#2f855a", "#805ad5"]
+    from open_fdd.analytics.charts import RAINBOW_PALETTE
+
+    colors = list(RAINBOW_PALETTE)
     for i, (name, sl) in enumerate(series_day):
         try:
             y = pd.to_numeric(sl, errors="coerce")

@@ -252,10 +252,13 @@ run_gate "00_hub_health_edges" "00 hub health + edges" bash -euo pipefail -c '
   echo "$HEALTH" | tee "'"$ART"'/health.json" | jq -e ".ok==true" >/dev/null
   fb="$(curl -sf --max-time 8 http://127.0.0.1:8081/health || true)"
   echo "fieldbus=$fb" | tee "'"$ART"'/fieldbus_health.txt"
-  TOK="$(curl -sf --max-time 20 -X POST "$OPENFDD_API_BASE/api/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "$(jq -nc --arg p "$OPENFDD_ADMIN_PASSWORD" "{username:\"admin\",password:\$p}")" \
-    | jq -r ".token // empty")"
+  TOK="${OPENFDD_ADMIN_TOKEN:-}"
+  if [[ -z "$TOK" ]]; then
+    TOK="$(curl -sf --max-time 20 -X POST "$OPENFDD_API_BASE/api/auth/login" \
+      -H "Content-Type: application/json" \
+      -d "$(jq -nc --arg p "$OPENFDD_ADMIN_PASSWORD" "{username:\"admin\",password:\$p}")" \
+      | jq -r ".token // empty")"
+  fi
   test -n "$TOK"
   EDGES="$(curl -sf --max-time 20 -H "Authorization: Bearer $TOK" "$OPENFDD_API_BASE/api/edges")"
   echo "$EDGES" | tee "'"$ART"'/edges.json" >/dev/null
