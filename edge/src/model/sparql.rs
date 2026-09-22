@@ -4,7 +4,7 @@ use crate::model::rdf;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-const MAX_ROWS: usize = 5000;
+use rdf::SPARQL_MAX_ROWS as MAX_ROWS;
 
 const PREFIXES: &str = r#"
 PREFIX hs: <https://project-haystack.org/def/>

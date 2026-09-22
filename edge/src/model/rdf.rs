@@ -14,6 +14,10 @@ use std::sync::RwLock;
 
 pub const HS_PREFIX: &str = "https://project-haystack.org/def/";
 pub const OFDD_PREFIX: &str = "https://open-fdd.dev/model#";
+/// Versioned Haystack-grid → Turtle projection (DM-10). Not lossless JSON↔TTL.
+pub const PROJECTION_VERSION: &str = "ofdd_haystack_projection_v1";
+/// Hard cap on SPARQL SELECT materialization (DM-09). Callers may truncate earlier.
+pub const SPARQL_MAX_ROWS: usize = 5000;
 
 static STORE: Lazy<RwLock<StoreState>> = Lazy::new(|| RwLock::new(StoreState::empty()));
 
@@ -228,10 +232,6 @@ fn enrich_rows(rows: &[Value]) -> Vec<Value> {
         .collect()
 }
 
-fn point_has_role_marker(row: &Value) -> bool {
-    POINT_ROLE_KEYS.iter().any(|key| row.get(*key).is_some())
-}
-
 fn format_subject_block(subj: &str, triples: &[(String, String)]) -> String {
     if triples.is_empty() {
         return String::new();
@@ -261,6 +261,11 @@ pub fn haystack_rows_to_turtle(rows: &[Value]) -> String {
         format!("@prefix hs: <{HS_PREFIX}> ."),
         format!("@prefix ofdd: <{OFDD_PREFIX}> ."),
         "@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .".to_string(),
+        String::new(),
+        // DM-10: declare projection identity; never claim lossless JSON↔TTL.
+        "ofdd:HaystackProjection a ofdd:ProjectionSpec ;".to_string(),
+        format!("  ofdd:projectionVersion \"{PROJECTION_VERSION}\" ;"),
+        "  ofdd:claimsLosslessJson false .".to_string(),
         String::new(),
     ];
 
@@ -321,9 +326,8 @@ pub fn haystack_rows_to_turtle(rows: &[Value]) -> String {
             }
         }
 
-        if row.get("point").is_some() && !point_has_role_marker(row) {
-            push_triple(&mut triples, "hs:sensor".into(), "true".into());
-        }
+        // DM-10: do not invent hs:sensor (or any role marker) when absent.
+        // Role markers are emitted only from explicit POINT_ROLE_KEYS above.
 
         let block = format_subject_block(&subj, &triples);
         if !block.is_empty() {
@@ -510,8 +514,14 @@ pub fn sparql_select(
 
         match results {
             QueryResults::Solutions(solutions) => {
-                let mut rows = Vec::new();
+                // DM-09: stop after SPARQL_MAX_ROWS+1 so callers can set truncated
+                // without materializing an unbounded solution set.
+                let cap = SPARQL_MAX_ROWS.saturating_add(1);
+                let mut rows = Vec::with_capacity(cap.min(256));
                 for sol in solutions {
+                    if rows.len() >= cap {
+                        break;
+                    }
                     let sol = sol.map_err(|e| format!("SPARQL solution error: {e}"))?;
                     let mut map = std::collections::HashMap::new();
                     for (var, term) in sol.iter() {
@@ -598,6 +608,7 @@ mod tests {
                 "id": "point:oa",
                 "dis": "OA Temp",
                 "point": "M",
+                "sensor": "M",
                 "equipRef": "equip:ahu1",
                 "fddInput": "oa_t"
             }),
@@ -609,10 +620,76 @@ mod tests {
         assert!(ttl.contains("ofdd:fddInput \"oa_t\""));
         assert!(ttl.contains("ofdd:equipType \"ahu\""));
         assert!(ttl.contains("hs:sensor true"));
+        assert!(ttl.contains(&format!("ofdd:projectionVersion \"{PROJECTION_VERSION}\"")));
+        assert!(ttl.contains("ofdd:claimsLosslessJson false"));
         Store::new()
             .unwrap()
             .load_from_reader(RdfFormat::Turtle, ttl.as_bytes())
             .expect("turtle parses");
+    }
+
+    #[test]
+    fn dm10_no_false_sensor_marker_when_role_absent() {
+        let rows = vec![
+            json!({"id": "site:lab", "dis": "Lab", "site": "M"}),
+            json!({
+                "id": "equip:ahu1",
+                "dis": "AHU-1",
+                "equip": "M",
+                "ahu": "M",
+                "siteRef": "site:lab"
+            }),
+            json!({
+                "id": "point:orphan",
+                "dis": "Unlabeled",
+                "point": "M",
+                "equipRef": "equip:ahu1"
+            }),
+        ];
+        let ttl = haystack_rows_to_turtle(&rows);
+        assert!(ttl.contains(&format!("ofdd:{}", turtle_local("point:orphan"))));
+        assert!(
+            !ttl.contains("hs:sensor"),
+            "DM-10: must not invent hs:sensor without an explicit role marker"
+        );
+        assert!(ttl.contains(&format!("ofdd:projectionVersion \"{PROJECTION_VERSION}\"")));
+    }
+
+    #[test]
+    fn dm09_sparql_select_caps_materialization() {
+        assert_eq!(SPARQL_MAX_ROWS, 5000);
+        let rows = school_kw_fixture_rows();
+        let ttl = haystack_rows_to_turtle(&rows);
+        let store = Store::new().unwrap();
+        store
+            .load_from_reader(RdfFormat::Turtle, ttl.as_bytes())
+            .unwrap();
+        let q = r#"
+            PREFIX hs: <https://project-haystack.org/def/>
+            SELECT ?s WHERE { ?s a hs:Point }
+        "#;
+        let results = SparqlEvaluator::new()
+            .parse_query(q)
+            .unwrap()
+            .on_store(&store)
+            .execute()
+            .unwrap();
+        match results {
+            QueryResults::Solutions(solutions) => {
+                let mut n = 0usize;
+                let cap = SPARQL_MAX_ROWS.saturating_add(1);
+                for sol in solutions {
+                    let _ = sol.unwrap();
+                    n += 1;
+                    if n >= cap {
+                        break;
+                    }
+                }
+                assert!(n <= cap);
+                assert_eq!(n, 1);
+            }
+            _ => panic!("expected SELECT"),
+        }
     }
 
     #[test]
