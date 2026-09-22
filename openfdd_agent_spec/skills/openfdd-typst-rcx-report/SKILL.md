@@ -20,6 +20,13 @@ Reference kit: `/home/ben/building100_rcx_report/`.
 (`openfdd_lab_typst`, CLI `open-fdd-lab-typst`). Future monorepo path
 `open_fdd.lab_typst` — see kit `FUTURE_OPENFDD_MERGE.md`.
 
+**Chart parity (W-CHART):** React Plotly (`frontend/web/src/api/plotlyTheme.ts`
+`RAINBOW_PALETTE`) is the visual SoT. Prefer `open_fdd.analytics.charts` helpers
+(and `overview_export`) over ad-hoc matplotlib colors. Permanent lock:
+`tests/analytics/test_chart_palette_parity.py`. Plan:
+`.cursor/plans/agent_report_chart_parity.plan.md`. Day-zoom PNGs use the same
+rainbow list as of `open-fdd>=4.4.5`.
+
 ---
 
 ## NEVER vibe-code these reports (hard law)

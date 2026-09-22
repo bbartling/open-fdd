@@ -70,4 +70,37 @@ Do **not** mark COMPLETE from “looks okay” screenshots alone — capture mat
 3. Overview export may call analytics helpers (parity better) but PDF width/DPI may still look “less nice”.
 4. Any Typst-embedded assets that recolor or restyle after export.
 
-Next: complete matrix for every RCx preset + Inspect + FDD series + report chart_id.
+Next: permanent palette lock test + day_zoom/report color alignment; expand `charts.contract.json`.
+
+## Parity matrix (inventory 2026-09-22)
+
+React SoT builders: `vibeCharts.*`, `centralOverview.*`, `inspectChart.*`, `fuelCharts.*`, `MvChangePointPanel`.  
+PyPI: `open_fdd/analytics/charts.py`, `reporting/overview_export.py`, `reporting/charts.py`, `reporting/day_zoom.py`.  
+Typst kit (out-of-tree): `/home/ben/building100_rcx_report/` per typst skill.
+
+| chart_id | React | PyPI | Gap |
+| --- | --- | --- | --- |
+| `fdd_rule_result` | `vibeCharts.ruleResultChart` | `charts.rule_result_chart` | Mostly aligned; React sets title + date axis |
+| `fdd_oat_meteo_overlay` | `withConfirmedFaultLane`+`basOverlay` | `bas_vs_web_oat_overlay` | Compose path differ |
+| `sensor_fault_chart` | `vibeCharts.sensorFaultChart` | `charts.sensor_fault_chart` | Swim-lane domains |
+| `sensor_health_heatmap` | `vibeCharts.sensorHealthHeatmap` | **missing** | React-only |
+| `inspect_stacked` | `inspectChart.equipmentInspectionChart` | `equipment_inspection_chart` | Title/subplot vs domain axes; `shape=hv` |
+| `rcx_timeseries_*` | `multiEquipmentTimeseries` | `multi_equipment_timeseries` | Fault-lane forbidden on RCx |
+| `rcx_scatter_oat_*` | `oatScatter` | `oat_scatter` | Markers vs lines |
+| `rcx_box_*` | `multiEquipmentBox` | `multi_equipment_box` | Outlier markers |
+| `rcx_ranking` / comfort | `rankingBars`+`comfortDonut` | `vav_comfort_donut` + report bars `#c05621` | Report chrome ≠ UI |
+| `vav_health_matrix` | `vavHealthWorstBars`/`Donut` | **no twin** | React-only |
+| `rcx_metering` | `meteringCharts` | bar + degree-day scatter | Combined vs split figs |
+| `*_motor_weekly` | `weeklyPlantFigures` | `motor_weekly_runtime_chart` | Stem/`overview_` prefix; bare-min line |
+| `mech_cooling_oat_bins` | `mechFigure` | `mech_cooling_oat_histogram` | Stem vocabulary |
+| `economizer_*` | `econDeltaScatter` / mat / temps | matching `economizer_*` | Dual-axis temps critical |
+| `bas_vs_web_oat` | overlay + `basHist` | overlay + histogram | Companion download stem |
+| `fuel_*` | `fuelCharts.ts` (12) | partial metering | React-heavy; no downloadFilename |
+| `mv_changepoint` | `MvChangePointPanel` | ECM oracle | By-design diverge |
+| `report_*` / `day_zoom` | none | `reporting/charts.py`, `day_zoom.py` | **Non-rainbow blues** — fix or document |
+
+**Highest-risk fixes first:** (1) palette lock React↔PyPI JSON; (2) day_zoom → `RAINBOW_PALETTE`; (3) PNG stem vocabulary; (4) Inspect title/axis; (5) Fuel `downloadFilename`.
+
+## Exit
+
+A fresh agent following updated skills produces PDF charts that pass the permanent parity tests against React color/axis/type fixtures; Soft-OPEN rows list any intentional PDF-only deltas with measured tolerances. PyPI version published.

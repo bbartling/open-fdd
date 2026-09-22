@@ -56,7 +56,7 @@
 | **stage-c-idp-mfa-sku** | Commercial IdP/MFA/SKU |
 | **util-interval** | **CLOSED (branch)** · empty `utility_interval`/`bas_submeter` views when CSV absent → UTIL-INTERVAL plans **0h** (not `rules_failed`); pandas oracle: expect 0h when interval frame empty |
 | **r6-ingest-reject** | **CLOSED (branch)** · count on health + `reject_buckets` on `/api/ingest/stats` (no dead-letter dump API) |
-| **kali-zap-af** | **REOPENED acceptance (UA-04)** · alias of `zap-af-authenticated` — **V2** |
+| **kali-zap-af** | **CLOSED (UA-04 / W2)** · alias of `zap-af-authenticated` — disposable AF PASS `reports/security/zap_af_disposable_20260922T151322Z/` |
 | **wave-o1-tenant-path-migrate** | **CLOSED (3.5.41 / V7)** · Dual-read prefers `tenants/{tid}/…` then hub-root; additive migrate script `scripts/ops/wave_u_v7_tenant_path_migrate.sh` (ACME / BUILDING_100 / LAKESIDE_ES); permanent ACL regressions foreign deny + hub_admin sees all. Live hub APPLY still requires Railway backup + `CONFIRM_BACKUP=1` — not run in this PR. #958 HOLD unchanged. |
 | **p2c-mqtt-acl-staging** | **REOPENED acceptance (UA-03)** · folded into `mqtt-key-mode-tenant-acl`; product-generated runtime ACL matrix still required — **V2** |
 | **historian-n-building-scale** | **CLOSED (V8 branch)** · H4 offline CLI `compact-history` (validate-before-publish) + runtime `CompactionCoordinator` (fail-closed/wait) + hub-admin `GET\|POST /api/historian/compaction` + Admin capacity Compact controls · CI: multi-building fixture + concurrent scan+compact negative · Residual Soft: Railway maintenance-window live compact soak (no MEGA) |
@@ -78,7 +78,7 @@
 | **standalone-https-bootstrap** | **candidate PASS (UA-02 / W1)** · Product soak `reports/security/standalone_https_peer_20260922T152529Z` on `sha-7ad6479` / 3.5.43 (trusted CA + HTTP→HTTPS); prior `…134930Z` on `sha-af4086f`; stub peer retained as component |
 | **fieldbus-mgmt-failclosed** | **CLOSED (3.5.34)** · `require_api_key_for_bind` + unit tests (`non_loopback_without_key_refused`, loopback/key cases) |
 | **mqtt-key-mode-tenant-acl** | **PARTIAL→product live PASS (UA-03)** · Gate/observer default `openfdd-mqtt` + provisioner ACL; tip live PASS on `sha-af4086f`; fixture broker requires ALLOW_FIXTURE — **V2** |
-| **zap-af-authenticated** | **PARTIAL (UA-04)** · disposable AF execute Soft-OPEN → **W2** (#982 seeds `/api/health`) |
+| **zap-af-authenticated** | **CLOSED (UA-04 / W2)** · disposable AF PASS `reports/security/zap_af_disposable_20260922T151322Z/` (`auth_me_hit`, High=0/Medium=0); plan seeds `/api/health` (#982) |
 | **image-digest-trivy** | **PARTIAL (UA-05 / W1)** · Tip rescan `sha-7ad6479`: web nginx H/C **0/0**; mqtt **0**; Debian central/fieldbus/mcp + caddy TRACKED UNFIXED — not readiness VERIFIED |
 | **agent-report-chart-parity** | **OPEN (W-CHART)** · PyPI/Typst agent PDF charts vs React Plotly one-for-one (colors/axes/scatter) — [agent_report_chart_parity.plan.md](../../.cursor/plans/agent_report_chart_parity.plan.md) |
 | **nessus-pass-readiness** | **PARTIAL (UA-08/09)** · host_runtime_probe PASS `reports/security/host_runtime_probe_v3.json` (field_only_ot) + field-only lint; Nessus still BLOCKED |
@@ -115,7 +115,7 @@ The current closure rows above are corrected prospectively. Earlier scan/test ac
 | `wu-audit-ua01-qualification` | P1 | FIXED (contract) | Both gate 36 required + provenance; MEGA `20260921T021332Z` FQ |
 | `wu-audit-ua02-standalone` | P1 | PARTIAL→evidence PASS | Product candidate soak PASS `standalone_https_peer_20260922T152529Z` on `sha-7ad6479`; compose hide web:3000 retained; Soft-OPEN only if acceptance still requires newer tip |
 | `wu-audit-ua03-mqtt` | P1 | PARTIAL | require-live + gate 26 PASS on tip; product MQTT image vs eclipse-mosquitto fixture still Soft-OPEN |
-| `wu-audit-ua04-zap` | P1 | PARTIAL | Evaluator fail-closed + JWT hygiene; disposable auth AF on candidate still Soft-OPEN |
+| `wu-audit-ua04-zap` | P1 | **CLOSED (W2)** | Disposable AF PASS `zap_af_disposable_20260922T151322Z` (`auth_me_hit`, High=0) |
 | `wu-audit-ua05-images` | P1 | PARTIAL | W1 tip rescan `sha-7ad6479` — nginx cleared; Debian/caddy residual OPEN |
 | `wu-audit-ua06-importer` | P1 | FIXED (code) / assessment BLOCKED | Per-host credentialed/completeness validation + permanent negatives on tip; licensed scan still BLOCKED |
 | `wu-audit-ua07-identity` | P1 | FIXED (code) | `tenant_ids` membership enforcement + permanent negatives on tip; broader MT route matrix remains Soft-OPEN |
@@ -216,7 +216,8 @@ Prior FAILs `20260920T194610Z` / `20260920T231407Z` / `20260921T014908Z` retaine
 | **wu-trivy-tip-digest** | Soft-OPEN | **W1 RESCANED** | `reports/trivy-wave-u/sha-7ad6479/SUMMARY.md` — web nginx H/C 0/0 (`1.28.3-r7`); Debian/caddy TRACKED; prior `sha-af4086f` historical |
 | **wu-bacnet-ci-api-key** | CI | **FIXED #960** | Optional BACnet smoke supplies `OPENFDD_FIELDBUS_API_KEY` after fail-closed |
 | **wu-bacnet-ci-ro-key-mode** | CI | **FIXED (#966)** | Keys 640 + writable broker mount; e2e PASS on tip `sha-af4086f` / 3.5.38 |
-| **wu-pypi-publish-4.4.3** | Residual | **CLOSED** | PyPI `open-fdd==4.4.3` live; tip **4.4.4** republish after #983 smoke fix (retag `open-fdd-v4.4.4`) |
+| **wu-pypi-publish-4.4.3** | Residual | **CLOSED** | PyPI `open-fdd==4.4.3` live; **4.4.4** published (retag after #983) |
+| **wu-pypi-publish-4.4.4** | Residual | **CLOSED** | `open-fdd==4.4.4` on PyPI (`ecm_context_v1`) |
 | **agent-report-chart-parity** | Soft-OPEN | **OPEN / W-CHART** | Agent Typst/PDF charts vs React Plotly parity — [agent_report_chart_parity.plan.md](../../.cursor/plans/agent_report_chart_parity.plan.md) |
 | **wu-dm-07-10** | Soft-OPEN | **PARTIAL (V5 tip)** | DM-07/08 CLOSED (injective IRI + W3C bindings; spargebra SELECT allowlist; no empty-ok). Residual: DM-09 PERF · DM-10 versioned projection · EQ-VOCAB · ECM-ADAPT · Pages |
 | **wu-mt-breadth** | Soft-OPEN | Soft-OPEN honesty | Continue IMPLEMENTED matrix later; inventory cited on tip |
