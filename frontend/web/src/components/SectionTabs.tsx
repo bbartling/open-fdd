@@ -18,12 +18,14 @@ function resolveActiveId(
     return "wattlab";
   }
   if (pathname.startsWith("/inspect")) return "inspect";
-  if (pathname.startsWith("/mapping")) return "data-model";
-  if (pathname.startsWith("/sites")) return "sites";
+  if (pathname.startsWith("/mapping") || pathname.startsWith("/findings")) {
+    return "data-model";
+  }
+  if (pathname.startsWith("/sites") || pathname.startsWith("/operations")) {
+    return "operations";
+  }
   if (pathname.startsWith("/admin")) return "admin";
-  if (pathname.startsWith("/operations")) return "operations";
   if (pathname.startsWith("/actions")) return "actions";
-  if (pathname.startsWith("/findings")) return "results";
   if (pathname.startsWith("/rcx")) return "rcx-plots";
   if (pathname.startsWith("/metering")) return "metering";
   if (pathname === "/" || pathname === "") return "overview";

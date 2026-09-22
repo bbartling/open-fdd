@@ -87,13 +87,13 @@ describe("AppShell layout parity", () => {
     expect(screen.getByText("Open-FDD")).toBeTruthy();
     expect(await screen.findByTestId("app-revision")).toBeTruthy();
     expect(screen.getByTestId("app-revision").textContent).toBe("3.3.2+abcdef1");
-    expect(await screen.findByTestId("app-tenant")).toBeTruthy();
-    expect(screen.getByTestId("app-tenant").textContent).toContain("legacy");
+    expect(screen.queryByTestId("app-tenant")).toBeNull();
+    expect(screen.getByTestId("app-sign-in")).toBeTruthy();
     expect(screen.getByTestId("sidebar-sites")).toBeTruthy();
     expect(screen.queryByTestId("nav-sites")).toBeNull();
     expect(screen.getAllByText("Sites").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId("sidebar-building-data")).toBeTruthy();
-    expect(screen.getByText("Building data")).toBeTruthy();
+    expect(screen.getByText("CSV Upload")).toBeTruthy();
     expect(screen.getByTestId("sidebar-rule-tuning")).toBeTruthy();
     expect(screen.getByText("Lab · rule thresholds")).toBeTruthy();
     expect(screen.getByTestId("page-caption").textContent).toBe("Parity shell");
@@ -112,12 +112,10 @@ describe("AppShell layout parity", () => {
       "Inspect",
       "Data Model",
       "Actions",
-      "Results by Category",
       "FDD Plots",
       "RCx Plots",
       "Metering",
       "Dump",
-      "Sites",
       "Operations",
       "Admin",
     ]);

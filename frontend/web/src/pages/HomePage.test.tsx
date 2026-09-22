@@ -177,10 +177,9 @@ describe("HomePage overview", () => {
       expect(screen.getByTestId("overview-schedule")).toBeTruthy();
     });
     expect(screen.getByTestId("oracle-hero-logo")).toBeTruthy();
-    expect(screen.getByTestId("oracle-hero-how").textContent).toMatch(
-      /2 pieces \+ run/,
-    );
-    expect(screen.queryByText(/FDD \/ WattLab/)).toBeNull();
+    expect(screen.queryByTestId("oracle-hero-how")).toBeNull();
+    expect(screen.queryByText(/WattLab energy twin/)).toBeNull();
+    expect(screen.queryByText(/How it works/)).toBeNull();
     expect(listPackageBuildings).toHaveBeenCalled();
     expect(listFddEquipment).toHaveBeenCalled();
     const hero = screen.getByTestId("oracle-hero");

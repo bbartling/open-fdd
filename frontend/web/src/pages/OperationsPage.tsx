@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { getStoredToken } from "../api/authApi";
 import { apiFetch, apiFetchBlob } from "../api/client";
 import { getStoredActiveTenant } from "../api/tenantApi";
 import { AppShell } from "../components/AppShell";
+import { SitesPanel } from "../components/SitesPanel";
 import { Button } from "../components/widgets";
 
-type OperationsView = "afdd" | "mqtt";
+type OperationsView = "afdd" | "mqtt" | "sites";
 type AfddMode = "bulk" | "continuous";
 
 interface AfddConfig {
@@ -1029,27 +1031,65 @@ function TelemetrySuspendPanel() {
 }
 
 export function OperationsPage() {
-  const [view, setView] = useState<OperationsView>("mqtt");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawView = searchParams.get("view");
+  const view: OperationsView =
+    rawView === "afdd" || rawView === "sites" ? rawView : "mqtt";
+
+  const setView = (next: OperationsView) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "mqtt") params.delete("view");
+    else params.set("view", next);
+    setSearchParams(params, { replace: true });
+  };
 
   return (
     <AppShell
       title="Operations"
-      caption="OT strip, MQTT live console, AFDD scheduler — Sites stays inventory; this tab is not nested under Sites."
       activeSectionId="operations"
     >
       <OtStatusStrip />
       <fieldset className="section-tabs" aria-label="Operations configuration">
         <legend className="sr-only">Operations configuration</legend>
         <label>
-          <input type="radio" name="operations-view" value="mqtt" checked={view === "mqtt"} onChange={() => setView("mqtt")} />
+          <input
+            type="radio"
+            name="operations-view"
+            value="sites"
+            checked={view === "sites"}
+            onChange={() => setView("sites")}
+            data-testid="operations-view-sites"
+          />
+          Sites
+        </label>
+        <label>
+          <input
+            type="radio"
+            name="operations-view"
+            value="mqtt"
+            checked={view === "mqtt"}
+            onChange={() => setView("mqtt")}
+            data-testid="operations-view-mqtt"
+          />
           MQTT Test Client
         </label>
         <label>
-          <input type="radio" name="operations-view" value="afdd" checked={view === "afdd"} onChange={() => setView("afdd")} />
+          <input
+            type="radio"
+            name="operations-view"
+            value="afdd"
+            checked={view === "afdd"}
+            onChange={() => setView("afdd")}
+            data-testid="operations-view-afdd"
+          />
           AFDD Config
         </label>
       </fieldset>
-      {view === "afdd" ? <AfddPanel /> : (
+      {view === "sites" ? (
+        <SitesPanel />
+      ) : view === "afdd" ? (
+        <AfddPanel />
+      ) : (
         <>
           <EdgeKitDownloadPanel />
           <MqttPanel />

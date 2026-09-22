@@ -4,12 +4,10 @@ export const MAIN_SECTIONS = [
   { id: "inspect", label: "Inspect", path: "/inspect" },
   { id: "data-model", label: "Data Model", path: "/mapping" },
   { id: "actions", label: "Actions", path: "/actions" },
-  { id: "results", label: "Results by Category", path: "/findings" },
   { id: "fdd-plots", label: "FDD Plots", path: "/reports?section=fdd-plots" },
   { id: "rcx-plots", label: "RCx Plots", path: "/rcx" },
   { id: "metering", label: "Metering", path: "/metering" },
   { id: "export", label: "Dump", path: "/export" },
-  { id: "sites", label: "Sites", path: "/sites" },
   { id: "operations", label: "Operations", path: "/operations" },
   { id: "admin", label: "Admin", path: "/admin" },
 ] as const;

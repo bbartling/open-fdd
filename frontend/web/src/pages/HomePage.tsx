@@ -19,9 +19,6 @@ import {
 import { getUiGeneration } from "../api/cutoverApi";
 import { inventoryWithoutWeather } from "../lib/overviewMetrics";
 
-const AGENTS_URL =
-  "https://github.com/bbartling/py-bacnet-stacks-playground/blob/develop/vibe_code_apps_19/AGENTS.md";
-
 const PACKAGE_LOADED = "openfdd:package-loaded";
 
 function formatErr(err: unknown): string {
@@ -153,37 +150,7 @@ export function HomePage() {
         />
 
         {!populated ? (
-          <>
-            <InlineAlert
-              id="overview-start-here"
-              variant="info"
-              testId="overview-start-here"
-            >
-              <strong>Start here:</strong> sidebar →{" "}
-              <strong>Building package zip</strong> →{" "}
-              <strong>Load package</strong>. Then Data Model →{" "}
-              <strong>Run all rules</strong> (health flags) / tune in Lab →{" "}
-              <strong>FDD Plots</strong> / <strong>RCx</strong>.{" "}
-              <strong>Update analytics</strong> is not an FDD run.
-            </InlineAlert>
-            <SectionTabs activeSectionId="overview" embedded />
-            <p className="oracle-overview__footer-links">
-              Agent brief:{" "}
-              <a href={AGENTS_URL} target="_blank" rel="noreferrer">
-                AGENTS.md
-              </a>
-              {" · "}
-              Package contract: <code>docs/PACKAGE_SPEC.md</code>
-              {" · "}
-              <a
-                href="https://bbartling.github.io/open-fdd/"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open-FDD docs
-              </a>
-            </p>
-          </>
+          <SectionTabs activeSectionId="overview" embedded />
         ) : null}
 
         {loading && (

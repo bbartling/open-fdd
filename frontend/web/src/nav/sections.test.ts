@@ -7,12 +7,10 @@ const ORACLE_MAIN_SECTIONS = [
   "Inspect",
   "Data Model",
   "Actions",
-  "Results by Category",
   "FDD Plots",
   "RCx Plots",
   "Metering",
   "Dump",
-  "Sites",
   "Operations",
   "Admin",
 ] as const;

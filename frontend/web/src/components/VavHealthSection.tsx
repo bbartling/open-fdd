@@ -20,7 +20,6 @@ export function VavHealthSection({
     <HealthMatrixSection
       family="vav"
       title="VAV zone health"
-      caption="Broken-box flags from VAV-3/4/5/7 cookbook rules; comfort and rogue from historian evidence."
       buildingId={buildingId}
       refreshToken={refreshToken}
       fetchHealth={fetchHealth}

@@ -340,7 +340,7 @@ export function AppShell({
                 {collapsed ? revision.collapsed : revision.display}
               </div>
             ) : null}
-            {tenantLabel ? (
+            {tenantLabel && tenantLabel !== "legacy" ? (
               <div
                 className="app-sidebar__tenant"
                 data-testid="app-tenant"
@@ -358,6 +358,27 @@ export function AppShell({
                 {collapsed ? sessionUser.slice(0, 3) : sessionUser}
               </div>
             ) : null}
+            <div className="app-sidebar__auth-row" data-testid="app-account">
+              {sessionUser ? (
+                <button
+                  type="button"
+                  className="button button--small"
+                  data-testid="app-sign-out"
+                  onClick={onSignOut}
+                  title="Sign out"
+                >
+                  {collapsed ? "Out" : "Sign out"}
+                </button>
+              ) : (
+                <Link
+                  to={hrefWithSession("/auth", location.search)}
+                  className="button button--small"
+                  data-testid="app-sign-in"
+                >
+                  {collapsed ? "In" : "Sign in"}
+                </Link>
+              )}
+            </div>
           </div>
           <button
             type="button"
@@ -396,42 +417,6 @@ export function AppShell({
           className="app-sidebar__scroll"
         >
           <OracleSidebar collapsed={collapsed} />
-        </div>
-
-        <div className="app-sidebar__account" data-testid="app-account">
-          {sessionUser ? (
-            <>
-              {!collapsed ? (
-                <span className="app-sidebar__account-label">
-                  Signed in as <strong>{sessionUser}</strong>
-                </span>
-              ) : null}
-              <button
-                type="button"
-                className="button button--small"
-                data-testid="app-sign-out"
-                onClick={onSignOut}
-                title="Sign out"
-              >
-                {collapsed ? "Out" : "Sign out"}
-              </button>
-              <Link
-                to={hrefWithSession("/auth", location.search)}
-                className="app-sidebar__account-link"
-                data-testid="app-account-link"
-              >
-                {collapsed ? "A" : "Account"}
-              </Link>
-            </>
-          ) : (
-            <Link
-              to={hrefWithSession("/auth", location.search)}
-              className="button button--small"
-              data-testid="app-sign-in"
-            >
-              {collapsed ? "In" : "Sign in"}
-            </Link>
-          )}
         </div>
 
         <details className="app-sidebar__pages" open={false}>

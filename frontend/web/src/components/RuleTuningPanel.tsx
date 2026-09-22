@@ -384,13 +384,6 @@ export function RuleTuningPanel() {
   return (
     <section className="oracle-sidebar__block" data-testid="sidebar-rule-tuning">
       <h3 className="oracle-sidebar__h3">Lab · rule thresholds</h3>
-      <p className="oracle-sidebar__caption">
-        Sliders store thresholds only (unit system applies to display; FDD SQL
-        stays °F). Expand a rule to tune — then click{" "}
-        <strong>Update this rule</strong>. Overview{" "}
-        <strong>Run all rules</strong> evaluates health flags;{" "}
-        <strong>Update analytics</strong> is not an FDD run.
-      </p>
       <label className="oracle-sidebar__check">
         <input
           type="checkbox"
@@ -399,10 +392,6 @@ export function RuleTuningPanel() {
         />
         Require operational proof (fan/pump status)
       </label>
-      <p className="oracle-sidebar__caption">
-        FDD math: central DataFusion SQL. Active site:{" "}
-        <code>{buildingId || "—"}</code>
-      </p>
       <label className="oracle-sidebar__field">
         <span className="oracle-sidebar__label">Category</span>
         <select
@@ -419,8 +408,7 @@ export function RuleTuningPanel() {
         </select>
       </label>
       <p className="oracle-sidebar__caption" data-testid="sidebar-tune-count">
-        {visible.length} rule{visible.length === 1 ? "" : "s"} in category —
-        expand to tune
+        {visible.length} rule{visible.length === 1 ? "" : "s"}
       </p>
       <div className="oracle-sidebar__btn-row">
         <button

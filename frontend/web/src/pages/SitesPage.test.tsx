@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { SitesPage } from "./SitesPage";
+import { SitesPanel } from "../components/SitesPanel";
 
 vi.mock("../api/mappingApi", () => ({
   listPackageBuildings: vi.fn(async () => ["ZIP_BUILDING_1", "BUILDING_50"]),
@@ -16,23 +16,22 @@ vi.mock("../api/datasetsApi", () => ({
   deleteDataset: vi.fn(async () => ({ ok: true })),
 }));
 
-vi.mock("../api/fddApi", () => ({
-  listFddRules: vi.fn(async () => []),
-  getFddRuleParams: vi.fn(async () => ({ ok: true, params: {} })),
+vi.mock("../api/client", () => ({
+  apiFetch: vi.fn(async () => ({ ok: true, edges: [] })),
 }));
 
 import { listPackageBuildings } from "../api/mappingApi";
 import { deleteDataset } from "../api/datasetsApi";
 
-function renderSites(entry = "/sites?site=ZIP_BUILDING_1") {
+function renderSites(entry = "/operations?view=sites&site=ZIP_BUILDING_1") {
   return render(
     <MemoryRouter initialEntries={[entry]}>
-      <SitesPage />
+      <SitesPanel />
     </MemoryRouter>,
   );
 }
 
-describe("SitesPage", () => {
+describe("Operations Sites panel", () => {
   beforeEach(() => {
     vi.mocked(listPackageBuildings).mockClear();
     vi.mocked(deleteDataset).mockClear();
@@ -55,7 +54,7 @@ describe("SitesPage", () => {
   });
 
   it("sets active site", async () => {
-    renderSites("/sites?site=ZIP_BUILDING_1");
+    renderSites("/operations?view=sites&site=ZIP_BUILDING_1");
     await waitFor(() => {
       expect(screen.getByTestId("sites-set-active-BUILDING_50")).toBeTruthy();
     });

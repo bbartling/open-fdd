@@ -614,20 +614,12 @@ export function OverviewPopulated({
     return () => window.clearInterval(id);
   }, [busy]);
 
-  const tableCount = overview?.devices_by_type?.length ? 1 : 0;
-
   return (
     <div
       className={`overview-populated${busy ? " overview-populated--busy" : ""}`}
       data-testid="overview-populated"
       aria-busy={busy || undefined}
     >
-      <p className="oracle-sidebar__caption">
-        Overview health matrices and device inventory. Motor, mechanical cooling,
-        economizer, and OAT bin tables live on <strong>RCx Plots</strong> under
-        each preset.
-      </p>
-
       {busy ? (
         <div
           className="overview-busy-panel"
@@ -641,17 +633,20 @@ export function OverviewPopulated({
               Updating analytics for <code>{buildingId}</code>
             </strong>
             <p>
-              Runtime · mechanical cooling · economizer · schedule via
-              DataFusion. Elapsed: <strong>{overviewElapsedSec}s</strong>
+              Elapsed: <strong>{overviewElapsedSec}s</strong>
             </p>
           </div>
         </div>
       ) : null}
 
       {loadingOverview && overview ? (
-        <p className="oracle-sidebar__caption" data-testid="overview-refreshing">
+        <InlineAlert
+          id="overview-refreshing"
+          variant="info"
+          testId="overview-refreshing"
+        >
           Refreshing analytics…
-        </p>
+        </InlineAlert>
       ) : null}
 
       <InlineAlert
@@ -667,22 +662,9 @@ export function OverviewPopulated({
       >
         Overview status: <strong data-testid="overview-readiness-label">{readinessLabel}</strong>
         {overview && fddPending && !rulesBusy
-          ? " — charts may be loaded, but health matrices need Run all rules."
+          ? " — run Run all rules for health matrices."
           : null}
       </InlineAlert>
-
-      {!busy && overview ? (
-        <InlineAlert
-          id="overview-charts-ready"
-          variant="info"
-          testId="overview-charts-ready"
-        >
-          Tables ready: <strong>{tableCount}</strong> tabulated section
-          {tableCount === 1 ? "" : "s"} for <code>{buildingId}</code> (
-          {overview.elapsed_s}s · {overview.source}). Bin/hour tables are on{" "}
-          <strong>RCx Plots</strong>.
-        </InlineAlert>
-      ) : null}
 
       <div className="overview-toolbar" data-testid="overview-actions">
         <div className="overview-toolbar__action">
@@ -718,10 +700,6 @@ export function OverviewPopulated({
               testId="overview-force-analytics"
             />
           ) : null}
-          <p className="oracle-sidebar__caption">
-            Update analytics = charts
-            {updateAnalyticsGrey ? " · grey until dirty or Force" : ""}
-          </p>
         </div>
         <div className="overview-toolbar__action">
           <Button
@@ -753,13 +731,6 @@ export function OverviewPopulated({
               testId="overview-force-run-all"
             />
           ) : null}
-          <p className="oracle-sidebar__caption">
-            {runAllGrey && !afddOwnsRefresh
-              ? "Results current — retune one rule in Lab"
-              : afddOwnsRefresh
-                ? "Continuous AFDD owns registry refresh"
-                : "Run all rules = health flags"}
-          </p>
         </div>
         {overview ? (
           <span className="oracle-sidebar__caption">
@@ -767,9 +738,9 @@ export function OverviewPopulated({
             {overview.source}
           </span>
         ) : (
-          <span className="oracle-sidebar__caption" data-testid="overview-idle-hint">
-            Click <strong>Update analytics</strong> to load building charts
-          </span>
+          <InlineAlert id="overview-idle" variant="info" testId="overview-idle-hint">
+            Click <strong>Update analytics</strong> to load tables.
+          </InlineAlert>
         )}
       </div>
 
@@ -779,12 +750,6 @@ export function OverviewPopulated({
           <code>{buildingId}</code> is loaded and central is healthy.
         </InlineAlert>
       ) : null}
-
-      <p className="oracle-sidebar__caption" data-testid="overview-dual-catalog">
-        Update analytics = charts. Run all rules = health flags. Sidebar{" "}
-        <strong>Update this rule</strong> re-runs one rule. Equipment for Inspect /
-        FDD Plots is chosen in those sections — not here.
-      </p>
 
       <SectionTabs activeSectionId="overview" embedded />
 
@@ -804,12 +769,6 @@ export function OverviewPopulated({
         <Metric id="ov-poll" label="Poll (s)" value="300" testId="overview-poll" />
         <Metric id="ov-kind" label="Kind" value={eqKind} testId="overview-kind" />
       </div>
-      <p className="oracle-sidebar__caption" data-testid="overview-rule-caption">
-        +4 SQL rollups
-      </p>
-      <p className="oracle-sidebar__caption" data-testid="overview-source-caption">
-        zip:{buildingId}
-      </p>
       <div className="overview-metrics overview-metrics--span">
         <Metric id="ov-start" label="Dataset start" value={datasetStart} testId="overview-start" />
         <Metric id="ov-end" label="Dataset end" value={datasetEnd} testId="overview-end" />
@@ -826,11 +785,6 @@ export function OverviewPopulated({
         data-testid="overview-update-rules"
       >
         <h3>Rule run status</h3>
-        <p className="oracle-sidebar__caption">
-          Tune thresholds with the left-rail sliders. Use{" "}
-          <strong>Update this rule</strong> next to a modified slider, or{" "}
-          <strong>Run all rules</strong> above for the full registry.
-        </p>
         {rulesNote ? (
           <p className="oracle-sidebar__ok" data-testid="overview-rules-note">
             {rulesNote}
@@ -856,12 +810,7 @@ export function OverviewPopulated({
       </section>
 
       <section className="overview-section" data-testid="overview-schedule">
-        <h3>Building schedule &amp; zone comfort (FDD starting point)</h3>
-        <p className="oracle-sidebar__caption">
-          Occupancy calendar always drives SCHED-1 (<code>occ_mode</code>) —
-          edit times below; do not remove this UI. Zone low/high seed VAV-1
-          comfort band. Bare-min hours draw on the air-side motor chart.
-        </p>
+        <h3>Set Building Schedule and Comfort Requirements</h3>
         <Slider
           id="zone-low"
           label={`Zone low ${tempUnit}`}

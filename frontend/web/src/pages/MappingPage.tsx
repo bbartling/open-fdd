@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { AppShell } from "../components/AppShell";
 import {
   Button,
@@ -8,6 +8,7 @@ import {
   Select,
   Toggle,
 } from "../components/widgets";
+import { ResultsByCategoryPanel } from "../components/ResultsByCategoryPanel";
 import { useDirtyFormWarning, useSessionQuery } from "../session";
 import {
   buildMappingManifest,
@@ -60,8 +61,18 @@ function buildRoleToFddRules(rules: FddRuleSummary[]): Map<string, string[]> {
 
 export function MappingPage() {
   const { query, setQuery } = useSessionQuery();
+  const [searchParams, setSearchParams] = useSearchParams();
   const buildingId = query.siteId ?? "";
   const equipmentId = query.equipment ?? "";
+  const view =
+    searchParams.get("view") === "results" ? "results" : "mapping";
+
+  const setView = (next: "mapping" | "results") => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "results") params.set("view", "results");
+    else params.delete("view");
+    setSearchParams(params, { replace: true });
+  };
 
   const [buildings, setBuildings] = useState<string[]>([]);
   /** Full-site inventory for export (never equipment-filtered). */
@@ -349,19 +360,44 @@ export function MappingPage() {
 
   return (
     <AppShell
-      title="Mapping"
-      caption="Column → role mapping via Rust package ingest + session-config."
+      title="Data Model"
+      caption={undefined}
       activeSectionId="data-model"
     >
       <div className="page-placeholder" data-testid="mapping-page">
+        <div
+          className="data-model-subnav"
+          role="tablist"
+          aria-label="Data Model panels"
+          data-testid="data-model-subnav"
+        >
+          <button
+            type="button"
+            role="tab"
+            className={`data-model-subnav__tab${view === "mapping" ? " data-model-subnav__tab--active" : ""}`}
+            aria-selected={view === "mapping"}
+            onClick={() => setView("mapping")}
+            data-testid="data-model-tab-mapping"
+          >
+            Mapping
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={`data-model-subnav__tab${view === "results" ? " data-model-subnav__tab--active" : ""}`}
+            aria-selected={view === "results"}
+            onClick={() => setView("results")}
+            data-testid="data-model-tab-results"
+          >
+            Results by Category
+          </button>
+        </div>
+
+        {view === "results" ? (
+          <ResultsByCategoryPanel />
+        ) : (
+          <>
         <h2>Role mapping</h2>
-        <p>
-          Map CSV / historian columns to cookbook roles for the selected building
-          and equipment. This tab is <strong>column ↔ role</strong> mapping (package{" "}
-          <code>columns.csv</code> or MQTT Parquet columns) — not live Haystack point
-          browse. Blank roles stay blank — no guessed fills. Use Active site /
-          equipment selectors (or URL <code>?site=</code> / <code>?eq=</code>).
-        </p>
 
         <div
           style={{
@@ -405,11 +441,6 @@ export function MappingPage() {
             testId="map-view-ttl-text"
           />
         </div>
-        <p className="oracle-sidebar__caption">
-          Export / view is the <strong>entire site</strong> data model (JSON or Turtle
-          derived export — not filtered by the equipment editor below). TTL does not
-          replace package zip maps for FDD.
-        </p>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
           <Select
@@ -443,10 +474,6 @@ export function MappingPage() {
             testId="map-unmapped-only"
           />
         </div>
-        <p className="oracle-sidebar__caption">
-          To remove a loaded site (feathers + FDD + analytics), use the{" "}
-          <strong>Sites</strong> section tab.
-        </p>
 
         {loading ? (
           <p data-testid="mapping-loading">Loading mapping inventory…</p>
@@ -542,10 +569,6 @@ export function MappingPage() {
               rows={tableRows}
               testId="map-columns-table"
             />
-            <p className="oracle-sidebar__caption">
-              FDD rules = registry consumers of the assigned SQL role.{" "}
-              <em>(analytics only)</em> means mapped but no SQL FDD rule lists that role.
-            </p>
 
             <div style={{ marginTop: "1rem" }}>
               <h3>Edit roles</h3>
@@ -628,6 +651,8 @@ export function MappingPage() {
             ) : null}
           </div>
         ) : null}
+          </>
+        )}
       </div>
     </AppShell>
   );

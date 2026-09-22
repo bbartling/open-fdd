@@ -63,7 +63,6 @@ export function PlantHealthSections({
       <HealthMatrixSection
         family="ahu-temperature"
         title="AHU temperature health"
-        caption="Supply and mixed-air temperature diagnostics. Fully faulted rows are highlighted regardless of matrix width."
         buildingId={buildingId}
         refreshToken={refreshToken}
         fetchHealth={fetchAhuTemperature}
@@ -92,7 +91,6 @@ export function PlantHealthSections({
       <HealthMatrixSection
         family="ahu-pressure"
         title="AHU pressure / fan health"
-        caption="Duct static, fan command, and static-pressure reset diagnostics."
         buildingId={buildingId}
         refreshToken={refreshToken}
         fetchHealth={fetchAhuPressure}
@@ -124,7 +122,6 @@ export function PlantHealthSections({
       <HealthMatrixSection
         family="ahu-economizer"
         title="AHU economizer health"
-        caption="Economizer sequence diagnostics from the canonical ECON rule family."
         buildingId={buildingId}
         refreshToken={refreshToken}
         fetchHealth={fetchAhuEconomizer}
@@ -172,7 +169,6 @@ export function PlantHealthSections({
       <HealthMatrixSection
         family="chiller"
         title="Chiller plant health"
-        caption="Expanded chilled-water plant diagnostics. Heat pumps and cooling towers use separate matrices."
         buildingId={buildingId}
         refreshToken={refreshToken}
         fetchHealth={fetchChiller}
@@ -207,7 +203,6 @@ export function PlantHealthSections({
       <HealthMatrixSection
         family="cooling-tower"
         title="Cooling-tower health"
-        caption="Condenser-water approach, fan, and optimization diagnostics."
         buildingId={buildingId}
         refreshToken={refreshToken}
         fetchHealth={fetchCoolingTower}
@@ -231,7 +226,6 @@ export function PlantHealthSections({
       <HealthMatrixSection
         family="hp"
         title="Heat-pump health"
-        caption="Heat-pump equipment only."
         buildingId={buildingId}
         refreshToken={refreshToken}
         fetchHealth={fetchHp}
@@ -259,7 +253,6 @@ export function PlantHealthSections({
       <HealthMatrixSection
         family="pid"
         title="PID Hunting"
-        caption="Operating-state and control-output hunting evidence across applicable equipment."
         buildingId={buildingId}
         refreshToken={refreshToken}
         fetchHealth={fetchPid}
@@ -274,7 +267,6 @@ export function PlantHealthSections({
       <HealthMatrixSection
         family="sensor"
         title="Sensor faults"
-        caption="Sensor validation faults across the current Overview window."
         buildingId={buildingId}
         refreshToken={refreshToken}
         fetchHealth={fetchSensors}
@@ -293,7 +285,6 @@ export function PlantHealthSections({
       <HealthMatrixSection
         family="zone-other"
         title="Generic zone monitoring"
-        caption="Zone Other / MQTT field equipment — zone temp, sensor validation, and occupancy. Not AHU FC/SATDEV."
         buildingId={buildingId}
         refreshToken={refreshToken}
         fetchHealth={fetchZoneOther}
