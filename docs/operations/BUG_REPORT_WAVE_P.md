@@ -6,7 +6,7 @@
 
 | Item | Status |
 |------|--------|
-| Product tip / **OPS PINNED (FQ)** | **3.5.37** / **`sha-1677c33`** (#963+#964) · health `3.5.37+1677c33047bd` · backup **`20260921T013819Z`** · stress `reports/nightly-ot-bench_20260921T021332Z/` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave U FQ** |
+| Product tip / **OPS PINNED (FQ)** | **3.5.43** / **`sha-7ad6479`** (#978) · health `3.5.43+7ad6479c924a` · backup **`20260921T233725Z`** · stress `reports/nightly-ot-bench_20260921T234148Z/` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave U V6 FQ** |
 | **Follow-on tip (not OPS PINNED)** | **3.5.38** / **`sha-af4086f`** (#966) · BACnet CI key modes + writable broker certs · nginx force-upgrade · HTTPS trusted-CA stub peer · Trivy absolute ARTIFACT_DIR — GHCR publish may lag; remainder cycles V1–V8 in [`.cursor/plans/wave_u_remainder_patch_cycles.plan.md`](../../.cursor/plans/wave_u_remainder_patch_cycles.plan.md) |
 | **Wave U remainder cycles** `2026-09-21` | Master [wave_u_remainder_patch_cycles.plan.md](../../.cursor/plans/wave_u_remainder_patch_cycles.plan.md) · MILESTONES V1–V8 index · Soft-OPEN mapped to cycles; Stage C IdP deferred · #958 HOLD |
 | **Wave U hub tip (smoke + MEGA in flight)** | **3.5.34** / **`sha-f44b45f`** (#959) · health `3.5.34+f44b45f6f58d` · backup **`20260920T193429Z`** · fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1` kit restored · MEGA `reports/nightly-ot-bench_20260920T194610Z/` · **no FQ / OPS PINNED claim until `fully_qualified=true`** |
@@ -216,6 +216,6 @@ Prior FAILs `20260920T194610Z` / `20260920T231407Z` / `20260921T014908Z` retaine
 | **wu-pypi-publish-4.4.3** | Residual | Soft-OPEN honesty | Math CLOSED on tip; PyPI publish `open-fdd` 4.4.3 not done |
 | **wu-dm-07-10** | Soft-OPEN | **PARTIAL (V5 tip)** | DM-07/08 CLOSED (injective IRI + W3C bindings; spargebra SELECT allowlist; no empty-ok). Residual: DM-09 PERF · DM-10 versioned projection · EQ-VOCAB · ECM-ADAPT · Pages |
 | **wu-mt-breadth** | Soft-OPEN | Soft-OPEN honesty | Continue IMPLEMENTED matrix later; inventory cited on tip |
-| **wu-v6-mega-20260921T204702Z** | Soft-OPEN / tip | **OPEN → tip 3.5.43** | MEGA on `sha-f1adfbd` / 3.5.42 `fully_qualified=false`: (1) gate 17 runtime empty — Jan-2026 synth-59 outside ACME 90d default; (2) gate 25 `fdd/series` 400 without equipment/rule + `package/buildings` foreign 200; (3) gate 26 observer rc≠0 after PASS + missing structured verdict; (4) 25b budget ERROR. Tip fixes runtime unbounded fallback + series/buildings ACL + gate26 verdict. |
+| **wu-v6-mega-20260921T204702Z** | Soft-OPEN / tip | **CLOSED FQ** | Tip **3.5.43** / `sha-7ad6479` (#978). MEGA `20260921T234148Z` `fully_qualified=true` (gate 00 retest after login throttle; all 25/25b/26/17/36/37 PASS). |
 
 **Do not claim:** Nessus assessment PASS · readiness VERIFIED while Critical/High unresolved · Soft-OPEN CLOSED without measured evidence. |

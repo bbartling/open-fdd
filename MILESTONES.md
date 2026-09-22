@@ -25,7 +25,7 @@ The independent audit reopened acceptance checks. Statuses below do not erase ea
 | **U-D — Web application assurance** | App/security maintainer | PARTIAL | Auth/tenant matrix on MEGA; authenticated ZAP candidate AF still Soft-OPEN. |
 | **U-E — Image and host acceptance** | Release/deployment maintainer | PARTIAL | Tip rescan `sha-1677c33`; mqtt 0 H/C; web nginx force-upgrade in 3.5.38; Debian TRACKED UNFIXED; caddy High residual. |
 | **U-F — Modeling, engineering and twins** | Data-model/PyPI/product maintainer | PARTIAL | Gate 36 FQ CLOSED on hub tip; Soft-OPEN: DM-07..10, PyPI 4.4.3 publish, MT breadth. |
-| **U-G — Qualified release and handoff** | Release maintainer + operator | RELEASED (hub FQ) | OPS PINNED **`sha-1677c33` / 3.5.37** · stress `20260921T021332Z`. Follow-on tip **3.5.38** (BACnet CI keys + nginx/trivy/HTTPS trust) not yet OPS-repinned. Soft remainders: UA-02 product soak, UA-05 Debian/caddy, UA-10 S3/S5, U-H Nessus. |
+| **U-G — Qualified release and handoff** | Release maintainer + operator | RELEASED (hub FQ) | OPS PINNED **`sha-7ad6479` / 3.5.43** · stress `20260921T234148Z` (V6). Prior **`sha-1677c33` / 3.5.37**. Soft remainders: UA-02/05/08/09, UA-10 S5 residual, U-H Nessus. |
 | **U-H — Licensed Nessus assessment** | Operator/customer security | BLOCKED — licensed scanner and isolated assessment host | Actual external and credentialed assessment of representative standalone/field hosts, verified scan completeness and policy, remediations and retest. Never substitute Python/ZAP/Trivy or synthetic XML for this result. |
 
 ## Wave U remainder cycles (V1–V8) — 2026-09-21
