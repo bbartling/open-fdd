@@ -55,7 +55,7 @@ jobs:
         run: python scripts/release/check_version.py
 
       - name: Pytest package suites
-        run: PYTHONPATH=tools/wattlab_export python -m pytest tests/ecm tests/rules tests/analytics tests/reporting -q
+        run: PYTHONPATH=tools/wattlab_export python -m pytest tests/ecm tests/ecm_engineering tests/rules tests/analytics tests/reporting -q
 
       - name: Build and inspect wheel
         run: |
@@ -65,5 +65,7 @@ jobs:
           wheel="$(ls -1t dist/*.whl | head -n 1)"
           python -m zipfile -l "$wheel" | grep -E 'ecm_engineering/data/Open_FDD_ECM_Engineering_Toolkit\.xlsx'
           python -m zipfile -l "$wheel" | grep -E 'ecm_engineering/data/open_fdd_model\.json'
+          python -m zipfile -l "$wheel" | grep -E 'ecm_engineering/data/ofdd_engineering_quantities_v1\.ttl'
+          python -m zipfile -l "$wheel" | grep -E 'ecm_engineering/data/ofdd_engineering_quantities_v1\.schema\.json'
           python -m zipfile -l "$wheel" | grep -E 'open_fdd/rules/cookbook_catalog\.py'
           python -m zipfile -l "$wheel" | grep -E 'open_fdd/reporting/pipeline\.py'

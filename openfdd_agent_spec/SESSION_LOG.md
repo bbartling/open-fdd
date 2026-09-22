@@ -1,3 +1,10 @@
+## 2026-09-22 — Wave U W4 EQ-VOCAB + ECM-ADAPT tip (4.4.7)
+
+- PyPI tip: `ofdd_engineering_quantities_v1` TTL/schema + `eq_vocab` + `adapt_model_to_calculator`.
+- Permanent pytest: `tests/ecm_engineering/test_eq_vocab_adapter.py` (CI paths include `tests/ecm_engineering`).
+- Soft-OPEN honesty: **CLOSED** EQ-VOCAB · ECM-ADAPT · Pages vocab; **residual Soft-OPEN** DM-09 PERF + edge DM-10 Haystack projection (no product Rust in this tip).
+- Tracker: `BUG_REPORT_WAVE_P` rows `wave-s5-dm-remainder` / `wu-dm-07-10`.
+
 ## 2026-09-20 — Wave U security spine tip (3.5.34)
 
 - Master `WAVE_U_MASTER.md` SUPERSEDES Wave T; Soft-OPEN inventory; assurance child plan.

@@ -56,7 +56,7 @@ jobs:
         run: python scripts/release/check_version.py
 
       - name: Run package tests
-        run: python -m pytest tests/ecm tests/rules tests/analytics tests/reporting -q
+        run: python -m pytest tests/ecm tests/ecm_engineering tests/rules tests/analytics tests/reporting -q
 
       - name: Build sdist and wheel
         run: |
@@ -71,6 +71,8 @@ jobs:
           wheel="$(ls -1t dist/*.whl | head -n 1)"
           python -m zipfile -l "$wheel" | grep -E 'ecm_engineering/data/Open_FDD_ECM_Engineering_Toolkit\.xlsx'
           python -m zipfile -l "$wheel" | grep -E 'ecm_engineering/data/open_fdd_model\.json'
+          python -m zipfile -l "$wheel" | grep -E 'ecm_engineering/data/ofdd_engineering_quantities_v1\.ttl'
+          python -m zipfile -l "$wheel" | grep -E 'ecm_engineering/data/ofdd_engineering_quantities_v1\.schema\.json'
           python -m zipfile -l "$wheel" | grep -E 'open_fdd/rules/cookbook_catalog\.py'
 
       - name: Verify wheel smoke
@@ -91,8 +93,14 @@ jobs:
               ECM_CONTEXT_SCHEMA_VERSION,
               validate_ecm_context,
           )
+          from open_fdd.ecm_engineering import (
+              EQ_VOCAB_VERSION,
+              adapt_model_to_calculator,
+          )
           assert ECM_CONTEXT_SCHEMA_VERSION == "ecm_context_v1"
           assert callable(validate_ecm_context)
+          assert EQ_VOCAB_VERSION == "ofdd_engineering_quantities_v1"
+          assert callable(adapt_model_to_calculator)
           assert CANONICAL_RULE_COUNT == 62
           assert "SCHED-1" in RULES_BY_ID
           assert "VAV-2" in RULES_BY_ID

@@ -1,0 +1,85 @@
+# Open-FDD engineering quantity vocabulary (EQ-VOCAB)
+# Version: ofdd_engineering_quantities_v1
+# Namespace: urn:openfdd:ns# (package / product projection)
+# Legacy commissioning RDF uses https://open-fdd.dev/model# — do not mint
+# engineering properties inside Project Haystack or Brick namespaces.
+# Public vocabulary only: no private tenant equipment instances.
+
+@prefix ofdd: <urn:openfdd:ns#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+ofdd:EngineeringQuantityVocabulary a owl:Ontology ;
+  ofdd:vocabVersion "ofdd_engineering_quantities_v1" ;
+  rdfs:comment "Typed design/rated capacities and evidence records for ECM adapters." .
+
+ofdd:EngineeringQuantity a rdfs:Class ;
+  rdfs:label "Engineering quantity" ;
+  rdfs:comment "Numeric value with unit, quantity kind, value basis, and provenance." .
+
+ofdd:QuantityKind a rdfs:Class .
+ofdd:ThermalPower a ofdd:QuantityKind .
+ofdd:ElectricalPower a ofdd:QuantityKind .
+ofdd:ShaftPower a ofdd:QuantityKind .
+ofdd:VolumeFlow a ofdd:QuantityKind .
+ofdd:Pressure a ofdd:QuantityKind .
+ofdd:Efficiency a ofdd:QuantityKind .
+ofdd:Energy a ofdd:QuantityKind .
+ofdd:CoolingLoad a ofdd:QuantityKind .
+
+ofdd:ValueBasis a rdfs:Class .
+ofdd:Design a ofdd:ValueBasis .
+ofdd:Rated a ofdd:ValueBasis .
+ofdd:TAB a ofdd:ValueBasis .
+ofdd:Measured a ofdd:ValueBasis .
+ofdd:Assumed a ofdd:ValueBasis .
+
+ofdd:ReviewStatus a rdfs:Class .
+ofdd:NeedsReview a ofdd:ReviewStatus .
+ofdd:Reviewed a ofdd:ReviewStatus .
+ofdd:Rejected a ofdd:ReviewStatus .
+
+# Capacity / flow / efficiency properties (object → EngineeringQuantity record)
+ofdd:ratedCoolingCapacity a rdf:Property ;
+  rdfs:domain ofdd:Equipment ; rdfs:range ofdd:EngineeringQuantity .
+ofdd:ratedHeatingCapacity a rdf:Property ;
+  rdfs:domain ofdd:Equipment ; rdfs:range ofdd:EngineeringQuantity .
+ofdd:ratedFuelInputPower a rdf:Property ;
+  rdfs:domain ofdd:Equipment ; rdfs:range ofdd:EngineeringQuantity .
+ofdd:ratedElectricalInputPower a rdf:Property ;
+  rdfs:domain ofdd:Equipment ; rdfs:range ofdd:EngineeringQuantity .
+ofdd:ratedShaftPower a rdf:Property ;
+  rdfs:domain ofdd:Equipment ; rdfs:range ofdd:EngineeringQuantity .
+ofdd:designSupplyAirflow a rdf:Property ;
+  rdfs:domain ofdd:Equipment ; rdfs:range ofdd:EngineeringQuantity .
+ofdd:designOutdoorAirflow a rdf:Property ;
+  rdfs:domain ofdd:Equipment ; rdfs:range ofdd:EngineeringQuantity .
+ofdd:designWaterFlow a rdf:Property ;
+  rdfs:domain ofdd:Equipment ; rdfs:range ofdd:EngineeringQuantity .
+ofdd:designExternalStaticPressure a rdf:Property ;
+  rdfs:domain ofdd:Equipment ; rdfs:range ofdd:EngineeringQuantity .
+ofdd:designPumpHead a rdf:Property ;
+  rdfs:domain ofdd:Equipment ; rdfs:range ofdd:EngineeringQuantity .
+ofdd:ratedCOP a rdf:Property ;
+  rdfs:domain ofdd:Equipment ; rdfs:range ofdd:EngineeringQuantity .
+ofdd:ratedEER a rdf:Property ;
+  rdfs:domain ofdd:Equipment ; rdfs:range ofdd:EngineeringQuantity .
+ofdd:ratedThermalEfficiency a rdf:Property ;
+  rdfs:domain ofdd:Equipment ; rdfs:range ofdd:EngineeringQuantity .
+ofdd:hasPerformanceCurve a rdf:Property ;
+  rdfs:domain ofdd:Equipment .
+ofdd:hasComponent a rdf:Property .
+ofdd:hasOperatingSchedule a rdf:Property .
+
+# Quantity record fields
+ofdd:numericValue a rdf:Property ; rdfs:domain ofdd:EngineeringQuantity ; rdfs:range xsd:decimal .
+ofdd:unitCode a rdf:Property ; rdfs:domain ofdd:EngineeringQuantity ; rdfs:range xsd:string .
+ofdd:quantityKind a rdf:Property ; rdfs:domain ofdd:EngineeringQuantity ; rdfs:range ofdd:QuantityKind .
+ofdd:valueBasis a rdf:Property ; rdfs:domain ofdd:EngineeringQuantity ; rdfs:range ofdd:ValueBasis .
+ofdd:sourceType a rdf:Property ; rdfs:domain ofdd:EngineeringQuantity ; rdfs:range xsd:string .
+ofdd:sourceReference a rdf:Property ; rdfs:domain ofdd:EngineeringQuantity .
+ofdd:sourceLocator a rdf:Property ; rdfs:domain ofdd:EngineeringQuantity ; rdfs:range xsd:string .
+ofdd:reviewStatus a rdf:Property ; rdfs:domain ofdd:EngineeringQuantity ; rdfs:range ofdd:ReviewStatus .
+ofdd:Equipment a rdfs:Class .

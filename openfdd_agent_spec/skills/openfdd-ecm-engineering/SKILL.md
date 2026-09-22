@@ -66,4 +66,14 @@ Use `open_fdd.ecm_engineering.context_envelope` for agent-facing context:
 Plan: `.cursor/plans/ecm_context_hardening.plan.md` · agent brief:
 `.cursor/agents/openfdd-generic-ecm-context-hardening.md`.
 
+## EQ-VOCAB + ECM-ADAPT (W4)
+
+- Vocabulary: `ofdd_engineering_quantities_v1` (TTL + JSON schema under
+  `open_fdd/ecm_engineering/data/`; Pages copy under `docs/modeling/vocab/`)
+- Validate records: `open_fdd.ecm_engineering.eq_vocab`
+- Map model quantities → calculators: `adapt_model_to_calculator` (fan /
+  schedule / kw_per_ton). Never invent hours or ton-hours from nameplate.
+- Docs: `docs/modeling/engineering-quantities.md`,
+  `docs/ecm/model-to-calculations.md`
+
 Do **not** add Python ECM to central/web request paths.

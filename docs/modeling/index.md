@@ -32,6 +32,8 @@ in the package**, not a broken engine. See
 | [Tenant storage honesty](tenant-storage-honesty.html) | DM-05 hub-root paths vs optional `tenants/{tid}/` |
 | [Rule readiness](rule-readiness.html) | Runnable / missing / not applicable |
 | [Haystack model](haystack-model.html) | Sites, equipment, points, RDF APIs |
+| [Engineering quantities](engineering-quantities.html) | EQ-VOCAB capacities for ECM adapters |
+| [RDF vocabulary notes](rdf-vocabulary.html) | DM-10 projection honesty (no false markers) |
 | [Assignments](assignments.html) | Bind drivers → Haystack → FDD |
 
 ## SQL FDD ↔ data model
