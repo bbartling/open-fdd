@@ -7,7 +7,7 @@
 | Item | Status |
 |------|--------|
 | Product tip / **OPS PINNED (FQ)** | **3.5.43** / **`sha-7ad6479`** (#978) · health `3.5.43+7ad6479c924a` · backup **`20260921T233725Z`** · stress `reports/nightly-ot-bench_20260921T234148Z/` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave U V6 FQ** |
-| **Follow-on tip (not OPS PINNED)** | **3.5.44** / **`sha-bcacee6`** (#984 chart palette + W1/W2 Soft-OPEN) · hub still **OPS** `sha-7ad6479` / 3.5.43 until **W7** MEGA · [wave_u_post-fq_remainder.plan.md](../../.cursor/plans/wave_u_post-fq_remainder.plan.md) |
+| **Follow-on tip (not OPS PINNED)** | **3.5.45** / **`sha-9da9902`** (#988 W4+3.5.45) · hub re-pinned · backup **`20260922T213028Z`** · W7 MEGA `reports/nightly-ot-bench_20260922T213831Z/` **`fully_qualified=false`** — Soft-OPEN below · [wave_u_post-fq_remainder.plan.md](../../.cursor/plans/wave_u_post-fq_remainder.plan.md) |
 | **Wave U post-FQ remainder** `2026-09-22` | Master W-UI→W0–W7 · ECM [ecm_context_hardening.plan.md](../../.cursor/plans/ecm_context_hardening.plan.md) · V1–V8 scheduling **SUPERSEDED** |
 | **Wave U remainder cycles** `2026-09-21` | **SUPERSEDED** [wave_u_remainder_patch_cycles.plan.md](../../.cursor/plans/wave_u_remainder_patch_cycles.plan.md) · historical V1–V8 only |
 | **Wave U hub tip (smoke + MEGA in flight)** | **3.5.34** / **`sha-f44b45f`** (#959) · health `3.5.34+f44b45f6f58d` · backup **`20260920T193429Z`** · fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1` kit restored · MEGA `reports/nightly-ot-bench_20260920T194610Z/` · **no FQ / OPS PINNED claim until `fully_qualified=true`** |
@@ -210,6 +210,7 @@ Prior FAILs `20260920T194610Z` / `20260920T231407Z` / `20260921T014908Z` retaine
 | **ci-959-docs-guard** | CI | **FIXED** | Cookbook link edits blocked; reverted — IPMVP lives under `docs/ecm/` |
 | **wu-mv-404-pre-pin** | Soft-OPEN / FQ gate | **FIXED** | Hub re-pin `sha-f44b45f` · `POST /api/analytics/mv` → **HTTP 200** `ok:true` (smoke 2026-09-20T19:45Z). Gate 36 twin still must PASS under MEGA. |
 | **wu-model-ecm-creds** | Soft-OPEN | **CLEARED for MEGA** | Railway has `OPENFDD_USER_ACME_OPS_PASSWORD` / `OPENFDD_USER_B100_OPS_PASSWORD` (stress fetches ops_a/ops_b len=32). Prior BLOCKED was missing fetch names. |
+| **wu-w7-mega-20260922T213831Z** | Soft-OPEN / tip | **FAIL (not FQ)** | Hub `sha-9da9902` / 3.5.45. MEGA `reports/nightly-ot-bench_20260922T213831Z/` `fully_qualified=false`. FAILs: (1) gate35 pause published to `buildings/lab/` — edges lacked `site_id` when `has_telemetry=false` → harness defaulted `OPENFDD_SITE_ID=lab`; (2) gate25 foreign analytics TimeoutError under load (idle 403 ~300ms); (3) gate37 `/api/analytics/runtime` HTTP 502 under load (idle 200). 25b/26 BLOCKED. Patch tip in flight. |
 | **wu-vim1-oa-t-kit** | Ops | **CLOSED (W6)** | Kit restored `deploy/mqtt/kits/ACME__vim-1/` + fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1`. Hub health `ingest_reject=0` under steady poll (edges=1, last_ingest fresh) — Soft-OPEN closed. |
 | **wu-acme-fdd-slow** | Perf (not hang) | Soft note | Hang Soft-OPEN **CLOSED** (20m reclaim + 900s timeout). ACME may still be slow/timeout under load — not indefinite `running` |
 | **wu-s4-fq-mega** | Soft-OPEN | **CLOSED** | MEGA `20260921T021332Z` `fully_qualified=true` · OPS PINNED `sha-1677c33` / 3.5.37 |
