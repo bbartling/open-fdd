@@ -21,7 +21,7 @@ Checklist: [`RAILWAY_DEPLOYMENT_CHECKLIST.md`](../../../docs/operations/RAILWAY_
 | Package | `@railway/cli` via `npm i -g @railway/cli` |
 | Auth | Prefer **`railway login`** (CLI session). Stale `RAILWAY_TOKEN` in `.secrets/.env` breaks CLI — `env -u RAILWAY_TOKEN` when needed. |
 | Link | checkout → project **`gleaming-cooperation`**, env **`production`** |
-| **Product hub pin** | **FQ OPS PINNED** **`sha-1677c33`** / **3.5.37** · stress `20260921T021332Z` **`fully_qualified=true`** (Wave U). Prior S1: **`sha-7b81eb8`** / **3.5.31**. Soft Tip B: **`sha-4a5c11e`** / **3.5.28**. |
+| **Product hub pin** | **FQ OPS PINNED** **`sha-7ad6479`** / **3.5.43** · stress `20260921T234148Z` **`fully_qualified=true`** (Wave U V6). Prior: **`sha-1677c33`** / **3.5.37**. Soft Tip B: **`sha-4a5c11e`** / **3.5.28**. |
 | Stress closeout | Wave N gate = ACL trio (31) + MQTTS continuity (32) + hub stress while ACME streams — [`BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md`](../../../docs/operations/BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md) · [`STRESS_CLOSEOUT.md`](../../../docs/operations/STRESS_CLOSEOUT.md) |
 | Local firewall hub | HTTP only — [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md) |
 | Fieldbus | **Not** a Railway service — ACME VIM OT edge (private) or bensbench x86 via `./scripts/openfdd_fieldbus_railway_up.sh sha-<7>` |
