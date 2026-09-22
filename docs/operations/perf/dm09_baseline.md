@@ -14,14 +14,16 @@
 
 1. Stop collecting unbounded SPARQL solutions before truncation (cap at `MAX_ROWS+1`).
 2. Permanent unit coverage for projection honesty (DM-10 false-marker) + shared cap constant with `sparql.rs`.
-3. This baseline table — full 1k/10k/100k point harness remains Soft-OPEN (isolated host / CI job with recorded RSS).
+3. This baseline table — full 1k/10k/100k point harness remains Soft-OPEN
+   (requires isolated host / CI job with recorded RSS).
 
 ## How to extend (next tip)
 
 ```bash
+# On a host authorized for cargo benches (not bensbench image builds):
 cargo test -p open_fdd_edge_prototype rdf:: --lib
 # Record wall/RSS for cold rebuild + warm SELECT on fixed fixtures into
-# reports/perf/dm09_<stamp>.json — then compare candidate vs this baseline.
+# docs/operations/perf/dm09_<stamp>.json — then compare candidate vs this baseline.
 ```
 
 Do not mark PERF-1 PASS without identical datasets, correct answers, and
