@@ -40,5 +40,6 @@ product UI. Role alias Camber↔SQL is a **doc table only** until twin SQL lands
    `open_fdd.analytics.charts.RAINBOW_PALETTE` + `equipment_inspection_chart`
    aligned with `frontend/web/src/api/charts.contract.json` /
    `inspectChart.ts`. Permanent tests:
-   `tests/analytics/test_chart_palette_parity.py`. PyPI overview PNG names keep
-   Soft-OPEN `overview_*` prefix vs React bare stems.
+   `tests/analytics/test_chart_palette_parity.py` +
+   `tests/reporting/test_report_chart_palette.py` (Findings chrome bars).
+   PyPI overview PNG names keep Soft-OPEN `overview_*` prefix vs React bare stems.

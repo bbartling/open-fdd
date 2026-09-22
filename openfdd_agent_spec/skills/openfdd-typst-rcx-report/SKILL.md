@@ -23,13 +23,15 @@ Reference kit: `/home/ben/building100_rcx_report/`.
 **Chart parity (W-CHART):** React Plotly (`frontend/web/src/api/plotlyTheme.ts`
 `RAINBOW_PALETTE`) is the visual SoT. Prefer `open_fdd.analytics.charts` helpers
 (and `overview_export`) over ad-hoc matplotlib colors. Permanent lock:
-`tests/analytics/test_chart_palette_parity.py` + `frontend/web/src/api/charts.contract.json`
-(Inspect title/domains, PNG stem vocabulary). Plan:
-`.cursor/plans/agent_report_chart_parity.plan.md`. Day-zoom PNGs use the same
-rainbow list as of `open-fdd>=4.4.5`. Inspect twin matches React stacked domains
-as of `open-fdd>=4.4.6`. React Overview-RCx PNG stems are bare contract ids
-(`mech_cooling_oat_bins`, …); Typst/report assets keep Soft-OPEN `overview_*`
-aliases from `png_stem_vocabulary.pypi_overview_export`.
+`tests/analytics/test_chart_palette_parity.py` +
+`tests/reporting/test_report_chart_palette.py` +
+`frontend/web/src/api/charts.contract.json` (Inspect title/domains, PNG stem
+vocabulary). Plan: `.cursor/plans/agent_report_chart_parity.plan.md`. Day-zoom
+PNGs use the same rainbow list as of `open-fdd>=4.4.5`. Findings/report chrome
+bars cycle rainbow like React `rankingBars` as of `open-fdd>=4.4.6`. Inspect twin
+matches React stacked domains as of `open-fdd>=4.4.6`. React Overview-RCx PNG
+stems are bare contract ids (`mech_cooling_oat_bins`, …); Typst/report assets keep
+Soft-OPEN `overview_*` aliases from `png_stem_vocabulary.pypi_overview_export`.
 
 ---
 
