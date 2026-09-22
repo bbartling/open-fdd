@@ -1,8 +1,12 @@
 /**
- * vibe19 equipment_inspection_chart — stacked subplots of raw historian columns.
+ * vibe19 equipment_inspection_chart — stacked domain axes of raw historian columns.
+ * Parity lock: charts.contract.json inspectChart + open_fdd.analytics.charts.
  */
+import chartContract from "./charts.contract.json";
 import { fingerprintJson, type PlotlyFigure, type PlotlyTrace } from "./plotDataset";
 import { rainbowColor } from "./plotlyTheme";
+
+const INSPECT = chartContract.inspectChart;
 
 export function equipmentInspectionChart(
   points: Array<Record<string, unknown>>,
@@ -26,11 +30,14 @@ export function equipmentInspectionChart(
   if (!cols.length) return null;
 
   const n = cols.length;
-  const rowH = opts.rowHeight ?? 140;
-  const height = Math.min(opts.maxHeight ?? 2400, Math.max(420, rowH * n + 80));
+  const rowH = opts.rowHeight ?? INSPECT.row_height_default;
+  const height = Math.min(
+    opts.maxHeight ?? INSPECT.max_height_default,
+    Math.max(420, rowH * n + 80),
+  );
   const data: PlotlyTrace[] = [];
   const layout: Record<string, unknown> = {
-    title: `Inspection — ${opts.equipmentId}`,
+    title: INSPECT.title_template.replace("{equipment_id}", opts.equipmentId),
     height,
     showlegend: false,
     paper_bgcolor: "white",
@@ -56,7 +63,11 @@ export function equipmentInspectionChart(
       }),
       xaxis,
       yaxis: axis,
-      line: { width: 1.4, color: rainbowColor(i) },
+      line: {
+        width: INSPECT.line_width,
+        color: rainbowColor(i),
+        shape: INSPECT.line_shape,
+      },
     });
     const domainH = 1 / n;
     const y0 = 1 - (i + 1) * domainH + 0.02;

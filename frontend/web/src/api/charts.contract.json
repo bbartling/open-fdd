@@ -4,12 +4,69 @@
     "fault_trace": "confirmed_fault",
     "fault_axis_title": "fault"
   },
+  "inspectChart": {
+    "title_template": "Inspection — {equipment_id}",
+    "axis_mode": "stacked_domains",
+    "line_shape": "linear",
+    "line_width": 1.4,
+    "row_height_default": 140,
+    "max_height_default": 2400,
+    "png_stem_suffix": "_inspect"
+  },
   "overview_png_stems": [
+    "ahu_motor_weekly",
+    "boiler_motor_weekly",
+    "chiller_motor_weekly",
     "mech_cooling_oat_bins",
     "economizer_free_cooling_delta",
     "economizer_mat_residual",
     "economizer_temps_oa_damper",
     "bas_vs_web_oat",
     "bas_web_oat_deviation_hist"
-  ]
+  ],
+  "png_stem_vocabulary": {
+    "notes": [
+      "React Overview-RCx downloads use bare stems in overview_png_stems.",
+      "Generic RCx presets use rcx_<family>_<preset> via plotDownloadStem.",
+      "PyPI overview_export keeps overview_ prefix for Typst report assets (Soft-OPEN alias).",
+      "Fuel Metering charts use fuel_* stems."
+    ],
+    "react_overview_rcx": {
+      "ahu_motor_weekly": "ahu_motor_weekly",
+      "boiler_motor_weekly": "boiler_motor_weekly",
+      "chiller_motor_weekly": "chiller_motor_weekly",
+      "mech_cooling_oat_bins": "mech_cooling_oat_bins",
+      "economizer_delta": "economizer_free_cooling_delta",
+      "economizer_mat_resid": "economizer_mat_residual",
+      "economizer_temps_overlay": "economizer_temps_oa_damper",
+      "bas_vs_web_oat": "bas_vs_web_oat"
+    },
+    "react_overview_rcx_companion": {
+      "bas_vs_web_oat": "bas_web_oat_deviation_hist"
+    },
+    "pypi_overview_export": {
+      "bas_vs_web_oat": "overview_bas_vs_web_oat",
+      "mech_cooling_oat_bins": "overview_mech_cooling_oat_bins",
+      "economizer_free_cooling_delta": "overview_economizer_delta_scatter",
+      "economizer_mat_residual": "overview_economizer_mat_residual",
+      "economizer_temps_oa_damper": "overview_economizer_temps_overlay",
+      "ahu_motor_weekly": "overview_motor_weekly_air",
+      "boiler_motor_weekly": "overview_motor_weekly_boiler",
+      "chiller_motor_weekly": "overview_motor_weekly_chiller"
+    },
+    "fuel": [
+      "fuel_summary_bullet",
+      "fuel_intensity_elec",
+      "fuel_intensity_gas",
+      "fuel_ranked_eui",
+      "fuel_stacked",
+      "fuel_monthly",
+      "fuel_roll12",
+      "fuel_weather",
+      "fuel_demand",
+      "fuel_demand_peak",
+      "fuel_peak_cool"
+    ],
+    "rcx_generic_prefix": "rcx_"
+  }
 }

@@ -35,6 +35,8 @@ import type { PlotlyFigure } from "../api/plotDataset";
 import {
   isOverviewRcxPreset,
   loadOverviewRcxPreset,
+  overviewRcxCompanionPngStem,
+  overviewRcxPngStem,
 } from "../api/rcxOverviewPresets";
 import type { RcxPresetTable } from "../api/rcxPresetTables";
 import {
@@ -497,11 +499,15 @@ export function RcxPage() {
           figure={figure}
           loading={loading}
           height={420}
-          downloadFilename={plotDownloadStem(
-            "rcx",
-            family || undefined,
-            presetId || "preset",
-          )}
+          downloadFilename={
+            isOverviewRcxPreset(presetId)
+              ? overviewRcxPngStem(presetId)
+              : plotDownloadStem(
+                  "rcx",
+                  family || undefined,
+                  presetId || "preset",
+                )
+          }
           testId="rcx-plot"
         />
         {donutFigure ? (
@@ -520,7 +526,9 @@ export function RcxPage() {
             label="Worst zones timeseries"
             figure={companionFigure}
             height={360}
-            downloadFilename="rcx_worst_zones"
+            downloadFilename={
+              overviewRcxCompanionPngStem(presetId) ?? "rcx_worst_zones"
+            }
             testId="rcx-worst-zones"
           />
         ) : null}

@@ -4,22 +4,22 @@ overview: "Deep eval and fix: PyPI/Typst AI-agent PDF charts must one-for-one ma
 todos:
   - id: chart-inventory
     content: "Inventory React Plotly charts + PyPI/Typst/matplotlib/plotly report figures into a parity matrix"
-    status: in_progress
+    status: completed
   - id: chart-eval
     content: "Per-chart eval: colors hex, line styles, axis titles/units, scatter vs line/bar, legend, markers"
-    status: pending
+    status: in_progress
   - id: chart-fix
     content: "Align PyPI chart theme/helpers to React SoT; regenerate Typst embeds"
-    status: pending
+    status: in_progress
   - id: chart-tests
     content: "Permanent known-answer tests for palette/series/axis/type parity on synthetic fixtures"
-    status: pending
+    status: in_progress
   - id: chart-spec-docs
     content: "Update typst-rcx-report skill + agent-context + AGENTS rule for parity-locked chart helpers"
-    status: pending
+    status: completed
   - id: chart-pypi
-    content: "PyPI bump + publish after fixes (4.4.5+ if 4.4.4 already shipped for ECM)"
-    status: pending
+    content: "PyPI bump + publish after fixes (4.4.6 Inspect/stems; tag after merge)"
+    status: in_progress
 isProject: false
 ---
 
@@ -84,22 +84,30 @@ Typst kit (out-of-tree): `/home/ben/building100_rcx_report/` per typst skill.
 | `fdd_oat_meteo_overlay` | `withConfirmedFaultLane`+`basOverlay` | `bas_vs_web_oat_overlay` | Compose path differ |
 | `sensor_fault_chart` | `vibeCharts.sensorFaultChart` | `charts.sensor_fault_chart` | Swim-lane domains |
 | `sensor_health_heatmap` | `vibeCharts.sensorHealthHeatmap` | **missing** | React-only |
-| `inspect_stacked` | `inspectChart.equipmentInspectionChart` | `equipment_inspection_chart` | Title/subplot vs domain axes; `shape=hv` |
+| `inspect_stacked` | `inspectChart.equipmentInspectionChart` | `equipment_inspection_chart` | **CLOSED 4.4.6** — stacked domains + `Inspection —` title; Soft-OPEN: PDF DPI/width only |
 | `rcx_timeseries_*` | `multiEquipmentTimeseries` | `multi_equipment_timeseries` | Fault-lane forbidden on RCx |
 | `rcx_scatter_oat_*` | `oatScatter` | `oat_scatter` | Markers vs lines |
 | `rcx_box_*` | `multiEquipmentBox` | `multi_equipment_box` | Outlier markers |
 | `rcx_ranking` / comfort | `rankingBars`+`comfortDonut` | `vav_comfort_donut` + report bars `#c05621` | Report chrome ≠ UI |
 | `vav_health_matrix` | `vavHealthWorstBars`/`Donut` | **no twin** | React-only |
 | `rcx_metering` | `meteringCharts` | bar + degree-day scatter | Combined vs split figs |
-| `*_motor_weekly` | `weeklyPlantFigures` | `motor_weekly_runtime_chart` | Stem/`overview_` prefix; bare-min line |
-| `mech_cooling_oat_bins` | `mechFigure` | `mech_cooling_oat_histogram` | Stem vocabulary |
+| `*_motor_weekly` | `weeklyPlantFigures` | `motor_weekly_runtime_chart` | React bare stem; PyPI Soft-OPEN `overview_motor_weekly_*` |
+| `mech_cooling_oat_bins` | `mechFigure` | `mech_cooling_oat_histogram` | Stem vocab locked in contract |
 | `economizer_*` | `econDeltaScatter` / mat / temps | matching `economizer_*` | Dual-axis temps critical |
-| `bas_vs_web_oat` | overlay + `basHist` | overlay + histogram | Companion download stem |
-| `fuel_*` | `fuelCharts.ts` (12) | partial metering | React-heavy; no downloadFilename |
+| `bas_vs_web_oat` | overlay + `basHist` | overlay + histogram | Companion stem `bas_web_oat_deviation_hist` |
+| `fuel_*` | `fuelCharts.ts` (12) | partial metering | **CLOSED** React `downloadFilename`; PyPI twin Soft-OPEN |
 | `mv_changepoint` | `MvChangePointPanel` | ECM oracle | By-design diverge |
-| `report_*` / `day_zoom` | none | `reporting/charts.py`, `day_zoom.py` | **Non-rainbow blues** — fix or document |
+| `report_*` / `day_zoom` | none | `reporting/charts.py`, `day_zoom.py` | day_zoom rainbow **CLOSED 4.4.5**; Findings bars Soft-OPEN `#2b6cb0` |
 
-**Highest-risk fixes first:** (1) palette lock React↔PyPI JSON; (2) day_zoom → `RAINBOW_PALETTE`; (3) PNG stem vocabulary; (4) Inspect title/axis; (5) Fuel `downloadFilename`.
+**Highest-risk fixes first:** (1) palette lock React↔PyPI JSON — **DONE 4.4.5**; (2) day_zoom → `RAINBOW_PALETTE` — **DONE 4.4.5**; (3) PNG stem vocabulary — **DONE 4.4.6** (React bare + PyPI Soft-OPEN `overview_*`); (4) Inspect title/axis — **DONE 4.4.6**; (5) Fuel `downloadFilename` — **DONE**.
+
+## Soft-OPEN (chart) after 4.4.6
+
+- Findings / report chrome bars (`#2b6cb0` / `#c05621`) vs rainbow — document or align later
+- PyPI `overview_*` PNG name prefix vs React bare stems (intentional Typst alias)
+- `sensor_health_heatmap` / `vav_health_matrix` React-only twins
+- Dual-axis economizer / OAT scatter marker-vs-line polish
+- PDF DPI / page-width rendering deltas vs Plotly web
 
 ## Exit
 
