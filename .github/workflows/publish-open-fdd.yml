@@ -85,7 +85,14 @@ jobs:
           import open_fdd
           from open_fdd.ecm_engineering import ECMJob
           from open_fdd.rules import CANONICAL_RULE_COUNT, RULES_BY_ID
-          assert open_fdd.__version__ == version("open-fdd") == "4.4.3"
+          assert open_fdd.__version__ == version("open-fdd")
+          assert open_fdd.__version__  # non-empty; matches pyproject via wheel metadata
+          from open_fdd.ecm_engineering.context_envelope import (
+              ECM_CONTEXT_SCHEMA_VERSION,
+              validate_ecm_context,
+          )
+          assert ECM_CONTEXT_SCHEMA_VERSION == "ecm_context_v1"
+          assert callable(validate_ecm_context)
           assert CANONICAL_RULE_COUNT == 62
           assert "SCHED-1" in RULES_BY_ID
           assert "VAV-2" in RULES_BY_ID
