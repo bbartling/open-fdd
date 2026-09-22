@@ -111,14 +111,14 @@ export function SqlAnomalySection({
   return (
     <section className="overview-section" data-testid="overview-sql-anomaly">
       <h3>Anomaly screening (SQL)</h3>
-      <p className="oracle-sidebar__caption">
-        Rolling Z-score on mapped supply/zone/OAT sensors (DataFusion). Transition
-        events count normal→anomaly steps; anomaly hours ≈ hourly sample flags.
-      </p>
       {loading ? (
-        <p className="oracle-sidebar__caption" data-testid="overview-sql-anomaly-loading">
-          Loading anomaly table…
-        </p>
+        <InlineAlert
+          id="overview-sql-anomaly-loading"
+          variant="info"
+          testId="overview-sql-anomaly-loading"
+        >
+          Loading…
+        </InlineAlert>
       ) : null}
       {err ? (
         <InlineAlert id="overview-sql-anomaly-err" variant="danger">
@@ -126,9 +126,13 @@ export function SqlAnomalySection({
         </InlineAlert>
       ) : null}
       {note && !err ? (
-        <p className="oracle-sidebar__caption" data-testid="overview-sql-anomaly-empty">
+        <InlineAlert
+          id="overview-sql-anomaly-empty"
+          variant="info"
+          testId="overview-sql-anomaly-empty"
+        >
           {note}
-        </p>
+        </InlineAlert>
       ) : null}
       {tableRows.length > 0 ? (
         <DataTable

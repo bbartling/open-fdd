@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { DataTable, InlineAlert } from "./widgets";
 import { getFddResults } from "../api/fddApi";
 import { postBasVsWebOat } from "../api/analyticsApi";
-import { healthColumnHeader } from "../lib/cookbookRuleCatalog";
 import { plantEquipmentFamilies } from "../lib/plantEquipment";
 import type { FddEquipmentItem } from "../api/analyticsApi";
 
@@ -153,14 +152,9 @@ export function WeatherHealthSection({
   return (
     <section className="overview-section" data-testid="overview-weather-health">
       <h3>Weather sensors — web vs local</h3>
-      <p className="oracle-sidebar__caption">
-        {healthColumnHeader("OAT-METEO", ["outsideAir", "web-outside-air-temp"])}. Compare
-        BAS <code>oa_t</code> / <code>oa_h</code> to web <code>web_oa_t</code> /{" "}
-        <code>web_oa_h</code>. Histogram on RCx preset <code>bas_vs_web_oat</code>.
-      </p>
       {loading ? (
         <InlineAlert id="weather-health-loading" variant="info" testId="weather-health-loading">
-          Loading weather sensor matrix…
+          Loading…
         </InlineAlert>
       ) : null}
       {err ? (
@@ -169,9 +163,9 @@ export function WeatherHealthSection({
         </InlineAlert>
       ) : null}
       {note ? (
-        <p className="oracle-sidebar__caption" data-testid="weather-health-note">
+        <InlineAlert id="weather-health-note" variant="info" testId="weather-health-note">
           {note}
-        </p>
+        </InlineAlert>
       ) : null}
       <DataTable
         id="weather-health-table"

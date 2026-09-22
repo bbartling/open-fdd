@@ -1,4 +1,4 @@
-/** Read-only active building. Overview + sidebar are the only editors. */
+/** Quiet active-site badge — no froofy grey prose when unlocked (use InlineAlert). */
 export function LockedSiteCaption({
   buildingId,
   testId = "locked-site",
@@ -6,16 +6,10 @@ export function LockedSiteCaption({
   buildingId: string;
   testId?: string;
 }) {
+  if (!buildingId) return null;
   return (
-    <p className="oracle-sidebar__caption" data-testid={testId}>
-      {buildingId ? (
-        <>
-          Active site <code>zip:{buildingId}</code> — change it on Overview or
-          sidebar Active site.
-        </>
-      ) : (
-        <>No site locked — pick a building on Overview or sidebar Active site.</>
-      )}
+    <p className="oracle-sidebar__ok" data-testid={testId}>
+      <code>zip:{buildingId}</code>
     </p>
   );
 }

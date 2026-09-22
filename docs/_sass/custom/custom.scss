@@ -1,3 +1,19 @@
 // Open-FDD brand accents on the default Just the Docs light theme.
 $link-color: #2563eb;
 $btn-primary-color: #059669;
+
+// Home architecture diagram — full content width, crisp PNG on retina.
+.architecture-diagram {
+  margin: 1.25rem 0 1.75rem;
+  max-width: 100%;
+
+  img {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border: 1px solid rgba(11, 27, 43, 0.08);
+    border-radius: 0.375rem;
+    background: #fff;
+  }
+}

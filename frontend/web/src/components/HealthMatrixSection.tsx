@@ -56,7 +56,8 @@ export interface HealthFlagColumn {
 export interface HealthMatrixSectionProps {
   family: string;
   title: string;
-  caption: string;
+  /** @deprecated Quiet UI — captions are not rendered. */
+  caption?: string;
   buildingId: string;
   refreshToken: number;
   fetchHealth: (buildingId: string) => Promise<AnalyticsEnvelope>;
@@ -75,7 +76,6 @@ export interface HealthMatrixSectionProps {
 export function HealthMatrixSection({
   family,
   title,
-  caption,
   buildingId,
   refreshToken,
   fetchHealth,
@@ -168,10 +168,9 @@ export function HealthMatrixSection({
       aria-labelledby={`${sectionId}-heading`}
     >
       <h3 id={`${sectionId}-heading`}>{title}</h3>
-      <p className="oracle-sidebar__caption">{caption}</p>
       {loading ? (
         <InlineAlert id={`${family}-health-loading`} variant="info" testId={test("loading")}>
-          Loading {title}…
+          Loading…
         </InlineAlert>
       ) : null}
       {err ? (
@@ -181,12 +180,7 @@ export function HealthMatrixSection({
       ) : null}
       {empty ? (
         <InlineAlert id={`${family}-health-empty`} variant="info" testId={test("empty")}>
-          {emptyMessage ?? (
-            <>
-              No {family.toUpperCase()} equipment in this data model. Run{" "}
-              <strong>Update analytics</strong> / <strong>Run all rules</strong> after mapping.
-            </>
-          )}
+          {emptyMessage ?? <>No {family.toUpperCase()} equipment in this data model.</>}
         </InlineAlert>
       ) : null}
       {pendingFlags && matrixRows.length > 0 ? (
@@ -195,14 +189,13 @@ export function HealthMatrixSection({
           variant="info"
           testId={test("pending")}
         >
-          Health flags pending — run <strong>Run all rules</strong> (Update analytics builds
-          charts only).
+          Run <strong>Run all rules</strong> to fill health flags.
         </InlineAlert>
       ) : null}
       {showTable ? (
         <DataTable
           id={`${family}-health-table`}
-          label={`${title} matrix`}
+          label={title}
           columns={tableColumns}
           rows={matrixRows}
           rowClassName={(row) =>

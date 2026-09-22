@@ -371,7 +371,8 @@ export function AdminPage() {
       <section style={{ marginTop: "2rem" }}>
         <h2>Site data</h2>
         <p>
-          Purge package/historian sites from <a href="/sites">Sites</a>.
+          Purge package/historian sites from{" "}
+          <a href="/operations?view=sites">Operations → Sites</a>.
         </p>
       </section>
 

@@ -39,12 +39,9 @@ description: >-
    refetch results + series so `confirm_min` session overlays show up.
 10. Do not drop `REQUIRED_RCX_PRESET_IDS`. Health row tint uses existing
     `--health-broken-1/2/3` tokens (`n/3`; `?/3` is not red).
-11. **Operations** (`/operations`) stays its own main tab — not nested under Sites.
-    MQTT console watches Central’s ingest buffer (`GET /api/mqtt/monitor`) — no
-    operator-facing scrape/poll-interval knobs (fieldbus owns OT cadence). OT strip
-    may surface `/api/ingest/stats` + `/api/edges`. Never put broker credentials in
-    the browser.
-12. **Sites** (`/sites`) is package/edge **inventory**. CSV / MQTT / Both is an
+11. **Operations** (`/operations`) includes Sites inventory + MQTT + AFDD radios
+    (`?view=sites|mqtt|afdd`). Legacy `/sites` redirects to Operations → Sites.
+12. **Sites** is package/edge **inventory** under Operations. CSV / MQTT / Both is an
     operator label only — not a dual-writer historian epic.
 13. Low-RAM benches: prefer `npm run dev` (Vite → `:8080`) and get human approval
     before GHCR `openfdd-web` fresh pulls after UI PRs.
@@ -58,9 +55,14 @@ description: >-
     matrices twice. Invalidate on `RULES_UPDATED` / existing explicit refresh only.
     Prefer durable `GET /api/fdd/results` for flags. Serving SPA from Rust does
     **not** fix this — packaging ≠ UX.
-16. **No agent UI chrome:** Never add banners, tips, or “we optimized / cached /
-    AI …” copy to explain under-hood work. Keep the product quiet and professional.
-    Put rationale in `openfdd_agent_spec` / PR description, not the SPA.
+16. **No agent UI chrome:** Never add banners, tips, froofy grey captions, or
+    “we optimized / cached / AI …” copy. Section **titles** and control labels
+    must be enough for an engineer — one heading per matrix/table (no redundant
+    subtitle + caption). Keep blue `InlineAlert` only for actionable empty/error
+    states. Package/agent workflow belongs in `AGENTS.md` / GitHub, not the SPA.
+    Hide `tenant:legacy` chrome. Left rail = Sites · CSV Upload · Units · Lab;
+    Sign in/out next to revision. Results by Category nests under Data Model;
+    Sites inventory nests under Operations (with MQTT / AFDD).
 17. **Hub Admin (Wave O8):** `/admin` is hub_admin only — quiet tables for users/tenants.
 18. **Data Model export (Wave O9):** Export = **entire active site** data model JSON.
     Do not offer device/point-scoped export. Equipment picker is for edits only.

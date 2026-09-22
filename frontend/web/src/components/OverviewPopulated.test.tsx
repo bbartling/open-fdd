@@ -224,9 +224,6 @@ describe("OverviewPopulated metric isolation", () => {
       );
     });
     expect(screen.getByTestId("overview-rule-count").textContent).toContain("59");
-    expect(screen.getByTestId("overview-rule-caption").textContent).toMatch(
-      /\+4 SQL rollups/,
-    );
     expect(screen.getByTestId("overview-kind").textContent).toMatch(/ahu/i);
     expect(screen.getByTestId("overview-kind").textContent).not.toMatch(/AHU/);
     expect(screen.getByTestId("overview-start").textContent).toContain(
@@ -241,7 +238,7 @@ describe("OverviewPopulated metric isolation", () => {
   it("has tables and health matrices, not Overview Plotly hosts", async () => {
     renderOverview();
     await waitFor(() => {
-      expect(screen.getByTestId("overview-charts-ready")).toBeTruthy();
+      expect(screen.getByTestId("overview-readiness")).toBeTruthy();
     });
     expect(screen.queryByTestId("overview-inspect-eq")).toBeNull();
     expect(screen.queryByTestId("overview-data-inspection")).toBeNull();
@@ -343,7 +340,7 @@ describe("OverviewPopulated metric isolation", () => {
     });
     renderOverview();
     await waitFor(() => {
-      expect(screen.getByTestId("overview-charts-ready")).toBeTruthy();
+      expect(screen.getByTestId("overview-readiness")).toBeTruthy();
     });
     window.dispatchEvent(
       new CustomEvent(RULES_UPDATED_EVENT, {
@@ -387,12 +384,12 @@ describe("OverviewPopulated metric isolation", () => {
     const first = renderOverview();
     await waitFor(() => {
       expect(fetchCentralOverview).toHaveBeenCalledTimes(1);
-      expect(screen.getByTestId("overview-charts-ready")).toBeTruthy();
+      expect(screen.getByTestId("overview-readiness")).toBeTruthy();
     });
     first.unmount();
     renderOverview();
     await waitFor(() => {
-      expect(screen.getByTestId("overview-charts-ready")).toBeTruthy();
+      expect(screen.getByTestId("overview-readiness")).toBeTruthy();
     });
     expect(fetchCentralOverview).toHaveBeenCalledTimes(1);
   });

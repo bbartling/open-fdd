@@ -1,26 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router";
 import { useSessionQuery } from "../session";
 import { listPackageBuildings } from "../api/mappingApi";
 import { uploadPackage } from "../api/uploadApi";
 import { ApiClientError } from "../api/client";
 import { RuleTuningPanel } from "./RuleTuningPanel";
-import { displayScalar, displayUnitLabel, storeScalar } from "../api/roleUnits";
 
 const UNITS_KEY = "openfdd.ui.unit_system";
 const PREFER_WEB_OAT_KEY = "openfdd.ui.prefer_web_oat";
 const STATUS_PROOF_KEY = "openfdd.ui.use_mech_cooling_status_proof";
 const CHW_LEAVE_KEY = "openfdd.ui.chw_leave_max_f";
-
-function readFlag(key: string, fallback: boolean): boolean {
-  try {
-    const v = localStorage.getItem(key);
-    if (v == null) return fallback;
-    return v === "1" || v === "true";
-  } catch {
-    return fallback;
-  }
-}
 
 function writeFlag(key: string, value: boolean): void {
   try {
@@ -30,28 +18,30 @@ function writeFlag(key: string, value: boolean): void {
   }
 }
 
-function downloadJson(filename: string, data: unknown): void {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: "application/json",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+function packageLoadError(err: unknown): string {
+  if (err instanceof ApiClientError) {
+    const msg = `${err.code}: ${err.message}`;
+    if (/map|role|session_config|columns|equipType|invalid|parse|zip/i.test(msg)) {
+      return `${msg} — check openfdd_package_v1 layout / data model (column→role map).`;
+    }
+    return msg;
+  }
+  const raw = err instanceof Error ? err.message : String(err);
+  if (/zip|corrupt|JSON|CSV|parse|map|role/i.test(raw)) {
+    return `${raw} — package zip or data model may be incomplete.`;
+  }
+  return raw;
 }
 
 /**
- * Product sidebar: Sites · Building data · Session restore · Display & site.
- * Dev/parity shell — wires zip upload to central when authenticated.
+ * Product sidebar: Sites · CSV Upload · Display · Lab.
+ * Quiet chrome — no froofy captions; package help lives in AGENTS.md for agents.
  */
 export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
   const { query, setQuery } = useSessionQuery();
   const activeSite = query.siteId ?? "";
 
   const [sites, setSites] = useState<string[]>([]);
-  const [dataSource, setDataSource] = useState<"Zip package">("Zip package");
   const [zipFiles, setZipFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -66,24 +56,21 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
       return "imperial";
     }
   });
-  const [preferWebOat, setPreferWebOat] = useState(() =>
-    readFlag(PREFER_WEB_OAT_KEY, true),
-  );
-  const [useStatusProof, setUseStatusProof] = useState(() =>
-    readFlag(STATUS_PROOF_KEY, true),
-  );
-  const [chwLeaveMaxF, setChwLeaveMaxF] = useState(() => {
-    try {
-      const v = localStorage.getItem(CHW_LEAVE_KEY);
-      return v ? Number(v) : 48;
-    } catch {
-      return 48;
-    }
-  });
 
   const zipInputRef = useRef<HTMLInputElement>(null);
-  const sessionInputRef = useRef<HTMLInputElement>(null);
-  const faultInputRef = useRef<HTMLInputElement>(null);
+
+  // Sensible defaults under the hood (no UI knobs) — agents/FDD still read these keys.
+  useEffect(() => {
+    writeFlag(PREFER_WEB_OAT_KEY, true);
+    writeFlag(STATUS_PROOF_KEY, true);
+    try {
+      if (localStorage.getItem(CHW_LEAVE_KEY) == null) {
+        localStorage.setItem(CHW_LEAVE_KEY, "48");
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const refreshSites = useCallback(async () => {
     try {
@@ -120,22 +107,6 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
       /* ignore */
     }
   }, [unitSystem]);
-
-  useEffect(() => {
-    writeFlag(PREFER_WEB_OAT_KEY, preferWebOat);
-  }, [preferWebOat]);
-
-  useEffect(() => {
-    writeFlag(STATUS_PROOF_KEY, useStatusProof);
-  }, [useStatusProof]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(CHW_LEAVE_KEY, String(chwLeaveMaxF));
-    } catch {
-      /* ignore */
-    }
-  }, [chwLeaveMaxF]);
 
   const siteOptions = useMemo(() => {
     const set = new Set(sites);
@@ -174,9 +145,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
       return;
     }
     if (zipFiles.length > 1) {
-      setError(
-        "Select one openfdd_package_v1 zip (multi-part assemble is not wired yet).",
-      );
+      setError("Select one openfdd_package_v1 zip.");
       return;
     }
     setLoading(true);
@@ -184,9 +153,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
     setStatus("");
     try {
       const sizeMb = Math.round((file.size / (1024 * 1024)) * 10) / 10;
-      setStatus(
-        `Uploading ${file.name} (${sizeMb} MB) → central historian… large sites often take 10–90s.`,
-      );
+      setStatus(`Uploading ${file.name} (${sizeMb} MB)…`);
       const body = await uploadPackage(file);
       const bid = body.building_id || "";
       if (bid) {
@@ -207,9 +174,8 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
           `Ready: ${n} equipment`,
           bid ? `\`${bid}\`` : null,
           rows != null ? `${rows.toLocaleString()} rows` : null,
-          ms != null ? `${ms} ms server` : null,
-          elapsed != null ? `${elapsed}s wall` : null,
-          "Overview charts are refreshing now.",
+          ms != null ? `${ms} ms` : null,
+          elapsed != null ? `${elapsed}s` : null,
         ]
           .filter(Boolean)
           .join(" · "),
@@ -226,11 +192,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
       }
     } catch (err: unknown) {
       setStatus("");
-      if (err instanceof ApiClientError) {
-        setError(`${err.code}: ${err.message}`);
-      } else {
-        setError(err instanceof Error ? err.message : String(err));
-      }
+      setError(packageLoadError(err));
     } finally {
       setLoading(false);
     }
@@ -250,12 +212,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
     <div className="oracle-sidebar" data-testid="oracle-sidebar">
       <section className="oracle-sidebar__block" data-testid="sidebar-sites">
         <h2 className="oracle-sidebar__h">Sites</h2>
-        {siteOptions.length === 0 ? (
-          <p className="oracle-sidebar__caption">
-            No sites — load a package below. Use the <strong>Sites</strong> tab to delete a
-            site.
-          </p>
-        ) : (
+        {siteOptions.length > 0 ? (
           <label className="oracle-sidebar__field">
             <span className="oracle-sidebar__label">Active site</span>
             <select
@@ -265,7 +222,6 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
                 setQuery({ siteId: e.target.value || undefined }, true)
               }
               data-testid="sidebar-active-site"
-              title="Active site writes ?site= — Overview and this picker are the only editors."
             >
               {!activeSite ? (
                 <option value="">— select site —</option>
@@ -276,35 +232,12 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
                 </option>
               ))}
             </select>
-            <p className="oracle-sidebar__caption" style={{ marginTop: "0.35rem" }}>
-              Switch anytime among loaded packages. Use the <strong>Sites</strong> tab to
-              delete a site (feathers + FDD + analytics).
-            </p>
           </label>
-        )}
+        ) : null}
       </section>
 
       <section className="oracle-sidebar__block" data-testid="sidebar-building-data">
-        <h3 className="oracle-sidebar__h3">Building data</h3>
-        <p className="oracle-sidebar__caption">
-          Cloud-capable · same <code>openfdd_package_v1</code> zip everywhere (
-          <code>docs/PACKAGE_SPEC.md</code>). Non-sensitive demo data on shared
-          hosts.
-        </p>
-
-        <fieldset className="oracle-sidebar__fieldset">
-          <legend className="oracle-sidebar__label">Data source</legend>
-          <label className="oracle-sidebar__radio">
-            <input
-              type="radio"
-              name="data-source"
-              checked={dataSource === "Zip package"}
-              onChange={() => setDataSource("Zip package")}
-            />
-            Zip package
-          </label>
-        </fieldset>
-
+        <h3 className="oracle-sidebar__h3">CSV Upload</h3>
         <label className="oracle-sidebar__field">
           <span className="oracle-sidebar__label">Building package zip</span>
           <div className="oracle-sidebar__file-wrap">
@@ -319,21 +252,13 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
                 setZipFiles(list.slice(0, 1));
               }}
             />
-            <p className="oracle-sidebar__caption" style={{ marginBottom: 0 }}>
-              One <code>openfdd_package_v1</code> zip · ≤200 MB typical
-            </p>
           </div>
         </label>
-        <p className="oracle-sidebar__caption">
-          {zipFiles[0] ? (
-            <>
-              Selected <strong>{zipFiles[0].name}</strong> ·{" "}
-              <strong>{partsMb}</strong> MB
-            </>
-          ) : (
-            <>No file selected yet</>
-          )}
-        </p>
+        {zipFiles[0] ? (
+          <p className="oracle-sidebar__ok" data-testid="sidebar-zip-selected">
+            {zipFiles[0].name} · {partsMb} MB
+          </p>
+        ) : null}
 
         <div className="oracle-sidebar__btn-row">
           <button
@@ -350,8 +275,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
 
         {loading ? (
           <p className="oracle-sidebar__busy" data-testid="sidebar-load-busy" role="status">
-            Importing into central… <strong>{loadElapsedSec}s</strong> elapsed.
-            Stay on this page; Overview will flip to charts when ready.
+            Importing… <strong>{loadElapsedSec}s</strong>
           </p>
         ) : null}
         {status ? (
@@ -364,147 +288,12 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
             {error}
           </p>
         ) : null}
-
-        <h3 className="oracle-sidebar__h3">Session restore (Cloud-safe)</h3>
-        <p className="oracle-sidebar__caption">
-          Download after mapping/tuning; later upload zip + this JSON — no
-          server path.
-        </p>
-        <div className="oracle-sidebar__btn-row">
-          <button
-            type="button"
-            className="oracle-sidebar__btn"
-            data-testid="sidebar-dl-session"
-            onClick={() =>
-              downloadJson("session_config.json", {
-                schema_version: "openfdd_session_v1",
-                unit_system: unitSystem,
-                prefer_web_oat: preferWebOat,
-                use_mech_cooling_status_proof: useStatusProof,
-                chw_leave_max_f: chwLeaveMaxF,
-                site_id: activeSite || null,
-                role_map: {},
-                params: {},
-              })
-            }
-          >
-            Download session config
-          </button>
-          <button
-            type="button"
-            className="oracle-sidebar__btn"
-            data-testid="sidebar-dl-faults"
-            onClick={() => downloadJson("fault_settings.json", {})}
-          >
-            Download fault settings
-          </button>
-        </div>
-
-        <label className="oracle-sidebar__field">
-          <span className="oracle-sidebar__label">Upload session config</span>
-          <div className="oracle-sidebar__file-wrap">
-            <input
-              ref={sessionInputRef}
-              type="file"
-              accept=".json,application/json"
-              className="oracle-sidebar__file"
-              data-testid="sidebar-upload-session"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (!f) return;
-                void f.text().then((t) => {
-                  try {
-                    const j = JSON.parse(t) as {
-                      unit_system?: string;
-                      prefer_web_oat?: boolean;
-                      site_id?: string;
-                    };
-                    if (j.unit_system === "metric" || j.unit_system === "imperial") {
-                      setUnitSystem(j.unit_system);
-                    }
-                    if (typeof j.prefer_web_oat === "boolean") {
-                      setPreferWebOat(j.prefer_web_oat);
-                    }
-                    if (j.site_id) setQuery({ siteId: j.site_id }, true);
-                    setStatus(`Applied session config from ${f.name}`);
-                  } catch (err) {
-                    setError(
-                      err instanceof Error ? err.message : "Invalid session JSON",
-                    );
-                  }
-                });
-              }}
-            />
-            <p className="oracle-sidebar__caption" style={{ marginBottom: 0 }}>
-              Limit 200MB per file · JSON
-            </p>
-          </div>
-        </label>
-        <label className="oracle-sidebar__field">
-          <span className="oracle-sidebar__label">Upload fault settings</span>
-          <div className="oracle-sidebar__file-wrap">
-            <input
-              ref={faultInputRef}
-              type="file"
-              accept=".json,application/json"
-              className="oracle-sidebar__file"
-              data-testid="sidebar-upload-faults"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (!f) return;
-                setStatus(`Fault settings file selected: ${f.name} (stored client-side)`);
-              }}
-            />
-            <p className="oracle-sidebar__caption" style={{ marginBottom: 0 }}>
-              Limit 200MB per file · JSON
-            </p>
-          </div>
-        </label>
-        <p className="oracle-sidebar__caption">
-          Active fault settings: defaults
-        </p>
-
-        <details className="oracle-sidebar__expander">
-          <summary>AI agent / package help</summary>
-          <div className="oracle-sidebar__expander-body">
-            <p>
-              <strong>Human + agent flow (large jobs)</strong>
-            </p>
-            <ol>
-              <li>
-                Agent preprocesses CSVs → one or many{" "}
-                <code>openfdd_package_v1</code> part zips.
-              </li>
-              <li>
-                Human uploads one package zip here → <strong>Load package</strong>.
-              </li>
-              <li>
-                Map + prerun faults (Overview Run all / left-rail Update this rule)
-                so Plots/RCx are ready.
-              </li>
-              <li>
-                Download session config to restore later.
-              </li>
-            </ol>
-            <p>
-              <Link to="/upload">Upload page</Link>
-              {" · "}
-              <a
-                href="https://bbartling.github.io/open-fdd/"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open-FDD docs
-              </a>
-            </p>
-          </div>
-        </details>
       </section>
 
       <hr className="oracle-sidebar__divider" />
 
       <section className="oracle-sidebar__block" data-testid="sidebar-display">
-        <h3 className="oracle-sidebar__h3">Display &amp; site</h3>
+        <h3 className="oracle-sidebar__h3">Display</h3>
         <fieldset className="oracle-sidebar__fieldset">
           <legend className="oracle-sidebar__label">Units</legend>
           <label className="oracle-sidebar__radio">
@@ -526,48 +315,6 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
             metric
           </label>
         </fieldset>
-        <label className="oracle-sidebar__check">
-          <input
-            type="checkbox"
-            checked={preferWebOat}
-            onChange={(e) => setPreferWebOat(e.target.checked)}
-          />
-          Prefer web OAT (Open-Meteo)
-        </label>
-        <label className="oracle-sidebar__check">
-          <input
-            type="checkbox"
-            checked={useStatusProof}
-            onChange={(e) => setUseStatusProof(e.target.checked)}
-          />
-          Use mapped mechanical-cooling status proof
-        </label>
-        <label className="oracle-sidebar__field">
-          <span className="oracle-sidebar__label">
-            CHW leave proof max (
-            {displayUnitLabel("°F", unitSystem)})
-          </span>
-          <input
-            type="range"
-            min={displayScalar(35, "°F", unitSystem)}
-            max={displayScalar(50, "°F", unitSystem)}
-            step={unitSystem === "metric" ? 0.2 : 0.5}
-            value={displayScalar(chwLeaveMaxF, "°F", unitSystem)}
-            disabled={useStatusProof}
-            onChange={(e) =>
-              setChwLeaveMaxF(storeScalar(Number(e.target.value), "°F", unitSystem))
-            }
-            className="oracle-sidebar__slider"
-          />
-          <span className="oracle-sidebar__caption">
-            {displayScalar(chwLeaveMaxF, "°F", unitSystem)}
-          </span>
-        </label>
-        <p className="oracle-sidebar__caption">
-          Occupancy: Overview weekly calendar always sets <code>occ_mode</code>{" "}
-          (SCHED-1). Mech-cooling OAT bins: chillers + DX only (no AHU CHW
-          valve).
-        </p>
       </section>
 
       <hr className="oracle-sidebar__divider" />
