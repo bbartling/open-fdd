@@ -26,6 +26,9 @@ Turtle subjects use safe IRI segments; opaque names become reversible
 - No SPARQL / Oxigraph on the FDD request path.
 - Do not invent Brick/Haystack roles in RDF that the zip does not map.
 - Do not treat downloaded `.ttl` as an ingest or authoring format.
+- Do not claim lossless JSON↔TTL (legacy Haystack projection declares
+  `ofdd:claimsLosslessJson false` — see [RDF vocabulary notes](rdf-vocabulary.html)).
 
 See also: [`docs/agent/PACKAGE_AUTHORING.md`](../agent/PACKAGE_AUTHORING.md),
+[Engineering quantities](engineering-quantities.html),
 Mapping page (`map-download-ttl`, `map-view-ttl-text`).

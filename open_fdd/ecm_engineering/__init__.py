@@ -20,6 +20,12 @@ from .context_envelope import (
     combine_schedule_then_fan_reset,
     validate_ecm_context,
 )
+from .eq_vocab import (
+    EQ_VOCAB_VERSION,
+    EngineeringQuantity,
+    validate_engineering_quantity,
+)
+from .model_adapter import AdaptResult, adapt_model_to_calculator
 from .calc_trace import CalculationTrace
 from .stage2_workbook import build_stage2_workbook
 from .g14 import (
@@ -79,6 +85,11 @@ __all__ = [
     "assess_screening_gaps",
     "combine_schedule_then_fan_reset",
     "validate_ecm_context",
+    "EQ_VOCAB_VERSION",
+    "EngineeringQuantity",
+    "validate_engineering_quantity",
+    "AdaptResult",
+    "adapt_model_to_calculator",
     "CalculationTrace",
     "build_stage2_workbook",
     "build_honesty_workbook",

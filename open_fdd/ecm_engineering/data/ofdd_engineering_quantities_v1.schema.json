@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:openfdd:schema:ofdd_engineering_quantities_v1",
+  "title": "Open-FDD engineering quantity record (ofdd_engineering_quantities_v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "quantity_id",
+    "property",
+    "numeric_value",
+    "unit_code",
+    "quantity_kind",
+    "value_basis",
+    "source_type"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "ofdd_engineering_quantities_v1"
+    },
+    "quantity_id": { "type": "string", "minLength": 1 },
+    "equipment_id": { "type": "string" },
+    "building_id": { "type": "string" },
+    "tenant_id": { "type": "string" },
+    "property": {
+      "type": "string",
+      "enum": [
+        "ratedCoolingCapacity",
+        "ratedHeatingCapacity",
+        "ratedFuelInputPower",
+        "ratedElectricalInputPower",
+        "ratedShaftPower",
+        "designSupplyAirflow",
+        "designOutdoorAirflow",
+        "designWaterFlow",
+        "designExternalStaticPressure",
+        "designPumpHead",
+        "ratedCOP",
+        "ratedEER",
+        "ratedThermalEfficiency"
+      ]
+    },
+    "numeric_value": { "type": "number" },
+    "unit_code": { "type": "string", "minLength": 1 },
+    "quantity_kind": {
+      "type": "string",
+      "enum": [
+        "ThermalPower",
+        "ElectricalPower",
+        "ShaftPower",
+        "VolumeFlow",
+        "Pressure",
+        "Efficiency",
+        "Energy",
+        "CoolingLoad"
+      ]
+    },
+    "value_basis": {
+      "type": "string",
+      "enum": ["Design", "Rated", "TAB", "Measured", "Assumed"]
+    },
+    "source_type": { "type": "string", "minLength": 1 },
+    "source_reference": { "type": "string" },
+    "source_locator": { "type": "string" },
+    "review_status": {
+      "type": "string",
+      "enum": ["NeedsReview", "Reviewed", "Rejected"]
+    },
+    "notes": { "type": "string" }
+  }
+}

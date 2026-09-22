@@ -69,7 +69,7 @@
 | **s1-datasets-mt-acl** | **CLOSED** (#951 / 3.5.31 / `sha-7b81eb8`) · datasets list/delete MT ACL; FQ `20260919T195100Z` gate 25/25b PASS |
 | **wave-s3-pypi-mv-oracle** | **CLOSED (PyPI)** · `open-fdd==4.4.3` live; tip **4.4.4** adds `ecm_context_v1` envelope (W4 / [ecm_context_hardening.plan.md](../../.cursor/plans/ecm_context_hardening.plan.md)) |
 | **wu-pypi-publish-4.4.3** | **CLOSED** · verified PyPI 4.4.3 live 2026-09-22 |
-| **wave-s5-dm-remainder** | **PARTIAL (W4 in flight)** · Soft-OPEN residual **DM-09 PERF** · **DM-10** · **EQ-VOCAB** · **ECM-ADAPT** (+ Pages vocab). ECM envelope **4.4.4/4.4.5** landed; EQ/ECM-ADAPT tip pending. |
+| **wave-s5-dm-remainder** | **PARTIAL (W4)** · EQ-VOCAB + ECM-ADAPT + DM-10 narrow + Pages CLOSED (4.4.7 / 3.5.45); Soft-OPEN residual **DM-09/PERF-1 scale RSS** · **EQ-PERSIST** · ECM REST/MCP |
 | **wave-s4-sql-twins-fq** | **CLOSED (FQ)** · MEGA `20260921T021332Z` `fully_qualified=true` on `sha-1677c33` / 3.5.37 · both gate 36 PASS · OPS PINNED |
 | **acme-fdd-run-hang** | **CLOSED (3.5.34)** · Stale `running` reclaim **20m** + `list_actions` reclaim + `POST /api/fdd/run` wall timeout via `OPENFDD_FDD_RUN_TIMEOUT_SECS` (default **900s**) finishes action `fail`/`timeout` instead of indefinite hang. Slow ACME DataFusion remains a performance topic, not an action hang. |
 | **sec-harness-mt-breadth** | **ADVANCED (W2 #982)** · +6 plant/zone health routes IMPLEMENTED (boiler/chiller/CT/HP/zone/sensor); residual PLANNED remain · [wave_u_post-fq_remainder.plan.md](../../.cursor/plans/wave_u_post-fq_remainder.plan.md) |
@@ -121,7 +121,7 @@ The current closure rows above are corrected prospectively. Earlier scan/test ac
 | `wu-audit-ua07-identity` | P1 | FIXED (code) | `tenant_ids` membership enforcement + permanent negatives on tip; broader MT route matrix remains Soft-OPEN |
 | `wu-audit-ua08-field-host` | P1 | PARTIAL | Key `0600`, dual-tenant kits, field-only exposure, host selftest on tip; live host probe + runtime container evidence still required |
 | `wu-audit-ua09-readiness-scope` | P1 | DOCS CORRECTED / VERIFICATION OPEN | Release maintainer: license-free readiness retained as required; close only after measured profile evidence |
-| `wu-audit-ua10-product-closeout` | P2 | PARTIAL | RCx presets ACL + hub FQ twins CLOSED; Soft-OPEN: S5 DM-09 PERF + edge DM-10 projection (EQ/ECM/Pages closed on W4), MT breadth |
+| `wu-audit-ua10-product-closeout` | P2 | PARTIAL | RCx presets ACL + hub FQ twins CLOSED; Soft-OPEN: S5 DM-09 scale PERF + EQ-PERSIST / ECM REST (EQ/ECM/DM-10 narrow closed on W4), MT breadth |
 | `wu-bacnet-ci-ro-key-mode` | CI | **FIXED (#966)** | Smoke stages keys 640; broker cert mount writable for mosquitto chown; e2e PASS on tip |
 | `wu-s4-fq-mega` | Soft-OPEN | **CLOSED** | MEGA `20260921T021332Z` `fully_qualified=true` → OPS PINNED `sha-1677c33` / 3.5.37 |
 | `wu-trivy-tip-digest` | Soft-OPEN | **W1 RESCANED** | `reports/trivy-wave-u/sha-7ad6479/SUMMARY.md` — web nginx cleared; Debian/caddy remain; 3.5.44 GHCR lag |
@@ -219,7 +219,7 @@ Prior FAILs `20260920T194610Z` / `20260920T231407Z` / `20260921T014908Z` retaine
 | **wu-pypi-publish-4.4.3** | Residual | **CLOSED** | PyPI `open-fdd==4.4.3` live; **4.4.4** published (retag after #983) |
 | **wu-pypi-publish-4.4.4** | Residual | **CLOSED** | `open-fdd==4.4.4` on PyPI (`ecm_context_v1`) |
 | **agent-report-chart-parity** | Soft-OPEN | **OPEN / W-CHART** | Agent Typst/PDF charts vs React Plotly parity — [agent_report_chart_parity.plan.md](../../.cursor/plans/agent_report_chart_parity.plan.md) |
-| **wu-dm-07-10** | Soft-OPEN | **PARTIAL (V5 tip)** | DM-07/08 CLOSED (injective IRI + W3C bindings; spargebra SELECT allowlist; no empty-ok). Residual: DM-09 PERF · DM-10 versioned projection · EQ-VOCAB · ECM-ADAPT · Pages |
+| **wu-dm-07-10** | Soft-OPEN | **PARTIAL (W4 tip)** | DM-07/08 CLOSED (V5). **CLOSED on W4:** EQ-VOCAB · ECM-ADAPT · DM-10 narrow (`ofdd_haystack_projection_v1`, no false `hs:sensor`) · Pages. **PARTIAL:** DM-09 SELECT cap + baseline doc. **Soft-OPEN residual:** PERF-1 scale RSS · EQ-PERSIST · ECM REST/MCP |
 | **wu-mt-breadth** | Soft-OPEN | Soft-OPEN honesty | Continue IMPLEMENTED matrix later; inventory cited on tip |
 | **wu-v6-mega-20260921T204702Z** | Soft-OPEN / tip | **CLOSED FQ** | Tip **3.5.43** / `sha-7ad6479` (#978). MEGA `20260921T234148Z` `fully_qualified=true` (gate 00 retest after login throttle; all 25/25b/26/17/36/37 PASS). |
 

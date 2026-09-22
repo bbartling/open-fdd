@@ -24,7 +24,7 @@ The independent audit reopened acceptance checks. Statuses below do not erase ea
 | **U-C — Field gateway readiness** | Field/MQTT maintainer | PARTIAL | Field-only exposure + key modes + dual-tenant tests; BACnet CI RO key staging fixed in 3.5.38. Product MQTT image ACL Soft-OPEN. |
 | **U-D — Web application assurance** | App/security maintainer | PARTIAL | Auth/tenant matrix on MEGA; authenticated ZAP candidate AF still Soft-OPEN. |
 | **U-E — Image and host acceptance** | Release/deployment maintainer | PARTIAL | Tip rescan `sha-1677c33`; mqtt 0 H/C; web nginx force-upgrade in 3.5.38; Debian TRACKED UNFIXED; caddy High residual. |
-| **U-F — Modeling, engineering and twins** | Data-model/PyPI/product maintainer | PARTIAL | Gate 36 FQ CLOSED on hub tip; Soft-OPEN: DM-07..10, PyPI 4.4.3 publish, MT breadth. |
+| **U-F — Modeling, engineering and twins** | Data-model/PyPI/product maintainer | PARTIAL | Gate 36 FQ CLOSED; W4: EQ-VOCAB + ECM-ADAPT + DM-10 narrow CLOSED; Soft-OPEN DM-09 scale / EQ-PERSIST / ECM REST / MT breadth. |
 | **U-G — Qualified release and handoff** | Release maintainer + operator | RELEASED (hub FQ) | OPS PINNED **`sha-7ad6479` / 3.5.43** · stress `20260921T234148Z` (V6). Prior **`sha-1677c33` / 3.5.37**. Soft remainders: UA-02/05/08/09, UA-10 S5 residual, U-H Nessus. |
 | **U-H — Licensed Nessus assessment** | Operator/customer security | BLOCKED — licensed scanner and isolated assessment host | Actual external and credentialed assessment of representative standalone/field hosts, verified scan completeness and policy, remediations and retest. Never substitute Python/ZAP/Trivy or synthetic XML for this result. |
 
@@ -38,7 +38,7 @@ The independent audit reopened acceptance checks. Statuses below do not erase ea
 | **V2** | Product MQTT ACL + disposable ZAP AF | **LANDED** (MQTT ACL); ZAP AF execute → W2 | UA-04 residual | [wave_u_v2_mqtt_zap.plan.md](.cursor/plans/wave_u_v2_mqtt_zap.plan.md) |
 | **V3** | MT breadth batch + field/host live evidence | **LANDED** (+6 routes); residual PLANNED → W2 | `sec-harness-mt-breadth` residual | [wave_u_v3_mt_field_host.plan.md](.cursor/plans/wave_u_v3_mt_field_host.plan.md) |
 | **V4** | PyPI `open-fdd` **4.4.3** publish | **CLOSED** (PyPI live 4.4.3) | — | [wave_u_v4_pypi_publish.plan.md](.cursor/plans/wave_u_v4_pypi_publish.plan.md) |
-| **V5** | S5 DM-07..10 / EQ-VOCAB / ECM-ADAPT / Pages | **PARTIAL** (DM-07/08 + Pages); residual → W4 + [ecm_context_hardening.plan.md](.cursor/plans/ecm_context_hardening.plan.md) | DM-09/10 · EQ · ECM | [wave_u_v5_s5_dm_ecm.plan.md](.cursor/plans/wave_u_v5_s5_dm_ecm.plan.md) |
+| **V5** | S5 DM-07..10 / EQ-VOCAB / ECM-ADAPT / Pages | **PARTIAL→advanced (W4)** · EQ-VOCAB + ECM-ADAPT + DM-10 narrow PASS; DM-09/PERF-1 scale Soft-OPEN | EQ-PERSIST · PERF scale · ECM REST | [wave_u_v5_s5_dm_ecm.plan.md](.cursor/plans/wave_u_v5_s5_dm_ecm.plan.md) |
 | **V6** | Single final MEGA FQ + OPS PINNED bump | **CLOSED FQ** | OPS PINNED `sha-7ad6479` / 3.5.43 | [wave_u_v6_final_mega.plan.md](.cursor/plans/wave_u_v6_final_mega.plan.md) |
 | **V7** | Tenant path migrate `tenants/{tid}/…` | **LANDED** (dual-read); live APPLY → W5 | live APPLY residual | [wave_u_v7_tenant_path_migrate.plan.md](.cursor/plans/wave_u_v7_tenant_path_migrate.plan.md) |
 | **V8** | Historian H4 + runtime compaction | **LANDED** (product); live compact soak → W5 | live soak residual | [wave_u_v8_historian_compaction.plan.md](.cursor/plans/wave_u_v8_historian_compaction.plan.md) |

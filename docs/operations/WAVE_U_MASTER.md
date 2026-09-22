@@ -35,7 +35,7 @@ The independent acceptance review reopened qualification, standalone, MQTT, ZAP 
 | ID | Status | Note |
 |----|--------|------|
 | `acme-fdd-run-hang` | Soft-OPEN | Critical interrupt — ACME `fdd_run_all` stuck `running` |
-| `wave-s5-dm-remainder` | Soft-OPEN | DM-04..10 / ECM / Pages / model gate |
+| `wave-s5-dm-remainder` | Soft-OPEN / PARTIAL | EQ-VOCAB + ECM-ADAPT + DM-10 narrow CLOSED (W4); residual DM-09 scale / EQ-PERSIST / ECM REST |
 | `wave-s3-pypi-mv-oracle` | Soft-OPEN | IPMVP / G14 / Camber→ECM wheel |
 | `wave-s4-sql-twins-fq` | Soft-OPEN | SQL M&V twin + Metering + FQ MEGA |
 

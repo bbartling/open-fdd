@@ -22,5 +22,6 @@ pip install "open-fdd[oracle]"       # + pandas rules / analytics
 3. [Install & API overview](overview.html) — `ECMJob`, CLI  
 4. [**AI agents & skills**](agent-context.html) — what agents do + skill links  
 5. [**IPMVP change-point & G14**](ipmvp-changepoint.html) — Option C baselines + Guideline 14 scores (pandas oracle)
+6. [**Model → ECM calculations**](model-to-calculations.html) — EQ-VOCAB → calculator adapter (ECM-ADAPT)
 
 **Boundary:** [Compute boundary ownership](../architecture/compute_boundary_ownership.html) — PyPI/ECM is external tooling, not central/web images.
