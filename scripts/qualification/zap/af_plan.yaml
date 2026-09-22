@@ -13,7 +13,8 @@ env:
   contexts:
     - name: openfdd-disposable
       urls:
-        - "${ZAP_TARGET_ORIGIN}"
+        # Central-only disposable: `/` is 404 (SPA not mounted). Seed a 200 URL.
+        - "${ZAP_TARGET_ORIGIN}/api/health"
       includePaths:
         - "${ZAP_TARGET_ORIGIN}.*"
       authentication:
@@ -35,7 +36,9 @@ jobs:
   - type: spider
     parameters:
       context: openfdd-disposable
-      url: "${ZAP_TARGET_ORIGIN}/"
+      # Central-only disposable stacks return 404 on `/` (no SPA). Seed a 200
+      # health URL so AF does not exit nonzero on spider warnings alone.
+      url: "${ZAP_TARGET_ORIGIN}/api/health"
       maxDuration: 5
 
   # Authenticated /api/auth/me coverage is asserted by run_af_disposable.py
