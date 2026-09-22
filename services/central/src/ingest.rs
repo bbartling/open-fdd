@@ -274,7 +274,7 @@ fn handle_payload(
         TopicKind::Telemetry => handle_telemetry(state, live_historian, &parsed, payload),
         TopicKind::Metadata => {
             if let Ok(value) = serde_json::from_slice(payload) {
-                store_shadow_payload(state, &parsed.edge_id, |shadow| {
+                store_shadow_payload(state, &parsed.edge_id, parsed.site_id(), |shadow| {
                     let key = parsed.protocol.as_deref().unwrap_or("mixed");
                     shadow.last_metadata.insert(key.to_string(), value);
                 });
@@ -284,7 +284,7 @@ fn handle_payload(
         }
         TopicKind::Discovery => {
             if let Ok(value) = serde_json::from_slice(payload) {
-                store_shadow_payload(state, &parsed.edge_id, |shadow| {
+                store_shadow_payload(state, &parsed.edge_id, parsed.site_id(), |shadow| {
                     let key = parsed.protocol.as_deref().unwrap_or("mixed");
                     shadow.last_discovery.insert(key.to_string(), value);
                 });
@@ -294,7 +294,7 @@ fn handle_payload(
         }
         TopicKind::Status => {
             if let Ok(value) = serde_json::from_slice(payload) {
-                store_shadow_payload(state, &parsed.edge_id, |shadow| {
+                store_shadow_payload(state, &parsed.edge_id, parsed.site_id(), |shadow| {
                     shadow.last_status = Some(value);
                 });
             } else {
@@ -309,10 +309,14 @@ fn handle_payload(
 fn store_shadow_payload(
     state: &AppState,
     edge_id: &str,
+    site_id: &str,
     update: impl FnOnce(&mut crate::state::EdgeShadow),
 ) {
     let entry = state.edges.entry(edge_id.to_string()).or_default();
     let mut guard = entry.lock().unwrap();
+    if !site_id.is_empty() {
+        guard.registered_site_id = Some(site_id.to_string());
+    }
     update(&mut guard);
 }
 
@@ -395,6 +399,9 @@ fn handle_telemetry(
             shadow
                 .sequences
                 .insert(format!("{:?}", env.protocol), env.sequence);
+            if !env.site_id.is_empty() {
+                shadow.registered_site_id = Some(env.site_id.clone());
+            }
             shadow.last_telemetry = Some(env);
             state.note_ingest_ok();
         }
@@ -518,5 +525,37 @@ mod tests {
     fn redacts_empty_payload() {
         let redacted = redact_payload(b"");
         assert_eq!(redacted, "<redacted empty utf8 payload: 0 bytes>");
+    }
+
+    #[test]
+    fn status_topic_registers_site_without_telemetry() {
+        let state = AppState::new();
+        let topic = "openfdd/v1/tenants/acme/buildings/ACME/edges/vim-1/status";
+        handle_payload(&state, None, topic, br#"{"ok":true,"suspended":false}"#);
+        let entry = state.edges.get("vim-1").expect("edge shadow from status");
+        let shadow = entry.lock().unwrap();
+        assert!(shadow.last_telemetry.is_none());
+        assert_eq!(shadow.registered_site_id.as_deref(), Some("ACME"));
+        assert_eq!(shadow.known_site_id().as_deref(), Some("ACME"));
+    }
+
+    #[test]
+    fn known_site_id_prefers_telemetry_over_registration() {
+        use crate::state::EdgeShadow;
+        use openfdd_contracts::{Protocol, TelemetryEnvelope};
+
+        let mut shadow = EdgeShadow {
+            registered_site_id: Some("from-status".into()),
+            ..Default::default()
+        };
+        assert_eq!(shadow.known_site_id().as_deref(), Some("from-status"));
+        shadow.last_telemetry = Some(TelemetryEnvelope::new(
+            "from-tel",
+            "e1",
+            Protocol::Mixed,
+            1,
+            vec![],
+        ));
+        assert_eq!(shadow.known_site_id().as_deref(), Some("from-tel"));
     }
 }

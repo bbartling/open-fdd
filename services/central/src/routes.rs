@@ -1305,11 +1305,7 @@ pub async fn list_edges(
         .iter()
         .filter_map(|e| {
             let g = e.value().lock().unwrap();
-            let site_id = g
-                .last_telemetry
-                .as_ref()
-                .map(|t| t.site_id.clone())
-                .filter(|s| !s.is_empty());
+            let site_id = g.known_site_id();
             if ctx.multi_tenant && !ctx.hub_admin {
                 match site_id.as_deref() {
                     Some(site) if ctx.allow_building(site) => {}

@@ -62,37 +62,23 @@ print(int(next((d[k] for k in ("ingest_ok","messages_ok","ok","accepted","total"
 }
 
 pick_edge() {
-  local edges_json site edge
+  local edges_json
+  # shellcheck disable=SC1091
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib_pick_edge.sh"
   edges_json="$(curl -sf --max-time 20 "${auth_hdr[@]}" "$BASE/api/edges")"
   echo "$edges_json" | tee "$ART/edges.json" >/dev/null
-  if [[ -n "${EXPECTED_EDGE_ID:-}" ]]; then
-    site="$(echo "$edges_json" | jq -r --arg e "$EXPECTED_EDGE_ID" \
-      '(.edges // [])[] | select(.edge_id==$e) | (.site_id // empty)' | head -1)"
-    edge="$EXPECTED_EDGE_ID"
-  elif [[ -n "${EXPECTED_SITE_ID:-}" ]]; then
-    site="$EXPECTED_SITE_ID"
-    edge="$(echo "$edges_json" | jq -r --arg s "$EXPECTED_SITE_ID" \
-      '(.edges // [])[] | select((.site_id // "")==$s and .has_telemetry==true) | .edge_id' | head -1)"
-  else
-    site="$(echo "$edges_json" | jq -r \
-      '(.edges // [])[] | select(.has_telemetry==true) | .site_id // empty' | head -1)"
-    edge="$(echo "$edges_json" | jq -r \
-      '(.edges // [])[] | select(.has_telemetry==true) | .edge_id' | head -1)"
-  fi
-  site="${site:-${OPENFDD_SITE_ID:-lab}}"
-  edge="${edge:-${OPENFDD_EDGE_ID:-fieldbus-1}}"
-  echo "$site" "$edge"
+  resolve_edge_target "$edges_json"
 }
 
 issue_telemetry() {
   local action="$1" site="$2" edge="$3"
   local body resp cmd_id status i
-    body="$(jq -nc --arg s "$site" --arg e "$edge" --arg a "$action" --arg t "${OPENFDD_TENANT_ID:-}" \
-      'if ($t|length)>0 then
-         {site_id:$s,edge_id:$e,tenant_id:$t,target_id:"edge:telemetry",approved_by:"stress-gate-35",value:{action:$a},ttl_secs:180}
-       else
-         {site_id:$s,edge_id:$e,target_id:"edge:telemetry",approved_by:"stress-gate-35",value:{action:$a},ttl_secs:180}
-       end')"
+  body="$(jq -nc --arg s "$site" --arg e "$edge" --arg a "$action" --arg t "${OPENFDD_TENANT_ID:-}" \
+    'if ($t|length)>0 then
+       {site_id:$s,edge_id:$e,tenant_id:$t,target_id:"edge:telemetry",approved_by:"stress-gate-35",value:{action:$a},ttl_secs:180}
+     else
+       {site_id:$s,edge_id:$e,target_id:"edge:telemetry",approved_by:"stress-gate-35",value:{action:$a},ttl_secs:180}
+     end')"
   resp="$(curl -sf --max-time 30 "${auth_hdr[@]}" -X POST "$BASE/api/commands" \
     -H 'Content-Type: application/json' -d "$body")"
   echo "$resp" | tee "$ART/cmd_${action}.json" >/dev/null
@@ -124,7 +110,11 @@ issue_telemetry() {
   return 1
 }
 
-read -r SITE_ID EDGE_ID < <(pick_edge)
+if ! pick_out="$(pick_edge)"; then
+  echo "FAIL: could not resolve site/edge for pause/resume (see resolve_edge_target)" | tee -a "$ART/pause_resume.log"
+  exit 1
+fi
+read -r SITE_ID EDGE_ID <<<"$pick_out"
 echo "target site=$SITE_ID edge=$EDGE_ID stall=${STALL_SECS}s resume_wait=${RESUME_WAIT_SECS}s" \
   | tee -a "$ART/pause_resume.log"
 

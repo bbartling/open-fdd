@@ -30,6 +30,14 @@ fi
 EXPECTED_EDGE_ID="${EXPECTED_EDGE_ID:-}"
 EXPECTED_SITE_ID="${EXPECTED_SITE_ID:-}"
 ACCEPT_ZAP_MEDIUM="${ACCEPT_ZAP_MEDIUM:-0}"
+# FQ MEGA: when security execute is on, also run MQTT ACL observer (prior FQ set this).
+if [[ "${OPENFDD_SECURITY_EXECUTE:-0}" == "1" && "${OPENFDD_MQTT_ACL_EXECUTE:-}" != "1" ]]; then
+  export OPENFDD_MQTT_ACL_EXECUTE=1
+  echo "NOTE: auto-enabled OPENFDD_MQTT_ACL_EXECUTE=1 (SECURITY_EXECUTE=1 on railway_field)"
+fi
+# Settle before analytics-heavy probes (foreign authz POSTs / Overview charts) after
+# prior gates leave DataFusion / nginx under pressure.
+ANALYTICS_SETTLE_SECS="${ANALYTICS_SETTLE_SECS:-45}"
 QUAL="$ROOT/scripts/qualification"
 ZAP_DISPOSITIONS="${ZAP_DISPOSITIONS:-$QUAL/zap_risk_dispositions.json}"
 MANIFEST_PY="$QUAL/write_manifest.py"
@@ -372,6 +380,8 @@ run_gate "10_wave_k_app_test_megas" "10 Wave K app-test MEGAs" \
 # --- 25 Python security harness (pre-stress). Default dry-run → BLOCKED until
 # OPENFDD_SECURITY_EXECUTE=1 in an authorized window. Distinct from Wave L 25_*.
 export OPENFDD_SECURITY_PROFILE="${OPENFDD_SECURITY_PROFILE:-live_readonly}"
+echo "settle ${ANALYTICS_SETTLE_SECS}s before gate 25 analytics-heavy security harness"
+sleep "$ANALYTICS_SETTLE_SECS"
 run_security_gate "25_security_python_harness" "25 security python harness (pre)" \
   "gate25_security_python_harness" \
   bash "$DIR/25_security_python_harness.sh"
@@ -493,9 +503,12 @@ run_gate "24_capacity_pressure" "24 capacity pressure" \
   bash "$DIR/24_capacity_pressure.sh"
 
 # --- 37 ACME Overview/charts analytics sequential break-finder (nginx 502) ---
+echo "settle ${ANALYTICS_SETTLE_SECS}s before gate 37 ACME analytics charts"
+sleep "$ANALYTICS_SETTLE_SECS"
 run_gate "37_acme_analytics_charts" "37 ACME analytics charts break-finder" \
   env ARTIFACT_DIR="$ART/gate37_acme_analytics_charts" \
     OPENFDD_USER_ACME_OPS_PASSWORD="${OPENFDD_USER_ACME_OPS_PASSWORD:-${OPENFDD_USER_A_OPS_PASSWORD:-}}" \
+    ANALYTICS_SETTLE_SECS="${ANALYTICS_SETTLE_SECS}" \
     bash "$DIR/37_acme_analytics_charts.sh"
 
 capacity_sampler_stop || true
@@ -552,6 +565,8 @@ else
 fi
 
 # --- 25b security postcheck (re-auth + bounded reads). Runs even after prior fails. ---
+echo "settle ${ANALYTICS_SETTLE_SECS}s before gate 25b security post-stress"
+sleep "$ANALYTICS_SETTLE_SECS"
 run_security_gate "25b_security_post_stress" "25b security post-stress" \
   "gate25b_security_post_stress" \
   bash "$DIR/25b_security_post_stress.sh"

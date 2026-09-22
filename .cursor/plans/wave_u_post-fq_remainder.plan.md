@@ -19,7 +19,7 @@ todos:
     status: completed
   - id: w4-s5-residual
     content: "W4: DM-09/10 + EQ-VOCAB + ECM-ADAPT tip (+ PyPI 4.4.4 context envelope)"
-    status: in_progress
+    status: completed
   - id: w-chart-parity
     content: "W-CHART: deep eval PyPI/Typst agent PDF charts vs React Plotly (colors/axes/series/scatter); fix + PyPI bump; update agent-spec"
     status: pending
@@ -30,8 +30,8 @@ todos:
     content: "W6: vim-1 kit quiet ingest_reject; close wu-vim1-oa-t-kit"
     status: completed
   - id: w7-rev-mega
-    content: "W7: final VERSION patch bump → GHCR → Railway re-pin → full MEGA stress → OPS PINNED + Soft-OPEN closeout"
-    status: pending
+    content: "W7: MEGA FAIL 20260922T213831Z on sha-9da9902 (35 lab site / 25 timeout / 37 502 / 26 ACL); tip 3.5.46 patch → re-pin → re-MEGA; Soft-OPEN until fully_qualified=true"
+    status: in_progress
 isProject: false
 ---
 
@@ -179,6 +179,8 @@ Ship a UX tip that makes the React app feel clickable, not documentary:
 
 ### W7 — Final platform rev bump + MEGA hub stress (closeout)
 
+**Status `2026-09-22`:** First W7 MEGA on hub tip **`sha-9da9902` / 3.5.45** → **`fully_qualified=false`**. Artifact `reports/nightly-ot-bench_20260922T213831Z/`. Soft-OPEN logged in BUG_REPORT **before** patch tip (do not greenwash). Root causes: (1) gate 35 `pick_edge` → `lab` when edges omitted `site_id`; (2) gate 25 foreign-analytics 10s timeouts under load; (3) gate 37 analytics 502 under load; (4) gate 26 BLOCKED without `OPENFDD_MQTT_ACL_EXECUTE`. Follow-up product+harness tip **3.5.46**; Soft-OPEN stays OPEN until re-MEGA PASS.
+
 Required end of series after W0–W6 Soft-OPEN work is in (or parked with honest FAIL rows):
 
 1. **VERSION patch bump** on master tip (platform revision only if no pending product tip; otherwise fold into the last product tip that already needs a bump) so sidebar/`GET /api/health` shows a new `semver+shortsha`.
@@ -186,11 +188,11 @@ Required end of series after W0–W6 Soft-OPEN work is in (or parked with honest
 3. Confirm tip via `./scripts/ghcr_newest_by_created.py` (not sticky `.env`).
 4. Railway **backup** then `railway_repin_hub.sh sha-<tip>` (positional TAG from W3).
 5. Smoke: health, `vim-1` online, MV 200, gate 37 if ACME in scope.
-6. **Full MEGA** hub stress (same contract as V6 FQ): `./scripts/nightly-ot-bench/run_all.sh` (or the locked MEGA entry used for `20260921T234148Z`) with gates 00/17/25/25b/26 + OT path; settle for 300s fieldbus poll before gate 00.
+6. **Full MEGA** hub stress (same contract as V6 FQ): `./scripts/nightly-ot-bench/run_all.sh` (or the locked MEGA entry used for `20260921T234148Z`) with gates 00/17/25/25b/26 + OT path; settle for 300s fieldbus poll before gate 00. Ensure `OPENFDD_MQTT_ACL_EXECUTE=1` when `OPENFDD_SECURITY_EXECUTE=1`.
 7. On `fully_qualified=true`: update OPS PINNED to new `sha-*` / semver in MILESTONES + BUG_REPORT + Railway docs; cite `reports/nightly-ot-bench_<stamp>/`.
 8. On FAIL: log Soft-OPEN / FAIL rows before any follow-up tip — do not greenwash.
 
-W7 is the **only** planned full stress in this remainder series. Mid-cycle tips stay smoke-only. W-CHART may ship a PyPI bump without forcing a product VERSION bump.
+W7 is the **only** planned full stress in this remainder series (plus one re-MEGA after FAIL patch). Mid-cycle tips stay smoke-only. W-CHART may ship a PyPI bump without forcing a product VERSION bump.
 
 ## Patch-cycle rules (unchanged)
 
