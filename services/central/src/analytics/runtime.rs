@@ -181,27 +181,21 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         let end = req.query.end;
         let building = req.query.building_id.as_deref();
         let mut used_retain_fallback = false;
-        let hist =
-            match runtime_from_history_budgeted(filter, max_gap, building, start, end).await {
-                Ok(Some(env)) if env_is_fail_closed(&env) || env_has_runtime_rows(&env) => {
-                    Ok(Some(env))
-                }
-                Ok(Some(_)) | Ok(None) if defaulted_start => {
-                    // Bounded expand only — never start=None (full-history LEAD → 502).
-                    used_retain_fallback = true;
-                    let retain_start = Utc::now()
-                        - chrono::Duration::days(historian::RUNTIME_RETAIN_FALLBACK_DAYS);
-                    runtime_from_history_budgeted(
-                        filter,
-                        max_gap,
-                        building,
-                        Some(retain_start),
-                        end,
-                    )
+        let hist = match runtime_from_history_budgeted(filter, max_gap, building, start, end).await
+        {
+            Ok(Some(env)) if env_is_fail_closed(&env) || env_has_runtime_rows(&env) => {
+                Ok(Some(env))
+            }
+            Ok(Some(_)) | Ok(None) if defaulted_start => {
+                // Bounded expand only — never start=None (full-history LEAD → 502).
+                used_retain_fallback = true;
+                let retain_start =
+                    Utc::now() - chrono::Duration::days(historian::RUNTIME_RETAIN_FALLBACK_DAYS);
+                runtime_from_history_budgeted(filter, max_gap, building, Some(retain_start), end)
                     .await
-                }
-                other => other,
-            };
+            }
+            other => other,
+        };
         match hist {
             Ok(Some(mut env)) => {
                 let (qv, mut warnings) = resolve_query_version(req, QV_RUNTIME);
@@ -238,7 +232,6 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 fn round2(x: f64) -> f64 {
     (x * 100.0).round() / 100.0
 }
-
 
 async fn runtime_from_history_budgeted(
     filter: Option<&[String]>,
