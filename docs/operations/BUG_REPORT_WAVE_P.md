@@ -7,8 +7,8 @@
 | Item | Status |
 |------|--------|
 | Product tip / **OPS PINNED (FQ)** | **3.5.43** / **`sha-7ad6479`** (#978) · health `3.5.43+7ad6479c924a` · backup **`20260921T233725Z`** · stress `reports/nightly-ot-bench_20260921T234148Z/` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave U V6 FQ** |
-| **W7 MEGA FAIL (not OPS PINNED)** | Hub tip under test **3.5.45** / **`sha-9da9902`** · backup **`20260922T213028Z`** · artifact `reports/nightly-ot-bench_20260922T213831Z/` · **`fully_qualified=false`** — Soft-OPEN rows below; follow-up tip **3.5.46** (list_edges site_id + harness) |
-| **Follow-on tip (not OPS PINNED)** | **3.5.45** / **`sha-9da9902`** (#988 W4 EQ-VOCAB) · prior **3.5.44** / `sha-bcacee6` · hub OPS still `sha-7ad6479` / 3.5.43 until W7 FQ · [wave_u_post-fq_remainder.plan.md](../../.cursor/plans/wave_u_post-fq_remainder.plan.md) |
+| **W7 MEGA FAIL (not OPS PINNED)** | Hub tip under test **3.5.46** / **`sha-5660837`** · re-MEGA `reports/nightly-ot-bench_20260923T004400Z/` almost FQ — gates **35/37/26 PASS**; residual FAIL **`25_security_python_harness`** sensor-health **502** · tip **3.5.47** (sensor_health lookback + single-pass) |
+| **Follow-on tip (not OPS PINNED)** | **3.5.47** sensor-health bound (this PR) · prior **3.5.46** / `sha-5660837` (list_edges site_id) · hub OPS still `sha-7ad6479` / 3.5.43 until W7 FQ · [wave_u_post-fq_remainder.plan.md](../../.cursor/plans/wave_u_post-fq_remainder.plan.md) |
 | **Wave U post-FQ remainder** `2026-09-22` | Master W-UI→W0–W7 · ECM [ecm_context_hardening.plan.md](../../.cursor/plans/ecm_context_hardening.plan.md) · V1–V8 scheduling **SUPERSEDED** |
 | **Wave U remainder cycles** `2026-09-21` | **SUPERSEDED** [wave_u_remainder_patch_cycles.plan.md](../../.cursor/plans/wave_u_remainder_patch_cycles.plan.md) · historical V1–V8 only |
 | **Wave U hub tip (smoke + MEGA in flight)** | **3.5.34** / **`sha-f44b45f`** (#959) · health `3.5.34+f44b45f6f58d` · backup **`20260920T193429Z`** · fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1` kit restored · MEGA `reports/nightly-ot-bench_20260920T194610Z/` · **no FQ / OPS PINNED claim until `fully_qualified=true`** |
@@ -61,15 +61,18 @@
 | **wave-o1-tenant-path-migrate** | **CLOSED (3.5.41 / V7 + W5 live)** · Dual-read prefers `tenants/{tid}/…` then hub-root; migrate script additive. Live hub dry-run `reports/wave_u_v7_tenant_path_migrate_hub_20260922T185532Z/` — ACME/BUILDING_100/LAKESIDE_ES already `skip_already_migrated` (eq counts match); dual-read smoke `GET /api/tenants` + `GET /api/fdd/equipment` (49 / 71). APPLY noop — no `CONFIRM_BACKUP` copy needed. |
 | **p2c-mqtt-acl-staging** | **REOPENED acceptance (UA-03)** · folded into `mqtt-key-mode-tenant-acl`; product-generated runtime ACL matrix still required — **V2** |
 | **historian-n-building-scale** | **CLOSED (V8 + W5 live soak)** · H4 + `CompactionCoordinator` + hub-admin `GET\|POST /api/historian/compaction`. Live soak `reports/wave_u_v8_compaction_soak_20260922T185707Z/` on hub `3.5.43+7ad6479`: fail-closed no-confirm **HTTP 400**; `plan_only` + `confirm:true wait:true` **ok** with **0** eligible hive partitions (equipment trees are single-file — honest empty compact, not a silent skip of the API). Soft residual: multi-part hive compact only when parts accumulate. |
+| **w7-acme-tenant-history-fanout** | **Soft-OPEN (tip 3.5.47 scans tenants)** · ACME hive `tenants/acme/history/` ~**54k** tiny parquet parts (~220MB). Compactor/stats now list `tenants/*/history` (was hub `history/` only → silent miss). Soft-OPEN until live V8 compact on hub reduces fan-out under re-MEGA. |
 | **admin-capacity-gauges** | **CLOSED (branch)** · cgroup memory + workspace `statvfs` + Parquet small-file strip on Admin |
 | **railway-capacity-stress** | **CITED** Tip B FQ `20260917T215437Z` gates 24/24b PASS |
 | **mqtt-pause-ui** | **CLOSED (#947 Tip B)** · MT command topics `tenants/…`; gate **35 PASS** on `sha-4a5c11e` stress `20260917T215437Z` |
-| **w7-mega-20260922T213831Z** | **Soft-OPEN / FAIL** · MEGA on `sha-9da9902` / 3.5.45 · `fully_qualified=false` — see section below; tip **3.5.46** patch pending re-MEGA |
-| **w7-gate35-pick-edge-lab** | **Soft-OPEN (patched tip)** · Gate 35 published `buildings/lab/…` while fieldbus on `ACME`; fixed in harness `resolve_edge_target` + product `registered_site_id` — Soft-OPEN until re-MEGA |
-| **w7-list-edges-site-id** | **Soft-OPEN (patched tip)** · `list_edges` now keeps MQTT topic `site_id` when telemetry absent — Soft-OPEN until re-MEGA |
-| **w7-gate25-analytics-timeout** | **Soft-OPEN (patched tip)** · settle + `--timeout 30` on railway live_readonly EXECUTE — Soft-OPEN until re-MEGA |
-| **w7-gate37-analytics-502** | **Soft-OPEN (patched tip)** · settle before gate 37 + one 502 retry — Soft-OPEN until re-MEGA |
-| **w7-gate26-acl-execute** | **Soft-OPEN (patched tip)** · auto `OPENFDD_MQTT_ACL_EXECUTE=1` when `OPENFDD_SECURITY_EXECUTE=1` — Soft-OPEN until re-MEGA |
+| **w7-mega-20260922T213831Z** | **Soft-OPEN / FAIL** · MEGA on `sha-9da9902` / 3.5.45 · `fully_qualified=false` — see section below; tip **3.5.46** site_id + **3.5.47** sensor-health |
+| **w7-mega-20260923T004400Z** | **Soft-OPEN / almost FQ** · re-MEGA on `sha-5660837` / 3.5.46 · gates **35/37/26 PASS** (site_id Soft-OPEN closed for harness); residual FAIL gate **25** own `sensor-health` **502** (~41s Railway edge) — tip **3.5.47** |
+| **w7-gate35-pick-edge-lab** | **CLOSED (re-MEGA PASS)** · Gate 35 PASS on `20260923T004400Z` after `resolve_edge_target` + `registered_site_id` tip |
+| **w7-list-edges-site-id** | **CLOSED (re-MEGA PASS)** · `list_edges` site_id retained; gate 35 PASS on tip `sha-5660837` |
+| **w7-gate25-analytics-timeout** | **Soft-OPEN → residual product** · harness settle helped foreign 403; own `y.authz.a_own_analytics_sensor_health` still **502** on unbounded UNION ALL — tip **3.5.47** lookback |
+| **w7-gate25-sensor-health-502** | **Soft-OPEN (patched tip)** · `sensor_health_from_history` default **14d** window + single-pass GROUP BY + 30s fail-closed; Soft-OPEN until re-MEGA |
+| **w7-gate37-analytics-502** | **CLOSED (re-MEGA PASS)** · Gate 37 PASS on `20260923T004400Z` |
+| **w7-gate26-acl-execute** | **CLOSED (re-MEGA PASS)** · Gate 26 PASS on `20260923T004400Z` (auto `OPENFDD_MQTT_ACL_EXECUTE=1`) |
 | **acme-oa-t-dup-reject** | **CLOSED (catalog 3.5.34)** · `config/fieldbus/field_devices.toml`: zone loopback no longer maps `outside-air-temperature` on AV 9101; `hosted-weather` owns `web-outside-air-temp`. Live `vim-1` needs kit restore to clear residual hub rejects. |
 | **local-bacnet-ot-bench** | **Soft-OPEN** · MS/TP/FEC shared-trunk; Waveshare C FTDI `--mstp-passive` @38400: FEC alone silence; +mini MAC2 → PFM heard. Resume when FEC online on isolated trunk. |
 | **edge-kit-soft** | **OPS** · MT kit `./scripts/openfdd_restore_edge_kit.sh ACME pi-1` → `deploy/mqtt/kits/ACME__pi-1/` · live ACME OT edge id `vim-1` |
@@ -152,7 +155,20 @@ For each fix append candidate/harness SHA, image/config/fixture hashes, profile,
 | **25b** | **BLOCKED** | Downstream of gate 25 errors. |
 | **26 MQTT ACL** | **BLOCKED** | `OPENFDD_MQTT_ACL_EXECUTE!=1` (prior FQ MEGA set it; this run did not auto-enable). |
 
-**Follow-up tip `3.5.46` (this PR):** product `list_edges` retains registered MQTT topic `site_id`; harness `pick_edge` prefers `EXPECTED_SITE_ID` / fail-closed (never silent `lab`); auto `OPENFDD_MQTT_ACL_EXECUTE=1` when `OPENFDD_SECURITY_EXECUTE=1`; settle + foreign-analytics timeout bump; gate 37 one 502 retry after settle. **Do not claim FIXED Soft-OPEN until re-MEGA `fully_qualified=true`.**
+**Follow-up tip `3.5.46`:** product `list_edges` retains registered MQTT topic `site_id`; harness `pick_edge` prefers `EXPECTED_SITE_ID` / fail-closed (never silent `lab`); auto `OPENFDD_MQTT_ACL_EXECUTE=1` when `OPENFDD_SECURITY_EXECUTE=1`; settle + foreign-analytics timeout bump; gate 37 one 502 retry after settle.
+
+## Wave U W7 re-MEGA `20260923T004400Z` — **almost FQ** (not OPS PINNED)
+
+**Tip under test:** `sha-5660837` / `3.5.46` · site_id + harness tip live · `OPENFDD_QUERY_MEMORY_MB=512`  
+**Artifact:** `reports/nightly-ot-bench_20260923T004400Z/` · gates **35/37/26 PASS** · residual FAIL gate **25**
+
+| Gate | Result | Root cause |
+|------|--------|------------|
+| **35 / 37 / 26** | **PASS** | site_id Soft-OPEN closed for this run |
+| **25 security python** | **FAIL** | `y.authz.a_own_analytics_sensor_health` observed **502** (~41s Railway `Application failed to respond`). Idle probe same. ACME `tenants/acme/history/` ~54k tiny parts; `sensor_health_from_history` built **UNION ALL** of ~40 role aggregates over **full history** (no time window) → hang/OOM. |
+| **25b** | **BLOCKED** | Foreign sensor-health `TimeoutError` downstream of own 502 |
+
+**Follow-up tip `3.5.47` (this PR):** default **14-day** `timestamp_utc` lookback (honor `query.start`/`end`); single-pass GROUP BY role aggregates (no N×UNION ALL); 30s fail-closed empty envelope; ParquetCompactor/stats list `tenants/*/history`. **Do not claim FIXED Soft-OPEN until re-MEGA `fully_qualified=true`.**
 
 ## Wave U MEGA FQ attempt `20260921T021332Z` — **PASS / OPS PINNED**
 
@@ -245,6 +261,8 @@ Prior FAILs `20260920T194610Z` / `20260920T231407Z` / `20260921T014908Z` retaine
 | **wu-dm-07-10** | Soft-OPEN | **PARTIAL (W4 tip)** | DM-07/08 CLOSED (V5). **CLOSED on W4:** EQ-VOCAB · ECM-ADAPT · DM-10 narrow (`ofdd_haystack_projection_v1`, no false `hs:sensor`) · Pages. **PARTIAL:** DM-09 SELECT cap + baseline doc. **Soft-OPEN residual:** PERF-1 scale RSS · EQ-PERSIST · ECM REST/MCP |
 | **wu-mt-breadth** | Soft-OPEN | Soft-OPEN honesty | Continue IMPLEMENTED matrix later; inventory cited on tip |
 | **wu-v6-mega-20260921T204702Z** | Soft-OPEN / tip | **CLOSED FQ** | Tip **3.5.43** / `sha-7ad6479` (#978). MEGA `20260921T234148Z` `fully_qualified=true` (gate 00 retest after login throttle; all 25/25b/26/17/36/37 PASS). |
-| **w7-mega-20260922T213831Z** | Soft-OPEN / tip | **OPEN (FAIL logged)** | Tip **3.5.45** / `sha-9da9902`. MEGA `20260922T213831Z` `fully_qualified=false` (35 lab site / 25 timeout / 37 502 / 26 ACL unset). Patch tip **3.5.46** in flight — Soft-OPEN stays OPEN until re-MEGA. |
+| **w7-mega-20260922T213831Z** | Soft-OPEN / tip | **OPEN (FAIL logged)** | Tip **3.5.45** / `sha-9da9902`. MEGA `20260922T213831Z` `fully_qualified=false` (35 lab site / 25 timeout / 37 502 / 26 ACL unset). Tip **3.5.46** closed 35/37/26 on re-MEGA; residual sensor-health → **3.5.47**. |
+| **w7-mega-20260923T004400Z** | Soft-OPEN / tip | **OPEN (almost FQ)** | Tip **3.5.46** / `sha-5660837`. Gates 35/37/26 PASS; gate 25 own sensor-health **502** (unbounded UNION ALL on ~54k ACME parts). Patch tip **3.5.47**. |
+| **w7-acme-tenant-history-fanout** | Soft-OPEN / ops | **OPEN (tip scans)** | Compactor/stats see `tenants/*/history` on **3.5.47**; live compact Soft-OPEN until hub V8 run reduces ~54k parts. |
 
 **Do not claim:** Nessus assessment PASS · readiness VERIFIED while Critical/High unresolved · Soft-OPEN CLOSED without measured evidence. |

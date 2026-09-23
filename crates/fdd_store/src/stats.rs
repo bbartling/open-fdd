@@ -46,7 +46,7 @@ pub fn local_historian_stats(
         .checked_mul(BYTES_PER_MIB)
         .ok_or_else(|| anyhow!("historian stats target file size is too large"))?;
 
-    let objects = storage.list_recursive(Path::new("history"))?;
+    let objects = storage.list_history_objects()?;
     let mut parquet_files = 0usize;
     let mut total_bytes = 0u64;
     let mut rows = 0u64;
@@ -197,10 +197,9 @@ struct CanonicalHistoryIdentity<'a> {
 
 fn canonical_history_identity(path: &Path) -> Option<CanonicalHistoryIdentity<'_>> {
     let components = path.components().collect::<Vec<_>>();
-    if components.len() != 6
-        || components
-            .iter()
-            .any(|c| !matches!(c, Component::Normal(_)))
+    if components
+        .iter()
+        .any(|c| !matches!(c, Component::Normal(_)))
     {
         return None;
     }
@@ -208,11 +207,24 @@ fn canonical_history_identity(path: &Path) -> Option<CanonicalHistoryIdentity<'_
         .iter()
         .map(|component| component.as_os_str().to_str())
         .collect::<Option<Vec<_>>>()?;
-    if text[0] != "history" || !text[5].ends_with(".parquet") {
+
+    // Hub: history/building_id=/equipment_id=/year=/month=/file.parquet
+    // Tenant: tenants/{tid}/history/building_id=/equipment_id=/year=/month=/file.parquet
+    let (history_idx, expected_len) = if text.first() == Some(&"history") {
+        (0usize, 6usize)
+    } else if text.len() >= 3 && text[0] == "tenants" && text[2] == "history" {
+        if text[1].is_empty() || text[1].contains("..") {
+            return None;
+        }
+        (2usize, 8usize)
+    } else {
+        return None;
+    };
+    if text.len() != expected_len || !text[expected_len - 1].ends_with(".parquet") {
         return None;
     }
-    let building = text[1].strip_prefix("building_id=")?;
-    let equipment = text[2].strip_prefix("equipment_id=")?;
+    let building = text[history_idx + 1].strip_prefix("building_id=")?;
+    let equipment = text[history_idx + 2].strip_prefix("equipment_id=")?;
     if building.is_empty()
         || equipment.is_empty()
         || building.contains('/')
@@ -226,8 +238,8 @@ fn canonical_history_identity(path: &Path) -> Option<CanonicalHistoryIdentity<'_
     {
         return None;
     }
-    let year_raw = text[3].strip_prefix("year=")?;
-    let month_raw = text[4].strip_prefix("month=")?;
+    let year_raw = text[history_idx + 3].strip_prefix("year=")?;
+    let month_raw = text[history_idx + 4].strip_prefix("month=")?;
     if year_raw.len() != 4 || month_raw.len() != 2 {
         return None;
     }
