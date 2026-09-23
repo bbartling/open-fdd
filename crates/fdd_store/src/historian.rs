@@ -527,6 +527,30 @@ impl LocalStorage {
         Ok(out)
     }
 
+    /// Hub-root `history/` plus every `tenants/{tid}/history/` tree.
+    ///
+    /// Wave U W7: ACME MT hive lives under `tenants/acme/history/` (~54k small
+    /// parts). Compaction / stats that only scanned hub `history/` silently
+    /// missed the tenant tree and could not reduce file fan-out.
+    pub fn list_history_objects(&self) -> Result<Vec<ObjectMetadata>> {
+        let mut out = self.list_recursive(Path::new("history"))?;
+        let tenants_dir = self.root.join("tenants");
+        if tenants_dir.is_dir() {
+            if let Ok(rd) = fs::read_dir(&tenants_dir) {
+                for entry in rd.flatten() {
+                    if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                        continue;
+                    }
+                    let tid = entry.file_name();
+                    let prefix = Path::new("tenants").join(&tid).join("history");
+                    out.extend(self.list_recursive(&prefix)?);
+                }
+            }
+        }
+        out.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+        Ok(out)
+    }
+
     fn walk(&self, dir: &Path, out: &mut Vec<ObjectMetadata>) -> Result<()> {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;

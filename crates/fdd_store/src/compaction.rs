@@ -126,7 +126,7 @@ impl ParquetCompactor {
     /// compressed input size. A final group below the minimum is intentionally
     /// left for a future compaction cycle.
     pub fn plan_history(&self) -> Result<Vec<CompactionPlan>> {
-        let objects = self.storage.list_recursive(Path::new("history"))?;
+        let objects = self.storage.list_history_objects()?;
         let mut partitions: BTreeMap<String, Vec<ObjectMetadata>> = BTreeMap::new();
 
         for object in objects {
@@ -390,12 +390,26 @@ fn is_canonical_history_partition(path: &Path) -> bool {
             _ => return false,
         }
     }
-    parts.len() == 5
+    // Hub: history/building_id=/equipment_id=/year=/month=
+    if parts.len() == 5
         && parts[0] == "history"
         && parts[1].starts_with("building_id=")
         && parts[2].starts_with("equipment_id=")
         && parts[3].starts_with("year=")
         && parts[4].starts_with("month=")
+    {
+        return true;
+    }
+    // Tenant: tenants/{tid}/history/building_id=/equipment_id=/year=/month=
+    parts.len() == 7
+        && parts[0] == "tenants"
+        && !parts[1].is_empty()
+        && !parts[1].contains("..")
+        && parts[2] == "history"
+        && parts[3].starts_with("building_id=")
+        && parts[4].starts_with("equipment_id=")
+        && parts[5].starts_with("year=")
+        && parts[6].starts_with("month=")
 }
 
 fn merge_schemas(schemas: &[SchemaRef]) -> Result<SchemaRef> {
@@ -735,6 +749,52 @@ mod tests {
         assert!(!is_canonical_history_partition(Path::new(
             "history/building_id=B1/equipment_id=AHU_1/../year=2026/month=08"
         )));
+    }
+
+    #[test]
+    fn canonical_partition_accepts_tenant_history_tree() {
+        assert!(is_canonical_history_partition(Path::new(
+            "tenants/acme/history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09"
+        )));
+        assert!(!is_canonical_history_partition(Path::new(
+            "tenants/../history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09"
+        )));
+    }
+
+    #[test]
+    fn planner_discovers_tenant_history_small_files() {
+        let tmp = TempDir::new().unwrap();
+        let storage = LocalStorage::new(tmp.path());
+        let writer = ParquetPartWriter::new(storage.clone());
+        let hub_parts = [
+            write_part(&writer, "2026-08-20T12:00:00Z"),
+            write_part(&writer, "2026-08-20T12:05:00Z"),
+            write_part(&writer, "2026-08-20T12:10:00Z"),
+        ];
+        // Mirror hub parts under tenants/acme/… so V8 compact sees MT hive.
+        for hub in &hub_parts {
+            let tenant_rel = format!("tenants/acme/{hub}");
+            let src = tmp.path().join(hub);
+            let dst = tmp.path().join(&tenant_rel);
+            fs::create_dir_all(dst.parent().unwrap()).unwrap();
+            fs::copy(&src, &dst).unwrap();
+        }
+        let plans = ParquetCompactor::new(storage, 3, 128)
+            .unwrap()
+            .plan_history()
+            .unwrap();
+        assert!(
+            plans
+                .iter()
+                .any(|p| p.partition_path.starts_with("tenants/acme/")),
+            "expected tenant partition plan, got {plans:?}"
+        );
+        assert!(
+            plans
+                .iter()
+                .any(|p| p.partition_path.starts_with("history/")),
+            "hub history plans must still appear"
+        );
     }
 
     #[test]

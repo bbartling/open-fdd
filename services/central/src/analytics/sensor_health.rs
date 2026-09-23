@@ -164,15 +164,39 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 
 /// Async handler: prefer historian DataFusion aggregate SQL when no inline
 /// series is provided; otherwise inline central-analytics-v1 compute.
+///
+/// Defaults `query.start` to the last
+/// [`historian::SENSOR_HEALTH_DEFAULT_LOOKBACK_DAYS`] when omitted so ACME-scale
+/// hives cannot hang unbounded. Explicit `query.start`/`query.end` are honored.
 pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     if req.series.is_none() {
+        let defaulted_start = req.query.start.is_none();
+        let start = req.query.start.or_else(|| {
+            Some(
+                Utc::now() - chrono::Duration::days(historian::SENSOR_HEALTH_DEFAULT_LOOKBACK_DAYS),
+            )
+        });
+        let end = req.query.end;
         match historian::sensor_health_from_history(
             req.query.equipment_ids.as_deref(),
             req.query.building_id.as_deref(),
+            start,
+            end,
         )
         .await
         {
-            Ok(Some(env)) => return finalize_historian(req, env, QV_SENSOR_HEALTH),
+            Ok(Some(mut env)) => {
+                if defaulted_start {
+                    env.warnings.insert(
+                        0,
+                        format!(
+                            "sensor_health defaulted start to last {} days; pass query.start for a custom window",
+                            historian::SENSOR_HEALTH_DEFAULT_LOOKBACK_DAYS
+                        ),
+                    );
+                }
+                return finalize_historian(req, env, QV_SENSOR_HEALTH);
+            }
             Ok(None) => {}
             Err(e) => {
                 tracing::warn!(error = %e, "historian sensor_health path failed; using inline/empty fallback");

@@ -1017,18 +1017,64 @@ fn as_u64(v: Option<&serde_json::Value>) -> u64 {
         .unwrap_or(0)
 }
 
+/// Default lookback when `query.start` is omitted (ACME-scale Parquet hives).
+/// Unbounded N×UNION ALL over full history hangs past Railway edge ~30–40s → 502.
+pub const SENSOR_HEALTH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
+
+/// Wall-clock budget for the historian sensor_health aggregate. Exceeding this
+/// fail-closes with an empty envelope (HTTP 200 + warning) instead of hanging.
+const SENSOR_HEALTH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Build single-pass sensor_health aggregate SQL (one scan, GROUP BY equipment_id).
+///
+/// Each present role contributes `COUNT`/`MIN`/`MAX`/`AVG`/`STDDEV_POP` columns;
+/// callers unpivot wide rows into per-role envelopes. Always includes a time
+/// bound via [`time_range_sql`] when `start`/`end` are set.
+pub(crate) fn build_sensor_health_sql(
+    role_cols: &[&str],
+    equipment_filter: Option<&[String]>,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+) -> String {
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let range_filter = time_range_sql("timestamp_utc", start, end);
+    let mut aggs = vec!["COUNT(*) AS n".to_string()];
+    for role in role_cols {
+        aggs.push(format!("COUNT({role}) AS n_finite_{role}"));
+        aggs.push(format!("MIN({role}) AS minv_{role}"));
+        aggs.push(format!("MAX({role}) AS maxv_{role}"));
+        aggs.push(format!("AVG({role}) AS meanv_{role}"));
+        aggs.push(format!("STDDEV_POP({role}) AS stdv_{role}"));
+    }
+    format!(
+        "SELECT equipment_id, {} \
+         FROM history \
+         WHERE equipment_id IS NOT NULL{eq_filter}{range_filter} \
+         GROUP BY equipment_id \
+         ORDER BY equipment_id",
+        aggs.join(", ")
+    )
+}
+
 /// Sensor health from historian Parquet via DataFusion aggregate SQL.
 ///
 /// For each canonical numeric role column present in `history`, computes
-/// per-`equipment_id` coverage, missingness, and flatline stats. Sets
-/// `engine=datafusion` only when the aggregate SQL actually runs.
+/// per-`equipment_id` coverage, missingness, and flatline stats over a bounded
+/// window (`start`/`end`; callers default lookback when omitted). Single-pass
+/// GROUP BY replaces N×UNION ALL. Sets `engine=datafusion` when SQL runs.
+/// Times out after [`SENSOR_HEALTH_QUERY_TIMEOUT`] with empty rows (fail-closed).
 pub async fn sensor_health_from_history(
     equipment_filter: Option<&[String]>,
     building_id: Option<&str>,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+    let ctx = SessionContext::new();
+    let (ok, _scan) = open_history_scan(&ctx, building_id).await?;
+    if !ok {
         return Ok(None);
-    };
+    }
+    let cols = history_columns_async(&ctx).await?;
 
     let role_cols: Vec<&str> = NUMERIC_ROLE_COLS
         .iter()
@@ -1040,88 +1086,113 @@ pub async fn sensor_health_from_history(
         return Ok(None);
     }
 
-    let eq_filter = equipment_filter_sql(equipment_filter);
-    let selects: Vec<String> = role_cols
-        .iter()
-        .map(|role| {
-            format!(
-                "SELECT equipment_id AS equipment_id, '{role}' AS role, \
-                   COUNT(*) AS n, COUNT({role}) AS n_finite, \
-                   MIN({role}) AS minv, MAX({role}) AS maxv, \
-                   AVG({role}) AS meanv, STDDEV_POP({role}) AS stdv \
-                 FROM history \
-                 WHERE equipment_id IS NOT NULL{eq_filter} \
-                 GROUP BY equipment_id"
-            )
-        })
-        .collect();
-    let sql = format!(
-        "{} ORDER BY equipment_id, role",
-        selects.join(" UNION ALL ")
-    );
+    let sql = build_sensor_health_sql(&role_cols, equipment_filter, start, end);
+    let query = AnalyticsQuery {
+        building_id: building_id.map(str::to_string),
+        start,
+        end,
+        ..AnalyticsQuery::default()
+    };
 
-    let result = run_sql(&ctx, &sql).await?;
+    let timed = tokio::time::timeout(SENSOR_HEALTH_QUERY_TIMEOUT, run_sql(&ctx, &sql)).await;
+    let result = match timed {
+        Ok(Ok(r)) => r,
+        Ok(Err(e)) => return Err(e),
+        Err(_) => {
+            tracing::warn!(
+                building_id = ?building_id,
+                timeout_secs = SENSOR_HEALTH_QUERY_TIMEOUT.as_secs(),
+                "sensor_health historian query exceeded budget; fail-closed empty rows"
+            );
+            let warnings = vec![format!(
+                "sensor_health historian query exceeded {}s budget; returning empty rows \
+                 (narrow query.start/end or compact Parquet parts under tenants/*/history)",
+                SENSOR_HEALTH_QUERY_TIMEOUT.as_secs()
+            )];
+            let mut env = envelope_with_engine(QV_SENSOR_HEALTH, &query, warnings, DF_ENGINE);
+            env.coverage = Some(json!({
+                "series_count": 0,
+                "history_rows": 0,
+                "roles": role_cols,
+                "source": "historian_parquet",
+                "timed_out": true,
+            }));
+            return Ok(Some(env));
+        }
+    };
+
     let min_n = super::sensor_health::DEFAULT_FLATLINE_MIN_N as u64;
     let eps = super::sensor_health::DEFAULT_FLATLINE_STD_EPS;
 
-    let mut rows = Vec::with_capacity(result.rows.len());
+    let mut rows = Vec::new();
+    let mut history_rows: u64 = 0;
     for r in &result.rows {
         let n_all = as_u64(r.get("n"));
-        let n_finite = as_u64(r.get("n_finite"));
-        if n_finite == 0 {
-            // Drop role columns that never applied to this equipment.
-            continue;
+        history_rows = history_rows.saturating_add(n_all);
+        for role in &role_cols {
+            let n_finite = as_u64(r.get(format!("n_finite_{role}")));
+            if n_finite == 0 {
+                // Drop role columns that never applied to this equipment.
+                continue;
+            }
+            let coverage_pct = if n_all > 0 {
+                100.0 * n_finite as f64 / n_all as f64
+            } else {
+                0.0
+            };
+            let missingness = if n_all > 0 {
+                1.0 - (n_finite as f64 / n_all as f64)
+            } else {
+                0.0
+            };
+            let std = as_f64(r.get(format!("stdv_{role}")));
+            let flatline_flag = n_finite > min_n && std.map(|s| s <= eps).unwrap_or(false);
+            let mut obj = json!({
+                "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+                "role": *role,
+                "n": n_all,
+                "n_finite": n_finite,
+                "coverage_pct": round2(coverage_pct),
+                "missingness": round4(missingness),
+                "flatline_flag": flatline_flag,
+            });
+            if let Some(v) = as_f64(r.get(format!("minv_{role}"))) {
+                obj["min"] = json!(round4(v));
+            }
+            if let Some(v) = as_f64(r.get(format!("maxv_{role}"))) {
+                obj["max"] = json!(round4(v));
+            }
+            if let Some(v) = as_f64(r.get(format!("meanv_{role}"))) {
+                obj["mean"] = json!(round4(v));
+            }
+            if let Some(v) = std {
+                obj["std"] = json!(round6(v));
+            }
+            rows.push(obj);
         }
-        let coverage_pct = if n_all > 0 {
-            100.0 * n_finite as f64 / n_all as f64
-        } else {
-            0.0
-        };
-        let missingness = if n_all > 0 {
-            1.0 - (n_finite as f64 / n_all as f64)
-        } else {
-            0.0
-        };
-        let std = as_f64(r.get("stdv"));
-        let flatline_flag = n_finite > min_n && std.map(|s| s <= eps).unwrap_or(false);
-        let mut obj = json!({
-            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
-            "role": r.get("role").cloned().unwrap_or(json!("")),
-            "n": n_all,
-            "n_finite": n_finite,
-            "coverage_pct": round2(coverage_pct),
-            "missingness": round4(missingness),
-            "flatline_flag": flatline_flag,
-        });
-        if let Some(v) = as_f64(r.get("minv")) {
-            obj["min"] = json!(round4(v));
-        }
-        if let Some(v) = as_f64(r.get("maxv")) {
-            obj["max"] = json!(round4(v));
-        }
-        if let Some(v) = as_f64(r.get("meanv")) {
-            obj["mean"] = json!(round4(v));
-        }
-        if let Some(v) = std {
-            obj["std"] = json!(round6(v));
-        }
-        rows.push(obj);
     }
 
-    let warnings = vec![
-        "sensor_health from historian Parquet via DataFusion aggregate SQL \
+    let mut warnings = vec![
+        "sensor_health from historian Parquet via DataFusion single-pass aggregate SQL \
          (coverage / missingness / flatline over canonical numeric roles)"
             .into(),
     ];
-    let query = AnalyticsQuery::default();
+    if start.is_some() || end.is_some() {
+        warnings.push(
+            "sensor_health window applied via timestamp_utc bound; pass query.start/end to override"
+                .into(),
+        );
+    }
     let mut env = envelope_with_engine(QV_SENSOR_HEALTH, &query, warnings, DF_ENGINE);
     env.rows = rows.clone();
     env.equipment = rows;
     env.coverage = Some(json!({
         "series_count": env.rows.len(),
-        "history_rows": n,
+        "history_rows": history_rows,
         "roles": role_cols,
         "source": "historian_parquet",
+        "window_start": start.map(|t| t.to_rfc3339()),
+        "window_end": end.map(|t| t.to_rfc3339()),
     }));
     Ok(Some(env))
 }
@@ -3349,6 +3420,7 @@ fn round6(x: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
     use std::io::Write;
     use tokio::sync::Mutex;
 
@@ -3494,9 +3566,39 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let missing = tmp.path().join("no_such_parquet_sh");
         std::env::set_var("OPENFDD_PARQUET_ROOT", &missing);
-        let out = sensor_health_from_history(None, None).await.unwrap();
+        let out = sensor_health_from_history(None, None, None, None)
+            .await
+            .unwrap();
         assert!(out.is_none());
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
+    }
+
+    #[test]
+    fn sensor_health_sql_includes_timestamp_bound() {
+        let start = Utc.with_ymd_and_hms(2026, 9, 1, 0, 0, 0).single().unwrap();
+        let end = Utc.with_ymd_and_hms(2026, 9, 15, 0, 0, 0).single().unwrap();
+        let sql = build_sensor_health_sql(&["sat", "mat"], None, Some(start), Some(end));
+        assert!(
+            sql.contains("timestamp_utc >= '2026-09-01T00:00:00Z'"),
+            "expected start bound in SQL: {sql}"
+        );
+        assert!(
+            sql.contains("timestamp_utc < '2026-09-15T00:00:00Z'"),
+            "expected end bound in SQL: {sql}"
+        );
+        assert!(
+            !sql.contains("UNION ALL"),
+            "sensor_health must be single-pass, not UNION ALL: {sql}"
+        );
+        assert!(
+            sql.contains("COUNT(sat) AS n_finite_sat")
+                && sql.contains("COUNT(mat) AS n_finite_mat"),
+            "expected per-role aggregates: {sql}"
+        );
+        assert!(
+            sql.contains("GROUP BY equipment_id"),
+            "expected GROUP BY: {sql}"
+        );
     }
 
     #[tokio::test]
@@ -3513,17 +3615,28 @@ mod tests {
             "col,point_role\nzone_temp_f,zone_temp\nmixed_air_temp_f,mixed_air_temp\n",
         )
         .unwrap();
+        // Timestamps inside a recent lookback so defaulted windows still hit.
+        let t0 = (Utc::now() - chrono::Duration::days(2))
+            .format("%Y-%m-%dT%H:%M:%SZ")
+            .to_string();
+        let t1 = (Utc::now() - chrono::Duration::days(2) + chrono::Duration::minutes(5))
+            .format("%Y-%m-%dT%H:%M:%SZ")
+            .to_string();
+        let t2 = (Utc::now() - chrono::Duration::days(2) + chrono::Duration::minutes(10))
+            .format("%Y-%m-%dT%H:%M:%SZ")
+            .to_string();
         let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
         writeln!(f, "timestamp_utc,zone_temp_f,mixed_air_temp_f").unwrap();
-        writeln!(f, "2026-01-01T00:00:00Z,72.0,55.0").unwrap();
-        writeln!(f, "2026-01-01T00:05:00Z,73.0,").unwrap();
-        writeln!(f, "2026-01-01T00:10:00Z,74.0,57.0").unwrap();
+        writeln!(f, "{t0},72.0,55.0").unwrap();
+        writeln!(f, "{t1},73.0,").unwrap();
+        writeln!(f, "{t2},74.0,57.0").unwrap();
 
         let parquet = tmp.path().join("parquet_sh");
         fdd_store::ingest_building(tmp.path(), "BUILDING_SH", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = sensor_health_from_history(None, Some("BUILDING_SH"))
+        let start = Utc::now() - chrono::Duration::days(14);
+        let env = sensor_health_from_history(None, Some("BUILDING_SH"), Some(start), None)
             .await
             .unwrap()
             .expect("expected sensor_health historian envelope");
@@ -3550,6 +3663,58 @@ mod tests {
         // One of three MAT samples is missing → coverage ~66.67%.
         assert_eq!(mat["n_finite"].as_u64().unwrap(), 2);
         assert!((mat["coverage_pct"].as_f64().unwrap() - 66.67).abs() < 0.1);
+    }
+
+    #[tokio::test]
+    async fn sensor_health_from_history_multi_file_completes_with_bound() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SH_MF");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_MF");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nzone_temp_f,zone_temp\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,zone_temp_f").unwrap();
+        // Spread rows across several days inside the 14d lookback.
+        for day in 0..6 {
+            for minute in [0, 5, 10, 15] {
+                let ts = (Utc::now() - chrono::Duration::days(day)
+                    + chrono::Duration::minutes(minute))
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string();
+                writeln!(f, "{ts},7{day}.0").unwrap();
+            }
+        }
+        let parquet = tmp.path().join("parquet_sh_mf");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_SH_MF", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let start = Utc::now() - chrono::Duration::days(14);
+        let env = tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            sensor_health_from_history(None, Some("BUILDING_SH_MF"), Some(start), None),
+        )
+        .await
+        .expect("sensor_health must complete within 20s on multi-row fixture")
+        .unwrap()
+        .expect("expected envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert_eq!(env.engine, DF_ENGINE);
+        assert!(!env.rows.is_empty());
+        assert!(
+            env.coverage
+                .as_ref()
+                .and_then(|c| c.get("window_start"))
+                .is_some(),
+            "coverage should record window_start"
+        );
     }
 
     #[tokio::test]
