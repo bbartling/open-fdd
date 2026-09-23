@@ -37,7 +37,7 @@ if [[ "${OPENFDD_SECURITY_EXECUTE:-0}" == "1" && "${OPENFDD_MQTT_ACL_EXECUTE:-}"
 fi
 # Settle before analytics-heavy probes (foreign authz POSTs / Overview charts) after
 # prior gates leave DataFusion / nginx under pressure.
-ANALYTICS_SETTLE_SECS="${ANALYTICS_SETTLE_SECS:-45}"
+ANALYTICS_SETTLE_SECS="${ANALYTICS_SETTLE_SECS:-60}"
 QUAL="$ROOT/scripts/qualification"
 ZAP_DISPOSITIONS="${ZAP_DISPOSITIONS:-$QUAL/zap_risk_dispositions.json}"
 MANIFEST_PY="$QUAL/write_manifest.py"

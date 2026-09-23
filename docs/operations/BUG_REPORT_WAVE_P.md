@@ -8,7 +8,7 @@
 |------|--------|
 | Product tip / **OPS PINNED (FQ)** | **3.5.43** / **`sha-7ad6479`** (#978) · health `3.5.43+7ad6479c924a` · backup **`20260921T233725Z`** · stress `reports/nightly-ot-bench_20260921T234148Z/` **`fully_qualified=true`** · live edge **`vim-1`** — **Wave U V6 FQ** |
 | **W7 MEGA FAIL (not OPS PINNED)** | Hub tip **3.5.47** / **`sha-cc23e89`** · MEGA `reports/nightly-ot-bench_20260923T035138Z/` `fully_qualified=false` — sensor-health **CLOSED** (HTTP 200); residual FAIL **25** foreign `rcx/ahu` TimeoutError + **37** `analytics/runtime` **502** (unbounded LEAD fallback) · tip **3.5.48** runtime bound · prior 3.5.46 almost-FQ |
-| **Follow-on tip (not OPS PINNED)** | **3.5.48** runtime LEAD bound (this PR) · hub under test **3.5.47** / `sha-cc23e89` · OPS still `sha-7ad6479` / 3.5.43 until W7 FQ · [wave_u_post-fq_remainder.plan.md](../../.cursor/plans/wave_u_post-fq_remainder.plan.md) |
+| **Follow-on tip (not OPS PINNED)** | **3.5.49** mechanical_cooling bound (this PR) · prior **3.5.48** / `sha-7a0e34e` runtime · hub under test **3.5.47** / `sha-cc23e89` · OPS still `sha-7ad6479` / 3.5.43 until W7 FQ · [wave_u_post-fq_remainder.plan.md](../../.cursor/plans/wave_u_post-fq_remainder.plan.md) |
 | **Wave U post-FQ remainder** `2026-09-22` | Master W-UI→W0–W7 · ECM [ecm_context_hardening.plan.md](../../.cursor/plans/ecm_context_hardening.plan.md) · V1–V8 scheduling **SUPERSEDED** |
 | **Wave U remainder cycles** `2026-09-21` | **SUPERSEDED** [wave_u_remainder_patch_cycles.plan.md](../../.cursor/plans/wave_u_remainder_patch_cycles.plan.md) · historical V1–V8 only |
 | **Wave U hub tip (smoke + MEGA in flight)** | **3.5.34** / **`sha-f44b45f`** (#959) · health `3.5.34+f44b45f6f58d` · backup **`20260920T193429Z`** · fieldbus `OPENFDD_RAILWAY_EDGE_ID=vim-1` kit restored · MEGA `reports/nightly-ot-bench_20260920T194610Z/` · **no FQ / OPS PINNED claim until `fully_qualified=true`** |
@@ -72,7 +72,9 @@
 | **w7-gate25-analytics-timeout** | **Soft-OPEN → residual product** · harness settle helped foreign 403; own `y.authz.a_own_analytics_sensor_health` still **502** on unbounded UNION ALL — tip **3.5.47** lookback |
 | **w7-gate25-sensor-health-502** | **CLOSED (3.5.47 / sha-cc23e89)** · Idle + MEGA own sensor-health **HTTP 200**; Soft-OPEN closed for product path |
 | **w7-mega-20260923T035138Z** | **Soft-OPEN / FAIL** · MEGA on `sha-cc23e89` / 3.5.47 · sensor-health PASS; FAIL **25** foreign rcx/ahu TimeoutError + **37** analytics/runtime **502**; **26** BLOCKED (MEGA ran stale local harness without auto `MQTT_ACL_EXECUTE`) — tip **3.5.48** |
-| **w7-gate37-runtime-502** | **Soft-OPEN (patched tip)** · `runtime_from_history` never expands to unbounded LEAD; 14d default + retain-floor fallback + 12s fail-closed; Soft-OPEN until re-MEGA |
+| **w7-gate37-runtime-502** | **CLOSED (3.5.48 / sha-7a0e34e)** · Idle + MEGA `analytics/runtime` HTTP 200 (~13s) |
+| **w7-gate37-mech-cooling** | **Soft-OPEN (patched tip)** · `mech_oat_bins_from_history` 14d lookback + 12s fail-closed; Soft-OPEN until re-MEGA |
+| **w7-mega-20260923T061852Z** | **Soft-OPEN / FAIL** · MEGA on `sha-7a0e34e` / 3.5.48 · 25/26/35 PASS; FAIL synth59 fixtures (worktree), 25b boiler-health 502 + foreign timeouts, 37 mechanical_cooling hang — tip **3.5.49** |
 | **w7-gate25-foreign-rcx-timeout** | **Soft-OPEN / harness** · foreign `/api/analytics/rcx/ahu` TimeoutError under post-capacity pressure; timeout default **45s** + settle; Soft-OPEN until re-MEGA |
 | **w7-gate37-analytics-502** | **CLOSED (re-MEGA PASS)** · Gate 37 PASS on `20260923T004400Z` |
 | **w7-gate26-acl-execute** | **CLOSED (re-MEGA PASS)** · Gate 26 PASS on `20260923T004400Z` (auto `OPENFDD_MQTT_ACL_EXECUTE=1`) |

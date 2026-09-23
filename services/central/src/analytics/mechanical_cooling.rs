@@ -3,6 +3,7 @@
 //! Pump or valve alone is **not** compressor proof. Compressor/chiller status
 //! (or equivalent) is required for eligible mechanical-cooling analytics.
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
@@ -180,14 +181,27 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     let mut diag_warnings = Vec::new();
     if req.series.is_none() {
         let max_gap = req.max_gap_seconds.unwrap_or(900.0);
+        let defaulted = req.query.start.is_none();
+        let start = req.query.start.or_else(|| {
+            Some(Utc::now() - chrono::Duration::days(historian::MECH_DEFAULT_LOOKBACK_DAYS))
+        });
+        let end = req.query.end;
         match historian::mech_oat_bins_from_history(
             req.query.equipment_ids.as_deref(),
             max_gap,
             building_id,
+            start,
+            end,
         )
         .await
         {
             Ok(Some(mut env)) => {
+                if defaulted {
+                    diag_warnings.push(format!(
+                        "mechanical_cooling defaulted start to last {} days; pass query.start for a custom window",
+                        historian::MECH_DEFAULT_LOOKBACK_DAYS
+                    ));
+                }
                 if !diag_warnings.is_empty() {
                     env.warnings.extend(diag_warnings.clone());
                 }

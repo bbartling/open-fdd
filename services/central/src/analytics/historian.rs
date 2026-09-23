@@ -1073,6 +1073,12 @@ const SENSOR_HEALTH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::fr
 /// ~15–40s; fail-closed HTTP 200 beats nginx 502.
 pub const RUNTIME_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(12);
 
+/// Default lookback for `/api/analytics/mechanical-cooling` when start omitted.
+pub const MECH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
+
+/// Wall-clock budget for mechanical-cooling OAT bin LEAD Δt (ACME-scale).
+pub const MECH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(12);
+
 /// Build single-pass sensor_health aggregate SQL (one scan, GROUP BY equipment_id).
 ///
 /// Each present role contributes `COUNT`/`MIN`/`MAX`/`AVG`/`STDDEV_POP` columns;
@@ -2034,6 +2040,8 @@ pub async fn mech_oat_bins_from_history(
     equipment_filter: Option<&[String]>,
     max_gap_seconds: f64,
     building_id: Option<&str>,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
@@ -2051,6 +2059,8 @@ pub async fn mech_oat_bins_from_history(
     let max_gap = max_gap_seconds.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
     let chiller_filter = chiller_like_equipment_sql();
+    let range_sql = time_range_sql(ts_col, start, end);
+    let range_sql_h = time_range_sql(&format!("h.{ts_col}"), start, end);
     let oat_f = history_temp_sql(oat);
     let oa_t_f = history_temp_sql("oa_t");
     // Prefer web/meteo OAT; when only `oa_t` exists, broadcast from weather
@@ -2061,7 +2071,7 @@ pub async fn mech_oat_bins_from_history(
             format!(
                 "SELECT {ts_col} AS ts, AVG({oat_f}) AS oat_f
   FROM history
-  WHERE {oat} IS NOT NULL AND {oat_f} >= 40.0 AND {oat_f} <= 110.0
+  WHERE {oat} IS NOT NULL AND {oat_f} >= 40.0 AND {oat_f} <= 110.0{range_sql}
   GROUP BY {ts_col}"
             ),
             oat,
@@ -2073,14 +2083,14 @@ pub async fn mech_oat_bins_from_history(
                 "weather_oat AS (
   SELECT {ts_col} AS ts, AVG({oa_t_f}) AS oat_f
   FROM history
-  WHERE oa_t IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0
+  WHERE oa_t IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0{range_sql}
     AND UPPER(CAST(equipment_id AS VARCHAR)) LIKE '%WEATHER%'
   GROUP BY {ts_col}
 ),
 fallback_oat AS (
   SELECT {ts_col} AS ts, AVG({oa_t_f}) AS oat_f
   FROM history
-  WHERE oa_t IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0
+  WHERE oa_t IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0{range_sql}
   GROUP BY {ts_col}
 ),"
             ),
@@ -2098,7 +2108,7 @@ fallback_oat AS (
             format!(
                 "SELECT {ts_col} AS ts, AVG({oat_f}) AS oat_f
   FROM history
-  WHERE {oat} IS NOT NULL AND {oat_f} >= 40.0 AND {oat_f} <= 110.0
+  WHERE {oat} IS NOT NULL AND {oat_f} >= 40.0 AND {oat_f} <= 110.0{range_sql}
   GROUP BY {ts_col}"
             ),
             oat,
@@ -2120,7 +2130,7 @@ chiller_samp AS (
     o.oat_f
   FROM history h
   LEFT JOIN oat_by_ts o ON h.{ts_col} = o.ts
-  WHERE h.equipment_id IS NOT NULL{eq_filter}{chiller_filter}
+  WHERE h.equipment_id IS NOT NULL{eq_filter}{chiller_filter}{range_sql_h}
 ),
 ordered AS (
   SELECT
@@ -2211,9 +2221,40 @@ FROM any_bins
 ORDER BY series_kind, equipment_id, bin_lo
 "#
     );
-    let result = match run_sql(&ctx, &sql).await {
-        Ok(r) => r,
-        Err(e) => {
+    let timed = tokio::time::timeout(MECH_QUERY_TIMEOUT, run_sql(&ctx, &sql)).await;
+    let result = match timed {
+        Err(_) => {
+            tracing::warn!(
+                timeout_secs = MECH_QUERY_TIMEOUT.as_secs(),
+                "mech oat bin historian query exceeded budget; fail-closed empty rows"
+            );
+            let query = AnalyticsQuery {
+                building_id: building_id.map(str::to_string),
+                start,
+                end,
+                ..AnalyticsQuery::default()
+            };
+            let mut env = envelope_with_engine(
+                QV_MECHANICAL_COOLING,
+                &query,
+                vec![format!(
+                    "mechanical_cooling historian query exceeded {}s budget; fail-closed — pass query.start/end or compact the hive",
+                    MECH_QUERY_TIMEOUT.as_secs()
+                )],
+                DF_ENGINE,
+            );
+            env.coverage = Some(json!({
+                "history_rows": n,
+                "fail_closed": true,
+                "timeout_secs": MECH_QUERY_TIMEOUT.as_secs(),
+                "building_id": safe_building_segment(building_id),
+                "start": start.map(|t| t.to_rfc3339()),
+                "end": end.map(|t| t.to_rfc3339()),
+            }));
+            return Ok(Some(env));
+        }
+        Ok(Ok(r)) => r,
+        Ok(Err(e)) => {
             tracing::warn!(error = %e, "mech oat bin SQL failed");
             return Ok(None);
         }
@@ -4049,7 +4090,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_PWR", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_PWR"))
+        let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_PWR"), None, None)
             .await
             .unwrap()
             .expect("chiller_power-only fixture should produce oat bins");
@@ -4167,7 +4208,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_FAN", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let out = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_FAN"))
+        let out = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_FAN"), None, None)
             .await
             .unwrap();
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
@@ -4201,7 +4242,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_CH", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_CH"))
+        let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_CH"), None, None)
             .await
             .unwrap()
             .expect("chiller_status fixture should produce oat bins");
@@ -4267,7 +4308,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_SPLIT", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_SPLIT"))
+        let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_SPLIT"), None, None)
             .await
             .unwrap()
             .expect("site OAT join should produce oat bins without inline chiller OAT");
