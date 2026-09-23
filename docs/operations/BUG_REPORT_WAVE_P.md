@@ -70,7 +70,7 @@
 | **w7-gate35-pick-edge-lab** | **CLOSED (re-MEGA PASS)** · Gate 35 PASS on `20260923T004400Z` after `resolve_edge_target` + `registered_site_id` tip |
 | **w7-list-edges-site-id** | **CLOSED (re-MEGA PASS)** · `list_edges` site_id retained; gate 35 PASS on tip `sha-5660837` |
 | **w7-gate25-analytics-timeout** | **Soft-OPEN → residual product** · harness settle helped foreign 403; own `y.authz.a_own_analytics_sensor_health` still **502** on unbounded UNION ALL — tip **3.5.47** lookback |
-| **w7-gate25-sensor-health-502** | **Soft-OPEN (patched tip)** · `sensor_health_from_history` default **14d** window + single-pass GROUP BY + 30s fail-closed; Soft-OPEN until re-MEGA |
+| **w7-gate25-sensor-health-502** | **Soft-OPEN (patched tip)** · `sensor_health_from_history` default **14d** window + single-pass GROUP BY + 30s fail-closed; clippy `needless_borrows` fixed `77bcda88`; Soft-OPEN until re-MEGA FQ |
 | **w7-gate37-analytics-502** | **CLOSED (re-MEGA PASS)** · Gate 37 PASS on `20260923T004400Z` |
 | **w7-gate26-acl-execute** | **CLOSED (re-MEGA PASS)** · Gate 26 PASS on `20260923T004400Z` (auto `OPENFDD_MQTT_ACL_EXECUTE=1`) |
 | **acme-oa-t-dup-reject** | **CLOSED (catalog 3.5.34)** · `config/fieldbus/field_devices.toml`: zone loopback no longer maps `outside-air-temperature` on AV 9101; `hosted-weather` owns `web-outside-air-temp`. Live `vim-1` needs kit restore to clear residual hub rejects. |
