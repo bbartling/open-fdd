@@ -14,8 +14,8 @@ pub const DEFAULT_AFDD_INTERVAL_MINUTES: u64 = 60;
 pub const DEFAULT_AFDD_LOOKBACK_VALUE: u64 = 24;
 pub const DEFAULT_AFDD_LOOKBACK_UNIT: AfddLookbackUnit = AfddLookbackUnit::Hours;
 
-/// Operator UI allowlist: every 1 / 3 / 6 / 12 hours.
-pub const OPERATOR_INTERVAL_MINUTES: [u64; 4] = [60, 180, 360, 720];
+/// Operator UI allowlist: every 1 / 3 / 6 / 12 / 24 hours.
+pub const OPERATOR_INTERVAL_MINUTES: [u64; 5] = [60, 180, 360, 720, 1440];
 /// Operator UI allowlist: rolling lookback 1 / 2 / 3 days.
 pub const OPERATOR_LOOKBACK_DAYS: [u64; 3] = [1, 2, 3];
 
@@ -155,7 +155,7 @@ impl AfddOperatorSchedule {
     pub fn validate_allowlist(&self) -> Result<()> {
         if !OPERATOR_INTERVAL_MINUTES.contains(&self.interval_minutes) {
             bail!(
-                "interval_minutes must be one of {:?} (1/3/6/12 hours)",
+                "interval_minutes must be one of {:?} (1/3/6/12/24 hours)",
                 OPERATOR_INTERVAL_MINUTES
             );
         }
@@ -262,6 +262,16 @@ mod tests {
         config.apply_operator_schedule(&schedule).unwrap();
         assert_eq!(config.interval_minutes, 180);
         assert_eq!(config.lookback_seconds().unwrap(), 172_800);
+    }
+
+    #[test]
+    fn operator_schedule_accepts_daily_interval() {
+        let schedule = AfddOperatorSchedule {
+            interval_minutes: 1440,
+            lookback_value: 1,
+            lookback_unit: AfddLookbackUnit::Days,
+        };
+        schedule.validate_allowlist().unwrap();
     }
 
     #[test]

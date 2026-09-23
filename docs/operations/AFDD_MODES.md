@@ -27,6 +27,25 @@ OPENFDD_AFDD_LOOKBACK_UNIT=days
 
 Lookback bounds are passed as `start_utc` / `end_utc` on the registry run and applied as DataFusion predicates on `history` (and `weather` when present) so Apache partition/stats pruning stays effective.
 
+Operator UI / `POST /api/afdd/scheduler/config` allowlist: interval **1 / 3 / 6 / 12 / 24 hours** (`60…1440` minutes); lookback **1 / 2 / 3 days**. Mode stays env-owned. A persisted `state/afdd/scheduler-runtime-config.json` overlay overwrites interval/lookback on boot — clear it when pinning env lookback in **hours**.
+
+## ACME = continuous AFDD qualification building (Railway)
+
+Live OT tenant **ACME** is the field proof for continuous AFDD (not Synthetic-59 flood / gate 19).
+
+```text
+OPENFDD_AFDD_MODE=continuous
+OPENFDD_AFDD_INTERVAL_MINUTES=1440
+OPENFDD_AFDD_LOOKBACK_VALUE=24
+OPENFDD_AFDD_LOOKBACK_UNIT=hours
+OPENFDD_AFDD_BUILDING_ID=ACME
+OPENFDD_PARQUET_FLUSH_SECONDS=300
+```
+
+- **Cadence:** once per 24h. **Window:** rolling 24h ending at live telemetry watermark.
+- Compact ACME hive parts before enabling continuous AFDD (`scripts/ops/railway_compact_hub.sh` / hub-admin compaction).
+- Stress SoT: gate **38** `38_acme_afdd_qualification.sh` (MEGA required). Gate **19** remains synth flood only.
+
 ## Local == cloud
 
 Same GHCR central image and SQL path. Only storage env changes (`OPENFDD_PARQUET_ROOT` / volume vs `OPENFDD_STORAGE_URL=s3://…`). No Railway/AWS-specific SQL fork.

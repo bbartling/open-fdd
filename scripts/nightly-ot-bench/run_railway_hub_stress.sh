@@ -168,6 +168,7 @@ python3 "$MANIFEST_PY" create \
   --required 36_mv_sql_oracle_twin \
   --required 36_model_ecm_qualification \
   --required 37_acme_analytics_charts
+  --required 38_acme_afdd_qualification
 
 record_gate() {
   local gate="$1" status="$2" title="$3" reason="${4:-}"
@@ -510,6 +511,14 @@ run_gate "37_acme_analytics_charts" "37 ACME analytics charts break-finder" \
     OPENFDD_USER_ACME_OPS_PASSWORD="${OPENFDD_USER_ACME_OPS_PASSWORD:-${OPENFDD_USER_A_OPS_PASSWORD:-}}" \
     ANALYTICS_SETTLE_SECS="${ANALYTICS_SETTLE_SECS}" \
     bash "$DIR/37_acme_analytics_charts.sh"
+
+# --- 38 ACME continuous AFDD qualification (SoT; not synth flood) ---
+echo "settle ${ANALYTICS_SETTLE_SECS}s before gate 38 ACME AFDD qual"
+sleep "$ANALYTICS_SETTLE_SECS"
+run_gate "38_acme_afdd_qualification" "38 ACME continuous AFDD qualification" \
+  env ARTIFACT_DIR="$ART/gate38_acme_afdd_qualification" \
+    OPENFDD_ADMIN_TOKEN="${OPENFDD_ADMIN_TOKEN:-}" \
+    bash "$DIR/38_acme_afdd_qualification.sh"
 
 capacity_sampler_stop || true
 trap - EXIT
