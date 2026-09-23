@@ -6,7 +6,8 @@ use std::path::PathBuf;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use datafusion::prelude::SessionContext;
-use fdd_sql::{register_parquet_tree, run_sql};
+use fdd_sql::{new_historian_session, register_parquet_tree, run_sql};
+use fdd_store::HistorianConfig;
 use serde_json::{json, Value};
 
 use super::{
@@ -14,6 +15,15 @@ use super::{
     QV_MECHANICAL_COOLING, QV_RUNTIME, QV_SCHEDULE, QV_SENSOR_HEALTH, QV_SENSOR_STATS,
     QV_SETPOINTS, QV_SQL_ANOMALY, QV_TOPOLOGY,
 };
+
+/// DataFusion session that honors `OPENFDD_QUERY_MEMORY_MB` + spill dir.
+///
+/// Bare `SessionContext::new()` ignores those env vars — production analytics
+/// and AFDD must use this helper so Railway memory settings are real.
+pub fn new_bounded_session() -> Result<SessionContext> {
+    let cfg = HistorianConfig::from_env().map_err(|e| anyhow!("historian config: {e}"))?;
+    new_historian_session(&cfg).map_err(|e| anyhow!("bounded DataFusion session: {e}"))
+}
 
 /// Canonical numeric role columns that may appear as `history` columns after
 /// ingest (see `fdd_core::columns::normalize_role`). `occ_mode` is Utf8 and is
@@ -621,7 +631,7 @@ pub async fn runtime_from_history(
     start: Option<DateTime<Utc>>,
     end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let ctx = SessionContext::new();
+    let ctx = new_bounded_session()?;
     let (ok, _scan) = open_history_scan(&ctx, building_id).await?;
     if !ok {
         return Ok(None);
@@ -1025,7 +1035,7 @@ ORDER BY week_start, equipment_id
 async fn open_history_scoped(
     building_id: Option<&str>,
 ) -> Result<Option<(SessionContext, HashSet<String>, i64, fdd_store::ScanPermit)>> {
-    let ctx = SessionContext::new();
+    let ctx = new_bounded_session()?;
     let (ok, scan) = open_history_scan(&ctx, building_id).await?;
     if !ok {
         return Ok(None);
@@ -1123,7 +1133,7 @@ pub async fn sensor_health_from_history(
     start: Option<DateTime<Utc>>,
     end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let ctx = SessionContext::new();
+    let ctx = new_bounded_session()?;
     let (ok, _scan) = open_history_scan(&ctx, building_id).await?;
     if !ok {
         return Ok(None);

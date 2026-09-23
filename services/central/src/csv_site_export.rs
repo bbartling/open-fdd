@@ -6,7 +6,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use csv::WriterBuilder;
-use datafusion::prelude::SessionContext;
 use fdd_sql::QueryResult;
 use serde_json::Value;
 use zip::write::SimpleFileOptions;
@@ -39,7 +38,7 @@ async fn build_site_csv_bytes(
 }
 
 async fn historian_csv_async(building_id: &str) -> Result<Option<Vec<u8>>, JobError> {
-    let ctx = SessionContext::new();
+    let ctx = historian::new_bounded_session().map_err(|e| JobError::Io(e.to_string()))?;
     let (ok, _scan) = historian::open_history_scan(&ctx, Some(building_id))
         .await
         .map_err(|e| JobError::Io(e.to_string()))?;

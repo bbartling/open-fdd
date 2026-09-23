@@ -218,15 +218,38 @@ if not art_ok:
     open(summary, "w").write(f"# Gate 38 FAIL\n\n{report['error']}\n")
     raise SystemExit(1)
 
-# E. Efficiency signal
-eff_ok = window_hours is not None and window_hours <= expect_lb_h + 0.1
+# E. Efficiency + executed-rule proof (not all-skip / empty cycle theater)
+succ = int(cycle.get("rules_succeeded") or 0)
+fail = int(cycle.get("rules_failed") or 0)
+skip = int(cycle.get("rules_skipped") or 0)
+executed = succ + fail
+eff_ok = (
+    window_hours is not None
+    and window_hours <= expect_lb_h + 0.1
+    and executed > 0
+)
 report["checks"]["efficiency"] = {
     "ok": eff_ok,
     "elapsed_secs": round(elapsed, 3),
     "window_hours": window_hours,
-    "rules_succeeded": cycle.get("rules_succeeded"),
-    "rules_failed": cycle.get("rules_failed"),
+    "rules_succeeded": succ,
+    "rules_failed": fail,
+    "rules_skipped": skip,
+    "rules_executed": executed,
 }
+if executed == 0:
+    report["error"] = (
+        "AFDD cycle executed zero rules (all-skipped or empty) — not useful qualification"
+    )
+    open(out, "w").write(json.dumps(report, indent=2))
+    open(summary, "w").write(f"# Gate 38 FAIL\n\n{report['error']}\n")
+    raise SystemExit(1)
+if not eff_ok:
+    report["error"] = f"efficiency check failed window_hours={window_hours} executed={executed}"
+    open(out, "w").write(json.dumps(report, indent=2))
+    open(summary, "w").write(f"# Gate 38 FAIL\n\n{report['error']}\n")
+    raise SystemExit(1)
+
 report["ok"] = True
 report["window_hours"] = window_hours
 report["elapsed_secs"] = round(elapsed, 3)
@@ -240,7 +263,7 @@ open(summary, "w").write(
 - cycle run_id: `{run_id}`
 - window_hours: {window_hours}
 - elapsed_secs: {elapsed:.1f}
-- rules_succeeded/failed/skipped: {cycle.get('rules_succeeded')}/{cycle.get('rules_failed')}/{cycle.get('rules_skipped')}
+- rules_succeeded/failed/skipped: {succ}/{fail}/{skip} (executed={executed})
 """
 )
 print(summary, "PASS", flush=True)

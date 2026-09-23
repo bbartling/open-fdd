@@ -191,6 +191,21 @@ probe() {
       echo "FAIL: broke at $name HTTP $code health_after=$health_after (after retry)" | tee -a "$LOG"
       exit 1
     fi
+    # HTTP 200 alone is not success — fail-closed timeout / empty degraded envelopes.
+    if [[ -f "$out" ]] && command -v jq >/dev/null 2>&1; then
+      if jq -e '
+          (.analytics.coverage.fail_closed == true)
+          or (.analytics.coverage.timed_out == true)
+          or (.analytics.timed_out == true)
+          or ((.analytics.warnings // []) | map(tostring) | any(test("timeout|fail.?closed|timed.?out"; "i")))
+        ' "$out" >/dev/null 2>&1; then
+        jq -n --arg n "$name" --arg p "$path" --arg c "$code" \
+          '{ok:false,broke_at:$n,path:$p,http_code:$c,reason:"fail_closed_or_timeout_envelope",building:"'"$BUILDING"'"}' \
+          >"$SUMMARY"
+        echo "FAIL: $name HTTP $code but analytics envelope is fail-closed/timeout (not useful data)" | tee -a "$LOG"
+        exit 1
+      fi
+    fi
     break
   done
   if ! health_ok; then

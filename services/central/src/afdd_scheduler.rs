@@ -294,7 +294,8 @@ impl AfddSchedulerRuntime {
         let latest_telemetry = self.latest_telemetry()?;
         let next_due = next_due_at(checkpoint.as_ref(), Utc::now(), &config)?;
         let status = self.status.lock().unwrap();
-        let timer_scope = normalize_scope(std::env::var("OPENFDD_AFDD_BUILDING_ID").ok().as_deref());
+        let timer_scope =
+            normalize_scope(std::env::var("OPENFDD_AFDD_BUILDING_ID").ok().as_deref());
         Ok(json!({
             "ok": true,
             "config": config,

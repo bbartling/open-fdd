@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use datafusion::prelude::*;
 use fdd_sql::{
-    register_historian_building, register_parquet_tree, register_utility_if_present,
-    register_weather_if_present, run_sql,
+    new_historian_session, register_historian_building, register_parquet_tree,
+    register_utility_if_present, register_weather_if_present, run_sql,
 };
+use fdd_store::HistorianConfig;
 use serde::Serialize;
 
 use crate::params::{read_poll_from_cache, rule_params, substitute_sql};
@@ -224,7 +225,8 @@ pub async fn run_all_rules_with_overrides(
     let rules_dir = Path::new(&registry.rules_dir);
     let tuning = load_tuning_profiles(rules_dir)?;
 
-    let ctx = SessionContext::new();
+    let cfg = HistorianConfig::from_env().context("historian config for AFDD/FDD session")?;
+    let ctx = new_historian_session(&cfg).context("bounded DataFusion session for AFDD/FDD")?;
     // OFDD-070 / 3.3.33: when building_id is set, prefer canonical
     // history/building_id=<id>/ then legacy building=<id>/ (same as analytics).
     // Callers must pass the storage/parquet root - not a pre-scoped building= dir.
