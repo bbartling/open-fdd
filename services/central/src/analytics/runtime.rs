@@ -168,24 +168,37 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     if !has_inline {
         let max_gap = req.max_gap_seconds.unwrap_or(900.0);
         let filter = req.query.equipment_ids.as_deref();
-        // ACME-scale historians: unbounded LEAD over full Parquet exceeds edge
-        // timeouts (~180s → 502). Default to a 90-day lookback when start omitted.
-        // Synthetic/CSV packages often sit outside wall-clock 90d (e.g. Jan fixture
-        // weeks) — if the defaulted window is empty, retry unbounded once.
+        // ACME-scale historians: unbounded LEAD over full Parquet exceeds Railway
+        // edge timeouts (~15–40s → nginx 502). Default to a short lookback; if that
+        // window is empty (synthetic fixtures outside wall-clock), expand once to
+        // the historian *retain floor* — never `start=None` (full history).
         let defaulted_start = req.query.start.is_none();
+        let default_lookback = historian::RUNTIME_DEFAULT_LOOKBACK_DAYS;
         let start = req
             .query
             .start
-            .or_else(|| Some(Utc::now() - chrono::Duration::days(90)));
+            .or_else(|| Some(Utc::now() - chrono::Duration::days(default_lookback)));
         let end = req.query.end;
         let building = req.query.building_id.as_deref();
-        let mut used_unbounded_fallback = false;
+        let mut used_retain_fallback = false;
         let hist =
-            match historian::runtime_from_history(filter, max_gap, building, start, end).await {
-                Ok(Some(env)) if env_has_runtime_rows(&env) => Ok(Some(env)),
+            match runtime_from_history_budgeted(filter, max_gap, building, start, end).await {
+                Ok(Some(env)) if env_is_fail_closed(&env) || env_has_runtime_rows(&env) => {
+                    Ok(Some(env))
+                }
                 Ok(Some(_)) | Ok(None) if defaulted_start => {
-                    used_unbounded_fallback = true;
-                    historian::runtime_from_history(filter, max_gap, building, None, end).await
+                    // Bounded expand only — never start=None (full-history LEAD → 502).
+                    used_retain_fallback = true;
+                    let retain_start = Utc::now()
+                        - chrono::Duration::days(historian::RUNTIME_RETAIN_FALLBACK_DAYS);
+                    runtime_from_history_budgeted(
+                        filter,
+                        max_gap,
+                        building,
+                        Some(retain_start),
+                        end,
+                    )
+                    .await
                 }
                 other => other,
             };
@@ -195,15 +208,17 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
                 env.query_version = qv;
                 env.job_id = req.query.job_id.clone().or(env.job_id);
                 env.run_id = req.query.run_id.clone().or(env.run_id);
-                if used_unbounded_fallback {
+                if used_retain_fallback {
                     warnings.push(
-                        "runtime 90-day default window was empty; expanded to full historian range — pass query.start/end to bound"
-                            .into(),
+                        format!(
+                            "runtime {default_lookback}-day default window was empty; expanded to historian retain floor (still bounded) — pass query.start/end to bound"
+                        ),
                     );
                 } else if defaulted_start {
                     warnings.push(
-                        "runtime defaulted start to last 90 days; pass query.start for a custom window"
-                            .into(),
+                        format!(
+                            "runtime defaulted start to last {default_lookback} days; pass query.start for a custom window"
+                        ),
                     );
                 }
                 warnings.append(&mut env.warnings);
@@ -224,8 +239,63 @@ fn round2(x: f64) -> f64 {
     (x * 100.0).round() / 100.0
 }
 
+
+async fn runtime_from_history_budgeted(
+    filter: Option<&[String]>,
+    max_gap: f64,
+    building: Option<&str>,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+) -> anyhow::Result<Option<AnalyticsEnvelope>> {
+    match tokio::time::timeout(
+        historian::RUNTIME_QUERY_TIMEOUT,
+        historian::runtime_from_history(filter, max_gap, building, start, end),
+    )
+    .await
+    {
+        Ok(inner) => inner,
+        Err(_) => {
+            tracing::warn!(
+                timeout_secs = historian::RUNTIME_QUERY_TIMEOUT.as_secs(),
+                "runtime historian path exceeded wall budget; fail-closed"
+            );
+            let query = super::AnalyticsQuery {
+                building_id: building.map(str::to_string),
+                start,
+                end,
+                ..super::AnalyticsQuery::default()
+            };
+            let mut env = super::envelope_with_engine(
+                QV_RUNTIME,
+                &query,
+                vec![format!(
+                    "runtime historian path exceeded {}s budget; fail-closed empty rows — pass a tighter query.start/end or compact the hive",
+                    historian::RUNTIME_QUERY_TIMEOUT.as_secs()
+                )],
+                super::DF_ENGINE,
+            );
+            env.coverage = Some(json!({
+                "fail_closed": true,
+                "timeout_secs": historian::RUNTIME_QUERY_TIMEOUT.as_secs(),
+                "building_id": building,
+                "start": start.map(|t| t.to_rfc3339()),
+                "end": end.map(|t| t.to_rfc3339()),
+            }));
+            Ok(Some(env))
+        }
+    }
+}
+
 fn env_has_runtime_rows(env: &AnalyticsEnvelope) -> bool {
     !env.equipment.is_empty() || !env.rows.is_empty()
+}
+
+fn env_is_fail_closed(env: &AnalyticsEnvelope) -> bool {
+    env.coverage
+        .as_ref()
+        .and_then(|c| c.get("fail_closed"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
