@@ -1130,7 +1130,7 @@ pub async fn sensor_health_from_history(
         let n_all = as_u64(r.get("n"));
         history_rows = history_rows.saturating_add(n_all);
         for role in &role_cols {
-            let n_finite = as_u64(r.get(&format!("n_finite_{role}")));
+            let n_finite = as_u64(r.get(format!("n_finite_{role}")));
             if n_finite == 0 {
                 // Drop role columns that never applied to this equipment.
                 continue;
@@ -1145,7 +1145,7 @@ pub async fn sensor_health_from_history(
             } else {
                 0.0
             };
-            let std = as_f64(r.get(&format!("stdv_{role}")));
+            let std = as_f64(r.get(format!("stdv_{role}")));
             let flatline_flag = n_finite > min_n && std.map(|s| s <= eps).unwrap_or(false);
             let mut obj = json!({
                 "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
@@ -1156,13 +1156,13 @@ pub async fn sensor_health_from_history(
                 "missingness": round4(missingness),
                 "flatline_flag": flatline_flag,
             });
-            if let Some(v) = as_f64(r.get(&format!("minv_{role}"))) {
+            if let Some(v) = as_f64(r.get(format!("minv_{role}"))) {
                 obj["min"] = json!(round4(v));
             }
-            if let Some(v) = as_f64(r.get(&format!("maxv_{role}"))) {
+            if let Some(v) = as_f64(r.get(format!("maxv_{role}"))) {
                 obj["max"] = json!(round4(v));
             }
-            if let Some(v) = as_f64(r.get(&format!("meanv_{role}"))) {
+            if let Some(v) = as_f64(r.get(format!("meanv_{role}"))) {
                 obj["mean"] = json!(round4(v));
             }
             if let Some(v) = std {
