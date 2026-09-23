@@ -1,0 +1,11 @@
+{
+  "http_inspected": true,
+  "verdict": "see_stdout",
+  "top_ok": true,
+  "fail_closed": null,
+  "n": 38,
+  "warnings": [
+    "runtime hours from historian Parquet via DataFusion \u0394t integration",
+    "rows include weekly per-equipment plant bins (runtime-weekly-v2)"
+  ]
+}

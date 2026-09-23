@@ -3,11 +3,10 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use datafusion::prelude::SessionContext;
 use fdd_sql::run_sql;
 use serde_json::{json, Value};
 
-use super::historian::open_history_scan;
+use super::historian::{self, open_history_scan};
 use super::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest, DF_ENGINE};
 
 pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
@@ -121,7 +120,7 @@ pub async fn vav_health_from_history(
         env.coverage = Some(json!({"schema_version": SCHEMA_VAV_HEALTH}));
         return Ok(Some(env));
     };
-    let ctx = SessionContext::new();
+    let ctx = historian::new_bounded_session().map_err(|e| anyhow::anyhow!("{e}"))?;
     let (ok, _scan) = open_history_scan(&ctx, Some(bid)).await?;
     if !ok {
         let q = AnalyticsQuery {

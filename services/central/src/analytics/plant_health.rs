@@ -7,11 +7,10 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use anyhow::Result;
-use datafusion::prelude::SessionContext;
 use fdd_sql::run_sql;
 use serde_json::{json, Map, Value};
 
-use super::historian::open_history_scan;
+use super::historian::{self, open_history_scan};
 use super::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest, DF_ENGINE};
 
 pub const QV_AHU_HEALTH: &str = "ahu-health-v1";
@@ -695,7 +694,7 @@ fn spec_rule_ids(spec: &MatrixSpec) -> BTreeSet<&'static str> {
 }
 
 async fn historian_equipment_ids(bid: &str) -> Result<Vec<String>> {
-    let ctx = SessionContext::new();
+    let ctx = historian::new_bounded_session()?;
     let (ok, _scan) = open_history_scan(&ctx, Some(bid)).await?;
     if !ok {
         return Ok(Vec::new());

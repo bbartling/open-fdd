@@ -1,0 +1,300 @@
+{
+  "ok": true,
+  "summary": {
+    "partitions": 40,
+    "input_files": 54814,
+    "input_bytes": 86694071,
+    "output_files": 40,
+    "output_bytes": 1651755,
+    "rows": 56951,
+    "cleanup_pending_files": 0
+  },
+  "coordinator": {
+    "scanners": 0,
+    "compacting": false,
+    "mode": "idle"
+  },
+  "partition_count": 40,
+  "partitions": [
+    {
+      "partition_path": "history/building_id=ACME/equipment_id=bldg2-zone-loopback/year=2026/month=09",
+      "input_files": 132,
+      "input_bytes": 154811,
+      "output_bytes": 9758,
+      "rows": 744
+    },
+    {
+      "partition_path": "history/building_id=ACME/equipment_id=hosted-weather/year=2026/month=09",
+      "input_files": 132,
+      "input_bytes": 119159,
+      "output_bytes": 11216,
+      "rows": 872
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=bldg2-zone-loopback/year=2026/month=09",
+      "input_files": 512,
+      "input_bytes": 573279,
+      "output_bytes": 7381,
+      "rows": 538
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=hosted-weather/year=2026/month=09",
+      "input_files": 642,
+      "input_bytes": 569409,
+      "output_bytes": 9000,
+      "rows": 666
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=hw_plant/year=2026/month=09",
+      "input_files": 1444,
+      "input_bytes": 5113327,
+      "output_bytes": 78055,
+      "rows": 1460
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_10/year=2026/month=09",
+      "input_files": 1633,
+      "input_bytes": 2613783,
+      "output_bytes": 52572,
+      "rows": 1663
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_11/year=2026/month=09",
+      "input_files": 1638,
+      "input_bytes": 2787657,
+      "output_bytes": 57099,
+      "rows": 1670
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_13/year=2026/month=09",
+      "input_files": 1638,
+      "input_bytes": 2716633,
+      "output_bytes": 55434,
+      "rows": 1667
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_14/year=2026/month=09",
+      "input_files": 1635,
+      "input_bytes": 2247203,
+      "output_bytes": 43988,
+      "rows": 1661
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_15/year=2026/month=09",
+      "input_files": 1638,
+      "input_bytes": 2242659,
+      "output_bytes": 44627,
+      "rows": 1668
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_16/year=2026/month=09",
+      "input_files": 1637,
+      "input_bytes": 3064717,
+      "output_bytes": 68909,
+      "rows": 1659
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_19/year=2026/month=09",
+      "input_files": 1638,
+      "input_bytes": 2373667,
+      "output_bytes": 48419,
+      "rows": 1665
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_20/year=2026/month=09",
+      "input_files": 1635,
+      "input_bytes": 2412506,
+      "output_bytes": 49469,
+      "rows": 1670
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_21/year=2026/month=09",
+      "input_files": 1616,
+      "input_bytes": 2284011,
+      "output_bytes": 44622,
+      "rows": 1639
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_24/year=2026/month=09",
+      "input_files": 1637,
+      "input_bytes": 2314364,
+      "output_bytes": 48569,
+      "rows": 1663
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_25/year=2026/month=09",
+      "input_files": 1638,
+      "input_bytes": 2788564,
+      "output_bytes": 57643,
+      "rows": 1666
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_27/year=2026/month=09",
+      "input_files": 1634,
+      "input_bytes": 2251430,
+      "output_bytes": 44506,
+      "rows": 1660
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_29/year=2026/month=09",
+      "input_files": 1638,
+      "input_bytes": 2804175,
+      "output_bytes": 57708,
+      "rows": 1668
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_30/year=2026/month=09",
+      "input_files": 1638,
+      "input_bytes": 2798402,
+      "output_bytes": 58415,
+      "rows": 1670
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_31/year=2026/month=09",
+      "input_files": 1638,
+      "input_bytes": 2406662,
+      "output_bytes": 48598,
+      "rows": 1653
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_34/year=2026/month=09",
+      "input_files": 1638,
+      "input_bytes": 2613759,
+      "output_bytes": 55284,
+      "rows": 1670
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_36/year=2026/month=09",
+      "input_files": 1638,
+      "input_bytes": 2700884,
+      "output_bytes": 53835,
+      "rows": 1647
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_37/year=2026/month=09",
+      "input_files": 1635,
+      "input_bytes": 2258421,
+      "output_bytes": 45866,
+      "rows": 1666
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_38/year=2026/month=09",
+      "input_files": 1638,
+      "input_bytes": 2864542,
+      "output_bytes": 59889,
+      "rows": 1661
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_39/year=2026/month=09",
+      "input_files": 1638,
+      "input_bytes": 2260595,
+      "output_bytes": 45347,
+      "rows": 1666
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_8/year=2026/month=09",
+      "input_files": 1900,
+      "input_bytes": 3021671,
+      "output_bytes": 62582,
+      "rows": 1940
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=jci_vav_9/year=2026/month=09",
+      "input_files": 1638,
+      "input_bytes": 2907019,
+      "output_bytes": 60306,
+      "rows": 1655
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=rtu_01/year=2026/month=09",
+      "input_files": 483,
+      "input_bytes": 671509,
+      "output_bytes": 16967,
+      "rows": 489
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=tec_73005/year=2026/month=09",
+      "input_files": 61,
+      "input_bytes": 52103,
+      "output_bytes": 1859,
+      "rows": 61
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=tec_73017/year=2026/month=09",
+      "input_files": 40,
+      "input_bytes": 34736,
+      "output_bytes": 1524,
+      "rows": 40
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=tec_73018/year=2026/month=09",
+      "input_files": 64,
+      "input_bytes": 54584,
+      "output_bytes": 1752,
+      "rows": 64
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=tracer_sc_01/year=2026/month=09",
+      "input_files": 1634,
+      "input_bytes": 1653871,
+      "output_bytes": 29690,
+      "rows": 1658
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=trane_vav_11002/year=2026/month=09",
+      "input_files": 1867,
+      "input_bytes": 2710328,
+      "output_bytes": 43673,
+      "rows": 1885
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=trane_vav_11007/year=2026/month=09",
+      "input_files": 1593,
+      "input_bytes": 2586076,
+      "output_bytes": 40677,
+      "rows": 1602
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=trane_vav_12023/year=2026/month=09",
+      "input_files": 1585,
+      "input_bytes": 2610715,
+      "output_bytes": 39206,
+      "rows": 1597
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=trane_vav_12026/year=2026/month=09",
+      "input_files": 1634,
+      "input_bytes": 2479045,
+      "output_bytes": 38099,
+      "rows": 1638
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=trane_vav_12028/year=2026/month=09",
+      "input_files": 1634,
+      "input_bytes": 2344814,
+      "output_bytes": 28853,
+      "rows": 1641
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=trane_vav_12032/year=2026/month=09",
+      "input_files": 1614,
+      "input_bytes": 2673644,
+      "output_bytes": 41653,
+      "rows": 1627
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=trane_vav_12033/year=2026/month=09",
+      "input_files": 1593,
+      "input_bytes": 2505786,
+      "output_bytes": 41468,
+      "rows": 1605
+    },
+    {
+      "partition_path": "tenants/acme/history/building_id=ACME/equipment_id=trane_vav_12035/year=2026/month=09",
+      "input_files": 1894,
+      "input_bytes": 3053551,
+      "output_bytes": 47237,
+      "rows": 1917
+    }
+  ]
+}

@@ -57,6 +57,15 @@ Low-RAM: never local `docker build`; no local central/web/mqtt on the closeout p
 | 7 | Auth role matrix | `scripts/qualification/auth_role_matrix.sh` | anon deny; admin/operator positive/deny per product contract |
 | 8 | MCP accuracy | `railway_mcp_accuracy.sh` | exact `OPENFDD_MCP_IMAGE` sha-*; MCP↔REST parity; **no** local-central fallback |
 
+### Continuous AFDD (ACME qual)
+
+| # | Name | Command / artifact | Pass |
+|---|------|--------------------|------|
+| **19** | Synth AFDD flood | `2N_wave_m_afdd_flood.sh` | Budgeted registry flood on Synthetic-59 (authorized live) — **not** ACME continuous proof |
+| **38** | **ACME continuous AFDD** | `38_acme_afdd_qualification.sh` | Hub `continuous` + **1440**/24h + `timer_scope=ACME`; live `run-now` ok; window ≤24h+5m; durable `recent_cycles` — **continuous-AFDD SoT** |
+
+Compact ACME hive parts before enabling continuous AFDD (`scripts/ops/railway_compact_hub.sh`). Recipe: [`AFDD_MODES.md`](AFDD_MODES.md) § ACME.
+
 ### Truthful manifests (3.3.26+)
 
 - Artifacts: `qualification_manifest.json` + generated `SUMMARY.md` under `reports/nightly-ot-bench_<TS>/`.

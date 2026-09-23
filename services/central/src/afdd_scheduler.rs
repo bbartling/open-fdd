@@ -294,12 +294,15 @@ impl AfddSchedulerRuntime {
         let latest_telemetry = self.latest_telemetry()?;
         let next_due = next_due_at(checkpoint.as_ref(), Utc::now(), &config)?;
         let status = self.status.lock().unwrap();
+        let timer_scope =
+            normalize_scope(std::env::var("OPENFDD_AFDD_BUILDING_ID").ok().as_deref());
         Ok(json!({
             "ok": true,
             "config": config,
             "checkpoint": checkpoint,
             "latest_persisted_telemetry_utc": latest_telemetry,
             "next_due_at_utc": if config.mode == AfddMode::Continuous { Some(next_due) } else { None },
+            "timer_scope": timer_scope,
             "last_error": status.last_error,
             "recent_cycles": status.recent_cycles,
             "operator_schedule_editable": true,
