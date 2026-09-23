@@ -39,7 +39,7 @@ if [[ "${OPENFDD_SECURITY_EXECUTE:-0}" == "1" ]]; then
   # Railway field / live hub: foreign analytics authz POSTs can exceed the default
   # 10s transport budget under concurrent stress (idle still returns 403 in ~300ms).
   if [[ "${RAILWAY_ONLY:-0}" == "1" || "$PROFILE" == "live_readonly" ]]; then
-    ARGS+=(--timeout "${OPENFDD_SECURITY_TIMEOUT_S:-45}")
+    ARGS+=(--timeout "${OPENFDD_SECURITY_TIMEOUT_S:-60}")
   fi
 else
   ARGS+=(--dry-run)

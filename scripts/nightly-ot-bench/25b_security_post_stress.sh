@@ -31,7 +31,7 @@ python3 "$PROBE" \
   --profile "$PROFILE" \
   --suite X --suite Y \
   --execute \
-  --timeout "${OPENFDD_SECURITY_TIMEOUT_S:-30}" \
+  --timeout "${OPENFDD_SECURITY_TIMEOUT_S:-60}" \
   --max-requests "${OPENFDD_SECURITY_POST_MAX_REQUESTS:-100}" \
   --output-dir "$OUT" \
   2>&1 | tee "$ART/25b_security_post_stress.log"
