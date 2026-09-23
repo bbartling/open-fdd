@@ -186,15 +186,46 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
             Some(Utc::now() - chrono::Duration::days(historian::MECH_DEFAULT_LOOKBACK_DAYS))
         });
         let end = req.query.end;
-        match historian::mech_oat_bins_from_history(
-            req.query.equipment_ids.as_deref(),
-            max_gap,
-            building_id,
-            start,
-            end,
+        // Wall-clock the *entire* historian path (scan + LEAD). ACME's ~54k tiny
+        // Parquet parts can stall open_history_scoped past Railway edge budgets
+        // before the inner SQL timeout ever fires.
+        let hist = match tokio::time::timeout(
+            historian::MECH_QUERY_TIMEOUT,
+            historian::mech_oat_bins_from_history(
+                req.query.equipment_ids.as_deref(),
+                max_gap,
+                building_id,
+                start,
+                end,
+            ),
         )
         .await
         {
+            Ok(inner) => inner,
+            Err(_) => {
+                tracing::warn!(
+                    timeout_secs = historian::MECH_QUERY_TIMEOUT.as_secs(),
+                    "mechanical_cooling historian path exceeded wall budget; fail-closed"
+                );
+                let mut env = super::envelope_with_engine(
+                    QV_MECHANICAL_COOLING,
+                    &req.query,
+                    vec![format!(
+                        "mechanical_cooling historian path exceeded {}s budget (scan+query); fail-closed — compact tenants/*/history or pass a tighter query.start/end",
+                        historian::MECH_QUERY_TIMEOUT.as_secs()
+                    )],
+                    super::DF_ENGINE,
+                );
+                env = finalize_historian(req, env, QV_MECHANICAL_COOLING);
+                env.coverage = Some(json!({
+                    "fail_closed": true,
+                    "timeout_secs": historian::MECH_QUERY_TIMEOUT.as_secs(),
+                    "building_id": building_id,
+                }));
+                return env;
+            }
+        };
+        match hist {
             Ok(Some(mut env)) => {
                 if defaulted {
                     diag_warnings.push(format!(
