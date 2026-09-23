@@ -719,7 +719,43 @@ ORDER BY i.equipment_id
 "#
             );
 
-            match run_sql(&ctx, &sql).await {
+            let timed = tokio::time::timeout(RUNTIME_QUERY_TIMEOUT, run_sql(&ctx, &sql)).await;
+            let sql_result = match timed {
+                Ok(inner) => inner,
+                Err(_) => {
+                    tracing::warn!(
+                        timeout_secs = RUNTIME_QUERY_TIMEOUT.as_secs(),
+                        "runtime historian LEAD query exceeded budget; fail-closed empty rows"
+                    );
+                    let query = AnalyticsQuery {
+                        building_id: building_id.map(str::to_string),
+                        start,
+                        end,
+                        ..AnalyticsQuery::default()
+                    };
+                    let mut env = envelope_with_engine(
+                        QV_RUNTIME,
+                        &query,
+                        vec![format!(
+                            "runtime historian query exceeded {}s budget; fail-closed empty rows — pass a tighter query.start/end or compact the hive",
+                            RUNTIME_QUERY_TIMEOUT.as_secs()
+                        )],
+                        DF_ENGINE,
+                    );
+                    env.coverage = Some(json!({
+                        "history_rows": n,
+                        "max_gap_seconds": max_gap,
+                        "source": "historian_parquet",
+                        "building_id": safe_building_segment(building_id),
+                        "start": start.map(|t| t.to_rfc3339()),
+                        "end": end.map(|t| t.to_rfc3339()),
+                        "timeout_secs": RUNTIME_QUERY_TIMEOUT.as_secs(),
+                        "fail_closed": true,
+                    }));
+                    return Ok(Some(env));
+                }
+            };
+            match sql_result {
                 Ok(result) => {
                     let mut warnings = vec![
                         "runtime hours from historian Parquet via DataFusion Δt integration".into(),
@@ -1021,9 +1057,21 @@ fn as_u64(v: Option<&serde_json::Value>) -> u64 {
 /// Unbounded N×UNION ALL over full history hangs past Railway edge ~30–40s → 502.
 pub const SENSOR_HEALTH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
 
+/// Default lookback for `/api/analytics/runtime` when `query.start` is omitted.
+/// Shorter than the old 90d default so LEAD Δt stays under Railway edge budgets.
+pub const RUNTIME_DEFAULT_LOOKBACK_DAYS: i64 = 14;
+
+/// Bounded expand when the default lookback is empty (synthetic fixtures outside
+/// wall-clock). Never use `start=None` — full-history LEAD hangs → nginx 502.
+pub const RUNTIME_RETAIN_FALLBACK_DAYS: i64 = 365;
+
 /// Wall-clock budget for the historian sensor_health aggregate. Exceeding this
 /// fail-closes with an empty envelope (HTTP 200 + warning) instead of hanging.
 const SENSOR_HEALTH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Wall-clock budget for historian runtime LEAD Δt. Railway edge often kills at
+/// ~15–40s; fail-closed HTTP 200 beats nginx 502.
+pub const RUNTIME_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(12);
 
 /// Build single-pass sensor_health aggregate SQL (one scan, GROUP BY equipment_id).
 ///
