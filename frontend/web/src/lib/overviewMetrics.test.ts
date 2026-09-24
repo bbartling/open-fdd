@@ -3,6 +3,8 @@ import {
   cookbookKind,
   cookbookRuleCount,
   datasetTimeSpan,
+  analyticsWindowFromSampling,
+  ANALYTICS_WINDOW_MAX_DAYS,
   formatOverviewTs,
   inventoryWithoutWeather,
   isWeatherEquipment,
@@ -59,6 +61,44 @@ describe("overviewMetrics", () => {
     expect(formatOverviewTs(span.start)).toBe("2026-03-16 00:40");
     expect(formatOverviewTs(span.end)).toBe("2026-07-17 10:00");
     expect(span.span_hours).toBe(2961.3);
+  });
+
+  it("builds analytics window from package sampling (not wall-clock)", () => {
+    const frames = [
+      {
+        equipment_id: "AHU_1",
+        sampling: {
+          first_timestamp: "2026-03-16T00:40:00",
+          last_timestamp: "2026-07-17T10:00:00",
+        },
+      },
+    ];
+    const w = analyticsWindowFromSampling(frames);
+    expect(w.start).toBeTruthy();
+    expect(w.end).toBeTruthy();
+    expect(Date.parse(w.start!)).toBe(Date.parse("2026-03-16T00:40:00"));
+    // end is last sample + 1h pad
+    expect(Date.parse(w.end!)).toBe(
+      Date.parse("2026-07-17T10:00:00") + 3_600_000,
+    );
+    expect(analyticsWindowFromSampling([])).toEqual({});
+  });
+
+  it("caps long dataset spans to ANALYTICS_WINDOW_MAX_DAYS from end", () => {
+    const frames = [
+      {
+        equipment_id: "AHU_1",
+        sampling: {
+          first_timestamp: "2024-01-01T00:00:00Z",
+          last_timestamp: "2026-07-01T00:00:00Z",
+        },
+      },
+    ];
+    const w = analyticsWindowFromSampling(frames);
+    const spanDays =
+      (Date.parse(w.end!) - Date.parse(w.start!)) / 86_400_000;
+    expect(spanDays).toBeLessThanOrEqual(ANALYTICS_WINDOW_MAX_DAYS + 1 / 24 + 0.01);
+    expect(Date.parse(w.start!)).toBeGreaterThan(Date.parse("2024-01-01T00:00:00Z"));
   });
 
   it("counts 59 cookbook rules and leaves 4 SQL rollups out", () => {

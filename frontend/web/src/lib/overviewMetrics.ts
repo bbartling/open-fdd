@@ -121,6 +121,40 @@ export function datasetTimeSpan(frames: SamplingFrame[]): {
 }
 
 /**
+ * Historian analytics window for Overview / RCx.
+ *
+ * Prefer the package sampling span (CSV / import jobs), not wall-clock "last
+ * 30 days". Wall-clock windows miss historical packages (e.g. BUILDING_100
+ * Mar–Jul) and skip central's empty-window retain fallback because `start` is set.
+ *
+ * Cap to the last {@link ANALYTICS_WINDOW_MAX_DAYS} of the dataset so live ACME
+ * multi-month historians stay within Railway query budgets.
+ *
+ * When sampling is missing, omit start/end so central defaults + retain floor apply.
+ */
+export const ANALYTICS_WINDOW_MAX_DAYS = 180;
+
+export function analyticsWindowFromSampling(frames: SamplingFrame[]): {
+  start?: string;
+  end?: string;
+} {
+  const span = datasetTimeSpan(frames);
+  if (!span.end) return {};
+  const endMs = Date.parse(span.end);
+  if (!Number.isFinite(endMs)) return {};
+  const maxMs = ANALYTICS_WINDOW_MAX_DAYS * 86_400_000;
+  let fromMs = span.start ? Date.parse(span.start) : endMs - maxMs;
+  if (!Number.isFinite(fromMs)) fromMs = endMs - maxMs;
+  if (endMs - fromMs > maxMs) fromMs = endMs - maxMs;
+  // Inclusive end pad so the last sample interval is not clipped.
+  const endPadMs = Math.min(endMs + 3_600_000, endMs + maxMs);
+  return {
+    start: new Date(fromMs).toISOString(),
+    end: new Date(endPadMs).toISOString(),
+  };
+}
+
+/**
  * Cookbook rule count. Prefer the rules list (minus 4 SQL rollups).
  * Status `63` is the SQL registry (59+4); `59` is already cookbook-sized.
  */

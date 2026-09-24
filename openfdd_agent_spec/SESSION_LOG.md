@@ -1,3 +1,10 @@
+## 2026-09-24 — Tip 3.5.52 RCx/Overview sampling window (UI)
+
+- SPA: `analyticsWindowFromSampling` (180d cap) for Overview + RCx presets — package mapping span, not wall-clock last-30d.
+- Fixes BUILDING_100 AHU motor weekly + mech OAT bins empty on Railway when historian is Mar–Jul.
+- Trackers: #996 compact-hive envelope CLOSED in `MILESTONES.md` / `BUG_REPORT_WAVE_P.md`.
+- Hub re-pin central→mqtt→web only; fieldbus unchanged; observe ACME MQTT reconnect.
+
 ## 2026-09-22 — Wave U W4 EQ-VOCAB + ECM-ADAPT tip (4.4.7)
 
 - PyPI tip: `ofdd_engineering_quantities_v1` TTL/schema + `eq_vocab` + `adapt_model_to_calculator`.
@@ -938,3 +945,14 @@ Newest first. Append after non-trivial agent work.
 - Reran 55 security and 16 qualification tests successfully. Fourteen additional synthetic negative cases reproduced false qualification; private audit output records source hashes. Rendered the supported Compose merge with synthetic environment values only. No production credentials, live scans, OT writes, product builds, deployment, merge or publishing performed.
 - Added `.cursor/plans/wave_u_independent_acceptance_audit.plan.md` and root `MILESTONES.md`. Corrected Wave U master/patch/active external FQ handoffs, current acceptance rows in BUG_REPORT, and the readiness checklist; preserved historical runs and unrelated in-flight edits.
 - Reopened insufficient acceptance scope and restored license-free standalone/field readiness as required. Only the actual licensed Nessus assessment remains externally BLOCKED. Cursor owns permanent test/product fixes, candidate integration and final enhanced MEGA evidence.
+
+
+## 2026-09-23 — Railway #996 bounded continuation
+
+Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT/web after verified backup and green publish checks. Daily AFDD remains **bulk/off**. Selected analytics + concurrent manual AFDD smoke passed (39 rules succeeded, 0 failed); mechanical-cooling coverage missing. No observed OOM in sampled checks. Local gates 37/38 false-pass fixes have 13 passing actual-evaluator regression tests. Full resource envelope, aggregate budget, recovery/conservation, timer and MEGA remain **NOT QUALIFIED / OPEN**. Local fieldbus pin unchanged. Evidence and precise limits: `reports/issue996_codex_20260923/SUMMARY.md`. Issue #996 remains open; no plan upgrade.
+
+## 2026-09-23 — Issue #996 exhaustion handoff
+
+- Completed disposable resource/recovery matrix on candidate 3.5.51: timer cycles, 1M-row low-memory queries, 1/2/4/8 concurrency, MQTTS flush/restart, compaction conservation/overlap, cancellation observation and AFDD low-memory behavior.
+- Results are recorded in `reports/issue996_exhaustion_20260923/SUMMARY.md`. Found false-success low-memory analytics and partial AFDD envelopes, one acknowledged pre-flush sample lost on SIGKILL, a scheduler catch-up gap question, and interrupted-compaction visibility gap. H10 assets and evaluator regressions passed.
+- Created GitHub milestone AFDD-996 and linked it from #996, `MILESTONES.md` and the evidence summary. Railway daily AFDD remains bulk/off. Next session starts a focused patch cycle; no further stress or GHCR refresh is needed until a patch is merged.

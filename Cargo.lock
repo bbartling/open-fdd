@@ -1927,7 +1927,7 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "fdd_bench"
-version = "3.5.51"
+version = "3.5.52"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1943,7 +1943,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_cli"
-version = "3.5.51"
+version = "3.5.52"
 dependencies = [
  "anyhow",
  "clap",
@@ -1962,7 +1962,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_core"
-version = "3.5.51"
+version = "3.5.52"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1976,7 +1976,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_csv"
-version = "3.5.51"
+version = "3.5.52"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1989,7 +1989,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_rules"
-version = "3.5.51"
+version = "3.5.52"
 dependencies = [
  "anyhow",
  "datafusion",
@@ -2006,7 +2006,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_sql"
-version = "3.5.51"
+version = "3.5.52"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2024,7 +2024,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_store"
-version = "3.5.51"
+version = "3.5.52"
 dependencies = [
  "anyhow",
  "arrow",
@@ -3182,7 +3182,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "open_fdd_edge_prototype"
-version = "3.5.51"
+version = "3.5.52"
 dependencies = [
  "arrow",
  "base64 0.22.1",
@@ -3225,7 +3225,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-central"
-version = "3.5.51"
+version = "3.5.52"
 dependencies = [
  "anyhow",
  "axum",
@@ -3266,7 +3266,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-fieldbus"
-version = "3.5.51"
+version = "3.5.52"
 dependencies = [
  "axum",
  "bacnet-client",
@@ -3308,7 +3308,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-mcp"
-version = "3.5.51"
+version = "3.5.52"
 dependencies = [
  "base64 0.22.1",
  "reqwest 0.12.28",
@@ -3318,7 +3318,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd_contracts"
-version = "3.5.51"
+version = "3.5.52"
 dependencies = [
  "chrono",
  "serde",
@@ -3330,7 +3330,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd_mqtt"
-version = "3.5.51"
+version = "3.5.52"
 dependencies = [
  "anyhow",
  "chrono",

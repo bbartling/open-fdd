@@ -64,9 +64,10 @@
 | **historian-n-building-scale** | **CLOSED (V8 + W5 live soak)** · H4 + `CompactionCoordinator` + hub-admin `GET\|POST /api/historian/compaction`. Live soak `reports/wave_u_v8_compaction_soak_20260922T185707Z/` on hub `3.5.43+7ad6479`: fail-closed no-confirm **HTTP 400**; `plan_only` + `confirm:true wait:true` **ok** with **0** eligible hive partitions (equipment trees are single-file — honest empty compact, not a silent skip of the API). Soft residual: multi-part hive compact only when parts accumulate. |
 | **w7-acme-tenant-history-fanout** | **CLOSED (APPLY 20260923T125014Z)** · Was ~54.8k tiny parts; hub-admin compaction APPLY collapsed to eligible plans=0 (~1.6 MiB outputs). Alias of acme-parquet-fanout. Flush coalesce `OPENFDD_PARQUET_FLUSH_SECONDS=300`. |
 | **acme-parquet-fanout** | **CLOSED (APPLY)** · See `reports/wave_u_acme_compaction_apply_20260923T125014Z/SOAK_SUMMARY.md`. |
-| **acme-afdd-continuous-off** | **PARTIAL** · Env now `continuous`/1440/24h/ACME on hub `sha-f885fe4` (scheduler status matches). Soft residual: tip #995 memory wire + `timer_scope` + gate 38 **NOT RUN** on tip digest; timer continuity **NOT RUN** (`recent_cycles=[]`). Resource validation: `reports/railway_afdd_resource_validation_20260923T131500Z/`. |
-| **wu-query-memory-unenforced** | **OPEN (tip fix in flight)** · Deployed analytics/AFDD used bare `SessionContext::new()` — `OPENFDD_QUERY_MEMORY_MB=512` **not honored** until #995 bounded-session wire lands + re-pin. |
-| **wu-analytics-http200-failclosed** | **OPEN (harness)** · Gate 37 now FAILs `coverage.fail_closed` / timeout envelopes; live runtime smoke on `sha-f885fe4` → **HAS_ROWS** (n=38), not fail-closed. |
+| **acme-afdd-continuous-off** | **Soft-OPEN (ops cadence)** · Compact-hive envelope accepted under #996 closeout; continuous AFDD timer soak / gate 38 remain optional follow-up — not required to keep hub smooth. |
+| **wu-query-memory-unenforced** | **CLOSED (#995 / sha-6914098)** · Bounded DataFusion sessions honor `OPENFDD_QUERY_MEMORY_MB=512` on live hub `3.5.51+69140983c783`. |
+| **wu-996-compact-hive-envelope** | **CLOSED (2026-09-24)** · ACME compaction APPLY + flush 300s + bounded queries — Railway smooth/fast; [#996](https://github.com/bbartling/open-fdd/issues/996) closed. Keep hive compacted; re-open only on fan-out/502 regression. |
+| **wu-analytics-http200-failclosed** | **OPEN (harness follow-up)** · Gate 37 empty-fallback / fail-closed hardening Soft-OPEN; not blocking accepted compact-hive envelope. |
 | **admin-capacity-gauges** | **CLOSED (branch)** · cgroup memory + workspace `statvfs` + Parquet small-file strip on Admin |
 | **railway-capacity-stress** | **CITED** Tip B FQ `20260917T215437Z` gates 24/24b PASS |
 | **mqtt-pause-ui** | **CLOSED (#947 Tip B)** · MT command topics `tenants/…`; gate **35 PASS** on `sha-4a5c11e` stress `20260917T215437Z` |
@@ -276,3 +277,18 @@ Prior FAILs `20260920T194610Z` / `20260920T231407Z` / `20260921T014908Z` retaine
 | **w7-acme-tenant-history-fanout** | Soft-OPEN / ops | **OPEN (tip scans)** | Compactor/stats see `tenants/*/history` on **3.5.47**; live compact Soft-OPEN until hub V8 run reduces ~54k parts. |
 
 **Do not claim:** Nessus assessment PASS · readiness VERIFIED while Critical/High unresolved · Soft-OPEN CLOSED without measured evidence. |
+
+
+## 2026-09-23 — Issue #996 candidate smoke
+
+Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT/web after verified backup and green publish checks. Daily AFDD remains **bulk/off**. Selected analytics + concurrent manual AFDD smoke passed (39 rules succeeded, 0 failed); mechanical-cooling coverage missing. No observed OOM in sampled checks. Local gates 37/38 false-pass fixes have 13 passing actual-evaluator regression tests. Full resource envelope, aggregate budget, recovery/conservation, timer and MEGA remain **NOT QUALIFIED / OPEN**. Local fieldbus pin unchanged. Evidence and precise limits: `reports/issue996_codex_20260923/SUMMARY.md`. Issue #996 remains open; no plan upgrade.
+
+## 2026-09-23 — Issue #996 exhaustion findings / patch cycle ready
+
+Evidence: `reports/issue996_exhaustion_20260923/SUMMARY.md` · [GitHub #996](https://github.com/bbartling/open-fdd/issues/996) · [AFDD-996 milestone](https://github.com/bbartling/open-fdd/milestone/3).
+
+Disposable candidate tests completed. H10 deterministic assets and gate 37/38 evaluator tests passed. Findings requiring patches: low-memory analytics emitted an HTTP 200 empty fallback accepted by gate 37; low-memory AFDD emitted `ok=true` with `status=partial` and 18 failed rules; one QoS1-acknowledged sample was lost before a forced restart flush; delayed AFDD catch-up needs a no-gap invariant; interrupted compaction left a retired source invisible; 29/47 skipped-rule applicability still needs proof. Status remains OPEN / NOT QUALIFIED. Keep daily AFDD bulk/off until a patched candidate repeats the matrix.
+
+## 2026-09-24 — Issue #996 CLOSED (compact hive + bounded queries)
+
+Maintainer accepted operating envelope: ACME Parquet compaction APPLY (`54814→0` eligible) + `OPENFDD_PARQUET_FLUSH_SECONDS=300` + tip `sha-6914098` / 3.5.51 bounded sessions/lookbacks. Railway hub reported smooth and fast afterward. Decision: **keep web+central+MQTT**; no Pro / worker / DB migration. Soft residuals from the exhaustion run remain optional follow-ups — they do not reopen #996 unless the compact-hive envelope regresses. See `MILESTONES.md` AFDD-996 CLOSED.

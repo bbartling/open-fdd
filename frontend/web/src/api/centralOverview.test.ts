@@ -252,6 +252,29 @@ describe("fetchCentralOverview", () => {
       { type: "AHU", count: 1 },
       { type: "VAV", count: 1 },
     ]);
+    const { postRuntime, postMechanicalCooling } = await import("./analyticsApi");
+    expect(postRuntime).toHaveBeenCalled();
+    const runtimeBody = vi.mocked(postRuntime).mock.calls[0]?.[0] as {
+      start?: string;
+      end?: string;
+      building_id?: string;
+    };
+    expect(runtimeBody.building_id).toBe("BUILDING_100");
+    // Package sampling Mar–Jul 2026 — not wall-clock last 30 days.
+    expect(Date.parse(String(runtimeBody.start))).toBe(
+      Date.parse("2026-03-16T00:40:00"),
+    );
+    expect(Date.parse(String(runtimeBody.end))).toBeGreaterThan(
+      Date.parse("2026-07-17T10:00:00"),
+    );
+    expect(postMechanicalCooling).toHaveBeenCalledWith(
+      expect.objectContaining({
+        building_id: "BUILDING_100",
+        start: runtimeBody.start,
+        end: runtimeBody.end,
+      }),
+      expect.anything(),
+    );
   });
 
   it("does not substitute count bars when econ scatter is empty", async () => {

@@ -76,3 +76,34 @@ Keep credentials, private targets and raw security artifacts out of this index. 
 5. Record the verification/release decision here and in BUG_REPORT, then close the remote milestone. Reopen when new evidence invalidates acceptance.
 
 No remote milestones were created by the 2026-09-20 audit. This file is ready to guide that setup.
+
+## AFDD-996 — resource controls and recovery qualification — CLOSED (accepted envelope)
+
+GitHub milestone: [AFDD-996](https://github.com/bbartling/open-fdd/milestone/3) · acceptance issue: [#996](https://github.com/bbartling/open-fdd/issues/996) (**closed 2026-09-24**).
+
+### Verification (accepted)
+
+| Item | Evidence |
+| --- | --- |
+| Candidate | #995 · hub health `3.5.51+69140983c783` / `sha-6914098` |
+| Compact ACME hive | APPLY `reports/wave_u_acme_compaction_apply_20260923T125014Z/` — eligible parts **54814 → 0**; flush coalesce `OPENFDD_PARQUET_FLUSH_SECONDS=300` |
+| Bounded queries | Tip seatbelts (lookback / wall timeouts / fail-closed) + `OPENFDD_QUERY_MEMORY_MB=512` honored via bounded DataFusion sessions |
+| Operator outcome | Railway hub analytics/ingest **smooth and fast** after compact hive — maintainer-accepted operating envelope |
+
+### Decision path
+
+**Keep web + central + MQTT** on the existing topology. Compact Parquet hive + bounded DataFusion queries are sufficient for the accepted ACME/Railway workload. No Pro plan upgrade, dedicated analytics worker, or Timescale/DB migration required to close this issue.
+
+### Release note
+
+This closes the **resource / crash-recovery acceptance** for the compact-hive envelope. It does **not** claim unlimited scale, continuous-AFDD timer FQ, or a full MEGA `fully_qualified=true` re-pin. Soft residuals (aggregate process-wide admission, AFDD fail-closed contracts, flush loss bounds, timer soak) may open as follow-up tips without reopening #996 unless the compact-hive envelope regresses.
+
+### Historical notes (superseded by closeout)
+
+- Exhaustion run: [`reports/issue996_exhaustion_20260923/SUMMARY.md`](reports/issue996_exhaustion_20260923/SUMMARY.md) — disposable findings informed tip seatbelts; not a remaining blocker for this accepted path.
+- Bounded smoke: [`reports/issue996_codex_20260923/SUMMARY.md`](reports/issue996_codex_20260923/SUMMARY.md).
+
+
+## 2026-09-23 — Issue #996 — candidate verification (historical)
+
+Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT/web after verified backup and green publish checks. Daily AFDD remained **bulk/off** during early smoke. Selected analytics + concurrent manual AFDD smoke passed. **Superseded 2026-09-24** by maintainer closeout: compact hive + bounded queries accepted; see AFDD-996 CLOSED above.

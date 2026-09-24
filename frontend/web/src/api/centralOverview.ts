@@ -27,6 +27,7 @@ import {
 } from "./plotlyTheme";
 import { getPackageMapping } from "./mappingApi";
 import {
+  analyticsWindowFromSampling,
   datasetTimeSpan,
   isWeatherEquipment,
   isWeatherEquipmentId,
@@ -700,28 +701,29 @@ export async function fetchCentralOverview(opts: {
   const building_id = opts.building_id;
   const oatErr = opts.oat_err ?? 5;
   const dtMin = opts.dt_min_f ?? 10;
+  const signal = opts.signal;
+
+  // Resolve package sampling *before* analytics so CSV/historical buildings
+  // (BUILDING_100 Mar–Jul, etc.) are not queried with wall-clock last-30-days
+  // — that empty window falls through to "no inline samples" / descriptive mech.
+  // Cap via analyticsWindowFromSampling for large live historians (ACME).
+  const mapping = building_id
+    ? await getPackageMapping(building_id).catch(() => null)
+    : null;
+  const window = analyticsWindowFromSampling(mapping?.equipment ?? []);
   const body = {
     building_id,
     max_points: 4000,
     dt_min_f: dtMin,
-    // ACME-scale historians: unbounded runtime LEAD exceeds edge timeouts.
-    start: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+    ...window,
   };
-  const signal = opts.signal;
 
-  // Mapping is cheap; keep it concurrent with the first analytics call only.
-  // Heavy DataFusion POSTs must not run in parallel on large historians (ACME):
-  // Promise.all of runtime+mech+econ+bas starved central and surfaced as nginx
-  // 502 "Central analytics unavailable" in Overview.
-  const mappingPromise = building_id
-    ? getPackageMapping(building_id).catch(() => null)
-    : Promise.resolve(null);
-
+  // Heavy DataFusion POSTs stay sequential on large historians (ACME):
+  // Promise.all of runtime+mech+econ+bas starved central → nginx 502.
   const runtime = await postRuntime(body, { signal });
   const mech = await postMechanicalCooling(body, { signal });
   const econ = await postEconomizer(body, { signal });
   const bas = await postBasVsWebOat(body, { signal });
-  const mapping = await mappingPromise;
 
   const runtimeRows = runtime.rows?.length ? runtime.rows : runtime.equipment;
   const equipmentTotals =
