@@ -15,6 +15,8 @@ import {
   mechFigure,
   weeklyPlantFigures,
 } from "./centralOverview";
+import { analyticsWindowFromSampling } from "../lib/overviewMetrics";
+import { getPackageMapping } from "./mappingApi";
 import type { PlotlyFigure } from "./plotDataset";
 import { rcxPresetTables, type RcxPresetTable } from "./rcxPresetTables";
 
@@ -66,11 +68,13 @@ export async function loadOverviewRcxPreset(
   tables: RcxPresetTable[];
   error?: string;
 }> {
+  const mapping = await getPackageMapping(buildingId).catch(() => null);
+  const window = analyticsWindowFromSampling(mapping?.equipment ?? []);
   const body = {
     building_id: buildingId,
     max_points: 4000,
     dt_min_f: 10,
-    start: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+    ...window,
   };
   if (presetId in PLANT_FOR) {
     const env = await postRuntime(body);
