@@ -3,7 +3,9 @@
 - SPA: `analyticsWindowFromSampling` (180d cap) for Overview + RCx presets — package mapping span, not wall-clock last-30d.
 - Fixes BUILDING_100 AHU motor weekly + mech OAT bins empty on Railway when historian is Mar–Jul.
 - Trackers: #996 compact-hive envelope CLOSED in `MILESTONES.md` / `BUG_REPORT_WAVE_P.md`.
-- Hub re-pin central→mqtt→web only; fieldbus unchanged; observe ACME MQTT reconnect.
+- Hub re-pin central→mqtt→web only (`sha-b19d72f`); fieldbus unchanged.
+- Evidence: `reports/tip_3.5.52_repin_20260924T163448Z/` — B100 smoke PASS; ACME MQTT reconnect observed (ingest flat then climb without field re-pin).
+- PR #1005 merged; GHCR tip completeness PASS.
 
 ## 2026-09-22 — Wave U W4 EQ-VOCAB + ECM-ADAPT tip (4.4.7)
 
