@@ -67,6 +67,7 @@
 | **acme-afdd-continuous-off** | **Soft-OPEN (ops cadence)** · Compact-hive envelope accepted under #996 closeout; continuous AFDD timer soak / gate 38 remain optional follow-up — not required to keep hub smooth. |
 | **wu-query-memory-unenforced** | **CLOSED (#995 / sha-6914098)** · Bounded DataFusion sessions honor `OPENFDD_QUERY_MEMORY_MB=512` on live hub `3.5.51+69140983c783`. |
 | **wu-996-compact-hive-envelope** | **CLOSED (2026-09-24)** · ACME compaction APPLY + flush 300s + bounded queries — Railway smooth/fast; [#996](https://github.com/bbartling/open-fdd/issues/996) closed. Keep hive compacted; re-open only on fan-out/502 regression. |
+| **wu-352-mqtt-reconnect-on-hub-repin** | **CLOSED (observed 2026-09-24)** · Hub re-pin `sha-b19d72f` / 3.5.52 central→mqtt→web; **fieldbus not re-pinned**. After mqtt bounce, `ingest_ok` flat ~6m (`has_telemetry=false`); then edge resumed without operator field action (`ingest_ok` 2→4, `last_ingest_at` advancing ~300s). Evidence: `reports/tip_3.5.52_repin_20260924T163448Z/`. |
 | **wu-analytics-http200-failclosed** | **OPEN (harness follow-up)** · Gate 37 empty-fallback / fail-closed hardening Soft-OPEN; not blocking accepted compact-hive envelope. |
 | **admin-capacity-gauges** | **CLOSED (branch)** · cgroup memory + workspace `statvfs` + Parquet small-file strip on Admin |
 | **railway-capacity-stress** | **CITED** Tip B FQ `20260917T215437Z` gates 24/24b PASS |
@@ -292,3 +293,11 @@ Disposable candidate tests completed. H10 deterministic assets and gate 37/38 ev
 ## 2026-09-24 — Issue #996 CLOSED (compact hive + bounded queries)
 
 Maintainer accepted operating envelope: ACME Parquet compaction APPLY (`54814→0` eligible) + `OPENFDD_PARQUET_FLUSH_SECONDS=300` + tip `sha-6914098` / 3.5.51 bounded sessions/lookbacks. Railway hub reported smooth and fast afterward. Decision: **keep web+central+MQTT**; no Pro / worker / DB migration. Soft residuals from the exhaustion run remain optional follow-ups — they do not reopen #996 unless the compact-hive envelope regresses. See `MILESTONES.md` AFDD-996 CLOSED.
+
+## 2026-09-24 — Tip 3.5.52 RCx sampling window + hub re-pin
+
+- **PR** [#1005](https://github.com/bbartling/open-fdd/pull/1005) · pin **`sha-b19d72f`** / health `3.5.52+b19d72f01d33`
+- SPA: Overview/RCx use package mapping timestamps (`analyticsWindowFromSampling`, 180d cap)
+- Railway: backup `20260924T170849Z` → re-pin **central → mqtt → web** only (fieldbus **not** re-pinned)
+- B100 smoke: runtime air weekly **36** + mech `oat_bin` **36** (`reports/tip_3.5.52_repin_20260924T163448Z/b100_smoke.json`)
+- MQTT observe: after mqtt bounce, ingest flat ~6m then recovered without field re-pin (`ingest_ok` 2→4, ~300s cadence). Row `wu-352-mqtt-reconnect-on-hub-repin` **CLOSED**. Evidence dir `reports/tip_3.5.52_repin_20260924T163448Z/`
