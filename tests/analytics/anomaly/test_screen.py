@@ -45,3 +45,14 @@ def test_screen_writes_scoreboard_and_ranks_spiked_point(tmp_path):
     assert "Python-only" in readme
     assert "UTC" in readme
     assert "zscore,mad" in readme
+
+
+def test_all_methods_still_rank_the_spike_first(tmp_path):
+    """STL/IF minutes must not outrank a real spike with a quiet analog."""
+    out = tmp_path / "all"
+    result = screen_folder(FIXTURE, out, top_n=2, max_days=3)
+    assert result.top_points[0] == "DAT"
+    board = result.scoreboard
+    active = board[board["skipped_reason"].fillna("") == ""]
+    totals = active.groupby("point")["anomaly_minutes"].sum()
+    assert float(totals["DAT"]) > float(totals["MAT"])

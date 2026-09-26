@@ -184,6 +184,41 @@ def _write_readme(
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _write_plots(
+    destination: Path,
+    *,
+    scoreboard: pd.DataFrame,
+    screened: dict[str, pd.Series],
+    flags_by_point: dict[str, dict[str, pd.Series]],
+    top_points: list[str],
+    days_by_point: dict[str, list[date]],
+) -> None:
+    from open_fdd.analytics.anomaly.plots import (
+        point_slug,
+        write_day_zoom,
+        write_scoreboard_bar,
+        write_support_plots,
+    )
+
+    write_scoreboard_bar(scoreboard, destination / "scoreboard_bar.png")
+    for point, series in screened.items():
+        write_support_plots(point, series, flags_by_point.get(point, {}), destination)
+    for point in top_points:
+        series = screened.get(point)
+        if series is None:
+            continue
+        flags = flags_by_point.get(point, {})
+        slug = point_slug(point)
+        for day in days_by_point.get(point, []):
+            write_day_zoom(
+                point,
+                series,
+                flags,
+                day,
+                destination / "days" / slug / f"{day.isoformat()}.png",
+            )
+
+
 def screen_folder(
     folder: Path | str,
     out_dir: Path | str,
@@ -193,9 +228,10 @@ def screen_folder(
     methods: list[str] | tuple[str, ...] | None = None,
     command: str | None = None,
 ) -> ScreenResult:
-    """Screen AHU IO points and write ``scoreboard.csv`` plus a run README.
+    """Screen AHU IO points and write the scoreboard, README, and plots.
 
-    Plot files are added by the plotting step when it is wired in.
+    Support plots cover every non-skipped point. Day zooms cover the top
+    ``top_n`` points and at most ``max_days`` UTC days each.
     """
     chosen = _parse_methods(methods)
     destination = Path(out_dir)
@@ -208,6 +244,7 @@ def screen_folder(
 
     rows: list[dict[str, object]] = []
     flags_by_point: dict[str, dict[str, pd.Series]] = {}
+    screened: dict[str, pd.Series] = {}
     for role, column in device.points:
         series = pd.to_numeric(device.frame[column], errors="coerce")
         series.index = device.frame.index
@@ -250,6 +287,7 @@ def screen_folder(
                 }
             )
         flags_by_point[column] = point_flags
+        screened[column] = series
 
     scoreboard = pd.DataFrame(rows, columns=SCOREBOARD_COLUMNS)
     scoreboard_path = destination / "scoreboard.csv"
@@ -269,6 +307,14 @@ def screen_folder(
         point: worst_days(flags_by_point.get(point, {}), median_dt, int(max_days))
         for point in top_points
     }
+    _write_plots(
+        destination,
+        scoreboard=scoreboard,
+        screened=screened,
+        flags_by_point=flags_by_point,
+        top_points=top_points,
+        days_by_point=days_by_point,
+    )
     return ScreenResult(
         scoreboard=scoreboard,
         out_dir=destination,
