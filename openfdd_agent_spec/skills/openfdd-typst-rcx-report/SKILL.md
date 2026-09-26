@@ -80,23 +80,49 @@ BUILDING_100 Overview PDF, `main.typ`, or Overview PNG stems.
 
 | Scope | Input | Command |
 | --- | --- | --- |
-| `single-system` | One device folder (`history_wide.csv` + `column_map.json`), v1 focus `AHU_1` | `open-fdd-anomaly report ./AHU_1 --out ./ahu1_report` |
-| `building` | Parent folder of device subfolders. AHU IO is reported; VAV/other children are skipped in the summary | `open-fdd-anomaly report ./BUILDING --scope building --out ./bldg_report` |
+| `single-system` | One device folder (`history_wide.csv` + `column_map.json`), v1 focus `AHU_1` | `open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06` |
+| `building` | Parent folder of device subfolders. AHU IO is reported; VAV/other children are skipped in the summary | `open-fdd-anomaly report ./BUILDING --scope building --month 2026-06 --out ./bldg_report` |
 
 Module: `open_fdd/reporting/single_system_typst.py`. Requires `open-fdd[anomaly]`
-(pandas oracle rules + screening). Optional PDF: `typst compile report.typ report.pdf`
-or `--compile` when `typst` is on `PATH`.
+plus Plotly (`open-fdd[reporting]` is what CI installs). Optional PDF:
+`typst compile report.typ report.pdf` or `--compile` when `typst` is on `PATH`.
 
-Ordered sections (do not promote anomaly minutes to faults):
+**Month filter (required for the analysis window).** `--month YYYY-MM` keeps every
+rule and plot inside that UTC calendar month. Omit it and the command uses the
+month with the most samples. The in-repo fixture month is **`2026-06`**
+(`tests/reporting/fixtures/ahu_typst_mini/`). An empty month is an error.
 
-1. Data health / quality (role coverage and physical bounds).
-2. Sensor-validation oracle (`SV-RANGE`, `SV-FLATLINE`, `SV-SPIKE`, `SV-STALE`) when roles exist.
-3. Anomaly scoreboard. Unsupervised ≠ FDD. Fan-ON share is a note; cookbook FC1/economizer gates still do the fan-ON proof.
-4. FC1 duct-static / fan evidence (pressure on one axis, fan % on the other).
-5. Economizer cookbook rows (`FC2`, `FC3`, `FC10`, `FC11`, `ECON-1`, `ECON-2`, `ECON-4`).
-6. Fan-on `economizer_delta_scatter` only. **x = OAT − RAT** (`delta_or_f`), **y = MAT − RAT** (`delta_mr_f`). Reference lines are y = OA fraction × x for 0/25/50/75/100% OA. Fan ON and |OAT−RAT| ≥ 10°F. Build the points with `build_economizer_delta_points` and render with `economizer_delta_scatter`. **Do not plot OAT−MAT vs RAT−MAT.**
+**Web outdoor-air temperature.** Rules that need `web-outside-air-temp` (including
+`OAT-METEO` and economizer rules with a web-OAT role) run only after a join:
 
-Haystack exports store devices under `equip` (object). Flat sidecars use string `equip` plus top-level `points`. Both must resolve or the scoreboard is empty.
+1. Mapped column `web-outside-air-temp` already on `history_wide.csv`, or
+2. `--web-oat weather.csv` with `timestamp_utc` and a dry-bulb column
+   (`web-outside-air-temp`, `dry_bulb_f`, or `web_oa_t`), or
+3. `--web-oat fetch --lat <deg> --lon <deg>` which calls
+   `open_fdd.analytics.open_meteo.fetch_open_meteo`.
+
+Join goes through `merge_weather` / `weather_resolver` and does not overwrite BAS
+`outside-air-temp`. CI must not call the network; pass a CSV or a mapped column.
+
+**Do not vibe-code this PDF.** Call the PyPI helpers. No matplotlib axis invention,
+no histograms, no anomaly day-zoom gallery in the Typst file.
+
+| Figure | Helper |
+| --- | --- |
+| AHU RCx week lines | `rcx_plots.PRESETS` where `family == "AHU / air"` and `chart == "timeseries"`, drawn with `charts.multi_equipment_timeseries` (`RAINBOW_PALETTE`). One 7-day window inside the month with the most fan-ON samples. Skip the preset when the role is unmapped. |
+| Econ temps + damper | `economizer_temps_overlay` (temperature axis + damper % axis) |
+| BAS vs web OAT | `bas_vs_web_oat_overlay` when web OAT was joined. Not the histogram. |
+| Fault overlay | `charts.rule_result_chart` **only** when `status == FAULT` and confirmed fault hours in the month are > 0. Skip the rule entirely otherwise. |
+| Economizer scatter | `build_economizer_delta_points` + `economizer_delta_scatter(..., viewport="bottom_left")` |
+
+Ordered sections:
+
+1. Executive summary paragraph. Data-bound issues and confirmed fault hours, rounded to 1 decimal. Do not invent faults. One-line caveat that unsupervised anomaly minutes are not confirmed FDD faults. No scoreboard, no histogram, no day zoom.
+2. RCx week line plots for mapped AHU timeseries presets, plus the econ temps overlay and BAS/web overlay when web OAT exists. Mixed units stay on dual axes inside those helpers.
+3. Confirmed-fault figures only. Under each figure, two bullets from `reporting.rule_meta`: what the rule means (`rule_summary`) and what the data shows (fault hours and the result note).
+4. Economizer delta scatter. **x = OAT − RAT** (`delta_or_f`), **y = MAT − RAT** (`delta_mr_f`). Reference lines y = OA fraction × x for 0/25/50/75/100% OA. Fan ON and |OAT−RAT| ≥ 10°F. **Viewport is the bottom-left mixing quadrant only** (both deltas ≤ 0, so OAT ≤ RAT and MAT ≤ RAT). **Do not plot OAT−MAT vs RAT−MAT.**
+
+Haystack exports store devices under `equip` (object). Flat sidecars use string `equip` plus top-level `points`. Both must resolve or the AHU is skipped.
 
 ### Railway / API for BUILDING_100
 

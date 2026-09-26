@@ -29,6 +29,8 @@ def test_report_help_mentions_scope(capsys):
     assert "--scope" in text
     assert "single-system" in text
     assert "building" in text
+    assert "--month" in text
+    assert "--web-oat" in text
 
 
 def test_screen_help_exits_zero(capsys):

@@ -46,4 +46,8 @@ product UI. Role alias Camber↔SQL is a **doc table only** until twin SQL lands
    PyPI overview PNG names keep Soft-OPEN `overview_*` prefix vs React bare stems.
 7. **Economizer delta scatter:** x = `delta_or_f` = OAT − RAT, y = `delta_mr_f` = MAT − RAT
    (`economizer_delta_scatter` / `build_economizer_delta_points`). Offline Typst
-   reports must call that chart. Do not plot OAT−MAT vs RAT−MAT.
+   reports must call that chart with `viewport="bottom_left"` (both deltas ≤ 0).
+   Do not plot OAT−MAT vs RAT−MAT.
+8. **Single-AHU Typst:** `open-fdd-anomaly report --month YYYY-MM`. Week RCx lines
+   and fault overlays come from `charts` / `rcx_plots` / `rule_result_chart`.
+   No histograms. Web OAT via column, CSV, or `open_meteo.fetch_open_meteo`.

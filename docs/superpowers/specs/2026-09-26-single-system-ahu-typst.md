@@ -21,12 +21,12 @@ v1 fixture and sample PDF are one AHU (`tests/reporting/fixtures/ahu_typst_mini/
 
 ## Section order
 
-1. Data health: coverage and physical bounds from cookbook sensor limits. Not anomaly minutes.
-2. Sensor-validation oracle (`SV-*`) when mapped roles exist.
-3. Anomaly scoreboard. Unsupervised screens are not FDD. Fan-ON fraction is stated; FC1 and economizer rules keep their cookbook fan-ON gates.
-4. FC1 duct static vs setpoint, with fan command on a separate axis.
-5. Economizer rules `FC2`, `FC3`, `FC10`, `FC11`, `ECON-1`, `ECON-2`, `ECON-4`.
-6. Fan-on `economizer_delta_scatter`: **x = OAT − RAT** (`delta_or_f`), **y = MAT − RAT** (`delta_mr_f`), reference lines y = OA fraction × x (0/25/50/75/100%). Points come from `build_economizer_delta_points`. Fan ON and |OAT−RAT| ≥ 10°F. Do not plot OAT−MAT vs RAT−MAT.
+`--month YYYY-MM` filters every rule and plot (fixture example `2026-06`). Web OAT joins from a mapped `web-outside-air-temp` column, `--web-oat weather.csv`, or `--web-oat fetch --lat --lon`.
+
+1. Executive summary: data-bound issues and confirmed fault hours, 1 decimal. Anomaly minutes are one caveat sentence, not a gallery.
+2. One fan-on week of AHU RCx timeseries from `multi_equipment_timeseries` / `economizer_temps_overlay` / `bas_vs_web_oat_overlay`. No histograms.
+3. `rule_result_chart` only for rules with confirmed fault hours in the month, with `rule_meta` bullets.
+4. `economizer_delta_scatter` viewport `bottom_left`: **x = OAT − RAT** (`delta_or_f`), **y = MAT − RAT** (`delta_mr_f`). Do not plot OAT−MAT vs RAT−MAT.
 
 ## Railway
 
@@ -36,7 +36,9 @@ When a JWT and `OPENFDD_API_BASE` are already available, mapping inventory is `G
 
 ```bash
 pip install "open-fdd[anomaly]"
-open-fdd-anomaly report ./AHU_1 --out ./ahu1_report
-open-fdd-anomaly report ./BUILDING --scope building --out ./bldg_report
+open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06
+open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --web-oat ./weather.csv
+open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --web-oat fetch --lat 43.07 --lon -89.40
+open-fdd-anomaly report ./BUILDING --scope building --month 2026-06 --out ./bldg_report
 typst compile ./ahu1_report/report.typ ./ahu1_report/report.pdf
 ```

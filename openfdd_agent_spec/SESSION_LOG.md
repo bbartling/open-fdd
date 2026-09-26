@@ -1,3 +1,7 @@
+## 2026-09-26 — Single-AHU Typst report uses Railway Plotly helpers
+
+- `open-fdd-anomaly report --month YYYY-MM` writes an executive summary, one fan-on week of AHU RCx lines, fault overlays only when confirmed, and a bottom-left `economizer_delta_scatter` (x = OAT−RAT, y = MAT−RAT). No histograms. Web OAT joins from a column, CSV, or Open-Meteo fetch.
+
 ## 2026-09-26 — Economizer scatter axes corrected
 
 - Single-system Typst scatter calls `economizer_delta_scatter`: **x = OAT − RAT** (`delta_or_f`), **y = MAT − RAT** (`delta_mr_f`). `build_economizer_delta_points` is the only point builder. OAT−MAT vs RAT−MAT is not a report axis.

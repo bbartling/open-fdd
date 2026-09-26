@@ -45,6 +45,35 @@ def test_full_oa_lands_on_yx_and_zero_oa_lands_on_y0():
     assert figure.layout.yaxis.title.text == "MAT − RAT (°F)"
 
 
+def test_bottom_left_viewport_clips_to_nonpositive_deltas():
+    """Mixing diagnostics view only OAT≤RAT and MAT≤RAT (both deltas ≤ 0)."""
+    frame = _frame(
+        oat=[40.0] * 6 + [90.0] * 6,
+        rat=[70.0] * 12,
+        mat=[40.0] * 6 + [90.0] * 6,
+        fan=[1] * 12,
+    )
+    points = build_economizer_delta_points(frame, equipment_id="AHU_1")
+    assert (points["delta_or_f"].iloc[:6] < 0).all()
+    assert (points["delta_or_f"].iloc[6:] > 0).all()
+
+    figure = economizer_delta_scatter(points, viewport="bottom_left")
+    assert figure is not None
+    x_range = list(figure.layout.xaxis.range)
+    y_range = list(figure.layout.yaxis.range)
+    assert x_range[1] == 0.0
+    assert y_range[1] == 0.0
+    assert x_range[0] < 0
+    assert y_range[0] < 0
+    assert "bottom-left" in figure.layout.title.text
+    xs = []
+    for trace in figure.data:
+        if trace.mode == "markers":
+            xs.extend(float(v) for v in trace.x)
+    assert xs
+    assert max(xs) <= 0.0
+
+
 def test_fan_off_dropped_and_small_delta_not_identifiable():
     frame = _frame(
         oat=[40.0, 40.0, 72.0],

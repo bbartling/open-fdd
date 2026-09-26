@@ -1384,16 +1384,27 @@ def bas_vs_web_oat_histogram(
     return fig
 
 
-def economizer_delta_scatter(points: pd.DataFrame, *, dt_min_f: float = 10.0) -> go.Figure | None:
+def economizer_delta_scatter(
+    points: pd.DataFrame,
+    *,
+    dt_min_f: float = 10.0,
+    viewport: str | None = None,
+) -> go.Figure | None:
     """(MAT−RAT) vs (OAT−RAT) mixing plot with OA-fraction reference lines.
 
     x = ``delta_or_f`` = OAT − RAT. y = ``delta_mr_f`` = MAT − RAT.
     Reference lines are y = frac × x for 0/25/50/75/100% OA. Callers must
     pass fan-on rows; identifiable samples are ``|OAT−RAT| ≥ dt_min_f``
     (default 10°F). Do not plot OAT−MAT or RAT−MAT.
+
+    ``viewport="bottom_left"`` clips the axes to the mixing quadrant where
+    both deltas are ≤ 0 (OAT ≤ RAT and MAT ≤ RAT). Other quadrants stay
+    out of the view. The default viewport is the full cloud (React autorange).
     """
     if points is None or points.empty:
         return None
+    if viewport not in {None, "bottom_left"}:
+        raise ValueError("viewport must be bottom_left or omitted")
     df = points.copy()
     if "identifiable" in df.columns:
         df = df[df["identifiable"].astype(bool)]
@@ -1401,6 +1412,8 @@ def economizer_delta_scatter(points: pd.DataFrame, *, dt_min_f: float = 10.0) ->
     if not need.issubset(df.columns) or df[list(need)].dropna().empty:
         return None
     df = df.dropna(subset=["delta_or_f", "delta_mr_f"])
+    if viewport == "bottom_left":
+        df = df[(df["delta_or_f"] <= 0) & (df["delta_mr_f"] <= 0)]
     if len(df) < 5:
         return None
 
@@ -1408,7 +1421,11 @@ def economizer_delta_scatter(points: pd.DataFrame, *, dt_min_f: float = 10.0) ->
     # Reference OA-fraction lines
     x_lo = float(df["delta_or_f"].min())
     x_hi = float(df["delta_or_f"].max())
-    if not np.isfinite(x_lo) or not np.isfinite(x_hi) or x_lo == x_hi:
+    if viewport == "bottom_left":
+        x_hi = 0.0
+        if not np.isfinite(x_lo) or x_lo >= 0:
+            x_lo = -20.0
+    elif not np.isfinite(x_lo) or not np.isfinite(x_hi) or x_lo == x_hi:
         x_lo, x_hi = -20.0, 20.0
     xs = np.linspace(x_lo, x_hi, 80)
     for frac, label in ((0.0, "0% OA"), (0.25, "25%"), (0.5, "50%"), (0.75, "75%"), (1.0, "100% OA")):
@@ -1464,8 +1481,20 @@ def economizer_delta_scatter(points: pd.DataFrame, *, dt_min_f: float = 10.0) ->
             )
         )
 
+    title = f"Economizer free-cooling delta scatter (fan on, |OAT−RAT|≥{dt_min_f:.0f}°F)"
+    x_range = None
+    y_range = None
+    if viewport == "bottom_left":
+        title += " — bottom-left mixing quadrant"
+        y_lo = float(df["delta_mr_f"].min())
+        if not np.isfinite(y_lo) or y_lo >= 0:
+            y_lo = -20.0
+        pad_x = max(1.0, 0.08 * abs(x_lo))
+        pad_y = max(1.0, 0.08 * abs(y_lo))
+        x_range = [x_lo - pad_x, 0.0]
+        y_range = [y_lo - pad_y, 0.0]
     fig.update_layout(
-        title=f"Economizer free-cooling delta scatter (fan on, |OAT−RAT|≥{dt_min_f:.0f}°F)",
+        title=title,
         xaxis_title="OAT − RAT (°F)",
         yaxis_title="MAT − RAT (°F)",
         template="plotly_white",
@@ -1473,6 +1502,9 @@ def economizer_delta_scatter(points: pd.DataFrame, *, dt_min_f: float = 10.0) ->
         margin=dict(l=50, r=20, t=60, b=50),
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
     )
+    if x_range is not None and y_range is not None:
+        fig.update_xaxes(range=x_range, autorange=False)
+        fig.update_yaxes(range=y_range, autorange=False)
     return fig
 
 

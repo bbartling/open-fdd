@@ -70,12 +70,24 @@ def build_parser() -> argparse.ArgumentParser:
         default="single-system",
         help="single-system (one AHU folder) or building (child device folders)",
     )
-    report.add_argument("--top-n", type=int, default=5)
-    report.add_argument("--max-days", type=int, default=10)
+    report.add_argument(
+        "--month",
+        default=None,
+        help="Calendar month YYYY-MM. Default: month with the most samples (fixture example 2026-06)",
+    )
+    report.add_argument(
+        "--web-oat",
+        default=None,
+        help="Web OAT CSV path, or 'fetch' with --lat and --lon (Open-Meteo). A mapped web-outside-air-temp column is used first.",
+    )
+    report.add_argument("--lat", type=float, default=None, help="Latitude for --web-oat fetch")
+    report.add_argument("--lon", type=float, default=None, help="Longitude for --web-oat fetch")
+    report.add_argument("--top-n", type=int, default=5, help="Unused by report (screen command)")
+    report.add_argument("--max-days", type=int, default=10, help="Unused by report (screen command)")
     report.add_argument(
         "--methods",
         default=DEFAULT_METHODS,
-        help=f"Anomaly detectors (default {DEFAULT_METHODS})",
+        help="Unused by report (screen command)",
     )
     report.add_argument(
         "--compile",
@@ -118,6 +130,10 @@ def main(argv: list[str] | None = None) -> int:
                 args.folder,
                 args.out,
                 scope=args.scope,
+                month=args.month,
+                web_oat=args.web_oat,
+                lat=args.lat,
+                lon=args.lon,
                 top_n=int(args.top_n),
                 max_days=int(args.max_days),
                 methods=methods,

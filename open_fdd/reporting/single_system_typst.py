@@ -1,20 +1,22 @@
 """Offline single-system (and building-folder) AHU FDD/RCx Typst pack.
 
 This path reads a device folder (``history_wide.csv`` + ``column_map.json``),
-runs the pandas oracle, and writes Typst sources. It does **not** replace the
-sacred BUILDING_100 Overview-mirrored lab PDF.
+filters to one calendar month, runs the pandas oracle, and writes Typst
+sources whose figures come from the same Plotly helpers as the Railway UI.
+
+It does **not** replace the sacred BUILDING_100 Overview-mirrored lab PDF.
 
 Scopes:
 
 * ``single-system`` — one AHU device folder (v1 demo shape, e.g. ``AHU_1``).
 * ``building`` — a parent folder whose children are device folders. AHU blocks
-  are reported; other equipment is listed as skipped. The full-building
-  Overview mirror for BUILDING_100 stays on the external legacy kit.
+  are reported; other equipment is listed as skipped.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -28,21 +30,15 @@ from open_fdd.analytics.anomaly.io import iter_ahu_io_points, load_device_folder
 from open_fdd.analytics.anomaly.plots import point_slug
 from open_fdd.rules.cookbook_catalog import SENSOR_LIMITS
 
-SV_RULE_IDS = ("SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE")
-FC1_RULE_IDS = ("FC1",)
-ECON_RULE_IDS = ("FC2", "FC3", "FC10", "FC11", "ECON-1", "ECON-2", "ECON-4")
-
-ANOMALY_NOTE = (
-    "Unsupervised anomaly minutes are not FDD faults. "
-    "Z-score and MAD are SQL-portable screens; STL and Isolation Forest are Python-only. "
-    "Cookbook FC1 and economizer rules apply a fan-ON operational gate. "
-    "Do not read the scoreboard as confirmed faults."
-)
+ANOMALY_NOTE = "Unsupervised anomaly minutes are not confirmed FDD faults."
 
 _BOUNDARY = (
     "Offline pandas-oracle pack for one AHU folder or a building folder of device "
-    "subfolders. This is not the BUILDING_100 Overview-mirrored lab PDF."
+    "subfolders. This is not the BUILDING_100 Overview-mirrored lab PDF. "
+    "Figures use the PyPI Plotly helpers shared with the Railway UI."
 )
+
+_MONTH_RE = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
 
 
 @dataclass
@@ -103,6 +99,90 @@ def role_frame(device) -> pd.DataFrame:
     return frame
 
 
+def parse_report_month(value: str) -> str:
+    """Return a validated ``YYYY-MM`` label."""
+    text = (value or "").strip()
+    if not _MONTH_RE.match(text):
+        raise ValueError("month must be YYYY-MM")
+    return text
+
+
+def dominant_month(index: pd.DatetimeIndex) -> str:
+    """Calendar month (UTC) with the most samples."""
+    if index is None or len(index) == 0:
+        raise ValueError("history has no timestamps")
+    stamps = index.tz_convert("UTC") if index.tz is not None else index.tz_localize("UTC")
+    labels = pd.Series(stamps.strftime("%Y-%m"))
+    return str(labels.mode().iloc[0])
+
+
+def filter_to_month(frame: pd.DataFrame, month: str) -> pd.DataFrame:
+    """Keep rows whose UTC timestamp falls in ``YYYY-MM``."""
+    label = parse_report_month(month)
+    start = pd.Timestamp(f"{label}-01", tz="UTC")
+    end = start + pd.DateOffset(months=1)
+    if not isinstance(frame.index, pd.DatetimeIndex):
+        raise ValueError("role frame index must be timestamps")
+    stamps = frame.index.tz_convert("UTC") if frame.index.tz is not None else frame.index.tz_localize("UTC")
+    mask = (stamps >= start) & (stamps < end)
+    out = frame.loc[mask].copy()
+    out.attrs = dict(frame.attrs)
+    if out.empty:
+        raise ValueError(f"no samples in {label}")
+    return out
+
+
+def load_web_oat_csv(path: Path | str) -> pd.DataFrame:
+    """Read a sidecar weather CSV (``timestamp_utc`` plus a dry-bulb column)."""
+    raw = pd.read_csv(path)
+    if "timestamp_utc" not in raw.columns:
+        raise ValueError(f"{path} needs a timestamp_utc column")
+    raw["timestamp_utc"] = pd.to_datetime(raw["timestamp_utc"], utc=True, format="mixed")
+    return raw.set_index("timestamp_utc").sort_index()
+
+
+def attach_web_oat(
+    frame: pd.DataFrame,
+    *,
+    web_oat: str | Path | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+) -> tuple[pd.DataFrame, str | None]:
+    """Join web outdoor-air temperature without overwriting BAS ``outside-air-temp``.
+
+    Sources, in order: a mapped ``web-outside-air-temp`` column, a CSV path, or
+    ``web_oat="fetch"`` (Open-Meteo via ``--lat`` / ``--lon``).
+    """
+    from open_fdd.rules.runner import merge_weather
+
+    if "web-outside-air-temp" in frame.columns and frame["web-outside-air-temp"].notna().any():
+        return merge_weather(frame, None), "column"
+    if web_oat is None or str(web_oat).strip() == "":
+        return merge_weather(frame, None), None
+
+    from open_fdd.analytics.open_meteo import align_to_index
+
+    token = str(web_oat).strip()
+    if token == "fetch":
+        if lat is None or lon is None:
+            raise ValueError("web OAT fetch requires lat and lon")
+        from open_fdd.analytics.open_meteo import fetch_open_meteo
+
+        weather = fetch_open_meteo(float(lat), float(lon), frame.index.min(), frame.index.max())
+        source = "open-meteo"
+    else:
+        path = Path(token)
+        if not path.is_file():
+            raise FileNotFoundError(f"web OAT file not found: {path}")
+        weather = load_web_oat_csv(path)
+        source = "csv"
+    aligned = align_to_index(weather, frame.index)
+    joined = merge_weather(frame, aligned)
+    if "web-outside-air-temp" not in joined.columns or not joined["web-outside-air-temp"].notna().any():
+        raise ValueError("web OAT join produced no web-outside-air-temp values")
+    return joined, source
+
+
 def data_health_rows(role_df: pd.DataFrame, points: list[tuple[str, str]]) -> list[dict[str, Any]]:
     """Coverage and physical-bound checks. These are quality flags, not FDD faults."""
     n = int(len(role_df))
@@ -147,35 +227,71 @@ def fan_on_fraction(role_df: pd.DataFrame) -> float | None:
     return round(float((series.fillna(0) >= 0.5).mean()), 3)
 
 
-def rule_rows(role_df: pd.DataFrame, rule_ids: tuple[str, ...], poll_seconds: float) -> list[dict[str, Any]]:
-    from open_fdd.rules import run_rule
+def representative_week(frame: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+    """Seven-day window inside ``frame`` with the most fan-on samples."""
+    if frame.empty:
+        return frame, ""
+    fan = _fan_on_mask(frame)
+    start0 = frame.index.min().floor("D")
+    last = frame.index.max()
+    best = frame
+    best_on = -1
+    cursor = start0
+    while cursor <= last:
+        end = cursor + pd.Timedelta(days=7)
+        window = frame.loc[(frame.index >= cursor) & (frame.index < end)]
+        if not window.empty:
+            on = int(fan.reindex(window.index).fillna(False).sum()) if fan is not None else int(len(window))
+            if on > best_on:
+                best_on = on
+                best = window.copy()
+                best.attrs = dict(frame.attrs)
+        cursor += pd.Timedelta(days=1)
+    label = f"{best.index.min():%Y-%m-%d} to {best.index.max():%Y-%m-%d} UTC"
+    return best, label
 
-    rows: list[dict[str, Any]] = []
-    for rule_id in rule_ids:
-        try:
-            result = run_rule(rule_id, role_df, poll_seconds=poll_seconds)
-        except Exception as exc:
-            rows.append(
-                {
-                    "rule_id": rule_id,
-                    "status": "ERROR",
-                    "fault_hours": None,
-                    "missing_roles": [],
-                    "notes": f"{type(exc).__name__}: {exc}",
-                }
-            )
+
+def _fan_on_mask(frame: pd.DataFrame) -> pd.Series | None:
+    for role in ("fan-status", "fan-cmd"):
+        if role not in frame.columns or not frame[role].notna().any():
             continue
-        hours = result.fault_hours
-        rows.append(
-            {
-                "rule_id": result.rule_id,
-                "status": result.status,
-                "fault_hours": None if hours is None else round(float(hours), 1),
-                "missing_roles": list(result.missing_roles),
-                "notes": result.notes,
-            }
-        )
-    return rows
+        num = pd.to_numeric(frame[role], errors="coerce")
+        scaled = num.where(num <= 1.5, num / 100.0)
+        return scaled.fillna(0) > 0.05
+    return None
+
+
+def _one_decimal(value: float) -> str:
+    return f"{float(value):.1f}"
+
+
+def _confirmed_fault(result) -> bool:
+    if getattr(result, "status", "") != "FAULT":
+        return False
+    hours = getattr(result, "fault_hours", None)
+    if hours is None or float(hours) <= 0:
+        return False
+    fault = getattr(result, "confirmed_fault", None)
+    if fault is None:
+        return False
+    return bool(pd.Series(fault).fillna(False).astype(bool).any())
+
+
+def _identity_pack(frame: pd.DataFrame, equipment_id: str) -> tuple[dict[str, pd.DataFrame], dict]:
+    raw = frame.copy()
+    raw.attrs["equipment_type"] = raw.attrs.get("equipment_type") or "AHU"
+    raw.attrs["equipment_id"] = equipment_id
+    role_map = {equipment_id: {column: column for column in frame.columns}}
+    return {equipment_id: raw}, role_map
+
+
+def _write_plotly_png(figure, path: Path) -> bool:
+    try:
+        height = int(getattr(figure.layout, "height", None) or 480)
+        figure.write_image(str(path), scale=2, width=980, height=max(360, height))
+    except Exception:
+        return False
+    return path.is_file() and path.stat().st_size > 100
 
 
 def _pyplot():
@@ -188,40 +304,58 @@ def _pyplot():
     return plt
 
 
-def write_fc1_figure(role_df: pd.DataFrame, path: Path) -> bool:
-    """Duct static and setpoint on the left axis; fan command percent on the right."""
-    if "duct-static-pressure" not in role_df.columns:
+def _mpl_from_plotly(figure, path: Path) -> bool:
+    """Export Plotly traces when Kaleido is unavailable. Axes stay those of the figure."""
+    traces = list(getattr(figure, "data", []) or [])
+    if not traces:
         return False
     plt = _pyplot()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fig, ax = plt.subplots(figsize=(9.0, 3.6))
-    x = role_df.index
-    ax.plot(x, role_df["duct-static-pressure"], color="#2563eb", lw=1.3, label="duct static")
-    if "duct-static-pressure-sp" in role_df.columns:
-        ax.plot(x, role_df["duct-static-pressure-sp"], color="#ea580c", lw=1.1, label="static SP")
-    ax.set_ylabel("in. w.c.")
-    ax.grid(axis="y", alpha=0.3)
-    if "fan-cmd" in role_df.columns:
-        ax2 = ax.twinx()
-        cmd = pd.to_numeric(role_df["fan-cmd"], errors="coerce")
-        pct = cmd.where(cmd > 1.0, cmd * 100.0)
-        ax2.plot(x, pct, color="#16a34a", lw=1.0, alpha=0.85, label="fan cmd %")
-        ax2.set_ylabel("Fan command (%)")
-        ax2.set_ylim(-5, 105)
-    ax.set_title("FC1 evidence — duct static vs setpoint (fan % on the right axis)")
-    ax.legend(loc="upper left", fontsize=8, frameon=False)
+    fig, ax = plt.subplots(figsize=(9.0, 4.2))
+    ax2 = None
+    for trace in traces:
+        xs = list(getattr(trace, "x", []) or [])
+        ys = list(getattr(trace, "y", []) or [])
+        if not xs or not ys:
+            continue
+        target = ax
+        if getattr(trace, "yaxis", None) not in {None, "y"}:
+            if ax2 is None:
+                ax2 = ax.twinx()
+            target = ax2
+        target.plot(xs, ys, lw=1.2, label=str(getattr(trace, "name", "") or ""))
+    title = ""
+    if figure.layout.title and figure.layout.title.text:
+        title = str(figure.layout.title.text)
+    ax.set_title(title)
+    if figure.layout.xaxis and figure.layout.xaxis.title and figure.layout.xaxis.title.text:
+        ax.set_xlabel(str(figure.layout.xaxis.title.text))
+    if figure.layout.yaxis and figure.layout.yaxis.title and figure.layout.yaxis.title.text:
+        ax.set_ylabel(str(figure.layout.yaxis.title.text))
+    if figure.layout.xaxis and figure.layout.xaxis.range:
+        ax.set_xlim(list(figure.layout.xaxis.range))
+    if figure.layout.yaxis and figure.layout.yaxis.range:
+        ax.set_ylim(list(figure.layout.yaxis.range))
+    ax.grid(alpha=0.3)
     fig.tight_layout()
     fig.savefig(path, dpi=120)
     plt.close(fig)
-    return True
+    return path.is_file() and path.stat().st_size > 100
+
+
+def _write_figure_png(figure, path: Path) -> bool:
+    if figure is None:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if _write_plotly_png(figure, path):
+        return True
+    return _mpl_from_plotly(figure, path)
 
 
 def write_econ_scatter(role_df: pd.DataFrame, path: Path) -> bool:
-    """Write ``economizer_delta_scatter``: x = OAT−RAT, y = MAT−RAT.
+    """Write ``economizer_delta_scatter`` clipped to the bottom-left mixing quadrant.
 
-    Points come from ``build_economizer_delta_points`` (``delta_or_f`` /
-    ``delta_mr_f`` only). Reference lines are y = OA fraction × x. Fan-off
-    rows and samples with |OAT−RAT| < 10°F are not the plotted cloud.
+    x = OAT−RAT (``delta_or_f``), y = MAT−RAT (``delta_mr_f``). Axis limits
+    stop at 0 so quadrants with OAT>RAT or MAT>RAT are outside the viewport.
     """
     from open_fdd.analytics.charts import economizer_delta_scatter
     from open_fdd.analytics.core import ECON_DIAG_DT_MIN_F, build_economizer_delta_points
@@ -232,174 +366,244 @@ def write_econ_scatter(role_df: pd.DataFrame, path: Path) -> bool:
         equipment_id=equipment_id,
         dt_min_f=ECON_DIAG_DT_MIN_F,
     )
-    figure = economizer_delta_scatter(points, dt_min_f=ECON_DIAG_DT_MIN_F)
-    if figure is None:
-        return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if _write_plotly_png(figure, path):
-        return True
-    return _write_delta_scatter_png(points, path, dt_min_f=ECON_DIAG_DT_MIN_F)
+    figure = economizer_delta_scatter(
+        points,
+        dt_min_f=ECON_DIAG_DT_MIN_F,
+        viewport="bottom_left",
+    )
+    return _write_figure_png(figure, path)
 
 
-def _write_plotly_png(figure, path: Path) -> bool:
-    """Static export of the Plotly ``economizer_delta_scatter`` figure."""
-    try:
-        figure.write_image(str(path), scale=2, width=900, height=480)
-    except Exception:
-        return False
-    return path.is_file() and path.stat().st_size > 100
+def _rcx_week_figures(
+    week: pd.DataFrame,
+    equipment_id: str,
+    out_dir: Path,
+    slug: str,
+) -> list[dict[str, str]]:
+    from open_fdd.analytics.charts import (
+        bas_vs_web_oat_overlay,
+        economizer_temps_overlay,
+        multi_equipment_timeseries,
+    )
+    from open_fdd.analytics.core import build_economizer_delta_points
+    from open_fdd.analytics.rcx_plots import PRESETS, collect_role_series
+    from open_fdd.analytics.units import resolve_role_unit
+
+    frames, role_map = _identity_pack(week, equipment_id)
+    figures: list[dict[str, str]] = []
+    for preset in PRESETS:
+        if preset.family != "AHU / air" or preset.chart != "timeseries":
+            continue
+        series_map = collect_role_series(
+            frames,
+            role_map,
+            role=preset.role,
+            equipment_types=preset.equipment_types,
+        )
+        if preset.overlay_role:
+            extra = collect_role_series(
+                frames,
+                role_map,
+                role=preset.overlay_role,
+                equipment_types=preset.equipment_types,
+            )
+            for eq_id, series in extra.items():
+                series_map[f"{eq_id} setpoint"] = series
+        if not series_map:
+            continue
+        figure = multi_equipment_timeseries(
+            series_map,
+            title=preset.title,
+            y_title=resolve_role_unit(preset.role) or preset.role,
+        )
+        name = f"figures/{slug}_rcx_{preset.id}.png"
+        if figure is not None and _write_figure_png(figure, out_dir / name):
+            figures.append(
+                {
+                    "id": preset.id,
+                    "title": preset.title,
+                    "caption": preset.description,
+                    "path": name,
+                }
+            )
+
+    points = build_economizer_delta_points(week, equipment_id=equipment_id)
+    overlay = economizer_temps_overlay(points, equipment_id=equipment_id)
+    overlay_name = f"figures/{slug}_rcx_econ_temps.png"
+    if overlay is not None and _write_figure_png(overlay, out_dir / overlay_name):
+        figures.append(
+            {
+                "id": "econ_temps",
+                "title": "Free-cooling temps + OA damper",
+                "caption": "OAT, RAT, MAT, and SAT on the temperature axis; OA damper percent on the right axis.",
+                "path": overlay_name,
+            }
+        )
+    bas_web = bas_vs_web_oat_overlay(frames, role_map)
+    bas_name = f"figures/{slug}_rcx_bas_web_oat.png"
+    if bas_web is not None and _write_figure_png(bas_web, out_dir / bas_name):
+        figures.append(
+            {
+                "id": "bas_web_oat",
+                "title": "BAS vs web outdoor-air temperature",
+                "caption": "BAS outside-air-temp and web-outside-air-temp on one temperature axis.",
+                "path": bas_name,
+            }
+        )
+    return figures
 
 
-def _write_delta_scatter_png(points: pd.DataFrame, path: Path, *, dt_min_f: float) -> bool:
-    """Matplotlib fallback that plots only ``delta_or_f`` / ``delta_mr_f``."""
-    df = points
-    if "identifiable" in df.columns:
-        df = df[df["identifiable"].astype(bool)]
-    df = df.dropna(subset=["delta_or_f", "delta_mr_f"])
-    if len(df) < 5:
-        return False
-    plt = _pyplot()
-    fig, ax = plt.subplots(figsize=(6.4, 5.2))
-    x_lo = float(df["delta_or_f"].min())
-    x_hi = float(df["delta_or_f"].max())
-    if x_lo == x_hi:
-        x_lo, x_hi = x_lo - 1.0, x_hi + 1.0
-    xs = [x_lo, x_hi]
-    for frac, label in ((0.0, "0% OA"), (0.25, "25%"), (0.5, "50%"), (0.75, "75%"), (1.0, "100% OA")):
-        ax.plot(xs, [frac * x_lo, frac * x_hi], color="#94a3b8", lw=0.8, ls=":", label=label)
-    ax.scatter(df["delta_or_f"], df["delta_mr_f"], s=18, color="#2563eb", alpha=0.8, zorder=3)
-    ax.set_xlabel("OAT − RAT (°F)")
-    ax.set_ylabel("MAT − RAT (°F)")
-    ax.set_title(f"Economizer free-cooling delta scatter (fan on, |OAT−RAT|≥{dt_min_f:.0f}°F)")
-    ax.grid(alpha=0.3)
-    ax.legend(loc="best", fontsize=8, frameon=False)
-    fig.tight_layout()
-    fig.savefig(path, dpi=120)
-    plt.close(fig)
-    return path.is_file() and path.stat().st_size > 100
+def _fault_figures(
+    frame: pd.DataFrame,
+    out_dir: Path,
+    slug: str,
+    month: str,
+) -> list[dict[str, Any]]:
+    from open_fdd.analytics.charts import rule_result_chart
+    from open_fdd.reporting.rule_meta import rule_summary, rule_title
+    from open_fdd.rules import RULES_BY_ID, run_all
+
+    poll = _poll_seconds(frame.index)
+    rows: list[dict[str, Any]] = []
+    for result in run_all(frame, poll_seconds=poll):
+        if not _confirmed_fault(result):
+            continue
+        rule = RULES_BY_ID.get(result.rule_id)
+        roles = None
+        if rule is not None:
+            roles = list(rule.required_roles) + list(getattr(rule, "optional_roles", []) or [])
+        figure = rule_result_chart(frame, result, required_roles=roles)
+        name = f"figures/{slug}_fault_{point_slug(result.rule_id)}.png"
+        path = name if figure is not None and _write_figure_png(figure, out_dir / name) else ""
+        hours = round(float(result.fault_hours or 0.0), 1)
+        note = (result.notes or "").strip()
+        data = f"{_one_decimal(hours)} fault hours in {month}."
+        if note:
+            data = f"{data} {note}"
+        rows.append(
+            {
+                "rule_id": result.rule_id,
+                "title": rule_title(result.rule_id),
+                "summary": rule_summary(result.rule_id),
+                "data": data,
+                "fault_hours": hours,
+                "figure": path,
+            }
+        )
+    return rows
+
+
+def _executive_summary(
+    *,
+    label: str,
+    month: str,
+    frame: pd.DataFrame,
+    health: list[dict[str, Any]],
+    faults: list[dict[str, Any]],
+    web_source: str | None,
+) -> str:
+    poll = _poll_seconds(frame.index)
+    span_h = round((len(frame) * poll) / 3600.0, 1)
+    issues = []
+    for row in health:
+        if not row.get("out_of_range"):
+            continue
+        issues.append(
+            f"{row['role']} has {int(row['out_of_range'])} sample(s) outside {row['bound']} "
+            f"(min {_one_decimal(row['min'])}, max {_one_decimal(row['max'])})"
+        )
+    parts = [
+        f"{label} in {month}: {len(frame)} samples, {_one_decimal(span_h)} h.",
+    ]
+    if issues:
+        parts.append("Data issues: " + "; ".join(issues) + ".")
+    else:
+        parts.append("Mapped roles stay inside cookbook physical bounds.")
+    if faults:
+        bits = [f"{row['rule_id']} {_one_decimal(row['fault_hours'])} h" for row in faults]
+        parts.append("Confirmed faults: " + ", ".join(bits) + ".")
+    else:
+        parts.append("No confirmed cookbook faults in this month.")
+    if web_source:
+        parts.append(f"Web outdoor-air temperature joined from {web_source}.")
+    else:
+        parts.append("No web outdoor-air temperature was joined, so rules that require it stay skipped.")
+    fan = fan_on_fraction(frame)
+    if fan is not None:
+        parts.append(f"Fan is ON for {_one_decimal(100.0 * fan)} percent of samples.")
+    parts.append(ANOMALY_NOTE)
+    return " ".join(parts)
 
 
 def _code_raw(value: object) -> str:
-    """Typst ``raw`` call for use inside a code-mode function argument list."""
     text = "" if value is None else str(value)
     escaped = text.replace("\\", "\\\\").replace('"', '\\"')
     return f'raw("{escaped}")'
 
 
 def _markup_raw(value: object) -> str:
-    """Typst ``#raw`` for a markup-mode paragraph or heading."""
     return "#" + _code_raw(value)
-
-
-def _table(headers: list[str], rows: list[list[object]]) -> str:
-    cells = ", ".join(_code_raw(header) for header in headers)
-    lines = [f"#table(columns: {len(headers)}, inset: 4pt, stroke: 0.4pt,", f"  table.header({cells}),"]
-    for row in rows:
-        lines.append("  " + ", ".join(_code_raw(cell) for cell in row) + ",")
-    lines.append(")")
-    return "\n".join(lines)
-
-
-def _rule_table(rows: list[dict[str, Any]]) -> str:
-    body = []
-    for row in rows:
-        missing = ", ".join(row.get("missing_roles") or [])
-        hours = row.get("fault_hours")
-        body.append(
-            [
-                row.get("rule_id"),
-                row.get("status"),
-                "" if hours is None else hours,
-                missing,
-            ]
-        )
-    return _table(["rule", "status", "fault_h", "missing roles"], body)
-
-
-def _health_table(rows: list[dict[str, Any]]) -> str:
-    body = [
-        [
-            row["role"],
-            row["coverage_pct"],
-            row["min"],
-            row["max"],
-            row["out_of_range"],
-            row["bound"],
-        ]
-        for row in rows
-    ]
-    return _table(["role", "coverage %", "min", "max", "out of range", "bound"], body)
-
-
-def _scoreboard_table(scoreboard: pd.DataFrame) -> str:
-    body = []
-    for rec in scoreboard.to_dict(orient="records"):
-        body.append(
-            [
-                rec.get("point"),
-                rec.get("role"),
-                rec.get("method"),
-                rec.get("anomaly_minutes"),
-                rec.get("event_count"),
-                rec.get("skipped_reason") if pd.notna(rec.get("skipped_reason")) else "",
-            ]
-        )
-    return _table(
-        ["point", "role", "method", "anomaly min", "events", "skipped"],
-        body,
-    )
 
 
 def _device_typst(device: dict[str, Any]) -> str:
     parts = [
         f"== {_markup_raw(device['equipment_id'])}",
         "",
-        "=== 1. Data health",
+        "=== Executive summary",
         "",
-        "Role coverage and physical bounds. Out-of-range counts are a quality pre-screen, not confirmed faults.",
+        _markup_raw(device["executive_summary"]),
         "",
-        _health_table(device["health"]),
+        f"=== RCx week ({_markup_raw(device['week'])})",
         "",
-        "=== 2. Sensor validation",
-        "",
-        "Pandas oracle SV rules when the mapped sensors exist. Skipped rows are missing roles, not passes.",
-        "",
-        _rule_table(device["sensor_validation"]),
-        "",
-        "=== 3. Anomaly screening",
-        "",
-        _markup_raw(device["anomaly_note"]),
+        "One representative week inside the filtered month, preferring fan-ON coverage. "
+        "Lines use the PyPI Plotly helpers shared with Railway RCx plots.",
         "",
     ]
-    board = device.get("scoreboard_preview") or []
-    if board:
-        parts.extend([_scoreboard_table(pd.DataFrame(board)), ""])
+    if not device.get("rcx"):
+        parts.extend(["No AHU timeseries presets had mapped roles in this week.", ""])
+    for figure in device.get("rcx") or []:
+        parts.extend(
+            [
+                _markup_raw(figure["title"]),
+                "",
+                _markup_raw(figure["caption"]),
+                "",
+                f'#image("{figure["path"]}", width: 100%)',
+                "",
+            ]
+        )
     parts.extend(
         [
-            "=== 4. Duct static / FC1",
+            "=== Confirmed faults",
             "",
-            "Supply-fan duct-static fault (cookbook FC1): static below setpoint while the fan is at high speed.",
-            "",
-            _rule_table(device["fc1"]),
+            "A figure is included only when the cookbook rule has confirmed fault hours in the filtered month.",
             "",
         ]
     )
-    if device.get("fc1_figure"):
-        parts.extend([f'#image("{device["fc1_figure"]}", width: 100%)', ""])
+    if not device.get("faults"):
+        parts.extend(["No confirmed cookbook faults in this month.", ""])
+    for fault in device.get("faults") or []:
+        parts.extend(
+            [
+                f"==== {_markup_raw(fault['rule_id'] + ' — ' + fault['title'])}",
+                "",
+                _markup_raw("Rule: " + fault["summary"]),
+                "",
+                _markup_raw("Data: " + fault["data"]),
+                "",
+            ]
+        )
+        if fault.get("figure"):
+            parts.extend([f'#image("{fault["figure"]}", width: 100%)', ""])
     parts.extend(
         [
-            "=== 5. Economizer performance",
-            "",
-            "Mixing and economizer cookbook rules (FC2, FC3, FC10, FC11, ECON-1, ECON-2, ECON-4).",
-            "",
-            _rule_table(device["economizer"]),
-            "",
-            "=== 6. Economizer scatter",
+            "=== Economizer delta scatter",
             "",
             _markup_raw(
                 "economizer_delta_scatter: x = OAT - RAT (delta_or_f), "
                 "y = MAT - RAT (delta_mr_f). Reference lines y = OA fraction * x "
                 "for 0/25/50/75/100% OA. Fan ON and |OAT-RAT| >= 10 F. "
+                "Viewport is the bottom-left mixing quadrant only (both deltas <= 0: OAT <= RAT and MAT <= RAT). "
                 "Do not plot OAT-MAT vs RAT-MAT."
             ),
             "",
@@ -410,7 +614,7 @@ def _device_typst(device: dict[str, Any]) -> str:
     else:
         parts.extend(
             [
-                "Scatter unavailable: need fan-on OAT, RAT, and MAT with at least five samples where |OAT-RAT| >= 10 F.",
+                "Scatter unavailable: need at least five fan-on samples in the bottom-left quadrant with |OAT-RAT| >= 10 F.",
                 "",
             ]
         )
@@ -424,11 +628,12 @@ def render_typst(summary: dict[str, Any]) -> str:
         names = ", ".join(item["folder"] for item in skipped)
         skip_line = _markup_raw(f"Skipped (no AHU IO): {names}") + "\n\n"
     body = "\n".join(_device_typst(device) for device in summary["devices"])
+    month = summary.get("month") or ""
     return "\n".join(
         [
             "#set page(paper: \"us-letter\", margin: 0.7in)",
             "#set text(size: 11pt)",
-            f"= AHU FDD / RCx ({summary['scope']})",
+            f"= AHU screening ({summary['scope']}, {month})",
             "",
             _markup_raw(_BOUNDARY),
             "",
@@ -439,8 +644,6 @@ def render_typst(summary: dict[str, Any]) -> str:
 
 
 def _is_ahu_folder(folder: Path) -> bool:
-    import json
-
     column_map = json.loads((folder / "column_map.json").read_text(encoding="utf-8"))
     if not isinstance(column_map, dict):
         return False
@@ -459,53 +662,43 @@ def _one_device(
     folder: Path,
     out_dir: Path,
     *,
-    methods: list[str],
-    top_n: int,
-    max_days: int,
-    command: str | None,
+    month: str,
+    web_oat: str | Path | None,
+    lat: float | None,
+    lon: float | None,
 ) -> dict[str, Any]:
-    from open_fdd.analytics.anomaly.screen import screen_folder
-
     device = load_device_folder(folder)
     label = equipment_label(device.column_map, folder)
     framed = role_frame(device)
     framed.attrs["equipment_id"] = label
+    framed = filter_to_month(framed, month)
+    framed, web_source = attach_web_oat(framed, web_oat=web_oat, lat=lat, lon=lon)
+    framed.attrs["equipment_id"] = label
     slug = point_slug(label)
-    anomaly_dir = out_dir / "devices" / slug / "anomaly"
-    screen_folder(
-        folder,
-        anomaly_dir,
-        top_n=top_n,
-        max_days=max_days,
-        methods=methods,
-        command=command,
-    )
-    scoreboard = pd.read_csv(anomaly_dir / "scoreboard.csv")
-    preview = []
-    for rec in scoreboard.to_dict(orient="records"):
-        preview.append({key: (None if pd.isna(val) else val) for key, val in rec.items()})
-    poll = _poll_seconds(framed.index)
-    figures = out_dir / "figures"
-    fc1_name = f"figures/{slug}_fc1.png"
+    health = data_health_rows(framed, device.points)
+    faults = _fault_figures(framed, out_dir, slug, month)
+    week, week_label = representative_week(framed)
+    rcx = _rcx_week_figures(week, label, out_dir, slug)
     scatter_name = f"figures/{slug}_econ_scatter.png"
-    fc1_ok = write_fc1_figure(framed, out_dir / fc1_name)
     scatter_ok = write_econ_scatter(framed, out_dir / scatter_name)
-    fan_frac = fan_on_fraction(framed)
-    fan_bit = (
-        f" Mapped fan is ON for {round(100.0 * fan_frac, 1)}% of samples."
-        if fan_frac is not None
-        else " No fan-status or fan-cmd column is mapped."
+    summary_text = _executive_summary(
+        label=label,
+        month=month,
+        frame=framed,
+        health=health,
+        faults=faults,
+        web_source=web_source,
     )
     return {
         "equipment_id": label,
         "folder": str(folder),
-        "health": data_health_rows(framed, device.points),
-        "sensor_validation": rule_rows(framed, SV_RULE_IDS, poll),
-        "anomaly_note": ANOMALY_NOTE + fan_bit,
-        "scoreboard_preview": preview,
-        "fc1": rule_rows(framed, FC1_RULE_IDS, poll),
-        "economizer": rule_rows(framed, ECON_RULE_IDS, poll),
-        "fc1_figure": fc1_name if fc1_ok else "",
+        "month": month,
+        "week": week_label,
+        "web_oat_source": web_source,
+        "executive_summary": summary_text,
+        "health": health,
+        "faults": faults,
+        "rcx": rcx,
         "scatter_figure": scatter_name if scatter_ok else "",
     }
 
@@ -537,17 +730,29 @@ def build_single_system_report(
     out_dir: Path | str,
     *,
     scope: str = "single-system",
+    month: str | None = None,
+    web_oat: str | Path | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
     top_n: int = 5,
     max_days: int = 10,
     methods: list[str] | None = None,
     command: str | None = None,
     compile_pdf: bool = False,
 ) -> SingleSystemReport:
-    """Write ``report.typ``, ``report_summary.json``, and figure PNGs under ``out_dir``."""
-    chosen = list(methods) if methods is not None else ["zscore", "mad", "stl", "iforest"]
+    """Write ``report.typ``, ``report_summary.json``, and Plotly PNGs under ``out_dir``.
+
+    ``top_n``, ``max_days``, and ``methods`` belong to ``open-fdd-anomaly screen``.
+    This report does not emit anomaly histograms or day-zoom galleries.
+    """
+    del top_n, max_days, methods, command
     destination = Path(out_dir)
     destination.mkdir(parents=True, exist_ok=True)
     folders = device_folders(folder, scope)
+    if month is None:
+        probe = load_device_folder(folders[0])
+        month = dominant_month(probe.frame.index)
+    month = parse_report_month(month)
     devices: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     for child in folders:
@@ -558,33 +763,28 @@ def build_single_system_report(
             _one_device(
                 child,
                 destination,
-                methods=chosen,
-                top_n=top_n,
-                max_days=max_days,
-                command=command,
+                month=month,
+                web_oat=web_oat,
+                lat=lat,
+                lon=lon,
             )
         )
     if not devices:
         raise ValueError(f"no AHU device folders to report under {folder}")
     summary = {
         "scope": scope,
+        "month": month,
         "boundary": _BOUNDARY,
         "devices": devices,
         "skipped": skipped,
-        "sections": [
-            "data_health",
-            "sensor_validation",
-            "anomaly_screening",
-            "fc1",
-            "economizer",
-            "econ_scatter_oat_mat_vs_rat_mat",
-        ],
     }
-    summary_path = destination / "report_summary.json"
-    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     typ_path = destination / "report.typ"
     typ_path.write_text(render_typst(summary), encoding="utf-8")
-    pdf_path = compile_typst(typ_path) if compile_pdf else None
+    summary_path = destination / "report_summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    pdf_path = None
+    if compile_pdf:
+        pdf_path = compile_typst(typ_path)
     return SingleSystemReport(
         typ_path=typ_path,
         summary_path=summary_path,
