@@ -1,3 +1,7 @@
+## 2026-09-26 — Reporter docs name every history source
+
+- The PDF reads mapped roles. Docs name a local CSV plus column map, a Railway or self-hosted Open-FDD central, and a future vendor API. The report is not Railway-only.
+
 ## 2026-09-26 — Economizer scatter matches the week-figure size
 
 - The section-6 scatter image is full Typst width, and the PNG uses the same 980×400 export frame as the week rainbow.

@@ -82,6 +82,13 @@ typst compile main.typ BUILDING_100_RCx_Lab_Report.pdf
 This path is **additive**. It does not render, replace, or overwrite the sacred
 BUILDING_100 Overview PDF, `main.typ`, or Overview PNG stems.
 
+The reporter is not Railway-only. It draws from mapped roles (`RoleHistory`).
+`open-fdd-anomaly report` loads a local device folder (`history_wide.csv` +
+`column_map.json`). The same template accepts a role-named frame from a Railway
+or self-hosted Open-FDD central (`OpenFddApiSource`; the class does not open
+the network) or from a future vendor API (`VendorApiSource`). Export central or
+vendor history into the device folder, or pass a reader.
+
 | Scope | Input | Command |
 | --- | --- | --- |
 | `single-system` | One device folder (`history_wide.csv` + `column_map.json`), v1 focus `AHU_1` | `open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile` |
@@ -152,7 +159,7 @@ pass/fail bullet list in everyday words.
 | Economizer scatter | `build_economizer_delta_points` + `economizer_delta_scatter(..., viewport="bottom_left")`. `economizer_delta_frame` is the same function (older local trees). Keep the `build_economizer_delta_points` name. |
 | Agent notes | Optional prose in `ai_comments.json` (slots: sensor_checks, anomaly_screening, executive_summary, rcx_week, confirmed_faults, economizer). Empty slots are omitted. The PDF has no re-run command. |
 
-History sources (`HISTORY_SOURCES`): `device_folder` (implemented), `openfdd_api` (any Open-FDD central; pass a reader, no network inside the class), `vendor_api` (registered stub). `--week YYYY-MM-DD` pins seven days (April example `2026-04-06`). Omit it and the window is the 7 days in the month with the most fan-ON samples.
+History sources (`HISTORY_SOURCES`): `device_folder` (local CSV + map; what the CLI loads), `openfdd_api` (Railway or self-hosted Open-FDD; pass a reader, no network inside the class), `vendor_api` (future vendor API; registered stub). All three land on mapped roles. `--week YYYY-MM-DD` pins seven days (April example `2026-04-06`). Omit it and the window is the 7 days in the month with the most fan-ON samples.
 
 Ordered sections for facility / RCx readers (keep this order):
 
@@ -165,11 +172,13 @@ Ordered sections for facility / RCx readers (keep this order):
 
 Haystack exports store devices under `equip` (object). Flat sidecars use string `equip` plus top-level `points`. Both must resolve or the AHU is skipped.
 
-### Railway / API for BUILDING_100
+### BUILDING_100 legacy kit
+
+The single-AHU reporter above is not this site's Overview PDF, and it is not a Railway-only command.
 
 - Full-building Overview PDF: keep the legacy kit (`fetch_railway.py` → `render_plots.py` → `build_typst_body.py` → `main.typ`). Do not point that site at `build_single_system_report`.
-- Single-AHU pack: `open-fdd-anomaly report <folder> --compile` after a device folder is already on disk. CI uses `tests/reporting/fixtures/ahu_typst_mini/` (sample PDF `tests/reporting/fixtures/ahu_typst_mini_report.pdf`). Do not commit a multi-megabyte BUILDING_100 CSV. Do not add a local `build_april_report.py`.
-- When `OPENFDD_API_BASE` and a JWT already exist, inventory is `GET /api/csv/import/package/mapping?building_id=BUILDING_100`. A local package zip can go through `scripts/agent_eplus_dump.sh` (engineering bundle). Neither call is required for the unit tests, and secrets stay out of CI.
+- Single-AHU pack: `open-fdd-anomaly report <folder> --compile` after a device folder is already on disk. That folder can be a local CSV export, a dump from Railway or a self-hosted Open-FDD central, or a mapped vendor export. CI uses `tests/reporting/fixtures/ahu_typst_mini/` (sample PDF `tests/reporting/fixtures/ahu_typst_mini_report.pdf`). Do not commit a multi-megabyte BUILDING_100 CSV. Do not add a local `build_april_report.py`.
+- When `OPENFDD_API_BASE` and a JWT already exist, inventory is `GET /api/csv/import/package/mapping?building_id=BUILDING_100` on whichever central that base URL points at (Railway or self-hosted). A local package zip can go through `scripts/agent_eplus_dump.sh` (engineering bundle). Neither call is required for the unit tests, and secrets stay out of CI.
 
 ### Additive changes only
 

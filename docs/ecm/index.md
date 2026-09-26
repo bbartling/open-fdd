@@ -8,7 +8,7 @@ permalink: /ecm/
 
 # PyPI agent tools — RCx/FDD reports and ECM workbooks
 
-`pip install open-fdd` is the agent library: an RCx/FDD PDF from mapped roles, plus human-auditable Excel ECM workbooks. **Not** the product DataFusion FDD runtime (that is GHCR central).
+`pip install open-fdd` is the agent library: an RCx/FDD PDF from mapped roles, plus human-auditable Excel ECM workbooks. **Not** the product DataFusion FDD runtime (that is GHCR central). The PDF is not Railway-only. `open-fdd-anomaly report` reads a local CSV plus column map. The same template accepts a Railway or self-hosted Open-FDD history frame, or a future vendor API, once those rows are mapped to roles.
 
 Any AI agent that can read markdown skills and run the CLI can use this. Skills live in `openfdd_agent_spec/skills/`. Sync with `./scripts/openfdd_install_agent_skills.sh --sync`.
 

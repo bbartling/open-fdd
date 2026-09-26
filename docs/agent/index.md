@@ -12,6 +12,8 @@ Open-FDD is a **vendor-neutral, local-first edge platform**. It does **not** shi
 
 **Split:** this folder holds **ops / edge / GHCR soak** prompts. Software-engineering missions (architecture, PyPI oracle, Milestone A) live in [`openfdd_agent_spec/`](../../openfdd_agent_spec/).
 
+The PyPI RCx PDF (`open-fdd-anomaly report`) reads mapped roles. It is not Railway-only: a local CSV plus column map, a Railway or self-hosted Open-FDD central, or a future vendor API. See [PyPI agent tools](../ecm/).
+
 ## Open-FDD core (GHCR edge)
 
 | Layer | Components |

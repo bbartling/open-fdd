@@ -54,7 +54,7 @@ product UI. Role alias Camber↔SQL is a **doc table only** until twin SQL lands
    The Typst note under that figure is `econ_scatter_caption`: damper color vs
    OA-fraction lines, damper position is not fresh-air fraction, and mild
    weather (MAT ≈ RAT ≈ OAT) shrinks the deltas.
-8. **Single-AHU Typst:** the only shipped PDF command is `open-fdd-anomaly report --month YYYY-MM --compile` (`open_fdd.reporting.report_template`). Do not use `build_april_report.py` or any other out-of-tree runner. Profile `vav_ahu` selects figures from mapped roles. Other system profiles are registered stubs. History sources: device folder, Open-FDD API reader, vendor API stub.
+8. **Single-AHU Typst:** the only shipped PDF command is `open-fdd-anomaly report --month YYYY-MM --compile` (`open_fdd.reporting.report_template`). Do not use `build_april_report.py` or any other out-of-tree runner. Profile `vav_ahu` selects figures from mapped roles. Other system profiles are registered stubs. History is not Railway-only: local CSV plus column map, a Railway or self-hosted Open-FDD central (agent-supplied reader), or a future vendor API, all as mapped roles.
    `report.pdf` is written when `typst` is on `PATH` (the CLI runs `typst compile`). Order is sensor
    checks, plain anomaly bullets, executive summary, week RCx lines, then
    non-SV fault overlays from `rule_result_chart`. No histograms or anomaly

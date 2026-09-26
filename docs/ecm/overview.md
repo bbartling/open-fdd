@@ -9,7 +9,7 @@ permalink: /ecm/overview.html
 
 `open-fdd` ships AI-agent RCx/FDD reporting and ECM workbooks. ECM guide: https://bbartling.github.io/open-fdd/ecm/
 
-1. **AI agent report** — `open-fdd-anomaly report ... --compile` from a device folder, an Open-FDD reader, or a future vendor reader. Default title **Open-FDD AI Agent Report**. `--title` and `--location` are optional.
+1. **AI agent report** — `open-fdd-anomaly report ... --compile` from mapped roles. Not Railway-only: a local CSV plus column map, a Railway or self-hosted Open-FDD central (agent-supplied reader), or a future vendor API. Default title **Open-FDD AI Agent Report**. `--title` and `--location` are optional.
 2. **ECM engineering** (`open_fdd.ecm_engineering`) — agent-drivable HVAC spreadsheet workbooks + Python benchmarks.
 3. **Pandas oracle** (`open_fdd.rules`, `open_fdd.analytics`, `open_fdd.reporting`) — cookbook catalog, analytics helpers, Engineering Findings.
 
@@ -109,6 +109,7 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_out
 # defaults: --top-n 5 --max-days 10 --methods zscore,mad,stl,iforest
 
 # Single AHU FDD/RCx PDF. Only this CLI; no build_april_report.py or other local runner.
+# History is mapped roles: local CSV+map, Railway or self-hosted Open-FDD, or a future vendor API.
 # --compile writes report.pdf when typst is on PATH.
 # --month filters every plot. --week pins the RCx window (YYYY-MM-DD, 7 days).
 # Web OAT: mapped column, CSV (web_oa_t reindexed onto the BAS clock), or fetch.

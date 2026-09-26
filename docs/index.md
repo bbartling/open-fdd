@@ -75,7 +75,7 @@ Intended for **LAN, VPN, or OT-network** deployment. Do not expose the API on th
 4. [Architecture]({{ site.baseurl }}/architecture/) — services and data flow
 5. [API & Security]({{ site.baseurl }}/api/) — REST + vulnerability reporting
 6. [MCP & Agents]({{ site.baseurl }}/mcp-agents/) — Cursor / OpenClaw
-7. [PyPI agent tools]({{ site.baseurl }}/ecm/) — `open-fdd-anomaly report` plus ECM workbooks (`pip install open-fdd`)
+7. [PyPI agent tools]({{ site.baseurl }}/ecm/) — `open-fdd-anomaly report` from mapped roles (local CSV, Railway or self-hosted Open-FDD, or a future vendor API) plus ECM workbooks (`pip install open-fdd`)
 8. [Web App]({{ site.baseurl }}/web-app/) — SPA routes and RCx examples
 
 ## Stack images
