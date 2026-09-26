@@ -23,6 +23,7 @@ pip install open-fdd                 # ECM only (openpyxl)
 pip install "open-fdd[oracle]"       # + pandas rules
 pip install "open-fdd[analytics]"    # + analytics helpers (same as oracle)
 pip install "open-fdd[reporting]"    # + Engineering Findings extras
+pip install "open-fdd[anomaly]"      # + offline anomaly screening (STL, Isolation Forest)
 ```
 
 For the FastAPI ECM example:
@@ -129,6 +130,17 @@ result = job.calc(
 ```bash
 open-fdd-ecm calculators
 open-fdd-ecm demo --out Demo_ECMs.xlsx
+```
+
+### Anomaly screening
+
+Offline AHU IO screen of a device folder (`history_wide.csv` + `column_map.json`).
+Z-score and MAD are SQL-portable rolling stats. STL and Isolation Forest are
+Python-only (`open-fdd[anomaly]`).
+
+```bash
+open-fdd-anomaly screen ./AHU_1 --out ./anomaly_out
+# defaults: --top-n 5 --max-days 10 --methods zscore,mad,stl,iforest
 ```
 
 ## Engineering posture
