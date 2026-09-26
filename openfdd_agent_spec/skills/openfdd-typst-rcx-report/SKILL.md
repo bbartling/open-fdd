@@ -12,7 +12,7 @@ description: >-
 
 # Open-FDD Typst lab reports (multi-profile)
 
-Works with any AI agent that can read markdown skills and run the PyPI CLI. This file lives in `openfdd_agent_spec/skills/`. `.cursor/` is an install target (`./scripts/openfdd_install_agent_skills.sh --sync`), not the source of truth.
+Works with any AI agent that can read markdown skills and run the PyPI CLI. Author this skill only in `openfdd_agent_spec/skills/openfdd-typst-rcx-report/`. Do not create a copy under `.cursor/skills/` or another vendor directory. `./scripts/openfdd_install_agent_skills.sh --sync` is the sync. See [`AGENTS.md`](../../AGENTS.md).
 
 **Not** the product PDF path (`rust-text-pdf`). Agent lab screening pack:
 DataFusion → Plotly (UI palette) → Typst → PDF + CSVs for Excel.
@@ -224,8 +224,19 @@ Temps (°F) and damper/fan (%) **must** use dual y-axis (`yaxis` + `yaxis2`) —
   AGENTS.md                # short agent gate (read first)
 ```
 
-## Related
+## Related skills
 
-- Kit `AGENTS.md` · `README.md` · `FUTURE_OPENFDD_MERGE.md`
-- Skills: `openfdd-react-spa` · `openfdd-package-mapping` · `openfdd-railway-cli`
-- Wave K plan + BUG_REPORT plot-span rows
+Authoring tree: `openfdd_agent_spec/skills/`. Install script: [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh). Orientation: [`AGENTS.md`](../../AGENTS.md).
+
+- [`openfdd-pypi-oracle`](../openfdd-pypi-oracle/SKILL.md) — PyPI package and `open-fdd-anomaly report`
+- [`openfdd-rcx-fdd-plot-poll`](../openfdd-rcx-fdd-plot-poll/SKILL.md) — blank RCx/FDD plots and poll gaps
+- [`openfdd-package-mapping`](../openfdd-package-mapping/SKILL.md) — Haystack roles and `equipType`
+- [`data-modeling`](../data-modeling/SKILL.md) — package layout
+- [`openfdd-ecm-engineering`](../openfdd-ecm-engineering/SKILL.md) — ECM workbooks on the same wheel
+- [`openfdd-react-spa`](../openfdd-react-spa/SKILL.md) — product UI chart contract
+
+The legacy BUILDING_100 kit (`AGENTS.md`, `README.md`, `FUTURE_OPENFDD_MERGE.md` under `/home/ben/building100_rcx_report/`) is a separate Overview PDF. It is not a second skill home.
+
+## Skill home
+
+`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).

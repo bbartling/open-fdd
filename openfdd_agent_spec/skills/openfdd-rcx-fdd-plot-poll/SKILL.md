@@ -113,10 +113,24 @@ Excluded: TEC=stripped gateway=stripped
 - Inventing points not on the Mint / site scrape
 - Patching RCx SQL filters instead of stamping `equipType: vav` / mapping roles
 - Treating empty Plotly as a frontend-only bug when envelope `rows`/`points` are empty
-- Duplicating this skill into `~/.cursor/skills/`
+- Authoring a second copy under `.cursor/skills/` or `~/.cursor/skills/` (sync with `scripts/openfdd_install_agent_skills.sh`)
 
 ## Done when
 
 - Poll matrix lists every blank preset/rule role with scrape evidence or explicit GAP
 - `field_devices` has health roles only; TEC + Modbus boiler gateway removed
 - Data Model shows the new columns; RCx/FDD envelopes non-empty after next ingest cycle
+
+## Skill home
+
+`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).
+
+## Related skills
+
+- [`openfdd-package-mapping`](../openfdd-package-mapping/SKILL.md) — Haystack roles and `equipType`
+- [`data-modeling`](../data-modeling/SKILL.md) — package layout
+- [`openfdd-typst-rcx-report`](../openfdd-typst-rcx-report/SKILL.md) — single-system PDF from those roles
+- [`openfdd-sql-fdd`](../openfdd-sql-fdd/SKILL.md) — DataFusion rule SQL
+- [`openfdd-bacnet-ot-debug`](../openfdd-bacnet-ot-debug/SKILL.md) — field poll when a role is missing
+- [`openfdd-react-spa`](../openfdd-react-spa/SKILL.md) — product chart contract
+- [`openfdd-pypi-oracle`](../openfdd-pypi-oracle/SKILL.md) — PyPI helpers the PDF calls

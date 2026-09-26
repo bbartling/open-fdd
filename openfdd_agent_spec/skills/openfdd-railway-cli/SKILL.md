@@ -147,3 +147,13 @@ Empty charts/FDD with healthy `ingest_ok` ⇒ missing **roles** (`zonetemp`/`sa_
 - Deploying `openfdd-fieldbus` on Railway for BACnet.
 - Confusing Railway CLI/MCP with `openfdd-mcp` FDD tools.
 - Leaving hub on a stale `sha-*` after tip Publish.
+
+## Skill home
+
+`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).
+
+## Related skills
+
+- [`openfdd-stack-ghcr`](../openfdd-stack-ghcr/SKILL.md) — local GHCR recreate
+- [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md) — stress after a re-pin
+- [`openfdd-bacnet-ot-debug`](../openfdd-bacnet-ot-debug/SKILL.md) — fieldbus stays on-prem

@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Agent skills installer.
 #
-# Source of truth for Open-FDD product skills is openfdd_agent_spec/skills/.
-# That tree is not Cursor-only. Any agent that can read markdown skills can use it.
+# HARD RULE: openfdd_agent_spec/skills/ is the only authoring tree for
+# Open-FDD AI agent skills. Do not create or edit a parallel skill under
+# .cursor/skills, .claude/skills, .agents/skills, or a home skill directory.
+# Those paths are sync targets. Agents (Grok Bot, Hermes, OpenClaw, Cursor,
+# Claude, Codex) read the synced copy and edit the source tree.
 #
 #   ./scripts/openfdd_install_agent_skills.sh --sync [--user]
 #       Symlink each product skill into repo homes for Cursor, Claude, and Codex.
 #       --user also links into the home directories used by Cursor, Claude, Codex,
-#       OpenClaw, Hermes, and Grok-style hosts.
+#       OpenClaw, Hermes, and Grok. A real directory with the same name is refused.
 #
 #   ./scripts/openfdd_install_agent_skills.sh [path/to/research_review_agent_skills_v1.zip]
 #       Install the separate research-review skill zip (existing behavior).
@@ -35,8 +38,9 @@ sync_product_skills() {
       name="$(basename "$skill")"
       target="$dest/$name"
       if [[ -e "$target" && ! -L "$target" ]]; then
-        echo "skip existing directory $target" >&2
-        continue
+        echo "Refusing second authoring copy at $target" >&2
+        echo "Edit $src_root/$name and remove the vendor directory, then re-run --sync." >&2
+        exit 1
       fi
       ln -sfn "$rel/$name" "$target"
     done
@@ -58,16 +62,17 @@ sync_product_skills() {
         name="$(basename "$skill")"
         target="$dest/$name"
         if [[ -e "$target" && ! -L "$target" ]]; then
-          echo "skip existing directory $target" >&2
-          continue
+          echo "Refusing second authoring copy at $target" >&2
+          echo "Edit $src_root/$name and remove the vendor directory, then re-run --sync." >&2
+          exit 1
         fi
         ln -sfn "$skill" "$target"
       done
     done
   fi
   echo "Synced product skills from $src_root"
+  echo "Edit only $src_root. Vendor folders are links, not a second authoring home."
   echo "Works with any AI agent that can read markdown skills and run the PyPI CLI."
-  echo "Repo links: .cursor/skills .agents/skills .claude/skills"
 }
 
 if [[ "${1:-}" == "--sync" ]]; then

@@ -7,7 +7,7 @@ permalink: /ecm/agent-context.html
 
 # How Open-FDD AI agents help humans
 
-Open-FDD does **not** ship an embedded chatbot. Any AI agent that can read markdown skills and run the PyPI CLI can use this package (Cursor, Claude, Codex, OpenClaw, Hermes, Grok Bot, or another MCP host). Product skills live in [`openfdd_agent_spec/skills/`](https://github.com/bbartling/open-fdd/tree/master/openfdd_agent_spec/skills). That tree is the source of truth. `.cursor/` is only one install target. Sync with `./scripts/openfdd_install_agent_skills.sh --sync` (add `--user` for home directories). Live stacks still use **JWT REST** and optional **`openfdd-mcp` stdio**. The CSV/API-agnostic PDF command is `open-fdd-anomaly report ... --compile`.
+Open-FDD does **not** ship an embedded chatbot. Any AI agent that can read markdown skills and run the PyPI CLI can use this package (Cursor, Claude, Codex, OpenClaw, Hermes, Grok Bot, or another MCP host). `openfdd_agent_spec/skills/` is the only authoring tree ([index](https://github.com/bbartling/open-fdd/tree/master/openfdd_agent_spec/skills)). Do not invent a parallel skill under `.cursor/skills/` or another vendor directory. `./scripts/openfdd_install_agent_skills.sh --sync` (add `--user` for home directories) is the sync into Cursor, Claude, Codex, OpenClaw, Hermes, and Grok. Live stacks still use **JWT REST** and optional **`openfdd-mcp` stdio**. The CSV/API-agnostic PDF command is `open-fdd-anomaly report ... --compile`.
 
 ## What agents are for
 

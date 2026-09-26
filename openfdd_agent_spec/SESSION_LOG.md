@@ -1,3 +1,7 @@
+## 2026-09-26 — Skills author only under openfdd_agent_spec/skills
+
+- That tree is the only authoring home. `.cursor/skills` and other vendor directories are sync targets of `scripts/openfdd_install_agent_skills.sh --sync`. Sibling skills cross-link (typst report, pypi-oracle, rcx-fdd-plot-poll, package-mapping, and the rest).
+
 ## 2026-09-26 — Report chrome, PyPI sales line, agent-neutral skills
 
 - PDF title defaults to Open-FDD AI Agent Report (`--title`, `--location`). Blue headings. Coverage bullets for month, samples, interval, and span. The screening/BUILDING_100 blurb is off the first page.

@@ -77,3 +77,12 @@ Plan: `.cursor/plans/ecm_context_hardening.plan.md` · agent brief:
   `docs/ecm/model-to-calculations.md`
 
 Do **not** add Python ECM to central/web request paths.
+
+## Skill home
+
+`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).
+
+## Related skills
+
+- [`openfdd-pypi-oracle`](../openfdd-pypi-oracle/SKILL.md) — wheel that ships ECM and the report CLI
+- [`openfdd-typst-rcx-report`](../openfdd-typst-rcx-report/SKILL.md) — RCx/FDD PDF beside the ECM guide

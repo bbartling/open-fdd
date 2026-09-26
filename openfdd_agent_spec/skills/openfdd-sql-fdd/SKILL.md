@@ -25,3 +25,14 @@ description: >-
 6. **SCHED-1:** portable occupancy — numeric/`false` unoccupied **and** string
    `unoccupied` tokens; keep `sql_rules/sched1_unoccupied_runtime.sql` aligned
    with pandas `sched1` in `open_fdd/rules/cookbook_catalog.py`.
+
+## Skill home
+
+`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).
+
+## Related skills
+
+- [`openfdd-cookbook-parity`](../openfdd-cookbook-parity/SKILL.md) — pandas twin of the same rules
+- [`openfdd-architecture`](../openfdd-architecture/SKILL.md) — engine boundaries
+- [`openfdd-package-mapping`](../openfdd-package-mapping/SKILL.md) — roles the SQL expects
+- [`openfdd-rcx-fdd-plot-poll`](../openfdd-rcx-fdd-plot-poll/SKILL.md) — plots that stay empty

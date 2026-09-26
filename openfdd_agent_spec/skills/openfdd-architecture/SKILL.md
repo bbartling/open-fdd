@@ -27,3 +27,15 @@ Read [`ARCHITECTURE.md`](../../ARCHITECTURE.md) and [`ownership.yaml`](../../own
 
 Add CI that validates `ownership.yaml` and fails on prohibited imports /
 missing cookbook paths / terminology regressions.
+
+## Skill home
+
+`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).
+
+## Related skills
+
+- [`openfdd-sql-fdd`](../openfdd-sql-fdd/SKILL.md) — product FDD engine
+- [`openfdd-react-spa`](../openfdd-react-spa/SKILL.md) — product UI
+- [`openfdd-pypi-oracle`](../openfdd-pypi-oracle/SKILL.md) — library boundary
+- [`openfdd-milestone-a-pr`](../openfdd-milestone-a-pr/SKILL.md) — PR loop
+- [`openfdd-stack-ghcr`](../openfdd-stack-ghcr/SKILL.md) — image pull

@@ -23,3 +23,13 @@ matrix in the same PR family. Accidental cookbook shrinkage must fail CI
 
 Display-name contract (registry `description` ↔ cookbook short title ↔ React
 labels): [`docs/RULE_DISPLAY_NAMES.md`](../../docs/RULE_DISPLAY_NAMES.md).
+
+## Skill home
+
+`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).
+
+## Related skills
+
+- [`openfdd-sql-fdd`](../openfdd-sql-fdd/SKILL.md) — DataFusion expression
+- [`openfdd-pypi-oracle`](../openfdd-pypi-oracle/SKILL.md) — pandas package
+- [`openfdd-architecture`](../openfdd-architecture/SKILL.md) — what stays out of central
