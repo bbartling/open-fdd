@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from open_fdd.analytics.charts import economizer_delta_scatter
-from open_fdd.analytics.core import build_economizer_delta_points
+from open_fdd.analytics.core import build_economizer_delta_points, economizer_delta_frame
 
 
 def _frame(oat, rat, mat, fan) -> pd.DataFrame:
@@ -18,6 +18,10 @@ def _frame(oat, rat, mat, fan) -> pd.DataFrame:
             "fan-status": fan,
         }
     )
+
+
+def test_economizer_delta_frame_is_the_point_builder():
+    assert economizer_delta_frame is build_economizer_delta_points
 
 
 def test_full_oa_lands_on_yx_and_zero_oa_lands_on_y0():

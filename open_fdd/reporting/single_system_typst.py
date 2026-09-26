@@ -158,12 +158,22 @@ def filter_to_month(frame: pd.DataFrame, month: str) -> pd.DataFrame:
 
 
 def load_web_oat_csv(path: Path | str) -> pd.DataFrame:
-    """Read a sidecar weather CSV (``timestamp_utc`` plus a dry-bulb column)."""
+    """Read a sidecar weather CSV (``timestamp_utc`` plus a dry-bulb column).
+
+    Accepts ``web-outside-air-temp`` or Open-Meteo ``web_oa_t``. A 15-minute
+    file is normalized here; ``attach_web_oat`` reindexes it onto the BAS clock.
+    """
+    from open_fdd.analytics.weather_psychrometrics import enrich_weather_frame
+
     raw = pd.read_csv(path)
     if "timestamp_utc" not in raw.columns:
         raise ValueError(f"{path} needs a timestamp_utc column")
     raw["timestamp_utc"] = pd.to_datetime(raw["timestamp_utc"], utc=True, format="mixed")
-    return raw.set_index("timestamp_utc").sort_index()
+    frame = enrich_weather_frame(raw.set_index("timestamp_utc").sort_index())
+    for column in frame.columns:
+        if pd.api.types.is_numeric_dtype(frame[column]) or column.startswith("web-"):
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    return frame
 
 
 def attach_web_oat(
@@ -176,8 +186,12 @@ def attach_web_oat(
     """Join web outdoor-air temperature without overwriting BAS ``outside-air-temp``.
 
     Sources, in order: a mapped ``web-outside-air-temp`` column, a CSV path, or
-    ``web_oat="fetch"`` (Open-Meteo via ``--lat`` / ``--lon``).
+    ``web_oat="fetch"`` (Open-Meteo via ``--lat`` / ``--lon``). CSV aliases
+    include ``web_oa_t``. ``align_to_index`` puts a 15-minute file onto the
+    BAS timestamps, then ``merge_weather`` / ``weather_resolver`` keeps web
+    OAT primary (``prefer_web_oat``).
     """
+    from open_fdd.analytics.weather_psychrometrics import prefer_web_oat
     from open_fdd.rules.runner import merge_weather
 
     if "web-outside-air-temp" in frame.columns and frame["web-outside-air-temp"].notna().any():
@@ -205,6 +219,10 @@ def attach_web_oat(
     joined = merge_weather(frame, aligned)
     if "web-outside-air-temp" not in joined.columns or not joined["web-outside-air-temp"].notna().any():
         raise ValueError("web OAT join produced no web-outside-air-temp values")
+    preferred = prefer_web_oat(joined, aligned, prefer_web=True)
+    if preferred is not None:
+        joined["oa_t_effective"] = preferred
+        joined.attrs["oa_t_effective_source"] = "web"
     return joined, source
 
 
@@ -252,10 +270,28 @@ def fan_on_fraction(role_df: pd.DataFrame) -> float | None:
     return round(float((series.fillna(0) >= 0.5).mean()), 3)
 
 
-def representative_week(frame: pd.DataFrame) -> tuple[pd.DataFrame, str]:
-    """Seven-day window inside ``frame`` with the most fan-on samples."""
+def representative_week(frame: pd.DataFrame, week_start: str | None = None) -> tuple[pd.DataFrame, str]:
+    """Seven-day window inside ``frame``.
+
+    ``week_start`` (``YYYY-MM-DD``, UTC) pins the window. The April OptiPlex
+    example is ``2026-04-06`` (through 2026-04-12). Without it, the window
+    with the most fan-on samples is used.
+    """
     if frame.empty:
         return frame, ""
+    if week_start:
+        start = pd.Timestamp(week_start)
+        if start.tzinfo is None:
+            start = start.tz_localize("UTC")
+        else:
+            start = start.tz_convert("UTC")
+        end = start + pd.Timedelta(days=7)
+        window = frame.loc[(frame.index >= start) & (frame.index < end)].copy()
+        if window.empty:
+            raise ValueError(f"no samples in the week starting {start:%Y-%m-%d}")
+        window.attrs = dict(frame.attrs)
+        label = f"{window.index.min():%Y-%m-%d} to {window.index.max():%Y-%m-%d} UTC"
+        return window, label
     fan = _fan_on_mask(frame)
     start0 = frame.index.min().floor("D")
     last = frame.index.max()
@@ -884,6 +920,7 @@ def _one_device(
     web_oat: str | Path | None,
     lat: float | None,
     lon: float | None,
+    week: str | None = None,
 ) -> dict[str, Any]:
     device = load_device_folder(folder)
     label = equipment_label(device.column_map, folder)
@@ -900,7 +937,7 @@ def _one_device(
     sensor_checks = sensor_validation_bullets(results, health)
     anomaly = anomaly_plain_checklist(framed, device.points, month)
     faults = _fault_figures(framed, results, out_dir, slug, month)
-    week, week_label = representative_week(framed)
+    week, week_label = representative_week(framed, week_start=week)
     rcx = _rcx_week_figures(week, label, out_dir, slug)
     scatter_name = f"figures/{slug}_econ_scatter.png"
     scatter_ok = write_econ_scatter(framed, out_dir / scatter_name)
@@ -960,6 +997,7 @@ def build_single_system_report(
     web_oat: str | Path | None = None,
     lat: float | None = None,
     lon: float | None = None,
+    week: str | None = None,
     top_n: int = 5,
     max_days: int = 10,
     methods: list[str] | None = None,
@@ -993,6 +1031,7 @@ def build_single_system_report(
                 web_oat=web_oat,
                 lat=lat,
                 lon=lon,
+                week=week,
             )
         )
     if not devices:

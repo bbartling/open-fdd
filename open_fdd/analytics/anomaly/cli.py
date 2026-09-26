@@ -82,6 +82,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     report.add_argument("--lat", type=float, default=None, help="Latitude for --web-oat fetch")
     report.add_argument("--lon", type=float, default=None, help="Longitude for --web-oat fetch")
+    report.add_argument(
+        "--week",
+        default=None,
+        help=(
+            "RCx week start YYYY-MM-DD (UTC), seven days from that date. "
+            "April example: 2026-04-06 (through 2026-04-12). "
+            "Default: the 7-day window in the month with the most fan-on samples."
+        ),
+    )
     report.add_argument("--top-n", type=int, default=5, help="Unused by report (screen command)")
     report.add_argument("--max-days", type=int, default=10, help="Unused by report (screen command)")
     report.add_argument(
@@ -134,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
                 web_oat=args.web_oat,
                 lat=args.lat,
                 lon=args.lon,
+                week=args.week,
                 top_n=int(args.top_n),
                 max_days=int(args.max_days),
                 methods=methods,

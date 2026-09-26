@@ -31,6 +31,40 @@ def test_report_help_mentions_scope(capsys):
     assert "building" in text
     assert "--month" in text
     assert "--web-oat" in text
+    assert "--week" in text
+    assert "2026-04-06" in text
+
+
+def test_report_passes_week_and_month(monkeypatch, tmp_path):
+    seen: dict = {}
+
+    def fake(folder, out, **kwargs):
+        seen["folder"] = folder
+        seen["out"] = out
+        seen.update(kwargs)
+
+    monkeypatch.setattr(
+        "open_fdd.reporting.single_system_typst.build_single_system_report",
+        fake,
+    )
+    code = main(
+        [
+            "report",
+            str(tmp_path),
+            "--out",
+            str(tmp_path / "out"),
+            "--month",
+            "2026-04",
+            "--week",
+            "2026-04-06",
+            "--web-oat",
+            "open_meteo_april.csv",
+        ]
+    )
+    assert code == 0
+    assert seen["month"] == "2026-04"
+    assert seen["week"] == "2026-04-06"
+    assert seen["web_oat"] == "open_meteo_april.csv"
 
 
 def test_screen_help_exits_zero(capsys):

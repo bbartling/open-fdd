@@ -15,7 +15,9 @@ description: >-
 **Not** the product PDF path (`rust-text-pdf`). Agent lab screening pack:
 DataFusion → Plotly (UI palette) → Typst → PDF + CSVs for Excel.
 
-Reference kit: `/home/ben/building100_rcx_report/`.
+Reference kit: `/home/ben/building100_rcx_report/` when that directory is present.
+The single-AHU command does not read it. A missing kit is not a blocker for
+`open-fdd-anomaly report`.
 
 **PyPI staging (not in open-fdd master yet):** package `open-fdd-lab-typst`
 (`openfdd_lab_typst`, CLI `open-fdd-lab-typst`). Future monorepo path
@@ -83,6 +85,21 @@ BUILDING_100 Overview PDF, `main.typ`, or Overview PNG stems.
 | `single-system` | One device folder (`history_wide.csv` + `column_map.json`), v1 focus `AHU_1` | `open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06` |
 | `building` | Parent folder of device subfolders. AHU IO is reported; VAV/other children are skipped in the summary | `open-fdd-anomaly report ./BUILDING --scope building --month 2026-06 --out ./bldg_report` |
 
+April device folder (local prep, not fetched in CI): 8640 rows at 5 minutes,
+`2026-04-01` through `2026-04-30`, plus a 15-minute Open-Meteo sidecar whose
+dry-bulb column is `web_oa_t` or `web-outside-air-temp`. Recommended RCx week
+is `2026-04-06` through `2026-04-12` (about 54% fan-ON):
+
+```bash
+open-fdd-anomaly report ./AHU_1 --out ./april_report --month 2026-04 \
+  --web-oat ./open_meteo_april.csv \
+  --week 2026-04-06 \
+  --compile
+```
+
+The in-repo fixture stays `2026-06` (`tests/reporting/fixtures/ahu_typst_mini/`).
+CI must not download that April folder or call Open-Meteo.
+
 Module: `open_fdd/reporting/single_system_typst.py`. Requires `open-fdd[anomaly]`
 plus Plotly (`open-fdd[reporting]` is what CI installs). Optional PDF:
 `typst compile report.typ report.pdf` or `--compile` when `typst` is on `PATH`.
@@ -101,8 +118,12 @@ month with the most samples. The in-repo fixture month is **`2026-06`**
 3. `--web-oat fetch --lat <deg> --lon <deg>` which calls
    `open_fdd.analytics.open_meteo.fetch_open_meteo`.
 
-Join goes through `merge_weather` / `weather_resolver` and does not overwrite BAS
-`outside-air-temp`. CI must not call the network; pass a CSV or a mapped column.
+`load_web_oat_csv` renames `web_oa_t` to `web-outside-air-temp`. `align_to_index`
+reindexes a 15-minute file onto the BAS clock (time interpolation). Join goes
+through `merge_weather` / `weather_resolver`, then `prefer_web_oat` so web
+outdoor air is the effective series. BAS `outside-air-temp` is not overwritten.
+The RCx figure is `bas_vs_web_oat_overlay`. CI must not call the network; pass
+a CSV or a mapped column.
 
 **Do not vibe-code this PDF.** Call the PyPI helpers. No matplotlib axis invention.
 Never put anomaly science in the PDF: no histograms, no scoreboard, no day zooms,
@@ -111,11 +132,11 @@ pass/fail bullet list in everyday words.
 
 | Figure | Helper |
 | --- | --- |
-| AHU RCx week lines | `rcx_plots.PRESETS` where `family == "AHU / air"` and `chart == "timeseries"`, drawn with `charts.multi_equipment_timeseries` (`RAINBOW_PALETTE`). One 7-day window inside the month with the most fan-ON samples. Skip the preset when the role is unmapped. |
+| AHU RCx week lines | `rcx_plots.PRESETS` where `family == "AHU / air"` and `chart == "timeseries"`, drawn with `charts.multi_equipment_timeseries` (`RAINBOW_PALETTE`). `--week YYYY-MM-DD` pins seven days from that UTC date (April example `2026-04-06`). Omit it and the window is the 7 days in the month with the most fan-ON samples. Skip the preset when the role is unmapped. |
 | Econ temps + damper | `economizer_temps_overlay` (temperature axis + damper % axis) |
 | BAS vs web OAT | `bas_vs_web_oat_overlay` when web OAT was joined. Not the histogram. |
 | Fault overlay | `charts.rule_result_chart` **only** for non-SV rules when `status == FAULT` and confirmed fault hours in the month are > 0. Skip the rule entirely otherwise. Sensor checks stay bullets, not these figures. |
-| Economizer scatter | `build_economizer_delta_points` + `economizer_delta_scatter(..., viewport="bottom_left")` |
+| Economizer scatter | `build_economizer_delta_points` + `economizer_delta_scatter(..., viewport="bottom_left")`. `economizer_delta_frame` is the same function (older local trees). Keep the `build_economizer_delta_points` name. |
 
 Ordered sections for facility / RCx readers (keep this order):
 

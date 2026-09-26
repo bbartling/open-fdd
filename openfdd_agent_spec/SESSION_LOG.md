@@ -1,3 +1,9 @@
+## 2026-09-26 — April device-folder example for the single-AHU report
+
+- Docs and CLI: `--month 2026-04 --web-oat ./open_meteo_april.csv --week 2026-04-06` for an 8640-row 5-minute folder (`2026-04-01` through `2026-04-30`) and a 15-minute `web_oa_t` sidecar reindexed onto the BAS clock (`align_to_index`, `prefer_web_oat`, `bas_vs_web_oat_overlay`). Recommended RCx week runs through `2026-04-12`.
+- `economizer_delta_frame` is an alias of `build_economizer_delta_points`. Axes stay x = OAT−RAT, y = MAT−RAT, bottom-left only.
+- The single-AHU path does not read `/home/ben/building100_rcx_report`. CI keeps the June fixture and does not fetch the April folder.
+
 ## 2026-09-26 — Single-AHU report leads with sensor checks
 
 - Facility order: sensor-check bullets, plain anomaly pass/fail (“looks normal” / “needs a look” / “skipped — not enough fan-on data”), executive summary, then RCx and confirmed-fault plots. No anomaly science plots.

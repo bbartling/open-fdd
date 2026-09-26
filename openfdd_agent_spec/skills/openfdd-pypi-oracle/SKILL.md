@@ -45,10 +45,16 @@ product UI. Role alias Camber↔SQL is a **doc table only** until twin SQL lands
    `tests/reporting/test_report_chart_palette.py` (Findings chrome bars).
    PyPI overview PNG names keep Soft-OPEN `overview_*` prefix vs React bare stems.
 7. **Economizer delta scatter:** x = `delta_or_f` = OAT − RAT, y = `delta_mr_f` = MAT − RAT
-   (`economizer_delta_scatter` / `build_economizer_delta_points`). Offline Typst
-   reports must call that chart with `viewport="bottom_left"` (both deltas ≤ 0).
-   Do not plot OAT−MAT vs RAT−MAT.
+   (`economizer_delta_scatter` / `build_economizer_delta_points`).
+   `economizer_delta_frame` is an alias of `build_economizer_delta_points`; keep
+   the longer name in this package. Offline Typst reports must call that chart
+   with `viewport="bottom_left"` (both deltas ≤ 0). Do not plot OAT−MAT vs RAT−MAT.
 8. **Single-AHU Typst:** `open-fdd-anomaly report --month YYYY-MM`. Order is sensor
    checks, plain anomaly bullets, executive summary, week RCx lines, then
    non-SV fault overlays from `rule_result_chart`. No histograms or anomaly
-   method names. Web OAT via column, CSV, or `open_meteo.fetch_open_meteo`.
+   method names. Web OAT via column, CSV (`web_oa_t` included; 15-minute files
+   reindex onto the BAS clock; `prefer_web_oat`), or `open_meteo.fetch_open_meteo`.
+   `--week YYYY-MM-DD` pins the RCx week. April example:
+   `--month 2026-04 --web-oat ./open_meteo_april.csv --week 2026-04-06`
+   (8640 rows at 5 minutes, week through 2026-04-12). Do not fetch that folder in CI.
+   This path does not read `/home/ben/building100_rcx_report`.

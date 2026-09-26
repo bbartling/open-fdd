@@ -13,9 +13,11 @@ import pandas as pd
 
 from open_fdd.reporting.single_system_typst import (
     anomaly_plain_checklist,
+    attach_web_oat,
     build_single_system_report,
     dominant_month,
     filter_to_month,
+    representative_week,
     write_econ_scatter,
 )
 from open_fdd.analytics.anomaly.io import load_device_folder
@@ -94,6 +96,51 @@ def test_month_filter_drops_other_months():
 def test_month_outside_history_fails_the_report(tmp_path):
     with pytest.raises(ValueError, match="no samples in 2026-04"):
         build_single_system_report(FIXTURE, tmp_path / "out", month="2026-04")
+
+
+def test_web_oa_t_15min_reindexes_onto_5min_bas(tmp_path):
+    """Open-Meteo ``web_oa_t`` at 15 min interpolates onto a 5-min BAS index."""
+    index = pd.date_range("2026-04-01", periods=4, freq="5min", tz="UTC")
+    frame = pd.DataFrame({"outside-air-temp": [50.0, 51.0, 52.0, 53.0]}, index=index)
+    sidecar = tmp_path / "open_meteo_april.csv"
+    sidecar.write_text(
+        "timestamp_utc,web_oa_t\n"
+        "2026-04-01T00:00:00Z,40\n"
+        "2026-04-01T00:15:00Z,70\n",
+        encoding="utf-8",
+    )
+    joined, source = attach_web_oat(frame, web_oat=sidecar)
+    assert source == "csv"
+    web = joined["web-outside-air-temp"]
+    assert web.iloc[0] == pytest.approx(40.0)
+    assert web.iloc[1] == pytest.approx(50.0)
+    assert web.notna().all()
+    assert joined["outside-air-temp"].iloc[0] == 50.0
+    assert joined.attrs.get("oa_t_effective_source") == "web"
+    assert joined["oa_t_effective"].iloc[0] == pytest.approx(40.0)
+
+
+def test_pinned_rcx_week_is_seven_days_from_start():
+    index = pd.date_range("2026-04-01", "2026-04-30 23:55", freq="5min", tz="UTC")
+    frame = pd.DataFrame({"fan-status": 1}, index=index)
+    window, label = representative_week(frame, week_start="2026-04-06")
+    assert window.index.min() == pd.Timestamp("2026-04-06", tz="UTC")
+    assert window.index.max() < pd.Timestamp("2026-04-13", tz="UTC")
+    assert window.index.max() >= pd.Timestamp("2026-04-12", tz="UTC")
+    assert label.startswith("2026-04-06")
+    assert "2026-04-12" in label
+    with pytest.raises(ValueError, match="no samples in the week starting 2026-05-01"):
+        representative_week(frame, week_start="2026-05-01")
+
+
+def test_pinned_week_outside_month_fails_the_report(tmp_path):
+    with pytest.raises(ValueError, match="no samples in the week starting 2026-04-06"):
+        build_single_system_report(
+            FIXTURE,
+            tmp_path / "out",
+            month="2026-06",
+            week="2026-04-06",
+        )
 
 
 def test_web_oat_csv_join_enables_meteo_rule(tmp_path):

@@ -106,10 +106,15 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_out
 # defaults: --top-n 5 --max-days 10 --methods zscore,mad,stl,iforest
 
 # Single AHU FDD/RCx Typst (not the BUILDING_100 Overview PDF).
-# --month filters every plot. Web OAT: mapped column, CSV, or fetch.
+# --month filters every plot. --week pins the RCx window (YYYY-MM-DD, 7 days).
+# Web OAT: mapped column, CSV (web_oa_t reindexed onto the BAS clock), or fetch.
 # Economizer scatter: x = OAT−RAT, y = MAT−RAT, bottom-left quadrant only.
+# build_economizer_delta_points (alias economizer_delta_frame).
 open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06
 open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --web-oat ./weather.csv
+# April folder (8640 rows @ 5 min). Do not fetch this in CI.
+open-fdd-anomaly report ./AHU_1 --out ./april_report --month 2026-04 \
+  --web-oat ./open_meteo_april.csv --week 2026-04-06 --compile
 open-fdd-anomaly report ./BUILDING --scope building --out ./bldg_report
 typst compile ./ahu1_report/report.typ ./ahu1_report/report.pdf
 ```

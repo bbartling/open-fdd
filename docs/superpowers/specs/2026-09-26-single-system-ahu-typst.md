@@ -21,7 +21,11 @@ v1 fixture and sample PDF are one AHU (`tests/reporting/fixtures/ahu_typst_mini/
 
 ## Section order
 
-`--month YYYY-MM` filters every rule and plot (fixture example `2026-06`). Web OAT joins from a mapped `web-outside-air-temp` column, `--web-oat weather.csv`, or `--web-oat fetch --lat --lon`.
+`--month YYYY-MM` filters every rule and plot (fixture example `2026-06`). `--week YYYY-MM-DD` pins the RCx window to seven UTC days from that date. Web OAT joins from a mapped `web-outside-air-temp` column, `--web-oat weather.csv` (`web_oa_t` or `web-outside-air-temp`; 15-minute rows reindex onto the BAS clock via `align_to_index`, then `prefer_web_oat`), or `--web-oat fetch --lat --lon`. The RCx overlay is `bas_vs_web_oat_overlay`.
+
+April device-folder example (documentation only; CI uses the June fixture and must not download the folder or call the network): 8640 rows at 5 minutes, `2026-04-01` through `2026-04-30`. Recommended RCx week `2026-04-06` through `2026-04-12`. The single-AHU path does not read `/home/ben/building100_rcx_report`.
+
+`economizer_delta_frame` is an alias of `build_economizer_delta_points`. Axes stay x = OAT − RAT, y = MAT − RAT, bottom-left quadrant only.
 
 1. Sensor checks: failed SV rules in everyday words, or one Passed bullet.
 2. Anomaly screening: “looks normal” / “needs a look” / “skipped — not enough fan-on data”. No method names or science plots.
@@ -41,6 +45,8 @@ pip install "open-fdd[anomaly]"
 open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06
 open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --web-oat ./weather.csv
 open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --web-oat fetch --lat 43.07 --lon -89.40
+open-fdd-anomaly report ./AHU_1 --out ./april_report --month 2026-04 \
+  --web-oat ./open_meteo_april.csv --week 2026-04-06 --compile
 open-fdd-anomaly report ./BUILDING --scope building --month 2026-06 --out ./bldg_report
 typst compile ./ahu1_report/report.typ ./ahu1_report/report.pdf
 ```

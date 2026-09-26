@@ -2070,6 +2070,9 @@ def build_economizer_delta_points(
     true when ``|OAT − RAT| >= dt_min_f`` (default 10°F).
 
     Do not derive OAT−MAT or RAT−MAT from this frame.
+
+    ``economizer_delta_frame`` is the same function. Older local trees used
+    that name; this package keeps ``build_economizer_delta_points``.
     """
     if frame is None or frame.empty:
         return _empty_economizer_delta_points()
@@ -2119,6 +2122,9 @@ def build_economizer_delta_points(
         points["damper_fb_pct"] = np.nan
 
     return points.loc[fan_on.fillna(False)].copy()
+
+
+economizer_delta_frame = build_economizer_delta_points
 
 
 def _econ_fan_on_mask(mapped: pd.DataFrame) -> pd.Series:
