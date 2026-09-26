@@ -47,6 +47,7 @@ Repository = "https://github.com/bbartling/open-fdd"
 open-fdd-ecm = "open_fdd.ecm_engineering.cli:main"
 open-fdd-report = "open_fdd.reporting.cli:main"
 open-fdd-version = "open_fdd.version:main"
+open-fdd-anomaly = "open_fdd.analytics.anomaly.cli:main"
 
 [project.optional-dependencies]
 ecm-web = [
@@ -70,6 +71,13 @@ reporting = [
 analytics = [
     "open-fdd[oracle]",
 ]
+anomaly = [
+    "pandas>=2.0.0",
+    "numpy>=1.26.0",
+    "matplotlib>=3.8.0",
+    "statsmodels>=0.14.0",
+    "scikit-learn>=1.3.0",
+]
 # Deprecated alias of reporting; removed in open-fdd 5.0. Prefer reporting/analytics/oracle.
 vibe19 = [
     "open-fdd[reporting]",
@@ -77,12 +85,14 @@ vibe19 = [
 test = [
     "pytest>=7.0",
     "open-fdd[reporting]",
+    "open-fdd[anomaly]",
 ]
 dev = [
     "pytest>=7.0",
     "build>=1.2.0",
     "twine>=6.0.0",
     "open-fdd[reporting]",
+    "open-fdd[anomaly]",
 ]
 release = [
     "build>=1.2.0",
