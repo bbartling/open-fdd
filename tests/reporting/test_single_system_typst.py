@@ -9,7 +9,10 @@ from pathlib import Path
 
 import pytest
 
+import pandas as pd
+
 from open_fdd.reporting.single_system_typst import (
+    anomaly_plain_checklist,
     build_single_system_report,
     dominant_month,
     filter_to_month,
@@ -30,13 +33,19 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
         month="2026-06",
     )
     typ = result.typ_path.read_text(encoding="utf-8")
-    assert "Executive summary" in typ
-    assert "RCx week" in typ
-    assert "Confirmed faults" in typ
-    assert "Economizer delta scatter" in typ
-    assert "not confirmed FDD faults" in typ
+    assert typ.index("Sensor checks") < typ.index("Anomaly screening")
+    assert typ.index("Anomaly screening") < typ.index("Executive summary")
+    assert typ.index("Executive summary") < typ.index("RCx week")
+    assert typ.index("RCx week") < typ.index("Confirmed faults")
+    assert typ.index("Confirmed faults") < typ.index("Economizer delta scatter")
+    assert "out of physical range" in typ or "stuck flat" in typ
+    assert "looks normal" in typ or "needs a look" in typ
+    assert "not equipment faults" in typ
     assert "histogram" not in typ.lower()
     assert "scoreboard" not in typ.lower()
+    assert "z-score" not in typ.lower()
+    assert "isolation forest" not in typ.lower()
+    assert " stl " not in typ.lower()
     assert "delta_or_f" in typ
     assert "delta_mr_f" in typ
     assert "OAT - RAT" in typ
@@ -55,6 +64,7 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert all("hist" not in path.name for path in pngs)
     assert (out / "figures" / "AHU_1_econ_scatter.png").stat().st_size > 100
     assert (out / "figures" / "AHU_1_fault_FC1.png").stat().st_size > 100
+    assert not (out / "figures" / "AHU_1_fault_SV-RANGE.png").exists()
     assert any("rcx_" in path.name for path in pngs)
 
     summary = json.loads(result.summary_path.read_text(encoding="utf-8"))
@@ -65,7 +75,10 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert "FC1" in fault_ids
     assert "ECON-1" in fault_ids
     assert "FC2" not in fault_ids
-    assert "1.0" in summary["devices"][0]["executive_summary"]
+    assert "SV-RANGE" not in fault_ids
+    summary_text = summary["devices"][0]["executive_summary"]
+    assert summary_text.index("Sensor checks") < summary_text.index("Anomaly screening")
+    assert any(row["outcome"] == "fail" for row in summary["devices"][0]["sensor_checks"])
 
 
 def test_month_filter_drops_other_months():
@@ -103,7 +116,7 @@ def test_web_oat_csv_join_enables_meteo_rule(tmp_path):
     assert device_summary["web_oat_source"] == "csv"
     fault_ids = {row["rule_id"] for row in device_summary["faults"]}
     assert "OAT-METEO" in fault_ids
-    assert "Web outdoor-air temperature joined from csv" in device_summary["executive_summary"]
+    assert "included from csv" in device_summary["executive_summary"]
     assert (out / "figures" / "AHU_1_rcx_bas_web_oat.png").stat().st_size > 100
 
 
@@ -134,6 +147,23 @@ def test_building_scope_skips_non_ahu_child(tmp_path):
     summary = json.loads(result.summary_path.read_text(encoding="utf-8"))
     assert summary["scope"] == "building"
     assert "VAV_1" in result.typ_path.read_text(encoding="utf-8")
+
+
+def test_anomaly_checklist_skips_without_fan_on_data():
+    index = pd.date_range("2026-06-01", periods=24, freq="h", tz="UTC")
+    frame = pd.DataFrame(
+        {
+            "outside-air-temp": [50.0 + i for i in range(24)],
+            "fan-status": [0] * 24,
+        },
+        index=index,
+    )
+    rows = anomaly_plain_checklist(
+        frame,
+        [("outside-air-temp", "OAT"), ("fan-status", "SF")],
+        "2026-06",
+    )
+    assert rows == [{"outcome": "skipped", "text": "Skipped — not enough fan-on data."}]
 
 
 def test_scatter_writer_calls_canonical_chart():

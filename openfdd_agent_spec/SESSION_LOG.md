@@ -1,3 +1,7 @@
+## 2026-09-26 — Single-AHU report leads with sensor checks
+
+- Facility order: sensor-check bullets, plain anomaly pass/fail (“looks normal” / “needs a look” / “skipped — not enough fan-on data”), executive summary, then RCx and confirmed-fault plots. No anomaly science plots.
+
 ## 2026-09-26 — Single-AHU Typst report uses Railway Plotly helpers
 
 - `open-fdd-anomaly report --month YYYY-MM` writes an executive summary, one fan-on week of AHU RCx lines, fault overlays only when confirmed, and a bottom-left `economizer_delta_scatter` (x = OAT−RAT, y = MAT−RAT). No histograms. Web OAT joins from a column, CSV, or Open-Meteo fetch.

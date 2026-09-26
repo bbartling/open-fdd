@@ -41,7 +41,7 @@ Open-FDD does **not** ship an embedded chatbot. External agents (Cursor, Codex, 
 | Multi-tenant / Kali security | [`openfdd-mt-security/SKILL.md`](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/openfdd-mt-security/SKILL.md) |
 | Typst RCx report | [`openfdd-typst-rcx-report/SKILL.md`](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/openfdd-typst-rcx-report/SKILL.md) |
 
-Offline single-system or building-folder AHU PDF sources: `open-fdd-anomaly report <folder> --out <dir> --month YYYY-MM`. Web OAT from a mapped column, `--web-oat` CSV, or `--web-oat fetch`. Economizer closer is `economizer_delta_scatter` viewport `bottom_left` (**x = OAT − RAT**, **y = MAT − RAT**). Do not plot OAT−MAT vs RAT−MAT. No histograms. That pack is not the BUILDING_100 Overview mirror.
+Offline single-system or building-folder AHU PDF sources: `open-fdd-anomaly report <folder> --out <dir> --month YYYY-MM`. Order is sensor-check bullets, then a plain anomaly pass/fail list, then RCx and fault plots. Web OAT from a mapped column, `--web-oat` CSV, or `--web-oat fetch`. Economizer closer is `economizer_delta_scatter` viewport `bottom_left` (**x = OAT − RAT**, **y = MAT − RAT**). Do not plot OAT−MAT vs RAT−MAT. No histograms. That pack is not the BUILDING_100 Overview mirror.
 | Architecture | [`openfdd-architecture/SKILL.md`](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/openfdd-architecture/SKILL.md) |
 | Milestone A PR | [`openfdd-milestone-a-pr/SKILL.md`](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/openfdd-milestone-a-pr/SKILL.md) |
 

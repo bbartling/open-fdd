@@ -30,7 +30,32 @@ from open_fdd.analytics.anomaly.io import iter_ahu_io_points, load_device_folder
 from open_fdd.analytics.anomaly.plots import point_slug
 from open_fdd.rules.cookbook_catalog import SENSOR_LIMITS
 
-ANOMALY_NOTE = "Unsupervised anomaly minutes are not confirmed FDD faults."
+ANOMALY_NOTE = "These screening notes are not equipment faults."
+
+_MIN_FAN_ON_SAMPLES = 6
+
+_PLAIN_ROLE = {
+    "outside-air-temp": "outdoor air temperature",
+    "web-outside-air-temp": "web outdoor air temperature",
+    "mixed-air-temp": "mixed air temperature",
+    "return-air-temp": "return air temperature",
+    "discharge-air-temp": "supply air temperature",
+    "duct-static-pressure": "duct static pressure",
+    "duct-static-pressure-sp": "duct static setpoint",
+    "outside-air-damper": "outdoor air damper",
+    "fan-cmd": "fan speed command",
+    "fan-status": "fan status",
+    "cooling-valve": "cooling valve",
+    "heating-valve": "heating valve",
+}
+
+_SV_PLAIN = {
+    "SV-RANGE": "reading out of physical range",
+    "SV-FLATLINE": "sensor stuck flat",
+    "SV-SPIKE": "reading jumped suddenly",
+    "SV-STALE": "readings stopped updating",
+    "SV-RATE": "reading changed faster than expected",
+}
 
 _BOUNDARY = (
     "Offline pandas-oracle pack for one AHU folder or a building folder of device "
@@ -453,20 +478,185 @@ def _rcx_week_figures(
     return figures
 
 
+def _plain_role(role: str) -> str:
+    return _PLAIN_ROLE.get(role, str(role).replace("-", " "))
+
+
+def _month_phrase(month: str) -> str:
+    return pd.Timestamp(f"{month}-01").strftime("%B %Y")
+
+
+def _is_sv_rule(rule_id: str) -> bool:
+    return str(rule_id).startswith("SV-")
+
+
+def _faulted_roles(result) -> list[str]:
+    metrics = getattr(result, "metrics", None) or {}
+    roles: list[str] = []
+    for key in ("sv_sweep_evidence", "sv_rate_evidence"):
+        for row in metrics.get(key) or []:
+            if not isinstance(row, dict) or not row.get("role"):
+                continue
+            hours = row.get("fault_hours", row.get("fault_hours_raw"))
+            try:
+                flagged = bool(row.get("faulted")) or float(hours or 0) > 0
+            except (TypeError, ValueError):
+                flagged = bool(row.get("faulted"))
+            if flagged:
+                roles.append(str(row["role"]))
+    seen: list[str] = []
+    for role in roles:
+        if role not in seen:
+            seen.append(role)
+    return seen
+
+
+def sensor_validation_bullets(results, health: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Plain pass/fail lines for sensor-validation rules. Findings only, unless clean."""
+    checked = [result for result in results if _is_sv_rule(result.rule_id)]
+    findings = [result for result in checked if _confirmed_fault(result)]
+    if not findings:
+        if not checked or all(str(result.status).startswith("SKIPPED") for result in checked):
+            return [
+                {
+                    "outcome": "skipped",
+                    "text": "Sensor checks skipped — no mapped sensors to review.",
+                }
+            ]
+        return [
+            {
+                "outcome": "pass",
+                "text": "Passed. No stuck sensors, out-of-range readings, or stale data.",
+            }
+        ]
+    health_by_role = {row["role"]: row for row in health}
+    bullets: list[dict[str, str]] = []
+    for result in findings:
+        issue = _SV_PLAIN.get(result.rule_id, "sensor check failed")
+        roles = _faulted_roles(result)
+        if not roles:
+            bullets.append({"outcome": "fail", "rule_id": result.rule_id, "text": f"Fail. {issue}."})
+            continue
+        details = []
+        for role in roles:
+            label = _plain_role(role).capitalize()
+            bound = health_by_role.get(role) or {}
+            if result.rule_id == "SV-RANGE" and bound.get("max") is not None:
+                details.append(
+                    f"{label}: {issue} (low {_one_decimal(bound['min'])}, high {_one_decimal(bound['max'])})"
+                )
+            else:
+                details.append(f"{label}: {issue}")
+        bullets.append(
+            {
+                "outcome": "fail",
+                "rule_id": result.rule_id,
+                "text": "Fail. " + "; ".join(details) + ".",
+            }
+        )
+    return bullets
+
+
+def anomaly_plain_checklist(
+    frame: pd.DataFrame,
+    points: list[tuple[str, str]],
+    month: str,
+) -> list[dict[str, str]]:
+    """High-level pass/fail lines. No method names and no plot files."""
+    from open_fdd.analytics.anomaly.detectors import (
+        is_binary_like,
+        rolling_mad_flags,
+        rolling_zscore_flags,
+        samples_per_day,
+    )
+
+    fan = _fan_on_mask(frame)
+    fan_on = int(fan.fillna(False).sum()) if fan is not None else int(len(frame))
+    if fan is not None and fan_on < _MIN_FAN_ON_SAMPLES:
+        return [
+            {
+                "outcome": "skipped",
+                "text": "Skipped — not enough fan-on data.",
+            }
+        ]
+    window = samples_per_day(frame.index)
+    when = _month_phrase(month)
+    bullets: list[dict[str, str]] = []
+    for role, _column in points:
+        if role not in frame.columns:
+            continue
+        series = pd.to_numeric(frame[role], errors="coerce")
+        if is_binary_like(series):
+            continue
+        view = series.where(fan) if fan is not None else series
+        usable = int(view.dropna().shape[0])
+        label = _plain_role(role).capitalize()
+        if usable < max(8, window // 2):
+            bullets.append(
+                {
+                    "outcome": "skipped",
+                    "role": role,
+                    "text": f"{label}: skipped — not enough fan-on data.",
+                }
+            )
+            continue
+        flags = rolling_zscore_flags(view, window=window) | rolling_mad_flags(view, window=window)
+        if not bool(flags.fillna(False).any()):
+            bullets.append({"outcome": "looks_normal", "role": role, "text": f"{label}: looks normal."})
+            continue
+        bullets.append(
+            {
+                "outcome": "needs_a_look",
+                "role": role,
+                "text": f"{label}: needs a look. {_unusual_sentence(label, view, flags, when)}",
+            }
+        )
+    if not bullets:
+        return [
+            {
+                "outcome": "skipped",
+                "text": "Skipped — mapped points do not vary enough to screen.",
+            }
+        ]
+    return bullets
+
+
+def _unusual_sentence(label: str, series: pd.Series, flags: pd.Series, when: str) -> str:
+    """One everyday sentence about the flagged samples. Not an equipment diagnosis."""
+    mask = flags.reindex(series.index).fillna(False).astype(bool)
+    flagged = pd.to_numeric(series, errors="coerce").where(mask).dropna()
+    rest = pd.to_numeric(series, errors="coerce").where(~mask).dropna()
+    if flagged.empty:
+        return f"{label} looked unusual in {when}."
+    low = float(flagged.min())
+    high = float(flagged.max())
+    typical = float(rest.median()) if not rest.empty else float(pd.to_numeric(series, errors="coerce").median())
+    if low <= 1.0 and typical > 20:
+        return f"{label} had sudden dropouts near zero in {when}."
+    if high >= typical + 30:
+        return f"{label} jumped to {_one_decimal(high)}, well above the rest of {when}."
+    if low <= typical - 30:
+        return f"{label} dropped to {_one_decimal(low)}, well below the rest of {when}."
+    return (
+        f"{label} moved unusually in {when} "
+        f"(about {_one_decimal(low)} to {_one_decimal(high)})."
+    )
+
+
 def _fault_figures(
     frame: pd.DataFrame,
+    results,
     out_dir: Path,
     slug: str,
     month: str,
 ) -> list[dict[str, Any]]:
     from open_fdd.analytics.charts import rule_result_chart
     from open_fdd.reporting.rule_meta import rule_summary, rule_title
-    from open_fdd.rules import RULES_BY_ID, run_all
+    from open_fdd.rules import RULES_BY_ID
 
-    poll = _poll_seconds(frame.index)
     rows: list[dict[str, Any]] = []
-    for result in run_all(frame, poll_seconds=poll):
-        if not _confirmed_fault(result):
+    for result in results:
+        if _is_sv_rule(result.rule_id) or not _confirmed_fault(result):
             continue
         rule = RULES_BY_ID.get(result.rule_id)
         roles = None
@@ -498,40 +688,43 @@ def _executive_summary(
     label: str,
     month: str,
     frame: pd.DataFrame,
-    health: list[dict[str, Any]],
+    sensor_checks: list[dict[str, str]],
+    anomaly: list[dict[str, str]],
     faults: list[dict[str, Any]],
     web_source: str | None,
 ) -> str:
     poll = _poll_seconds(frame.index)
     span_h = round((len(frame) * poll) / 3600.0, 1)
-    issues = []
-    for row in health:
-        if not row.get("out_of_range"):
-            continue
-        issues.append(
-            f"{row['role']} has {int(row['out_of_range'])} sample(s) outside {row['bound']} "
-            f"(min {_one_decimal(row['min'])}, max {_one_decimal(row['max'])})"
-        )
+    fails = [row["text"] for row in sensor_checks if row.get("outcome") == "fail"]
+    if fails:
+        sensor_line = "Sensor checks found issues. " + " ".join(fails)
+    elif any(row.get("outcome") == "skipped" for row in sensor_checks):
+        sensor_line = sensor_checks[0]["text"]
+    else:
+        sensor_line = "Sensor checks passed. No stuck, out-of-range, or stale readings."
+    needs = [row["text"] for row in anomaly if row.get("outcome") == "needs_a_look"]
+    if needs:
+        anomaly_line = "Anomaly screening: " + " ".join(needs) + " Other screened trends look normal."
+    elif anomaly and all(row.get("outcome") == "skipped" for row in anomaly):
+        anomaly_line = "Anomaly screening: " + anomaly[0]["text"]
+    else:
+        anomaly_line = "Anomaly screening: screened trends look normal."
     parts = [
-        f"{label} in {month}: {len(frame)} samples, {_one_decimal(span_h)} h.",
+        f"{label} in {_month_phrase(month)} ({len(frame)} samples, {_one_decimal(span_h)} h).",
+        sensor_line,
+        anomaly_line,
+        ANOMALY_NOTE,
     ]
-    if issues:
-        parts.append("Data issues: " + "; ".join(issues) + ".")
-    else:
-        parts.append("Mapped roles stay inside cookbook physical bounds.")
     if faults:
-        bits = [f"{row['rule_id']} {_one_decimal(row['fault_hours'])} h" for row in faults]
-        parts.append("Confirmed faults: " + ", ".join(bits) + ".")
+        bits = [f"{row['title']} {_one_decimal(row['fault_hours'])} h" for row in faults]
+        parts.append("Confirmed operating findings: " + "; ".join(bits) + ".")
     else:
-        parts.append("No confirmed cookbook faults in this month.")
+        parts.append("No confirmed operating faults in this month.")
     if web_source:
-        parts.append(f"Web outdoor-air temperature joined from {web_source}.")
-    else:
-        parts.append("No web outdoor-air temperature was joined, so rules that require it stay skipped.")
+        parts.append(f"Web outdoor air temperature was included from {web_source}.")
     fan = fan_on_fraction(frame)
     if fan is not None:
-        parts.append(f"Fan is ON for {_one_decimal(100.0 * fan)} percent of samples.")
-    parts.append(ANOMALY_NOTE)
+        parts.append(f"The fan was on for {_one_decimal(100.0 * fan)} percent of the samples.")
     return " ".join(parts)
 
 
@@ -545,20 +738,45 @@ def _markup_raw(value: object) -> str:
     return "#" + _code_raw(value)
 
 
+def _bullet_block(rows: list[dict[str, str]]) -> list[str]:
+    lines: list[str] = []
+    for row in rows:
+        lines.extend([_markup_raw(row["text"]), ""])
+    return lines
+
+
 def _device_typst(device: dict[str, Any]) -> str:
     parts = [
         f"== {_markup_raw(device['equipment_id'])}",
         "",
-        "=== Executive summary",
+        "=== Sensor checks",
         "",
-        _markup_raw(device["executive_summary"]),
-        "",
-        f"=== RCx week ({_markup_raw(device['week'])})",
-        "",
-        "One representative week inside the filtered month, preferring fan-ON coverage. "
-        "Lines use the PyPI Plotly helpers shared with Railway RCx plots.",
+        "Checks for stuck, out-of-range, or stale sensors. Only failed checks are listed when something is wrong.",
         "",
     ]
+    parts.extend(_bullet_block(device.get("sensor_checks") or []))
+    parts.extend(
+        [
+            "=== Anomaly screening",
+            "",
+            "A quick look at whether each varying trend is ordinary this month. Not an equipment fault list.",
+            "",
+        ]
+    )
+    parts.extend(_bullet_block(device.get("anomaly") or []))
+    parts.extend(
+        [
+            "=== Executive summary",
+            "",
+            _markup_raw(device["executive_summary"]),
+            "",
+            f"=== RCx week ({_markup_raw(device['week'])})",
+            "",
+            "One representative week inside the filtered month, preferring fan-ON coverage. "
+            "Lines use the PyPI Plotly helpers shared with Railway RCx plots.",
+            "",
+        ]
+    )
     if not device.get("rcx"):
         parts.extend(["No AHU timeseries presets had mapped roles in this week.", ""])
     for figure in device.get("rcx") or []:
@@ -674,9 +892,14 @@ def _one_device(
     framed = filter_to_month(framed, month)
     framed, web_source = attach_web_oat(framed, web_oat=web_oat, lat=lat, lon=lon)
     framed.attrs["equipment_id"] = label
+    from open_fdd.rules import run_all
+
     slug = point_slug(label)
     health = data_health_rows(framed, device.points)
-    faults = _fault_figures(framed, out_dir, slug, month)
+    results = run_all(framed, poll_seconds=_poll_seconds(framed.index))
+    sensor_checks = sensor_validation_bullets(results, health)
+    anomaly = anomaly_plain_checklist(framed, device.points, month)
+    faults = _fault_figures(framed, results, out_dir, slug, month)
     week, week_label = representative_week(framed)
     rcx = _rcx_week_figures(week, label, out_dir, slug)
     scatter_name = f"figures/{slug}_econ_scatter.png"
@@ -685,7 +908,8 @@ def _one_device(
         label=label,
         month=month,
         frame=framed,
-        health=health,
+        sensor_checks=sensor_checks,
+        anomaly=anomaly,
         faults=faults,
         web_source=web_source,
     )
@@ -696,6 +920,8 @@ def _one_device(
         "week": week_label,
         "web_oat_source": web_source,
         "executive_summary": summary_text,
+        "sensor_checks": sensor_checks,
+        "anomaly": anomaly,
         "health": health,
         "faults": faults,
         "rcx": rcx,

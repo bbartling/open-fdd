@@ -104,23 +104,27 @@ month with the most samples. The in-repo fixture month is **`2026-06`**
 Join goes through `merge_weather` / `weather_resolver` and does not overwrite BAS
 `outside-air-temp`. CI must not call the network; pass a CSV or a mapped column.
 
-**Do not vibe-code this PDF.** Call the PyPI helpers. No matplotlib axis invention,
-no histograms, no anomaly day-zoom gallery in the Typst file.
+**Do not vibe-code this PDF.** Call the PyPI helpers. No matplotlib axis invention.
+Never put anomaly science in the PDF: no histograms, no scoreboard, no day zooms,
+no Isolation Forest / STL / MAD / Z-score chronology. Anomaly screening is a
+pass/fail bullet list in everyday words.
 
 | Figure | Helper |
 | --- | --- |
 | AHU RCx week lines | `rcx_plots.PRESETS` where `family == "AHU / air"` and `chart == "timeseries"`, drawn with `charts.multi_equipment_timeseries` (`RAINBOW_PALETTE`). One 7-day window inside the month with the most fan-ON samples. Skip the preset when the role is unmapped. |
 | Econ temps + damper | `economizer_temps_overlay` (temperature axis + damper % axis) |
 | BAS vs web OAT | `bas_vs_web_oat_overlay` when web OAT was joined. Not the histogram. |
-| Fault overlay | `charts.rule_result_chart` **only** when `status == FAULT` and confirmed fault hours in the month are > 0. Skip the rule entirely otherwise. |
+| Fault overlay | `charts.rule_result_chart` **only** for non-SV rules when `status == FAULT` and confirmed fault hours in the month are > 0. Skip the rule entirely otherwise. Sensor checks stay bullets, not these figures. |
 | Economizer scatter | `build_economizer_delta_points` + `economizer_delta_scatter(..., viewport="bottom_left")` |
 
-Ordered sections:
+Ordered sections for facility / RCx readers (keep this order):
 
-1. Executive summary paragraph. Data-bound issues and confirmed fault hours, rounded to 1 decimal. Do not invent faults. One-line caveat that unsupervised anomaly minutes are not confirmed FDD faults. No scoreboard, no histogram, no day zoom.
-2. RCx week line plots for mapped AHU timeseries presets, plus the econ temps overlay and BAS/web overlay when web OAT exists. Mixed units stay on dual axes inside those helpers.
-3. Confirmed-fault figures only. Under each figure, two bullets from `reporting.rule_meta`: what the rule means (`rule_summary`) and what the data shows (fault hours and the result note).
-4. Economizer delta scatter. **x = OAT − RAT** (`delta_or_f`), **y = MAT − RAT** (`delta_mr_f`). Reference lines y = OA fraction × x for 0/25/50/75/100% OA. Fan ON and |OAT−RAT| ≥ 10°F. **Viewport is the bottom-left mixing quadrant only** (both deltas ≤ 0, so OAT ≤ RAT and MAT ≤ RAT). **Do not plot OAT−MAT vs RAT−MAT.**
+1. **Sensor checks first.** SV rules for the mapped sensors. List only checks with findings, in plain language (stuck flat, reading out of physical range, sudden jump, stopped updating). If every check is clean, one “Passed” bullet. Do not invent findings.
+2. **Anomaly screening second, high-level only.** One bullet per varying trend: “looks normal”, “needs a look”, or “skipped — not enough fan-on data”. If something needs a look, add one everyday sentence about the trace (for example a sudden dropout). Do not treat that sentence as an equipment fault. No method names.
+3. **Executive summary** that opens with the sensor-check outcome and the plain anomaly outcome, then confirmed operating findings rounded to 1 decimal.
+4. RCx week line plots for mapped AHU timeseries presets, plus the econ temps overlay and BAS/web overlay when web OAT exists. Mixed units stay on dual axes inside those helpers.
+5. Confirmed operating-fault figures only (not the SV bullets). Under each figure, two bullets from `reporting.rule_meta`: what the rule means (`rule_summary`) and what the data shows.
+6. Economizer delta scatter. **x = OAT − RAT** (`delta_or_f`), **y = MAT − RAT** (`delta_mr_f`). Reference lines y = OA fraction × x for 0/25/50/75/100% OA. Fan ON and |OAT−RAT| ≥ 10°F. **Viewport is the bottom-left mixing quadrant only** (both deltas ≤ 0, so OAT ≤ RAT and MAT ≤ RAT). **Do not plot OAT−MAT vs RAT−MAT.**
 
 Haystack exports store devices under `equip` (object). Flat sidecars use string `equip` plus top-level `points`. Both must resolve or the AHU is skipped.
 
