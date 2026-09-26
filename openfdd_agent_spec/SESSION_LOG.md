@@ -1,3 +1,7 @@
+## 2026-09-26 — Single-system PDF is only the package CLI
+
+- The shipped PDF command is `open-fdd-anomaly report ... --compile`. `build_april_report.py` is not in this package. Docs examples include `--compile`.
+
 ## 2026-09-26 — Report prose, line gaps, FC1 traces, metric labels
 
 - Sensor checks, anomaly screening, and the executive summary are paragraphs from `narrative_polish` after the rules run. The PDF does not print a raw `Fail.` list.
@@ -32,7 +36,7 @@
 
 ## 2026-09-26 — Single-AHU Typst report uses Railway Plotly helpers
 
-- `open-fdd-anomaly report --month YYYY-MM` writes an executive summary, one fan-on week of AHU RCx lines, fault overlays only when confirmed, and a bottom-left `economizer_delta_scatter` (x = OAT−RAT, y = MAT−RAT). No histograms. Web OAT joins from a column, CSV, or Open-Meteo fetch.
+- `open-fdd-anomaly report --month YYYY-MM --compile` writes an executive summary, one fan-on week of AHU RCx lines, fault overlays only when confirmed, and a bottom-left `economizer_delta_scatter` (x = OAT−RAT, y = MAT−RAT). No histograms. Web OAT joins from a column, CSV, or Open-Meteo fetch.
 
 ## 2026-09-26 — Economizer scatter axes corrected
 

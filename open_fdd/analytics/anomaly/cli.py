@@ -115,7 +115,7 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument(
         "--compile",
         action="store_true",
-        help="Write report.pdf in --out when the typst binary is on PATH",
+        help="Write report.pdf in --out. This CLI flag is the only PDF path; typst must be on PATH",
     )
     return parser
 

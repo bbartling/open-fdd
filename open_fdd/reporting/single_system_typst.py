@@ -1144,8 +1144,7 @@ def compile_typst(typ_path: Path) -> Path:
     if not binary:
         raise FileNotFoundError(
             "typst is not on PATH. Install the typst binary, then re-run "
-            "open-fdd-anomaly report with --compile. Typst sources are already in "
-            f"{typ_path.parent}."
+            "open-fdd-anomaly report with --compile. That flag is the only PDF path."
         )
     pdf_path = typ_path.with_suffix(".pdf")
     completed = subprocess.run(

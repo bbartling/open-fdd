@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-26
 **Status:** Shipped on the anomaly-screening CLI branch
-**Package:** PyPI `open-fdd` (`open_fdd.reporting.single_system_typst`, CLI `open-fdd-anomaly report`)
+**Package:** PyPI `open-fdd`. The only shipped PDF command is `open-fdd-anomaly report ... --compile`.
 
 ## Goal
 
@@ -42,13 +42,15 @@ When a JWT and `OPENFDD_API_BASE` are already available, mapping inventory is `G
 
 ## Command
 
+The PDF comes only from this CLI. `build_april_report.py` and other out-of-tree runners are not in the package.
+
 ```bash
 pip install "open-fdd[anomaly]"
-open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06
-open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --web-oat ./weather.csv
-open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --web-oat fetch --lat 43.07 --lon -89.40
+open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile
+open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --web-oat ./weather.csv --compile
+open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --web-oat fetch --lat 43.07 --lon -89.40 --compile
 open-fdd-anomaly report ./AHU_1 --out ./april_report --month 2026-04 \
   --web-oat ./open_meteo_april.csv --week 2026-04-06 --compile
-open-fdd-anomaly report ./BUILDING --scope building --month 2026-06 --out ./bldg_report
-# --compile writes ./ahu1_report/report.pdf when typst is on PATH.
+open-fdd-anomaly report ./BUILDING --scope building --month 2026-06 --out ./bldg_report --compile
+# --compile writes report.pdf when typst is on PATH. Do not compile report.typ by hand.
 ```

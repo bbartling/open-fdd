@@ -82,8 +82,8 @@ BUILDING_100 Overview PDF, `main.typ`, or Overview PNG stems.
 
 | Scope | Input | Command |
 | --- | --- | --- |
-| `single-system` | One device folder (`history_wide.csv` + `column_map.json`), v1 focus `AHU_1` | `open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06` |
-| `building` | Parent folder of device subfolders. AHU IO is reported; VAV/other children are skipped in the summary | `open-fdd-anomaly report ./BUILDING --scope building --month 2026-06 --out ./bldg_report` |
+| `single-system` | One device folder (`history_wide.csv` + `column_map.json`), v1 focus `AHU_1` | `open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile` |
+| `building` | Parent folder of device subfolders. AHU IO is reported; VAV/other children are skipped in the summary | `open-fdd-anomaly report ./BUILDING --scope building --month 2026-06 --out ./bldg_report --compile` |
 
 April device folder (local prep, not fetched in CI): 8640 rows at 5 minutes,
 `2026-04-01` through `2026-04-30`, plus a 15-minute Open-Meteo sidecar whose
@@ -101,10 +101,11 @@ The in-repo fixture stays `2026-06` (`tests/reporting/fixtures/ahu_typst_mini/`)
 CI must not download that April folder or call Open-Meteo.
 
 Module: `open_fdd/reporting/single_system_typst.py`. Requires `open-fdd[anomaly]`
-plus Plotly (`open-fdd[reporting]` is what CI installs). The PDF is produced by
-the same command: add `--compile`. That flag runs `typst compile` when the
-`typst` binary is on `PATH` and writes `report.pdf` next to `report.typ`.
-A follow-up hand compile is not the shipped path.
+plus Plotly (`open-fdd[reporting]` is what CI installs). The only shipped PDF
+command is `open-fdd-anomaly report ... --compile`. That flag runs `typst compile`
+when the `typst` binary is on `PATH` and writes `report.pdf` next to `report.typ`.
+`build_april_report.py` and any other out-of-tree runner are not in this package.
+Do not add one, and do not compile `report.typ` by hand.
 
 **Month filter (required for the analysis window).** `--month YYYY-MM` keeps every
 rule and plot inside that UTC calendar month. Omit it and the command uses the
@@ -127,7 +128,7 @@ outdoor air is the effective series. BAS `outside-air-temp` is not overwritten.
 The RCx figure is `bas_vs_web_oat_overlay`. CI must not call the network; pass
 a CSV or a mapped column.
 
-**Do not vibe-code this PDF.** Call the PyPI helpers. No matplotlib axis invention.
+**Do not vibe-code this PDF.** Generate it only with `open-fdd-anomaly report ... --compile`. No local runner, and no matplotlib axis invention.
 Never put anomaly science in the PDF: no histograms, no scoreboard, no day zooms,
 no Isolation Forest / STL / MAD / Z-score chronology. Anomaly screening is a
 pass/fail bullet list in everyday words.
@@ -159,7 +160,7 @@ Haystack exports store devices under `equip` (object). Flat sidecars use string 
 ### Railway / API for BUILDING_100
 
 - Full-building Overview PDF: keep the legacy kit (`fetch_railway.py` → `render_plots.py` → `build_typst_body.py` → `main.typ`). Do not point that site at `build_single_system_report`.
-- Single-AHU pack: only after a device folder is already on disk. CI uses `tests/reporting/fixtures/ahu_typst_mini/` (sample PDF `tests/reporting/fixtures/ahu_typst_mini_report.pdf`). Do not commit a multi-megabyte BUILDING_100 CSV.
+- Single-AHU pack: `open-fdd-anomaly report <folder> --compile` after a device folder is already on disk. CI uses `tests/reporting/fixtures/ahu_typst_mini/` (sample PDF `tests/reporting/fixtures/ahu_typst_mini_report.pdf`). Do not commit a multi-megabyte BUILDING_100 CSV. Do not add a local `build_april_report.py`.
 - When `OPENFDD_API_BASE` and a JWT already exist, inventory is `GET /api/csv/import/package/mapping?building_id=BUILDING_100`. A local package zip can go through `scripts/agent_eplus_dump.sh` (engineering bundle). Neither call is required for the unit tests, and secrets stay out of CI.
 
 ### Additive changes only
