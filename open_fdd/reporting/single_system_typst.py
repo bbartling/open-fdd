@@ -473,6 +473,10 @@ def write_econ_scatter(role_df: pd.DataFrame, path: Path, *, temp_unit: str = "Â
         viewport="bottom_left",
         temp_unit=temp_unit,
     )
+    if figure is not None:
+        # Same export frame as the week rainbow (`economizer_temps_overlay` is height 400;
+        # `_write_plotly_png` uses width 980). Typst then places it at full page width.
+        figure.update_layout(height=400, width=980)
     return _write_figure_png(figure, path)
 
 
@@ -1043,7 +1047,7 @@ def _device_typst(device: dict[str, Any]) -> str:
     parts.extend(["=== Economizer delta scatter", ""])
     parts.extend(_ai_note(device, "economizer"))
     if device.get("scatter_figure"):
-        parts.extend([f'#image("{device["scatter_figure"]}", width: 80%)', ""])
+        parts.extend([f'#image("{device["scatter_figure"]}", width: 100%)', ""])
     else:
         parts.extend(
             [

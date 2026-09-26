@@ -1,3 +1,7 @@
+## 2026-09-26 — Economizer scatter matches the week-figure size
+
+- The section-6 scatter image is full Typst width, and the PNG uses the same 980×400 export frame as the week rainbow.
+
 ## 2026-09-26 — Skills author only under openfdd_agent_spec/skills
 
 - That tree is the only authoring home. `.cursor/skills` and other vendor directories are sync targets of `scripts/openfdd_install_agent_skills.sh --sync`. Sibling skills cross-link (typst report, pypi-oracle, rcx-fdd-plot-poll, package-mapping, and the rest).

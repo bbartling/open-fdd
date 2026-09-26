@@ -28,6 +28,13 @@ from open_fdd.reporting.single_system_typst import (
 from open_fdd.analytics.anomaly.io import load_device_folder
 from open_fdd.reporting.single_system_typst import role_frame
 
+
+def _png_size(path: Path) -> tuple[int, int]:
+    data = path.read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    assert data[12:16] == b"IHDR"
+    return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+
 FIXTURE = Path(__file__).parent / "fixtures" / "ahu_typst_mini"
 
 
@@ -65,6 +72,8 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert "100% outdoor-air line" in typ
     assert "mild economizer weather" in typ
     assert typ.index("AHU_1_econ_scatter.png") < typ.index("Outdoor-air mixing with the supply fan on")
+    assert '#image("figures/AHU_1_econ_scatter.png", width: 100%)' in typ
+    assert "width: 80%" not in typ
     assert "x = (OAT - MAT)" not in typ
     assert "Open-FDD AI Agent Report" in typ
     assert "AHU screening" not in typ
@@ -85,7 +94,10 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     names = {path.name for path in pngs}
     assert pngs
     assert all("hist" not in path.name for path in pngs)
-    assert (out / "figures" / "AHU_1_econ_scatter.png").stat().st_size > 100
+    scatter_png = out / "figures" / "AHU_1_econ_scatter.png"
+    rainbow_png = out / "figures" / "AHU_1_rcx_econ_temps.png"
+    assert scatter_png.stat().st_size > 100
+    assert _png_size(scatter_png) == _png_size(rainbow_png)
     assert (out / "figures" / "AHU_1_fault_FC1.png").stat().st_size > 100
     assert not (out / "figures" / "AHU_1_fault_SV-RANGE.png").exists()
     assert "AHU_1_rcx_econ_temps.png" in names
@@ -368,6 +380,8 @@ def test_scatter_writer_calls_canonical_chart():
     assert "build_economizer_delta_points" in source
     assert "economizer_delta_scatter" in source
     assert "bottom_left" in source
+    assert "height=400" in source
+    assert "width=980" in source
     assert "OAT − MAT" not in source
     assert "RAT − MAT" not in source
 
