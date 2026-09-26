@@ -12,6 +12,8 @@ Open-FDD is a **vendor-neutral, local-first edge platform**. It does **not** shi
 
 **Split:** this folder holds **ops / edge / GHCR soak** prompts. Software-engineering missions (architecture, PyPI oracle, Milestone A) live in [`openfdd_agent_spec/`](../../openfdd_agent_spec/).
 
+The PyPI RCx PDF (`open-fdd-anomaly report`) reads mapped roles. It is not Railway-only: a local CSV plus column map, a Railway or self-hosted Open-FDD central, or a future vendor API. See [PyPI agent tools](../ecm/).
+
 ## Open-FDD core (GHCR edge)
 
 | Layer | Components |
@@ -58,9 +60,8 @@ See [examples/external-agents.md](../examples/external-agents.md).
 
 | Path | Role |
 |------|------|
-| [`openfdd_agent_spec/`](../../openfdd_agent_spec/) | Software-engineering agent OS (Milestone A, skills) |
+| [`openfdd_agent_spec/skills/`](../../openfdd_agent_spec/skills/) | Only authoring tree for Open-FDD AI agent skills |
 | `.codex/` | Codex CLI project agents + MCP |
-| `.cursor/agents/` | Cursor external development agents |
-| `.agents/skills/` | Portable review skills (not edge runtime) |
+| `.cursor/skills/`, `.claude/skills/`, `.agents/skills/` | Sync targets of `scripts/openfdd_install_agent_skills.sh --sync`. Do not author product skills here. |
 
 These configure **external** tools. They are not bundled into the GHCR edge image.

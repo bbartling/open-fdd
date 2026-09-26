@@ -45,3 +45,13 @@ Railway CLI: [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md)
 - Do not rewrite historical PASS rows as if they used this enhanced suite.
 - **Wave U acceptance correction (2026-09-20):** read `.cursor/plans/wave_u_independent_acceptance_audit.plan.md` and root `MILESTONES.md`. Both gate 36 tests must be machine-required for the promised closeout; scanner/observer errors, missing provenance or component-only evidence cannot qualify a candidate. The current runner needs the audit's repairs before its FQ label can close those milestones. A missing Nessus license blocks only the actual assessment, not readiness work.
 - Machine port brain: [`docs/operations/recovery/AI_CONTEXT_HANDOFF.md`](../../../docs/operations/recovery/AI_CONTEXT_HANDOFF.md). Next program: 3.5.x patch train under `docs/operations/` / BUG_REPORT.
+
+## Skill home
+
+`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).
+
+## Related skills
+
+- [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md) — backup and re-pin
+- [`openfdd-stack-ghcr`](../openfdd-stack-ghcr/SKILL.md) — image under test
+- [`openfdd-mt-security`](../openfdd-mt-security/SKILL.md) — ZAP and tenant checks

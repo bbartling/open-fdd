@@ -1,3 +1,70 @@
+## 2026-09-26 — Reporter docs name every history source
+
+- The PDF reads mapped roles. Docs name a local CSV plus column map, a Railway or self-hosted Open-FDD central, and a future vendor API. The report is not Railway-only.
+
+## 2026-09-26 — Economizer scatter matches the week-figure size
+
+- The section-6 scatter image is full Typst width, and the PNG uses the same 980×400 export frame as the week rainbow.
+
+## 2026-09-26 — Skills author only under openfdd_agent_spec/skills
+
+- That tree is the only authoring home. `.cursor/skills` and other vendor directories are sync targets of `scripts/openfdd_install_agent_skills.sh --sync`. Sibling skills cross-link (typst report, pypi-oracle, rcx-fdd-plot-poll, package-mapping, and the rest).
+
+## 2026-09-26 — Report chrome, PyPI sales line, agent-neutral skills
+
+- PDF title defaults to Open-FDD AI Agent Report (`--title`, `--location`). Blue headings. Coverage bullets for month, samples, interval, and span. The screening/BUILDING_100 blurb is off the first page.
+- PyPI long description leads with `open-fdd-anomaly report` beside the ECM site. `./scripts/openfdd_install_agent_skills.sh --sync` links `openfdd_agent_spec/skills/` for any agent.
+
+## 2026-09-26 — Single-system PDF is only the package CLI
+
+- The shipped PDF command is `open-fdd-anomaly report ... --compile`. `build_april_report.py` is not in this package. Docs examples include `--compile`.
+
+## 2026-09-26 — Report prose, line gaps, FC1 traces, metric labels
+
+- Sensor checks, anomaly screening, and the executive summary are paragraphs from `narrative_polish` after the rules run. The PDF does not print a raw `Fail.` list.
+- Fan-on temperature lines keep null Y across fan-off and long gaps. FC1 shows duct static versus setpoint, fan percent, and the fault line. `unit_system: metric` / `si` labels temperatures °C and duct static Pa.
+
+## 2026-09-26 — Economizer scatter caption is engineer-facing
+
+- The note under the section-6 scatter (`ECON_SCATTER_CAPTION`) explains OAT−RAT vs MAT−RAT, the bottom-left fan-on gate, damper color against the outdoor-air fraction lines, that damper position is not fresh-air fraction, and that mild weather shrinks the deltas. Axes are unchanged.
+
+## 2026-09-26 — Unit ventilator uses the constant-volume air-handler profile
+
+- `unitVentilator` / `uv` resolve to `cv_ahu`. That profile shares the air-side figure set with `vav_ahu`: economizer rainbow, BAS vs web outdoor air, fan-on supply-air scatter, fan-on duct-static box. The duct-static timeseries is not in the PDF.
+
+## 2026-09-26 — Generic RCx template for the single-system PDF
+
+- Report figures follow mapped roles on profile `vav_ahu`. Rainbow duplicate timeseries (`ahu_dats`, `ahu_mats`, `ahu_rats`, `ahu_dampers`, `ahu_cooling_valves`, `fan_speeds`) are omitted. Fan-on supply-air vs web OAT and a fan-on duct-static box are included. Faults carry a troubleshoot line and a plain data-window line. No re-run footer.
+- `open_fdd.reporting.report_template` registers history sources (device folder, Open-FDD API, vendor API) and stub profiles for CV AHU, single-zone, chiller, boiler, heat pump, VAV box, fan coil, geothermal field, and data hall. Agents fill `ai_comments.json`.
+
+## 2026-09-26 — Single-AHU PDF is `open-fdd-anomaly report --compile`
+
+- `--compile` writes `report.pdf` beside `report.typ` when `typst` is on `PATH`. The CLI runs `typst compile`. A separate hand compile is not the shipped path.
+
+## 2026-09-26 — April device-folder example for the single-AHU report
+
+- Docs and CLI: `--month 2026-04 --web-oat ./open_meteo_april.csv --week 2026-04-06` for an 8640-row 5-minute folder (`2026-04-01` through `2026-04-30`) and a 15-minute `web_oa_t` sidecar reindexed onto the BAS clock (`align_to_index`, `prefer_web_oat`, `bas_vs_web_oat_overlay`). Recommended RCx week runs through `2026-04-12`.
+- `economizer_delta_frame` is an alias of `build_economizer_delta_points`. Axes stay x = OAT−RAT, y = MAT−RAT, bottom-left only.
+- The single-AHU path does not read `/home/ben/building100_rcx_report`. CI keeps the June fixture and does not fetch the April folder.
+
+## 2026-09-26 — Single-AHU report leads with sensor checks
+
+- Facility order: sensor-check bullets, plain anomaly pass/fail (“looks normal” / “needs a look” / “skipped — not enough fan-on data”), executive summary, then RCx and confirmed-fault plots. No anomaly science plots.
+
+## 2026-09-26 — Single-AHU Typst report uses Railway Plotly helpers
+
+- `open-fdd-anomaly report --month YYYY-MM --compile` writes an executive summary, one fan-on week of AHU RCx lines, fault overlays only when confirmed, and a bottom-left `economizer_delta_scatter` (x = OAT−RAT, y = MAT−RAT). No histograms. Web OAT joins from a column, CSV, or Open-Meteo fetch.
+
+## 2026-09-26 — Economizer scatter axes corrected
+
+- Single-system Typst scatter calls `economizer_delta_scatter`: **x = OAT − RAT** (`delta_or_f`), **y = MAT − RAT** (`delta_mr_f`). `build_economizer_delta_points` is the only point builder. OAT−MAT vs RAT−MAT is not a report axis.
+
+## 2026-09-26 — Offline single-system AHU Typst + anomaly CLI
+
+- PyPI `open-fdd-anomaly` screens a device folder and `report` writes a Typst pack (data health, SV, anomaly scoreboard, FC1, economizer rules, canonical economizer delta scatter).
+- Haystack `equip` object maps resolve when `equipment` is empty. BUILDING_100 Overview mirror stays the external legacy kit.
+- Sample PDF: `tests/reporting/fixtures/ahu_typst_mini_report.pdf`.
+
 ## 2026-09-24 — Tip 3.5.52 RCx/Overview sampling window (UI)
 
 - SPA: `analyticsWindowFromSampling` (180d cap) for Overview + RCx presets — package mapping span, not wall-clock last-30d.

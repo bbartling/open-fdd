@@ -66,3 +66,13 @@ After GHCR publish, poll with `./scripts/ghcr_watch_central.py` (legacy shim: `w
 
 Workflow: `ghcr-openfdd-stack.yml` (retargets nightly on master).
 MCP: separate `rust-ghcr-mcp.yml`.
+
+## Skill home
+
+`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).
+
+## Related skills
+
+- [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md) — hub pin
+- [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md) — stress closeout
+- [`openfdd-architecture`](../openfdd-architecture/SKILL.md) — what each image owns

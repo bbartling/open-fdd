@@ -72,3 +72,14 @@ bills = pd.read_csv("summaries/utility_monthly_electric.csv")
 ## Legacy fuel campus ZIP
 
 Read-only: `services/central/src/fuel/import.rs` — do not use for new sites; import utilities via package.
+
+## Skill home
+
+`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).
+
+## Related skills
+
+- [`openfdd-package-mapping`](../openfdd-package-mapping/SKILL.md) — Haystack to SQL roles
+- [`openfdd-rcx-fdd-plot-poll`](../openfdd-rcx-fdd-plot-poll/SKILL.md) — blank charts after a bad map
+- [`openfdd-typst-rcx-report`](../openfdd-typst-rcx-report/SKILL.md) — report figures from mapped roles
+- [`openfdd-sql-fdd`](../openfdd-sql-fdd/SKILL.md) — rule SQL

@@ -59,8 +59,20 @@ Large package uploads need web nginx `client_max_body_size 128m` (matches centra
 - Porting vibe19 Streamlit Data Model into the SPA
 - Documenting SCAFFOLD mapping tools as if they drive Central import
 - Modeling WSHPs as VAVs or flattening floor “areas” as proven thermal zones without BAS evidence
-- Duplicating this skill into `~/.cursor/skills/`
+- Authoring a second copy under `.cursor/skills/` or `~/.cursor/skills/` (sync with `scripts/openfdd_install_agent_skills.sh`)
 
 ## Stamped equipment types
 
 Prefer stamping `equipType` (or `equipment_type`) in each equipment map. Open-FDD persists and prefers the stamp over folder-id inference. If an Overview family is empty for an opaque id such as `AC_1`, stamp the correct generic type instead of adding a vendor/site heuristic to Rust.
+
+## Skill home
+
+`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).
+
+## Related skills
+
+- [`data-modeling`](../data-modeling/SKILL.md) — package layout and export bundle
+- [`openfdd-rcx-fdd-plot-poll`](../openfdd-rcx-fdd-plot-poll/SKILL.md) — which plot is empty and why
+- [`openfdd-typst-rcx-report`](../openfdd-typst-rcx-report/SKILL.md) — PDF that reads the mapped roles
+- [`openfdd-sql-fdd`](../openfdd-sql-fdd/SKILL.md) — SQL roles after import
+- [`openfdd-pypi-oracle`](../openfdd-pypi-oracle/SKILL.md) — pandas side of the same roles

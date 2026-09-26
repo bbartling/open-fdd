@@ -6,15 +6,20 @@ description: >-
   Creekside), and MQTTS zone monitoring (bldg2). CRITICAL: preserve Overview-
   mirrored charts; never strip reports to thin package layouts. Triggers on:
   typst rcx, rcx lab report, heat pump report, lakeside, creekside, mqtts zone
-  PDF, building100_rcx_report, elec_power metering PDF, box plot, seasonal heat cool.
+  PDF, building100_rcx_report, elec_power metering PDF, box plot, seasonal heat cool,
+  open-fdd-anomaly report, single-system AHU Typst, AHU_1 FDD RCx PDF.
 ---
 
 # Open-FDD Typst lab reports (multi-profile)
 
+Works with any AI agent that can read markdown skills and run the PyPI CLI. Author this skill only in `openfdd_agent_spec/skills/openfdd-typst-rcx-report/`. Do not create a copy under `.cursor/skills/` or another vendor directory. `./scripts/openfdd_install_agent_skills.sh --sync` is the sync. See [`AGENTS.md`](../../AGENTS.md).
+
 **Not** the product PDF path (`rust-text-pdf`). Agent lab screening pack:
 DataFusion → Plotly (UI palette) → Typst → PDF + CSVs for Excel.
 
-Reference kit: `/home/ben/building100_rcx_report/`.
+Reference kit: `/home/ben/building100_rcx_report/` when that directory is present.
+The single-AHU command does not read it. A missing kit is not a blocker for
+`open-fdd-anomaly report`.
 
 **PyPI staging (not in open-fdd master yet):** package `open-fdd-lab-typst`
 (`openfdd_lab_typst`, CLI `open-fdd-lab-typst`). Future monorepo path
@@ -72,6 +77,109 @@ typst compile main.typ BUILDING_100_RCx_Lab_Report.pdf
 # or: open-fdd-lab-typst --building BUILDING_100 --skip-fetch
 ```
 
+### Offline single-system and building-folder pack (in this repo)
+
+This path is **additive**. It does not render, replace, or overwrite the sacred
+BUILDING_100 Overview PDF, `main.typ`, or Overview PNG stems.
+
+The reporter is not Railway-only. It draws from mapped roles (`RoleHistory`).
+`open-fdd-anomaly report` loads a local device folder (`history_wide.csv` +
+`column_map.json`). The same template accepts a role-named frame from a Railway
+or self-hosted Open-FDD central (`OpenFddApiSource`; the class does not open
+the network) or from a future vendor API (`VendorApiSource`). Export central or
+vendor history into the device folder, or pass a reader.
+
+| Scope | Input | Command |
+| --- | --- | --- |
+| `single-system` | One device folder (`history_wide.csv` + `column_map.json`), v1 focus `AHU_1` | `open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile` |
+| `building` | Parent folder of device subfolders. AHU IO is reported; VAV/other children are skipped in the summary | `open-fdd-anomaly report ./BUILDING --scope building --month 2026-06 --out ./bldg_report --compile` |
+
+April device folder (local prep, not fetched in CI): 8640 rows at 5 minutes,
+`2026-04-01` through `2026-04-30`, plus a 15-minute Open-Meteo sidecar whose
+dry-bulb column is `web_oa_t` or `web-outside-air-temp`. Recommended RCx week
+is `2026-04-06` through `2026-04-12` (about 54% fan-ON):
+
+```bash
+open-fdd-anomaly report ./AHU_1 --out ./april_report --month 2026-04 \
+  --web-oat ./open_meteo_april.csv \
+  --week 2026-04-06 \
+  --compile
+```
+
+The in-repo fixture stays `2026-06` (`tests/reporting/fixtures/ahu_typst_mini/`).
+CI must not download that April folder or call Open-Meteo.
+
+Module: `open_fdd/reporting/single_system_typst.py`. Requires `open-fdd[anomaly]`
+plus Plotly (`open-fdd[reporting]` is what CI installs). The only shipped PDF
+command is `open-fdd-anomaly report ... --compile`. That flag runs `typst compile`
+when the `typst` binary is on `PATH` and writes `report.pdf` next to `report.typ`.
+`build_april_report.py` and any other out-of-tree runner are not in this package.
+Do not add one, and do not compile `report.typ` by hand.
+
+The PDF title defaults to **Open-FDD AI Agent Report**. `--title` overrides it.
+`--location` prints a site line (example `AHU · ACME Office · Detroit, MI`).
+Headings and the running header use Open-FDD blue (`#1e3a8a` headings, `#2563eb` accent).
+Under the title: month, sample count, Δt, and span hours. Do not put the old
+“AHU screening / not the BUILDING_100 Overview PDF” blurb back on the first page.
+
+**Month filter (required for the analysis window).** `--month YYYY-MM` keeps every
+rule and plot inside that UTC calendar month. Omit it and the command uses the
+month with the most samples. The in-repo fixture month is **`2026-06`**
+(`tests/reporting/fixtures/ahu_typst_mini/`). An empty month is an error.
+
+**Web outdoor-air temperature.** Rules that need `web-outside-air-temp` (including
+`OAT-METEO` and economizer rules with a web-OAT role) run only after a join:
+
+1. Mapped column `web-outside-air-temp` already on `history_wide.csv`, or
+2. `--web-oat weather.csv` with `timestamp_utc` and a dry-bulb column
+   (`web-outside-air-temp`, `dry_bulb_f`, or `web_oa_t`), or
+3. `--web-oat fetch --lat <deg> --lon <deg>` which calls
+   `open_fdd.analytics.open_meteo.fetch_open_meteo`.
+
+`load_web_oat_csv` renames `web_oa_t` to `web-outside-air-temp`. `align_to_index`
+reindexes a 15-minute file onto the BAS clock (time interpolation). Join goes
+through `merge_weather` / `weather_resolver`, then `prefer_web_oat` so web
+outdoor air is the effective series. BAS `outside-air-temp` is not overwritten.
+The RCx figure is `bas_vs_web_oat_overlay`. CI must not call the network; pass
+a CSV or a mapped column.
+
+**Do not vibe-code this PDF.** Generate it only with `open-fdd-anomaly report ... --compile`. No local runner, and no matplotlib axis invention.
+Never put anomaly science in the PDF: no histograms, no scoreboard, no day zooms,
+no Isolation Forest / STL / MAD / Z-score chronology. Anomaly screening is a
+pass/fail bullet list in everyday words.
+
+| Figure | Helper |
+| --- | --- |
+| Profile selection | `open_fdd.reporting.report_template`. `vav_ahu` and `cv_ahu` share the air-side figures (`unitVentilator` / `uv` resolve to `cv_ahu`). `single_zone`, `chiller`, `boiler`, `heat_pump`, `vav_box`, `fan_coil`, `geothermal_field`, and `data_hall` are registered stubs. A figure is drawn only when its roles are mapped. |
+| Econ temps + damper | `economizer_temps_overlay` (temperature axis + damper % axis, fan running). Do **not** also emit `ahu_dats`, `ahu_mats`, `ahu_rats`, `ahu_dampers`, `ahu_cooling_valves`, or `fan_speeds`. |
+| Supply air vs web OAT | `collect_oat_scatter` + `oat_scatter` (`ahu_sat_reset_scatter`), fan running, web outdoor air on x. Skip when web OAT is absent. |
+| Duct static box | `collect_role_series(..., filter_fan_on=True)` + `multi_equipment_box` (`duct_static_box`). |
+| BAS vs web OAT | `bas_vs_web_oat_overlay` when web OAT was joined. Not the histogram. |
+| Fault overlay | `charts.rule_result_chart` **only** for non-SV rules when `status == FAULT` and confirmed fault hours in the month are > 0. Under each figure: a troubleshoot line from `rule_troubleshoot` (equation + summary) and a plain “in the data” line for that fault window. |
+| Economizer scatter | `build_economizer_delta_points` + `economizer_delta_scatter(..., viewport="bottom_left")`. `economizer_delta_frame` is the same function (older local trees). Keep the `build_economizer_delta_points` name. |
+| Agent notes | Optional prose in `ai_comments.json` (slots: sensor_checks, anomaly_screening, executive_summary, rcx_week, confirmed_faults, economizer). Empty slots are omitted. The PDF has no re-run command. |
+
+History sources (`HISTORY_SOURCES`): `device_folder` (local CSV + map; what the CLI loads), `openfdd_api` (Railway or self-hosted Open-FDD; pass a reader, no network inside the class), `vendor_api` (future vendor API; registered stub). All three land on mapped roles. `--week YYYY-MM-DD` pins seven days (April example `2026-04-06`). Omit it and the window is the 7 days in the month with the most fan-ON samples.
+
+Ordered sections for facility / RCx readers (keep this order):
+
+1. **Sensor checks first.** SV rules supply facts. `narrative_polish.polish_sensor_paragraph` writes one English paragraph before Typst: only failed checks, with stuck / stale / rate issues grouped into sentences. A clean month is one passed sentence. Do not dump a raw `Fail.` list.
+2. **Anomaly screening second, high-level only.** Facts stay “looks normal”, “needs a look”, or “skipped — not enough fan-on data”. `polish_anomaly_paragraph` turns them into a short paragraph (one sentence when every trend looks normal). Not an equipment fault. No method names.
+3. **Executive summary** from `polish_executive_summary`: sensor paragraph, anomaly paragraph, then confirmed operating findings. Same formatter, not a second copy of the raw facts.
+4. RCx week figures selected from mapped roles: economizer rainbow (OAT/RAT/MAT/SAT plus damper percent), BAS/web overlay when web OAT exists, fan-on supply air vs web outdoor air, and a fan-on duct-static box. Fan-on line plots keep fan-off and missing samples as null Y (`connectgaps=False`); do not draw across downtime. Do not add the duplicate timeseries presets listed above.
+5. Confirmed operating-fault figures only (not the SV bullets). Under each figure: how to troubleshoot (rule equation) and what the fault window shows, in plain language. **FC1** keeps duct static versus setpoint, fan percent, and the bottom fault line. No temperature traces on that figure.
+6. Economizer delta scatter, same page width and PNG frame as the week rainbow (`width: 100%`, export width 980, height 400). **x = OAT − RAT** (`delta_or_f`), **y = MAT − RAT** (`delta_mr_f`). Reference lines y = OA fraction × x for 0/25/50/75/100% OA. Fan ON and |OAT−RAT| ≥ 10 degrees in the series temperature unit. **Viewport is the bottom-left mixing quadrant only** (both deltas ≤ 0, so OAT ≤ RAT and MAT ≤ RAT). **Do not plot OAT−MAT vs RAT−MAT.** The note under the figure is `econ_scatter_caption` in `single_system_typst.py` (plain language, not an axis dump). It states: point color is OA damper % when that role is mapped, and points at a given outdoor-air fraction should lie near the matching 0/25/50/75/100% line (yellow / high damper near the 100% OA line); damper % is actuator position, not calculated fresh-air fraction or airflow; the cloud indicates mixing problems, temperature-sensor error, and too much or too little outdoor air; the plot is clearest in extreme cold or hot weather, and in mild weather where MAT ≈ RAT ≈ OAT the deltas shrink and those errors are hardest to see. Axis labels use °C and Pa when `column_map.json` `unit_system` is `metric` or `si` (or a per-role `units` override). Imperial stays °F and in. w.c. Values are plotted as stored.
+
+Haystack exports store devices under `equip` (object). Flat sidecars use string `equip` plus top-level `points`. Both must resolve or the AHU is skipped.
+
+### BUILDING_100 legacy kit
+
+The single-AHU reporter above is not this site's Overview PDF, and it is not a Railway-only command.
+
+- Full-building Overview PDF: keep the legacy kit (`fetch_railway.py` → `render_plots.py` → `build_typst_body.py` → `main.typ`). Do not point that site at `build_single_system_report`.
+- Single-AHU pack: `open-fdd-anomaly report <folder> --compile` after a device folder is already on disk. That folder can be a local CSV export, a dump from Railway or a self-hosted Open-FDD central, or a mapped vendor export. CI uses `tests/reporting/fixtures/ahu_typst_mini/` (sample PDF `tests/reporting/fixtures/ahu_typst_mini_report.pdf`). Do not commit a multi-megabyte BUILDING_100 CSV. Do not add a local `build_april_report.py`.
+- When `OPENFDD_API_BASE` and a JWT already exist, inventory is `GET /api/csv/import/package/mapping?building_id=BUILDING_100` on whichever central that base URL points at (Railway or self-hosted). A local package zip can go through `scripts/agent_eplus_dump.sh` (engineering bundle). Neither call is required for the unit tests, and secrets stay out of CI.
+
 ### Additive changes only
 
 When the user asks for “a few box plots / one scatter / rounding”:
@@ -96,6 +204,7 @@ Temps (°F) and damper/fan (%) **must** use dual y-axis (`yaxis` + `yaxis2`) —
 | Profile | Sites | Pipeline |
 |---------|-------|----------|
 | `vav_ahu` / legacy | BUILDING_100 | `fetch_railway.py` → `render_plots.py` → `build_typst_body.py` → `main.typ` |
+| `single_system` / `building` | device folder or building folder of devices | `open-fdd-anomaly report --compile` → `report.pdf` when `typst` is on `PATH` (does not replace the row above) |
 | `heat_pump` | LAKESIDE_ES | `openfdd_lab_typst` fetch/render/typst → copy to Creekside HeatPump PDF |
 | `mqtts_zone` | bldg2 | package path → copy to `bldg2_MQTTS_Zone_Lab_Report.pdf` |
 | seasonal | LAKESIDE_ES | `python -m openfdd_lab_typst.seasonal_hp` → **Seasonal** PDF only |
@@ -124,8 +233,19 @@ Temps (°F) and damper/fan (%) **must** use dual y-axis (`yaxis` + `yaxis2`) —
   AGENTS.md                # short agent gate (read first)
 ```
 
-## Related
+## Related skills
 
-- Kit `AGENTS.md` · `README.md` · `FUTURE_OPENFDD_MERGE.md`
-- Skills: `openfdd-react-spa` · `openfdd-package-mapping` · `openfdd-railway-cli`
-- Wave K plan + BUG_REPORT plot-span rows
+Authoring tree: `openfdd_agent_spec/skills/`. Install script: [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh). Orientation: [`AGENTS.md`](../../AGENTS.md).
+
+- [`openfdd-pypi-oracle`](../openfdd-pypi-oracle/SKILL.md) — PyPI package and `open-fdd-anomaly report`
+- [`openfdd-rcx-fdd-plot-poll`](../openfdd-rcx-fdd-plot-poll/SKILL.md) — blank RCx/FDD plots and poll gaps
+- [`openfdd-package-mapping`](../openfdd-package-mapping/SKILL.md) — Haystack roles and `equipType`
+- [`data-modeling`](../data-modeling/SKILL.md) — package layout
+- [`openfdd-ecm-engineering`](../openfdd-ecm-engineering/SKILL.md) — ECM workbooks on the same wheel
+- [`openfdd-react-spa`](../openfdd-react-spa/SKILL.md) — product UI chart contract
+
+The legacy BUILDING_100 kit (`AGENTS.md`, `README.md`, `FUTURE_OPENFDD_MERGE.md` under `/home/ben/building100_rcx_report/`) is a separate Overview PDF. It is not a second skill home.
+
+## Skill home
+
+`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).

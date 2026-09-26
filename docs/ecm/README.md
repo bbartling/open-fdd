@@ -1,11 +1,22 @@
 # Open-FDD Python package (PyPI)
 
-> **GitHub Pages:** this README is excluded from the docs site (`exclude: README.md`). Published overview lives at [`docs/ecm/index.md`](index.md) / [`overview.md`](overview.md) — section **PyPI agent tools**.
+> **GitHub Pages:** this README is excluded from the docs site (`exclude: README.md`). Published overview lives at [`docs/ecm/index.md`](index.md) / [`overview.md`](overview.md) — section **PyPI agent tools**. ECM pages: https://bbartling.github.io/open-fdd/ecm/
 
-`open-fdd` (PyPI **4.1+**) ships:
+`open-fdd` is the library AI agents install. It ships RCx/FDD reporting and ECM workbooks together.
 
-1. **ECM engineering** (`open_fdd.ecm_engineering`) — agent-drivable HVAC spreadsheet workbooks + Python benchmarks.
-2. **Pandas oracle** (`open_fdd.rules`, `open_fdd.analytics`, `open_fdd.reporting`) — cookbook catalog, analytics helpers, Engineering Findings.
+1. **AI agent RCx/FDD report** — `open-fdd-anomaly report` writes a Typst PDF from **mapped roles**. It is not a Railway-only tool. The CLI reads a local device folder (`history_wide.csv` + `column_map.json`). The same template (`open_fdd.reporting.report_template`) accepts a role-named frame from a Railway or self-hosted Open-FDD central (the agent supplies the reader) or from a future vendor API.
+2. **ECM engineering** (`open_fdd.ecm_engineering`) — agent-drivable HVAC spreadsheet workbooks + Python benchmarks. Guide: https://bbartling.github.io/open-fdd/ecm/
+3. **Pandas oracle** (`open_fdd.rules`, `open_fdd.analytics`, `open_fdd.reporting`) — cookbook catalog, analytics helpers, Engineering Findings.
+
+Works with any AI agent that can read markdown skills and run the PyPI CLI. Skills live in `openfdd_agent_spec/skills/` (not only `.cursor/`). Sync them with `./scripts/openfdd_install_agent_skills.sh --sync`.
+
+```bash
+pip install "open-fdd[anomaly]" "open-fdd[reporting]"
+open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile \
+  --location "AHU · ACME Office · Detroit, MI"
+```
+
+`--compile` is the only PDF path. `--title` overrides the default **Open-FDD AI Agent Report**.
 
 The ECM API fills the same workbook input cells a human engineer would fill.
 It does not replace the visible spreadsheet calculations.
@@ -23,6 +34,7 @@ pip install open-fdd                 # ECM only (openpyxl)
 pip install "open-fdd[oracle]"       # + pandas rules
 pip install "open-fdd[analytics]"    # + analytics helpers (same as oracle)
 pip install "open-fdd[reporting]"    # + Engineering Findings extras
+pip install "open-fdd[anomaly]"      # + offline anomaly screening (STL, Isolation Forest)
 ```
 
 For the FastAPI ECM example:
@@ -129,6 +141,32 @@ result = job.calc(
 ```bash
 open-fdd-ecm calculators
 open-fdd-ecm demo --out Demo_ECMs.xlsx
+```
+
+### Anomaly screening
+
+Offline AHU IO screen of a device folder (`history_wide.csv` + `column_map.json`).
+Z-score and MAD are SQL-portable rolling stats. STL and Isolation Forest are
+Python-only (`open-fdd[anomaly]`).
+
+```bash
+open-fdd-anomaly screen ./AHU_1 --out ./anomaly_out
+# defaults: --top-n 5 --max-days 10 --methods zscore,mad,stl,iforest
+
+# Single AHU FDD/RCx PDF. Only this CLI; no build_april_report.py or other local runner.
+# History is mapped roles: local CSV+map, Railway or self-hosted Open-FDD, or a future vendor API.
+# --compile writes report.pdf when typst is on PATH.
+# --month filters every plot. --week pins the RCx window (YYYY-MM-DD, 7 days).
+# Web OAT: mapped column, CSV (web_oa_t reindexed onto the BAS clock), or fetch.
+# Economizer scatter: x = OAT−RAT, y = MAT−RAT, bottom-left quadrant only.
+# build_economizer_delta_points (alias economizer_delta_frame).
+open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile
+open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --web-oat ./weather.csv --compile
+# April folder (8640 rows @ 5 min). Do not fetch this in CI.
+open-fdd-anomaly report ./AHU_1 --out ./april_report --month 2026-04 \
+  --web-oat ./open_meteo_april.csv --week 2026-04-06 --compile
+# building folder of device subfolders:
+open-fdd-anomaly report ./BUILDING --scope building --out ./bldg_report --compile
 ```
 
 ## Engineering posture

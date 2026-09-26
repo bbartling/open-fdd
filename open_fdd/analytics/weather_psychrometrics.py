@@ -50,6 +50,9 @@ def enrich_weather_frame(df: pd.DataFrame) -> pd.DataFrame:
     # Dry bulb → wx_oa_t
     if "web-outside-air-temp" not in out.columns:
         for c in (
+            "web_oa_t",
+            "web_oa_temp",
+            "web_outside_air_temp",
             "outside_air_temp_f",
             "temperature_2m",
             "temp_f",

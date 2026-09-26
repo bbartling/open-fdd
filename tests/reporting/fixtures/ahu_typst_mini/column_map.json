@@ -1,0 +1,15 @@
+{
+  "equipType": "ahu",
+  "equip": "AHU_1",
+  "points": {
+    "discharge-air-temp": "DAT",
+    "mixed-air-temp": "MAT",
+    "return-air-temp": "RAT",
+    "outside-air-temp": "OAT",
+    "duct-static-pressure": "DSP",
+    "duct-static-pressure-sp": "DSPSP",
+    "fan-cmd": "SF_C",
+    "fan-status": "SF_S",
+    "outside-air-damper": "OAD"
+  }
+}

@@ -81,3 +81,12 @@ that profile: `.cursor/plans/wave_u_independent_acceptance_audit.plan.md`.
 - Fall back to `AuthUser::dev_anonymous()` Admin for tenant/topology list handlers
 - Put long-lived JWTs / admin passwords in Cursor config, GHCR images, browser bundles, logs, or the repo
 - Claim shared-data launch ready while V1–V3 or pairwise IDOR tests are red
+
+## Skill home
+
+`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).
+
+## Related skills
+
+- [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md) — qualification stress
+- [`openfdd-stack-ghcr`](../openfdd-stack-ghcr/SKILL.md) — stack under test

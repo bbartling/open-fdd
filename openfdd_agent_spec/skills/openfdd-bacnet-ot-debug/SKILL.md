@@ -67,3 +67,13 @@ Who-Is + ReadProperty + playground pointers. Tools:
 - No BACnet **writes** without explicit human approval.
 - Keep rusty-bacnet-mcp **`read_only: true`** unless approved.
 - Never print OT credentials or JWTs into public tickets.
+
+## Skill home
+
+`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).
+
+## Related skills
+
+- [`openfdd-rcx-fdd-plot-poll`](../openfdd-rcx-fdd-plot-poll/SKILL.md) — which points the plots need
+- [`openfdd-package-mapping`](../openfdd-package-mapping/SKILL.md) — role names to poll
+- [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md) — hub versus on-prem fieldbus

@@ -269,6 +269,7 @@ def rule_result_chart(
     required_roles: list[str] | None = None,
     units_map: dict[str, str] | None = None,
     max_points: int | None = None,
+    pressure_and_fan_only: bool = False,
 ) -> go.Figure | None:
     """One figure: each unit family on its own y-axis domain; confirmed fault as shaded swim lane.
 
@@ -284,6 +285,16 @@ def rule_result_chart(
         return None
 
     series = rule_plot_series(df, result, required_roles=required_roles)
+    if pressure_and_fan_only:
+        # Duct-static rules (FC1): static vs setpoint and fan percent only.
+        # Temperature traces and extra bool lanes stay off this figure.
+        kept: dict[str, pd.Series] = {}
+        for name, s in series.items():
+            unit = _series_unit(name, units_map)
+            fam = unit_family(unit) if unit else ""
+            if fam in {"static", "static_Pa", "pct"}:
+                kept[name] = s
+        series = kept
     fault = result.confirmed_fault
     if fault is None and not series:
         return None
@@ -1113,6 +1124,7 @@ def bas_vs_web_oat_overlay(
     *,
     weather: pd.DataFrame | None = None,
     oat_err: float = 5.0,
+    temp_unit: str = "°F",
 ) -> go.Figure | None:
     """Overlay BAS vs web OAT on one axis with ±oat_err band and fault bool lane."""
     from open_fdd.analytics.role_map import apply_role_map
@@ -1146,14 +1158,32 @@ def bas_vs_web_oat_overlay(
     diff = (bas_p - web_p).abs()
     fault = diff > float(oat_err)
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=bas_p.index, y=bas_p, name="BAS OAT", mode="lines", line=dict(width=1.4, color=RAINBOW_PALETTE[0])))
-    fig.add_trace(go.Scatter(x=web_p.index, y=web_p, name="Web dry-bulb OAT", mode="lines", line=dict(width=1.4, color=RAINBOW_PALETTE[3])))
+    fig.add_trace(
+        go.Scatter(
+            x=bas_p.index,
+            y=bas_p,
+            name="BAS OAT",
+            mode="lines",
+            line=dict(width=1.4, color=RAINBOW_PALETTE[0]),
+            connectgaps=False,
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=web_p.index,
+            y=web_p,
+            name="Web dry-bulb OAT",
+            mode="lines",
+            line=dict(width=1.4, color=RAINBOW_PALETTE[3]),
+            connectgaps=False,
+        )
+    )
     # Band around web: web ± oat_err
     fig.add_trace(
         go.Scatter(
             x=web_p.index,
             y=web_p + float(oat_err),
-            name=f"+{oat_err:g}°F band",
+            name=f"+{oat_err:g}{temp_unit} band",
             mode="lines",
             line=dict(width=0, color="rgba(0,0,0,0)"),
             showlegend=False,
@@ -1163,7 +1193,7 @@ def bas_vs_web_oat_overlay(
         go.Scatter(
             x=web_p.index,
             y=web_p - float(oat_err),
-            name=f"±{oat_err:g}°F tolerance",
+            name=f"±{oat_err:g}{temp_unit} tolerance",
             mode="lines",
             line=dict(width=0),
             fill="tonexty",
@@ -1183,11 +1213,11 @@ def bas_vs_web_oat_overlay(
         )
     )
     fig.update_layout(
-        title=f"BAS vs web outdoor-air temperature (±{oat_err:g}°F band)",
+        title=f"BAS vs web outdoor-air temperature (±{oat_err:g}{temp_unit} band)",
         template="plotly_white",
         height=440,
         margin=dict(l=50, r=20, t=50, b=40),
-        yaxis=dict(title="Temperature °F", domain=[0.28, 1.0]),
+        yaxis=dict(title=f"Temperature {temp_unit}", domain=[0.28, 1.0]),
         yaxis2=dict(title="fault", domain=[0.0, 0.22], range=[-0.05, 1.05], tickvals=[0, 1], ticktext=["ok", "fault"], showgrid=False),
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
     )
@@ -1384,10 +1414,28 @@ def bas_vs_web_oat_histogram(
     return fig
 
 
-def economizer_delta_scatter(points: pd.DataFrame, *, dt_min_f: float = 10.0) -> go.Figure | None:
-    """(MAT−RAT) vs (OAT−RAT) mixing plot with OA-fraction reference lines (fan-on, identifiable)."""
+def economizer_delta_scatter(
+    points: pd.DataFrame,
+    *,
+    dt_min_f: float = 10.0,
+    viewport: str | None = None,
+    temp_unit: str = "°F",
+) -> go.Figure | None:
+    """(MAT−RAT) vs (OAT−RAT) mixing plot with OA-fraction reference lines.
+
+    x = ``delta_or_f`` = OAT − RAT. y = ``delta_mr_f`` = MAT − RAT.
+    Reference lines are y = frac × x for 0/25/50/75/100% OA. Callers must
+    pass fan-on rows; identifiable samples are ``|OAT−RAT| ≥ dt_min_f``
+    (default 10°F). Do not plot OAT−MAT or RAT−MAT.
+
+    ``viewport="bottom_left"`` clips the axes to the mixing quadrant where
+    both deltas are ≤ 0 (OAT ≤ RAT and MAT ≤ RAT). Other quadrants stay
+    out of the view. The default viewport is the full cloud (React autorange).
+    """
     if points is None or points.empty:
         return None
+    if viewport not in {None, "bottom_left"}:
+        raise ValueError("viewport must be bottom_left or omitted")
     df = points.copy()
     if "identifiable" in df.columns:
         df = df[df["identifiable"].astype(bool)]
@@ -1395,6 +1443,8 @@ def economizer_delta_scatter(points: pd.DataFrame, *, dt_min_f: float = 10.0) ->
     if not need.issubset(df.columns) or df[list(need)].dropna().empty:
         return None
     df = df.dropna(subset=["delta_or_f", "delta_mr_f"])
+    if viewport == "bottom_left":
+        df = df[(df["delta_or_f"] <= 0) & (df["delta_mr_f"] <= 0)]
     if len(df) < 5:
         return None
 
@@ -1402,7 +1452,11 @@ def economizer_delta_scatter(points: pd.DataFrame, *, dt_min_f: float = 10.0) ->
     # Reference OA-fraction lines
     x_lo = float(df["delta_or_f"].min())
     x_hi = float(df["delta_or_f"].max())
-    if not np.isfinite(x_lo) or not np.isfinite(x_hi) or x_lo == x_hi:
+    if viewport == "bottom_left":
+        x_hi = 0.0
+        if not np.isfinite(x_lo) or x_lo >= 0:
+            x_lo = -20.0
+    elif not np.isfinite(x_lo) or not np.isfinite(x_hi) or x_lo == x_hi:
         x_lo, x_hi = -20.0, 20.0
     xs = np.linspace(x_lo, x_hi, 80)
     for frac, label in ((0.0, "0% OA"), (0.25, "25%"), (0.5, "50%"), (0.75, "75%"), (1.0, "100% OA")):
@@ -1458,15 +1512,30 @@ def economizer_delta_scatter(points: pd.DataFrame, *, dt_min_f: float = 10.0) ->
             )
         )
 
+    title = f"Economizer free-cooling delta scatter (fan on, |OAT−RAT|≥{dt_min_f:.0f}{temp_unit})"
+    x_range = None
+    y_range = None
+    if viewport == "bottom_left":
+        title += " — bottom-left mixing quadrant"
+        y_lo = float(df["delta_mr_f"].min())
+        if not np.isfinite(y_lo) or y_lo >= 0:
+            y_lo = -20.0
+        pad_x = max(1.0, 0.08 * abs(x_lo))
+        pad_y = max(1.0, 0.08 * abs(y_lo))
+        x_range = [x_lo - pad_x, 0.0]
+        y_range = [y_lo - pad_y, 0.0]
     fig.update_layout(
-        title=f"Economizer free-cooling delta scatter (fan on, |OAT−RAT|≥{dt_min_f:.0f}°F)",
-        xaxis_title="OAT − RAT (°F)",
-        yaxis_title="MAT − RAT (°F)",
+        title=title,
+        xaxis_title=f"OAT − RAT ({temp_unit})",
+        yaxis_title=f"MAT − RAT ({temp_unit})",
         template="plotly_white",
         height=420,
         margin=dict(l=50, r=20, t=60, b=50),
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
     )
+    if x_range is not None and y_range is not None:
+        fig.update_xaxes(range=x_range, autorange=False)
+        fig.update_yaxes(range=y_range, autorange=False)
     return fig
 
 
@@ -1508,8 +1577,55 @@ def economizer_mat_residual_chart(points: pd.DataFrame) -> go.Figure | None:
     return fig
 
 
-def economizer_temps_overlay(points: pd.DataFrame, *, equipment_id: str | None = None) -> go.Figure | None:
-    """Time overlay of OAT/RAT/MAT/SAT + damper for one AHU (fan-on samples)."""
+def _line_gap_limit_seconds(index: pd.DatetimeIndex) -> float:
+    """Break a line when the clock jumps more than max(1 h, 4 × median step)."""
+    if len(index) < 3:
+        return 3600.0
+    deltas = index.to_series().diff().dt.total_seconds().iloc[1:]
+    deltas = deltas[deltas > 0]
+    median = float(deltas.median()) if not deltas.empty else 0.0
+    if not np.isfinite(median) or median <= 0:
+        return 3600.0
+    return max(3600.0, 4.0 * median)
+
+
+def break_line_at_time_gaps(frame: pd.DataFrame) -> pd.DataFrame:
+    """Insert a null-Y row wherever the timestamp clock jumps.
+
+    Plotly and matplotlib both skip a segment when Y is null. Dropping the
+    fan-off row instead would draw a straight line across the downtime.
+    """
+    if frame is None or frame.empty or not isinstance(frame.index, pd.DatetimeIndex):
+        return frame
+    if len(frame) < 2:
+        return frame
+    limit = _line_gap_limit_seconds(frame.index)
+    pieces: list[pd.DataFrame] = []
+    idx = frame.index
+    for i in range(len(idx)):
+        pieces.append(frame.iloc[[i]])
+        if i + 1 >= len(idx):
+            continue
+        gap = float((idx[i + 1] - idx[i]).total_seconds())
+        if gap > limit:
+            mid = idx[i] + pd.Timedelta(seconds=gap / 2.0)
+            blank = pd.DataFrame(np.nan, index=[mid], columns=frame.columns)
+            pieces.append(blank)
+    return pd.concat(pieces)
+
+
+def economizer_temps_overlay(
+    points: pd.DataFrame,
+    *,
+    equipment_id: str | None = None,
+    full_index: pd.DatetimeIndex | None = None,
+    temp_unit: str = "°F",
+) -> go.Figure | None:
+    """Time overlay of OAT/RAT/MAT/SAT + damper for one AHU (fan-on samples).
+
+    Fan-off and missing samples stay on the clock as null Y so the line does
+    not bridge downtime. ``temp_unit`` is the axis label (°F or °C).
+    """
     if points is None or points.empty:
         return None
     df = points.copy()
@@ -1525,6 +1641,16 @@ def economizer_temps_overlay(points: pd.DataFrame, *, equipment_id: str | None =
             df = df[df["equipment_id"] == df["equipment_id"].iloc[0]]
     if len(df) < 5:
         return None
+    eq_label = ""
+    if "equipment_id" in df.columns:
+        named = df["equipment_id"].dropna()
+        if len(named):
+            eq_label = f" — {named.iloc[0]}"
+    if full_index is not None:
+        # Keep fan-off timestamps so Y can be null there instead of bridging them.
+        df = df.reindex(pd.DatetimeIndex(full_index))
+    if "timestamp" not in df.columns:
+        df = break_line_at_time_gaps(df)
     x = df["timestamp"] if "timestamp" in df.columns else df.index
     fig = go.Figure()
     series = [
@@ -1544,6 +1670,7 @@ def economizer_temps_overlay(points: pd.DataFrame, *, equipment_id: str | None =
                 mode="lines",
                 line=dict(width=1.5, color=color),
                 yaxis="y",
+                connectgaps=False,
             )
         )
     if "damper_fb_pct" in df.columns and df["damper_fb_pct"].notna().any():
@@ -1555,17 +1682,15 @@ def economizer_temps_overlay(points: pd.DataFrame, *, equipment_id: str | None =
                 mode="lines",
                 line=dict(width=1.5, color=RAINBOW_PALETTE[1], dash="dot"),
                 yaxis="y2",
+                connectgaps=False,
             )
         )
-    eq_label = ""
-    if "equipment_id" in df.columns and len(df):
-        eq_label = f" — {df['equipment_id'].iloc[0]}"
     fig.update_layout(
         title=f"Free-cooling temps + OA damper (fan on){eq_label}",
         template="plotly_white",
         height=400,
         margin=dict(l=50, r=50, t=60, b=50),
-        yaxis=dict(title="Temperature (°F)"),
+        yaxis=dict(title=f"Temperature ({temp_unit})"),
         yaxis2=dict(title="Damper %", overlaying="y", side="right", range=[0, 105]),
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
     )
