@@ -422,14 +422,16 @@ def _write_figure_png(figure, path: Path) -> bool:
 
 # Engineer-facing note under the section-6 scatter. Axes stay
 # x = OAT−RAT (delta_or_f), y = MAT−RAT (delta_mr_f), bottom-left viewport.
-ECON_SCATTER_CAPTION = (
+def econ_scatter_caption(temp_unit: str = "°F") -> str:
+    """Section-6 note. ``temp_unit`` follows the series units (°F or °C)."""
+    return (
     "Outdoor-air mixing with the supply fan on. "
     "The horizontal axis is outdoor-air temperature minus return-air temperature (OAT − RAT). "
     "The vertical axis is mixed-air temperature minus return-air temperature (MAT − RAT). "
     "The view is the bottom-left diagnostic quadrant only, where outdoor air is at or below return air "
     "and mixed air is at or below return air. "
     "A sample is plotted only when the fan is on and the absolute difference between outdoor air and return air "
-    "is at least 10°F, so the outdoor-air fraction is identifiable.\n\n"
+    f"is at least 10{temp_unit}, so the outdoor-air fraction is identifiable.\n\n"
     "Dotted reference lines are the outdoor-air fraction that would put mixed air on that line: "
     "0%, 25%, 50%, 75%, and 100% outdoor air. "
     "When an outdoor-air damper is mapped, point color is damper position from closed (0%) to open (100%). "
@@ -445,7 +447,7 @@ ECON_SCATTER_CAPTION = (
 )
 
 
-def write_econ_scatter(role_df: pd.DataFrame, path: Path) -> bool:
+def write_econ_scatter(role_df: pd.DataFrame, path: Path, *, temp_unit: str = "°F") -> bool:
     """Write ``economizer_delta_scatter`` clipped to the bottom-left mixing quadrant.
 
     x = OAT−RAT (``delta_or_f``), y = MAT−RAT (``delta_mr_f``). Axis limits
@@ -464,6 +466,7 @@ def write_econ_scatter(role_df: pd.DataFrame, path: Path) -> bool:
         points,
         dt_min_f=ECON_DIAG_DT_MIN_F,
         viewport="bottom_left",
+        temp_unit=temp_unit,
     )
     return _write_figure_png(figure, path)
 
@@ -477,7 +480,7 @@ def _mapped_roles(frame: pd.DataFrame) -> set[str]:
     return roles
 
 
-def _figure_for_spec(spec, week: pd.DataFrame, equipment_id: str):
+def _figure_for_spec(spec, week: pd.DataFrame, equipment_id: str, units_map: dict[str, str] | None = None):
     """Draw one profile figure with the shared Plotly helpers."""
     from open_fdd.analytics.charts import (
         bas_vs_web_oat_overlay,
@@ -490,12 +493,23 @@ def _figure_for_spec(spec, week: pd.DataFrame, equipment_id: str):
     from open_fdd.analytics.rcx_plots import collect_oat_scatter, collect_role_series
     from open_fdd.analytics.units import resolve_role_unit
 
+    units_map = units_map or {}
+    temp_unit = str(units_map.get("outside-air-temp") or "°F")
+    static_unit = str(units_map.get("duct-static-pressure") or "in. w.c.")
     frames, role_map = _identity_pack(week, equipment_id)
     if spec.kind == "econ_temps":
         points = build_economizer_delta_points(week, equipment_id=equipment_id)
-        return economizer_temps_overlay(points, equipment_id=equipment_id)
+        if "discharge-air-temp" in week.columns and not points.empty:
+            points = points.copy()
+            points["sat_f"] = pd.to_numeric(week["discharge-air-temp"], errors="coerce").reindex(points.index)
+        return economizer_temps_overlay(
+            points,
+            equipment_id=equipment_id,
+            full_index=week.index,
+            temp_unit=temp_unit,
+        )
     if spec.kind == "bas_web":
-        return bas_vs_web_oat_overlay(frames, role_map)
+        return bas_vs_web_oat_overlay(frames, role_map, temp_unit=temp_unit)
     if spec.kind == "oat_scatter":
         long_df = collect_oat_scatter(
             frames,
@@ -510,8 +524,8 @@ def _figure_for_spec(spec, week: pd.DataFrame, equipment_id: str):
         return oat_scatter(
             long_df,
             title=spec.title,
-            x_title="Web outdoor air °F",
-            y_title=resolve_role_unit(spec.y_role or "discharge-air-temp") or "Supply air °F",
+            x_title=f"Web outdoor air {temp_unit}",
+            y_title=resolve_role_unit(spec.y_role or "discharge-air-temp", units_map) or f"Supply air {temp_unit}",
         )
     if spec.kind == "box":
         series_map = collect_role_series(
@@ -524,7 +538,7 @@ def _figure_for_spec(spec, week: pd.DataFrame, equipment_id: str):
         return multi_equipment_box(
             series_map,
             title=spec.title,
-            y_title=resolve_role_unit(spec.y_role or "duct-static-pressure") or spec.y_role,
+            y_title=resolve_role_unit(spec.y_role or "duct-static-pressure", units_map) or static_unit,
         )
     if spec.kind == "timeseries":
         series_map = collect_role_series(
@@ -547,7 +561,7 @@ def _figure_for_spec(spec, week: pd.DataFrame, equipment_id: str):
         return multi_equipment_timeseries(
             series_map,
             title=spec.title,
-            y_title=resolve_role_unit(spec.y_role) or spec.y_role,
+            y_title=resolve_role_unit(spec.y_role, units_map) or spec.y_role,
         )
     return None
 
@@ -559,12 +573,13 @@ def _rcx_week_figures(
     slug: str,
     *,
     profile_id: str,
+    units_map: dict[str, str] | None = None,
 ) -> list[dict[str, str]]:
     from open_fdd.reporting.report_template import select_figures
 
     figures: list[dict[str, str]] = []
     for spec in select_figures(profile_id, _mapped_roles(week)):
-        figure = _figure_for_spec(spec, week, equipment_id)
+        figure = _figure_for_spec(spec, week, equipment_id, units_map)
         name = f"figures/{slug}_rcx_{spec.id}.png"
         if figure is not None and _write_figure_png(figure, out_dir / name):
             figures.append(
@@ -630,28 +645,38 @@ def sensor_validation_bullets(results, health: list[dict[str, Any]]) -> list[dic
             }
         ]
     health_by_role = {row["role"]: row for row in health}
-    bullets: list[dict[str, str]] = []
+    bullets: list[dict[str, Any]] = []
     for result in findings:
         issue = _SV_PLAIN.get(result.rule_id, "sensor check failed")
         roles = _faulted_roles(result)
-        if not roles:
-            bullets.append({"outcome": "fail", "rule_id": result.rule_id, "text": f"Fail. {issue}."})
-            continue
-        details = []
-        for role in roles:
-            label = _plain_role(role).capitalize()
-            bound = health_by_role.get(role) or {}
-            if result.rule_id == "SV-RANGE" and bound.get("max") is not None:
-                details.append(
-                    f"{label}: {issue} (low {_one_decimal(bound['min'])}, high {_one_decimal(bound['max'])})"
+        if result.rule_id == "SV-RANGE" and roles:
+            for role in roles:
+                label = _plain_role(role).capitalize()
+                bound = health_by_role.get(role) or {}
+                low = high = None
+                if bound.get("max") is not None:
+                    low = _one_decimal(bound["min"])
+                    high = _one_decimal(bound["max"])
+                bullets.append(
+                    {
+                        "outcome": "fail",
+                        "rule_id": result.rule_id,
+                        "roles": [role],
+                        "labels": [label],
+                        "low": low,
+                        "high": high,
+                        "text": f"{label}: {issue}.",
+                    }
                 )
-            else:
-                details.append(f"{label}: {issue}")
+            continue
+        labels = [_plain_role(role).capitalize() for role in roles]
         bullets.append(
             {
                 "outcome": "fail",
                 "rule_id": result.rule_id,
-                "text": "Fail. " + "; ".join(details) + ".",
+                "roles": roles,
+                "labels": labels,
+                "text": f"{'; '.join(labels) or 'A mapped sensor'}: {issue}.",
             }
         )
     return bullets
@@ -696,19 +721,30 @@ def anomaly_plain_checklist(
                 {
                     "outcome": "skipped",
                     "role": role,
+                    "labels": [label],
                     "text": f"{label}: skipped — not enough fan-on data.",
                 }
             )
             continue
         flags = rolling_zscore_flags(view, window=window) | rolling_mad_flags(view, window=window)
         if not bool(flags.fillna(False).any()):
-            bullets.append({"outcome": "looks_normal", "role": role, "text": f"{label}: looks normal."})
+            bullets.append(
+                {
+                    "outcome": "looks_normal",
+                    "role": role,
+                    "labels": [label],
+                    "text": f"{label}: looks normal.",
+                }
+            )
             continue
+        detail = _unusual_sentence(label, view, flags, when)
         bullets.append(
             {
                 "outcome": "needs_a_look",
                 "role": role,
-                "text": f"{label}: needs a look. {_unusual_sentence(label, view, flags, when)}",
+                "labels": [label],
+                "detail": detail,
+                "text": f"{label}: needs a look. {detail}",
             }
         )
     if not bullets:
@@ -791,9 +827,10 @@ def _fault_figures(
     out_dir: Path,
     slug: str,
     month: str,
+    units_map: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     from open_fdd.analytics.charts import rule_result_chart
-    from open_fdd.reporting.rule_meta import rule_title, rule_troubleshoot
+    from open_fdd.reporting.rule_meta import DUCT_STATIC_RULE_IDS, rule_title, rule_troubleshoot
     from open_fdd.rules import RULES_BY_ID
 
     rows: list[dict[str, Any]] = []
@@ -804,7 +841,13 @@ def _fault_figures(
         roles = None
         if rule is not None:
             roles = list(rule.required_roles) + list(getattr(rule, "optional_roles", []) or [])
-        figure = rule_result_chart(frame, result, required_roles=roles)
+        figure = rule_result_chart(
+            frame,
+            result,
+            required_roles=roles,
+            units_map=units_map,
+            pressure_and_fan_only=result.rule_id in DUCT_STATIC_RULE_IDS,
+        )
         name = f"figures/{slug}_fault_{point_slug(result.rule_id)}.png"
         path = name if figure is not None and _write_figure_png(figure, out_dir / name) else ""
         hours = round(float(result.fault_hours or 0.0), 1)
@@ -826,44 +869,33 @@ def _executive_summary(
     label: str,
     month: str,
     frame: pd.DataFrame,
-    sensor_checks: list[dict[str, str]],
-    anomaly: list[dict[str, str]],
+    sensor_checks: list[dict[str, Any]],
+    anomaly: list[dict[str, Any]],
     faults: list[dict[str, Any]],
     web_source: str | None,
 ) -> str:
+    from open_fdd.reporting.narrative_polish import (
+        polish_anomaly_paragraph,
+        polish_executive_summary,
+        polish_sensor_paragraph,
+    )
+
     poll = _poll_seconds(frame.index)
-    span_h = round((len(frame) * poll) / 3600.0, 1)
-    fails = [row["text"] for row in sensor_checks if row.get("outcome") == "fail"]
-    if fails:
-        sensor_line = "Sensor checks found issues. " + " ".join(fails)
-    elif any(row.get("outcome") == "skipped" for row in sensor_checks):
-        sensor_line = sensor_checks[0]["text"]
-    else:
-        sensor_line = "Sensor checks passed. No stuck, out-of-range, or stale readings."
-    needs = [row["text"] for row in anomaly if row.get("outcome") == "needs_a_look"]
-    if needs:
-        anomaly_line = "Anomaly screening: " + " ".join(needs) + " Other screened trends look normal."
-    elif anomaly and all(row.get("outcome") == "skipped" for row in anomaly):
-        anomaly_line = "Anomaly screening: " + anomaly[0]["text"]
-    else:
-        anomaly_line = "Anomaly screening: screened trends look normal."
-    parts = [
-        f"{label} in {_month_phrase(month)} ({len(frame)} samples, {_one_decimal(span_h)} h).",
-        sensor_line,
-        anomaly_line,
-        ANOMALY_NOTE,
-    ]
-    if faults:
-        bits = [f"{row['title']} {_one_decimal(row['fault_hours'])} h" for row in faults]
-        parts.append("Confirmed operating findings: " + "; ".join(bits) + ".")
-    else:
-        parts.append("No confirmed operating faults in this month.")
-    if web_source:
-        parts.append(f"Web outdoor air temperature was included from {web_source}.")
+    span_h = _one_decimal((len(frame) * poll) / 3600.0)
     fan = fan_on_fraction(frame)
-    if fan is not None:
-        parts.append(f"The fan was on for {_one_decimal(100.0 * fan)} percent of the samples.")
-    return " ".join(parts)
+    fan_pct = _one_decimal(100.0 * fan) if fan is not None else None
+    return polish_executive_summary(
+        label=label,
+        month_phrase=_month_phrase(month),
+        sample_count=len(frame),
+        span_h=span_h,
+        sensor_paragraph=polish_sensor_paragraph(sensor_checks),
+        anomaly_paragraph=polish_anomaly_paragraph(anomaly),
+        anomaly_note=ANOMALY_NOTE,
+        faults=faults,
+        web_source=web_source,
+        fan_on_percent=fan_pct,
+    )
 
 
 def _code_raw(value: object) -> str:
@@ -883,13 +915,6 @@ def _ai_note(device: dict[str, Any], slot: str) -> list[str]:
     return [_markup_raw(text), ""]
 
 
-def _bullet_block(rows: list[dict[str, str]]) -> list[str]:
-    lines: list[str] = []
-    for row in rows:
-        lines.extend([_markup_raw(row["text"]), ""])
-    return lines
-
-
 def _device_typst(device: dict[str, Any]) -> str:
     parts = [
         f"== {_markup_raw(device['equipment_id'])}",
@@ -899,7 +924,7 @@ def _device_typst(device: dict[str, Any]) -> str:
         "Checks for stuck, out-of-range, or stale sensors. Only failed checks are listed when something is wrong.",
         "",
     ]
-    parts.extend(_bullet_block(device.get("sensor_checks") or []))
+    parts.extend([_markup_raw(device.get("sensor_narrative") or ""), ""])
     parts.extend(_ai_note(device, "sensor_checks"))
     parts.extend(
         [
@@ -909,7 +934,7 @@ def _device_typst(device: dict[str, Any]) -> str:
             "",
         ]
     )
-    parts.extend(_bullet_block(device.get("anomaly") or []))
+    parts.extend([_markup_raw(device.get("anomaly_narrative") or ""), ""])
     parts.extend(_ai_note(device, "anomaly_screening"))
     parts.extend(
         [
@@ -988,7 +1013,7 @@ def _device_typst(device: dict[str, Any]) -> str:
                 "",
             ]
         )
-    parts.extend([ECON_SCATTER_CAPTION, ""])
+    parts.extend([device.get("scatter_caption") or econ_scatter_caption(), ""])
     return "\n".join(parts)
 
 
@@ -1044,10 +1069,17 @@ def _one_device(
     from open_fdd.reporting.report_template import DeviceFolderSource, load_ai_comments, resolve_profile
     from open_fdd.rules import run_all
 
+    from open_fdd.analytics.units import stamp_display_units
+    from open_fdd.reporting.narrative_polish import polish_anomaly_paragraph, polish_sensor_paragraph
+
     history = DeviceFolderSource(folder).load()
     label = history.equipment_id
     framed = history.frame
     framed.attrs["equipment_id"] = label
+    column_map_path = Path(folder) / "column_map.json"
+    column_map = json.loads(column_map_path.read_text(encoding="utf-8")) if column_map_path.is_file() else {}
+    units_map = stamp_display_units(framed, column_map if isinstance(column_map, dict) else {})
+    temp_unit = str(units_map.get("outside-air-temp") or "°F")
     framed = filter_to_month(framed, month)
     framed, web_source = attach_web_oat(framed, web_oat=web_oat, lat=lat, lon=lon)
     framed.attrs["equipment_id"] = label
@@ -1059,11 +1091,15 @@ def _one_device(
     results = run_all(framed, poll_seconds=_poll_seconds(framed.index))
     sensor_checks = sensor_validation_bullets(results, health)
     anomaly = anomaly_plain_checklist(framed, history.points, month)
-    faults = _fault_figures(framed, results, out_dir, slug, month)
+    sensor_narrative = polish_sensor_paragraph(sensor_checks)
+    anomaly_narrative = polish_anomaly_paragraph(anomaly)
+    faults = _fault_figures(framed, results, out_dir, slug, month, units_map)
     week, week_label = representative_week(framed, week_start=week)
-    rcx = _rcx_week_figures(week, label, out_dir, slug, profile_id=chosen.id)
+    framed.attrs["units_map"] = units_map
+    week.attrs["units_map"] = units_map
+    rcx = _rcx_week_figures(week, label, out_dir, slug, profile_id=chosen.id, units_map=units_map)
     scatter_name = f"figures/{slug}_econ_scatter.png"
-    scatter_ok = write_econ_scatter(framed, out_dir / scatter_name)
+    scatter_ok = write_econ_scatter(framed, out_dir / scatter_name, temp_unit=temp_unit)
     summary_text = _executive_summary(
         label=label,
         month=month,
@@ -1084,7 +1120,11 @@ def _one_device(
         "profile_implemented": chosen.implemented,
         "source_id": history.source_id,
         "ai_comments": comments,
+        "unit_system": str(framed.attrs.get("unit_system") or "imperial"),
         "executive_summary": summary_text,
+        "sensor_narrative": sensor_narrative,
+        "anomaly_narrative": anomaly_narrative,
+        "scatter_caption": econ_scatter_caption(temp_unit),
         "sensor_checks": sensor_checks,
         "anomaly": anomaly,
         "health": health,

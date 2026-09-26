@@ -1,3 +1,8 @@
+## 2026-09-26 — Report prose, line gaps, FC1 traces, metric labels
+
+- Sensor checks, anomaly screening, and the executive summary are paragraphs from `narrative_polish` after the rules run. The PDF does not print a raw `Fail.` list.
+- Fan-on temperature lines keep null Y across fan-off and long gaps. FC1 shows duct static versus setpoint, fan percent, and the fault line. `unit_system: metric` / `si` labels temperatures °C and duct static Pa.
+
 ## 2026-09-26 — Economizer scatter caption is engineer-facing
 
 - The note under the section-6 scatter (`ECON_SCATTER_CAPTION`) explains OAT−RAT vs MAT−RAT, the bottom-left fan-on gate, damper color against the outdoor-air fraction lines, that damper position is not fresh-air fraction, and that mild weather shrinks the deltas. Axes are unchanged.

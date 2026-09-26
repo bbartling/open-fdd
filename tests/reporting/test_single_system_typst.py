@@ -43,8 +43,10 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert typ.index("Executive summary") < typ.index("RCx week")
     assert typ.index("RCx week") < typ.index("Confirmed faults")
     assert typ.index("Confirmed faults") < typ.index("Economizer delta scatter")
-    assert "out of physical range" in typ or "stuck flat" in typ
-    assert "looks normal" in typ or "needs a look" in typ
+    assert "outside its physical range" in typ
+    assert "stuck flat" in typ
+    assert "look normal" in typ or "needs a look" in typ
+    assert "Fail." not in typ
     assert "not equipment faults" in typ
     assert "histogram" not in typ.lower()
     assert "scoreboard" not in typ.lower()
@@ -318,3 +320,122 @@ def test_scatter_writer_calls_canonical_chart():
     assert "bottom_left" in source
     assert "OAT − MAT" not in source
     assert "RAT − MAT" not in source
+
+
+def test_narrative_groups_sensor_faults_without_fail_prefix():
+    from open_fdd.reporting.narrative_polish import polish_anomaly_paragraph, polish_sensor_paragraph
+
+    sensor = polish_sensor_paragraph(
+        [
+            {
+                "outcome": "fail",
+                "rule_id": "SV-RANGE",
+                "labels": ["Outdoor air temperature"],
+                "low": "35.0",
+                "high": "200.0",
+            },
+            {
+                "outcome": "fail",
+                "rule_id": "SV-FLATLINE",
+                "labels": ["Return air temperature", "Supply air temperature"],
+            },
+            {"outcome": "fail", "rule_id": "SV-SPIKE", "labels": ["Outdoor air temperature"]},
+            {"outcome": "fail", "rule_id": "SV-RATE", "labels": ["Outdoor air temperature"]},
+        ]
+    )
+    assert "Fail." not in sensor
+    assert "stayed stuck flat" in sensor
+    assert "jumped suddenly and changed faster than expected" in sensor
+    assert sensor.index("physical range") < sensor.index("stuck flat")
+    anomaly = polish_anomaly_paragraph(
+        [
+            {"outcome": "looks_normal", "labels": ["Mixed air temperature"]},
+            {"outcome": "looks_normal", "labels": ["Outdoor air temperature"]},
+        ]
+    )
+    assert anomaly == "Mixed air temperature and outdoor air temperature look normal."
+
+
+def test_fan_off_line_inserts_null_y():
+    from open_fdd.analytics.charts import economizer_temps_overlay
+
+    index = pd.date_range("2026-06-01", periods=8, freq="h", tz="UTC")
+    fan_on = pd.Series([True, True, True, False, False, True, True, True], index=index)
+    points = pd.DataFrame(
+        {
+            "oat_f": [50, 51, 52, 53, 54, 55, 56, 57],
+            "rat_f": [70] * 8,
+            "mat_f": [60] * 8,
+            "equipment_id": "AHU_1",
+        },
+        index=index,
+    ).loc[fan_on]
+    figure = economizer_temps_overlay(points, equipment_id="AHU_1", full_index=index, temp_unit="°F")
+    assert figure is not None
+    oat = next(trace for trace in figure.data if trace.name == "OAT")
+    assert oat.connectgaps is False
+    assert figure.layout.yaxis.title.text == "Temperature (°F)"
+    values = list(oat.y)
+    assert any(value is None or (isinstance(value, float) and value != value) for value in values)
+    # The off hours are not bridged: a null sits between 52 and 55.
+    numeric = [None if value is None or value != value else value for value in values]
+    assert 52 in numeric and 55 in numeric
+    assert numeric[numeric.index(52) + 1] is None
+
+
+def test_fc1_chart_omits_temperature_traces():
+    from open_fdd.analytics.charts import rule_result_chart
+    from open_fdd.rules.base import RuleResult
+
+    index = pd.date_range("2026-06-01", periods=6, freq="h", tz="UTC")
+    frame = pd.DataFrame(
+        {
+            "duct-static-pressure": [0.2] * 6,
+            "duct-static-pressure-sp": [1.2] * 6,
+            "fan-cmd": [1.0] * 6,
+            "outside-air-temp": [70] * 6,
+            "discharge-air-temp": [55] * 6,
+        },
+        index=index,
+    )
+    fault = pd.Series([True] * 6, index=index)
+    result = RuleResult(
+        rule_id="FC1",
+        equipment_id="AHU_1",
+        status="FAULT",
+        applicable=True,
+        fault_hours=6,
+        confirmed_fault=fault,
+        plot_series={
+            "outside-air-temp": frame["outside-air-temp"],
+            "duct-static-pressure": frame["duct-static-pressure"],
+            "fan-cmd": frame["fan-cmd"],
+        },
+    )
+    figure = rule_result_chart(
+        frame,
+        result,
+        required_roles=["duct-static-pressure", "duct-static-pressure-sp", "fan-cmd"],
+        pressure_and_fan_only=True,
+    )
+    assert figure is not None
+    names = {str(trace.name) for trace in figure.data}
+    assert any("duct-static-pressure" in name for name in names)
+    assert any("fan-cmd" in name for name in names)
+    assert "confirmed_fault" in names
+    assert not any("temp" in name for name in names)
+
+
+def test_metric_unit_labels():
+    from open_fdd.analytics.units import report_units_map, stamp_display_units
+    from open_fdd.reporting.single_system_typst import econ_scatter_caption
+
+    units = report_units_map("metric")
+    assert units["outside-air-temp"] == "°C"
+    assert units["duct-static-pressure"] == "Pa"
+    assert report_units_map("imperial")["duct-static-pressure"] == "in. w.c."
+    assert "10°C" in econ_scatter_caption("°C")
+    frame = pd.DataFrame({"outside-air-temp": [20.0]})
+    stamped = stamp_display_units(frame, {"unit_system": "si", "units": {"duct-static-pressure": "Pa"}})
+    assert stamped["outside-air-temp"] == "°C"
+    assert frame.attrs["unit_system"] == "si"

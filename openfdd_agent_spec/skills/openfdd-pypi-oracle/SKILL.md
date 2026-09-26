@@ -49,7 +49,7 @@ product UI. Role alias Camber↔SQL is a **doc table only** until twin SQL lands
    `economizer_delta_frame` is an alias of `build_economizer_delta_points`; keep
    the longer name in this package. Offline Typst reports must call that chart
    with `viewport="bottom_left"` (both deltas ≤ 0). Do not plot OAT−MAT vs RAT−MAT.
-   The Typst note under that figure is `ECON_SCATTER_CAPTION`: damper color vs
+   The Typst note under that figure is `econ_scatter_caption`: damper color vs
    OA-fraction lines, damper position is not fresh-air fraction, and mild
    weather (MAT ≈ RAT ≈ OAT) shrinks the deltas.
 8. **Single-AHU Typst:** `open-fdd-anomaly report --month YYYY-MM --compile` writes a host-independent PDF (`open_fdd.reporting.report_template`). Profile `vav_ahu` selects figures from mapped roles. Other system profiles are registered stubs. History sources: device folder, Open-FDD API reader, vendor API stub.

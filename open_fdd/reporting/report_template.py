@@ -253,9 +253,12 @@ class DeviceFolderSource:
         from open_fdd.analytics.anomaly.io import load_device_folder
         from open_fdd.reporting.single_system_typst import equipment_label, role_frame
 
+        from open_fdd.analytics.units import stamp_display_units
+
         folder = Path(self.folder)
         device = load_device_folder(folder)
         frame = role_frame(device)
+        stamp_display_units(frame, device.column_map if isinstance(device.column_map, dict) else {})
         equip_type = str(frame.attrs.get("equipment_type") or "ahu")
         return RoleHistory(
             frame=frame,
@@ -288,7 +291,10 @@ class OpenFddApiSource:
                 "Use a device folder (history_wide.csv + column_map.json) until that reader is supplied. "
                 f"Central origin: {self.base_url}"
             )
+        from open_fdd.analytics.units import stamp_display_units
+
         frame = self.reader()
+        stamp_display_units(frame)
         points = [(str(column), str(column)) for column in frame.columns]
         return RoleHistory(
             frame=frame,
@@ -315,7 +321,10 @@ class VendorApiSource:
                 f"Vendor API {self.vendor!r} is registered and not connected. "
                 "Map the export into a device folder, or pass a reader that returns a role-named frame."
             )
+        from open_fdd.analytics.units import stamp_display_units
+
         frame = self.reader()
+        stamp_display_units(frame)
         points = [(str(column), str(column)) for column in frame.columns]
         return RoleHistory(
             frame=frame,
