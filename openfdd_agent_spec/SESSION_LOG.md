@@ -1,3 +1,8 @@
+## 2026-09-26 — Generic RCx template for the single-system PDF
+
+- Report figures follow mapped roles on profile `vav_ahu`. Rainbow duplicate timeseries (`ahu_dats`, `ahu_mats`, `ahu_rats`, `ahu_dampers`, `ahu_cooling_valves`, `fan_speeds`) are omitted. Fan-on supply-air vs web OAT and a fan-on duct-static box are included. Faults carry a troubleshoot line and a plain data-window line. No re-run footer.
+- `open_fdd.reporting.report_template` registers history sources (device folder, Open-FDD API, vendor API) and stub profiles for CV AHU, single-zone, chiller, boiler, heat pump, VAV box, fan coil, geothermal field, and data hall. Agents fill `ai_comments.json`.
+
 ## 2026-09-26 — Single-AHU PDF is `open-fdd-anomaly report --compile`
 
 - `--compile` writes `report.pdf` beside `report.typ` when `typst` is on `PATH`. The CLI runs `typst compile`. A separate hand compile is not the shipped path.

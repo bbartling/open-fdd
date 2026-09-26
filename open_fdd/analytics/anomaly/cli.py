@@ -103,6 +103,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Unused by report (screen command)",
     )
     report.add_argument(
+        "--profile",
+        default=None,
+        help=(
+            "System profile id. Default follows equipType. "
+            "Implemented today: vav_ahu. Registered stubs include cv_ahu, single_zone, "
+            "chiller, boiler, heat_pump, vav_box, fan_coil, geothermal_field, data_hall."
+        ),
+    )
+    report.add_argument(
         "--compile",
         action="store_true",
         help="Write report.pdf in --out when the typst binary is on PATH",
@@ -148,6 +157,7 @@ def main(argv: list[str] | None = None) -> int:
                 lat=args.lat,
                 lon=args.lon,
                 week=args.week,
+                profile=args.profile,
                 top_n=int(args.top_n),
                 max_days=int(args.max_days),
                 methods=methods,

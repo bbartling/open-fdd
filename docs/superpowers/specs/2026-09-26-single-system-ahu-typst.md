@@ -30,9 +30,11 @@ April device-folder example (documentation only; CI uses the June fixture and mu
 1. Sensor checks: failed SV rules in everyday words, or one Passed bullet.
 2. Anomaly screening: “looks normal” / “needs a look” / “skipped — not enough fan-on data”. No method names or science plots.
 3. Executive summary opening with those two outcomes, then confirmed operating hours at 1 decimal.
-4. One fan-on week of AHU RCx timeseries from `multi_equipment_timeseries` / `economizer_temps_overlay` / `bas_vs_web_oat_overlay`. No histograms.
-5. `rule_result_chart` only for non-SV rules with confirmed fault hours, with `rule_meta` bullets.
+4. One week of role-selected RCx figures for profile `vav_ahu`: economizer temperature rainbow with damper percent, fan-on supply air vs web outdoor air, fan-on duct-static box, duct static with setpoint, and BAS vs web outdoor air when web OAT is joined. Do not also draw `ahu_dats`, `ahu_mats`, `ahu_rats`, `ahu_dampers`, `ahu_cooling_valves`, or `fan_speeds`. No histograms. No re-run footer.
+5. `rule_result_chart` only for non-SV rules with confirmed fault hours. Under each figure: a troubleshoot line from the rule equation and a plain description of the fault window.
 6. `economizer_delta_scatter` viewport `bottom_left`: **x = OAT − RAT** (`delta_or_f`), **y = MAT − RAT** (`delta_mr_f`). Do not plot OAT−MAT vs RAT−MAT.
+
+The template (`open_fdd.reporting.report_template`) is not tied to a deploy host. Sources: device folder, any Open-FDD central (reader-supplied), future vendor API. Stub profiles: `cv_ahu`, `single_zone`, `chiller`, `boiler`, `heat_pump`, `vav_box`, `fan_coil`, `geothermal_field`, `data_hall`. Agents insert prose through `ai_comments.json`.
 
 ## Railway
 

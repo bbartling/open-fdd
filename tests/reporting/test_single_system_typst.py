@@ -58,22 +58,40 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert "bottom-left" in typ
     assert "x = (OAT - MAT)" not in typ
     assert "BUILDING_100 Overview-mirrored" in typ
-    assert "Rule:" in typ
-    assert "Data:" in typ
+    assert "Troubleshoot:" in typ
+    assert "In the data:" in typ
+    assert "open-fdd-anomaly" not in typ
+    assert "how to run" not in typ.lower()
     assert "FC1" in typ
     assert "ECON-1" in typ
     assert "FC2" not in typ
     assert result.devices == ["AHU_1"]
     pngs = list((out / "figures").glob("*.png"))
+    names = {path.name for path in pngs}
     assert pngs
     assert all("hist" not in path.name for path in pngs)
     assert (out / "figures" / "AHU_1_econ_scatter.png").stat().st_size > 100
     assert (out / "figures" / "AHU_1_fault_FC1.png").stat().st_size > 100
     assert not (out / "figures" / "AHU_1_fault_SV-RANGE.png").exists()
-    assert any("rcx_" in path.name for path in pngs)
+    assert "AHU_1_rcx_econ_temps.png" in names
+    assert "AHU_1_rcx_duct_static_box.png" in names
+    assert "AHU_1_rcx_duct_static_ts.png" in names
+    assert "AHU_1_rcx_ahu_sat_reset_scatter.png" not in names
+    for skipped in (
+        "ahu_dats",
+        "ahu_mats",
+        "ahu_rats",
+        "ahu_dampers",
+        "ahu_cooling_valves",
+        "fan_speeds",
+    ):
+        assert f"AHU_1_rcx_{skipped}.png" not in names
 
     summary = json.loads(result.summary_path.read_text(encoding="utf-8"))
     assert summary["month"] == "2026-06"
+    assert summary["devices"][0]["profile"] == "vav_ahu"
+    assert "sensor_checks" in summary["ai_comment_slots"]
+    assert "device_folder" in summary["history_sources"]
     health = {row["role"]: row for row in summary["devices"][0]["health"]}
     assert health["outside-air-temp"]["out_of_range"] >= 1
     fault_ids = {row["rule_id"] for row in summary["devices"][0]["faults"]}
@@ -168,6 +186,7 @@ def test_web_oat_csv_join_enables_meteo_rule(tmp_path):
     assert "OAT-METEO" in fault_ids
     assert "included from csv" in device_summary["executive_summary"]
     assert (out / "figures" / "AHU_1_rcx_bas_web_oat.png").stat().st_size > 100
+    assert (out / "figures" / "AHU_1_rcx_ahu_sat_reset_scatter.png").stat().st_size > 100
 
 
 def test_building_scope_skips_non_ahu_child(tmp_path):

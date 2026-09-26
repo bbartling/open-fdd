@@ -51,6 +51,31 @@ def rule_summary(rule_id: str) -> str:
     return f"Open-FDD rule {rid}."
 
 
+def rule_equation(rule_id: str) -> str:
+    """Cookbook equation text for ``rule_id``, or an empty string."""
+    rid = (rule_id or "").strip()
+    if rid == "FAN-OFF-STATIC":
+        return "Duct static stays high while fan status is OFF."
+    rule = _catalog().get(rid)
+    if rule is None:
+        return ""
+    return str(getattr(rule, "equation", "") or "").strip()
+
+
+def rule_troubleshoot(rule_id: str) -> str:
+    """One line a technician can act on, grounded in the rule equation."""
+    equation = rule_equation(rule_id).rstrip(".")
+    summary = rule_summary(rule_id).rstrip(".")
+    if equation and summary:
+        return f"{summary}. Check: {equation}."
+    if equation:
+        return f"Check: {equation}."
+    if summary:
+        return f"{summary}."
+    rid = (rule_id or "").strip() or "this rule"
+    return f"Review the {rid} condition against the trend."
+
+
 def rule_label(rule_id: str, fallback: str | None = None) -> str:
     """Prefer catalog title; fall back to caller label or raw id."""
     title = rule_title(rule_id)
