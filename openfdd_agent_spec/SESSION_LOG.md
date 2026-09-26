@@ -1,3 +1,7 @@
+## 2026-09-26 — PyPI 4.4.8 for the anomaly report CLI
+
+- `4.4.7` is already on PyPI (EQ-VOCAB). The report CLI ships as `4.4.8`, tagged `open-fdd-v4.4.8` so `.github/workflows/publish-open-fdd.yml` publishes it. Product `VERSION` stays the GHCR semver.
+
 ## 2026-09-26 — Reporter docs name every history source
 
 - The PDF reads mapped roles. Docs name a local CSV plus column map, a Railway or self-hosted Open-FDD central, and a future vendor API. The report is not Railway-only.
