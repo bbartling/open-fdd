@@ -9,6 +9,8 @@ description: >-
 
 # PyPI pandas oracle
 
+Works with any AI agent that can read markdown skills and run the PyPI CLI. Source of truth: `openfdd_agent_spec/skills/` (`./scripts/openfdd_install_agent_skills.sh --sync`). Publishing `open-fdd` showcases AI agent RCx/FDD reporting (`open-fdd-anomaly report`) alongside the ECM guide at https://bbartling.github.io/open-fdd/ecm/
+
 ## Layout
 
 | Module | Role |

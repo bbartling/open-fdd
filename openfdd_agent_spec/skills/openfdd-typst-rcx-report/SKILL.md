@@ -12,6 +12,8 @@ description: >-
 
 # Open-FDD Typst lab reports (multi-profile)
 
+Works with any AI agent that can read markdown skills and run the PyPI CLI. This file lives in `openfdd_agent_spec/skills/`. `.cursor/` is an install target (`./scripts/openfdd_install_agent_skills.sh --sync`), not the source of truth.
+
 **Not** the product PDF path (`rust-text-pdf`). Agent lab screening pack:
 DataFusion → Plotly (UI palette) → Typst → PDF + CSVs for Excel.
 
@@ -106,6 +108,12 @@ command is `open-fdd-anomaly report ... --compile`. That flag runs `typst compil
 when the `typst` binary is on `PATH` and writes `report.pdf` next to `report.typ`.
 `build_april_report.py` and any other out-of-tree runner are not in this package.
 Do not add one, and do not compile `report.typ` by hand.
+
+The PDF title defaults to **Open-FDD AI Agent Report**. `--title` overrides it.
+`--location` prints a site line (example `AHU · ACME Office · Detroit, MI`).
+Headings and the running header use Open-FDD blue (`#1e3a8a` headings, `#2563eb` accent).
+Under the title: month, sample count, Δt, and span hours. Do not put the old
+“AHU screening / not the BUILDING_100 Overview PDF” blurb back on the first page.
 
 **Month filter (required for the analysis window).** `--month YYYY-MM` keeps every
 rule and plot inside that UTC calendar month. Omit it and the command uses the

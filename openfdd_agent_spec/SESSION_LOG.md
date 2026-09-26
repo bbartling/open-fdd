@@ -1,3 +1,8 @@
+## 2026-09-26 — Report chrome, PyPI sales line, agent-neutral skills
+
+- PDF title defaults to Open-FDD AI Agent Report (`--title`, `--location`). Blue headings. Coverage bullets for month, samples, interval, and span. The screening/BUILDING_100 blurb is off the first page.
+- PyPI long description leads with `open-fdd-anomaly report` beside the ECM site. `./scripts/openfdd_install_agent_skills.sh --sync` links `openfdd_agent_spec/skills/` for any agent.
+
 ## 2026-09-26 — Single-system PDF is only the package CLI
 
 - The shipped PDF command is `open-fdd-anomaly report ... --compile`. `build_april_report.py` is not in this package. Docs examples include `--compile`.

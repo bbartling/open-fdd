@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "open-fdd"
 version = "4.4.7"
-description = "Open-FDD libraries: ECM engineering workbooks plus pandas oracle rules, analytics, and Engineering Findings reporting. Production FDD remains the DataFusion/GHCR stack."
+description = "Open-FDD for AI agents: RCx/FDD reports from mapped CSV or an API, plus ECM engineering workbooks. Production FDD remains the DataFusion/GHCR stack."
 readme = "docs/ecm/README.md"
 license = { text = "MIT" }
 authors = [
@@ -33,6 +33,9 @@ keywords = [
     "energy-conservation",
     "building-automation",
     "open-fdd",
+    "rcx",
+    "ai-agent",
+    "reporting",
 ]
 dependencies = [
     "openpyxl>=3.1.0",

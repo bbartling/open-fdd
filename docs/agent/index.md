@@ -58,7 +58,7 @@ See [examples/external-agents.md](../examples/external-agents.md).
 
 | Path | Role |
 |------|------|
-| [`openfdd_agent_spec/`](../../openfdd_agent_spec/) | Software-engineering agent OS (Milestone A, skills) |
+| [`openfdd_agent_spec/`](../../openfdd_agent_spec/) | Software-engineering agent OS (Milestone A, skills). Source of truth for any agent, not only Cursor. |
 | `.codex/` | Codex CLI project agents + MCP |
 | `.cursor/agents/` | Cursor external development agents |
 | `.agents/skills/` | Portable review skills (not edge runtime) |

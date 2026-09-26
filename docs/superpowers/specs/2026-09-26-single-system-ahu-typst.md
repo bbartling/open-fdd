@@ -46,7 +46,8 @@ The PDF comes only from this CLI. `build_april_report.py` and other out-of-tree 
 
 ```bash
 pip install "open-fdd[anomaly]"
-open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile
+open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile \
+  --location "AHU · ACME Office · Detroit, MI"
 open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --web-oat ./weather.csv --compile
 open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --web-oat fetch --lat 43.07 --lon -89.40 --compile
 open-fdd-anomaly report ./AHU_1 --out ./april_report --month 2026-04 \

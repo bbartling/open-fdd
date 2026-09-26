@@ -7,10 +7,13 @@ permalink: /ecm/overview.html
 
 # Open-FDD Python package (PyPI)
 
-`open-fdd` (PyPI **4.1+**) ships:
+`open-fdd` ships AI-agent RCx/FDD reporting and ECM workbooks. ECM guide: https://bbartling.github.io/open-fdd/ecm/
 
-1. **ECM engineering** (`open_fdd.ecm_engineering`) — agent-drivable HVAC spreadsheet workbooks + Python benchmarks.
-2. **Pandas oracle** (`open_fdd.rules`, `open_fdd.analytics`, `open_fdd.reporting`) — cookbook catalog, analytics helpers, Engineering Findings.
+1. **AI agent report** — `open-fdd-anomaly report ... --compile` from a device folder, an Open-FDD reader, or a future vendor reader. Default title **Open-FDD AI Agent Report**. `--title` and `--location` are optional.
+2. **ECM engineering** (`open_fdd.ecm_engineering`) — agent-drivable HVAC spreadsheet workbooks + Python benchmarks.
+3. **Pandas oracle** (`open_fdd.rules`, `open_fdd.analytics`, `open_fdd.reporting`) — cookbook catalog, analytics helpers, Engineering Findings.
+
+Works with any AI agent that can read markdown skills and run the PyPI CLI. Skill source of truth: `openfdd_agent_spec/skills/` (`./scripts/openfdd_install_agent_skills.sh --sync`).
 
 **Why it exists:** agents put industry-method calcs into **Excel** for human audit, then optionally **compare honesty against EnergyPlus** — see [Purpose: Excel + EnergyPlus](purpose-excel-energyplus.html).
 

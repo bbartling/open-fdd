@@ -3,7 +3,8 @@
 Example::
 
     open-fdd-anomaly screen ./AHU_1 --out ./anomaly_out
-    open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile
+    open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile \\
+        --location "AHU · ACME Office · Detroit, MI"
 
 ``report --compile`` writes ``report.pdf`` in the output directory when the
 ``typst`` binary is on ``PATH``.
@@ -117,6 +118,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write report.pdf in --out. This CLI flag is the only PDF path; typst must be on PATH",
     )
+    report.add_argument(
+        "--title",
+        default=None,
+        help='Report title. Default: "Open-FDD AI Agent Report"',
+    )
+    report.add_argument(
+        "--location",
+        default=None,
+        help='Site line under the title. Example: "AHU · ACME Office · Detroit, MI"',
+    )
     return parser
 
 
@@ -159,6 +170,8 @@ def main(argv: list[str] | None = None) -> int:
                 lon=args.lon,
                 week=args.week,
                 profile=args.profile,
+                title=args.title,
+                location=args.location,
                 top_n=int(args.top_n),
                 max_days=int(args.max_days),
                 methods=methods,

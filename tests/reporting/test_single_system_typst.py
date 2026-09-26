@@ -14,12 +14,14 @@ import pandas as pd
 
 from open_fdd.analytics.anomaly.cli import main
 from open_fdd.reporting.single_system_typst import (
+    EXAMPLE_LOCATION,
     anomaly_plain_checklist,
     attach_web_oat,
     build_single_system_report,
     compile_typst,
     dominant_month,
     filter_to_month,
+    render_typst,
     representative_week,
     write_econ_scatter,
 )
@@ -64,7 +66,13 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert "mild economizer weather" in typ
     assert typ.index("AHU_1_econ_scatter.png") < typ.index("Outdoor-air mixing with the supply fan on")
     assert "x = (OAT - MAT)" not in typ
-    assert "BUILDING_100 Overview-mirrored" in typ
+    assert "Open-FDD AI Agent Report" in typ
+    assert "AHU screening" not in typ
+    assert "BUILDING_100" not in typ
+    assert "Offline report from mapped roles" not in typ
+    assert "#2563eb" in typ
+    assert "samples" in typ
+    assert "Δt" in typ
     assert "Troubleshoot:" in typ
     assert "In the data:" in typ
     assert "open-fdd-anomaly" not in typ
@@ -109,6 +117,48 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     summary_text = summary["devices"][0]["executive_summary"]
     assert summary_text.index("Sensor checks") < summary_text.index("Anomaly screening")
     assert any(row["outcome"] == "fail" for row in summary["devices"][0]["sensor_checks"])
+    coverage = summary["devices"][0]["coverage"]
+    assert coverage["samples"] == 72
+    assert coverage["interval"].endswith("min")
+    assert summary["title"] == "Open-FDD AI Agent Report"
+    assert summary["location"] == ""
+
+
+def test_report_chrome_uses_title_location_and_coverage():
+    typ = render_typst(
+        {
+            "title": "Open-FDD AI Agent Report",
+            "location": EXAMPLE_LOCATION,
+            "devices": [
+                {
+                    "equipment_id": "AHU_1",
+                    "week": "2026-06-01 to 2026-06-07",
+                    "executive_summary": "Summary.",
+                    "sensor_narrative": "Sensor checks passed.",
+                    "anomaly_narrative": "Outdoor air temperature looks normal.",
+                    "profile_implemented": True,
+                    "rcx": [],
+                    "faults": [],
+                    "scatter_figure": "",
+                    "scatter_caption": "Caption.",
+                    "coverage": {
+                        "month_phrase": "June 2026",
+                        "samples": 72,
+                        "interval": "60 min",
+                        "span_h": "72.0",
+                    },
+                }
+            ],
+            "skipped": [],
+        }
+    )
+    assert "Open-FDD AI Agent Report" in typ
+    assert EXAMPLE_LOCATION in typ
+    assert "June 2026, 72 samples, Δt ≈ 60 min, span 72.0 h" in typ
+    assert "AHU screening" not in typ
+    assert "BUILDING_100" not in typ
+    assert "#2563eb" in typ
+    assert "#1e3a8a" in typ
 
 
 def test_month_filter_drops_other_months():

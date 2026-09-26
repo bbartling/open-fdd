@@ -1,11 +1,22 @@
 # Open-FDD Python package (PyPI)
 
-> **GitHub Pages:** this README is excluded from the docs site (`exclude: README.md`). Published overview lives at [`docs/ecm/index.md`](index.md) / [`overview.md`](overview.md) — section **PyPI agent tools**.
+> **GitHub Pages:** this README is excluded from the docs site (`exclude: README.md`). Published overview lives at [`docs/ecm/index.md`](index.md) / [`overview.md`](overview.md) — section **PyPI agent tools**. ECM pages: https://bbartling.github.io/open-fdd/ecm/
 
-`open-fdd` (PyPI **4.1+**) ships:
+`open-fdd` is the library AI agents install. It ships RCx/FDD reporting and ECM workbooks together.
 
-1. **ECM engineering** (`open_fdd.ecm_engineering`) — agent-drivable HVAC spreadsheet workbooks + Python benchmarks.
-2. **Pandas oracle** (`open_fdd.rules`, `open_fdd.analytics`, `open_fdd.reporting`) — cookbook catalog, analytics helpers, Engineering Findings.
+1. **AI agent RCx/FDD report** — `open-fdd-anomaly report` turns a device folder (`history_wide.csv` + `column_map.json`) into a Typst PDF. The same template accepts an Open-FDD API reader or a future vendor reader. It is not tied to one host or one agent.
+2. **ECM engineering** (`open_fdd.ecm_engineering`) — agent-drivable HVAC spreadsheet workbooks + Python benchmarks. Guide: https://bbartling.github.io/open-fdd/ecm/
+3. **Pandas oracle** (`open_fdd.rules`, `open_fdd.analytics`, `open_fdd.reporting`) — cookbook catalog, analytics helpers, Engineering Findings.
+
+Works with any AI agent that can read markdown skills and run the PyPI CLI. Skills live in `openfdd_agent_spec/skills/` (not only `.cursor/`). Sync them with `./scripts/openfdd_install_agent_skills.sh --sync`.
+
+```bash
+pip install "open-fdd[anomaly]" "open-fdd[reporting]"
+open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile \
+  --location "AHU · ACME Office · Detroit, MI"
+```
+
+`--compile` is the only PDF path. `--title` overrides the default **Open-FDD AI Agent Report**.
 
 The ECM API fills the same workbook input cells a human engineer would fill.
 It does not replace the visible spreadsheet calculations.

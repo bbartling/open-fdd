@@ -31,6 +31,11 @@ from open_fdd.analytics.anomaly.plots import point_slug
 from open_fdd.rules.cookbook_catalog import SENSOR_LIMITS
 
 ANOMALY_NOTE = "These screening notes are not equipment faults."
+DEFAULT_REPORT_TITLE = "Open-FDD AI Agent Report"
+# Docs site link blue and a darker navy for headings (docs/_sass/custom/custom.scss).
+BRAND_BLUE = "#2563eb"
+BRAND_NAVY = "#1e3a8a"
+EXAMPLE_LOCATION = "AHU · ACME Office · Detroit, MI"
 
 _MIN_FAN_ON_SAMPLES = 6
 
@@ -601,6 +606,39 @@ def _month_phrase(month: str) -> str:
     return pd.Timestamp(f"{month}-01").strftime("%B %Y")
 
 
+def _interval_label(seconds: float) -> str:
+    """Human sample spacing, such as ``5 min`` or ``60 min``."""
+    minutes = float(seconds) / 60.0
+    if not minutes or minutes <= 0:
+        return "unknown"
+    rounded = round(minutes)
+    if abs(minutes - rounded) <= 0.15 and rounded >= 1:
+        return f"{int(rounded)} min"
+    return f"{_one_decimal(minutes)} min"
+
+
+def coverage_facts(frame: pd.DataFrame, month: str) -> dict[str, Any]:
+    """Month, sample count, typical spacing, and span for the report chrome."""
+    poll = _poll_seconds(frame.index)
+    return {
+        "month_phrase": _month_phrase(month),
+        "samples": int(len(frame)),
+        "interval": _interval_label(poll),
+        "span_h": _one_decimal((len(frame) * poll) / 3600.0),
+    }
+
+
+def _coverage_bullet(device: dict[str, Any], *, prefix_id: bool) -> str:
+    cov = device.get("coverage") or {}
+    line = (
+        f"{cov.get('month_phrase', '')}, {cov.get('samples', 0)} samples, "
+        f"Δt ≈ {cov.get('interval', '')}, span {cov.get('span_h', '')} h"
+    )
+    if prefix_id:
+        return f"{device.get('equipment_id')}: {line}"
+    return line
+
+
 def _is_sv_rule(rule_id: str) -> bool:
     return str(rule_id).startswith("SV-")
 
@@ -1023,15 +1061,40 @@ def render_typst(summary: dict[str, Any]) -> str:
     if skipped:
         names = ", ".join(item["folder"] for item in skipped)
         skip_line = _markup_raw(f"Skipped (no AHU IO): {names}") + "\n\n"
-    body = "\n".join(_device_typst(device) for device in summary["devices"])
-    month = summary.get("month") or ""
+    devices = summary.get("devices") or []
+    body = "\n".join(_device_typst(device) for device in devices)
+    title = str(summary.get("title") or "").strip() or DEFAULT_REPORT_TITLE
+    location = str(summary.get("location") or "").strip()
+    prefix_id = len(devices) > 1
+    bullets = [
+        f"- {_markup_raw(_coverage_bullet(device, prefix_id=prefix_id))}"
+        for device in devices
+        if device.get("coverage")
+    ]
+    location_line = f"#text(fill: accent)[{_markup_raw(location)}]" if location else ""
     return "\n".join(
         [
-            "#set page(paper: \"us-letter\", margin: 0.7in)",
-            "#set text(size: 11pt)",
-            f"= AHU screening ({summary['scope']}, {month})",
+            f'#let brand = rgb("{BRAND_NAVY}")',
+            f'#let accent = rgb("{BRAND_BLUE}")',
+            "#set page(",
+            '  paper: "us-letter",',
+            "  margin: (x: 0.7in, top: 0.9in, bottom: 0.7in),",
+            "  header: align(right)[#text(fill: accent, size: 9pt, weight: \"bold\")[Open-FDD]],",
+            ")",
+            '#set text(size: 11pt, fill: rgb("#0f172a"))',
+            "#show heading: set text(fill: brand)",
+            "#show heading.where(level: 1): it => {",
+            '  set text(fill: brand, size: 20pt, weight: "bold")',
+            "  it",
+            "  v(0.15em)",
+            "  line(length: 100%, stroke: 2pt + accent)",
+            "}",
             "",
-            _markup_raw(_BOUNDARY),
+            f"= {_markup_raw(title)}",
+            "",
+            location_line,
+            "",
+            *bullets,
             "",
             skip_line.rstrip(),
             body,
@@ -1124,6 +1187,7 @@ def _one_device(
         "executive_summary": summary_text,
         "sensor_narrative": sensor_narrative,
         "anomaly_narrative": anomaly_narrative,
+        "coverage": coverage_facts(framed, month),
         "scatter_caption": econ_scatter_caption(temp_unit),
         "sensor_checks": sensor_checks,
         "anomaly": anomaly,
@@ -1172,6 +1236,8 @@ def build_single_system_report(
     week: str | None = None,
     profile: str | None = None,
     ai_comments: dict[str, str] | None = None,
+    title: str | None = None,
+    location: str | None = None,
     top_n: int = 5,
     max_days: int = 10,
     methods: list[str] | None = None,
@@ -1219,6 +1285,8 @@ def build_single_system_report(
     summary = {
         "scope": scope,
         "month": month,
+        "title": (title or "").strip() or DEFAULT_REPORT_TITLE,
+        "location": (location or "").strip(),
         "boundary": _BOUNDARY,
         "ai_comment_slots": list(AI_COMMENT_SLOTS),
         "profiles": [
