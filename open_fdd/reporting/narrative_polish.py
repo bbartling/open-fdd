@@ -69,15 +69,17 @@ def polish_sensor_paragraph(checks: list[dict[str, Any]]) -> str:
     if stale:
         sentences.append(f"{_lead(stale)} stopped updating.")
 
-    spike = set(_labels(by_rule.get("SV-SPIKE") or []))
-    rate = set(_labels(by_rule.get("SV-RATE") or []))
-    both = [label for label in _labels(by_rule.get("SV-SPIKE") or []) if label in rate]
+    spike_labels = _labels(by_rule.get("SV-SPIKE") or [])
+    rate_labels = _labels(by_rule.get("SV-RATE") or [])
+    spike = set(spike_labels)
+    rate = set(rate_labels)
+    both = [label for label in spike_labels if label in rate]
     if both:
         sentences.append(f"{_lead(both)} jumped suddenly and changed faster than expected.")
-    only_spike = [label for label in spike if label not in rate]
+    only_spike = [label for label in spike_labels if label not in rate]
     if only_spike:
         sentences.append(f"{_lead(only_spike)} jumped suddenly.")
-    only_rate = [label for label in rate if label not in spike]
+    only_rate = [label for label in rate_labels if label not in spike]
     if only_rate:
         sentences.append(f"{_lead(only_rate)} changed faster than expected.")
 
@@ -107,10 +109,11 @@ def polish_anomaly_paragraph(rows: list[dict[str, Any]]) -> str:
     needs = [row for row in rows if row.get("outcome") == "needs_a_look"]
     skipped = _labels([row for row in rows if row.get("outcome") == "skipped"])
     sentences: list[str] = []
+    verb = "looks" if len(dict.fromkeys(normal)) == 1 else "look"
     if normal and not needs and not skipped:
-        return f"{_lead(normal)} look normal."
+        return f"{_lead(normal)} {verb} normal."
     if normal:
-        sentences.append(f"{_lead(normal)} look normal.")
+        sentences.append(f"{_lead(normal)} {verb} normal.")
     for row in needs:
         label = (_labels([row]) or ["A trend"])[0]
         detail = str(row.get("detail") or "").strip()

@@ -354,6 +354,17 @@ def test_narrative_groups_sensor_faults_without_fail_prefix():
         ]
     )
     assert anomaly == "Mixed air temperature and outdoor air temperature look normal."
+    one = polish_anomaly_paragraph(
+        [{"outcome": "looks_normal", "labels": ["Outdoor air temperature"]}]
+    )
+    assert one == "Outdoor air temperature looks normal."
+    ordered = polish_sensor_paragraph(
+        [
+            {"outcome": "fail", "rule_id": "SV-SPIKE", "labels": ["Mixed air temperature", "Supply air temperature"]},
+            {"outcome": "fail", "rule_id": "SV-RATE", "labels": ["Return air temperature"]},
+        ]
+    )
+    assert ordered.index("Mixed air temperature") < ordered.index("supply air temperature")
 
 
 def test_fan_off_line_inserts_null_y():
