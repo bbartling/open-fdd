@@ -1,3 +1,7 @@
+## 2026-09-26 — Single-AHU PDF is `open-fdd-anomaly report --compile`
+
+- `--compile` writes `report.pdf` beside `report.typ` when `typst` is on `PATH`. The CLI runs `typst compile`. A separate hand compile is not the shipped path.
+
 ## 2026-09-26 — April device-folder example for the single-AHU report
 
 - Docs and CLI: `--month 2026-04 --web-oat ./open_meteo_april.csv --week 2026-04-06` for an 8640-row 5-minute folder (`2026-04-01` through `2026-04-30`) and a 15-minute `web_oa_t` sidecar reindexed onto the BAS clock (`align_to_index`, `prefer_web_oat`, `bas_vs_web_oat_overlay`). Recommended RCx week runs through `2026-04-12`.

@@ -116,7 +116,7 @@ open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --web-oat ./
 open-fdd-anomaly report ./AHU_1 --out ./april_report --month 2026-04 \
   --web-oat ./open_meteo_april.csv --week 2026-04-06 --compile
 open-fdd-anomaly report ./BUILDING --scope building --out ./bldg_report
-typst compile ./ahu1_report/report.typ ./ahu1_report/report.pdf
+# --compile writes report.pdf when typst is on PATH.
 ```
 
 ## Math & agent rules

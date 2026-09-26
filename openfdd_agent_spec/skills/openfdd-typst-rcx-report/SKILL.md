@@ -101,8 +101,10 @@ The in-repo fixture stays `2026-06` (`tests/reporting/fixtures/ahu_typst_mini/`)
 CI must not download that April folder or call Open-Meteo.
 
 Module: `open_fdd/reporting/single_system_typst.py`. Requires `open-fdd[anomaly]`
-plus Plotly (`open-fdd[reporting]` is what CI installs). Optional PDF:
-`typst compile report.typ report.pdf` or `--compile` when `typst` is on `PATH`.
+plus Plotly (`open-fdd[reporting]` is what CI installs). The PDF is produced by
+the same command: add `--compile`. That flag runs `typst compile` when the
+`typst` binary is on `PATH` and writes `report.pdf` next to `report.typ`.
+A follow-up hand compile is not the shipped path.
 
 **Month filter (required for the analysis window).** `--month YYYY-MM` keeps every
 rule and plot inside that UTC calendar month. Omit it and the command uses the
@@ -179,7 +181,7 @@ Temps (°F) and damper/fan (%) **must** use dual y-axis (`yaxis` + `yaxis2`) —
 | Profile | Sites | Pipeline |
 |---------|-------|----------|
 | `vav_ahu` / legacy | BUILDING_100 | `fetch_railway.py` → `render_plots.py` → `build_typst_body.py` → `main.typ` |
-| `single_system` / `building` | device folder or building folder of devices | `open-fdd-anomaly report` → `report.typ` (does not replace the row above) |
+| `single_system` / `building` | device folder or building folder of devices | `open-fdd-anomaly report --compile` → `report.pdf` when `typst` is on `PATH` (does not replace the row above) |
 | `heat_pump` | LAKESIDE_ES | `openfdd_lab_typst` fetch/render/typst → copy to Creekside HeatPump PDF |
 | `mqtts_zone` | bldg2 | package path → copy to `bldg2_MQTTS_Zone_Lab_Report.pdf` |
 | seasonal | LAKESIDE_ES | `python -m openfdd_lab_typst.seasonal_hp` → **Seasonal** PDF only |

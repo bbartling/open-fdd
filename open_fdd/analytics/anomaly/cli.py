@@ -3,6 +3,10 @@
 Example::
 
     open-fdd-anomaly screen ./AHU_1 --out ./anomaly_out
+    open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile
+
+``report --compile`` writes ``report.pdf`` in the output directory when the
+``typst`` binary is on ``PATH``.
 
 Defaults: ``--top-n 5 --max-days 10 --methods zscore,mad,stl,iforest``.
 Z-score and MAD are SQL-portable (pandas/numpy). STL and Isolation Forest
@@ -101,7 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument(
         "--compile",
         action="store_true",
-        help="Run `typst compile` when the typst binary is on PATH",
+        help="Write report.pdf in --out when the typst binary is on PATH",
     )
     return parser
 
@@ -135,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             from open_fdd.reporting.single_system_typst import build_single_system_report
 
-            build_single_system_report(
+            result = build_single_system_report(
                 args.folder,
                 args.out,
                 scope=args.scope,
@@ -150,6 +154,9 @@ def main(argv: list[str] | None = None) -> int:
                 command=command,
                 compile_pdf=bool(args.compile),
             )
+            pdf_path = getattr(result, "pdf_path", None)
+            if pdf_path is not None:
+                print(pdf_path)
     except NotImplementedError:
         print("screen is not implemented yet", file=sys.stderr)
         return 1

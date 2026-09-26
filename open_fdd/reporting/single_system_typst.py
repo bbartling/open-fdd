@@ -967,12 +967,17 @@ def _one_device(
 
 
 def compile_typst(typ_path: Path) -> Path:
-    """Compile ``report.typ`` beside itself. Raises if ``typst`` is missing."""
+    """Compile ``report.typ`` to ``report.pdf`` beside it.
+
+    This is the PDF step inside ``open-fdd-anomaly report --compile``. It runs
+    ``typst compile`` when that binary is on ``PATH``.
+    """
     binary = shutil.which("typst")
     if not binary:
         raise FileNotFoundError(
-            "typst is not on PATH. Install typst and run: "
-            f"typst compile {typ_path.name} {typ_path.with_suffix('.pdf').name}"
+            "typst is not on PATH. Install the typst binary, then re-run "
+            "open-fdd-anomaly report with --compile. Typst sources are already in "
+            f"{typ_path.parent}."
         )
     pdf_path = typ_path.with_suffix(".pdf")
     completed = subprocess.run(
@@ -1006,8 +1011,10 @@ def build_single_system_report(
 ) -> SingleSystemReport:
     """Write ``report.typ``, ``report_summary.json``, and Plotly PNGs under ``out_dir``.
 
-    ``top_n``, ``max_days``, and ``methods`` belong to ``open-fdd-anomaly screen``.
-    This report does not emit anomaly histograms or day-zoom galleries.
+    ``compile_pdf=True`` (CLI ``--compile``) also writes ``report.pdf`` when
+    ``typst`` is on ``PATH``. ``top_n``, ``max_days``, and ``methods`` belong to
+    ``open-fdd-anomaly screen``. This report does not emit anomaly histograms
+    or day-zoom galleries.
     """
     del top_n, max_days, methods, command
     destination = Path(out_dir)

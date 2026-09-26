@@ -5,16 +5,19 @@ from __future__ import annotations
 import inspect
 import json
 import shutil
+import stat
 from pathlib import Path
 
 import pytest
 
 import pandas as pd
 
+from open_fdd.analytics.anomaly.cli import main
 from open_fdd.reporting.single_system_typst import (
     anomaly_plain_checklist,
     attach_web_oat,
     build_single_system_report,
+    compile_typst,
     dominant_month,
     filter_to_month,
     representative_week,
@@ -211,6 +214,77 @@ def test_anomaly_checklist_skips_without_fan_on_data():
         "2026-06",
     )
     assert rows == [{"outcome": "skipped", "text": "Skipped — not enough fan-on data."}]
+
+
+def test_compile_typst_invokes_binary_on_path(tmp_path, monkeypatch):
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    compiler = bindir / "typst"
+    compiler.write_text(
+        "#!/bin/sh\ntest \"$1\" = compile || exit 1\nprintf '%s\\n' '%PDF-1.4' > \"$3\"\n",
+        encoding="utf-8",
+    )
+    compiler.chmod(compiler.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", str(bindir))
+    typ = tmp_path / "report.typ"
+    typ.write_text("= Hello\n", encoding="utf-8")
+    pdf = compile_typst(typ)
+    assert pdf == tmp_path / "report.pdf"
+    assert pdf.read_bytes().startswith(b"%PDF")
+
+
+def test_compile_without_typst_names_the_cli(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATH", str(tmp_path))
+    typ = tmp_path / "report.typ"
+    typ.write_text("= Hello\n", encoding="utf-8")
+    with pytest.raises(FileNotFoundError, match="open-fdd-anomaly report"):
+        compile_typst(typ)
+
+
+def test_report_compile_flag_prints_pdf(tmp_path, monkeypatch, capsys):
+    pdf = tmp_path / "report.pdf"
+
+    def fake(*_args, **kwargs):
+        assert kwargs["compile_pdf"] is True
+        from open_fdd.reporting.single_system_typst import SingleSystemReport
+
+        return SingleSystemReport(
+            typ_path=tmp_path / "report.typ",
+            summary_path=tmp_path / "report_summary.json",
+            pdf_path=pdf,
+        )
+
+    monkeypatch.setattr(
+        "open_fdd.reporting.single_system_typst.build_single_system_report",
+        fake,
+    )
+    code = main(
+        [
+            "report",
+            str(FIXTURE),
+            "--out",
+            str(tmp_path / "out"),
+            "--month",
+            "2026-06",
+            "--compile",
+        ]
+    )
+    assert code == 0
+    assert str(pdf) in capsys.readouterr().out
+
+
+@pytest.mark.skipif(shutil.which("typst") is None, reason="typst is not on PATH")
+def test_compile_writes_pdf_when_typst_is_on_path(tmp_path):
+    result = build_single_system_report(
+        FIXTURE,
+        tmp_path / "out",
+        month="2026-06",
+        compile_pdf=True,
+    )
+    assert result.pdf_path is not None
+    assert result.pdf_path.is_file()
+    assert result.pdf_path.stat().st_size > 1000
+    assert result.pdf_path.read_bytes().startswith(b"%PDF")
 
 
 def test_scatter_writer_calls_canonical_chart():

@@ -49,7 +49,9 @@ product UI. Role alias Camber↔SQL is a **doc table only** until twin SQL lands
    `economizer_delta_frame` is an alias of `build_economizer_delta_points`; keep
    the longer name in this package. Offline Typst reports must call that chart
    with `viewport="bottom_left"` (both deltas ≤ 0). Do not plot OAT−MAT vs RAT−MAT.
-8. **Single-AHU Typst:** `open-fdd-anomaly report --month YYYY-MM`. Order is sensor
+8. **Single-AHU Typst:** `open-fdd-anomaly report --month YYYY-MM --compile` writes
+   `report.pdf` when `typst` is on `PATH` (the CLI runs `typst compile`; do not
+   leave PDF generation as a hand script). Order is sensor
    checks, plain anomaly bullets, executive summary, week RCx lines, then
    non-SV fault overlays from `rule_result_chart`. No histograms or anomaly
    method names. Web OAT via column, CSV (`web_oa_t` included; 15-minute files
