@@ -1,0 +1,16 @@
+{
+  "equipType": "ahu",
+  "equip": "AHU_1",
+  "points": {
+    "discharge-air-temp": "DAT",
+    "mixed-air-temp": "MAT",
+    "fan-status": "SF_S",
+    "return-air-temp": "RAT_MISSING"
+  },
+  "column_roles": {
+    "discharge-air-temp": "DAT",
+    "mixed-air-temp": "MAT",
+    "fan-status": "SF_S",
+    "return-air-temp": "RAT_MISSING"
+  }
+}
