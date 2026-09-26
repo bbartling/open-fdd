@@ -107,7 +107,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "System profile id. Default follows equipType. "
-            "Implemented today: vav_ahu. Registered stubs include cv_ahu, single_zone, "
+            "Implemented today: vav_ahu and cv_ahu (same air-side figures; unit ventilator is cv_ahu). "
+            "Registered stubs include single_zone, "
             "chiller, boiler, heat_pump, vav_box, fan_coil, geothermal_field, data_hall."
         ),
     )

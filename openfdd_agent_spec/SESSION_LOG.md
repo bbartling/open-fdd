@@ -1,3 +1,7 @@
+## 2026-09-26 — Unit ventilator uses the constant-volume air-handler profile
+
+- `unitVentilator` / `uv` resolve to `cv_ahu`. That profile shares the air-side figure set with `vav_ahu`: economizer rainbow, BAS vs web outdoor air, fan-on supply-air scatter, fan-on duct-static box. The duct-static timeseries is not in the PDF.
+
 ## 2026-09-26 — Generic RCx template for the single-system PDF
 
 - Report figures follow mapped roles on profile `vav_ahu`. Rainbow duplicate timeseries (`ahu_dats`, `ahu_mats`, `ahu_rats`, `ahu_dampers`, `ahu_cooling_valves`, `fan_speeds`) are omitted. Fan-on supply-air vs web OAT and a fan-on duct-static box are included. Faults carry a troubleshoot line and a plain data-window line. No re-run footer.

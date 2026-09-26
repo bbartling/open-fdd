@@ -25,8 +25,8 @@ FIXTURE = Path(__file__).parent / "fixtures" / "ahu_typst_mini"
 
 def test_future_profiles_are_registered_stubs():
     assert PROFILES["vav_ahu"].implemented
+    assert PROFILES["cv_ahu"].implemented
     for stub in (
-        "cv_ahu",
         "single_zone",
         "chiller",
         "boiler",
@@ -43,6 +43,8 @@ def test_future_profiles_are_registered_stubs():
 
 def test_equip_type_picks_vav_ahu_and_stubs():
     assert profile_for_equip_type("ahu") == "vav_ahu"
+    assert profile_for_equip_type("unitventilator") == "cv_ahu"
+    assert profile_for_equip_type("uv") == "cv_ahu"
     assert profile_for_equip_type("fcu") == "fan_coil"
     assert profile_for_equip_type("chiller") == "chiller"
 
@@ -65,6 +67,9 @@ def test_vav_ahu_skips_rainbow_duplicate_timeseries():
     assert "ahu_sat_reset_scatter" in chosen
     assert "duct_static_box" in chosen
     assert "ahu_dats" not in chosen
+    assert "duct_static_ts" not in chosen
+    cv_chosen = {spec.id for spec in select_figures("cv_ahu", roles)}
+    assert cv_chosen == chosen
     without_web = select_figures("vav_ahu", roles - {"web-outside-air-temp"})
     assert "ahu_sat_reset_scatter" not in {spec.id for spec in without_web}
     assert select_figures("chiller", roles) == []

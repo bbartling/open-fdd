@@ -134,11 +134,10 @@ pass/fail bullet list in everyday words.
 
 | Figure | Helper |
 | --- | --- |
-| Profile selection | `open_fdd.reporting.report_template`. `vav_ahu` is implemented. `cv_ahu`, `single_zone`, `chiller`, `boiler`, `heat_pump`, `vav_box`, `fan_coil`, `geothermal_field`, and `data_hall` are registered stubs. A figure is drawn only when its roles are mapped. |
+| Profile selection | `open_fdd.reporting.report_template`. `vav_ahu` and `cv_ahu` share the air-side figures (`unitVentilator` / `uv` resolve to `cv_ahu`). `single_zone`, `chiller`, `boiler`, `heat_pump`, `vav_box`, `fan_coil`, `geothermal_field`, and `data_hall` are registered stubs. A figure is drawn only when its roles are mapped. |
 | Econ temps + damper | `economizer_temps_overlay` (temperature axis + damper % axis, fan running). Do **not** also emit `ahu_dats`, `ahu_mats`, `ahu_rats`, `ahu_dampers`, `ahu_cooling_valves`, or `fan_speeds`. |
 | Supply air vs web OAT | `collect_oat_scatter` + `oat_scatter` (`ahu_sat_reset_scatter`), fan running, web outdoor air on x. Skip when web OAT is absent. |
 | Duct static box | `collect_role_series(..., filter_fan_on=True)` + `multi_equipment_box` (`duct_static_box`). |
-| Duct static + setpoint | `multi_equipment_timeseries` when duct static is mapped. |
 | BAS vs web OAT | `bas_vs_web_oat_overlay` when web OAT was joined. Not the histogram. |
 | Fault overlay | `charts.rule_result_chart` **only** for non-SV rules when `status == FAULT` and confirmed fault hours in the month are > 0. Under each figure: a troubleshoot line from `rule_troubleshoot` (equation + summary) and a plain “in the data” line for that fault window. |
 | Economizer scatter | `build_economizer_delta_points` + `economizer_delta_scatter(..., viewport="bottom_left")`. `economizer_delta_frame` is the same function (older local trees). Keep the `build_economizer_delta_points` name. |
@@ -151,7 +150,7 @@ Ordered sections for facility / RCx readers (keep this order):
 1. **Sensor checks first.** SV rules for the mapped sensors. List only checks with findings, in plain language (stuck flat, reading out of physical range, sudden jump, stopped updating). If every check is clean, one “Passed” bullet. Do not invent findings.
 2. **Anomaly screening second, high-level only.** One bullet per varying trend: “looks normal”, “needs a look”, or “skipped — not enough fan-on data”. If something needs a look, add one everyday sentence about the trace (for example a sudden dropout). Do not treat that sentence as an equipment fault. No method names.
 3. **Executive summary** that opens with the sensor-check outcome and the plain anomaly outcome, then confirmed operating findings rounded to 1 decimal.
-4. RCx week figures selected from mapped roles: economizer rainbow (OAT/RAT/MAT/SAT plus damper percent), fan-on supply air vs web outdoor air, fan-on duct-static box, duct static with setpoint, and BAS/web overlay when web OAT exists. Do not add the duplicate timeseries presets listed above.
+4. RCx week figures selected from mapped roles: economizer rainbow (OAT/RAT/MAT/SAT plus damper percent), BAS/web overlay when web OAT exists, fan-on supply air vs web outdoor air, and a fan-on duct-static box. Do not add the duplicate timeseries presets listed above.
 5. Confirmed operating-fault figures only (not the SV bullets). Under each figure: how to troubleshoot (rule equation) and what the fault window shows, in plain language.
 6. Economizer delta scatter. **x = OAT − RAT** (`delta_or_f`), **y = MAT − RAT** (`delta_mr_f`). Reference lines y = OA fraction × x for 0/25/50/75/100% OA. Fan ON and |OAT−RAT| ≥ 10°F. **Viewport is the bottom-left mixing quadrant only** (both deltas ≤ 0, so OAT ≤ RAT and MAT ≤ RAT). **Do not plot OAT−MAT vs RAT−MAT.**
 

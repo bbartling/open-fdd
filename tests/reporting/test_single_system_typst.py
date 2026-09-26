@@ -75,7 +75,7 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert not (out / "figures" / "AHU_1_fault_SV-RANGE.png").exists()
     assert "AHU_1_rcx_econ_temps.png" in names
     assert "AHU_1_rcx_duct_static_box.png" in names
-    assert "AHU_1_rcx_duct_static_ts.png" in names
+    assert "AHU_1_rcx_duct_static_ts.png" not in names
     assert "AHU_1_rcx_ahu_sat_reset_scatter.png" not in names
     for skipped in (
         "ahu_dats",

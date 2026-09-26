@@ -103,16 +103,10 @@ def _vav_ahu_figures() -> tuple[FigureSpec, ...]:
             y_role="duct-static-pressure",
             fan_on=True,
         ),
-        FigureSpec(
-            "duct_static_ts",
-            "Duct static and setpoint",
-            "Duct static pressure with the mapped setpoint.",
-            "timeseries",
-            ("duct-static-pressure",),
-            y_role="duct-static-pressure",
-            overlay_role="duct-static-pressure-sp",
-        ),
     )
+
+
+_AIR_HANDLER_FIGURES = _vav_ahu_figures()
 
 
 def _stub(profile_id: str, label: str, *equipment_types: str) -> SystemProfile:
@@ -130,9 +124,15 @@ PROFILES: dict[str, SystemProfile] = {
         label="Air handler",
         equipment_types=("AHU",),
         implemented=True,
-        figures=_vav_ahu_figures(),
+        figures=_AIR_HANDLER_FIGURES,
     ),
-    "cv_ahu": _stub("cv_ahu", "Constant-volume air handler", "AHU"),
+    "cv_ahu": SystemProfile(
+        id="cv_ahu",
+        label="Constant-volume air handler",
+        equipment_types=("AHU",),
+        implemented=True,
+        figures=_AIR_HANDLER_FIGURES,
+    ),
     "single_zone": _stub("single_zone", "Single-zone unit", "ZONE"),
     "chiller": _stub("chiller", "Chiller", "CHILLER", "CHW_PLANT"),
     "boiler": _stub("boiler", "Boiler", "BOILER"),
@@ -146,8 +146,10 @@ PROFILES: dict[str, SystemProfile] = {
 _EQUIP_PROFILE = {
     "ahu": "vav_ahu",
     "rtu": "vav_ahu",
-    "unitventilator": "vav_ahu",
-    "uv": "vav_ahu",
+    "unitventilator": "cv_ahu",
+    "uv": "cv_ahu",
+    "cv": "cv_ahu",
+    "cvahu": "cv_ahu",
     "vav": "vav_box",
     "fcu": "fan_coil",
     "zone": "single_zone",

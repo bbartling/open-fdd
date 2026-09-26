@@ -35,6 +35,7 @@ def test_report_help_mentions_scope(capsys):
     assert "--compile" in text
     assert "--profile" in text
     assert "vav_ahu" in text
+    assert "cv_ahu" in text
     assert "report.pdf" in text
     assert "2026-04-06" in text
 
