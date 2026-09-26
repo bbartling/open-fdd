@@ -44,3 +44,6 @@ product UI. Role alias Camber↔SQL is a **doc table only** until twin SQL lands
    `tests/analytics/test_chart_palette_parity.py` +
    `tests/reporting/test_report_chart_palette.py` (Findings chrome bars).
    PyPI overview PNG names keep Soft-OPEN `overview_*` prefix vs React bare stems.
+7. **Economizer delta scatter:** x = `delta_or_f` = OAT − RAT, y = `delta_mr_f` = MAT − RAT
+   (`economizer_delta_scatter` / `build_economizer_delta_points`). Offline Typst
+   reports must call that chart. Do not plot OAT−MAT vs RAT−MAT.

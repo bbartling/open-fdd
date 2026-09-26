@@ -2021,6 +2021,105 @@ def economizer_weather_summary(
 ECON_DIAG_AIR_TYPES = frozenset({"AHU", "RTU"})
 ECON_DIAG_DT_MIN_F = 10.0  # Guideline 36 default ΔT_MIN for mixing diagnostics
 
+# Canonical mixing axes. x = OAT − RAT, y = MAT − RAT. Never OAT−MAT / RAT−MAT.
+_ECON_OAT_COLUMNS = ("oat_f", "outside-air-temp", "bas-outside-air-temp")
+_ECON_RAT_COLUMNS = ("rat_f", "return-air-temp")
+_ECON_MAT_COLUMNS = ("mat_f", "mixed-air-temp")
+_ECON_DELTA_COLUMNS = (
+    "delta_or_f",
+    "delta_mr_f",
+    "identifiable",
+    "oat_f",
+    "rat_f",
+    "mat_f",
+    "equipment_id",
+    "damper_fb_pct",
+)
+
+
+def _econ_numeric_column(frame: pd.DataFrame, names: tuple[str, ...]) -> pd.Series | None:
+    for name in names:
+        if name not in frame.columns:
+            continue
+        series = pd.to_numeric(frame[name], errors="coerce")
+        if series.notna().any():
+            return series
+    return None
+
+
+def _empty_economizer_delta_points() -> pd.DataFrame:
+    return pd.DataFrame(columns=list(_ECON_DELTA_COLUMNS))
+
+
+def build_economizer_delta_points(
+    frame: pd.DataFrame,
+    *,
+    equipment_id: str | None = None,
+    dt_min_f: float = ECON_DIAG_DT_MIN_F,
+) -> pd.DataFrame:
+    """Fan-on points for ``economizer_delta_scatter``.
+
+    The only mixing deltas this helper emits are:
+
+    * ``delta_or_f`` = OAT − RAT (scatter x)
+    * ``delta_mr_f`` = MAT − RAT (scatter y)
+
+    100% outdoor-air mixing (MAT = OAT) lands on y ≈ x. 0% outdoor air
+    (MAT = RAT) lands on y ≈ 0. Reference lines on the chart are
+    y = frac × x. Rows with the fan off are omitted. ``identifiable`` is
+    true when ``|OAT − RAT| >= dt_min_f`` (default 10°F).
+
+    Do not derive OAT−MAT or RAT−MAT from this frame.
+    """
+    if frame is None or frame.empty:
+        return _empty_economizer_delta_points()
+
+    oat = _econ_numeric_column(frame, _ECON_OAT_COLUMNS)
+    rat = _econ_numeric_column(frame, _ECON_RAT_COLUMNS)
+    mat = _econ_numeric_column(frame, _ECON_MAT_COLUMNS)
+    if oat is None or rat is None or mat is None:
+        return _empty_economizer_delta_points()
+
+    if any(role in frame.columns for role in MAPPED_FAN_ROLES):
+        fan_on = _econ_fan_on_mask(frame)
+    elif "fan_on" in frame.columns:
+        fan_on = frame["fan_on"].fillna(False).astype(bool)
+    else:
+        fan_on = pd.Series(False, index=frame.index)
+
+    delta_or = oat - rat
+    delta_mr = mat - rat
+    points = pd.DataFrame(
+        {
+            "delta_or_f": delta_or,
+            "delta_mr_f": delta_mr,
+            "identifiable": delta_or.abs() >= float(dt_min_f),
+            "oat_f": oat,
+            "rat_f": rat,
+            "mat_f": mat,
+        },
+        index=frame.index,
+    )
+    if equipment_id:
+        points["equipment_id"] = str(equipment_id)
+    elif "equipment_id" in frame.columns:
+        points["equipment_id"] = frame["equipment_id"].astype(str)
+    elif frame.attrs.get("equipment_id"):
+        points["equipment_id"] = str(frame.attrs["equipment_id"])
+    else:
+        points["equipment_id"] = "AHU"
+
+    if "damper_fb_pct" in frame.columns:
+        points["damper_fb_pct"] = pd.to_numeric(frame["damper_fb_pct"], errors="coerce")
+    elif "outside-air-damper" in frame.columns:
+        from open_fdd.rules.cookbook_catalog import norm_cmd
+
+        points["damper_fb_pct"] = norm_cmd(frame["outside-air-damper"]) * 100.0
+    else:
+        points["damper_fb_pct"] = np.nan
+
+    return points.loc[fan_on.fillna(False)].copy()
+
 
 def _econ_fan_on_mask(mapped: pd.DataFrame) -> pd.Series:
     """OR of mapped fan-status / fan-cmd (required for free-cooling plots)."""
@@ -2149,12 +2248,17 @@ def economizer_free_cooling_diagnostics(
             skipped.append({"equipment_id": eq_id, "reason": "no_fan_on_rows"})
             continue
 
-        delta_or = sub["oat_f"] - sub["rat_f"]
-        delta_mr = sub["mat_f"] - sub["rat_f"]
-        ident = delta_or.abs() >= float(dt_min_f)
-        sub["delta_or_f"] = delta_or
-        sub["delta_mr_f"] = delta_mr
-        sub["identifiable"] = ident
+        deltas = build_economizer_delta_points(
+            sub,
+            equipment_id=str(eq_id),
+            dt_min_f=float(dt_min_f),
+        )
+        sub["delta_or_f"] = deltas["delta_or_f"].reindex(sub.index)
+        sub["delta_mr_f"] = deltas["delta_mr_f"].reindex(sub.index)
+        sub["identifiable"] = deltas["identifiable"].reindex(sub.index).fillna(False).astype(bool)
+        delta_or = sub["delta_or_f"]
+        delta_mr = sub["delta_mr_f"]
+        ident = sub["identifiable"]
         with np.errstate(divide="ignore", invalid="ignore"):
             oa_frac = 100.0 * delta_mr / delta_or
         oa_frac = oa_frac.where(ident)

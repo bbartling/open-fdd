@@ -1,6 +1,10 @@
+## 2026-09-26 — Economizer scatter axes corrected
+
+- Single-system Typst scatter calls `economizer_delta_scatter`: **x = OAT − RAT** (`delta_or_f`), **y = MAT − RAT** (`delta_mr_f`). `build_economizer_delta_points` is the only point builder. OAT−MAT vs RAT−MAT is not a report axis.
+
 ## 2026-09-26 — Offline single-system AHU Typst + anomaly CLI
 
-- PyPI `open-fdd-anomaly` screens a device folder and `report` writes a Typst pack (data health, SV, anomaly scoreboard, FC1, economizer, OAT−MAT vs RAT−MAT).
+- PyPI `open-fdd-anomaly` screens a device folder and `report` writes a Typst pack (data health, SV, anomaly scoreboard, FC1, economizer rules, canonical economizer delta scatter).
 - Haystack `equip` object maps resolve when `equipment` is empty. BUILDING_100 Overview mirror stays the external legacy kit.
 - Sample PDF: `tests/reporting/fixtures/ahu_typst_mini_report.pdf`.
 

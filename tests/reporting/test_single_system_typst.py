@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import shutil
 from pathlib import Path
 
-from open_fdd.reporting.single_system_typst import build_single_system_report
+from open_fdd.reporting.single_system_typst import build_single_system_report, write_econ_scatter
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ahu_typst_mini"
 
@@ -37,7 +38,12 @@ def test_single_system_report_sections_and_oracle(tmp_path):
     ):
         assert heading in typ
     assert "not FDD faults" in typ
-    assert "OAT − MAT" in typ or "OAT - MAT" in typ
+    assert "delta_or_f" in typ
+    assert "delta_mr_f" in typ
+    assert "OAT - RAT" in typ
+    assert "MAT - RAT" in typ
+    assert "x = (OAT - MAT)" not in typ
+    assert "y = (RAT - MAT)" not in typ
     assert "economizer_delta_scatter" in typ
     assert "BUILDING_100 Overview-mirrored" in typ
     assert result.devices == ["AHU_1"]
@@ -87,3 +93,11 @@ def test_building_scope_skips_non_ahu_child(tmp_path):
     summary = json.loads(result.summary_path.read_text(encoding="utf-8"))
     assert summary["scope"] == "building"
     assert "VAV_1" in result.typ_path.read_text(encoding="utf-8")
+
+
+def test_scatter_writer_calls_canonical_chart():
+    source = inspect.getsource(write_econ_scatter)
+    assert "build_economizer_delta_points" in source
+    assert "economizer_delta_scatter" in source
+    assert "OAT − MAT" not in source
+    assert "RAT − MAT" not in source

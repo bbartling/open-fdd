@@ -1385,7 +1385,13 @@ def bas_vs_web_oat_histogram(
 
 
 def economizer_delta_scatter(points: pd.DataFrame, *, dt_min_f: float = 10.0) -> go.Figure | None:
-    """(MAT−RAT) vs (OAT−RAT) mixing plot with OA-fraction reference lines (fan-on, identifiable)."""
+    """(MAT−RAT) vs (OAT−RAT) mixing plot with OA-fraction reference lines.
+
+    x = ``delta_or_f`` = OAT − RAT. y = ``delta_mr_f`` = MAT − RAT.
+    Reference lines are y = frac × x for 0/25/50/75/100% OA. Callers must
+    pass fan-on rows; identifiable samples are ``|OAT−RAT| ≥ dt_min_f``
+    (default 10°F). Do not plot OAT−MAT or RAT−MAT.
+    """
     if points is None or points.empty:
         return None
     df = points.copy()

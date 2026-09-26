@@ -24,7 +24,7 @@ OpenClaw, Claude Desktop, or any MCP host — connect via **JWT REST** and optio
 
 **PyPI (`open-fdd`):** ECM engineering + pandas oracle (`open_fdd.rules` / `analytics` / `reporting`) for **third-party tooling** outside the product app. Product FDD is DataFusion on GHCR.
 
-**Offline AHU Typst (single system or building folder):** `open-fdd-anomaly report <folder> --out <dir>` (`--scope single-system|building`). Sections are data health, SV rules, anomaly scoreboard (unsupervised, not faults), FC1, economizer rules, and fan-on (OAT−MAT) vs (RAT−MAT). This does **not** replace the BUILDING_100 Overview-mirrored lab PDF. Skill: [`openfdd_agent_spec/skills/openfdd-typst-rcx-report/SKILL.md`](openfdd_agent_spec/skills/openfdd-typst-rcx-report/SKILL.md).
+**Offline AHU Typst (single system or building folder):** `open-fdd-anomaly report <folder> --out <dir>` (`--scope single-system|building`). Sections are data health, SV rules, anomaly scoreboard (unsupervised, not faults), FC1, economizer rules, and `economizer_delta_scatter`: **x = OAT − RAT** (`delta_or_f`), **y = MAT − RAT** (`delta_mr_f`), OA-fraction lines y = frac × x, fan-on and |OAT−RAT| ≥ 10°F via `build_economizer_delta_points`. Do not plot OAT−MAT vs RAT−MAT. This does **not** replace the BUILDING_100 Overview-mirrored lab PDF. Skill: [`openfdd_agent_spec/skills/openfdd-typst-rcx-report/SKILL.md`](openfdd_agent_spec/skills/openfdd-typst-rcx-report/SKILL.md).
 
 Dual expression cookbooks (permanent): `docs/rules/cookbook/` (SQL + pandas).
 

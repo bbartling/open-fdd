@@ -188,17 +188,6 @@ def _pyplot():
     return plt
 
 
-def _fan_mask(role_df: pd.DataFrame) -> pd.Series:
-    if "fan-status" in role_df.columns:
-        series = pd.to_numeric(role_df["fan-status"], errors="coerce")
-        return series.fillna(0) >= 0.5
-    if "fan-cmd" in role_df.columns:
-        series = pd.to_numeric(role_df["fan-cmd"], errors="coerce")
-        series = series.where(series <= 1.0, series / 100.0)
-        return series.fillna(0) >= 0.5
-    return pd.Series(True, index=role_df.index)
-
-
 def write_fc1_figure(role_df: pd.DataFrame, path: Path) -> bool:
     """Duct static and setpoint on the left axis; fan command percent on the right."""
     if "duct-static-pressure" not in role_df.columns:
@@ -228,38 +217,66 @@ def write_fc1_figure(role_df: pd.DataFrame, path: Path) -> bool:
 
 
 def write_econ_scatter(role_df: pd.DataFrame, path: Path) -> bool:
-    """Fan-on scatter of (OAT−MAT) vs (RAT−MAT).
+    """Write ``economizer_delta_scatter``: x = OAT−RAT, y = MAT−RAT.
 
-    The product RCx cookbook figure ``economizer_delta_scatter`` is the mixing
-    equivalent: (OAT−RAT) vs (MAT−RAT). This closer uses the requested axes
-    when OAT, MAT, and RAT columns exist.
+    Points come from ``build_economizer_delta_points`` (``delta_or_f`` /
+    ``delta_mr_f`` only). Reference lines are y = OA fraction × x. Fan-off
+    rows and samples with |OAT−RAT| < 10°F are not the plotted cloud.
     """
-    need = ("outside-air-temp", "mixed-air-temp", "return-air-temp")
-    if any(role not in role_df.columns for role in need):
-        return False
-    plt = _pyplot()
-    mask = _fan_mask(role_df)
-    oat = pd.to_numeric(role_df["outside-air-temp"], errors="coerce")
-    mat = pd.to_numeric(role_df["mixed-air-temp"], errors="coerce")
-    rat = pd.to_numeric(role_df["return-air-temp"], errors="coerce")
-    x = (oat - mat).where(mask)
-    y = (rat - mat).where(mask)
-    paired = pd.DataFrame({"x": x, "y": y}).dropna()
-    if paired.empty:
+    from open_fdd.analytics.charts import economizer_delta_scatter
+    from open_fdd.analytics.core import ECON_DIAG_DT_MIN_F, build_economizer_delta_points
+
+    equipment_id = str(role_df.attrs.get("equipment_id") or "AHU")
+    points = build_economizer_delta_points(
+        role_df,
+        equipment_id=equipment_id,
+        dt_min_f=ECON_DIAG_DT_MIN_F,
+    )
+    figure = economizer_delta_scatter(points, dt_min_f=ECON_DIAG_DT_MIN_F)
+    if figure is None:
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
+    if _write_plotly_png(figure, path):
+        return True
+    return _write_delta_scatter_png(points, path, dt_min_f=ECON_DIAG_DT_MIN_F)
+
+
+def _write_plotly_png(figure, path: Path) -> bool:
+    """Static export of the Plotly ``economizer_delta_scatter`` figure."""
+    try:
+        figure.write_image(str(path), scale=2, width=900, height=480)
+    except Exception:
+        return False
+    return path.is_file() and path.stat().st_size > 100
+
+
+def _write_delta_scatter_png(points: pd.DataFrame, path: Path, *, dt_min_f: float) -> bool:
+    """Matplotlib fallback that plots only ``delta_or_f`` / ``delta_mr_f``."""
+    df = points
+    if "identifiable" in df.columns:
+        df = df[df["identifiable"].astype(bool)]
+    df = df.dropna(subset=["delta_or_f", "delta_mr_f"])
+    if len(df) < 5:
+        return False
+    plt = _pyplot()
     fig, ax = plt.subplots(figsize=(6.4, 5.2))
-    ax.scatter(paired["x"], paired["y"], s=18, color="#2563eb", alpha=0.8)
-    ax.axhline(0, color="#94a3b8", lw=0.8)
-    ax.axvline(0, color="#94a3b8", lw=0.8)
-    ax.set_xlabel("OAT − MAT (°F)")
-    ax.set_ylabel("RAT − MAT (°F)")
-    ax.set_title("Economizer scatter (fan ON)")
+    x_lo = float(df["delta_or_f"].min())
+    x_hi = float(df["delta_or_f"].max())
+    if x_lo == x_hi:
+        x_lo, x_hi = x_lo - 1.0, x_hi + 1.0
+    xs = [x_lo, x_hi]
+    for frac, label in ((0.0, "0% OA"), (0.25, "25%"), (0.5, "50%"), (0.75, "75%"), (1.0, "100% OA")):
+        ax.plot(xs, [frac * x_lo, frac * x_hi], color="#94a3b8", lw=0.8, ls=":", label=label)
+    ax.scatter(df["delta_or_f"], df["delta_mr_f"], s=18, color="#2563eb", alpha=0.8, zorder=3)
+    ax.set_xlabel("OAT − RAT (°F)")
+    ax.set_ylabel("MAT − RAT (°F)")
+    ax.set_title(f"Economizer free-cooling delta scatter (fan on, |OAT−RAT|≥{dt_min_f:.0f}°F)")
     ax.grid(alpha=0.3)
+    ax.legend(loc="best", fontsize=8, frameon=False)
     fig.tight_layout()
     fig.savefig(path, dpi=120)
     plt.close(fig)
-    return True
+    return path.is_file() and path.stat().st_size > 100
 
 
 def _code_raw(value: object) -> str:
@@ -380,8 +397,10 @@ def _device_typst(device: dict[str, Any]) -> str:
             "=== 6. Economizer scatter",
             "",
             _markup_raw(
-                "Fan-ON samples: x = (OAT - MAT), y = (RAT - MAT). "
-                "Cookbook / RCx equivalent is economizer_delta_scatter: (OAT - RAT) vs (MAT - RAT)."
+                "economizer_delta_scatter: x = OAT - RAT (delta_or_f), "
+                "y = MAT - RAT (delta_mr_f). Reference lines y = OA fraction * x "
+                "for 0/25/50/75/100% OA. Fan ON and |OAT-RAT| >= 10 F. "
+                "Do not plot OAT-MAT vs RAT-MAT."
             ),
             "",
         ]
@@ -391,7 +410,7 @@ def _device_typst(device: dict[str, Any]) -> str:
     else:
         parts.extend(
             [
-                "Scatter unavailable: need outside-air-temp, mixed-air-temp, and return-air-temp with fan-on samples.",
+                "Scatter unavailable: need fan-on OAT, RAT, and MAT with at least five samples where |OAT-RAT| >= 10 F.",
                 "",
             ]
         )

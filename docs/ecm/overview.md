@@ -105,7 +105,9 @@ Python-only (`open-fdd[anomaly]`).
 open-fdd-anomaly screen ./AHU_1 --out ./anomaly_out
 # defaults: --top-n 5 --max-days 10 --methods zscore,mad,stl,iforest
 
-# Single AHU FDD/RCx Typst (not the BUILDING_100 Overview PDF)
+# Single AHU FDD/RCx Typst (not the BUILDING_100 Overview PDF).
+# Economizer scatter: x = OAT−RAT (delta_or_f), y = MAT−RAT (delta_mr_f).
+# Do not plot OAT−MAT vs RAT−MAT.
 open-fdd-anomaly report ./AHU_1 --out ./ahu1_report
 open-fdd-anomaly report ./BUILDING --scope building --out ./bldg_report
 typst compile ./ahu1_report/report.typ ./ahu1_report/report.pdf

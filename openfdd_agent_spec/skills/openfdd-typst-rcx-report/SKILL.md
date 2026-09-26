@@ -94,7 +94,7 @@ Ordered sections (do not promote anomaly minutes to faults):
 3. Anomaly scoreboard. Unsupervised ≠ FDD. Fan-ON share is a note; cookbook FC1/economizer gates still do the fan-ON proof.
 4. FC1 duct-static / fan evidence (pressure on one axis, fan % on the other).
 5. Economizer cookbook rows (`FC2`, `FC3`, `FC10`, `FC11`, `ECON-1`, `ECON-2`, `ECON-4`).
-6. Fan-ON scatter **(OAT−MAT) vs (RAT−MAT)**. Caption must name the cookbook/RCx equivalent `economizer_delta_scatter`: **(OAT−RAT) vs (MAT−RAT)**.
+6. Fan-on `economizer_delta_scatter` only. **x = OAT − RAT** (`delta_or_f`), **y = MAT − RAT** (`delta_mr_f`). Reference lines are y = OA fraction × x for 0/25/50/75/100% OA. Fan ON and |OAT−RAT| ≥ 10°F. Build the points with `build_economizer_delta_points` and render with `economizer_delta_scatter`. **Do not plot OAT−MAT vs RAT−MAT.**
 
 Haystack exports store devices under `equip` (object). Flat sidecars use string `equip` plus top-level `points`. Both must resolve or the scoreboard is empty.
 
