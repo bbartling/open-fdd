@@ -1,3 +1,7 @@
+## 2026-09-26 — Agent reporting is instance results or local oracle
+
+- One paragraph in the PyPI README and the typst / pypi-oracle skills: consume DataFusion FDD already run on an Open-FDD instance, or crunch mapped CSV locally. Not compute-only, and not Railway-only. #1008 was already merged, so this note is a follow-up on master.
+
 ## 2026-09-26 — PyPI 4.4.8 for the anomaly report CLI
 
 - `4.4.7` is already on PyPI (EQ-VOCAB). The report CLI ships as `4.4.8`, tagged `open-fdd-v4.4.8` so `.github/workflows/publish-open-fdd.yml` publishes it. Product `VERSION` stays the GHCR semver.
