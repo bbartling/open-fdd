@@ -66,6 +66,14 @@ def _day_slice(series: pd.Series, day: date) -> pd.Series:
     return series[(series.index >= start) & (series.index < end)]
 
 
+def _draw_boxplot(ax, groups: list[np.ndarray], labels: list[str]) -> None:
+    """Box plot that accepts matplotlib 3.9 ``tick_labels`` and 3.8 ``labels``."""
+    try:
+        ax.boxplot(groups, tick_labels=labels, showfliers=True)
+    except TypeError:
+        ax.boxplot(groups, labels=labels, showfliers=True)
+
+
 def write_scoreboard_bar(scoreboard_df: pd.DataFrame, path: Path | str) -> Path:
     """Stacked bar of anomaly minutes per point × method."""
     plt = _pyplot()
@@ -184,7 +192,7 @@ def write_support_plots(
     if not groups:
         groups = [np.array([0.0])]
         labels = ["empty"]
-    ax.boxplot(groups, tick_labels=labels, showfliers=True)
+    _draw_boxplot(ax, groups, labels)
     ax.set_title(f"{point} — box")
     ax.set_ylabel("Value")
     ax.grid(axis="y", alpha=0.3)

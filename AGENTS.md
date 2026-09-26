@@ -24,6 +24,8 @@ OpenClaw, Claude Desktop, or any MCP host — connect via **JWT REST** and optio
 
 **PyPI (`open-fdd`):** ECM engineering + pandas oracle (`open_fdd.rules` / `analytics` / `reporting`) for **third-party tooling** outside the product app. Product FDD is DataFusion on GHCR.
 
+**Offline AHU Typst (single system or building folder):** `open-fdd-anomaly report <folder> --out <dir>` (`--scope single-system|building`). Sections are data health, SV rules, anomaly scoreboard (unsupervised, not faults), FC1, economizer rules, and fan-on (OAT−MAT) vs (RAT−MAT). This does **not** replace the BUILDING_100 Overview-mirrored lab PDF. Skill: [`openfdd_agent_spec/skills/openfdd-typst-rcx-report/SKILL.md`](openfdd_agent_spec/skills/openfdd-typst-rcx-report/SKILL.md).
+
 Dual expression cookbooks (permanent): `docs/rules/cookbook/` (SQL + pandas).
 
 ## Start session

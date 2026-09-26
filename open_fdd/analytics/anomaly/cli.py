@@ -23,7 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="open-fdd-anomaly",
         description=(
             "Screen AHU IO points in a device folder (history_wide.csv + column_map.json) "
-            "with rolling Z-score, rolling MAD, STL residual, and Isolation Forest."
+            "and optionally write a single-system FDD/RCx Typst report."
         ),
     )
     sub = parser.add_subparsers(dest="command")
@@ -54,6 +54,34 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_METHODS,
         help=f"Comma-separated detectors (default {DEFAULT_METHODS})",
     )
+    report = sub.add_parser(
+        "report",
+        help="Offline single-system or building-folder AHU FDD/RCx Typst sources",
+    )
+    report.add_argument(
+        "folder",
+        type=Path,
+        help="Device folder, or a building folder of device subfolders",
+    )
+    report.add_argument("--out", type=Path, required=True, help="Output directory")
+    report.add_argument(
+        "--scope",
+        choices=("single-system", "building"),
+        default="single-system",
+        help="single-system (one AHU folder) or building (child device folders)",
+    )
+    report.add_argument("--top-n", type=int, default=5)
+    report.add_argument("--max-days", type=int, default=10)
+    report.add_argument(
+        "--methods",
+        default=DEFAULT_METHODS,
+        help=f"Anomaly detectors (default {DEFAULT_METHODS})",
+    )
+    report.add_argument(
+        "--compile",
+        action="store_true",
+        help="Run `typst compile` when the typst binary is on PATH",
+    )
     return parser
 
 
@@ -65,26 +93,41 @@ def main(argv: list[str] | None = None) -> int:
         code = exc.code
         return int(code) if isinstance(code, int) else 0
 
-    if args.command != "screen":
+    if args.command not in {"screen", "report"}:
         parser.print_help()
         return 2
 
-    from open_fdd.analytics.anomaly.screen import screen_folder
-
     methods = [part.strip().lower() for part in str(args.methods).split(",") if part.strip()]
+    command = "open-fdd-anomaly " + " ".join(argv if argv is not None else sys.argv[1:])
     try:
-        screen_folder(
-            args.folder,
-            args.out,
-            top_n=int(args.top_n),
-            max_days=int(args.max_days),
-            methods=methods,
-            command="open-fdd-anomaly " + " ".join(argv if argv is not None else sys.argv[1:]),
-        )
+        if args.command == "screen":
+            from open_fdd.analytics.anomaly.screen import screen_folder
+
+            screen_folder(
+                args.folder,
+                args.out,
+                top_n=int(args.top_n),
+                max_days=int(args.max_days),
+                methods=methods,
+                command=command,
+            )
+        else:
+            from open_fdd.reporting.single_system_typst import build_single_system_report
+
+            build_single_system_report(
+                args.folder,
+                args.out,
+                scope=args.scope,
+                top_n=int(args.top_n),
+                max_days=int(args.max_days),
+                methods=methods,
+                command=command,
+                compile_pdf=bool(args.compile),
+            )
     except NotImplementedError:
         print("screen is not implemented yet", file=sys.stderr)
         return 1
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, ValueError, ImportError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
     return 0

@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from open_fdd.analytics.anomaly.plots import (
+    _draw_boxplot,
     write_day_zoom,
     write_scoreboard_bar,
     write_support_plots,
@@ -21,6 +22,21 @@ FIXTURE = Path(__file__).parent / "fixtures" / "mini_ahu"
 def _assert_png(path: Path) -> None:
     assert path.is_file(), path
     assert path.stat().st_size > 100
+
+
+def test_boxplot_falls_back_to_labels_on_matplotlib_38():
+    class Ax:
+        def __init__(self):
+            self.labels = None
+
+        def boxplot(self, groups, tick_labels=None, labels=None, showfliers=True):
+            if tick_labels is not None:
+                raise TypeError("tick_labels")
+            self.labels = labels
+
+    ax = Ax()
+    _draw_boxplot(ax, [np.array([1.0, 2.0])], ["normal"])
+    assert ax.labels == ["normal"]
 
 
 def test_plot_helpers_write_nonempty_pngs(tmp_path):

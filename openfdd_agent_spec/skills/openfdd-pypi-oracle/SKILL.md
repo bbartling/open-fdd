@@ -15,8 +15,9 @@ description: >-
 | --- | --- |
 | `open_fdd.rules` | Cookbook runner / catalog / gates |
 | `open_fdd.analytics` | Analytics helpers (`core`, weather, topology, …) |
-| `open_fdd.reporting` | Portable reports |
-| Extras | `oracle`, `reporting`, `vibe19` |
+| `open_fdd.reporting` | Portable reports, including offline `single_system_typst` |
+| `open_fdd.analytics.anomaly` | `open-fdd-anomaly` screen + report CLI |
+| Extras | `oracle`, `reporting`, `anomaly`, `vibe19` |
 
 Not production FDD. Consumers: vibe19, `frontend/web` lab paths, tests, notebooks.
 

@@ -6,7 +6,8 @@ description: >-
   Creekside), and MQTTS zone monitoring (bldg2). CRITICAL: preserve Overview-
   mirrored charts; never strip reports to thin package layouts. Triggers on:
   typst rcx, rcx lab report, heat pump report, lakeside, creekside, mqtts zone
-  PDF, building100_rcx_report, elec_power metering PDF, box plot, seasonal heat cool.
+  PDF, building100_rcx_report, elec_power metering PDF, box plot, seasonal heat cool,
+  open-fdd-anomaly report, single-system AHU Typst, AHU_1 FDD RCx PDF.
 ---
 
 # Open-FDD Typst lab reports (multi-profile)
@@ -72,6 +73,37 @@ typst compile main.typ BUILDING_100_RCx_Lab_Report.pdf
 # or: open-fdd-lab-typst --building BUILDING_100 --skip-fetch
 ```
 
+### Offline single-system and building-folder pack (in this repo)
+
+This path is **additive**. It does not render, replace, or overwrite the sacred
+BUILDING_100 Overview PDF, `main.typ`, or Overview PNG stems.
+
+| Scope | Input | Command |
+| --- | --- | --- |
+| `single-system` | One device folder (`history_wide.csv` + `column_map.json`), v1 focus `AHU_1` | `open-fdd-anomaly report ./AHU_1 --out ./ahu1_report` |
+| `building` | Parent folder of device subfolders. AHU IO is reported; VAV/other children are skipped in the summary | `open-fdd-anomaly report ./BUILDING --scope building --out ./bldg_report` |
+
+Module: `open_fdd/reporting/single_system_typst.py`. Requires `open-fdd[anomaly]`
+(pandas oracle rules + screening). Optional PDF: `typst compile report.typ report.pdf`
+or `--compile` when `typst` is on `PATH`.
+
+Ordered sections (do not promote anomaly minutes to faults):
+
+1. Data health / quality (role coverage and physical bounds).
+2. Sensor-validation oracle (`SV-RANGE`, `SV-FLATLINE`, `SV-SPIKE`, `SV-STALE`) when roles exist.
+3. Anomaly scoreboard. Unsupervised ≠ FDD. Fan-ON share is a note; cookbook FC1/economizer gates still do the fan-ON proof.
+4. FC1 duct-static / fan evidence (pressure on one axis, fan % on the other).
+5. Economizer cookbook rows (`FC2`, `FC3`, `FC10`, `FC11`, `ECON-1`, `ECON-2`, `ECON-4`).
+6. Fan-ON scatter **(OAT−MAT) vs (RAT−MAT)**. Caption must name the cookbook/RCx equivalent `economizer_delta_scatter`: **(OAT−RAT) vs (MAT−RAT)**.
+
+Haystack exports store devices under `equip` (object). Flat sidecars use string `equip` plus top-level `points`. Both must resolve or the scoreboard is empty.
+
+### Railway / API for BUILDING_100
+
+- Full-building Overview PDF: keep the legacy kit (`fetch_railway.py` → `render_plots.py` → `build_typst_body.py` → `main.typ`). Do not point that site at `build_single_system_report`.
+- Single-AHU pack: only after a device folder is already on disk. CI uses `tests/reporting/fixtures/ahu_typst_mini/` (sample PDF `tests/reporting/fixtures/ahu_typst_mini_report.pdf`). Do not commit a multi-megabyte BUILDING_100 CSV.
+- When `OPENFDD_API_BASE` and a JWT already exist, inventory is `GET /api/csv/import/package/mapping?building_id=BUILDING_100`. A local package zip can go through `scripts/agent_eplus_dump.sh` (engineering bundle). Neither call is required for the unit tests, and secrets stay out of CI.
+
 ### Additive changes only
 
 When the user asks for “a few box plots / one scatter / rounding”:
@@ -96,6 +128,7 @@ Temps (°F) and damper/fan (%) **must** use dual y-axis (`yaxis` + `yaxis2`) —
 | Profile | Sites | Pipeline |
 |---------|-------|----------|
 | `vav_ahu` / legacy | BUILDING_100 | `fetch_railway.py` → `render_plots.py` → `build_typst_body.py` → `main.typ` |
+| `single_system` / `building` | device folder or building folder of devices | `open-fdd-anomaly report` → `report.typ` (does not replace the row above) |
 | `heat_pump` | LAKESIDE_ES | `openfdd_lab_typst` fetch/render/typst → copy to Creekside HeatPump PDF |
 | `mqtts_zone` | bldg2 | package path → copy to `bldg2_MQTTS_Zone_Lab_Report.pdf` |
 | seasonal | LAKESIDE_ES | `python -m openfdd_lab_typst.seasonal_hp` → **Seasonal** PDF only |

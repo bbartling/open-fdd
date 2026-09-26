@@ -40,6 +40,8 @@ Open-FDD does **not** ship an embedded chatbot. External agents (Cursor, Codex, 
 | RCx/FDD plot → poll | [`openfdd-rcx-fdd-plot-poll/SKILL.md`](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/openfdd-rcx-fdd-plot-poll/SKILL.md) |
 | Multi-tenant / Kali security | [`openfdd-mt-security/SKILL.md`](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/openfdd-mt-security/SKILL.md) |
 | Typst RCx report | [`openfdd-typst-rcx-report/SKILL.md`](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/openfdd-typst-rcx-report/SKILL.md) |
+
+Offline single-system or building-folder AHU PDF sources: `open-fdd-anomaly report <folder> --out <dir>`. That pack is not the BUILDING_100 Overview mirror.
 | Architecture | [`openfdd-architecture/SKILL.md`](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/openfdd-architecture/SKILL.md) |
 | Milestone A PR | [`openfdd-milestone-a-pr/SKILL.md`](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/openfdd-milestone-a-pr/SKILL.md) |
 

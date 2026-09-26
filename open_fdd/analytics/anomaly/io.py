@@ -60,18 +60,35 @@ def _dedupe(pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
     return out
 
 
+def _equipment_blocks(column_map: dict[str, Any]) -> dict[str, Any] | None:
+    """Nested equipment map.
+
+    Package exports use ``equipment``. Haystack exports use ``equip`` as an
+    object of device blocks. A string ``equip`` (device id on a flat sidecar)
+    is metadata and is not a block map.
+    """
+    equipment = column_map.get("equipment")
+    if isinstance(equipment, dict) and equipment:
+        return equipment
+    equip = column_map.get("equip")
+    if isinstance(equip, dict) and equip:
+        return equip
+    return None
+
+
 def iter_ahu_io_points(column_map: dict[str, Any]) -> list[tuple[str, str]]:
     """Return ``(role, column)`` for AHU IO referenced by the column map.
 
     Flat device maps contribute every ``points`` / ``column_roles`` entry when
-    the stamp is missing or AHU-like. Nested ``equipment`` blocks contribute
-    only AHU-typed blocks (or unstamped ids that start with ``ahu`` / ``rtu``).
-    Zone / VAV blocks are omitted.
+    the stamp is missing or AHU-like. Nested ``equipment`` or Haystack ``equip``
+    blocks contribute only AHU-typed blocks (or unstamped ids that start with
+    ``ahu`` / ``rtu``). Zone / VAV blocks are omitted. ``equipment`` wins when
+    it is a non-empty object; otherwise a dict ``equip`` is used.
     """
     if not isinstance(column_map, dict):
         return []
-    equipment = column_map.get("equipment")
-    if isinstance(equipment, dict) and equipment:
+    equipment = _equipment_blocks(column_map)
+    if equipment is not None:
         pairs: list[tuple[str, str]] = []
         for equip_id, block in equipment.items():
             if not isinstance(block, dict):

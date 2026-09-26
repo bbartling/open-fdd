@@ -1,3 +1,9 @@
+## 2026-09-26 — Offline single-system AHU Typst + anomaly CLI
+
+- PyPI `open-fdd-anomaly` screens a device folder and `report` writes a Typst pack (data health, SV, anomaly scoreboard, FC1, economizer, OAT−MAT vs RAT−MAT).
+- Haystack `equip` object maps resolve when `equipment` is empty. BUILDING_100 Overview mirror stays the external legacy kit.
+- Sample PDF: `tests/reporting/fixtures/ahu_typst_mini_report.pdf`.
+
 ## 2026-09-24 — Tip 3.5.52 RCx/Overview sampling window (UI)
 
 - SPA: `analyticsWindowFromSampling` (180d cap) for Overview + RCx presets — package mapping span, not wall-clock last-30d.

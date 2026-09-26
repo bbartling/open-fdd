@@ -24,6 +24,35 @@ def test_iter_ahu_io_points_points_override_column_roles():
     assert ("discharge-air-temp", "DAT_OLD") not in pairs
 
 
+def test_haystack_equip_object_when_equipment_missing():
+    column_map = {
+        "equip": {
+            "AHU_1": {"equipType": "ahu", "points": {"discharge-air-temp": "SAT"}},
+            "VAV_1": {"equipType": "vav", "points": {"zone-air-temp": "ZT"}},
+        }
+    }
+    assert iter_ahu_io_points(column_map) == [("discharge-air-temp", "SAT")]
+
+
+def test_empty_equipment_falls_back_to_haystack_equip_object():
+    column_map = {
+        "equipment": {},
+        "equip": {
+            "AHU_1": {"equipType": "ahu", "points": {"mixed-air-temp": "MAT"}},
+        },
+    }
+    assert iter_ahu_io_points(column_map) == [("mixed-air-temp", "MAT")]
+
+
+def test_string_equip_id_keeps_flat_points():
+    column_map = {
+        "equip": "AHU_1",
+        "equipType": "ahu",
+        "points": {"discharge-air-temp": "DAT"},
+    }
+    assert iter_ahu_io_points(column_map) == [("discharge-air-temp", "DAT")]
+
+
 def test_iter_ahu_io_points_nested_equipment_keeps_ahu_only():
     column_map = {
         "equipment": {
