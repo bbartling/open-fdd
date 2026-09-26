@@ -82,6 +82,8 @@ typst compile main.typ BUILDING_100_RCx_Lab_Report.pdf
 This path is **additive**. It does not render, replace, or overwrite the sacred
 BUILDING_100 Overview PDF, `main.typ`, or Overview PNG stems.
 
+AI agent reporting can consume FDD and analytics that DataFusion SQL already ran on an Open-FDD instance (Railway or self-hosted), or crunch the same mapped roles locally with the PyPI pandas oracle on a CSV. Either path is valid: not compute-only, and not Railway-only.
+
 The reporter is not Railway-only. It draws from mapped roles (`RoleHistory`).
 `open-fdd-anomaly report` loads a local device folder (`history_wide.csv` +
 `column_map.json`). The same template accepts a role-named frame from a Railway

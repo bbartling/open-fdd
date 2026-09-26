@@ -11,6 +11,8 @@ description: >-
 
 Works with any AI agent that can read markdown skills and run the PyPI CLI. Author only under `openfdd_agent_spec/skills/`. `./scripts/openfdd_install_agent_skills.sh --sync` links that tree into vendor homes. Do not edit a copy under `.cursor/skills/`. Publishing `open-fdd` showcases AI agent RCx/FDD reporting (`open-fdd-anomaly report`) alongside the ECM guide at https://bbartling.github.io/open-fdd/ecm/
 
+AI agent reporting can consume FDD and analytics that DataFusion SQL already ran on an Open-FDD instance (Railway or self-hosted), or crunch the same mapped roles locally with the PyPI pandas oracle on a CSV. Either path is valid: not compute-only, and not Railway-only.
+
 ## Layout
 
 | Module | Role |
