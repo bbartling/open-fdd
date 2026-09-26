@@ -51,11 +51,16 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert "z-score" not in typ.lower()
     assert "isolation forest" not in typ.lower()
     assert " stl " not in typ.lower()
-    assert "delta_or_f" in typ
-    assert "delta_mr_f" in typ
-    assert "OAT - RAT" in typ
-    assert "MAT - RAT" in typ
+    assert "delta_or_f" not in typ
+    assert "delta_mr_f" not in typ
+    assert "OAT − RAT" in typ
+    assert "MAT − RAT" in typ
     assert "bottom-left" in typ
+    assert "fresh-air fraction" in typ
+    assert "actuator position" in typ
+    assert "100% outdoor-air line" in typ
+    assert "mild economizer weather" in typ
+    assert typ.index("AHU_1_econ_scatter.png") < typ.index("Outdoor-air mixing with the supply fan on")
     assert "x = (OAT - MAT)" not in typ
     assert "BUILDING_100 Overview-mirrored" in typ
     assert "Troubleshoot:" in typ

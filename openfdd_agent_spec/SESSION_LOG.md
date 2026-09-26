@@ -1,3 +1,7 @@
+## 2026-09-26 — Economizer scatter caption is engineer-facing
+
+- The note under the section-6 scatter (`ECON_SCATTER_CAPTION`) explains OAT−RAT vs MAT−RAT, the bottom-left fan-on gate, damper color against the outdoor-air fraction lines, that damper position is not fresh-air fraction, and that mild weather shrinks the deltas. Axes are unchanged.
+
 ## 2026-09-26 — Unit ventilator uses the constant-volume air-handler profile
 
 - `unitVentilator` / `uv` resolve to `cv_ahu`. That profile shares the air-side figure set with `vav_ahu`: economizer rainbow, BAS vs web outdoor air, fan-on supply-air scatter, fan-on duct-static box. The duct-static timeseries is not in the PDF.

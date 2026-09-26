@@ -420,6 +420,31 @@ def _write_figure_png(figure, path: Path) -> bool:
     return _mpl_from_plotly(figure, path)
 
 
+# Engineer-facing note under the section-6 scatter. Axes stay
+# x = OAT−RAT (delta_or_f), y = MAT−RAT (delta_mr_f), bottom-left viewport.
+ECON_SCATTER_CAPTION = (
+    "Outdoor-air mixing with the supply fan on. "
+    "The horizontal axis is outdoor-air temperature minus return-air temperature (OAT − RAT). "
+    "The vertical axis is mixed-air temperature minus return-air temperature (MAT − RAT). "
+    "The view is the bottom-left diagnostic quadrant only, where outdoor air is at or below return air "
+    "and mixed air is at or below return air. "
+    "A sample is plotted only when the fan is on and the absolute difference between outdoor air and return air "
+    "is at least 10°F, so the outdoor-air fraction is identifiable.\n\n"
+    "Dotted reference lines are the outdoor-air fraction that would put mixed air on that line: "
+    "0%, 25%, 50%, 75%, and 100% outdoor air. "
+    "When an outdoor-air damper is mapped, point color is damper position from closed (0%) to open (100%). "
+    "In theory, points at a given outdoor-air fraction lie near the matching fraction line. "
+    "A high damper position (yellow, near fully open) should cluster on the 100% outdoor-air line. "
+    "Intermediate colors should sit near their own fraction lines.\n\n"
+    "Damper percent is actuator position. It is not the calculated fresh-air fraction, and it is not an airflow fraction.\n\n"
+    "Points off their fraction line indicate a mixing problem, a temperature-sensor error, "
+    "or the wrong outdoor-air volume (too much or too little outdoor air).\n\n"
+    "The plot is clearest in extreme cold or hot outdoor weather, when outdoor air and return air are far apart. "
+    "In mild economizer weather, where mixed air, return air, and outdoor air are nearly the same temperature, "
+    "the differences shrink and those errors are hardest to see."
+)
+
+
 def write_econ_scatter(role_df: pd.DataFrame, path: Path) -> bool:
     """Write ``economizer_delta_scatter`` clipped to the bottom-left mixing quadrant.
 
@@ -952,20 +977,7 @@ def _device_typst(device: dict[str, Any]) -> str:
         )
         if fault.get("figure"):
             parts.extend([f'#image("{fault["figure"]}", width: 100%)', ""])
-    parts.extend(
-        [
-            "=== Economizer delta scatter",
-            "",
-            _markup_raw(
-                "economizer_delta_scatter: x = OAT - RAT (delta_or_f), "
-                "y = MAT - RAT (delta_mr_f). Reference lines y = OA fraction * x "
-                "for 0/25/50/75/100% OA. Fan ON and |OAT-RAT| >= 10 F. "
-                "Viewport is the bottom-left mixing quadrant only (both deltas <= 0: OAT <= RAT and MAT <= RAT). "
-                "Do not plot OAT-MAT vs RAT-MAT."
-            ),
-            "",
-        ]
-    )
+    parts.extend(["=== Economizer delta scatter", ""])
     parts.extend(_ai_note(device, "economizer"))
     if device.get("scatter_figure"):
         parts.extend([f'#image("{device["scatter_figure"]}", width: 80%)', ""])
@@ -976,6 +988,7 @@ def _device_typst(device: dict[str, Any]) -> str:
                 "",
             ]
         )
+    parts.extend([ECON_SCATTER_CAPTION, ""])
     return "\n".join(parts)
 
 
