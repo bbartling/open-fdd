@@ -49,7 +49,8 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     typ = result.typ_path.read_text(encoding="utf-8")
     assert typ.index("Sensor checks") < typ.index("Anomaly screening")
     assert typ.index("Anomaly screening") < typ.index("Executive summary")
-    assert typ.index("Executive summary") < typ.index("RCx week")
+    assert typ.index("Executive summary") < typ.index("Motor run hours")
+    assert typ.index("Motor run hours") < typ.index("RCx week")
     assert typ.index("RCx week") < typ.index("Confirmed faults")
     assert typ.index("Confirmed faults") < typ.index("Economizer delta scatter")
     assert "outside its physical range" in typ
@@ -102,6 +103,8 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert not (out / "figures" / "AHU_1_fault_SV-RANGE.png").exists()
     assert "AHU_1_rcx_econ_temps.png" in names
     assert "AHU_1_rcx_duct_static_box.png" in names
+    assert "AHU_1_motor_weekly.png" in names
+    assert '#image("figures/AHU_1_motor_weekly.png", width: 100%)' in typ
     assert "AHU_1_rcx_duct_static_ts.png" not in names
     assert "AHU_1_rcx_ahu_sat_reset_scatter.png" not in names
     for skipped in (
@@ -136,6 +139,9 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert summary["location"] == ""
     assert "BUILDING_100" not in summary.get("boundary", "")
     assert "ACME" not in summary.get("boundary", "")
+    motor = summary["devices"][0]["motors"][0]
+    assert motor["signals"] == ["fan-status"]
+    assert "outdoor" in motor["caption"].lower()
 
 
 def test_report_chrome_uses_title_location_and_coverage():
@@ -518,3 +524,141 @@ def test_metric_unit_labels():
     stamped = stamp_display_units(frame, {"unit_system": "si", "units": {"duct-static-pressure": "Pa"}})
     assert stamped["outside-air-temp"] == "°C"
     assert frame.attrs["unit_system"] == "si"
+
+
+def _write_device(
+    folder: Path,
+    *,
+    equip: str,
+    equip_type: str,
+    points: dict[str, str],
+    columns: dict[str, list],
+) -> None:
+    folder.mkdir(parents=True)
+    count = len(next(iter(columns.values())))
+    index = pd.date_range("2026-06-01", periods=count, freq="h", tz="UTC")
+    header = ["timestamp_utc", *points.values()]
+    lines = [",".join(header)]
+    for i, stamp in enumerate(index):
+        values = [stamp.strftime("%Y-%m-%dT%H:%M:%SZ")]
+        for column in points.values():
+            values.append(str(columns[column][i]))
+        lines.append(",".join(values))
+    (folder / "history_wide.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (folder / "column_map.json").write_text(
+        json.dumps({"equipType": equip_type, "equip": equip, "points": points}),
+        encoding="utf-8",
+    )
+
+
+def _on_off(hours: int, on: int, off: int) -> list[int]:
+    pattern = [1] * on + [0] * off
+    return (pattern * ((hours // len(pattern)) + 1))[:hours]
+
+
+def test_motor_weekly_includes_fans_pumps_and_oat_on_any_profile():
+    """Overview weekly rollup, with every mapped motor, including non-AHU types."""
+    from open_fdd.analytics.charts import motor_weekly_runtime_chart
+    from open_fdd.analytics.core import motor_run_hours_weekly
+
+    hours = 48
+    index = pd.date_range("2026-06-01", periods=hours, freq="h", tz="UTC")
+    frame = pd.DataFrame(
+        {
+            "fan-status": _on_off(hours, 12, 12),
+            "pump-status": _on_off(hours, 6, 18),
+            "outside-air-temp": [40.0 + (i % 10) for i in range(hours)],
+        },
+        index=index,
+    )
+    frame.attrs["equipment_type"] = "fcu"
+    frames = {"FCU_1": frame}
+    role_map = {"FCU_1": {column: column for column in frame.columns}}
+    weekly = motor_run_hours_weekly(frames, role_map, include_all_mapped=True)
+    assert set(weekly["signal"]) == {"fan-status", "pump-status"}
+    assert weekly["avg_oat_f"].notna().any()
+    figure = motor_weekly_runtime_chart(weekly, title="FCU_1 motor run hours", show_avg_oat=True)
+    assert figure is not None
+    assert any(getattr(trace, "yaxis", None) == "y2" for trace in figure.data)
+
+
+def test_motor_chart_emitted_for_mapped_fan_and_pump(tmp_path):
+    folder = tmp_path / "AHU_9"
+    hours = 48
+    _write_device(
+        folder,
+        equip="AHU_9",
+        equip_type="ahu",
+        points={"fan-status": "SF_S", "pump-status": "PMP_S", "outside-air-temp": "OAT"},
+        columns={
+            "SF_S": _on_off(hours, 12, 12),
+            "PMP_S": _on_off(hours, 6, 18),
+            "OAT": [55 + (i % 5) for i in range(hours)],
+        },
+    )
+    out = tmp_path / "out"
+    result = build_single_system_report(folder, out, month="2026-06")
+    typ = result.typ_path.read_text(encoding="utf-8")
+    assert typ.index("Executive summary") < typ.index("Motor run hours") < typ.index("RCx week")
+    assert '#image("figures/AHU_9_motor_weekly.png", width: 100%)' in typ
+    png = out / "figures" / "AHU_9_motor_weekly.png"
+    assert png.is_file() and png.stat().st_size > 100
+    summary = json.loads(result.summary_path.read_text(encoding="utf-8"))
+    motor = summary["devices"][0]["motors"][0]
+    assert motor["signals"] == ["fan-status", "pump-status"]
+    assert "outdoor" in motor["caption"].lower()
+    assert summary["devices"][0]["motor_note"] == ""
+
+
+def test_motor_chart_skipped_when_no_motor_proof(tmp_path):
+    folder = tmp_path / "AHU_0"
+    hours = 24
+    _write_device(
+        folder,
+        equip="AHU_0",
+        equip_type="ahu",
+        points={"outside-air-temp": "OAT", "discharge-air-temp": "DAT"},
+        columns={
+            "OAT": [60 + i for i in range(hours)],
+            "DAT": [55] * hours,
+        },
+    )
+    out = tmp_path / "out"
+    result = build_single_system_report(folder, out, month="2026-06")
+    typ = result.typ_path.read_text(encoding="utf-8")
+    assert "Motor run hours" in typ
+    assert "not mapped" in typ
+    assert "motor_weekly" not in typ
+    assert list((out / "figures").glob("*motor_weekly*")) == []
+    summary = json.loads(result.summary_path.read_text(encoding="utf-8"))
+    device = summary["devices"][0]
+    assert device["motors"] == []
+    assert "not mapped" in device["motor_note"]
+
+
+def test_heat_pump_stub_still_draws_motor_run_hours(tmp_path):
+    folder = tmp_path / "HP_1"
+    hours = 48
+    _write_device(
+        folder,
+        equip="HP_1",
+        equip_type="heatPump",
+        points={"fan-status": "FAN_S", "pump-status": "PMP_S", "outside-air-temp": "OAT"},
+        columns={
+            "FAN_S": _on_off(hours, 10, 14),
+            "PMP_S": _on_off(hours, 8, 16),
+            "OAT": [35 + (i % 12) for i in range(hours)],
+        },
+    )
+    out = tmp_path / "out"
+    result = build_single_system_report(folder, out, month="2026-06")
+    summary = json.loads(result.summary_path.read_text(encoding="utf-8"))
+    device = summary["devices"][0]
+    assert device["profile"] == "heat_pump"
+    assert device["profile_implemented"] is False
+    assert device["motors"][0]["signals"] == ["fan-status", "pump-status"]
+    png = out / "figures" / "HP_1_motor_weekly.png"
+    assert png.is_file() and png.stat().st_size > 100
+    typ = result.typ_path.read_text(encoding="utf-8")
+    assert '#image("figures/HP_1_motor_weekly.png", width: 100%)' in typ
+    assert "Figures for it are not drawn yet." in typ

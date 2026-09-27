@@ -1,4 +1,4 @@
-"""Offline single-system (and building-folder) AHU FDD/RCx Typst pack.
+"""Offline single-system (and building-folder) FDD/RCx Typst pack.
 
 This path reads a device folder (``history_wide.csv`` + ``column_map.json``),
 filters to one calendar month, runs the pandas oracle, and writes Typst
@@ -9,7 +9,9 @@ It does **not** replace the legacy Overview-mirrored lab PDF.
 
 Scopes:
 
-* ``single-system`` — one AHU device folder (v1 demo shape, e.g. ``AHU_1``).
+* ``single-system`` — one device folder (AHU, heat pump, chiller, FCU, or any
+  other mapped system). Motor run-hours charts are included whenever fan or
+  pump proof is mapped.
 * ``building`` — a parent folder whose children are device folders. AHU blocks
   are reported; other equipment is listed as skipped.
 """
@@ -27,7 +29,7 @@ from typing import Any
 import pandas as pd
 
 from open_fdd.analytics.anomaly.detectors import median_sample_delta
-from open_fdd.analytics.anomaly.io import iter_ahu_io_points, load_device_folder
+from open_fdd.analytics.anomaly.io import iter_ahu_io_points, iter_mapped_points, load_device_folder
 from open_fdd.analytics.anomaly.plots import point_slug
 from open_fdd.rules.cookbook_catalog import SENSOR_LIMITS
 
@@ -425,6 +427,72 @@ def _write_figure_png(figure, path: Path) -> bool:
     if _write_plotly_png(figure, path):
         return True
     return _mpl_from_plotly(figure, path)
+
+
+MOTOR_SECTION_LEAD = (
+    "Weekly run hours for each mapped fan and pump over the filtered month."
+)
+MOTOR_CAPTION = (
+    "Bars are run hours for each mapped fan and pump, grouped by week. "
+    "Status is used when it is mapped; otherwise the command is used. "
+    "The dotted line is average outdoor-air temperature while that motor was on."
+)
+MOTOR_SKIP_NOTE = (
+    "No motor run-hours chart. Fan status, fan command, and pump status are not mapped on this system."
+)
+MOTOR_ZERO_NOTE = (
+    "Fan or pump proof is mapped, but those motors did not run in this month, so there is no weekly run-hours chart."
+)
+_CHILLER_MOTOR_PROOF = ("chiller-status", "compressor-status", "equipment-enable")
+
+
+def _role_has_data(frame: pd.DataFrame, role: str) -> bool:
+    if role not in frame.columns:
+        return False
+    return bool(pd.to_numeric(frame[role], errors="coerce").notna().any())
+
+
+def _motor_weekly_figures(
+    frame: pd.DataFrame,
+    equipment_id: str,
+    out_dir: Path,
+    slug: str,
+) -> tuple[list[dict[str, Any]], str]:
+    """One Overview motor chart for every mapped fan and pump on this system.
+
+    Uses ``motor_run_hours_weekly(..., include_all_mapped=True)`` and
+    ``motor_weekly_runtime_chart`` (grouped weekly bars, optional avg OAT).
+    """
+    from open_fdd.analytics.charts import motor_weekly_runtime_chart
+    from open_fdd.analytics.core import MOTOR_SIGNAL_ROLES, motor_run_hours_weekly
+
+    frames, role_map = _identity_pack(frame, equipment_id)
+    weekly = motor_run_hours_weekly(
+        frames,
+        role_map,
+        prefer_web_oat=True,
+        include_all_mapped=True,
+    )
+    mapped = any(_role_has_data(frame, role) for role in MOTOR_SIGNAL_ROLES)
+    chiller_proof = any(_role_has_data(frame, role) for role in _CHILLER_MOTOR_PROOF)
+    if weekly is None or weekly.empty:
+        if mapped or chiller_proof:
+            return [], MOTOR_ZERO_NOTE
+        return [], MOTOR_SKIP_NOTE
+    title = f"{equipment_id} motor run hours"
+    figure = motor_weekly_runtime_chart(weekly, title=title, show_avg_oat=True)
+    name = f"figures/{slug}_motor_weekly.png"
+    if figure is None or not _write_figure_png(figure, out_dir / name):
+        return [], "Motor run hours were calculated, but the chart could not be drawn."
+    signals = sorted({str(signal) for signal in weekly["signal"].dropna().unique()})
+    return [
+        {
+            "title": title,
+            "caption": MOTOR_CAPTION,
+            "path": name,
+            "signals": signals,
+        }
+    ], ""
 
 
 # Engineer-facing note under the section-6 scatter. Axes stay
@@ -991,6 +1059,28 @@ def _device_typst(device: dict[str, Any]) -> str:
     parts.extend(_ai_note(device, "executive_summary"))
     parts.extend(
         [
+            "=== Motor run hours",
+            "",
+            MOTOR_SECTION_LEAD,
+            "",
+        ]
+    )
+    if device.get("motors"):
+        for figure in device["motors"]:
+            parts.extend(
+                [
+                    _markup_raw(figure["title"]),
+                    "",
+                    _markup_raw(figure["caption"]),
+                    "",
+                    f'#image("{figure["path"]}", width: 100%)',
+                    "",
+                ]
+            )
+    else:
+        parts.extend([_markup_raw(device.get("motor_note") or MOTOR_SKIP_NOTE), ""])
+    parts.extend(
+        [
             f"=== RCx week ({_markup_raw(device['week'])})",
             "",
             "One week inside the filtered month. Figures follow the mapped roles for this system profile.",
@@ -1108,11 +1198,16 @@ def render_typst(summary: dict[str, Any]) -> str:
     )
 
 
-def _is_ahu_folder(folder: Path) -> bool:
+def _is_report_folder(folder: Path, scope: str) -> bool:
+    """Building scope keeps AHU children. Single-system accepts any mapped device."""
     column_map = json.loads((folder / "column_map.json").read_text(encoding="utf-8"))
     if not isinstance(column_map, dict):
         return False
-    return bool(iter_ahu_io_points(column_map))
+    if iter_ahu_io_points(column_map):
+        return True
+    if scope == "single-system":
+        return bool(iter_mapped_points(column_map))
+    return False
 
 
 def _poll_seconds(index: pd.DatetimeIndex) -> float:
@@ -1166,6 +1261,7 @@ def _one_device(
     week, week_label = representative_week(framed, week_start=week)
     framed.attrs["units_map"] = units_map
     week.attrs["units_map"] = units_map
+    motors, motor_note = _motor_weekly_figures(framed, label, out_dir, slug)
     rcx = _rcx_week_figures(week, label, out_dir, slug, profile_id=chosen.id, units_map=units_map)
     scatter_name = f"figures/{slug}_econ_scatter.png"
     scatter_ok = write_econ_scatter(framed, out_dir / scatter_name, temp_unit=temp_unit)
@@ -1199,6 +1295,8 @@ def _one_device(
         "anomaly": anomaly,
         "health": health,
         "faults": faults,
+        "motors": motors,
+        "motor_note": motor_note,
         "rcx": rcx,
         "scatter_figure": scatter_name if scatter_ok else "",
     }
@@ -1268,7 +1366,7 @@ def build_single_system_report(
     devices: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     for child in folders:
-        if not _is_ahu_folder(child):
+        if not _is_report_folder(child, scope):
             skipped.append({"folder": child.name, "reason": "no AHU IO in column_map"})
             continue
         devices.append(

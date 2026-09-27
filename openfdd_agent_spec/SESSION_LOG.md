@@ -1,3 +1,7 @@
+## 2026-09-27 — Single-system Typst reports include motor run hours
+
+- `open-fdd-anomaly report` now draws `motor_weekly_runtime_chart` for every mapped fan and pump on any system profile, using `motor_run_hours_weekly(..., include_all_mapped=True)`. A short note replaces the chart when no motor proof is mapped. Building scope still skips non-AHU children.
+
 ## 2026-09-27 — Site-identity ban narrowed to product defaults
 
 - Rule 62 and `openfdd-site-identity` apply only to PyPI report/fault/oracle tooling and the Rust DataFusion historian runtime. Tests, stress, ops, and lab fixtures may keep ACME / BUILDING_100 / LAKESIDE. `EXAMPLE_LOCATION` stays a generic example; report location stays empty unless passed.

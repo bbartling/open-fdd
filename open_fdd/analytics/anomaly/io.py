@@ -76,6 +76,24 @@ def _equipment_blocks(column_map: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def iter_mapped_points(column_map: dict[str, Any]) -> list[tuple[str, str]]:
+    """Every ``(role, column)`` pair, including non-AHU equipment stamps.
+
+    Nested ``equipment`` / Haystack ``equip`` blocks contribute every device.
+    A flat sidecar contributes its ``points`` / ``column_roles``.
+    """
+    if not isinstance(column_map, dict):
+        return []
+    equipment = _equipment_blocks(column_map)
+    if equipment is not None:
+        pairs: list[tuple[str, str]] = []
+        for block in equipment.values():
+            if isinstance(block, dict):
+                pairs.extend(_pairs_from_block(block))
+        return _dedupe(pairs)
+    return _dedupe(_pairs_from_block(column_map))
+
+
 def iter_ahu_io_points(column_map: dict[str, Any]) -> list[tuple[str, str]]:
     """Return ``(role, column)`` for AHU IO referenced by the column map.
 
@@ -110,7 +128,7 @@ def iter_ahu_io_points(column_map: dict[str, Any]) -> list[tuple[str, str]]:
     return _dedupe(_pairs_from_block(column_map))
 
 
-def load_device_folder(path: Path | str) -> DeviceSeries:
+def load_device_folder(path: Path | str, *, ahu_only: bool = True) -> DeviceSeries:
     """Read ``history_wide.csv`` and ``column_map.json`` from ``path``.
 
     ``timestamp_utc`` becomes a timezone-aware UTC index. Columns named by the
@@ -138,7 +156,8 @@ def load_device_folder(path: Path | str) -> DeviceSeries:
 
     present: list[tuple[str, str]] = []
     missing: list[tuple[str, str]] = []
-    for role, column in iter_ahu_io_points(column_map):
+    point_pairs = iter_ahu_io_points(column_map) if ahu_only else iter_mapped_points(column_map)
+    for role, column in point_pairs:
         if column in frame.columns:
             present.append((role, column))
         else:
