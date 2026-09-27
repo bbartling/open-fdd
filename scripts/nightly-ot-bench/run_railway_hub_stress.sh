@@ -167,7 +167,7 @@ python3 "$MANIFEST_PY" create \
   --required 35_mqtt_telemetry_pause_resume \
   --required 36_mv_sql_oracle_twin \
   --required 36_model_ecm_qualification \
-  --required 37_acme_analytics_charts
+  --required 37_acme_analytics_charts \
   --required 38_acme_afdd_qualification
 
 record_gate() {
