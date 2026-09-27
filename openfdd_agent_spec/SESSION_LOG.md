@@ -1,3 +1,7 @@
+## 2026-09-27 — Generic campus example; compaction tests use tenant_a
+
+- Report location example is `AHU · Example Campus · City, ST` and stays empty unless passed. The Typst module docstring names `BUILDING_100` only as a separate lab dataset. Compaction tests that this PR touched use `tenant_a` / `BldgA`. Tenant control-plane default remains `legacy` with no buildings.
+
 ## 2026-09-27 — Site-identity rule covers Python and Rust equally
 
 - Rule 62 and `openfdd-site-identity` name both trees: PyPI `open_fdd` (reporting, analytics, ECM/oracle, CLI, Typst, skills that ship behavior) and Rust (`crates/*`, central, mqtt, fieldbus, edge, web backends). The touched anomaly CLI test passes location `AHU · BldgA`.

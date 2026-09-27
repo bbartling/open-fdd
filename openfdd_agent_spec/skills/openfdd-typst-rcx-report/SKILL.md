@@ -119,7 +119,7 @@ when the `typst` binary is on `PATH` and writes `report.pdf` next to `report.typ
 Do not add one, and do not compile `report.typ` by hand.
 
 The PDF title defaults to **Open-FDD AI Agent Report**. `--title` overrides it.
-`--location` prints a site line (example `AHU · Example Office`).
+`--location` prints a site line (example `AHU · Example Campus · City, ST`). It is empty unless passed.
 Headings and the running header use Open-FDD blue (`#1e3a8a` headings, `#2563eb` accent).
 Under the title: month, sample count, Δt, and span hours. Do not put the old
 “AHU screening / not the BUILDING_100 Overview PDF” blurb back on the first page.

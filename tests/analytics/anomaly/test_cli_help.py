@@ -43,8 +43,10 @@ def test_report_help_mentions_scope(capsys):
     assert "Open-FDD AI Agent Report" in text
     assert "AHU" in text
     assert "Example" in text
-    assert "Office" in text
+    assert "Campus" in text
+    assert "City" in text
     assert "ACME" not in text
+    assert "Detroit" not in text
     assert "BUILDING_100" not in text
 
 

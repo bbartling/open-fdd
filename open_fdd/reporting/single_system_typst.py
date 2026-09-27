@@ -5,6 +5,7 @@ filters to one calendar month, runs the pandas oracle, and writes Typst
 sources whose figures come from the same Plotly helpers as the Railway UI.
 
 It does **not** replace the legacy Overview-mirrored lab PDF.
+``BUILDING_100`` is a separate lab dataset, not a product default.
 
 Scopes:
 
@@ -35,7 +36,8 @@ DEFAULT_REPORT_TITLE = "Open-FDD AI Agent Report"
 # Docs site link blue and a darker navy for headings (docs/_sass/custom/custom.scss).
 BRAND_BLUE = "#2563eb"
 BRAND_NAVY = "#1e3a8a"
-EXAMPLE_LOCATION = "AHU · Example Office"
+# Help and chrome example only. Reports leave location empty unless the caller passes one.
+EXAMPLE_LOCATION = "AHU · Example Campus · City, ST"
 
 _MIN_FAN_ON_SAMPLES = 6
 
