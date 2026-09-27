@@ -1,3 +1,7 @@
+## 2026-09-27 — Site-identity ban narrowed to product defaults
+
+- Rule 62 and `openfdd-site-identity` apply only to PyPI report/fault/oracle tooling and the Rust DataFusion historian runtime. Tests, stress, ops, and lab fixtures may keep ACME / BUILDING_100 / LAKESIDE. `EXAMPLE_LOCATION` stays a generic example; report location stays empty unless passed.
+
 ## 2026-09-27 — Generic campus example; compaction tests use tenant_a
 
 - Report location example is `AHU · Example Campus · City, ST` and stays empty unless passed. The Typst module docstring names `BUILDING_100` only as a separate lab dataset. Compaction tests that this PR touched use `tenant_a` / `BldgA`. Tenant control-plane default remains `legacy` with no buildings.

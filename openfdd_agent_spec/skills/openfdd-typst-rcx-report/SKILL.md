@@ -176,7 +176,7 @@ Haystack exports store devices under `equip` (object). Flat sidecars use string 
 
 ### BUILDING_100 legacy kit
 
-The names in this section are the external lab kit only. Do not copy `BUILDING_100`, `LAKESIDE_ES`, or a Detroit ACME address into `open_fdd` source, CLI defaults, Rust product code, or new tests (`BldgA` / `tenant_a`).
+The names in this section are the external lab kit only. Do not copy `BUILDING_100`, `LAKESIDE_ES`, or a Detroit ACME address into a PyPI report default or a DataFusion historian branch. Tests and ops may keep those names.
 
 The single-AHU reporter above is not this site's Overview PDF, and it is not a Railway-only command.
 
