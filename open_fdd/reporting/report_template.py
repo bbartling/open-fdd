@@ -5,8 +5,10 @@ deploy host is not part of the template. A device folder, an Open-FDD HTTP
 API (self-hosted or hosted), or a future vendor adapter all land on
 ``RoleHistory``.
 
-Only the VAV-style air-handler profile draws figures today. Other system
-profiles are registered so a later pass can fill them without a new chrome.
+Only the VAV-style air-handler profile draws RCx week figures today. Motor
+run-hours charts are drawn for every profile, including stubs, when fan or
+pump proof is mapped. Other system profiles stay registered so a later pass
+can fill their RCx figures without a new chrome.
 """
 
 from __future__ import annotations
@@ -257,6 +259,8 @@ class DeviceFolderSource:
 
         folder = Path(self.folder)
         device = load_device_folder(folder)
+        if not device.points:
+            device = load_device_folder(folder, ahu_only=False)
         frame = role_frame(device)
         stamp_display_units(frame, device.column_map if isinstance(device.column_map, dict) else {})
         equip_type = str(frame.attrs.get("equipment_type") or "ahu")

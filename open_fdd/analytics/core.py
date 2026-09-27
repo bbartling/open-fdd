@@ -197,6 +197,76 @@ def _preferred_motor_roles(df: pd.DataFrame) -> list[tuple[str, str]]:
     return out
 
 
+# One series per motor family. Status wins over that family's command.
+_MOTOR_ROLE_FAMILIES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("fan-status", "fan-cmd"), "fan"),
+    (("pump-status", "pump-cmd"), "pump"),
+    (("chw-pump-status", "chw-pump-cmd"), "pump"),
+    (("hw-pump-cmd",), "pump"),
+)
+
+
+def _all_mapped_motor_roles(df: pd.DataFrame) -> list[tuple[str, str]]:
+    """Every mapped fan or pump family, not only the first pump role."""
+    out: list[tuple[str, str]] = []
+    for roles, kind in _MOTOR_ROLE_FAMILIES:
+        for role in roles:
+            if role not in df.columns:
+                continue
+            series = pd.to_numeric(df[role], errors="coerce")
+            if series.notna().any():
+                out.append((role, kind))
+                break
+    return out
+
+
+def _fallback_plant_group(role: str, kind: str) -> str:
+    if "chw" in role:
+        return PLANT_CHILLER
+    if kind == "fan":
+        return PLANT_AIR
+    return PLANT_BOILER
+
+
+def union_mapped_motor_series(
+    found: list[dict[str, Any]],
+    frames: dict[str, pd.DataFrame],
+    role_map: dict,
+) -> list[dict[str, Any]]:
+    """Add mapped fan/pump roles that plant discovery did not already emit.
+
+    Plant charts stay supply-fan or one chiller/boiler series. A single system
+    can still carry a fan and a pump, or a fan on a stub profile (FCU, VAV, HP).
+    """
+    covered = {(spec.get("equipment_id"), spec.get("signal")) for spec in found}
+    extra: list[dict[str, Any]] = []
+    for eq_id, raw in frames.items():
+        if raw is None or raw.empty:
+            continue
+        mapped = apply_role_map(raw, eq_id, role_map)
+        et = resolve_equipment_type(eq_id, df=raw, role_map=role_map)
+        plant = _equipment_plant_group(eq_id, et, df=raw, role_map=role_map)
+        for role, kind in _all_mapped_motor_roles(mapped):
+            if (eq_id, role) in covered:
+                continue
+            series = pd.to_numeric(mapped[role], errors="coerce")
+            if not series.notna().any():
+                continue
+            extra.append(
+                {
+                    "equipment_id": eq_id,
+                    "signal": role,
+                    "column": role,
+                    "motor_kind": kind,
+                    "plant_group": plant or _fallback_plant_group(role, kind),
+                    "label": f"{eq_id} · {role}",
+                    "series": series,
+                }
+            )
+            covered.add((eq_id, role))
+    return list(found) + extra
+
+
 def _normalize_plant_group(raw: str | None) -> str | None:
     if not raw:
         return None
@@ -733,11 +803,16 @@ def motor_run_hours_weekly(
     chw_leave_max_f: float = 48.0,
     weather: pd.DataFrame | None = None,
     prefer_web_oat: bool = True,
+    include_all_mapped: bool = False,
 ) -> pd.DataFrame:
     """Weekly on-hours per motor, split by plant_group (air / boiler / chiller).
 
     Columns: week_start, week_label, equipment_id, signal, motor_kind, plant_group,
     label, hours, avg_oat_f (mean OAT while that motor was on in the week).
+
+    ``include_all_mapped`` keeps the same weekly math and also emits every mapped
+    fan or pump family that plant discovery omitted (pumps on air handlers, fans
+    on FCU / VAV / other stubs). Overview export leaves this off.
     """
     from open_fdd.analytics.poll import infer_poll_seconds
 
@@ -745,6 +820,8 @@ def motor_run_hours_weekly(
     series_list = discover_plant_motor_series(
         frames, role_map, chw_leave_max_f=chw_leave_max_f
     )
+    if include_all_mapped:
+        series_list = union_mapped_motor_series(series_list, frames, role_map)
     poll_by_eq: dict[str, float] = {}
     oat_by_eq: dict[str, pd.Series] = {}
     for eq_id, raw in frames.items():

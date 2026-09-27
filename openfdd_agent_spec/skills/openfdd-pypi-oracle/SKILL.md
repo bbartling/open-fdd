@@ -58,7 +58,9 @@ product UI. Role alias Camber↔SQL is a **doc table only** until twin SQL lands
    weather (MAT ≈ RAT ≈ OAT) shrinks the deltas.
 8. **Single-AHU Typst:** the only shipped PDF command is `open-fdd-anomaly report --month YYYY-MM --compile` (`open_fdd.reporting.report_template`). Do not use `build_april_report.py` or any other out-of-tree runner. Profile `vav_ahu` selects figures from mapped roles. Other system profiles are registered stubs. History is not Railway-only: local CSV plus column map, a Railway or self-hosted Open-FDD central (agent-supplied reader), or a future vendor API, all as mapped roles.
    `report.pdf` is written when `typst` is on `PATH` (the CLI runs `typst compile`). Order is sensor
-   checks, plain anomaly bullets, executive summary, week RCx lines, then
+   checks, plain anomaly bullets, executive summary, motor run hours
+   (`motor_weekly_runtime_chart` for every mapped fan and pump on any profile;
+   short skip note when none are mapped), week RCx lines, then
    non-SV fault overlays from `rule_result_chart`. No histograms or anomaly
    method names. Web OAT via column, CSV (`web_oa_t` included; 15-minute files
    reindex onto the BAS clock; `prefer_web_oat`), or `open_meteo.fetch_open_meteo`.
