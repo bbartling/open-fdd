@@ -101,12 +101,12 @@ def test_report_passes_title_and_location(monkeypatch, tmp_path):
             "--title",
             "Site report",
             "--location",
-            "AHU · ACME Office · Detroit, MI",
+            "AHU · BldgA",
         ]
     )
     assert code == 0
     assert seen["title"] == "Site report"
-    assert seen["location"] == "AHU · ACME Office · Detroit, MI"
+    assert seen["location"] == "AHU · BldgA"
 
 
 def test_screen_help_exits_zero(capsys):

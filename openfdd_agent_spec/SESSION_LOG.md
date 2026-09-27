@@ -1,3 +1,7 @@
+## 2026-09-27 — Site-identity rule covers Python and Rust equally
+
+- Rule 62 and `openfdd-site-identity` name both trees: PyPI `open_fdd` (reporting, analytics, ECM/oracle, CLI, Typst, skills that ship behavior) and Rust (`crates/*`, central, mqtt, fieldbus, edge, web backends). The touched anomaly CLI test passes location `AHU · BldgA`.
+
 ## 2026-09-27 — No hardcoded building ids in product code
 
 - Fuel ZIP import takes `campus_id` only from `campus.json`. It no longer embeds a lab campus or infers one from a workbook name. CLI/MCP/UI examples use generic site language. Rule 62 and `openfdd-site-identity` state the hard rule. Dual-read newer-wins (#1014) was not changed.

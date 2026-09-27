@@ -176,6 +176,8 @@ Haystack exports store devices under `equip` (object). Flat sidecars use string 
 
 ### BUILDING_100 legacy kit
 
+The names in this section are the external lab kit only. Do not copy `BUILDING_100`, `LAKESIDE_ES`, or a Detroit ACME address into `open_fdd` source, CLI defaults, Rust product code, or new tests (`BldgA` / `tenant_a`).
+
 The single-AHU reporter above is not this site's Overview PDF, and it is not a Railway-only command.
 
 - Full-building Overview PDF: keep the legacy kit (`fetch_railway.py` → `render_plots.py` → `build_typst_body.py` → `main.typ`). Do not point that site at `build_single_system_report`.
