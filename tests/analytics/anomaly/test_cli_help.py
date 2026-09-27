@@ -41,7 +41,11 @@ def test_report_help_mentions_scope(capsys):
     assert "--title" in text
     assert "--location" in text
     assert "Open-FDD AI Agent Report" in text
-    assert "Detroit" in text
+    assert "AHU" in text
+    assert "Example" in text
+    assert "Office" in text
+    assert "ACME" not in text
+    assert "BUILDING_100" not in text
 
 
 def test_report_passes_week_and_month(monkeypatch, tmp_path):

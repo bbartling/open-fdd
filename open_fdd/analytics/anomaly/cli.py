@@ -4,7 +4,7 @@ Example::
 
     open-fdd-anomaly screen ./AHU_1 --out ./anomaly_out
     open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile \\
-        --location "AHU · ACME Office · Detroit, MI"
+        --location "AHU · Example Office"
 
 ``report --compile`` writes ``report.pdf`` in the output directory when the
 ``typst`` binary is on ``PATH``.
@@ -126,7 +126,7 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument(
         "--location",
         default=None,
-        help='Site line under the title. Example: "AHU · ACME Office · Detroit, MI"',
+        help='Site line under the title. Example: "AHU · Example Office"',
     )
     return parser
 

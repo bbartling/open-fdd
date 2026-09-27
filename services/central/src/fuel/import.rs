@@ -2,7 +2,8 @@
 //!
 //! **Legacy path (read-only):** new sites should ship utilities inside
 //! `openfdd_package_v1` under `utilities/` (see `edge/src/csv_ingest/package.rs`).
-//! This ZIP importer remains for `liberty_practice_bensbench` until migrated.
+//! `campus_id` always comes from `campus.json` in the zip. The importer does not
+//! invent a campus id or substitute a built-in dataset.
 
 use std::fs;
 use std::io::{Cursor, Read, Write};
@@ -15,11 +16,6 @@ use crate::jobs::workspace_root;
 
 use super::campus::load_campus;
 
-const LIBERTY_ELEC: &str = "Liberty_50_100_Electric_Summary.csv";
-const LIBERTY_GAS_50: &str = "Liberty_50_Gas_Summary.csv";
-const LIBERTY_GAS_100: &str = "Liberty_100_Gas_Summary.csv";
-const LIBERTY_CAMPUS_ID: &str = "liberty_practice_bensbench";
-
 pub fn fuel_root() -> PathBuf {
     let root = workspace_root().join("data").join("fuel");
     let _ = fs::create_dir_all(&root);
@@ -29,8 +25,8 @@ pub fn fuel_root() -> PathBuf {
 /// List imported campuses (directories containing campus.json).
 ///
 /// Also materializes campuses from package `utilities_v1` under
-/// `data/csv_buildings/<building_id>/utilities/` so Metering sees Creekside-style
-/// package utilities without a separate fuel ZIP import.
+/// `data/csv_buildings/<building_id>/utilities/` so Metering sees package
+/// utilities without a separate fuel ZIP import.
 pub fn list_campuses() -> Result<Value> {
     let _ = sync_campuses_from_package_utilities();
     let root = fuel_root();
@@ -162,8 +158,8 @@ pub fn get_campus_meta(campus_id: Option<&str>) -> Result<Value> {
     list_campuses()
 }
 
-/// Import a fuel package ZIP (bytes). Prefer campus.json + CSVs; synthesize Liberty defaults
-/// when Liberty_* CSV filenames are present without campus.json; Excel-only → honest error.
+/// Import a fuel package ZIP (bytes). `campus_id` comes from `campus.json`.
+/// Excel-only workbooks and CSV layouts without `campus.json` are rejected.
 pub fn import_fuel_zip(bytes: &[u8]) -> Result<Value> {
     let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
         .context("invalid zip (not a fuel package archive)")?;
@@ -208,74 +204,61 @@ pub fn import_fuel_zip(bytes: &[u8]) -> Result<Value> {
     fs::create_dir_all(&staging).context("create staging")?;
 
     let result = (|| -> Result<Value> {
-        let mut warnings: Vec<String> = Vec::new();
+        let warnings: Vec<String> = Vec::new();
 
-        // Liberty Excel practice package (Buidling_100_50_fuel_use.zip): map to the
-        // same campus.json + bill CSVs already validated in vibe20 (no Python derive).
         if !has_campus_json && has_xlsx && !has_csv {
-            if looks_like_liberty_excel_package(&entries) {
-                materialize_embedded_liberty_campus(&staging)?;
-                warnings.push(
-                    "Excel Liberty fuel package mapped to embedded campus.json + bill CSVs \
-                     (same data as liberty_campus_fuel.zip / vibe20 Excel derive)"
-                        .into(),
-                );
-            } else {
-                bail!(
-                    "Excel fuel package: provide campus.json + bill CSVs \
-                     (liberty_campus_fuel.zip), or a Liberty Building 50/100 Excel package"
-                );
-            }
-        } else {
-            // Flatten: write files using basename when under a single package folder,
-            // otherwise preserve relative path (still zip-slip safe via Component::Normal).
-            let strip_prefix = detect_common_prefix(&entries);
-
-            for (rel, data) in &entries {
-                let trimmed = if let Some(pref) = &strip_prefix {
-                    rel.strip_prefix(pref)
-                        .map(|s| s.trim_start_matches('/'))
-                        .unwrap_or(rel.as_str())
-                } else {
-                    rel.as_str()
-                };
-                let out = safe_join(&staging, trimmed)
-                    .ok_or_else(|| anyhow::anyhow!("unsafe path in zip: {rel}"))?;
-                if let Some(parent) = out.parent() {
-                    fs::create_dir_all(parent)?;
-                }
-                let mut f =
-                    fs::File::create(&out).with_context(|| format!("create {}", out.display()))?;
-                f.write_all(data)?;
-            }
-
-            // Flatten bill CSVs / campus.json to staging root so meter file paths resolve.
-            flatten_fuel_files_to_root(&staging)?;
+            bail!(
+                "Excel fuel package: provide campus.json with campus_id plus bill CSVs. \
+                 Workbook names do not select a campus."
+            );
         }
+
+        // Flatten: write files using basename when under a single package folder,
+        // otherwise preserve relative path (still zip-slip safe via Component::Normal).
+        let strip_prefix = detect_common_prefix(&entries);
+
+        for (rel, data) in &entries {
+            let trimmed = if let Some(pref) = &strip_prefix {
+                rel.strip_prefix(pref)
+                    .map(|s| s.trim_start_matches('/'))
+                    .unwrap_or(rel.as_str())
+            } else {
+                rel.as_str()
+            };
+            let out = safe_join(&staging, trimmed)
+                .ok_or_else(|| anyhow::anyhow!("unsafe path in zip: {rel}"))?;
+            if let Some(parent) = out.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let mut f =
+                fs::File::create(&out).with_context(|| format!("create {}", out.display()))?;
+            f.write_all(data)?;
+        }
+
+        // Flatten bill CSVs / campus.json to staging root so meter file paths resolve.
+        flatten_fuel_files_to_root(&staging)?;
 
         // Locate campus.json (possibly after flatten)
         let campus_json = find_named(&staging, "campus.json");
         let campus_id = if let Some(ref cj) = campus_json {
             let doc: Value = serde_json::from_slice(&fs::read(cj)?).context("parse campus.json")?;
-            doc.get("campus_id")
+            let id = doc
+                .get("campus_id")
                 .and_then(|v| v.as_str())
-                .unwrap_or("imported_campus")
-                .to_string()
-        } else if liberty_csv_layout(&staging) {
-            let synthesized = synthesize_liberty_campus_json();
-            let cj = staging.join("campus.json");
-            fs::write(&cj, serde_json::to_vec_pretty(&synthesized)?)?;
-            LIBERTY_CAMPUS_ID.to_string()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| anyhow::anyhow!("campus.json is missing campus_id"))?;
+            if id.contains('/') || id.contains("..") {
+                bail!("campus_id is not a single path segment");
+            }
+            id.to_string()
         } else if has_xlsx {
             bail!(
-                "Excel fuel package: provide campus.json + bill CSVs \
-                 (liberty_campus_fuel.zip), or a Liberty Building 50/100 Excel package"
+                "Excel fuel package: provide campus.json with campus_id plus bill CSVs. \
+                 Workbook names do not select a campus."
             );
         } else {
-            bail!(
-                "fuel zip missing campus.json and no Liberty_* CSV layout \
-                 (need Liberty_50_100_Electric_Summary.csv + gas summaries)"
-            );
+            bail!("fuel zip missing campus.json; campus_id must be declared in the package");
         };
 
         // Validate load before promoting
@@ -308,34 +291,6 @@ pub fn import_fuel_zip(bytes: &[u8]) -> Result<Value> {
         let _ = fs::remove_dir_all(&staging);
     }
     result
-}
-
-fn looks_like_liberty_excel_package(entries: &[(String, Vec<u8>)]) -> bool {
-    entries.iter().any(|(n, _)| {
-        let lower = n.to_ascii_lowercase();
-        (lower.contains("liberty") || lower.contains("buidling") || lower.contains("building_100"))
-            && (lower.ends_with(".xlsx") || lower.ends_with(".xls"))
-    })
-}
-
-fn materialize_embedded_liberty_campus(staging: &Path) -> Result<()> {
-    fs::write(
-        staging.join("campus.json"),
-        include_str!("fixtures/campus.json"),
-    )?;
-    fs::write(
-        staging.join(LIBERTY_ELEC),
-        include_str!("fixtures/Liberty_50_100_Electric_Summary.csv"),
-    )?;
-    fs::write(
-        staging.join(LIBERTY_GAS_50),
-        include_str!("fixtures/Liberty_50_Gas_Summary.csv"),
-    )?;
-    fs::write(
-        staging.join(LIBERTY_GAS_100),
-        include_str!("fixtures/Liberty_100_Gas_Summary.csv"),
-    )?;
-    Ok(())
 }
 
 fn file_name(path: &str) -> String {
@@ -449,79 +404,6 @@ fn flatten_fuel_files_to_root(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn liberty_csv_layout(dir: &Path) -> bool {
-    let names: Vec<String> = collect_basenames(dir);
-    let has = |n: &str| names.iter().any(|x| x.eq_ignore_ascii_case(n));
-    has(LIBERTY_ELEC) && has(LIBERTY_GAS_50) && has(LIBERTY_GAS_100)
-}
-
-fn collect_basenames(dir: &Path) -> Vec<String> {
-    let mut out = Vec::new();
-    let Ok(rd) = fs::read_dir(dir) else {
-        return out;
-    };
-    for entry in rd.flatten() {
-        let p = entry.path();
-        if p.is_file() {
-            if let Some(n) = p.file_name() {
-                out.push(n.to_string_lossy().into_owned());
-            }
-        } else if p.is_dir() {
-            out.extend(collect_basenames(&p));
-        }
-    }
-    out
-}
-
-fn synthesize_liberty_campus_json() -> Value {
-    json!({
-        "campus_id": LIBERTY_CAMPUS_ID,
-        "label": "Liberty Buildings 50 + 100 (Troy MI) — synthesized from Liberty_* CSVs",
-        "notes": "Synthesized campus.json for Liberty_50_100 CSV layout (floor_area 140000 each).",
-        "siteRef": "liberty_troy",
-        "lat": 42.5626,
-        "lon": -83.1227,
-        "buildings": [
-            {
-                "building_id": "liberty_50",
-                "label": "Liberty Building 50",
-                "floor_area_ft2": 140000,
-                "property_type": "office"
-            },
-            {
-                "building_id": "liberty_100",
-                "label": "Liberty Building 100",
-                "floor_area_ft2": 140000,
-                "property_type": "office"
-            }
-        ],
-        "meters": [
-            {
-                "meter_id": "elec_shared",
-                "fuel": "electricity",
-                "unit": "kwh",
-                "file": LIBERTY_ELEC,
-                "serves": ["liberty_50", "liberty_100"],
-                "allocation": { "method": "area_weighted" }
-            },
-            {
-                "meter_id": "gas_50",
-                "fuel": "gas",
-                "unit": "mcf",
-                "file": LIBERTY_GAS_50,
-                "serves": ["liberty_50"]
-            },
-            {
-                "meter_id": "gas_100",
-                "fuel": "gas",
-                "unit": "mcf",
-                "file": LIBERTY_GAS_100,
-                "serves": ["liberty_100"]
-            }
-        ]
-    })
-}
-
 fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
@@ -626,8 +508,19 @@ mod tests {
     use super::*;
     use crate::jobs::WORKSPACE_ENV_TEST_LOCK;
 
+    const FIXTURE_ELEC: &str = "Liberty_50_100_Electric_Summary.csv";
+    const FIXTURE_GAS_A: &str = "Liberty_50_Gas_Summary.csv";
+    const FIXTURE_GAS_B: &str = "Liberty_100_Gas_Summary.csv";
+    const FIXTURE_CAMPUS_ID: &str = "demo_site";
+
+    fn assert_no_lab_campus_dir() {
+        assert!(!fuel_root().join("liberty_practice_bensbench").exists());
+        assert!(!fuel_root().join("ACME").exists());
+        assert!(!fuel_root().join("BUILDING_100").exists());
+    }
+
     #[test]
-    fn import_liberty_fixture_zip() {
+    fn import_fixture_zip_uses_campus_json_id() {
         let _g = WORKSPACE_ENV_TEST_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("OPENFDD_WORKSPACE", dir.path());
@@ -636,14 +529,13 @@ mod tests {
         if !fixture.join("campus.json").is_file() {
             return;
         }
-        // Build zip from fixtures
         let zip_path = dir.path().join("pkg.zip");
         {
             let file = fs::File::create(&zip_path).unwrap();
             let mut zipw = zip::ZipWriter::new(file);
             let opts = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated);
-            for name in ["campus.json", LIBERTY_ELEC, LIBERTY_GAS_50, LIBERTY_GAS_100] {
+            for name in ["campus.json", FIXTURE_ELEC, FIXTURE_GAS_A, FIXTURE_GAS_B] {
                 let data = fs::read(fixture.join(name)).unwrap();
                 zipw.start_file(name, opts).unwrap();
                 zipw.write_all(&data).unwrap();
@@ -653,15 +545,16 @@ mod tests {
         let bytes = fs::read(&zip_path).unwrap();
         let out = import_fuel_zip(&bytes).expect("import");
         assert_eq!(out["ok"], true);
-        assert_eq!(out["campus_id"], LIBERTY_CAMPUS_ID);
+        assert_eq!(out["campus_id"], FIXTURE_CAMPUS_ID);
         assert!(fuel_root()
-            .join(LIBERTY_CAMPUS_ID)
+            .join(FIXTURE_CAMPUS_ID)
             .join("campus.json")
             .is_file());
+        assert_no_lab_campus_dir();
     }
 
     #[test]
-    fn liberty_excel_zip_maps_to_embedded_campus() {
+    fn named_excel_zip_does_not_infer_campus() {
         let _g = WORKSPACE_ENV_TEST_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("OPENFDD_WORKSPACE", dir.path());
@@ -672,24 +565,15 @@ mod tests {
             let mut zipw = zip::ZipWriter::new(file);
             let opts = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated);
-            zipw.start_file(
-                "Buidling_100_50_fuel_use/Liberty DTE Energy Monthly.xlsx",
-                opts,
-            )
-            .unwrap();
+            zipw.start_file("site_pack/monthly_bills.xlsx", opts)
+                .unwrap();
             zipw.write_all(b"not-really-xlsx").unwrap();
             zipw.finish().unwrap();
         }
         let bytes = fs::read(&zip_path).unwrap();
-        let out = import_fuel_zip(&bytes).expect("liberty excel maps");
-        assert_eq!(out["ok"], true);
-        assert_eq!(out["campus_id"], LIBERTY_CAMPUS_ID);
-        let warns = out["warnings"].as_array().expect("warnings");
-        assert!(!warns.is_empty());
-        assert!(fuel_root()
-            .join(LIBERTY_CAMPUS_ID)
-            .join("campus.json")
-            .is_file());
+        let err = import_fuel_zip(&bytes).unwrap_err().to_string();
+        assert!(err.contains("campus.json"), "{err}");
+        assert_no_lab_campus_dir();
     }
 
     #[test]
@@ -711,16 +595,17 @@ mod tests {
         let bytes = fs::read(&zip_path).unwrap();
         let err = import_fuel_zip(&bytes).unwrap_err().to_string();
         assert!(err.contains("Excel fuel package"), "{err}");
+        assert!(err.contains("campus.json"), "{err}");
     }
 
     #[test]
-    fn liberty_csv_only_synthesizes_campus() {
+    fn csv_without_campus_json_does_not_invent_id() {
         let _g = WORKSPACE_ENV_TEST_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("OPENFDD_WORKSPACE", dir.path());
 
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fuel");
-        if !fixture.join(LIBERTY_ELEC).is_file() {
+        if !fixture.join(FIXTURE_ELEC).is_file() {
             return;
         }
         let zip_path = dir.path().join("csv_only.zip");
@@ -729,7 +614,7 @@ mod tests {
             let mut zipw = zip::ZipWriter::new(file);
             let opts = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated);
-            for name in [LIBERTY_ELEC, LIBERTY_GAS_50, LIBERTY_GAS_100] {
+            for name in [FIXTURE_ELEC, FIXTURE_GAS_A, FIXTURE_GAS_B] {
                 let data = fs::read(fixture.join(name)).unwrap();
                 zipw.start_file(name, opts).unwrap();
                 zipw.write_all(&data).unwrap();
@@ -737,8 +622,8 @@ mod tests {
             zipw.finish().unwrap();
         }
         let bytes = fs::read(&zip_path).unwrap();
-        let out = import_fuel_zip(&bytes).expect("import csv-only liberty");
-        assert_eq!(out["ok"], true);
-        assert_eq!(out["campus_id"], LIBERTY_CAMPUS_ID);
+        let err = import_fuel_zip(&bytes).unwrap_err().to_string();
+        assert!(err.contains("campus.json"), "{err}");
+        assert_no_lab_campus_dir();
     }
 }

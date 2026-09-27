@@ -134,6 +134,8 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert coverage["interval"].endswith("min")
     assert summary["title"] == "Open-FDD AI Agent Report"
     assert summary["location"] == ""
+    assert "BUILDING_100" not in summary.get("boundary", "")
+    assert "ACME" not in summary.get("boundary", "")
 
 
 def test_report_chrome_uses_title_location_and_coverage():
@@ -165,6 +167,8 @@ def test_report_chrome_uses_title_location_and_coverage():
         }
     )
     assert "Open-FDD AI Agent Report" in typ
+    assert "ACME" not in EXAMPLE_LOCATION
+    assert "BUILDING_100" not in EXAMPLE_LOCATION
     assert EXAMPLE_LOCATION in typ
     assert "June 2026, 72 samples, Δt ≈ 60 min, span 72.0 h" in typ
     assert "AHU screening" not in typ

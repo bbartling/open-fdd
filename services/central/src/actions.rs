@@ -97,7 +97,7 @@ const JSONL_CAP: usize = 50;
 const DEFAULT_LIST_LIMIT: usize = 10;
 const MAX_LIST_LIMIT: usize = 500;
 /// Orphaned `running` rows after OOM/crash — fail them so single-flight can recover.
-/// Soft-OPEN ACME hangs were observed >20m; reclaim at 20m so list/start recover without
+/// Soft-OPEN large-site hangs were observed >20m; reclaim at 20m so list/start recover without
 /// waiting for a second POST (Wave U interrupt).
 const STALE_RUNNING_SECS: i64 = 20 * 60;
 

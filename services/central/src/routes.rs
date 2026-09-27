@@ -2352,7 +2352,7 @@ pub async fn csv_import_package(
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package import task: {e}")}));
     let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
     if ok {
-        // Promote package utilities_v1 → Metering fuel campus (Creekside / LAKESIDE_ES).
+        // Promote package utilities_v1 → Metering fuel campus for the imported building.
         let _ =
             tokio::task::spawn_blocking(fuel::import::sync_campuses_from_package_utilities).await;
         if let Some(bid) = result

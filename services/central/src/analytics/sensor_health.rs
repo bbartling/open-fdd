@@ -166,7 +166,7 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 /// series is provided; otherwise inline central-analytics-v1 compute.
 ///
 /// Defaults `query.start` to the last
-/// [`historian::SENSOR_HEALTH_DEFAULT_LOOKBACK_DAYS`] when omitted so ACME-scale
+/// [`historian::SENSOR_HEALTH_DEFAULT_LOOKBACK_DAYS`] when omitted so large
 /// hives cannot hang unbounded. Explicit `query.start`/`query.end` are honored.
 pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     if req.series.is_none() {

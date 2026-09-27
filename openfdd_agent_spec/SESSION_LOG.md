@@ -1,3 +1,7 @@
+## 2026-09-27 — No hardcoded building ids in product code
+
+- Fuel ZIP import takes `campus_id` only from `campus.json`. It no longer embeds a lab campus or infers one from a workbook name. CLI/MCP/UI examples use generic site language. Rule 62 and `openfdd-site-identity` state the hard rule. Dual-read newer-wins (#1014) was not changed.
+
 ## 2026-09-26 — Agent reporting is instance results or local oracle
 
 - One paragraph in the PyPI README and the typst / pypi-oracle skills: consume DataFusion FDD already run on an Open-FDD instance, or crunch mapped CSV locally. Not compute-only, and not Railway-only. #1008 was already merged, so this note is a follow-up on master.

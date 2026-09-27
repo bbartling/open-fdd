@@ -83,7 +83,7 @@ enum Commands {
         sql_results: PathBuf,
         #[arg(long, default_value_t = 0.5)]
         tolerance: f64,
-        #[arg(long, default_value = "docs/BUILDING_100_BENCHMARK.md")]
+        #[arg(long, default_value = "docs/FDD_BENCHMARK.md")]
         report: PathBuf,
     },
     /// End-to-end benchmark (validate → scan → ingest → rules)
@@ -98,7 +98,7 @@ enum Commands {
         rules_dir: PathBuf,
         #[arg(long, default_value = ".cache/rule_results")]
         rule_out: PathBuf,
-        #[arg(long, default_value = "docs/BUILDING_100_BENCHMARK.md")]
+        #[arg(long, default_value = "docs/FDD_BENCHMARK.md")]
         report: PathBuf,
     },
     /// H4 offline historian compaction (validate-before-publish).

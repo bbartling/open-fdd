@@ -168,7 +168,7 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     if !has_inline {
         let max_gap = req.max_gap_seconds.unwrap_or(900.0);
         let filter = req.query.equipment_ids.as_deref();
-        // ACME-scale historians: unbounded LEAD over full Parquet exceeds Railway
+        // Large historians: unbounded LEAD over full Parquet exceeds Railway
         // edge timeouts (~15–40s → nginx 502). Default to a short lookback; if that
         // window is empty (synthetic fixtures outside wall-clock), expand once to
         // the historian *retain floor* — never `start=None` (full history).
