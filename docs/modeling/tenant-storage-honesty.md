@@ -16,13 +16,13 @@ multi-tenant (MT) mode. Update when paths migrate.
 | --- | --- | --- |
 | Package CSV tree | `workspace/data/csv_buildings/<building_id>/` | **Building ACL on HTTP** (`deny_if_building_out_of_scope`); filesystem is hub-root, not `tenants/{tid}/` |
 | Equipment type stamps | `…/csv_buildings/<bid>/equipment_types.json` and Parquet `building=<bid>/equipment_types.json` | Same building id; stamps preferred (DM-04) |
-| Historian Parquet | `OPENFDD_STORAGE_URL` → hub-root `building=<bid>/…` **or** optional `tenants/{tid}/building=<bid>/…` (Wave U V7 dual-read) | JWT membership gates reads/writes; path prefer tenant partition when present |
+| Historian Parquet | `OPENFDD_STORAGE_URL` → hub-root `building=<bid>/…` **or** optional `tenants/{tid}/building=<bid>/…` (Wave U V7 dual-read) | JWT membership gates reads/writes; read the newer Parquet tree (tie → hub-root) |
 | Session / fault config | building-keyed session files | ACL on `/api/fdd/session-config` |
 | Legacy Oxigraph / Haystack grid | process-global `data/model/*` (edge path) | **Not multi-tenant ACL** — do not expose as a shared-tenant service |
 
 ## Dual-read + migrate (Wave U V7)
 
-- **Reads:** `fdd_store::resolve_building_read_root` prefers `tenants/{tid}/…` when that tree has the building; falls back to hub-root `building=*`. Ambiguous identical labels under two tenants without a preferred tid fall through to hub-root (fail closed).
+- **Reads:** `fdd_store::resolve_building_read_root` loads the newer Parquet tree of `tenants/{tid}/…` and hub-root `building=*`. A tree counts only when it contains `.parquet` (an empty legacy `building=` directory does not). Freshness is the max of file mtime and `part-` / `compact-` UTC stamps in the file name; a tie prefers hub-root so a copied or compacted tenant snapshot cannot mask live hub parts. A tenant-only tree still reads `tenants/{tid}/…`. Ambiguous identical labels under two tenants without a preferred tid fall through to hub-root (fail closed).
 - **Migrate:** additive copy via `scripts/ops/wave_u_v7_tenant_path_migrate.sh` (ACME→`acme`, BUILDING_100→`building_100`, LAKESIDE_ES→`lakeside_sd`). Never deletes hub-root.
 - **ACL:** foreign tenant deny; hub_admin sees all (`TenantContext::allow_building` + gate 31 / preauth matrix).
 

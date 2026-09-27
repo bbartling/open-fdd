@@ -11,7 +11,7 @@ use std::env;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Datelike, Utc};
@@ -256,6 +256,16 @@ pub enum BuildingReadSource {
     HubRoot,
 }
 
+impl BuildingReadSource {
+    /// Stable label for response meta and logs (`tenant` or `hub`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            BuildingReadSource::TenantPartition => "tenant",
+            BuildingReadSource::HubRoot => "hub",
+        }
+    }
+}
+
 /// Resolved storage root for [`register_historian_building`]-style callers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BuildingReadRoot {
@@ -266,6 +276,9 @@ pub struct BuildingReadRoot {
 }
 
 /// True when `storage_root` has canonical Hive and/or legacy sidecar Parquet for `building_id`.
+///
+/// An empty legacy `building={id}` directory is not history. Callers must see real
+/// `.parquet` bytes before treating that tree as a read candidate.
 pub fn building_history_present(storage_root: &Path, building_id: &str) -> bool {
     let Ok(bid) = safe_partition_value(building_id.trim(), "building_id") else {
         return false;
@@ -274,7 +287,7 @@ pub fn building_history_present(storage_root: &Path, building_id: &str) -> bool 
         .join("history")
         .join(format!("building_id={bid}"));
     let legacy = storage_root.join(format!("building={bid}"));
-    dir_has_parquet(&canonical) || dir_has_parquet(&legacy) || legacy.is_dir()
+    dir_has_parquet(&canonical) || dir_has_parquet(&legacy)
 }
 
 fn dir_has_parquet(root: &Path) -> bool {
@@ -291,12 +304,7 @@ fn dir_has_parquet(root: &Path) -> bool {
         for entry in rd.flatten() {
             let path = entry.path();
             if path.is_file() {
-                if path
-                    .extension()
-                    .and_then(|x| x.to_str())
-                    .map(|x| x.eq_ignore_ascii_case("parquet"))
-                    .unwrap_or(false)
-                {
+                if is_parquet_file(&path) {
                     return true;
                 }
             } else if path.is_dir() && walk(&path, depth + 1) {
@@ -308,12 +316,101 @@ fn dir_has_parquet(root: &Path) -> bool {
     walk(root, 0)
 }
 
+/// Newest signal among Parquet files for `building_id` under `storage_root`.
+///
+/// The signal is the max of file mtime and a `part-` / `compact-` UTC stamp
+/// embedded in the file name (`part-20260926T132500Z-….parquet`). `None` when
+/// the tree has no Parquet for the building.
+fn building_history_freshness(storage_root: &Path, building_id: &str) -> Option<SystemTime> {
+    let Ok(bid) = safe_partition_value(building_id.trim(), "building_id") else {
+        return None;
+    };
+    let canonical = storage_root
+        .join("history")
+        .join(format!("building_id={bid}"));
+    let legacy = storage_root.join(format!("building={bid}"));
+    match (
+        dir_max_parquet_freshness(&canonical),
+        dir_max_parquet_freshness(&legacy),
+    ) {
+        (Some(a), Some(b)) => Some(a.max(b)),
+        (Some(only), None) | (None, Some(only)) => Some(only),
+        (None, None) => None,
+    }
+}
+
+fn is_parquet_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("parquet"))
+}
+
+/// `part-20260926T132500Z-…` / `compact-20260923T120000Z-…` → that UTC instant.
+fn filename_history_instant(path: &Path) -> Option<SystemTime> {
+    let name = path.file_name()?.to_str()?;
+    let rest = name
+        .strip_prefix("part-")
+        .or_else(|| name.strip_prefix("compact-"))?;
+    let bytes = rest.as_bytes();
+    if bytes.len() < 16 || bytes[8] != b'T' || bytes[15] != b'Z' {
+        return None;
+    }
+    let naive = chrono::NaiveDateTime::parse_from_str(&rest[..15], "%Y%m%dT%H%M%S").ok()?;
+    let secs = u64::try_from(naive.and_utc().timestamp()).ok()?;
+    Some(SystemTime::UNIX_EPOCH + Duration::from_secs(secs))
+}
+
+fn parquet_file_freshness(path: &Path, modified: Option<SystemTime>) -> SystemTime {
+    match (filename_history_instant(path), modified) {
+        (Some(stamped), Some(mtime)) => stamped.max(mtime),
+        (Some(stamped), None) => stamped,
+        (None, Some(mtime)) => mtime,
+        (None, None) => SystemTime::UNIX_EPOCH,
+    }
+}
+
+fn dir_max_parquet_freshness(root: &Path) -> Option<SystemTime> {
+    if !root.is_dir() {
+        return None;
+    }
+    fn walk(dir: &Path, depth: usize, best: &mut Option<SystemTime>) {
+        if depth > 8 {
+            return;
+        }
+        let Ok(rd) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in rd.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if !is_parquet_file(&path) {
+                    continue;
+                }
+                let modified = entry.metadata().ok().and_then(|meta| meta.modified().ok());
+                let freshness = parquet_file_freshness(&path, modified);
+                *best = Some(best.map(|prev| prev.max(freshness)).unwrap_or(freshness));
+            } else if path.is_dir() {
+                walk(&path, depth + 1, best);
+            }
+        }
+    }
+    let mut best = None;
+    walk(root, 0, &mut best);
+    best
+}
+
 /// Dual-read resolver (Wave U V7 / Soft-OPEN `wave-o1-tenant-path-migrate`).
 ///
-/// Preference order:
-/// 1. `preferred_tenant` → `{hub}/tenants/{tid}/…` when that tree has the building
-/// 2. Unique `tenants/*/…` hit for the building (hub_admin / unscoped migrate)
-/// 3. Hub-root `{hub}/building=…` / `history/building_id=…`
+/// A tree is a candidate only when it contains Parquet for the building.
+/// When both the tenant partition and the hub root have Parquet, the newer
+/// tree wins ([`building_history_freshness`]). Equal freshness prefers the
+/// hub root so a copied or compacted tenant snapshot cannot mask live hub
+/// parts that share the same stamp.
+///
+/// Preference:
+/// 1. Newer of `preferred_tenant`'s tree and hub-root (other tenants ignored)
+/// 2. Newer of the unique `tenants/*/…` hit and hub-root (unscoped / hub_admin)
+/// 3. Hub-root when no tenant has Parquet, or when several tenants match
 ///
 /// Ambiguous multi-tenant hits without a preferred tenant fall through to hub-root
 /// (fail closed for cross-tenant label collisions — do not pick a random tenant).
@@ -323,17 +420,17 @@ pub fn resolve_building_read_root(
     building_id: &str,
 ) -> Result<BuildingReadRoot> {
     let bid = safe_partition_value(building_id.trim(), "building_id")?;
+    let hub_present = building_history_present(hub_base, &bid);
 
     if let Some(raw) = preferred_tenant.map(str::trim).filter(|s| !s.is_empty()) {
         let tid = safe_partition_value(raw, "tenant_id")?;
         let tenant_root = hub_base.join("tenants").join(&tid);
-        if building_history_present(&tenant_root, &bid) {
-            return Ok(BuildingReadRoot {
-                root: tenant_root,
-                source: BuildingReadSource::TenantPartition,
-                tenant_id: Some(tid),
-            });
-        }
+        let tenant = if building_history_present(&tenant_root, &bid) {
+            Some((tid, tenant_root))
+        } else {
+            None
+        };
+        return Ok(choose_newer_root(hub_base, &bid, hub_present, tenant));
     }
 
     let mut tenant_hits: Vec<(String, PathBuf)> = Vec::new();
@@ -363,11 +460,12 @@ pub fn resolve_building_read_root(
     tenant_hits.sort_by(|a, b| a.0.cmp(&b.0));
     if tenant_hits.len() == 1 {
         let (tid, root) = tenant_hits.remove(0);
-        return Ok(BuildingReadRoot {
-            root,
-            source: BuildingReadSource::TenantPartition,
-            tenant_id: Some(tid),
-        });
+        return Ok(choose_newer_root(
+            hub_base,
+            &bid,
+            hub_present,
+            Some((tid, root)),
+        ));
     }
 
     Ok(BuildingReadRoot {
@@ -375,6 +473,49 @@ pub fn resolve_building_read_root(
         source: BuildingReadSource::HubRoot,
         tenant_id: None,
     })
+}
+
+/// Pick the newer Parquet tree. `tenant` is already known to contain history.
+fn choose_newer_root(
+    hub_base: &Path,
+    building_id: &str,
+    hub_present: bool,
+    tenant: Option<(String, PathBuf)>,
+) -> BuildingReadRoot {
+    let Some((tid, tenant_root)) = tenant else {
+        return BuildingReadRoot {
+            root: hub_base.to_path_buf(),
+            source: BuildingReadSource::HubRoot,
+            tenant_id: None,
+        };
+    };
+    if !hub_present {
+        return BuildingReadRoot {
+            root: tenant_root,
+            source: BuildingReadSource::TenantPartition,
+            tenant_id: Some(tid),
+        };
+    }
+    let tenant_fresh = building_history_freshness(&tenant_root, building_id);
+    let hub_fresh = building_history_freshness(hub_base, building_id);
+    let tenant_is_newer = match (tenant_fresh, hub_fresh) {
+        (Some(tenant_at), Some(hub_at)) => tenant_at > hub_at,
+        (Some(_), None) => true,
+        _ => false,
+    };
+    if tenant_is_newer {
+        BuildingReadRoot {
+            root: tenant_root,
+            source: BuildingReadSource::TenantPartition,
+            tenant_id: Some(tid),
+        }
+    } else {
+        BuildingReadRoot {
+            root: hub_base.to_path_buf(),
+            source: BuildingReadSource::HubRoot,
+            tenant_id: None,
+        }
+    }
 }
 
 /// Inventory hub-root `building=*` / `history/building_id=*` plus `tenants/{tid}/…`.
@@ -754,6 +895,193 @@ mod tests {
         let preferred = resolve_building_read_root(hub, Some("tenant_b"), "site_x").unwrap();
         assert_eq!(preferred.source, BuildingReadSource::TenantPartition);
         assert_eq!(preferred.tenant_id.as_deref(), Some("tenant_b"));
+    }
+
+    fn utc_instant(stamp: &str) -> SystemTime {
+        let dt = DateTime::parse_from_rfc3339(stamp).unwrap();
+        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(dt.timestamp() as u64)
+    }
+
+    fn write_parquet(path: &Path, mtime: SystemTime) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, b"pq").unwrap();
+        let file = fs::File::options().write(true).open(path).unwrap();
+        file.set_modified(mtime).unwrap();
+    }
+
+    #[test]
+    fn dual_read_hub_only_live_uses_hub_root() {
+        let tmp = TempDir::new().unwrap();
+        let hub = tmp.path();
+        write_parquet(
+            &hub.join("history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
+            utc_instant("2026-09-26T13:25:00Z"),
+        );
+
+        let resolved = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        assert_eq!(resolved.source, BuildingReadSource::HubRoot);
+        assert_eq!(resolved.root, hub);
+        assert!(resolved.tenant_id.is_none());
+
+        let unscoped = resolve_building_read_root(hub, None, "ACME").unwrap();
+        assert_eq!(unscoped.source, BuildingReadSource::HubRoot);
+        assert_eq!(unscoped.root, hub);
+    }
+
+    #[test]
+    fn dual_read_tenant_only_uses_tenant_partition() {
+        let tmp = TempDir::new().unwrap();
+        let hub = tmp.path();
+        let part = hub.join(
+            "tenants/acme/history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260920T000000Z-only.parquet",
+        );
+        write_parquet(&part, utc_instant("2026-09-20T00:00:00Z"));
+
+        let resolved = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        assert_eq!(resolved.source, BuildingReadSource::TenantPartition);
+        assert_eq!(resolved.tenant_id.as_deref(), Some("acme"));
+        assert!(resolved.root.ends_with("tenants/acme"));
+
+        let unscoped = resolve_building_read_root(hub, None, "ACME").unwrap();
+        assert_eq!(unscoped.source, BuildingReadSource::TenantPartition);
+        assert_eq!(unscoped.tenant_id.as_deref(), Some("acme"));
+    }
+
+    #[test]
+    fn dual_read_hub_newer_than_tenant_uses_hub() {
+        let tmp = TempDir::new().unwrap();
+        let hub = tmp.path();
+        write_parquet(
+            &hub.join("tenants/acme/history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260921T000000Z-old.parquet"),
+            utc_instant("2026-09-21T00:00:00Z"),
+        );
+        write_parquet(
+            &hub.join("history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
+            utc_instant("2026-09-26T13:25:00Z"),
+        );
+
+        let preferred = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        assert_eq!(preferred.source, BuildingReadSource::HubRoot);
+        assert_eq!(preferred.root, hub);
+
+        let unscoped = resolve_building_read_root(hub, None, "ACME").unwrap();
+        assert_eq!(unscoped.source, BuildingReadSource::HubRoot);
+        assert_eq!(unscoped.root, hub);
+    }
+
+    #[test]
+    fn dual_read_newer_tenant_still_wins_over_older_hub() {
+        let tmp = TempDir::new().unwrap();
+        let hub = tmp.path();
+        write_parquet(
+            &hub.join("history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260920T000000Z-old.parquet"),
+            utc_instant("2026-09-20T00:00:00Z"),
+        );
+        write_parquet(
+            &hub.join("tenants/acme/history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
+            utc_instant("2026-09-26T13:25:00Z"),
+        );
+
+        let resolved = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        assert_eq!(resolved.source, BuildingReadSource::TenantPartition);
+        assert_eq!(resolved.tenant_id.as_deref(), Some("acme"));
+        assert!(resolved.root.ends_with("tenants/acme"));
+    }
+
+    #[test]
+    fn building_history_present_ignores_empty_legacy_dir() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("building=ACME")).unwrap();
+        assert!(
+            !building_history_present(root, "ACME"),
+            "empty legacy building dir is not historian content"
+        );
+        write_parquet(
+            &root.join("building=ACME/equipment=AHU_1/history.parquet"),
+            utc_instant("2026-09-01T00:00:00Z"),
+        );
+        assert!(building_history_present(root, "ACME"));
+    }
+
+    #[test]
+    fn dual_read_empty_legacy_tenant_dir_does_not_mask_live_hub() {
+        let tmp = TempDir::new().unwrap();
+        let hub = tmp.path();
+        fs::create_dir_all(hub.join("tenants/acme/building=ACME")).unwrap();
+        write_parquet(
+            &hub.join("history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
+            utc_instant("2026-09-26T13:25:00Z"),
+        );
+
+        assert!(!building_history_present(&hub.join("tenants/acme"), "ACME"));
+        let resolved = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        assert_eq!(resolved.source, BuildingReadSource::HubRoot);
+        assert_eq!(resolved.root, hub);
+
+        let unscoped = resolve_building_read_root(hub, None, "ACME").unwrap();
+        assert_eq!(unscoped.source, BuildingReadSource::HubRoot);
+    }
+
+    #[test]
+    fn dual_read_equal_freshness_prefers_hub_root() {
+        let tmp = TempDir::new().unwrap();
+        let hub = tmp.path();
+        let when = utc_instant("2026-09-23T12:00:00Z");
+        write_parquet(
+            &hub.join("tenants/acme/history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260923T120000Z-copy.parquet"),
+            when,
+        );
+        write_parquet(
+            &hub.join("history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260923T120000Z-live.parquet"),
+            when,
+        );
+
+        let resolved = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        assert_eq!(resolved.source, BuildingReadSource::HubRoot);
+        assert_eq!(resolved.root, hub);
+    }
+
+    #[test]
+    fn dual_read_part_filename_stamp_beats_older_mtime() {
+        let tmp = TempDir::new().unwrap();
+        let hub = tmp.path();
+        // Tenant sidecar is newer on disk, but the hub part name carries a later
+        // sample stamp. Freshness is max(mtime, filename stamp), so the hub wins.
+        write_parquet(
+            &hub.join("tenants/acme/building=ACME/equipment=AHU_1/history.parquet"),
+            utc_instant("2026-09-24T00:00:00Z"),
+        );
+        write_parquet(
+            &hub.join("history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
+            utc_instant("2026-09-20T00:00:00Z"),
+        );
+
+        let resolved = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        assert_eq!(resolved.source, BuildingReadSource::HubRoot);
+        assert_eq!(resolved.root, hub);
+    }
+
+    #[test]
+    fn dual_read_stale_compact_tenant_does_not_mask_live_hub() {
+        let tmp = TempDir::new().unwrap();
+        let hub = tmp.path();
+        write_parquet(
+            &hub.join("tenants/acme/history/building_id=ACME/equipment_id=jci_vav_8/year=2026/month=09/compact-20260923T120000Z-stale.parquet"),
+            utc_instant("2026-09-23T12:00:00Z"),
+        );
+        write_parquet(
+            &hub.join("history/building_id=ACME/equipment_id=jci_vav_8/year=2026/month=09/part-20260926T132500Z-live.parquet"),
+            utc_instant("2026-09-26T13:25:00Z"),
+        );
+
+        let preferred = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        assert_eq!(preferred.source, BuildingReadSource::HubRoot);
+        assert_eq!(preferred.root, hub);
+
+        let unscoped = resolve_building_read_root(hub, None, "ACME").unwrap();
+        assert_eq!(unscoped.source, BuildingReadSource::HubRoot);
+        assert_eq!(unscoped.root, hub);
     }
 
     #[test]

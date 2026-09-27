@@ -152,7 +152,7 @@ fn safe_building_segment(building_id: Option<&str>) -> Option<String> {
 ///
 /// When `building_id` is set, prefers canonical live Hive
 /// `history/building_id={id}/`, then legacy package sidecars `building={id}/`.
-/// Wave U V7 dual-read: prefers `tenants/{tid}/…` when present, else hub-root.
+/// Wave U V7 dual-read: newer of `tenants/{tid}/…` and hub-root (tie → hub).
 /// Does **not** fall back to the whole tree (that would mix other buildings).
 /// Returns `Ok(false)` when nothing usable is present.
 ///
@@ -187,6 +187,13 @@ pub async fn try_register_history_scoped_for_tenant(
                 );
                 return Ok(false);
             }
+            tracing::debug!(
+                building = %bid,
+                read_root = %resolved.root.display(),
+                read_source = resolved.source.as_str(),
+                tenant_id = resolved.tenant_id.as_deref().unwrap_or(""),
+                "historian dual-read root"
+            );
             match fdd_sql::register_historian_building(ctx, &resolved.root, &bid).await {
                 Ok(_) => Ok(true),
                 Err(e) => {
@@ -2642,7 +2649,7 @@ LIMIT {limit}
     let mut env = envelope_with_engine("equipment-inspect-v1", &query, warnings, DF_ENGINE);
     env.points = points;
     env.rows = selected.iter().map(|c| json!({ "column": c })).collect();
-    env.coverage = Some(json!({
+    let mut coverage = json!({
         "equipment_id": eq,
         "row_count": n,
         "point_count": env.points.len(),
@@ -2652,7 +2659,25 @@ LIMIT {limit}
         "last_timestamp": last,
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
-    }));
+    });
+    // Same unscoped dual-read as [`open_history_scan`] (preferred tenant is None).
+    if let Some(bid) = safe_building_segment(building_id) {
+        if let Ok(resolved) =
+            fdd_store::resolve_building_read_root(&parquet_root_base(), None, &bid)
+        {
+            if let Some(obj) = coverage.as_object_mut() {
+                obj.insert(
+                    "read_root".into(),
+                    json!(resolved.root.display().to_string()),
+                );
+                obj.insert("read_source".into(), json!(resolved.source.as_str()));
+                if let Some(tid) = resolved.tenant_id {
+                    obj.insert("read_tenant_id".into(), json!(tid));
+                }
+            }
+        }
+    }
+    env.coverage = Some(coverage);
     Ok(Some(env))
 }
 
@@ -4582,6 +4607,7 @@ mod tests {
             .unwrap();
         assert!(!plotted.is_empty());
         assert!(env.points[0].get("timestamp_utc").is_some());
+        assert_eq!(env.coverage.as_ref().unwrap()["read_source"], "hub");
     }
 
     #[test]

@@ -124,9 +124,10 @@ impl TenantContext {
 
     /// Dual-read storage root for a building (Wave U V7).
     ///
-    /// Prefers `tenants/{tid}/…` when that tree has the building; falls back to
-    /// hub-root. Hub admins without an active tenant use unique-tenant scan /
-    /// hub fallback (see [`fdd_store::resolve_building_read_root`]).
+    /// Newer of `tenants/{tid}/…` and hub-root when both have Parquet; hub-root
+    /// on a tie or when the tenant tree is empty. Hub admins without an active
+    /// tenant use the unique-tenant scan / hub fallback
+    /// (see [`fdd_store::resolve_building_read_root`]).
     pub fn historian_read_root_for_building(
         &self,
         base: &std::path::Path,
