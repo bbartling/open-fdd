@@ -48,8 +48,8 @@ export function MeteringPage() {
         {section === "utilities" ? (
           <>
             <InlineAlert id="metering-scope" variant="info" testId="metering-scope">
-              Import a building package with <code>utilities_v1</code> (or wrapper{" "}
-              <code>utility_bills_monthly.csv</code>, e.g. Creekside) on{" "}
+              Import a building package with <code>utilities_v1</code> (or a wrapper{" "}
+              <code>utility_bills_monthly.csv</code>) on{" "}
               <Link to="/upload">Upload</Link> /{" "}
               <Link to="/operations?view=sites">Sites</Link>.
               Metering reads package utilities for the active site

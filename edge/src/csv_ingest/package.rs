@@ -231,7 +231,7 @@ fn read_zip_entries(bytes: &[u8]) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> 
 }
 
 /// Root may be the building folder holding `openfdd_package_v1` manifest.json at any
-/// safe depth (Creekside-style wrappers: `OpenFdd_Creekside/.../LAKESIDE_ES/manifest.json`).
+/// safe depth (wrapper folders: `OpenFdd_<job>/.../<building_id>/manifest.json`).
 fn resolve_building_prefix(entries: &BTreeMap<PathBuf, Vec<u8>>) -> Result<PathBuf, String> {
     if entries.contains_key(Path::new("manifest.json")) {
         return Ok(PathBuf::new());
@@ -266,8 +266,8 @@ fn is_package_manifest(bytes: &[u8]) -> bool {
         .unwrap_or(false)
 }
 
-/// Wrapper-level utility files (sibling to nested package folders), e.g. Creekside
-/// `OpenFdd_Creekside/utility_bills_monthly.csv` alongside `.../LAKESIDE_ES/manifest.json`.
+/// Wrapper-level utility files (sibling to nested package folders), e.g.
+/// `OpenFdd_<job>/utility_bills_monthly.csv` alongside `.../<building_id>/manifest.json`.
 fn collect_wrapper_utility_files(
     entries: &BTreeMap<PathBuf, Vec<u8>>,
     building_prefix: &Path,
@@ -1504,7 +1504,7 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
     }
 
     // Package trees can be a partial CSV rematerialization (e.g. AHU-only fixture)
-    // while MQTT/historian still holds the full site (Creekside meter, HPs, …).
+    // while MQTT/historian still holds the full site (meters, heat pumps, …).
     // Merge historian-only equipment so Data Model / Metering maps stay complete.
     let hist = mapping_from_historian_equipment(&building_id, equipment_id);
     if hist.get("ok").and_then(|v| v.as_bool()) == Some(true) {

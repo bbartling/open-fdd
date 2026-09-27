@@ -439,7 +439,7 @@ mod tests {
             return;
         }
         let campus = load_campus(&dir).expect("load liberty campus");
-        assert_eq!(campus.campus_id, "liberty_practice_bensbench");
+        assert_eq!(campus.campus_id, "demo_site");
         assert_eq!(campus.buildings.len(), 2);
         assert_eq!(campus.meters.len(), 3);
 

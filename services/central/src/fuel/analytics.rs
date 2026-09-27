@@ -727,7 +727,7 @@ mod tests {
             return;
         }
         // Import via copy
-        let dest = fuel_root().join("liberty_practice_bensbench");
+        let dest = fuel_root().join("demo_site");
         std::fs::create_dir_all(&dest).unwrap();
         for name in [
             "campus.json",
@@ -740,7 +740,7 @@ mod tests {
 
         let req = FuelRequest {
             query_version: Some(QV_SUMMARY.into()),
-            campus_id: Some("liberty_practice_bensbench".into()),
+            campus_id: Some("demo_site".into()),
             allocation: Some(ALLOCATION_AREA_WEIGHTED.into()),
             ..Default::default()
         };
@@ -752,7 +752,7 @@ mod tests {
 
         let wreq = FuelRequest {
             query_version: Some(QV_WEATHER.into()),
-            campus_id: Some("liberty_practice_bensbench".into()),
+            campus_id: Some("demo_site".into()),
             ..Default::default()
         };
         let w = handle_fuel(&wreq);

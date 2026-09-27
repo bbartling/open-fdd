@@ -186,7 +186,7 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
             Some(Utc::now() - chrono::Duration::days(historian::MECH_DEFAULT_LOOKBACK_DAYS))
         });
         let end = req.query.end;
-        // Wall-clock the *entire* historian path (scan + LEAD). ACME's ~54k tiny
+        // Wall-clock the *entire* historian path (scan + LEAD). A large hive's ~54k tiny
         // Parquet parts can stall open_history_scoped past Railway edge budgets
         // before the inner SQL timeout ever fires.
         let hist = match tokio::time::timeout(

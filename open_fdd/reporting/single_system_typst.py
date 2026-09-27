@@ -4,7 +4,8 @@ This path reads a device folder (``history_wide.csv`` + ``column_map.json``),
 filters to one calendar month, runs the pandas oracle, and writes Typst
 sources whose figures come from the same Plotly helpers as the Railway UI.
 
-It does **not** replace the sacred BUILDING_100 Overview-mirrored lab PDF.
+It does **not** replace the legacy Overview-mirrored lab PDF.
+``BUILDING_100`` is a separate lab dataset, not a product default.
 
 Scopes:
 
@@ -35,7 +36,8 @@ DEFAULT_REPORT_TITLE = "Open-FDD AI Agent Report"
 # Docs site link blue and a darker navy for headings (docs/_sass/custom/custom.scss).
 BRAND_BLUE = "#2563eb"
 BRAND_NAVY = "#1e3a8a"
-EXAMPLE_LOCATION = "AHU · ACME Office · Detroit, MI"
+# Help and chrome example only. Reports leave location empty unless the caller passes one.
+EXAMPLE_LOCATION = "AHU · Example Campus · City, ST"
 
 _MIN_FAN_ON_SAMPLES = 6
 
@@ -65,7 +67,7 @@ _SV_PLAIN = {
 _BOUNDARY = (
     "Offline report from mapped roles and history. The same PDF is produced from a "
     "device folder, an Open-FDD server, or a future vendor adapter. "
-    "This is not the BUILDING_100 Overview-mirrored lab PDF."
+    "This is not the legacy Overview-mirrored lab PDF."
 )
 
 _MONTH_RE = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")

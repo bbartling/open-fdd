@@ -622,7 +622,7 @@ pub fn chiller_like_equipment_sql() -> &'static str {
 /// When `building_id` is set, scopes the Parquet read like economizer (OFDD-070).
 ///
 /// `start` / `end` bound the Δt window (inclusive start, exclusive end). Callers
-/// should set a lookback on large historians — full-history LEAD over ACME-scale
+/// should set a lookback on large historians — full-history LEAD over large-hive
 /// Parquet exceeds Railway edge timeouts (~180s) and surfaces as nginx 502.
 pub async fn runtime_from_history(
     equipment_filter: Option<&[String]>,
@@ -1063,7 +1063,7 @@ fn as_u64(v: Option<&serde_json::Value>) -> u64 {
         .unwrap_or(0)
 }
 
-/// Default lookback when `query.start` is omitted (ACME-scale Parquet hives).
+/// Default lookback when `query.start` is omitted (large Parquet hives).
 /// Unbounded N×UNION ALL over full history hangs past Railway edge ~30–40s → 502.
 pub const SENSOR_HEALTH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
 
@@ -1086,7 +1086,7 @@ pub const RUNTIME_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from
 /// Default lookback for `/api/analytics/mechanical-cooling` when start omitted.
 pub const MECH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
 
-/// Wall-clock budget for mechanical-cooling OAT bin LEAD Δt (ACME-scale).
+/// Wall-clock budget for mechanical-cooling OAT bin LEAD Δt (large hives).
 pub const MECH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(12);
 
 /// Build single-pass sensor_health aggregate SQL (one scan, GROUP BY equipment_id).
@@ -1879,7 +1879,7 @@ ORDER BY equipment_id
     let limit = max_points.clamp(100, 8000);
     // Keep aliases consistent in the CTE (sat_f / damper_fb_pct). Avoid bare
     // `WHERE fan_on` + `THEN true/false` outer columns — those hit DataFusion
-    // SanityCheckPlan on some historian schemas (Liberty BUILDING_100).
+    // SanityCheckPlan on some historian schemas (wide package hives).
     let points_sql = format!(
         r#"
 WITH base AS (

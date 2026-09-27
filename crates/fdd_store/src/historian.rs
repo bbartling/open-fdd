@@ -529,9 +529,9 @@ impl LocalStorage {
 
     /// Hub-root `history/` plus every `tenants/{tid}/history/` tree.
     ///
-    /// Wave U W7: ACME MT hive lives under `tenants/acme/history/` (~54k small
-    /// parts). Compaction / stats that only scanned hub `history/` silently
-    /// missed the tenant tree and could not reduce file fan-out.
+    /// Wave U W7: a multi-tenant hive can live under `tenants/{tid}/history/`
+    /// (~54k small parts). Compaction / stats that only scanned hub `history/`
+    /// silently missed the tenant tree and could not reduce file fan-out.
     pub fn list_history_objects(&self) -> Result<Vec<ObjectMetadata>> {
         let mut out = self.list_recursive(Path::new("history"))?;
         let tenants_dir = self.root.join("tenants");

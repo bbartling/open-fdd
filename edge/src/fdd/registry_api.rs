@@ -1366,7 +1366,7 @@ pub fn roles_response() -> Value {
 ///
 /// ```json
 /// { "mode": "registry", "rule_ids": ["FC1","VAV-1"], "params": { "FC1": { "confirm_min": 5 } },
-///   "building_id": "BUILDING_100" }
+///   "building_id": "BldgA" }
 /// ```
 /// Omit `rule_ids` to run all. Pass ``building_id`` to scope history via
 /// ``register_historian_building`` (canonical ``history/building_id=`` then

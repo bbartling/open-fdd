@@ -124,10 +124,10 @@ export function datasetTimeSpan(frames: SamplingFrame[]): {
  * Historian analytics window for Overview / RCx.
  *
  * Prefer the package sampling span (CSV / import jobs), not wall-clock "last
- * 30 days". Wall-clock windows miss historical packages (e.g. BUILDING_100
- * Mar–Jul) and skip central's empty-window retain fallback because `start` is set.
+ * 30 days". Wall-clock windows miss historical packages that are not the
+ * current month and skip central's empty-window retain fallback because `start` is set.
  *
- * Cap to the last {@link ANALYTICS_WINDOW_MAX_DAYS} of the dataset so live ACME
+ * Cap to the last {@link ANALYTICS_WINDOW_MAX_DAYS} of the dataset so large
  * multi-month historians stay within Railway query budgets.
  *
  * When sampling is missing, omit start/end so central defaults + retain floor apply.

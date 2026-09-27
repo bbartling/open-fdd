@@ -754,10 +754,10 @@ mod tests {
     #[test]
     fn canonical_partition_accepts_tenant_history_tree() {
         assert!(is_canonical_history_partition(Path::new(
-            "tenants/acme/history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09"
+            "tenants/tenant_a/history/building_id=BldgA/equipment_id=AHU_1/year=2026/month=09"
         )));
         assert!(!is_canonical_history_partition(Path::new(
-            "tenants/../history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09"
+            "tenants/../history/building_id=BldgA/equipment_id=AHU_1/year=2026/month=09"
         )));
     }
 
@@ -771,9 +771,9 @@ mod tests {
             write_part(&writer, "2026-08-20T12:05:00Z"),
             write_part(&writer, "2026-08-20T12:10:00Z"),
         ];
-        // Mirror hub parts under tenants/acme/… so V8 compact sees MT hive.
+        // Mirror hub parts under tenants/tenant_a/… so V8 compact sees MT hive.
         for hub in &hub_parts {
-            let tenant_rel = format!("tenants/acme/{hub}");
+            let tenant_rel = format!("tenants/tenant_a/{hub}");
             let src = tmp.path().join(hub);
             let dst = tmp.path().join(&tenant_rel);
             fs::create_dir_all(dst.parent().unwrap()).unwrap();
@@ -786,7 +786,7 @@ mod tests {
         assert!(
             plans
                 .iter()
-                .any(|p| p.partition_path.starts_with("tenants/acme/")),
+                .any(|p| p.partition_path.starts_with("tenants/tenant_a/")),
             "expected tenant partition plan, got {plans:?}"
         );
         assert!(

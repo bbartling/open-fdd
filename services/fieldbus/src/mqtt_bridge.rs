@@ -756,7 +756,7 @@ pub async fn spawn_if_configured(
                 continue;
             }
             // Chunk by equipment so one large site cannot exceed MQTT packet limits
-            // (rumqttc default was 10 KiB; ACME full HVAC ~20 KiB in one envelope).
+            // (rumqttc default was 10 KiB; a full HVAC envelope can be ~20 KiB).
             if !bacnet_points.is_empty() {
                 let topic = topics.topic(TopicKind::Telemetry, Some(Protocol::Bacnet));
                 for chunk in chunk_points_by_equipment(bacnet_points) {

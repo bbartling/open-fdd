@@ -119,7 +119,7 @@ when the `typst` binary is on `PATH` and writes `report.pdf` next to `report.typ
 Do not add one, and do not compile `report.typ` by hand.
 
 The PDF title defaults to **Open-FDD AI Agent Report**. `--title` overrides it.
-`--location` prints a site line (example `AHU · ACME Office · Detroit, MI`).
+`--location` prints a site line (example `AHU · Example Campus · City, ST`). It is empty unless passed.
 Headings and the running header use Open-FDD blue (`#1e3a8a` headings, `#2563eb` accent).
 Under the title: month, sample count, Δt, and span hours. Do not put the old
 “AHU screening / not the BUILDING_100 Overview PDF” blurb back on the first page.
@@ -175,6 +175,8 @@ Ordered sections for facility / RCx readers (keep this order):
 Haystack exports store devices under `equip` (object). Flat sidecars use string `equip` plus top-level `points`. Both must resolve or the AHU is skipped.
 
 ### BUILDING_100 legacy kit
+
+The names in this section are the external lab kit only. Do not copy `BUILDING_100`, `LAKESIDE_ES`, or a Detroit ACME address into a PyPI report default or a DataFusion historian branch. Tests and ops may keep those names.
 
 The single-AHU reporter above is not this site's Overview PDF, and it is not a Railway-only command.
 

@@ -41,7 +41,13 @@ def test_report_help_mentions_scope(capsys):
     assert "--title" in text
     assert "--location" in text
     assert "Open-FDD AI Agent Report" in text
-    assert "Detroit" in text
+    assert "AHU" in text
+    assert "Example" in text
+    assert "Campus" in text
+    assert "City" in text
+    assert "ACME" not in text
+    assert "Detroit" not in text
+    assert "BUILDING_100" not in text
 
 
 def test_report_passes_week_and_month(monkeypatch, tmp_path):
@@ -97,12 +103,12 @@ def test_report_passes_title_and_location(monkeypatch, tmp_path):
             "--title",
             "Site report",
             "--location",
-            "AHU · ACME Office · Detroit, MI",
+            "AHU · BldgA",
         ]
     )
     assert code == 0
     assert seen["title"] == "Site report"
-    assert seen["location"] == "AHU · ACME Office · Detroit, MI"
+    assert seen["location"] == "AHU · BldgA"
 
 
 def test_screen_help_exits_zero(capsys):

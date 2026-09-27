@@ -703,10 +703,10 @@ export async function fetchCentralOverview(opts: {
   const dtMin = opts.dt_min_f ?? 10;
   const signal = opts.signal;
 
-  // Resolve package sampling *before* analytics so CSV/historical buildings
-  // (BUILDING_100 Mar–Jul, etc.) are not queried with wall-clock last-30-days
-  // — that empty window falls through to "no inline samples" / descriptive mech.
-  // Cap via analyticsWindowFromSampling for large live historians (ACME).
+  // Resolve package sampling *before* analytics so historical packages
+  // are not queried with wall-clock last-30-days — that empty window falls
+  // through to "no inline samples" / descriptive mech.
+  // Cap via analyticsWindowFromSampling for large live historians.
   const mapping = building_id
     ? await getPackageMapping(building_id).catch(() => null)
     : null;
@@ -718,7 +718,7 @@ export async function fetchCentralOverview(opts: {
     ...window,
   };
 
-  // Heavy DataFusion POSTs stay sequential on large historians (ACME):
+  // Heavy DataFusion POSTs stay sequential on large historians:
   // Promise.all of runtime+mech+econ+bas starved central → nginx 502.
   const runtime = await postRuntime(body, { signal });
   const mech = await postMechanicalCooling(body, { signal });

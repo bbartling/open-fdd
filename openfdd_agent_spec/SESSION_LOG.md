@@ -1,3 +1,19 @@
+## 2026-09-27 — Site-identity ban narrowed to product defaults
+
+- Rule 62 and `openfdd-site-identity` apply only to PyPI report/fault/oracle tooling and the Rust DataFusion historian runtime. Tests, stress, ops, and lab fixtures may keep ACME / BUILDING_100 / LAKESIDE. `EXAMPLE_LOCATION` stays a generic example; report location stays empty unless passed.
+
+## 2026-09-27 — Generic campus example; compaction tests use tenant_a
+
+- Report location example is `AHU · Example Campus · City, ST` and stays empty unless passed. The Typst module docstring names `BUILDING_100` only as a separate lab dataset. Compaction tests that this PR touched use `tenant_a` / `BldgA`. Tenant control-plane default remains `legacy` with no buildings.
+
+## 2026-09-27 — Site-identity rule covers Python and Rust equally
+
+- Rule 62 and `openfdd-site-identity` name both trees: PyPI `open_fdd` (reporting, analytics, ECM/oracle, CLI, Typst, skills that ship behavior) and Rust (`crates/*`, central, mqtt, fieldbus, edge, web backends). The touched anomaly CLI test passes location `AHU · BldgA`.
+
+## 2026-09-27 — No hardcoded building ids in product code
+
+- Fuel ZIP import takes `campus_id` only from `campus.json`. It no longer embeds a lab campus or infers one from a workbook name. CLI/MCP/UI examples use generic site language. Rule 62 and `openfdd-site-identity` state the hard rule. Dual-read newer-wins (#1014) was not changed.
+
 ## 2026-09-26 — Agent reporting is instance results or local oracle
 
 - One paragraph in the PyPI README and the typst / pypi-oracle skills: consume DataFusion FDD already run on an Open-FDD instance, or crunch mapped CSV locally. Not compute-only, and not Railway-only. #1008 was already merged, so this note is a follow-up on master.
