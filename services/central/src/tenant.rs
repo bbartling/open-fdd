@@ -487,34 +487,37 @@ mod tests {
         std::env::set_var("OPENFDD_MULTI_TENANT", "1");
         let tmp = tempfile::TempDir::new().unwrap();
         let hub = tmp.path();
-        let tenant_tree = hub.join("tenants/acme/building=ACME/equipment=rtu_01");
+        let tenant_tree = hub.join("tenants/tenant_a/building=BldgA/equipment=ahu_1");
         std::fs::create_dir_all(&tenant_tree).unwrap();
         std::fs::write(tenant_tree.join("history.parquet"), b"pq").unwrap();
-        let hub_tree = hub.join("building=BUILDING_100/equipment=AHU_1");
+        let hub_tree = hub.join("building=BldgB/equipment=ahu_1");
         std::fs::create_dir_all(&hub_tree).unwrap();
         std::fs::write(hub_tree.join("history.parquet"), b"pq").unwrap();
 
         let plane = ControlPlane {
             tenants: vec![TenantRecord {
-                id: "acme".into(),
-                name: "ACME".into(),
-                building_ids: vec!["ACME".into(), "BUILDING_100".into()],
+                id: "tenant_a".into(),
+                name: "Tenant A".into(),
+                building_ids: vec!["BldgA".into(), "BldgB".into()],
             }],
         };
         let user = AuthUser {
             sub: "eng".into(),
             role: Role::Operator,
-            tenant_ids: vec!["acme".into()],
+            tenant_ids: vec!["tenant_a".into()],
         };
         let ctx = TenantContext::resolve(&user, &plane).expect("resolve");
-        let acme = ctx
-            .historian_read_root_for_building(hub, "ACME")
-            .expect("acme");
-        assert_eq!(acme.source, fdd_store::BuildingReadSource::TenantPartition);
-        let b100 = ctx
-            .historian_read_root_for_building(hub, "BUILDING_100")
-            .expect("b100");
-        assert_eq!(b100.source, fdd_store::BuildingReadSource::HubRoot);
+        let bldg_a = ctx
+            .historian_read_root_for_building(hub, "BldgA")
+            .expect("bldg a");
+        assert_eq!(
+            bldg_a.source,
+            fdd_store::BuildingReadSource::TenantPartition
+        );
+        let bldg_b = ctx
+            .historian_read_root_for_building(hub, "BldgB")
+            .expect("bldg b");
+        assert_eq!(bldg_b.source, fdd_store::BuildingReadSource::HubRoot);
         std::env::remove_var("OPENFDD_MULTI_TENANT");
     }
 }

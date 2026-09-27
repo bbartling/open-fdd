@@ -1789,11 +1789,11 @@ mod tests {
                 .as_nanos()
         ));
         let _ = std::fs::remove_dir_all(&tmp);
-        let building_dir = tmp.join("building=BUILDING_100");
+        let building_dir = tmp.join("building=BldgA");
         std::fs::create_dir_all(&building_dir).unwrap();
         let payload = json!({
             "rows": [{
-                "equipment_id": "AHU_1",
+                "equipment_id": "ahu_1",
                 "timestamp": " 2024-01-01T00:00:00.000Z ",
                 "confirmed_fault": true
             }]
@@ -1805,7 +1805,7 @@ mod tests {
         .unwrap();
         let prev = std::env::var("OPENFDD_RULE_RESULTS_DIR").ok();
         std::env::set_var("OPENFDD_RULE_RESULTS_DIR", &tmp);
-        let idx = load_confirmed_fault_index("AHU_1", "FC1", Some("BUILDING_100"));
+        let idx = load_confirmed_fault_index("ahu_1", "FC1", Some("BldgA"));
         match prev {
             Some(v) => std::env::set_var("OPENFDD_RULE_RESULTS_DIR", v),
             None => std::env::remove_var("OPENFDD_RULE_RESULTS_DIR"),

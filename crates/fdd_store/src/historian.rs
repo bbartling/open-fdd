@@ -803,16 +803,16 @@ mod tests {
     fn builds_monthly_hive_paths() {
         let ts = Utc.with_ymd_and_hms(2026, 8, 20, 14, 30, 0).unwrap();
         assert_eq!(
-            history_partition_path("BUILDING_100", "AHU_1", ts)
+            history_partition_path("BldgA", "ahu_1", ts)
                 .unwrap()
                 .to_string_lossy(),
-            "history/building_id=BUILDING_100/equipment_id=AHU_1/year=2026/month=08"
+            "history/building_id=BldgA/equipment_id=ahu_1/year=2026/month=08"
         );
         assert_eq!(
-            weather_partition_path("BUILDING_100", ts)
+            weather_partition_path("BldgA", ts)
                 .unwrap()
                 .to_string_lossy(),
-            "weather/building_id=BUILDING_100/year=2026/month=08"
+            "weather/building_id=BldgA/year=2026/month=08"
         );
     }
 
@@ -835,12 +835,15 @@ mod tests {
     #[test]
     fn tenant_storage_root_partitions_and_isolates() {
         let base = PathBuf::from("/workspace/openfdd");
-        let a = tenant_storage_root(&base, Some("acme")).unwrap();
-        let b = tenant_storage_root(&base, Some("beta")).unwrap();
-        assert_eq!(a, PathBuf::from("/workspace/openfdd/tenants/acme"));
-        assert_eq!(b, PathBuf::from("/workspace/openfdd/tenants/beta"));
+        let a = tenant_storage_root(&base, Some("tenant_a")).unwrap();
+        let b = tenant_storage_root(&base, Some("tenant_b")).unwrap();
+        assert_eq!(a, PathBuf::from("/workspace/openfdd/tenants/tenant_a"));
+        assert_eq!(b, PathBuf::from("/workspace/openfdd/tenants/tenant_b"));
         assert_ne!(a, b);
-        assert_eq!(tenant_storage_prefix(Some("acme")).unwrap(), "tenants/acme");
+        assert_eq!(
+            tenant_storage_prefix(Some("tenant_a")).unwrap(),
+            "tenants/tenant_a"
+        );
         // Hive under tenant root stays relative to that root:
         let ts = Utc.with_ymd_and_hms(2026, 9, 10, 0, 0, 0).unwrap();
         let rel = history_partition_path("bldg2", "loopback", ts).unwrap();
@@ -854,27 +857,27 @@ mod tests {
     fn dual_read_prefers_tenant_partition_then_hub_fallback() {
         let tmp = TempDir::new().unwrap();
         let hub = tmp.path();
-        let tenant = hub.join("tenants/acme/building=ACME/equipment=rtu_01");
+        let tenant = hub.join("tenants/tenant_a/building=BldgA/equipment=ahu_1");
         fs::create_dir_all(&tenant).unwrap();
         fs::write(tenant.join("history.parquet"), b"pq").unwrap();
-        let hub_only = hub.join("building=BUILDING_100/equipment=AHU_1");
+        let hub_only = hub.join("building=BldgB/equipment=ahu_1");
         fs::create_dir_all(&hub_only).unwrap();
         fs::write(hub_only.join("history.parquet"), b"pq").unwrap();
 
-        let acme = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
-        assert_eq!(acme.source, BuildingReadSource::TenantPartition);
-        assert_eq!(acme.tenant_id.as_deref(), Some("acme"));
-        assert!(acme.root.ends_with("tenants/acme"));
+        let bldg_a = resolve_building_read_root(hub, Some("tenant_a"), "BldgA").unwrap();
+        assert_eq!(bldg_a.source, BuildingReadSource::TenantPartition);
+        assert_eq!(bldg_a.tenant_id.as_deref(), Some("tenant_a"));
+        assert!(bldg_a.root.ends_with("tenants/tenant_a"));
 
         // Preferred tenant missing tree → hub-root fallback (additive migrate window).
-        let b100 = resolve_building_read_root(hub, Some("building_100"), "BUILDING_100").unwrap();
-        assert_eq!(b100.source, BuildingReadSource::HubRoot);
-        assert_eq!(b100.root, hub);
+        let bldg_b = resolve_building_read_root(hub, Some("tenant_b"), "BldgB").unwrap();
+        assert_eq!(bldg_b.source, BuildingReadSource::HubRoot);
+        assert_eq!(bldg_b.root, hub);
 
         // Unique tenants/* hit without preferred tid.
-        let via_scan = resolve_building_read_root(hub, None, "ACME").unwrap();
+        let via_scan = resolve_building_read_root(hub, None, "BldgA").unwrap();
         assert_eq!(via_scan.source, BuildingReadSource::TenantPartition);
-        assert_eq!(via_scan.tenant_id.as_deref(), Some("acme"));
+        assert_eq!(via_scan.tenant_id.as_deref(), Some("tenant_a"));
     }
 
     #[test]
@@ -1091,12 +1094,12 @@ mod tests {
     fn list_building_ids_unions_hub_and_tenant_trees() {
         let tmp = TempDir::new().unwrap();
         let hub = tmp.path();
-        fs::create_dir_all(hub.join("building=LAKESIDE_ES")).unwrap();
-        fs::create_dir_all(hub.join("tenants/lakeside_sd/building=LAKESIDE_ES")).unwrap();
-        fs::create_dir_all(hub.join("tenants/acme/history/building_id=ACME")).unwrap();
+        fs::create_dir_all(hub.join("building=BldgA")).unwrap();
+        fs::create_dir_all(hub.join("tenants/tenant_a/building=BldgA")).unwrap();
+        fs::create_dir_all(hub.join("tenants/tenant_b/history/building_id=BldgB")).unwrap();
         let ids = list_building_ids(hub);
-        assert!(ids.contains(&"LAKESIDE_ES".to_string()));
-        assert!(ids.contains(&"ACME".to_string()));
+        assert!(ids.contains(&"BldgA".to_string()));
+        assert!(ids.contains(&"BldgB".to_string()));
     }
 
     #[test]
