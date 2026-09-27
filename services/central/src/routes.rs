@@ -586,7 +586,8 @@ fn resolve_tenant_context(state: &AppState, headers: &HeaderMap) -> crate::tenan
     crate::tenant::TenantContext::resolve_fail_closed(&user, &plane)
 }
 
-/// Wave U V7: prefer dual-read tenant partition when present for a building.
+/// Tenant id for dual-read. The active session tenant is used when the newer
+/// tree is hub-root (that call still compares hub vs tenant Parquet).
 fn preferred_tenant_for_building_read(
     ctx: &crate::tenant::TenantContext,
     building_id: Option<&str>,
