@@ -914,16 +914,16 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let hub = tmp.path();
         write_parquet(
-            &hub.join("history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
+            &hub.join("history/building_id=BldgA/equipment_id=ahu_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
             utc_instant("2026-09-26T13:25:00Z"),
         );
 
-        let resolved = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        let resolved = resolve_building_read_root(hub, Some("tenant_a"), "BldgA").unwrap();
         assert_eq!(resolved.source, BuildingReadSource::HubRoot);
         assert_eq!(resolved.root, hub);
         assert!(resolved.tenant_id.is_none());
 
-        let unscoped = resolve_building_read_root(hub, None, "ACME").unwrap();
+        let unscoped = resolve_building_read_root(hub, None, "BldgA").unwrap();
         assert_eq!(unscoped.source, BuildingReadSource::HubRoot);
         assert_eq!(unscoped.root, hub);
     }
@@ -933,18 +933,18 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let hub = tmp.path();
         let part = hub.join(
-            "tenants/acme/history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260920T000000Z-only.parquet",
+            "tenants/tenant_a/history/building_id=BldgA/equipment_id=ahu_1/year=2026/month=09/part-20260920T000000Z-only.parquet",
         );
         write_parquet(&part, utc_instant("2026-09-20T00:00:00Z"));
 
-        let resolved = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        let resolved = resolve_building_read_root(hub, Some("tenant_a"), "BldgA").unwrap();
         assert_eq!(resolved.source, BuildingReadSource::TenantPartition);
-        assert_eq!(resolved.tenant_id.as_deref(), Some("acme"));
-        assert!(resolved.root.ends_with("tenants/acme"));
+        assert_eq!(resolved.tenant_id.as_deref(), Some("tenant_a"));
+        assert!(resolved.root.ends_with("tenants/tenant_a"));
 
-        let unscoped = resolve_building_read_root(hub, None, "ACME").unwrap();
+        let unscoped = resolve_building_read_root(hub, None, "BldgA").unwrap();
         assert_eq!(unscoped.source, BuildingReadSource::TenantPartition);
-        assert_eq!(unscoped.tenant_id.as_deref(), Some("acme"));
+        assert_eq!(unscoped.tenant_id.as_deref(), Some("tenant_a"));
     }
 
     #[test]
@@ -952,19 +952,19 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let hub = tmp.path();
         write_parquet(
-            &hub.join("tenants/acme/history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260921T000000Z-old.parquet"),
+            &hub.join("tenants/tenant_a/history/building_id=BldgA/equipment_id=ahu_1/year=2026/month=09/part-20260921T000000Z-old.parquet"),
             utc_instant("2026-09-21T00:00:00Z"),
         );
         write_parquet(
-            &hub.join("history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
+            &hub.join("history/building_id=BldgA/equipment_id=ahu_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
             utc_instant("2026-09-26T13:25:00Z"),
         );
 
-        let preferred = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        let preferred = resolve_building_read_root(hub, Some("tenant_a"), "BldgA").unwrap();
         assert_eq!(preferred.source, BuildingReadSource::HubRoot);
         assert_eq!(preferred.root, hub);
 
-        let unscoped = resolve_building_read_root(hub, None, "ACME").unwrap();
+        let unscoped = resolve_building_read_root(hub, None, "BldgA").unwrap();
         assert_eq!(unscoped.source, BuildingReadSource::HubRoot);
         assert_eq!(unscoped.root, hub);
     }
@@ -974,52 +974,55 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let hub = tmp.path();
         write_parquet(
-            &hub.join("history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260920T000000Z-old.parquet"),
+            &hub.join("history/building_id=BldgA/equipment_id=ahu_1/year=2026/month=09/part-20260920T000000Z-old.parquet"),
             utc_instant("2026-09-20T00:00:00Z"),
         );
         write_parquet(
-            &hub.join("tenants/acme/history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
+            &hub.join("tenants/tenant_a/history/building_id=BldgA/equipment_id=ahu_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
             utc_instant("2026-09-26T13:25:00Z"),
         );
 
-        let resolved = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        let resolved = resolve_building_read_root(hub, Some("tenant_a"), "BldgA").unwrap();
         assert_eq!(resolved.source, BuildingReadSource::TenantPartition);
-        assert_eq!(resolved.tenant_id.as_deref(), Some("acme"));
-        assert!(resolved.root.ends_with("tenants/acme"));
+        assert_eq!(resolved.tenant_id.as_deref(), Some("tenant_a"));
+        assert!(resolved.root.ends_with("tenants/tenant_a"));
     }
 
     #[test]
     fn building_history_present_ignores_empty_legacy_dir() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        fs::create_dir_all(root.join("building=ACME")).unwrap();
+        fs::create_dir_all(root.join("building=BldgA")).unwrap();
         assert!(
-            !building_history_present(root, "ACME"),
+            !building_history_present(root, "BldgA"),
             "empty legacy building dir is not historian content"
         );
         write_parquet(
-            &root.join("building=ACME/equipment=AHU_1/history.parquet"),
+            &root.join("building=BldgA/equipment=ahu_1/history.parquet"),
             utc_instant("2026-09-01T00:00:00Z"),
         );
-        assert!(building_history_present(root, "ACME"));
+        assert!(building_history_present(root, "BldgA"));
     }
 
     #[test]
     fn dual_read_empty_legacy_tenant_dir_does_not_mask_live_hub() {
         let tmp = TempDir::new().unwrap();
         let hub = tmp.path();
-        fs::create_dir_all(hub.join("tenants/acme/building=ACME")).unwrap();
+        fs::create_dir_all(hub.join("tenants/tenant_a/building=BldgA")).unwrap();
         write_parquet(
-            &hub.join("history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
+            &hub.join("history/building_id=BldgA/equipment_id=ahu_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
             utc_instant("2026-09-26T13:25:00Z"),
         );
 
-        assert!(!building_history_present(&hub.join("tenants/acme"), "ACME"));
-        let resolved = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        assert!(!building_history_present(
+            &hub.join("tenants/tenant_a"),
+            "BldgA"
+        ));
+        let resolved = resolve_building_read_root(hub, Some("tenant_a"), "BldgA").unwrap();
         assert_eq!(resolved.source, BuildingReadSource::HubRoot);
         assert_eq!(resolved.root, hub);
 
-        let unscoped = resolve_building_read_root(hub, None, "ACME").unwrap();
+        let unscoped = resolve_building_read_root(hub, None, "BldgA").unwrap();
         assert_eq!(unscoped.source, BuildingReadSource::HubRoot);
     }
 
@@ -1029,15 +1032,15 @@ mod tests {
         let hub = tmp.path();
         let when = utc_instant("2026-09-23T12:00:00Z");
         write_parquet(
-            &hub.join("tenants/acme/history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260923T120000Z-copy.parquet"),
+            &hub.join("tenants/tenant_a/history/building_id=BldgA/equipment_id=ahu_1/year=2026/month=09/part-20260923T120000Z-copy.parquet"),
             when,
         );
         write_parquet(
-            &hub.join("history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260923T120000Z-live.parquet"),
+            &hub.join("history/building_id=BldgA/equipment_id=ahu_1/year=2026/month=09/part-20260923T120000Z-live.parquet"),
             when,
         );
 
-        let resolved = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        let resolved = resolve_building_read_root(hub, Some("tenant_a"), "BldgA").unwrap();
         assert_eq!(resolved.source, BuildingReadSource::HubRoot);
         assert_eq!(resolved.root, hub);
     }
@@ -1049,15 +1052,15 @@ mod tests {
         // Tenant sidecar is newer on disk, but the hub part name carries a later
         // sample stamp. Freshness is max(mtime, filename stamp), so the hub wins.
         write_parquet(
-            &hub.join("tenants/acme/building=ACME/equipment=AHU_1/history.parquet"),
+            &hub.join("tenants/tenant_a/building=BldgA/equipment=ahu_1/history.parquet"),
             utc_instant("2026-09-24T00:00:00Z"),
         );
         write_parquet(
-            &hub.join("history/building_id=ACME/equipment_id=AHU_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
+            &hub.join("history/building_id=BldgA/equipment_id=ahu_1/year=2026/month=09/part-20260926T132500Z-live.parquet"),
             utc_instant("2026-09-20T00:00:00Z"),
         );
 
-        let resolved = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        let resolved = resolve_building_read_root(hub, Some("tenant_a"), "BldgA").unwrap();
         assert_eq!(resolved.source, BuildingReadSource::HubRoot);
         assert_eq!(resolved.root, hub);
     }
@@ -1067,19 +1070,19 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let hub = tmp.path();
         write_parquet(
-            &hub.join("tenants/acme/history/building_id=ACME/equipment_id=jci_vav_8/year=2026/month=09/compact-20260923T120000Z-stale.parquet"),
+            &hub.join("tenants/tenant_a/history/building_id=BldgA/equipment_id=vav_8/year=2026/month=09/compact-20260923T120000Z-stale.parquet"),
             utc_instant("2026-09-23T12:00:00Z"),
         );
         write_parquet(
-            &hub.join("history/building_id=ACME/equipment_id=jci_vav_8/year=2026/month=09/part-20260926T132500Z-live.parquet"),
+            &hub.join("history/building_id=BldgA/equipment_id=vav_8/year=2026/month=09/part-20260926T132500Z-live.parquet"),
             utc_instant("2026-09-26T13:25:00Z"),
         );
 
-        let preferred = resolve_building_read_root(hub, Some("acme"), "ACME").unwrap();
+        let preferred = resolve_building_read_root(hub, Some("tenant_a"), "BldgA").unwrap();
         assert_eq!(preferred.source, BuildingReadSource::HubRoot);
         assert_eq!(preferred.root, hub);
 
-        let unscoped = resolve_building_read_root(hub, None, "ACME").unwrap();
+        let unscoped = resolve_building_read_root(hub, None, "BldgA").unwrap();
         assert_eq!(unscoped.source, BuildingReadSource::HubRoot);
         assert_eq!(unscoped.root, hub);
     }
