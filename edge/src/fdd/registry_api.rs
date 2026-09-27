@@ -148,7 +148,7 @@ fn preferred_tenant_from_env() -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
-/// Wave U V7 dual-read: prefer `tenants/{tid}/…` when present, else hub-root.
+/// Wave U V7 dual-read: newer Parquet tree of `tenants/{tid}/…` and hub-root.
 fn building_has_history_for_tenant(pq: &Path, bid: &str, preferred_tenant: Option<&str>) -> bool {
     match fdd_store::resolve_building_read_root(pq, preferred_tenant, bid) {
         Ok(resolved) => fdd_store::building_history_present(&resolved.root, bid),
@@ -539,8 +539,8 @@ fn rule_applies_to_kind(kinds: &[String], kind: &str) -> bool {
 ///
 /// When `building_id` is set, walk both legacy `building={id}/equipment=*` and
 /// canonical MQTT `history/building_id={id}/equipment_id=*` so Overview / AFDD
-/// see live sites the same as CSV packages (3.3.33). Wave U V7 dual-reads
-/// `tenants/{tid}/…` when present.
+/// see live sites the same as CSV packages (3.3.33). Wave U V7 dual-reads the
+/// newer of `tenants/{tid}/…` and hub-root.
 pub fn equipment_response(building_id: Option<&str>) -> Value {
     equipment_response_scoped(building_id, preferred_tenant_from_env().as_deref())
 }
@@ -775,29 +775,53 @@ pub fn series_response_scoped(
     let pq = parquet_root();
     // Prefer OFDD-070 registration (canonical history/building_id= then legacy)
     // so MQTT live sites plot the same as CSV packages (3.3.33). Wave U V7
-    // dual-reads tenants/{tid}/ when present.
-    let (storage_root, weather_root, scoped_bid): (PathBuf, PathBuf, Option<String>) =
-        match building_id.map(str::trim).filter(|s| !s.is_empty()) {
-            Some(bid) => {
-                if !building_has_history_for_tenant(&pq, bid, tenant_id) {
-                    return json!({
-                        "ok": false,
-                        "error": format!(
-                            "no parquet for building_id={bid} under {} - ingest that package or wait for MQTT historian",
-                            pq.display()
-                        ),
-                        "missing_roles": rule.required_roles,
-                        "equipment_id": equipment_id,
-                        "rule_id": rule.rule_id,
-                        "building_id": bid,
-                        "rows": [],
-                    });
-                }
-                let root = storage_root_for_building(&pq, bid, tenant_id);
-                (root.clone(), root, Some(bid.to_string()))
+    // dual-reads the newer of tenants/{tid}/ and hub-root.
+    let (storage_root, weather_root, scoped_bid, read_root, read_source): (
+        PathBuf,
+        PathBuf,
+        Option<String>,
+        String,
+        &'static str,
+    ) = match building_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(bid) => {
+            if !building_has_history_for_tenant(&pq, bid, tenant_id) {
+                return json!({
+                    "ok": false,
+                    "error": format!(
+                        "no parquet for building_id={bid} under {} - ingest that package or wait for MQTT historian",
+                        pq.display()
+                    ),
+                    "missing_roles": rule.required_roles,
+                    "equipment_id": equipment_id,
+                    "rule_id": rule.rule_id,
+                    "building_id": bid,
+                    "rows": [],
+                });
             }
-            None => (pq.clone(), pq.clone(), None),
-        };
+            let resolved = fdd_store::resolve_building_read_root(&pq, tenant_id, bid)
+                .unwrap_or_else(|_| fdd_store::BuildingReadRoot {
+                    root: pq.clone(),
+                    source: fdd_store::BuildingReadSource::HubRoot,
+                    tenant_id: None,
+                });
+            let read_root = resolved.root.display().to_string();
+            let read_source = resolved.source.as_str();
+            (
+                resolved.root.clone(),
+                resolved.root,
+                Some(bid.to_string()),
+                read_root,
+                read_source,
+            )
+        }
+        None => (
+            pq.clone(),
+            pq.clone(),
+            None,
+            pq.display().to_string(),
+            fdd_store::BuildingReadSource::HubRoot.as_str(),
+        ),
+    };
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -973,6 +997,8 @@ LIMIT {limit}
                     "fault_overlay_hits": overlay_hits,
                     "fault_overlay_true_hits": confirmed_true_hits,
                     "building_id": building_id,
+                    "read_root": read_root,
+                    "read_source": read_source,
                 })
             }
             Err(e) => {
@@ -1763,11 +1789,11 @@ mod tests {
                 .as_nanos()
         ));
         let _ = std::fs::remove_dir_all(&tmp);
-        let building_dir = tmp.join("building=BUILDING_100");
+        let building_dir = tmp.join("building=BldgA");
         std::fs::create_dir_all(&building_dir).unwrap();
         let payload = json!({
             "rows": [{
-                "equipment_id": "AHU_1",
+                "equipment_id": "ahu_1",
                 "timestamp": " 2024-01-01T00:00:00.000Z ",
                 "confirmed_fault": true
             }]
@@ -1779,7 +1805,7 @@ mod tests {
         .unwrap();
         let prev = std::env::var("OPENFDD_RULE_RESULTS_DIR").ok();
         std::env::set_var("OPENFDD_RULE_RESULTS_DIR", &tmp);
-        let idx = load_confirmed_fault_index("AHU_1", "FC1", Some("BUILDING_100"));
+        let idx = load_confirmed_fault_index("ahu_1", "FC1", Some("BldgA"));
         match prev {
             Some(v) => std::env::set_var("OPENFDD_RULE_RESULTS_DIR", v),
             None => std::env::remove_var("OPENFDD_RULE_RESULTS_DIR"),
