@@ -1,4 +1,4 @@
 col,point_role
 cmd,damper-cmd
-pos,damper-position
+pos,damper
 fan,fan-status
