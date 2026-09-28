@@ -631,17 +631,32 @@ fn validate_role(role: &str) -> Result<()> {
     Ok(())
 }
 
+fn non_finite_quality_marker(point: &TelemetryPoint) -> bool {
+    point
+        .tags
+        .get("non_finite_quality")
+        .and_then(|value| value.as_bool())
+        == Some(true)
+}
+
+fn numeric_role_value(point: &TelemetryPoint, good: bool) -> Option<f64> {
+    if good {
+        point.value.as_f64()
+    } else if non_finite_quality_marker(point) {
+        // Arrow/Parquet can represent NaN even though JSON cannot represent the
+        // originating BACnet Inf/NaN. Only that marker is a range fault.
+        // Other bad poll results stay null so a circuit-open or BACnet error
+        // class does not become an SV-RANGE hit.
+        Some(f64::NAN)
+    } else {
+        None
+    }
+}
+
 fn role_value(point: &TelemetryPoint) -> Result<Option<RoleValue>> {
     let good = matches!(point.quality, Quality::Good | Quality::Uncertain);
     match point.kind {
-        // Arrow/Parquet can represent NaN even though JSON cannot represent the
-        // originating BACnet Inf/NaN. Preserve a numeric bad-quality marker so
-        // range rules can fault it instead of treating a dead sensor as missing.
-        Some(ValueKind::Number) => Ok(Some(RoleValue::Number(if good {
-            point.value.as_f64()
-        } else {
-            Some(f64::NAN)
-        }))),
+        Some(ValueKind::Number) => Ok(Some(RoleValue::Number(numeric_role_value(point, good)))),
         Some(ValueKind::Bool) => Ok(Some(RoleValue::Boolean(if good {
             point.value.as_bool()
         } else {
@@ -653,11 +668,9 @@ fn role_value(point: &TelemetryPoint) -> Result<Option<RoleValue>> {
             None
         }))),
         Some(ValueKind::Null) => Ok(None),
-        None if point.value.is_number() => Ok(Some(RoleValue::Number(if good {
-            point.value.as_f64()
-        } else {
-            None
-        }))),
+        None if point.value.is_number() => {
+            Ok(Some(RoleValue::Number(numeric_role_value(point, good))))
+        }
         None if point.value.is_boolean() => Ok(Some(RoleValue::Boolean(if good {
             point.value.as_bool()
         } else {
@@ -676,6 +689,7 @@ fn role_value(point: &TelemetryPoint) -> Result<Option<RoleValue>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use datafusion::arrow::array::Array;
     use datafusion::prelude::SessionContext;
     use fdd_rules::{rule_params, substitute_sql};
     use fdd_sql::{register_historian_building, run_sql};
@@ -737,10 +751,15 @@ mod tests {
         assert_eq!(skipped, 1);
     }
 
+    fn mark_non_finite(point: &mut TelemetryPoint) {
+        point.tags.insert("non_finite_quality".into(), json!(true));
+    }
+
     #[test]
     fn bad_numeric_quality_preserves_schema_as_nan_marker() {
         let mut p = point("sat", json!(55.0));
         p.quality = Quality::Bad;
+        mark_non_finite(&mut p);
         let (groups, _, _, _) = normalized_batches(&envelope(vec![p])).unwrap();
         let batch = groups.values().next().unwrap();
         assert_eq!(batch.schema().field(1).name(), "sat");
@@ -752,8 +771,22 @@ mod tests {
         assert!(values.value(0).is_nan());
     }
 
-    #[tokio::test]
-    async fn bad_quality_flows_through_historian_nan_to_sv_range() {
+    #[test]
+    fn generic_bad_quality_stays_null_instead_of_a_range_marker() {
+        let mut p = point("sat", json!(55.0));
+        p.quality = Quality::Bad;
+        let (groups, eligible, _, _) = normalized_batches(&envelope(vec![p])).unwrap();
+        assert_eq!(eligible, 1);
+        let batch = groups.values().next().unwrap();
+        let values = batch
+            .column(1)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+        assert!(values.is_null(0));
+    }
+
+    async fn sv_range_fault_hours(sample: TelemetryPoint) -> f64 {
         let tmp = TempDir::new().unwrap();
         let config = HistorianConfig {
             storage_url: StorageUrl::File {
@@ -769,17 +802,12 @@ mod tests {
             legacy_parquet_root: None,
         };
         let mut live = LiveHistorian::from_config(&config).unwrap();
-        let mut bad = point("sat", json!(55.0));
-        bad.quality = Quality::Bad;
-        live.ingest_envelope(&envelope(vec![bad])).unwrap();
+        live.ingest_envelope(&envelope(vec![sample])).unwrap();
 
         let ctx = SessionContext::new();
         register_historian_building(&ctx, tmp.path(), "BUILDING_100")
             .await
             .unwrap();
-        // SV-RANGE is a sensor sweep and references all optional sensor lanes.
-        // Recreate the runner's optional NULL-column injection around the real
-        // persisted history table so this test exercises the shipped SQL file.
         let optional = [
             "oa_t",
             "mat",
@@ -817,18 +845,30 @@ mod tests {
         )
         .unwrap();
         let mut params = rule_params(300.0, 0);
-        // Registry defaults. Leaving the scale placeholders unsubstituted
-        // makes DataFusion reject the shipped SV-RANGE file.
         params.insert("RANGE_SCALE_TEMPERATURE".into(), "1".into());
         params.insert("RANGE_SCALE_HUMIDITY".into(), "1".into());
         params.insert("RANGE_SCALE_PRESSURE".into(), "1".into());
         let sql = substitute_sql(&sql, &params);
         let result = run_sql(&ctx, &sql).await.unwrap();
-        let fault_hours = result.rows[0]
+        result.rows[0]
             .get("fault_hours")
             .and_then(|value| value.as_f64())
-            .unwrap();
-        assert_eq!(fault_hours, 300.0 / 3600.0);
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn bad_quality_flows_through_historian_nan_to_sv_range() {
+        let mut bad = point("sat", json!(55.0));
+        bad.quality = Quality::Bad;
+        mark_non_finite(&mut bad);
+        assert_eq!(sv_range_fault_hours(bad).await, 300.0 / 3600.0);
+    }
+
+    #[tokio::test]
+    async fn generic_poll_error_does_not_sv_range_fault() {
+        let mut bad = point("sat", json!(55.0));
+        bad.quality = Quality::Bad;
+        assert_eq!(sv_range_fault_hours(bad).await, 0.0);
     }
 
     #[test]

@@ -205,4 +205,89 @@ mod tests {
         .await;
         assert_hours_close(idle_h, 300.0 / 3600.0, "FCU idle mode row SQL");
     }
+
+    #[tokio::test]
+    async fn valve_pass_and_co2_damper_fault() {
+        let heat_pass = run(
+            "fcu_valve_pass_htg.sql",
+            &[
+                RoleCol {
+                    csv_col: "sat",
+                    role: "sat",
+                },
+                RoleCol {
+                    csv_col: "zt",
+                    role: "zone_t",
+                },
+                RoleCol {
+                    csv_col: "hv",
+                    role: "htg_valve_pct",
+                },
+                RoleCol {
+                    csv_col: "cv",
+                    role: "clg_valve_pct",
+                },
+                RoleCol {
+                    csv_col: "fan",
+                    role: "fan_status",
+                },
+            ],
+            "timestamp_utc,sat,zt,hv,cv,fan\n2026-01-01T00:00:00Z,80,72,0,0,1\n",
+            &[("PASS_DELTA_F", "5.4")],
+        )
+        .await;
+        assert_hours_close(heat_pass, 300.0 / 3600.0, "FCU-VALVE-PASS-HTG SQL");
+
+        let cool_pass = run(
+            "fcu_valve_pass_clg.sql",
+            &[
+                RoleCol {
+                    csv_col: "sat",
+                    role: "sat",
+                },
+                RoleCol {
+                    csv_col: "zt",
+                    role: "zone_t",
+                },
+                RoleCol {
+                    csv_col: "hv",
+                    role: "htg_valve_pct",
+                },
+                RoleCol {
+                    csv_col: "cv",
+                    role: "clg_valve_pct",
+                },
+                RoleCol {
+                    csv_col: "fan",
+                    role: "fan_status",
+                },
+            ],
+            "timestamp_utc,sat,zt,hv,cv,fan\n2026-01-01T00:00:00Z,60,72,0,0,1\n",
+            &[("PASS_DELTA_F", "5.4")],
+        )
+        .await;
+        assert_hours_close(cool_pass, 300.0 / 3600.0, "FCU-VALVE-PASS-CLG SQL");
+
+        let co2 = run(
+            "fcu_co2_damper.sql",
+            &[
+                RoleCol {
+                    csv_col: "co2",
+                    role: "zone_co2",
+                },
+                RoleCol {
+                    csv_col: "cmd",
+                    role: "damper_cmd",
+                },
+                RoleCol {
+                    csv_col: "fan",
+                    role: "fan_status",
+                },
+            ],
+            "timestamp_utc,co2,cmd,fan\n2026-01-01T00:00:00Z,1200,5,1\n",
+            &[("CO2_HIGH_PPM", "1000"), ("DAMPER_LOW", "0.10")],
+        )
+        .await;
+        assert_hours_close(co2, 300.0 / 3600.0, "FCU-CO2-DAMPER SQL");
+    }
 }

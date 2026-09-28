@@ -314,6 +314,30 @@ fn parse_bacnet_target(target_id: &str) -> Result<(u32, String, u32), String> {
     Ok((device, object_type, instance))
 }
 
+/// Bad quality is any non-null poll error. Only a non-finite BACnet real or
+/// double is the SV-RANGE marker (`non_finite_quality`).
+fn poll_error_quality(error: Option<&serde_json::Value>) -> (Quality, bool) {
+    let Some(error) = error else {
+        return (Quality::Good, false);
+    };
+    if error.is_null() {
+        return (Quality::Good, false);
+    }
+    let non_finite = error
+        .as_str()
+        .is_some_and(|text| text.starts_with("bad-quality: non-finite"));
+    (Quality::Bad, non_finite)
+}
+
+fn stamp_non_finite_quality(
+    tags: &mut serde_json::Map<String, serde_json::Value>,
+    non_finite: bool,
+) {
+    if non_finite {
+        tags.insert("non_finite_quality".into(), serde_json::Value::Bool(true));
+    }
+}
+
 /// Map a poll `last_values` row into a telemetry JSON value.
 fn telemetry_point_value(row: &serde_json::Value) -> serde_json::Value {
     row.get("value")
@@ -483,6 +507,9 @@ fn rest_telemetry_points(
                 .as_object()
                 .cloned()
                 .unwrap_or_default();
+            let (quality, non_finite) = poll_error_quality(v.get("error"));
+            let mut tags = historian_tags(tags, building_id, device, point, equipment_type);
+            stamp_non_finite_quality(&mut tags, non_finite);
             Some(TelemetryPoint {
                 id: format!("rest:{device}:{point}"),
                 display_name: Some(point.to_string()),
@@ -493,12 +520,8 @@ fn rest_telemetry_points(
                     .and_then(|x| x.as_str())
                     .filter(|u| !u.is_empty())
                     .map(str::to_string),
-                quality: if v.get("error").map(|e| e.is_null()).unwrap_or(true) {
-                    Quality::Good
-                } else {
-                    Quality::Bad
-                },
-                tags: historian_tags(tags, building_id, device, point, equipment_type),
+                quality,
+                tags,
             })
         })
         .collect()
@@ -620,11 +643,7 @@ pub async fn spawn_if_configured(
                     let id =
                         format!("bacnet:{device}:{object_type}:{object_instance}:{point_name}");
                     let value = telemetry_point_value(&v);
-                    let quality = if v.get("error").map(|e| e.is_null()).unwrap_or(true) {
-                        Quality::Good
-                    } else {
-                        Quality::Bad
-                    };
+                    let (quality, non_finite) = poll_error_quality(v.get("error"));
                     let equipment_type = equipment_type_for(
                         &type_stamps,
                         equipment_id,
@@ -634,13 +653,14 @@ pub async fn spawn_if_configured(
                         .as_object()
                         .cloned()
                         .unwrap_or_default();
-                    let tags = historian_tags(
+                    let mut tags = historian_tags(
                         base,
                         building_id.as_deref(),
                         equipment_id,
                         point_name,
                         equipment_type,
                     );
+                    stamp_non_finite_quality(&mut tags, non_finite);
                     Some(TelemetryPoint {
                         id,
                         display_name: Some(point_name.to_string()),
@@ -852,6 +872,24 @@ mod tests {
         assert_eq!(points[0].tags["role"], serde_json::json!("chw_supply_t"));
         assert_eq!(points[1].quality, Quality::Bad);
         assert_eq!(points[1].unit, None);
+        assert!(points[1].tags.get("non_finite_quality").is_none());
+    }
+
+    #[test]
+    fn non_finite_poll_error_is_the_only_range_marker() {
+        let (quality, non_finite) = poll_error_quality(Some(&serde_json::json!(
+            "bad-quality: non-finite BACnet real (inf)"
+        )));
+        assert_eq!(quality, Quality::Bad);
+        assert!(non_finite);
+        let (quality, non_finite) = poll_error_quality(Some(&serde_json::json!(
+            "Error: class=Object code=UnknownObject"
+        )));
+        assert_eq!(quality, Quality::Bad);
+        assert!(!non_finite);
+        let (quality, non_finite) = poll_error_quality(Some(&serde_json::Value::Null));
+        assert_eq!(quality, Quality::Good);
+        assert!(!non_finite);
     }
 
     #[test]
