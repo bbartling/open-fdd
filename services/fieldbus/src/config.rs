@@ -1181,6 +1181,7 @@ mod tests {
 
     #[test]
     fn field_device_rpm_chunk_is_configurable_and_bounded() {
+        // Parse only. The address is not contacted; CI has no path to the FEC LAN.
         let path = std::env::temp_dir().join(format!(
             "openfdd-field-devices-{}-{}.toml",
             std::process::id(),
