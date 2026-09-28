@@ -15,7 +15,7 @@ rules:
     confirm_seconds: 0
 
   - rule_id: VAV-1
-    equipment_kinds: [vav, zone]
+    equipment_kinds: [vav, zone_other]
     sql_file: vav1_comfort_fault.sql
     pandas_function: vav1
     description: Zone comfort band violation hours with confirm window
@@ -84,7 +84,7 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: VAV-2
-    equipment_kinds: [vav, zone]
+    equipment_kinds: [vav, zone_other]
     sql_file: vav2_night_setback.sql
     pandas_function: vav2
     description: Night setback miss — unoccupied zone above heating setback
@@ -1602,7 +1602,7 @@ rules:
 # --- Ported from datafusion-sql-cookbook (feat/sql-rules-59) ---
 
   - rule_id: SV-RANGE
-    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump, meter]
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump, meter]
     sql_file: sv_range.sql
     pandas_function: null
     description: Sensor out of hard range
@@ -1681,7 +1681,7 @@ rules:
         sql_placeholder: RANGE_SCALE_PRESSURE
 
   - rule_id: SV-FLATLINE
-    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump]
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
     sql_file: sv_flatline.sql
     pandas_function: null
     description: Sensor flatline (stuck)
@@ -1751,7 +1751,7 @@ rules:
         sql_placeholder: FLATLINE_HOURS
 
   - rule_id: SV-SPIKE
-    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump]
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
     sql_file: sv_spike.sql
     pandas_function: null
     description: Sensor rate-of-change spike
@@ -1839,7 +1839,7 @@ rules:
         sql_placeholder: SPIKE_SCALE
 
   - rule_id: SV-STALE
-    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump]
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
     sql_file: sv_stale.sql
     pandas_function: null
     description: Stale data (no fresh samples)
@@ -1883,7 +1883,7 @@ rules:
         sql_placeholder: STALE_TOL
 
   - rule_id: SV-RATE
-    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump]
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
     aliases: [SV-SLEW]
     sql_file: sv_rate.sql
     pandas_function: null
@@ -1944,7 +1944,7 @@ rules:
         sql_placeholder: STEADY_FAULT_PER_HOUR
 
   - rule_id: PID-HUNT-1
-    equipment_kinds: [ahu, vav, chiller, boiler, heatpump]
+    equipment_kinds: [ahu, vav, zone_other, chiller, boiler, heatpump]
     sql_file: pid_hunt_1.sql
     pandas_function: null
     description: Suspected control-output hunting
@@ -4846,7 +4846,7 @@ rules:
         sql_placeholder: REQUEST_LO
 
   - rule_id: SCHED-1
-    equipment_kinds: [ahu]
+    equipment_kinds: [ahu, zone_other]
     sql_file: sched1_unoccupied_runtime.sql
     pandas_function: sched1
     aliases: [excess_runtime]
@@ -4892,7 +4892,7 @@ rules:
         sql_placeholder: ZONE_T_HI
 
   - rule_id: SCHED-247
-    equipment_kinds: [ahu, vav, chiller, boiler, heatpump]
+    equipment_kinds: [ahu, vav, zone_other, chiller, boiler, heatpump]
     sql_file: sched247_always_on.sql
     pandas_function: _sched247
     description: Always-on fan or pump runtime
@@ -4923,6 +4923,248 @@ rules:
         unit: frac
         frontend_control: slider
         sql_placeholder: ALWAYS_ON_PCT
+
+  - rule_id: FCU-SENSOR-NULL
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_sensor_null.sql
+    pandas_function: fcu_sensor_null
+    description: Own zone setpoint present but zone temperature null for at least 90% of window
+    required_roles: [zone_air_temp_sp]
+    optional_roles: [zone_t]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      null_fraction:
+        label: Null fraction
+        default: 0.9
+        min: 0.5
+        max: 1
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: NULL_FRACTION
+  - rule_id: FCU-HTG-COIL
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_htg_coil.sql
+    pandas_function: fcu_htg_coil
+    description: Fan-on heating coil under-delivery
+    required_roles: [sat, zone_t, htg_valve_pct]
+    optional_roles: [clg_valve_pct, damper_cmd, damper_pct, zone_co2, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      valve_open:
+        label: Valve open threshold
+        default: 0.8
+        min: 0.5
+        max: 1
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: VALVE_OPEN
+      coil_delta_f:
+        label: Minimum heating rise
+        default: 5.4
+        min: 1
+        max: 20
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: COIL_DELTA_F
+  - rule_id: FCU-CLG-COIL
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_clg_coil.sql
+    pandas_function: fcu_clg_coil
+    description: Fan-on cooling coil under-delivery
+    required_roles: [sat, zone_t, clg_valve_pct, htg_valve_pct]
+    optional_roles: [damper_cmd, damper_pct, zone_co2, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      valve_open:
+        label: Valve open threshold
+        default: 0.8
+        min: 0.5
+        max: 1
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: VALVE_OPEN
+  - rule_id: FCU-VALVE-PASS-HTG
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_valve_pass_htg.sql
+    pandas_function: fcu_valve_pass_htg
+    description: Heating valve passing with both commands shut
+    required_roles: [sat, zone_t, htg_valve_pct, clg_valve_pct]
+    optional_roles: [damper_cmd, damper_pct, zone_co2, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      pass_delta_f:
+        label: Passing temperature rise
+        default: 5.4
+        min: 1
+        max: 20
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: PASS_DELTA_F
+  - rule_id: FCU-VALVE-PASS-CLG
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_valve_pass_clg.sql
+    pandas_function: fcu_valve_pass_clg
+    description: Cooling valve passing with both commands shut
+    required_roles: [sat, zone_t, htg_valve_pct, clg_valve_pct]
+    optional_roles: [damper_cmd, damper_pct, zone_co2, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      pass_delta_f:
+        label: Passing temperature drop
+        default: 5.4
+        min: 1
+        max: 20
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: PASS_DELTA_F
+  - rule_id: FCU-DAMPER-POS
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_damper_pos.sql
+    pandas_function: fcu_damper_pos
+    description: Damper feedback more than 15 points below command
+    required_roles: [damper_cmd, damper_pct]
+    optional_roles: [sat, zone_t, htg_valve_pct, clg_valve_pct, zone_co2, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      command_min:
+        label: Minimum command
+        default: 0.15
+        min: 0
+        max: 1
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: COMMAND_MIN
+      position_error:
+        label: Position error
+        default: 0.15
+        min: 0.05
+        max: 0.5
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: POSITION_ERROR
+  - rule_id: FCU-CO2-DAMPER
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_co2_damper.sql
+    pandas_function: fcu_co2_damper
+    description: High valid CO2 with low outdoor-air damper command
+    required_roles: [zone_co2, damper_cmd]
+    optional_roles: [sat, zone_t, htg_valve_pct, clg_valve_pct, damper_pct, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      co2_high_ppm:
+        label: High CO2
+        default: 1000
+        min: 600
+        max: 2000
+        step: 50
+        unit: ppm
+        frontend_control: slider
+        sql_placeholder: CO2_HIGH_PPM
+      damper_low:
+        label: Low damper command
+        default: 0.1
+        min: 0
+        max: 0.5
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: DAMPER_LOW
+  - rule_id: FCU-DEADBAND
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_deadband.sql
+    pandas_function: fcu_deadband
+    description: Heating/cooling pass-through setpoint deadband below 1 C
+    required_roles: [cooling_sp, heating_sp]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      deadband_c:
+        label: Minimum deadband
+        default: 1
+        min: 0
+        max: 5
+        step: 0.1
+        unit: degC
+        frontend_control: slider
+        sql_placeholder: DEADBAND_C
+  - rule_id: FCU-MODE-CYCLE
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_mode_cycle.sql
+    pandas_function: fcu_mode_cycle
+    description: Four or more heat/cool valve mode changes in window
+    required_roles: [htg_valve_pct, clg_valve_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      mode_valve_min:
+        label: Active valve threshold
+        default: 0.1
+        min: 0
+        max: 0.5
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: MODE_VALVE_MIN
+      mode_changes:
+        label: Mode changes
+        default: 4
+        min: 1
+        max: 20
+        step: 1
+        unit: count
+        frontend_control: slider
+        sql_placeholder: MODE_CHANGES
 
   - rule_id: UTIL-MONTHLY
     equipment_kinds: [meter, ahu, heatpump]

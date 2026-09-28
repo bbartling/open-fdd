@@ -8,9 +8,9 @@ nav_order: 7
 
 Implementation order for expanding the public Open-FDD cookbooks. Priorities derive from **public literature frequency** (ASHRAE GL36 AFDD, Berkeley fault taxonomy, PNNL AIRCx, NIST Cx) and the **validated vibe19 catalog**.
 
-## P0 — validated pandas catalog ✅ (62 rules)
+## P0 — validated pandas catalog ✅ (71 rules)
 
-Production Open-FDD SQL registry is **68** rules (`sql_rules/registry.yaml`). The **62** figure is the pandas oracle catalog floor (see [parity matrix](parity-matrix.html)).
+Production Open-FDD SQL registry is **77** rules (`sql_rules/registry.yaml`). The **71** figure is the pandas oracle catalog floor (see [parity matrix](parity-matrix.html)). Nine of those diagnostics are the FCU / `zone_other` family.
 
 - Sensor sweeps: SV-RANGE, SV-FLATLINE, SV-SPIKE, SV-STALE, SV-RATE
 - Control: PID-HUNT-1

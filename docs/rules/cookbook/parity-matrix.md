@@ -12,19 +12,19 @@ Regenerate with `python3 scripts/generate_parity_inventory.py`. Drift fails CI v
 **Audit:** 2026-08-07 — legacy building-100 / cookbook-port parity labels removed.  
 **Audit:** 2026-08-11 — flat `matrix[]` columns (title, roles, proof, thresholds, docs, tests, difference class).
 
-## Why 62 versus 68 (do not pad)
+## Why 71 versus 77 (do not pad)
 
 | Surface | Count | Source |
 |---------|------:|------|
-| Pandas diagnostics | **62** | `CookbookRule(...)` in `open_fdd/rules/cookbook_catalog.py` (`CANONICAL_RULE_COUNT`) |
-| SQL twins of those 62 | 62 | `sql_rules/registry.yaml` |
+| Pandas diagnostics | **71** | `CookbookRule(...)` in `open_fdd/rules/cookbook_catalog.py` (`CANONICAL_RULE_COUNT`) |
+| SQL twins of those 71 | 71 | `sql_rules/registry.yaml` |
 | SQL-only analytics | **4** | `FAN-RUNTIME-HOURS`, `AVG-ZONE-TEMP`, `ZONE-COMFORT-PCT`, `FAULT-ELAPSED-HOURS` |
 | Utility meter FDD | **2** | `UTIL-MONTHLY`, `UTIL-INTERVAL` |
-| SQL registry total | **68** | 62 diagnostics + 4 analytics + 2 UTIL |
+| SQL registry total | **77** | 71 diagnostics + 4 analytics + 2 UTIL |
 
 Aliases are **not** extra rules: `SV-SLEW` → `SV-RATE`, `FC13` → `FC13-SAT-HIGH`, `excess_runtime` → `SCHED-1`.
 
-Building 100 `48 × 62` is the pandas diagnostic cartesian product, not 66.
+Building 100 `48 × 71` is the pandas diagnostic cartesian product. The nine FCU rules are inside the 71, labeled `sql_screening` until mask/duration soak evidence exists.
 
 Product UI is **React** (`frontend/web`). Do not delete pandas because SQL exists. Do not put pandas on the product request path.
 
@@ -55,7 +55,7 @@ See generated inventory for exact per-rule rows. Typical tip after Wave 0:
 
 | Level | Approx count |
 |-------|-------------:|
-| `sql_screening` | 62 |
+| `sql_screening` | 71 |
 | `concept_only` | 1 (`FC7`) |
 | `predicate_parity`+ | 0 until Wave 1+ proofs land |
 
@@ -78,6 +78,7 @@ P0 correctness backlog (Wave 1): `SV-STALE`, `FC2`, `FC4`, `FC6`, `FC14`/`FC15`,
 | plant | CHW-*, CW-*, … | ✅ | ✅ | screening |
 | trim | TRIM-* | ✅ | ✅ | screening |
 | schedule | SCHED-1, SCHED-247 | ✅ | ✅ | screening |
+| fcu / zone | FCU-* | ✅ | ✅ | screening |
 
 ---
 

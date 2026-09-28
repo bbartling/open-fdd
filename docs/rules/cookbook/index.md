@@ -8,14 +8,17 @@ permalink: /rules/cookbook/
 
 # HVAC FDD Rule Cookbook
 
+See [FCU / zone_other rules](fcu-zone-other.md) for the nine fan-coil and
+standalone controller diagnostics, role requirements, and unit boundary.
+
 Open-source, **standards-first** fault detection for commercial HVAC. Rules use generic semantic variables / Haystack roles (`discharge-air-temp`, `outside-air-temp`, `fan-cmd`, …) — portable across modeled sites and generic BAS telemetry.
 
 **Two catalogs (do not conflate):**
 
 | Catalog | Count | Role |
 |---------|------:|------|
-| **DataFusion SQL** — [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) | **68** | **Production** FDD in Open-FDD Rust / central (`POST /api/fdd/run`) |
-| **Pandas** — `open_fdd.rules` (`pip install "open-fdd[oracle]"`) | **62** | **Oracle / docs / notebooks** — packaged on PyPI; consumers pin the wheel |
+| **DataFusion SQL** — [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) | **77** | **Production** FDD in Open-FDD Rust / central (`POST /api/fdd/run`) |
+| **Pandas** — `open_fdd.rules` (`pip install "open-fdd[oracle]"`) | **71** | **Oracle / docs / notebooks** — packaged on PyPI; consumers pin the wheel |
 
 Parity honesty ([parity matrix](parity-matrix.html), [generated report](generated-parity-report.html)): see live `sql_rules/registry.yaml` counts. SQL presence ≠ oracle-proven. Do not claim “54 full parity.”
 
@@ -57,8 +60,9 @@ Product UI is the React SPA. Pandas stays on PyPI for third-party tooling.
 | Weather | 1 | WX-1 |
 | Trim & respond | 3 | TRIM-1, TRIM-3, TRIM-4 |
 | Schedule | 2 | SCHED-1, SCHED-247 |
+| Fan coil / zone | 9 | FCU-SENSOR-NULL, FCU-HTG-COIL, FCU-CLG-COIL, FCU-VALVE-PASS-HTG, FCU-VALVE-PASS-CLG, FCU-DAMPER-POS, FCU-CO2-DAMPER, FCU-DEADBAND, FCU-MODE-CYCLE |
 
-**Total validated:** 62. **Default confirmation:** 300 s (5 min) unless noted per rule.
+**Total validated:** 71. **Default confirmation:** 300 s (5 min) unless noted per rule.
 
 Additional rules documented under **Not yet in validated catalog** remain in the cookbooks for continuity (flagged, not legacy UI-parity-tested).
 

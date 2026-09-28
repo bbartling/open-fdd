@@ -45,7 +45,19 @@ const LATEST_TELEMETRY_WATERMARK: &str = "state/live-historian/latest-telemetry.
 
 type EquipmentKey = (String, String);
 type EquipmentRoles = BTreeMap<String, RoleValue>;
-type NormalizedBatches = (BTreeMap<EquipmentKey, RecordBatch>, usize, usize);
+type NormalizedBatches = (
+    BTreeMap<EquipmentKey, RecordBatch>,
+    usize,
+    usize,
+    Vec<DuplicateRole>,
+);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuplicateRole {
+    pub building_id: String,
+    pub equipment_id: String,
+    pub role: String,
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LiveHistorianIngest {
@@ -54,6 +66,9 @@ pub struct LiveHistorianIngest {
     pub flushes: usize,
     pub persisted_rows: usize,
     pub latest_persisted_timestamp_utc: Option<DateTime<Utc>>,
+    /// Later points with a canonical role already present in the same equipment
+    /// envelope. The first point wins deterministically; unique points remain valid.
+    pub duplicate_roles: Vec<DuplicateRole>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -362,10 +377,11 @@ impl LiveHistorian {
 
     pub fn ingest_envelope(&mut self, env: &TelemetryEnvelope) -> Result<LiveHistorianIngest> {
         collect_type_stamps(env, &mut self.pending_type_stamps);
-        let (groups, eligible_points, skipped_points) = normalized_batches(env)?;
+        let (groups, eligible_points, skipped_points, duplicate_roles) = normalized_batches(env)?;
         let mut report = LiveHistorianIngest {
             eligible_points,
             skipped_points,
+            duplicate_roles,
             ..LiveHistorianIngest::default()
         };
         for ((building_id, equipment_id), batch) in groups {
@@ -481,6 +497,7 @@ fn normalized_batches(env: &TelemetryEnvelope) -> Result<NormalizedBatches> {
     let mut grouped: BTreeMap<EquipmentKey, EquipmentRoles> = BTreeMap::new();
     let mut eligible = 0usize;
     let mut skipped = 0usize;
+    let mut duplicates = Vec::new();
 
     for point in &env.points {
         let Some((building_id, equipment_id, role)) = point_identity(point)? else {
@@ -491,10 +508,19 @@ fn normalized_batches(env: &TelemetryEnvelope) -> Result<NormalizedBatches> {
             skipped += 1;
             continue;
         };
-        let roles = grouped.entry((building_id, equipment_id)).or_default();
-        if roles.insert(role.clone(), value).is_some() {
-            bail!("duplicate canonical live role {role} in one equipment envelope");
+        let roles = grouped
+            .entry((building_id.clone(), equipment_id.clone()))
+            .or_default();
+        if roles.contains_key(&role) {
+            duplicates.push(DuplicateRole {
+                building_id,
+                equipment_id,
+                role,
+            });
+            skipped += 1;
+            continue;
         }
+        roles.insert(role, value);
         eligible += 1;
     }
 
@@ -530,7 +556,7 @@ fn normalized_batches(env: &TelemetryEnvelope) -> Result<NormalizedBatches> {
         let batch = RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays)?;
         out.insert(identity, batch);
     }
-    Ok((out, eligible, skipped))
+    Ok((out, eligible, skipped, duplicates))
 }
 
 fn collect_type_stamps(env: &TelemetryEnvelope, out: &mut BTreeMap<EquipmentKey, String>) {
@@ -605,14 +631,32 @@ fn validate_role(role: &str) -> Result<()> {
     Ok(())
 }
 
+fn non_finite_quality_marker(point: &TelemetryPoint) -> bool {
+    point
+        .tags
+        .get("non_finite_quality")
+        .and_then(|value| value.as_bool())
+        == Some(true)
+}
+
+fn numeric_role_value(point: &TelemetryPoint, good: bool) -> Option<f64> {
+    if good {
+        point.value.as_f64()
+    } else if non_finite_quality_marker(point) {
+        // Arrow/Parquet can represent NaN even though JSON cannot represent the
+        // originating BACnet Inf/NaN. Only that marker is a range fault.
+        // Other bad poll results stay null so a circuit-open or BACnet error
+        // class does not become an SV-RANGE hit.
+        Some(f64::NAN)
+    } else {
+        None
+    }
+}
+
 fn role_value(point: &TelemetryPoint) -> Result<Option<RoleValue>> {
     let good = matches!(point.quality, Quality::Good | Quality::Uncertain);
     match point.kind {
-        Some(ValueKind::Number) => Ok(Some(RoleValue::Number(if good {
-            point.value.as_f64()
-        } else {
-            None
-        }))),
+        Some(ValueKind::Number) => Ok(Some(RoleValue::Number(numeric_role_value(point, good)))),
         Some(ValueKind::Bool) => Ok(Some(RoleValue::Boolean(if good {
             point.value.as_bool()
         } else {
@@ -624,11 +668,9 @@ fn role_value(point: &TelemetryPoint) -> Result<Option<RoleValue>> {
             None
         }))),
         Some(ValueKind::Null) => Ok(None),
-        None if point.value.is_number() => Ok(Some(RoleValue::Number(if good {
-            point.value.as_f64()
-        } else {
-            None
-        }))),
+        None if point.value.is_number() => {
+            Ok(Some(RoleValue::Number(numeric_role_value(point, good))))
+        }
         None if point.value.is_boolean() => Ok(Some(RoleValue::Boolean(if good {
             point.value.as_bool()
         } else {
@@ -647,6 +689,10 @@ fn role_value(point: &TelemetryPoint) -> Result<Option<RoleValue>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use datafusion::arrow::array::Array;
+    use datafusion::prelude::SessionContext;
+    use fdd_rules::{rule_params, substitute_sql};
+    use fdd_sql::{register_historian_building, run_sql};
     use openfdd_contracts::Protocol;
     use serde_json::json;
     use tempfile::TempDir;
@@ -681,9 +727,10 @@ mod tests {
     #[test]
     fn metadata_tags_define_identity_without_parsing_point_id() {
         let env = envelope(vec![point("sat", json!(55.0))]);
-        let (groups, eligible, skipped) = normalized_batches(&env).unwrap();
+        let (groups, eligible, skipped, duplicates) = normalized_batches(&env).unwrap();
         assert_eq!(eligible, 1);
         assert_eq!(skipped, 0);
+        assert!(duplicates.is_empty());
         let batch = groups
             .get(&("BUILDING_100".into(), "AHU_1".into()))
             .unwrap();
@@ -698,20 +745,149 @@ mod tests {
     fn untagged_point_is_not_canonicalized() {
         let mut p = point("sat", json!(55.0));
         p.tags.remove("equipment_id");
-        let (groups, eligible, skipped) = normalized_batches(&envelope(vec![p])).unwrap();
+        let (groups, eligible, skipped, _) = normalized_batches(&envelope(vec![p])).unwrap();
         assert!(groups.is_empty());
         assert_eq!(eligible, 0);
         assert_eq!(skipped, 1);
     }
 
+    fn mark_non_finite(point: &mut TelemetryPoint) {
+        point.tags.insert("non_finite_quality".into(), json!(true));
+    }
+
     #[test]
-    fn bad_quality_preserves_schema_as_null() {
+    fn bad_numeric_quality_preserves_schema_as_nan_marker() {
         let mut p = point("sat", json!(55.0));
         p.quality = Quality::Bad;
-        let (groups, _, _) = normalized_batches(&envelope(vec![p])).unwrap();
+        mark_non_finite(&mut p);
+        let (groups, _, _, _) = normalized_batches(&envelope(vec![p])).unwrap();
         let batch = groups.values().next().unwrap();
         assert_eq!(batch.schema().field(1).name(), "sat");
-        assert_eq!(batch.column(1).null_count(), 1);
+        let values = batch
+            .column(1)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+        assert!(values.value(0).is_nan());
+    }
+
+    #[test]
+    fn generic_bad_quality_stays_null_instead_of_a_range_marker() {
+        let mut p = point("sat", json!(55.0));
+        p.quality = Quality::Bad;
+        let (groups, eligible, _, _) = normalized_batches(&envelope(vec![p])).unwrap();
+        assert_eq!(eligible, 1);
+        let batch = groups.values().next().unwrap();
+        let values = batch
+            .column(1)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+        assert!(values.is_null(0));
+    }
+
+    async fn sv_range_fault_hours(sample: TelemetryPoint) -> f64 {
+        let tmp = TempDir::new().unwrap();
+        let config = HistorianConfig {
+            storage_url: StorageUrl::File {
+                root: tmp.path().to_path_buf(),
+            },
+            flush_rows: 1,
+            flush_seconds: 60,
+            target_file_mb: 128,
+            compaction_min_files: 8,
+            compaction_enabled: true,
+            query_memory_mb: 512,
+            spill_directory: None,
+            legacy_parquet_root: None,
+        };
+        let mut live = LiveHistorian::from_config(&config).unwrap();
+        live.ingest_envelope(&envelope(vec![sample])).unwrap();
+
+        let ctx = SessionContext::new();
+        register_historian_building(&ctx, tmp.path(), "BUILDING_100")
+            .await
+            .unwrap();
+        let optional = [
+            "oa_t",
+            "mat",
+            "zone_t",
+            "rat",
+            "chw_supply_t",
+            "chw_return_t",
+            "hw_supply_t",
+            "hw_return_t",
+            "oa_h",
+            "duct_static",
+            "fan_status",
+            "fan_cmd",
+            "pump_status",
+            "chw_pump_cmd",
+            "chiller_status",
+            "kwh",
+            "electric_kw",
+            "electric_kwh",
+        ];
+        let nulls = optional
+            .iter()
+            .map(|role| format!("CAST(NULL AS DOUBLE) AS {role}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let enriched = ctx
+            .sql(&format!("SELECT history.*, {nulls} FROM history"))
+            .await
+            .unwrap();
+        ctx.deregister_table("history").unwrap();
+        ctx.register_table("history", enriched.into_view()).unwrap();
+
+        let sql = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sql_rules/sv_range.sql"),
+        )
+        .unwrap();
+        let mut params = rule_params(300.0, 0);
+        params.insert("RANGE_SCALE_TEMPERATURE".into(), "1".into());
+        params.insert("RANGE_SCALE_HUMIDITY".into(), "1".into());
+        params.insert("RANGE_SCALE_PRESSURE".into(), "1".into());
+        let sql = substitute_sql(&sql, &params);
+        let result = run_sql(&ctx, &sql).await.unwrap();
+        result.rows[0]
+            .get("fault_hours")
+            .and_then(|value| value.as_f64())
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn bad_quality_flows_through_historian_nan_to_sv_range() {
+        let mut bad = point("sat", json!(55.0));
+        bad.quality = Quality::Bad;
+        mark_non_finite(&mut bad);
+        assert_eq!(sv_range_fault_hours(bad).await, 300.0 / 3600.0);
+    }
+
+    #[tokio::test]
+    async fn generic_poll_error_does_not_sv_range_fault() {
+        let mut bad = point("sat", json!(55.0));
+        bad.quality = Quality::Bad;
+        assert_eq!(sv_range_fault_hours(bad).await, 0.0);
+    }
+
+    #[test]
+    fn duplicate_role_drops_later_point_and_keeps_unique_points() {
+        let env = envelope(vec![
+            point("occ_mode", json!(1.0)),
+            point("occ_mode", json!(0.0)),
+            point("sat", json!(55.0)),
+        ]);
+        let (groups, eligible, skipped, duplicates) = normalized_batches(&env).unwrap();
+        assert_eq!(eligible, 2);
+        assert_eq!(skipped, 1);
+        assert_eq!(duplicates.len(), 1);
+        assert_eq!(duplicates[0].building_id, "BUILDING_100");
+        assert_eq!(duplicates[0].equipment_id, "AHU_1");
+        assert_eq!(duplicates[0].role, "occ_mode");
+        let batch = groups.values().next().unwrap();
+        assert!(batch.schema().index_of("occ_mode").is_ok());
+        assert!(batch.schema().index_of("sat").is_ok());
     }
 
     #[test]

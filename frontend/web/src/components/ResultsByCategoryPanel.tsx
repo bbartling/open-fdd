@@ -191,6 +191,13 @@ export function ResultsByCategoryPanel() {
         onChange={setHitlOpen}
         testId="hitl-expander"
       >
+        {jobs.length === 0 ? (
+          <InlineAlert id="hitl-no-jobs" variant="info" testId="hitl-no-jobs">
+            HITL dispositions are available after an engineering findings job has
+            produced findings. Bulk FDD results remain available in Results by
+            category above.
+          </InlineAlert>
+        ) : null}
         <Select
           id="hitl-job"
           label="Job"
@@ -217,9 +224,18 @@ export function ResultsByCategoryPanel() {
           rows={hitlRows}
           testId="hitl-table"
         />
+        {jobId && hitlRows.length === 0 ? (
+          <InlineAlert
+            id="hitl-no-findings"
+            variant="info"
+            testId="hitl-no-findings"
+          >
+            This job has no engineering findings to disposition.
+          </InlineAlert>
+        ) : null}
         <Button
           id="hitl-open"
-          label="Mark selected open (demo)"
+          label="Mark first finding open"
           disabled={!jobId || !hitlRows[0]}
           onClick={() => {
             if (!jobId || !hitlRows[0]) return;

@@ -6,9 +6,9 @@ nav_order: 2
 
 # Pandas FDD Cookbook
 
-**Oracle / documentation catalog:** packaged as `open_fdd.rules` on PyPI (`pip install "open-fdd[oracle]"`) — **62** executable diagnostics. Source of truth: [`open_fdd/rules/cookbook_catalog.py`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py). Consumers pin the wheel rather than maintaining a second copy.
+**Oracle / documentation catalog:** packaged as `open_fdd.rules` on PyPI (`pip install "open-fdd[oracle]"`) — **71** executable diagnostics. Source of truth: [`open_fdd/rules/cookbook_catalog.py`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py). Consumers pin the wheel rather than maintaining a second copy.
 
-This cookbook is **intentionally maintained**. Production Open-FDD FDD math runs **Rust + Apache Arrow + DataFusion SQL** (`sql_rules/registry.yaml`, **68** entries = 62 diagnostic twins + 4 SQL analytics + 2 UTIL). Use this pandas catalog for notebooks, CSV exports, RCx studies, and SQL↔pandas parity testing.
+This cookbook is **intentionally maintained**. Production Open-FDD FDD math runs **Rust + Apache Arrow + DataFusion SQL** (`sql_rules/registry.yaml`, **77** entries = 71 diagnostic twins + 4 SQL analytics + 2 UTIL). Use this pandas catalog for notebooks, CSV exports, RCx studies, and SQL↔pandas parity testing. The nine FCU / `zone_other` rules are documented in [FCU and zone_other rules](fcu-zone-other.html).
 
 See also the [DataFusion SQL cookbook](datafusion-sql-cookbook.html), [parity matrix](parity-matrix.html), [generated parity report](generated-parity-report.html), and [P0 rule catalog](p0-rule-catalog.html).
 

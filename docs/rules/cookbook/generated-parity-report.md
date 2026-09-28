@@ -9,12 +9,12 @@ nav_order: 7
 Auto-generated from `sql_rules/generated/parity_inventory.yaml`.
 Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.
 
-62 is the executable pandas cookbook (CookbookRule constructors). 68 is the SQL registry: those 62 twins plus 6 SQL-only analytics. Aliases SV-SLEW, FC13, and excess_runtime are not extra rules.
+71 is the executable pandas cookbook (CookbookRule constructors). 77 is the SQL registry: 71 pandas diagnostics plus 6 SQL-only analytics. Aliases SV-SLEW, FC13, and excess_runtime are not extra rules.
 
-- Pandas diagnostics: **62**
+- Pandas diagnostics: **71**
 - SQL analytics: **6**
-- SQL registry: **68**
-- Building 100 cartesian: 48 equipment × 62 diagnostics
+- SQL registry: **77**
+- Building 100 cartesian: 48 equipment × 71 diagnostics
 
 ## Difference classes
 
@@ -23,7 +23,7 @@ Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.
 | `alias` | 2 |
 | `intentional_non_applicability` | 4 |
 | `missing_implementation` | 1 |
-| `none` | 60 |
+| `none` | 69 |
 | `semantic_gap` | 1 |
 
 ## Matrix
@@ -64,6 +64,15 @@ Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.
 | `ECON-7` | Economizer OK but not economizing | `econ_7` | `econ7_ok_not_economizing.sql` | `sql_screening` | `none` |
 | `MECH-OAT-1` | Mechanical cooling below 60°F web OAT | `mech_oat_1` | `mech_oat_1.sql` | `sql_screening` | `none` |
 | `CHW-NOLOAD-1` | Chiller running with no building load | `chw_noload_1` | `chw_noload_1.sql` | `sql_screening` | `none` |
+| `FCU-SENSOR-NULL` | Own zone setpoint present but zone temperature null for at least 90% of window | `fcu_sensor_null` | `fcu_sensor_null.sql` | `sql_screening` | `none` |
+| `FCU-HTG-COIL` | Fan-on heating coil under-delivery | `fcu_htg_coil` | `fcu_htg_coil.sql` | `sql_screening` | `none` |
+| `FCU-CLG-COIL` | Fan-on cooling coil under-delivery | `fcu_clg_coil` | `fcu_clg_coil.sql` | `sql_screening` | `none` |
+| `FCU-VALVE-PASS-HTG` | Heating valve passing with both commands shut | `fcu_valve_pass_htg` | `fcu_valve_pass_htg.sql` | `sql_screening` | `none` |
+| `FCU-VALVE-PASS-CLG` | Cooling valve passing with both commands shut | `fcu_valve_pass_clg` | `fcu_valve_pass_clg.sql` | `sql_screening` | `none` |
+| `FCU-DAMPER-POS` | Damper feedback more than 15 points below command | `fcu_damper_pos` | `fcu_damper_pos.sql` | `sql_screening` | `none` |
+| `FCU-CO2-DAMPER` | High valid CO2 with low outdoor-air damper command | `fcu_co2_damper` | `fcu_co2_damper.sql` | `sql_screening` | `none` |
+| `FCU-DEADBAND` | Heating/cooling pass-through setpoint deadband below 1 C | `fcu_deadband` | `fcu_deadband.sql` | `sql_screening` | `none` |
+| `FCU-MODE-CYCLE` | Four or more heat/cool valve mode changes in window | `fcu_mode_cycle` | `fcu_mode_cycle.sql` | `sql_screening` | `none` |
 | `VAV-1` | Zone comfort band violation hours with confirm window | `vav1` | `vav1_comfort_fault.sql` | `sql_screening` | `none` |
 | `VAV-2` | Night setback miss — unoccupied zone above heating setback | `vav2` | `vav2_night_setback.sql` | `sql_screening` | `none` |
 | `VAV-3` | Excessive reheat during warm weather | `vav_3` | `vav3_excessive_reheat.sql` | `sql_screening` | `none` |

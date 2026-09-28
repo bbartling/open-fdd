@@ -5,11 +5,12 @@ use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bacnet_client::client::BACnetClient;
+use bacnet_client::discovery::RoutedDeviceConfig;
 use bacnet_encoding::primitives::{decode_application_value, encode_property_value};
 use bacnet_services::common::PropertyReference;
 use bacnet_services::rpm::ReadAccessSpecification;
 use bacnet_transport::bvll::encode_bip_mac;
-use bacnet_types::enums::{ObjectType, PropertyIdentifier};
+use bacnet_types::enums::{ObjectType, PropertyIdentifier, Segmentation};
 use bacnet_types::primitives::{ObjectIdentifier, PropertyValue};
 use bytes::BytesMut;
 use fdd_core::columns::{haystack_point_to_role, is_known_cookbook_role};
@@ -18,9 +19,9 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use crate::config::{load_field_devices, FieldDevice, FieldPoint, Settings};
-use crate::services::bacnet_server::{property_value_tag, property_value_to_json};
-
-const RPM_CHUNK_SIZE: usize = 25;
+use crate::services::bacnet_server::{
+    property_value_quality_error, property_value_tag, property_value_to_json,
+};
 
 static OBJECT_TYPE_MAP: &[(&str, ObjectType)] = &[
     ("analog-input", ObjectType::ANALOG_INPUT),
@@ -137,23 +138,11 @@ impl BacnetClientService {
         d: &FieldDevice,
     ) -> Result<(), String> {
         if d.is_routed() {
-            let ip: Ipv4Addr = d.host.parse().map_err(|e| format!("bad host: {e}"))?;
-            let router_mac = encode_bip_mac(ip.octets(), d.port);
-            let net = d
-                .mstp_network
-                .ok_or_else(|| format!("routed device {} missing mstp_network", d.name))?;
-            let dest_mac = d
-                .mstp_mac
-                .first()
-                .copied()
-                .ok_or_else(|| format!("routed device {} missing mstp_mac", d.name))?;
+            let seeded = routed_device_config(d)?;
+            let net = seeded.remote_network;
+            let dest_mac = seeded.remote_mac.first().copied().unwrap_or(0);
             client
-                .add_routed_device(
-                    d.device_instance,
-                    &router_mac,
-                    net,
-                    std::slice::from_ref(&dest_mac),
-                )
+                .add_routed_device(seeded)
                 .await
                 .map_err(|e| e.to_string())?;
             info!(
@@ -270,6 +259,8 @@ impl BacnetClientService {
                 "property_id": property_id,
                 "tag": property_value_tag(&pv),
                 "value": property_value_to_json(&pv),
+                "quality": if property_value_quality_error(&pv).is_some() { "bad" } else { "good" },
+                "error": property_value_quality_error(&pv),
                 "client_bind_port": bind_port,
             }))
         }
@@ -491,21 +482,7 @@ impl BacnetClientService {
             if points.is_empty() {
                 continue;
             }
-            let mut specs = Vec::new();
-            for p in &points {
-                let Ok(ot) = parse_object_type(&p.object_type) else {
-                    continue;
-                };
-                let oid =
-                    ObjectIdentifier::new(ot, p.object_instance).map_err(|e| e.to_string())?;
-                specs.push(ReadAccessSpecification {
-                    object_identifier: oid,
-                    list_of_property_references: vec![PropertyReference {
-                        property_identifier: PropertyIdentifier::PRESENT_VALUE,
-                        property_array_index: None,
-                    }],
-                });
-            }
+            let specs = present_value_specs(&points)?;
             if specs.is_empty() {
                 continue;
             }
@@ -560,24 +537,31 @@ impl BacnetClientService {
         let result = async {
             self.prepare(&client, Some(device), device.device_instance)
                 .await?;
-            let rpm = client
-                .read_property_multiple_from_device(device.device_instance, specs.to_vec())
-                .await
-                .map_err(|e| e.to_string())?;
-
             let mut map = HashMap::new();
-            for obj in rpm.list_of_read_access_results {
-                let oid_str = normalize_oid(&obj.object_identifier);
-                for r in obj.list_of_results {
-                    if let Some((class, code)) = r.error {
-                        map.insert(
-                            oid_str.clone(),
-                            (None, Some(format!("Error: class={class:?} code={code:?}"))),
-                        );
-                    } else if let Some(bytes) = r.property_value {
-                        let (pv, _) =
-                            decode_application_value(&bytes, 0).map_err(|e| e.to_string())?;
-                        map.insert(oid_str.clone(), (Some(property_value_to_json(&pv)), None));
+            for chunk in rpm_request_chunks(specs, device.rpm_chunk) {
+                let rpm = client
+                    .read_property_multiple_from_device(device.device_instance, chunk.to_vec())
+                    .await
+                    .map_err(|e| e.to_string())?;
+                for obj in rpm.list_of_read_access_results {
+                    let oid_str = normalize_oid(&obj.object_identifier);
+                    for r in obj.list_of_results {
+                        if let Some((class, code)) = r.error {
+                            map.insert(
+                                oid_str.clone(),
+                                (None, Some(format!("Error: class={class:?} code={code:?}"))),
+                            );
+                        } else if let Some(bytes) = r.property_value {
+                            let (pv, _) =
+                                decode_application_value(&bytes, 0).map_err(|e| e.to_string())?;
+                            map.insert(
+                                oid_str.clone(),
+                                (
+                                    Some(property_value_to_json(&pv)),
+                                    property_value_quality_error(&pv),
+                                ),
+                            );
+                        }
                     }
                 }
             }
@@ -716,7 +700,10 @@ impl BacnetClientService {
             self.prepare(&client, device, device_instance).await?;
             let addr = self.resolve_address(&client, device, device_instance).await;
 
-            let raw_oids = self.read_object_list(&client, device_instance).await?;
+            let rpm_chunk = device.map_or(25, |d| d.rpm_chunk.max(1));
+            let raw_oids = self
+                .read_object_list(&client, device_instance, rpm_chunk)
+                .await?;
             let oids: Vec<_> = raw_oids
                 .into_iter()
                 .filter(|o| object_type_name(o.object_type()) != "device")
@@ -732,7 +719,7 @@ impl BacnetClientService {
                 .filter(|o| COMMANDABLE_TYPES.contains(&object_type_name(o.object_type()).as_str()))
                 .copied()
                 .collect();
-            for chunk in candidates.chunks(15) {
+            for chunk in candidates.chunks(rpm_chunk) {
                 let specs: Vec<_> = chunk
                     .iter()
                     .map(|o| ReadAccessSpecification {
@@ -784,6 +771,7 @@ impl BacnetClientService {
         &self,
         client: &BACnetClient<bacnet_transport::bip::BipTransport>,
         device_instance: u32,
+        rpm_chunk: usize,
     ) -> Result<Vec<ObjectIdentifier>, String> {
         let dev_oid = ObjectIdentifier::new(ObjectType::DEVICE, device_instance)
             .map_err(|e| e.to_string())?;
@@ -805,19 +793,9 @@ impl BacnetClientService {
         };
 
         let mut oids = Vec::new();
-        for start in (1..=length).step_by(RPM_CHUNK_SIZE) {
-            let end = (start + RPM_CHUNK_SIZE - 1).min(length);
+        for (start, end) in rpm_chunk_ranges(length, rpm_chunk) {
             let idxs: Vec<u32> = (start..=end).map(|i| i as u32).collect();
-            let specs = vec![ReadAccessSpecification {
-                object_identifier: dev_oid,
-                list_of_property_references: idxs
-                    .iter()
-                    .map(|i| PropertyReference {
-                        property_identifier: PropertyIdentifier::OBJECT_LIST,
-                        property_array_index: Some(*i),
-                    })
-                    .collect(),
-            }];
+            let specs = vec![object_list_index_spec(dev_oid, &idxs)];
             match client
                 .read_property_multiple_from_device(device_instance, specs)
                 .await
@@ -1190,6 +1168,90 @@ impl BacnetClientService {
     }
 }
 
+/// Present-value ReadPropertyMultiple specs for one poll cycle.
+///
+/// `poll_device` batches the returned slice with `rpm_request_chunks`.
+fn present_value_specs(points: &[FieldPoint]) -> Result<Vec<ReadAccessSpecification>, String> {
+    let mut specs = Vec::new();
+    for p in points {
+        let Ok(ot) = parse_object_type(&p.object_type) else {
+            continue;
+        };
+        let oid = ObjectIdentifier::new(ot, p.object_instance).map_err(|e| e.to_string())?;
+        specs.push(ReadAccessSpecification {
+            object_identifier: oid,
+            list_of_property_references: vec![PropertyReference {
+                property_identifier: PropertyIdentifier::PRESENT_VALUE,
+                property_array_index: None,
+            }],
+        });
+    }
+    Ok(specs)
+}
+
+/// Object-list RPM for one inclusive index window. Discovery uses the same
+/// `rpm_chunk` as the poll path.
+fn object_list_index_spec(dev_oid: ObjectIdentifier, indexes: &[u32]) -> ReadAccessSpecification {
+    ReadAccessSpecification {
+        object_identifier: dev_oid,
+        list_of_property_references: indexes
+            .iter()
+            .map(|i| PropertyReference {
+                property_identifier: PropertyIdentifier::OBJECT_LIST,
+                property_array_index: Some(*i),
+            })
+            .collect(),
+    }
+}
+
+/// Routed seed used by `seed_field_device`. Parses the router address and
+/// copies `max_apdu` with segmentation none. It does not open a socket.
+fn routed_device_config(d: &FieldDevice) -> Result<RoutedDeviceConfig, String> {
+    let ip: Ipv4Addr = d.host.parse().map_err(|e| format!("bad host: {e}"))?;
+    let router_mac = encode_bip_mac(ip.octets(), d.port);
+    let net = d
+        .mstp_network
+        .ok_or_else(|| format!("routed device {} missing mstp_network", d.name))?;
+    let dest_mac = d
+        .mstp_mac
+        .first()
+        .copied()
+        .ok_or_else(|| format!("routed device {} missing mstp_mac", d.name))?;
+    Ok(RoutedDeviceConfig {
+        instance: d.device_instance,
+        router_mac: router_mac.to_vec(),
+        remote_network: net,
+        remote_mac: vec![dest_mac],
+        max_apdu_length: d.max_apdu,
+        segmentation_supported: Segmentation::NONE,
+        max_segments_accepted: None,
+    })
+}
+
+/// Return inclusive object-list index ranges for a configured RPM chunk.
+///
+/// The configured `rpm_chunk` is deliberately independent of APDU negotiation:
+/// a routed MS/TP device with a 206-byte, no-segmentation profile can set a
+/// conservative value such as 10 and keep every request below its limit.
+fn rpm_chunk_ranges(length: usize, configured_chunk: usize) -> Vec<(usize, usize)> {
+    let chunk = configured_chunk.max(1);
+    if length == 0 {
+        return Vec::new();
+    }
+    (1..=length)
+        .step_by(chunk)
+        .map(|start| (start, (start + chunk - 1).min(length)))
+        .collect()
+}
+
+/// Build the ReadPropertyMultiple request batches used by the live poll path.
+/// Keep the configured chunk independent from APDU negotiation so conservative
+/// routed profiles (for example max APDU 206 with no segmentation) can select
+/// a safe request size.
+fn rpm_request_chunks<T>(items: &[T], configured_chunk: usize) -> Vec<&[T]> {
+    items.chunks(configured_chunk.max(1)).collect()
+}
+
 fn parse_object_type(name: &str) -> Result<ObjectType, String> {
     let key = name.trim().to_ascii_lowercase();
     if let Some((_, ot)) = OBJECT_TYPE_MAP.iter().find(|(k, _)| *k == key) {
@@ -1367,6 +1429,8 @@ mod poll_select_tests {
             port: 47808,
             mstp_network: None,
             mstp_mac: vec![],
+            rpm_chunk: 25,
+            max_apdu: 480,
             points,
         }
     }
@@ -1391,6 +1455,129 @@ mod poll_select_tests {
         assert_eq!(discovery_bind_port(0, 47808), 47808);
         assert_eq!(discovery_bind_port(0, 47809), 47809);
         assert_eq!(discovery_bind_port(47900, 47808), 47900);
+    }
+
+    fn unsegmented_rpm_request_apdu_len(specs: &[ReadAccessSpecification]) -> usize {
+        let mut service = BytesMut::new();
+        bacnet_services::rpm::ReadPropertyMultipleRequest {
+            list_of_read_access_specs: specs.to_vec(),
+        }
+        .encode(&mut service);
+        // Confirmed-request header is 4 octets before the service payload.
+        4 + service.len()
+    }
+
+    fn unsegmented_present_value_ack_apdu_len(specs: &[ReadAccessSpecification]) -> usize {
+        let mut service = BytesMut::new();
+        let ack = bacnet_services::rpm::ReadPropertyMultipleACK {
+            list_of_read_access_results: specs
+                .iter()
+                .map(|spec| {
+                    let mut value = BytesMut::new();
+                    encode_property_value(&mut value, &PropertyValue::Real(0.0))
+                        .expect("real present-value encodes");
+                    bacnet_services::rpm::ReadAccessResult {
+                        object_identifier: spec.object_identifier,
+                        list_of_results: vec![bacnet_services::rpm::ReadResultElement {
+                            property_identifier: PropertyIdentifier::PRESENT_VALUE,
+                            property_array_index: None,
+                            property_value: Some(value.to_vec()),
+                            error: None,
+                        }],
+                    }
+                })
+                .collect(),
+        };
+        ack.encode(&mut service);
+        // Complex-ACK header is 3 octets (type, invoke id, service choice).
+        3 + service.len()
+    }
+
+    #[test]
+    fn poll_rpm_path_uses_configured_chunk_for_206_byte_profile() {
+        // JCI FEC device class, instance 5007: routed, 206-byte APDU, no
+        // segmentation, rpm_chunk 10. The host is documentation-only TEST-NET;
+        // this test never opens a socket.
+        const FEC_OBJECTS: u32 = 65;
+        let points: Vec<_> = (1..=FEC_OBJECTS)
+            .map(|instance| FieldPoint {
+                object_type: "analog-input".into(),
+                object_instance: instance,
+                point_name: format!("ai-{instance}"),
+                units: "°F".into(),
+            })
+            .collect();
+        let mut fec = dev("jci-fec-5007", 5007, points);
+        fec.rpm_chunk = 10;
+        fec.max_apdu = 206;
+        fec.mstp_network = Some(2001);
+        fec.mstp_mac = vec![7];
+        fec.host = "192.0.2.50".into();
+        assert!(fec.is_routed());
+
+        let seeded = routed_device_config(&fec).expect("fec seed");
+        assert_eq!(seeded.instance, 5007);
+        assert_eq!(seeded.max_apdu_length, 206);
+        assert_eq!(seeded.segmentation_supported, Segmentation::NONE);
+        assert_eq!(seeded.max_segments_accepted, None);
+        assert_eq!(seeded.remote_network, 2001);
+        assert_eq!(seeded.remote_mac, vec![7]);
+
+        let specs = present_value_specs(&fec.points).expect("present-value specs");
+        assert_eq!(specs.len(), FEC_OBJECTS as usize);
+        let requests = rpm_request_chunks(&specs, fec.rpm_chunk);
+        assert_eq!(
+            requests.iter().map(|r| r.len()).collect::<Vec<_>>(),
+            vec![10, 10, 10, 10, 10, 10, 5]
+        );
+        let max_apdu = fec.max_apdu as usize;
+        for chunk in &requests {
+            let request_len = unsegmented_rpm_request_apdu_len(chunk);
+            let ack_len = unsegmented_present_value_ack_apdu_len(chunk);
+            assert!(
+                request_len <= max_apdu,
+                "poll chunk request {request_len} exceeds max APDU {max_apdu}"
+            );
+            assert!(
+                ack_len <= max_apdu,
+                "poll chunk ack {ack_len} exceeds max APDU {max_apdu}"
+            );
+        }
+        let whole_ack = unsegmented_present_value_ack_apdu_len(&specs);
+        assert!(
+            whole_ack > max_apdu,
+            "unchunked FEC catalog ack {whole_ack} must exceed the 206-byte profile"
+        );
+        let default_chunk = rpm_request_chunks(&specs, 25);
+        assert!(default_chunk
+            .iter()
+            .any(|chunk| { unsegmented_present_value_ack_apdu_len(chunk) > max_apdu }));
+
+        // Twenty-five specs still split 10/10/5, which is the planner poll_device uses.
+        let twenty_five = rpm_request_chunks(&specs[..25], fec.rpm_chunk);
+        assert_eq!(
+            twenty_five.iter().map(|r| r.len()).collect::<Vec<_>>(),
+            vec![10, 10, 5]
+        );
+        assert_eq!(twenty_five[0][0].object_identifier.instance_number(), 1);
+        assert_eq!(twenty_five[2][4].object_identifier.instance_number(), 25);
+
+        let dev_oid = ObjectIdentifier::new(ObjectType::DEVICE, fec.device_instance).unwrap();
+        for (start, end) in rpm_chunk_ranges(FEC_OBJECTS as usize, fec.rpm_chunk) {
+            let idxs: Vec<u32> = (start as u32..=end as u32).collect();
+            let spec = object_list_index_spec(dev_oid, &idxs);
+            let request_len = unsegmented_rpm_request_apdu_len(std::slice::from_ref(&spec));
+            assert!(
+                request_len <= max_apdu,
+                "object-list chunk {start}-{end} request {request_len} exceeds max APDU"
+            );
+        }
+        assert_eq!(
+            rpm_chunk_ranges(25, fec.rpm_chunk),
+            vec![(1, 10), (11, 20), (21, 25)]
+        );
+        assert_eq!(rpm_chunk_ranges(0, fec.rpm_chunk), Vec::new());
+        assert_eq!(rpm_chunk_ranges(3, 0), vec![(1, 1), (2, 2), (3, 3)]);
     }
 }
 

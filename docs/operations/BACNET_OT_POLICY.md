@@ -8,7 +8,7 @@ Operators and AI agents must treat BACnet as a **shared, fragile OT resource** �
 2. **Poll + MQTT publish interval is fixed at 300 seconds** (compiled into fieldbus). Operator env/TOML knobs that used to lower the interval are **ignored**. This protects legacy MS/TP from MQTTS bursts.
 3. Target **~30%** of configured points — HVAC health / cookbook roles only (`OPENFDD_POLL_HEALTH_ONLY=1` or `[poll] health_roles_only = true`). Bandwidth throttle is the point subset, **not** a faster poll.
 4. **Never** bulk-discover and poll an entire BACnet network on a production site.
-5. MS/TP routed devices must be seeded via `field_devices.toml` (`mstp_network`, `mstp_mac`) — see B3 notes in [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md).
+5. MS/TP routed devices must be seeded via `field_devices.toml` (`mstp_network`, `mstp_mac`) — see B3 notes in [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md). For small controllers that do not support segmentation, set `max_apdu = 206` and `rpm_chunk` per device (for example `rpm_chunk = 10`); defaults are 480 and 25.
 6. For hard BACnet commissioning/debug only, use companion [rusty-bacnet-mcp](../mcp-agents/companion-rusty-bacnet-mcp.md) — **read-only**; do not replace `openfdd-fieldbus`.
 
 ## Production defaults (fieldbus)

@@ -107,7 +107,7 @@ else
   bad "provisioning failed for ${SITE2}__${EDGE2}"; summary; exit 1
 fi
 
-ACL="$ROOT/deploy/mqtt/acl"
+ACL="$ROOT/deploy/mqtt/certs/acl"
 if ! grep -q "edge:${SITE2}:${EDGE2}" "$ACL" 2>/dev/null; then
   { echo; cat "$KIT_DIR/mosquitto.acl"; } >>"$ACL"
   NEED_MQTT_RESTART=1

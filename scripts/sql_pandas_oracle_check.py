@@ -85,8 +85,8 @@ def import_oracle(require_external: bool = False):
 
     print(f"oracle package version={package_version} module={module_path}")
 
-    if len(RULES) < 62:
-        fail(f"canonical RULES shrunk: {len(RULES)} < 59")
+    if len(RULES) < 71:
+        fail(f"canonical RULES shrunk: {len(RULES)} < 71")
     if "SV-SLEW" not in RULES_BY_ID:
         fail("RULES_BY_ID missing SV-SLEW alias")
     if "SV-RATE" not in RULES_BY_ID:
@@ -168,13 +168,26 @@ def run_seeds(run_rule, inventory) -> int:
             df = load_history_csv(hist)
             df = apply_role_map(df, path / "columns.csv")
             df.attrs["equipment_id"] = meta.get("equipment_id", "AHU_1")
+            # Typed rules no longer treat unknown equipment as a wildcard (#1023).
+            # Seeds that name a type must run as that type; id inference stays for
+            # seeds that only set equipment_id (AHU_1, and similar).
+            if meta.get("equipment_type"):
+                df.attrs["equipment_type"] = meta["equipment_type"]
             params = meta.get("params") or {}
             result = run_rule(
                 rule_id,
                 df,
                 params=params,
                 poll_seconds=float(meta.get("poll_seconds", 300)),
+                require_operational_gates=bool(meta.get("require_operational_gates", True)),
             )
+            status = getattr(result, "status", "")
+            if status == "NOT_APPLICABLE" and meta.get("any_fault") is True:
+                fail(
+                    f"{fx['path']}: {rule_id} not applicable to "
+                    f"equipment_type={df.attrs.get('equipment_type')!r} "
+                    f"equipment_id={df.attrs.get('equipment_id')!r}"
+                )
             fault_hours = float(getattr(result, "fault_hours", 0.0) or 0.0)
             expect_hours = meta.get("fault_hours")
             expect_any = meta.get("any_fault")

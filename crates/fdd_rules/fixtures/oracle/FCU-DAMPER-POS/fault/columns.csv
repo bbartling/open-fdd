@@ -1,0 +1,4 @@
+col,point_role
+cmd,damper-cmd
+pos,damper
+fan,fan-status

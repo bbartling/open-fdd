@@ -20,7 +20,7 @@
     <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
   </a>
   <a href="https://bbartling.github.io/open-fdd/rules/cookbook/">
-    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-62%20%2F%2066%20SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — datafusion-sql-cookbook · pandas-cookbook">
+    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-71%20%2F%2077%20SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — datafusion-sql-cookbook · pandas-cookbook">
   </a>
   <a href="https://pypi.org/project/open-fdd/">
     <img src="https://img.shields.io/pypi/v/open-fdd?style=for-the-badge&label=PyPI&color=3775A9" alt="Open-FDD on PyPI">

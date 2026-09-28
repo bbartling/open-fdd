@@ -1,6 +1,6 @@
 [package]
 name = "openfdd-fieldbus"
-version = "3.5.54"
+version = "3.5.55"
 edition = "2021"
 rust-version = "1.93"
 description = "Open-FDD fieldbus edge — BACnet/Modbus/Haystack poll + local Swagger + MQTTS publish"
@@ -35,13 +35,13 @@ toml = "0.8"
 csv = "1"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 
-bacnet-types = "0.9"
-bacnet-encoding = "0.9"
-bacnet-services = "0.9"
-bacnet-transport = "0.9"
-bacnet-client = "0.9"
-bacnet-objects = "0.9"
-bacnet-server = "0.9"
+bacnet-types = "0.11"
+bacnet-encoding = "0.11"
+bacnet-services = "0.11"
+bacnet-transport = "0.11"
+bacnet-client = "0.11"
+bacnet-objects = "0.11"
+bacnet-server = "0.11"
 bytes = "1"
 chrono = { version = "0.4", features = ["serde"] }
 

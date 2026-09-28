@@ -283,6 +283,11 @@ pub struct FieldDevice {
     pub port: u16,
     pub mstp_network: Option<u16>,
     pub mstp_mac: Vec<u8>,
+    /// Maximum ReadPropertyMultiple object specifications per request. Lower
+    /// this for small, non-segmenting MS/TP controllers (for example 206-byte APDU devices).
+    pub rpm_chunk: usize,
+    /// Advertised maximum APDU for a manually seeded routed device.
+    pub max_apdu: u32,
     pub points: Vec<FieldPoint>,
 }
 
@@ -434,6 +439,8 @@ struct FieldDeviceToml {
     port: Option<u16>,
     mstp_network: Option<u16>,
     mstp_mac: Option<Vec<u8>>,
+    rpm_chunk: Option<usize>,
+    max_apdu: Option<u32>,
     points: Option<Vec<FieldPointToml>>,
 }
 
@@ -814,6 +821,8 @@ pub fn load_field_devices(path: Option<&Path>) -> Result<Vec<FieldDevice>, Strin
             port: d.port.unwrap_or(0xBAC0),
             mstp_network: d.mstp_network,
             mstp_mac: d.mstp_mac.unwrap_or_default(),
+            rpm_chunk: d.rpm_chunk.unwrap_or(25).clamp(1, 100),
+            max_apdu: d.max_apdu.unwrap_or(480),
             points: d
                 .points
                 .unwrap_or_default()
@@ -1168,6 +1177,33 @@ mod tests {
         )
         .unwrap();
         assert!(devices.is_empty());
+    }
+
+    #[test]
+    fn field_device_rpm_chunk_is_configurable_and_bounded() {
+        // Parse only. The address is not contacted; CI has no path to the FEC LAN.
+        let path = std::env::temp_dir().join(format!(
+            "openfdd-field-devices-{}-{}.toml",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        std::fs::write(
+            &path,
+            r#"[[devices]]
+name = "small-spyder"
+device_instance = 5007
+host = "192.168.204.200"
+mstp_network = 2000
+mstp_mac = [7]
+rpm_chunk = 10
+max_apdu = 206
+"#,
+        )
+        .unwrap();
+        let devices = load_field_devices(Some(&path)).unwrap();
+        assert_eq!(devices[0].rpm_chunk, 10);
+        assert_eq!(devices[0].max_apdu, 206);
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
