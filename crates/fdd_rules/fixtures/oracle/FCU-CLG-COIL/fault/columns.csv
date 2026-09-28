@@ -1,0 +1,7 @@
+col,point_role
+sat,discharge-air-temp
+zt,zone-air-temp
+cv,cooling-valve
+hv,heating-valve
+fan,fan-status
+

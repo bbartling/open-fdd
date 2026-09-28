@@ -46,6 +46,9 @@ def infer_equipment_kind(
         "HP": "heatpump",
         "WEATHER": "weather",
         "METER": "meter",
+        "FCU": "zone_other",
+        "ZONE_OTHER": "zone_other",
+        "GENERAL": "general",
         "UNKNOWN": "unknown",
     }.get(t, "unknown")
 
@@ -106,6 +109,13 @@ def _confirm_seconds(rule: cb.CookbookRule, params: dict) -> float:
 def _missing_roles(rule: cb.CookbookRule, df: pd.DataFrame) -> list[str]:
     from open_fdd.analytics.weather_resolver import oat_meteo_availability
 
+    if rule.id == "FCU-SENSOR-NULL":
+        missing = []
+        if "zone-air-temp" not in df.columns:
+            missing.append("zone-air-temp")
+        if "zone-air-temp-sp" not in df.columns or not df["zone-air-temp-sp"].notna().any():
+            missing.append("zone-air-temp-sp")
+        return missing
     if rule.id == "OAT-METEO":
         ok, reasons = oat_meteo_availability(df)
         return [] if ok else reasons
@@ -397,7 +407,7 @@ def run_cookbook_rule(
     sid = site_id or sid
     bid = building_id or bid
 
-    if equipment_kind != "unknown" and equipment_kind not in rule.equipment_kinds:
+    if rule.equipment_kinds and equipment_kind not in rule.equipment_kinds:
         return not_applicable(
             rule.id,
             equipment_id,
@@ -452,6 +462,15 @@ def run_cookbook_rule(
     )
 
     q_roles = list(dict.fromkeys(list(rule.required_roles) + list(rule.optional_roles)))
+    # FCU pass-through setpoints are site-native Celsius. The generic temperature
+    # quality ranges are Fahrenheit and must not null these before FCU-DEADBAND /
+    # FCU-SENSOR-NULL evaluates them.
+    if rule.id.startswith("FCU-"):
+        q_roles = [
+            role
+            for role in q_roles
+            if role not in {"zone-air-temp-sp", "cooling-sp", "heating-sp"}
+        ]
     q_roles.extend(FAN_PROOF_ROLES)
     q_roles.extend(FAN_CMD_FALLBACK)
     q_roles.extend(PUMP_PROOF_ROLES)

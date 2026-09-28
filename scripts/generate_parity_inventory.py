@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate sql_rules/generated/parity_inventory.{yaml,json} from registry + pandas catalog.
 
-Contract: 62 pandas diagnostics + 4 SQL-only analytics = 66 SQL registry entries.
+Contract: 71 pandas diagnostics + 6 SQL-only analytics = 77 SQL registry entries.
 Aliases (SV-SLEW, FC13, excess_runtime) are not extra rules.
 
 Does not claim mask/duration parity — statuses come from registry.yaml plus
@@ -58,6 +58,21 @@ FIXTURE_CASES = (
     "duplicate_timestamp",
     "out_of_order",
 )
+
+# FCU promotion starts with executable field-failure fixtures rather than 90
+# empty matrix placeholders. The Python predicate test covers all nine rules;
+# these five cases are also executed through DataFusion in fcu_parity_test.rs.
+FCU_FIXTURE_CASES = {
+    "FCU-SENSOR-NULL": ("fault",),
+    "FCU-HTG-COIL": (),
+    "FCU-CLG-COIL": ("fault",),
+    "FCU-VALVE-PASS-HTG": (),
+    "FCU-VALVE-PASS-CLG": (),
+    "FCU-DAMPER-POS": ("fault",),
+    "FCU-CO2-DAMPER": (),
+    "FCU-DEADBAND": ("fault",),
+    "FCU-MODE-CYCLE": ("fault",),
+}
 
 PARITY_LEVELS = frozenset(
     {
@@ -221,7 +236,8 @@ def load_pandas_objects() -> tuple[dict, dict]:
 def fixture_entries(rule_id: str, seed_cases: set[str] | None = None) -> list[dict]:
     seed_cases = seed_cases or set()
     entries = []
-    for case in FIXTURE_CASES:
+    cases = FCU_FIXTURE_CASES.get(rule_id, FIXTURE_CASES)
+    for case in cases:
         rel = Path("crates/fdd_rules/fixtures/oracle") / rule_id / case
         abs_dir = ROOT / rel
         present = (abs_dir / "history_wide.csv").is_file() or (
@@ -327,14 +343,14 @@ def _difference(rule_id: str, aliases: list[str]) -> tuple[str, str]:
 
 def build_inventory() -> dict:
     pandas_ids = pandas_ids_from_catalog()
-    if len(pandas_ids) != 62:
+    if len(pandas_ids) != 71:
         raise SystemExit(
-            f"FAIL: expected 62 pandas CookbookRule ids, found {len(pandas_ids)}"
+            f"FAIL: expected 71 pandas CookbookRule ids, found {len(pandas_ids)}"
         )
 
     reg = load_registry()
-    if len(reg) != 68:
-        raise SystemExit(f"FAIL: expected 68 registry rules, found {len(reg)}")
+    if len(reg) != 77:
+        raise SystemExit(f"FAIL: expected 77 registry rules, found {len(reg)}")
 
     by_sql = {r["rule_id"]: r for r in reg if isinstance(r, dict) and "rule_id" in r}
     aliases_index: dict[str, str] = {}
@@ -521,16 +537,16 @@ def build_inventory() -> dict:
         "schema_version": "parity-inventory-v2",
         "generated_by": "scripts/generate_parity_inventory.py",
         "counts": {
-            "pandas_diagnostics": 62,
+            "pandas_diagnostics": 71,
             "sql_analytics": 6,
-            "sql_registry": 68,
+            "sql_registry": 77,
             "concepts": len(concepts),
             "aliases": len(aliases_index),
-            "building_100_cartesian": "48 equipment × 62 diagnostics",
+            "building_100_cartesian": "48 equipment × 71 diagnostics",
         },
         "count_explanation": (
-            "62 is the executable pandas cookbook (CookbookRule constructors). "
-            "68 is the SQL registry: those 62 twins plus 6 SQL-only analytics. "
+            "71 is the executable pandas cookbook (CookbookRule constructors). "
+            "77 is the SQL registry: 71 pandas diagnostics plus 6 SQL-only analytics. "
             "Aliases SV-SLEW, FC13, and excess_runtime are not extra rules."
         ),
         "parity_levels": sorted(PARITY_LEVELS),

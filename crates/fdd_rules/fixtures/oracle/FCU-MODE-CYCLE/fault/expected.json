@@ -1,0 +1,9 @@
+{
+  "pandas_rule_id": "FCU-MODE-CYCLE",
+  "equipment_id": "FCU_1",
+  "equipment_type": "UNKNOWN",
+  "poll_seconds": 300,
+  "any_fault": true,
+  "datafusion_compare": "covered by crates/fdd_rules/src/fcu_parity_test.rs"
+}
+
