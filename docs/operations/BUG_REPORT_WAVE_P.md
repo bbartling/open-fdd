@@ -2,6 +2,22 @@
 
 **Parent:** [`BUG_REPORT_WAVE_O.md`](BUG_REPORT_WAVE_O.md) Soft residuals · Wave R plan [`wave_r_stress_patches_5406b539.plan.md`](../../.cursor/plans/wave_r_stress_patches_5406b539.plan.md) · Soft UX master [`wave_ux_soft_master_a1b2c3d4.plan.md`](../../.cursor/plans/wave_ux_soft_master_a1b2c3d4.plan.md)
 
+## 3.5.55 patch train — issues #1022–#1030 (candidate)
+
+| Issue | Closeout evidence |
+|------:|-------------------|
+| #1022 | Compose forwards historian compaction, query-memory, and DataFusion spill settings to central; defaults remain explicit and inspectable. |
+| #1023 | `zone_other` is the canonical FCU/general matcher kind; registry, Rust, and pandas matching no longer treat unknown equipment as a typed-rule wildcard. |
+| #1024 | Non-finite BACnet Real/Double values serialize as JSON `null` with `bad-quality` metadata; central keeps a NaN marker so SV-RANGE raises `FAULT`. |
+| #1025 | Routed devices accept `max_apdu` and `rpm_chunk`; the 206-byte/no-segmentation profile is covered by a deterministic no-hardware chunk regression. |
+| #1026 | Duplicate canonical live roles keep the first point, drop later duplicates, and emit building/equipment/role audit context. |
+| #1027 | Overview timezone display uses detected IANA timezone and metric sliders convert displayed values and ranges rather than relabeling units. |
+| #1028 | MQTT ACL is mounted and seeded at `/mosquitto/certs/acl`, matching the image's read path; deployment docs and smoke setup use the same path. |
+| #1029 | Custom SQL/FDD behavior is documented across Results, Overview, and gated HITL states, including shipped rule families. |
+| #1030 | Nine FCU-* SQL and pandas rules have registry metadata, parity fixtures/tests, and cookbook documentation; `sql_screening` status is explicit where full wiring is pending. |
+
+The candidate version is **3.5.55**. Physical BACnet evidence is read-only: Who-Is, AI:1173 Present_Value, and configured RPM/poll proof against routed FEC device 5007. No write endpoint is part of this validation.
+
 ## Tip / GHCR / Railway
 
 | Item | Status |

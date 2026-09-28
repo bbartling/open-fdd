@@ -23,8 +23,6 @@ use crate::services::bacnet_server::{
     property_value_quality_error, property_value_tag, property_value_to_json,
 };
 
-const RPM_CHUNK_SIZE: usize = 25;
-
 static OBJECT_TYPE_MAP: &[(&str, ObjectType)] = &[
     ("analog-input", ObjectType::ANALOG_INPUT),
     ("analog-output", ObjectType::ANALOG_OUTPUT),
@@ -583,8 +581,8 @@ impl BacnetClientService {
                                 (None, Some(format!("Error: class={class:?} code={code:?}"))),
                             );
                         } else if let Some(bytes) = r.property_value {
-                            let (pv, _) = decode_application_value(&bytes, 0)
-                                .map_err(|e| e.to_string())?;
+                            let (pv, _) =
+                                decode_application_value(&bytes, 0).map_err(|e| e.to_string())?;
                             map.insert(
                                 oid_str.clone(),
                                 (
@@ -731,7 +729,10 @@ impl BacnetClientService {
             self.prepare(&client, device, device_instance).await?;
             let addr = self.resolve_address(&client, device, device_instance).await;
 
-            let raw_oids = self.read_object_list(&client, device_instance).await?;
+            let rpm_chunk = device.map_or(25, |d| d.rpm_chunk.max(1));
+            let raw_oids = self
+                .read_object_list(&client, device_instance, rpm_chunk)
+                .await?;
             let oids: Vec<_> = raw_oids
                 .into_iter()
                 .filter(|o| object_type_name(o.object_type()) != "device")
@@ -747,7 +748,7 @@ impl BacnetClientService {
                 .filter(|o| COMMANDABLE_TYPES.contains(&object_type_name(o.object_type()).as_str()))
                 .copied()
                 .collect();
-            for chunk in candidates.chunks(15) {
+            for chunk in candidates.chunks(rpm_chunk) {
                 let specs: Vec<_> = chunk
                     .iter()
                     .map(|o| ReadAccessSpecification {
@@ -799,6 +800,7 @@ impl BacnetClientService {
         &self,
         client: &BACnetClient<bacnet_transport::bip::BipTransport>,
         device_instance: u32,
+        rpm_chunk: usize,
     ) -> Result<Vec<ObjectIdentifier>, String> {
         let dev_oid = ObjectIdentifier::new(ObjectType::DEVICE, device_instance)
             .map_err(|e| e.to_string())?;
@@ -820,8 +822,7 @@ impl BacnetClientService {
         };
 
         let mut oids = Vec::new();
-        for start in (1..=length).step_by(RPM_CHUNK_SIZE) {
-            let end = (start + RPM_CHUNK_SIZE - 1).min(length);
+        for (start, end) in rpm_chunk_ranges(length, rpm_chunk) {
             let idxs: Vec<u32> = (start..=end).map(|i| i as u32).collect();
             let specs = vec![ReadAccessSpecification {
                 object_identifier: dev_oid,
@@ -1205,6 +1206,22 @@ impl BacnetClientService {
     }
 }
 
+/// Return inclusive object-list index ranges for a configured RPM chunk.
+///
+/// The configured `rpm_chunk` is deliberately independent of APDU negotiation:
+/// a routed MS/TP device with a 206-byte, no-segmentation profile can set a
+/// conservative value such as 10 and keep every request below its limit.
+fn rpm_chunk_ranges(length: usize, configured_chunk: usize) -> Vec<(usize, usize)> {
+    let chunk = configured_chunk.max(1);
+    if length == 0 {
+        return Vec::new();
+    }
+    (1..=length)
+        .step_by(chunk)
+        .map(|start| (start, (start + chunk - 1).min(length)))
+        .collect()
+}
+
 fn parse_object_type(name: &str) -> Result<ObjectType, String> {
     let key = name.trim().to_ascii_lowercase();
     if let Some((_, ot)) = OBJECT_TYPE_MAP.iter().find(|(k, _)| *k == key) {
@@ -1408,6 +1425,23 @@ mod poll_select_tests {
         assert_eq!(discovery_bind_port(0, 47808), 47808);
         assert_eq!(discovery_bind_port(0, 47809), 47809);
         assert_eq!(discovery_bind_port(47900, 47808), 47900);
+    }
+
+    #[test]
+    fn rpm_chunks_obey_206_byte_no_segmentation_profile() {
+        let mut fec = dev("fec-5007", 5007, vec![]);
+        fec.rpm_chunk = 10;
+        fec.max_apdu = 206;
+        assert_eq!(fec.max_apdu, 206);
+        let ranges = rpm_chunk_ranges(25, fec.rpm_chunk);
+        assert_eq!(ranges, vec![(1, 10), (11, 20), (21, 25)]);
+
+        // This is the routed FEC profile used by the bench.  The client seeds
+        // Segmentation::NONE and uses this configured chunk for object-list,
+        // commandable-point, and poll RPM requests; keep the regression fully
+        // deterministic so CI never needs a BACnet controller.
+        assert_eq!(rpm_chunk_ranges(0, fec.rpm_chunk), Vec::new());
+        assert_eq!(rpm_chunk_ranges(3, 0), vec![(1, 1), (2, 2), (3, 3)]);
     }
 }
 

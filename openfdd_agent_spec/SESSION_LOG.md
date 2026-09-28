@@ -1059,3 +1059,9 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 - Confirmed the sparse actuator/status report defect was fieldbus change-only publishing, not CSV export loss: stable values were removed between successful BACnet polls before MQTTS ingestion.
 - On candidate 3.5.54, removed the MQTT change cache/filter, reduced-metadata publish mode, related configuration surface and obsolete delta test. BACnet and REST telemetry retain full historian metadata; every successful BACnet poll snapshot proceeds unchanged to per-equipment MQTT chunking.
 - Updated edge bandwidth documentation and added a repeated-identical-snapshot regression. Candidate still requires CI/GHCR, ACME fieldbus re-pin without retired env settings and a 24-hour density comparison before closing #1021.
+## 2026-09-28 — 3.5.55 field residual patch train (#1022–#1030)
+
+- Ported and checkpointed the surface/UI/compose residuals, BACnet quality + duplicate-role handling, and the nine FCU-* SQL/pandas parity family. Product crates and lockfile are synchronized at **3.5.55**.
+- Routed BACnet devices expose `max_apdu` and `rpm_chunk`; object-list, commandable-point, and poll RPM paths use the configured chunk. A deterministic no-hardware test covers the 206-byte/no-segmentation FEC profile with chunk 10.
+- Local FEC validation evidence is intentionally read-only: Who-Is, device 5007 analog-input 1173 Present_Value, and one configured RPM/poll request. No BACnet WriteProperty or release request was issued. Values and network identifiers are omitted from this ledger.
+- Remaining release gates are recorded with the candidate commit and test commands below as they complete.
