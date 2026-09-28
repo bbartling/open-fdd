@@ -364,6 +364,23 @@ fn handle_telemetry(
             if let Some(historian) = live_historian {
                 match historian.ingest_envelope(&env) {
                     Ok(report) => {
+                        for duplicate in &report.duplicate_roles {
+                            warn!(
+                                building_id = %duplicate.building_id,
+                                equipment_id = %duplicate.equipment_id,
+                                role = %duplicate.role,
+                                "dropped later duplicate canonical live role"
+                            );
+                            open_fdd_edge_prototype::auth::audit::log_event(
+                                "mqtt_ingest_duplicate_role",
+                                serde_json::json!({
+                                    "building_id": duplicate.building_id,
+                                    "equipment_id": duplicate.equipment_id,
+                                    "role": duplicate.role,
+                                    "resolution": "first_point_wins",
+                                }),
+                            );
+                        }
                         if report.eligible_points > 0 {
                             debug!(
                                 message_id = %env.message_id,

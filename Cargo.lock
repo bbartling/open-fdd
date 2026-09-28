@@ -499,9 +499,12 @@ dependencies = [
 
 [[package]]
 name = "bacnet-client"
-version = "0.9.0"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c609e9859a0402ba926c999cbb170d8176274b619817035737755889ffedc59"
 dependencies = [
  "bacnet-encoding",
+ "bacnet-endpoint-core",
  "bacnet-network",
  "bacnet-services",
  "bacnet-transport",
@@ -514,9 +517,9 @@ dependencies = [
 
 [[package]]
 name = "bacnet-encoding"
-version = "0.9.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c60f48cbf28c5d8cb9e6669effb8f618eae84d4a71f5394186702a23daaf3f08"
+checksum = "2d865779fa0a26f39f9084e2e508242e91e002ecb90beae21501061a86ca38ad"
 dependencies = [
  "bacnet-types",
  "bytes",
@@ -524,10 +527,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "bacnet-network"
-version = "0.9.0"
+name = "bacnet-endpoint-core"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3580673570e3fb0038087644ddcd93fdc54e5c91311751b1d2d3e87c30d01813"
+checksum = "3cfc0de3dd85c7e19eacd5e764da3659d06075556f525c1c522595b3d41182c8"
+dependencies = [
+ "bacnet-encoding",
+ "bacnet-network",
+ "bacnet-transport",
+ "bacnet-types",
+ "tokio",
+]
+
+[[package]]
+name = "bacnet-network"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "318b125e1973a9b4ae8c9614a07d6e057e5b8af812a26e50a6d2647c92f0e3ea"
 dependencies = [
  "bacnet-encoding",
  "bacnet-transport",
@@ -539,9 +555,9 @@ dependencies = [
 
 [[package]]
 name = "bacnet-objects"
-version = "0.9.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd5c8074f4cdb1ed53330559c5571ea34d80e2e22d7595183dcf0a1c42df8678"
+checksum = "11dbf5e4f0f2ed1694d4f1e6aa62d92c62491933f708b33ef60db0a346e59742"
 dependencies = [
  "bacnet-encoding",
  "bacnet-types",
@@ -551,11 +567,12 @@ dependencies = [
 
 [[package]]
 name = "bacnet-server"
-version = "0.9.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "999ac74db2efd8ba442583da72bd8ec319c26440bb03b62292b03a0feeeea26f"
+checksum = "2cbab87ccc0eef59f6708c2f64cc11d4c67874ce77330282f7a6fb904afcc9ab"
 dependencies = [
  "bacnet-encoding",
+ "bacnet-endpoint-core",
  "bacnet-network",
  "bacnet-objects",
  "bacnet-services",
@@ -568,9 +585,9 @@ dependencies = [
 
 [[package]]
 name = "bacnet-services"
-version = "0.9.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f022ddc9f0081022abfe74242fb10c2209680fff64304471b378b45afbe3f8a"
+checksum = "309ee8c145c408372218a4d0b9336b41ad54ebbaa8fe193614c94ea1075eb1c0"
 dependencies = [
  "bacnet-encoding",
  "bacnet-types",
@@ -580,24 +597,26 @@ dependencies = [
 
 [[package]]
 name = "bacnet-transport"
-version = "0.9.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "325797ceeb3298e59a1ed3276198d583d0394e1e97c67be6d017b7c9d212c23f"
+checksum = "1e7d7824310ce0605f045018337d894067a757d71018daab4ad6e257160fa6b3"
 dependencies = [
  "bacnet-encoding",
  "bacnet-types",
  "bytes",
+ "getrandom 0.3.4",
  "libc",
  "socket2",
  "tokio",
  "tracing",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "bacnet-types"
-version = "0.9.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6975f24ce6506f2906d08bec590272f0001de67cf1090f1f149bb3ce58c494c3"
+checksum = "ecf52732abbeeebf648980888a2dbf7774910060f814c0417cac1bbd8e307874"
 dependencies = [
  "bitflags",
  "smallvec",
