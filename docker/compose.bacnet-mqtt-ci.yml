@@ -13,9 +13,10 @@ services:
     image: ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG to sha-xxxxxxx}
     volumes:
       # Writable: entrypoint must chown keys to mosquitto (1883) then chmod 640.
-      # Read-only host staging with mode 640 still fails OpenSSL (wrong owner).
+      # Product stacks mount this directory read-only; those hosts must set
+      # group 1883 before start because the entrypoint cannot chown a :ro file.
+      # ACL is the file staged at broker/acl, which lands at /mosquitto/certs/acl.
       - ${OPENFDD_BACNET_MQTT_CERT_DIR:?set OPENFDD_BACNET_MQTT_CERT_DIR}/broker:/mosquitto/certs
-      - ${OPENFDD_BACNET_MQTT_CERT_DIR}/acl:/mosquitto/config/acl:ro
       - mqtt-data:/mosquitto/data
     healthcheck:
       test: ["CMD-SHELL", "pidof mosquitto >/dev/null"]

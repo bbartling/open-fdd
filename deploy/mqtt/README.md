@@ -73,6 +73,12 @@ chmod 640 deploy/mqtt/certs/server.key.pem
 Keep every parent directory on the bind-mount path searchable (`chmod 755` or
 more restrictive group/owner equivalent) so uid/gid 1883 can traverse it.
 
+The host owns `server.key.pem` and `acl`. Product Compose mounts
+`deploy/mqtt/certs` read-only, so the container entrypoint cannot chown a key
+that the host left owned by another user. Set group 1883 and mode 0640 on the
+host before the first start. A mode of 0640 with the wrong group is still
+unreadable after Mosquitto drops to uid 1883.
+
 ## Edge runtime
 
 Mount the generated kit at `/mqtt` (read-only) and set:

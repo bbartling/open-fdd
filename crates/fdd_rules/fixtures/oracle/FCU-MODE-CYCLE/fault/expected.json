@@ -6,4 +6,3 @@
   "any_fault": true,
   "datafusion_compare": "covered by crates/fdd_rules/src/fcu_parity_test.rs"
 }
-

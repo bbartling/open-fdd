@@ -115,4 +115,94 @@ mod tests {
         ).await;
         assert_hours_close(cycle_h, 300.0 / 3600.0, "FCU-MODE-CYCLE SQL");
     }
+
+    #[tokio::test]
+    async fn fan_fallback_missing_valve_and_idle_mode_match_pandas() {
+        let fan_h = run(
+            "fcu_htg_coil.sql",
+            &[
+                RoleCol {
+                    csv_col: "sat",
+                    role: "sat",
+                },
+                RoleCol {
+                    csv_col: "zt",
+                    role: "zone_t",
+                },
+                RoleCol {
+                    csv_col: "hv",
+                    role: "htg_valve_pct",
+                },
+                RoleCol {
+                    csv_col: "fs",
+                    role: "fan_status",
+                },
+                RoleCol {
+                    csv_col: "fc",
+                    role: "fan_cmd",
+                },
+            ],
+            "timestamp_utc,sat,zt,hv,fs,fc\n\
+             2026-01-01T00:00:00Z,75,72,100,,100\n\
+             2026-01-01T00:05:00Z,75,72,100,0,100\n",
+            &[("VALVE_OPEN", "0.8"), ("COIL_DELTA_F", "5.4")],
+        )
+        .await;
+        // Row 1 falls back to fan command. Row 2 has explicit fan-off status.
+        assert_hours_close(fan_h, 300.0 / 3600.0, "FCU fan fallback SQL");
+
+        let missing_valve = run(
+            "fcu_clg_coil.sql",
+            &[
+                RoleCol {
+                    csv_col: "sat",
+                    role: "sat",
+                },
+                RoleCol {
+                    csv_col: "zt",
+                    role: "zone_t",
+                },
+                RoleCol {
+                    csv_col: "cv",
+                    role: "clg_valve_pct",
+                },
+                RoleCol {
+                    csv_col: "hv",
+                    role: "htg_valve_pct",
+                },
+                RoleCol {
+                    csv_col: "fan",
+                    role: "fan_status",
+                },
+            ],
+            "timestamp_utc,sat,zt,cv,hv,fan\n2026-01-01T00:00:00Z,90,72,100,,1\n",
+            &[("VALVE_OPEN", "0.8")],
+        )
+        .await;
+        assert_hours_close(missing_valve, 0.0, "FCU missing heating valve SQL");
+
+        let idle_h = run(
+            "fcu_mode_cycle.sql",
+            &[
+                RoleCol {
+                    csv_col: "hv",
+                    role: "htg_valve_pct",
+                },
+                RoleCol {
+                    csv_col: "cv",
+                    role: "clg_valve_pct",
+                },
+            ],
+            "timestamp_utc,hv,cv\n\
+             2026-01-01T00:00:00Z,100,0\n\
+             2026-01-01T00:05:00Z,0,100\n\
+             2026-01-01T00:10:00Z,100,0\n\
+             2026-01-01T00:15:00Z,0,100\n\
+             2026-01-01T00:20:00Z,100,0\n\
+             2026-01-01T00:25:00Z,0,0\n",
+            &[("MODE_VALVE_MIN", "0.1"), ("MODE_CHANGES", "4")],
+        )
+        .await;
+        assert_hours_close(idle_h, 300.0 / 3600.0, "FCU idle mode row SQL");
+    }
 }

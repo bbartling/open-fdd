@@ -60,6 +60,7 @@ Product UI is the React SPA. Pandas stays on PyPI for third-party tooling.
 | Weather | 1 | WX-1 |
 | Trim & respond | 3 | TRIM-1, TRIM-3, TRIM-4 |
 | Schedule | 2 | SCHED-1, SCHED-247 |
+| Fan coil / zone | 9 | FCU-SENSOR-NULL, FCU-HTG-COIL, FCU-CLG-COIL, FCU-VALVE-PASS-HTG, FCU-VALVE-PASS-CLG, FCU-DAMPER-POS, FCU-CO2-DAMPER, FCU-DEADBAND, FCU-MODE-CYCLE |
 
 **Total validated:** 71. **Default confirmation:** 300 s (5 min) unless noted per rule.
 

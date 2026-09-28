@@ -170,14 +170,14 @@ def run_docs_integrity() -> None:
     print(f"PASS sql_rules/registry.yaml ({len(reg_ids)} rule ids)")
 
     hub = (COOKBOOK / "index.md").read_text(encoding="utf-8")
-    if "68" not in hub or "62" not in hub:
+    if "77" not in hub or "71" not in hub:
         raise AssertionError(
-            "cookbook/index.md must state both SQL registry 68 and pandas catalog 62"
+            "cookbook/index.md must state both SQL registry 77 and pandas catalog 71"
         )
     sql_intro = (COOKBOOK / "datafusion-sql-cookbook.md").read_text(encoding="utf-8")[:2500]
     pd_intro = (COOKBOOK / "pandas-cookbook.md").read_text(encoding="utf-8")[:2500]
-    if "68" not in sql_intro:
-        raise AssertionError("datafusion-sql-cookbook.md intro must mention registry 68")
+    if "77" not in sql_intro:
+        raise AssertionError("datafusion-sql-cookbook.md intro must mention registry 77")
     if "59" not in pd_intro or "not" not in pd_intro.lower():
         # require "not" near keep/delete messaging — soft check for retention language
         if "not vibe-coded away" not in pd_intro and "intentionally maintained" not in pd_intro:

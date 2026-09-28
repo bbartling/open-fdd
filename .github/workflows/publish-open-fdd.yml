@@ -101,7 +101,7 @@ jobs:
           assert callable(validate_ecm_context)
           assert EQ_VOCAB_VERSION == "ofdd_engineering_quantities_v1"
           assert callable(adapt_model_to_calculator)
-          assert CANONICAL_RULE_COUNT == 62
+          assert CANONICAL_RULE_COUNT == 71
           assert "SCHED-1" in RULES_BY_ID
           assert "VAV-2" in RULES_BY_ID
           from open_fdd.analytics.vav_health import vav_health_matrix, SCHEMA_VERSION

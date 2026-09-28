@@ -90,6 +90,15 @@ fn sql_with_optional_null_roles(
     history_columns: &std::collections::HashSet<String>,
     history_table: &str,
 ) -> String {
+    // A missing zone temperature column means the sensor is not mapped.
+    // Injecting NULL would look like the dead-sensor case and false-fault
+    // followers that only publish a setpoint. Keep the rule applicable at
+    // zero hours; a present-but-null zone_t still runs the shipped SQL.
+    if rule_id == "FCU-SENSOR-NULL" && !history_columns.contains("zone_t") {
+        return format!(
+            "SELECT equipment_id, CAST(0.0 AS DOUBLE) AS fault_hours FROM {history_table} GROUP BY equipment_id"
+        );
+    }
     let missing: Vec<String> = optional_roles
         .iter()
         .filter(|role| !history_columns.contains(&role.to_ascii_lowercase()))
@@ -98,7 +107,6 @@ fn sql_with_optional_null_roles(
     if missing.is_empty() {
         return sql.to_string();
     }
-    let _ = rule_id;
     let null_cols: String = missing
         .iter()
         .map(|r| {
@@ -493,5 +501,70 @@ mod time_window_tests {
             .value(0);
         // [11:00, 13:00) -> 11:00 and 12:00
         assert_eq!(c, 2);
+    }
+}
+
+#[cfg(test)]
+mod sensor_null_applicability_tests {
+    use std::collections::HashSet;
+    use std::sync::Arc;
+
+    use datafusion::arrow::array::{Float64Array, StringArray};
+    use datafusion::arrow::datatypes::{DataType, Field, Schema};
+    use datafusion::arrow::record_batch::RecordBatch;
+    use datafusion::prelude::SessionContext;
+    use fdd_sql::run_sql;
+
+    use super::sql_with_optional_null_roles;
+
+    #[tokio::test]
+    async fn unmapped_zone_temperature_stays_applicable_at_zero_hours() {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("equipment_id", DataType::Utf8, false),
+            Field::new("zone_air_temp_sp", DataType::Float64, true),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(StringArray::from(vec!["FCU_1", "FCU_1"])),
+                Arc::new(Float64Array::from(vec![21.0, 21.0])),
+            ],
+        )
+        .unwrap();
+        let ctx = SessionContext::new();
+        ctx.register_batch("history", batch).unwrap();
+        let columns = HashSet::from(["equipment_id".to_string(), "zone_air_temp_sp".to_string()]);
+        let sql = sql_with_optional_null_roles(
+            "FCU-SENSOR-NULL",
+            "SELECT zone_t FROM history",
+            &["zone_t".to_string()],
+            &columns,
+            "history",
+        );
+        assert!(!sql.contains("zone_t"));
+        let result = run_sql(&ctx, &sql).await.unwrap();
+        let hours = result.rows[0]
+            .get("fault_hours")
+            .and_then(|value| value.as_f64())
+            .unwrap();
+        assert_eq!(hours, 0.0);
+    }
+
+    #[test]
+    fn mapped_zone_temperature_keeps_the_shipped_predicate() {
+        let columns = HashSet::from([
+            "equipment_id".to_string(),
+            "zone_t".to_string(),
+            "zone_air_temp_sp".to_string(),
+        ]);
+        let raw = "SELECT zone_t FROM history";
+        let sql = sql_with_optional_null_roles(
+            "FCU-SENSOR-NULL",
+            raw,
+            &["zone_t".to_string()],
+            &columns,
+            "history",
+        );
+        assert_eq!(sql, raw);
     }
 }

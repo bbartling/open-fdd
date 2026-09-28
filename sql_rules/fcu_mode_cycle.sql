@@ -26,4 +26,3 @@ SELECT equipment_id,
     * {{POLL_SECONDS}} / 3600.0 AS fault_hours
 FROM cumulative
 GROUP BY equipment_id;
-

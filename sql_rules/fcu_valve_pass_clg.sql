@@ -29,4 +29,3 @@ SELECT equipment_id,
   SUM(CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
 FROM ranked
 GROUP BY equipment_id;
-

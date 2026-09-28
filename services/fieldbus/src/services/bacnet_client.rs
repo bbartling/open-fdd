@@ -567,7 +567,7 @@ impl BacnetClientService {
             self.prepare(&client, Some(device), device.device_instance)
                 .await?;
             let mut map = HashMap::new();
-            for chunk in rpm_request_chunks(&specs, device.rpm_chunk) {
+            for chunk in rpm_request_chunks(specs, device.rpm_chunk) {
                 let rpm = client
                     .read_property_multiple_from_device(device.device_instance, chunk.to_vec())
                     .await
@@ -1460,10 +1460,18 @@ mod poll_select_tests {
         );
         assert_eq!(requests[0][0].object_identifier.instance_number(), 1);
         assert_eq!(requests[2][4].object_identifier.instance_number(), 25);
-        assert!(requests.iter().flatten().all(|spec| {
+        assert!(requests.iter().flat_map(|chunk| chunk.iter()).all(|spec| {
             spec.list_of_property_references[0].property_identifier
                 == PropertyIdentifier::PRESENT_VALUE
         }));
+        // Object-list RPM uses the same configured chunk, including a zero
+        // request size that must still advance one object at a time.
+        assert_eq!(
+            rpm_chunk_ranges(25, fec.rpm_chunk),
+            vec![(1, 10), (11, 20), (21, 25)]
+        );
+        assert_eq!(rpm_chunk_ranges(0, fec.rpm_chunk), Vec::new());
+        assert_eq!(rpm_chunk_ranges(3, 0), vec![(1, 1), (2, 2), (3, 3)]);
     }
 }
 

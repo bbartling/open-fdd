@@ -5,4 +5,3 @@ SELECT equipment_id,
     * {{POLL_SECONDS}} / 3600.0 AS fault_hours
 FROM history
 GROUP BY equipment_id;
-
