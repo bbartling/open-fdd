@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { MappingPage } from "./MappingPage";
 
@@ -105,7 +105,14 @@ describe("Data Model Results by Category", () => {
       expect(screen.getByTestId("data-model-subnav")).toBeTruthy();
       expect(screen.getByTestId("results-table")).toBeTruthy();
       expect(screen.getByText("AHU-SATDEV")).toBeTruthy();
-      expect(screen.getByText("Mark first finding open")).toBeTruthy();
+      const hitlTrigger = screen.getByRole("button", {
+        name: "Engineering findings HITL (job dispositions)",
+      });
+      expect(hitlTrigger.getAttribute("aria-expanded")).toBe("false");
+      fireEvent.click(hitlTrigger);
+      expect(
+        screen.getByRole("button", { name: "Mark first finding open" }),
+      ).toBeTruthy();
     });
     expect(screen.queryByText(/demo/i)).toBeNull();
   });

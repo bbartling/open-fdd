@@ -89,7 +89,8 @@ fn building_id_scopes_results_and_faults() {
     // VAV-1 confirms a fault streak — the two sites MUST differ.
     write_building(&parquet_root, "B50", Some(72.0), 60);
     write_building(&parquet_root, "B100", Some(95.0), 60);
-    // BNOROLE lacks zone_t entirely → VAV-1 must SKIP, not fail (OFDD-066).
+    // BNOROLE lacks a package type stamp. VAV-1 is type-gated, so the
+    // untyped/general equipment row is N/A rather than a missing-role skip.
     write_building(&parquet_root, "BNOROLE", None, 60);
 
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -154,7 +155,9 @@ fn building_id_scopes_results_and_faults() {
         "scoped results_response must differ: {r50} vs {r100}"
     );
 
-    // OFDD-066: a building missing the required role SKIPS rather than failing.
+    // Type gating classifies GENERAL/VAV-1 as N/A while preserving the
+    // missing-role metadata. Rules that explicitly include `general` remain
+    // eligible; the registry unit test below protects that contract.
     let skip = run("BNOROLE");
     assert_eq!(skip["ok"], json!(true), "skip run: {skip}");
     assert_eq!(
@@ -165,15 +168,14 @@ fn building_id_scopes_results_and_faults() {
     assert_eq!(
         skip["rules_skipped"].as_u64().unwrap_or(0),
         1,
-        "expected VAV-1 skipped: {skip}"
+        "expected VAV-1 skipped/N/A row: {skip}"
     );
     let skip_status = skip["results"][0]["status"].as_str().unwrap_or("");
-    assert_eq!(skip_status, "SKIPPED_MISSING_ROLES", "skip status: {skip}");
-    let missing = skip["results"][0]["missing_roles"]
-        .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str()).any(|s| s == "zone_t"))
-        .unwrap_or(false);
-    assert!(missing, "expected zone_t in missing_roles: {skip}");
+    assert_eq!(
+        skip_status, "NOT_APPLICABLE_EQUIPMENT_TYPE",
+        "skip status: {skip}"
+    );
+    assert_eq!(skip["results"][0]["missing_roles"], json!(["zone_t"]));
 
     let _ = std::fs::remove_dir_all(&tmp);
 }

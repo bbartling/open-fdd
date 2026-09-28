@@ -1672,6 +1672,7 @@ mod tests {
         assert!(rule_applies_to_kind(&kinds, "zone_other"));
         assert!(!rule_applies_to_kind(&kinds, "unknown"));
         assert!(!rule_applies_to_kind(&kinds, "general"));
+        assert!(rule_applies_to_kind(&["general".to_string()], "general"));
         assert!(rule_applies_to_kind(&[], "unknown"));
     }
 
