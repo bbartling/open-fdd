@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Gate 24 — Railway capacity pressure probe (Wave S S5a).
 # Building-scoped FDD/analytics burst; hard-fail on 5xx/timeout/health death.
+#
+# STRESS NOTE #1: this burst is one analytics load to set next to central RAM.
+# The ride-along sampler (lib_capacity_sample.sh) records process/host RSS and
+# historian file pressure. Railway metrics memory limit/current/max are the
+# replica cap (Pro openfdd-central: 24 GB). A silent restart, an OOM, or a
+# 499 storm fails closeout even when this gate's HTTP code is 2xx.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091

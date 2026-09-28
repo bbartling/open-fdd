@@ -42,9 +42,12 @@ OPENFDD_AFDD_BUILDING_ID=ACME
 OPENFDD_PARQUET_FLUSH_SECONDS=300
 ```
 
-- **Cadence:** once per 24h. **Window:** rolling 24h ending at live telemetry watermark.
+- **Cadence:** `OPENFDD_AFDD_INTERVAL_MINUTES=1440` (once per 24h) measured from the last checkpoint (`last_completed_at + interval`). That 1440 is the cadence. It does not pin the run to wall-clock 05:00.
+- **Ops clock (ACME lab):** prefer the daily cycle around **05:00 America/Chicago** so it finishes before the **06:00** morning digest. Lookback stays tied to the cadence (daily → 24h / 1 day).
+- **Window:** lookback-sized only. `end` = latest persisted telemetry watermark; `start` = `end − lookback` (`plan_continuous_cycle` in `crates/fdd_store/src/afdd_scheduler.rs`). The cycle does not scan the entire dataset. After downtime, catch-up is still one lookback-sized window (`catch_up`). Full-history replay is explicit backfill (`plan_backfill_chunks`), separate from the timer.
 - Compact ACME hive parts before enabling continuous AFDD (`scripts/ops/railway_compact_hub.sh` / hub-admin compaction).
 - Stress SoT: gate **38** `38_acme_afdd_qualification.sh` (MEGA required). Gate **19** remains synth flood only.
+- **RAM:** Pro `openfdd-central` replica limit is 24 GB. Watch Railway memory limit/current/max and the hub capacity sampler during Overview / RCx / this cycle ([`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) § STRESS NOTE #1). The 2026-09-28 OOM was the old Hobby 8 GB cap. Keep the headroom.
 
 ## Local == cloud
 

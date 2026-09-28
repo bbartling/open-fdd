@@ -4,7 +4,7 @@
 
 | Profile | Entry | Environment |
 |---------|-------|-------------|
-| `railway_field` | `./scripts/nightly-ot-bench/run_railway_hub_stress.sh` | Authorized live ops window; includes data mutations and telemetry pause/resume, plus public ZAP baseline |
+| `railway_field` | `./scripts/nightly-ot-bench/run_railway_hub_stress.sh` | Authorized live ops window; includes data mutations and telemetry pause/resume, plus public ZAP baseline. **STRESS NOTE #1:** watch central RAM (Railway memory limit/current/max + capacity sampler) under Overview/RCx/AFDD; hard-fail silent restart / OOM / 499 storm. ACME AFDD stays lookback-sized (daily → 24h). See [`STRESS_CLOSEOUT.md`](../../docs/operations/STRESS_CLOSEOUT.md). |
 | `lab_local` | `./scripts/nightly-ot-bench/run_all.sh` | Disposable/local stack (not field closeout) |
 | `harness_selftest` | `python3 scripts/qualification/write_manifest.py selftest` | No network |
 

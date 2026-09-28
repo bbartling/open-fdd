@@ -1,6 +1,26 @@
 #!/usr/bin/env bash
 # Gate 38 — ACME continuous AFDD qualification (primary live AFDD SoT).
-# Synthetic-59 flood remains gate 19; this gate proves ACME 24h lookback cycles.
+# Synthetic-59 flood remains gate 19; this gate proves ACME lookback-sized cycles.
+#
+# Window policy — plan_continuous_cycle (crates/fdd_store/src/afdd_scheduler.rs):
+#   end   = latest persisted telemetry watermark
+#   start = end − lookback
+# Cycles use a lookback-sized window only, tied to the interval
+# (daily cadence → 24h / 1 day). They do not scan the entire historian.
+# After downtime the next cycle is still one lookback-sized window
+# (catch_up). Explicit history replay is plan_backfill_chunks, separate
+# from the timer.
+#
+# Cadence: OPENFDD_AFDD_INTERVAL_MINUTES=1440 is last_completed_at + interval
+# (checkpoint-relative). It is not wall-clock aligned. Ops preference for
+# this ACME lab: land the daily cycle around 05:00 America/Chicago so it
+# finishes before the 06:00 morning digest, with lookback kept at 24h.
+# This gate checks config truth and a bounded run-now window. It does not
+# assert a 05:00 clock alignment.
+#
+# Live lab env (Railway, not a product default): OPENFDD_AFDD_MODE=continuous,
+# INTERVAL_MINUTES=1440, LOOKBACK_VALUE=24, LOOKBACK_UNIT=hours,
+# BUILDING_ID=ACME. RAM watch: STRESS NOTE #1 (Pro central 24 GB/replica).
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091

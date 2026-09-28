@@ -2,6 +2,24 @@
 # Railway hub capacity sampler helpers (Wave S S5a).
 # Source from run_railway_hub_stress.sh — do not run alone as a gate.
 #
+# In-script RAM watch for multi-building and analytics pressure (Overview,
+# RCx, AFDD, gate 24). Samples append to capacity_samples.ndjson: health,
+# /api/host/stats memory, and data-management file_count / small_files / bytes.
+# capacity_write_report rolls that into capacity_report.json (gate 24b).
+# Correlate RSS and file counts with how many buildings are on the hub.
+#
+# Railway replica limit vs process RSS (STRESS NOTE #1):
+#   - Replica limit is the platform cgroup cap. Read it from Railway metrics
+#     (memory limit / current / max). Pro openfdd-central is 24 GB/replica.
+#     Hobby hard-capped replicas at 8 GB; 2026-09-28 OOM'd there under
+#     Overview/RCx. The sampler does not read that cgroup cap.
+#   - Samples record process/host RSS (memory_used_bytes, memory_percent_used,
+#     memory_source). RSS is not the replica limit. host_proc totals above
+#     64 GiB are tagged host_proc_likely_shared_node — do not FAIL on
+#     memory_percent_used alone in that case.
+#   - Silent restart, OOM, or a 499 storm still fails closeout. See
+#     run_railway_hub_stress.sh and docs/operations/STRESS_CLOSEOUT.md.
+#
 # Env:
 #   CAPACITY_SAMPLE=1|0     default 1 when RAILWAY_ONLY=1 else 0
 #   CAPACITY_SAMPLE_SECS=15
@@ -84,6 +102,8 @@ if storage.get("used_bytes") is not None and bytes_v is None:
 
 mem_total = mem.get("total_bytes")
 memory_source = mem.get("source") or "host_proc"
+# RSS from /api/host/stats, not the Railway replica cgroup cap (Pro: 24 GB).
+# A shared-node host_proc total above 64 GiB is not that replica limit.
 if memory_source == "host_proc" and mem_total and int(mem_total) > 64 * 1024**3:
     memory_source = "host_proc_likely_shared_node"
 
