@@ -1,3 +1,11 @@
+## 2026-09-27 — Tip 3.5.53 closeout stress (not FQ)
+
+- Tip `dc32615` / VERSION 3.5.53 on Railway (`sha-dc32615`); backup `20260927T193409Z`; edge `vim-1` MQTTS fresh.
+- Full hub stress `reports/nightly-ot-bench_20260927T201408Z/` **fully_qualified=false** (FAIL gate17 mech-cooling bins=0; FAIL gate37 ACME analytics fail-closed). Security gates PASS; gate38 ACME AFDD PASS.
+- Findings: `reports/tip_3.5.53_closeout_20260927T201408Z/`. Do not bump OPS PINNED (still 3.5.43 / sha-7ad6479).
+- Rebased onto master 3.5.54 / `9b703857` (#1031). That tip's Wave P row `mqtt-full-snapshot-1021` stays candidate-pending and does not change this NOT-FQ result or the OPS pin.
+- Harness only: restore the missing `\` so `--required 38_acme_afdd_qualification` stays on the required-gate list. Product residuals remain #1019 and #1020.
+
 ## 2026-09-27 — Single-system Typst reports include motor run hours
 
 - `open-fdd-anomaly report` now draws `motor_weekly_runtime_chart` for every mapped fan and pump on any system profile, using `motor_run_hours_weekly(..., include_all_mapped=True)`. A short note replaces the chart when no motor proof is mapped. Building scope still skips non-AHU children.
