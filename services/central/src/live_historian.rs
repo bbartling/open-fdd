@@ -816,7 +816,13 @@ mod tests {
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sql_rules/sv_range.sql"),
         )
         .unwrap();
-        let sql = substitute_sql(&sql, &rule_params(300.0, 0));
+        let mut params = rule_params(300.0, 0);
+        // Registry defaults. Leaving the scale placeholders unsubstituted
+        // makes DataFusion reject the shipped SV-RANGE file.
+        params.insert("RANGE_SCALE_TEMPERATURE".into(), "1".into());
+        params.insert("RANGE_SCALE_HUMIDITY".into(), "1".into());
+        params.insert("RANGE_SCALE_PRESSURE".into(), "1".into());
+        let sql = substitute_sql(&sql, &params);
         let result = run_sql(&ctx, &sql).await.unwrap();
         let fault_hours = result.rows[0]
             .get("fault_hours")
