@@ -10,6 +10,10 @@ host = "192.168.204.200"
 port = 47808
 mstp_network = 2000
 mstp_mac = [7]
+# The FEC router advertises a 206-byte APDU and no segmentation. Keep RPM
+# requests conservative; this is also the CI no-hardware chunking profile.
+rpm_chunk = 10
+max_apdu = 206
 points = [
   { object_type = "analog-input", object_instance = 1173, point_name = "OA-T", units = "°F" },
 ]
