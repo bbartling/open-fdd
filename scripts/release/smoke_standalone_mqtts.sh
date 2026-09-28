@@ -101,7 +101,7 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   export OPENFDD_EDGE_ID="$EDGE_ID"
   export OPENFDD_EDGE_KIT_DIR="${OPENFDD_EDGE_KIT_DIR:-$ROOT/$KIT_DIR}"
   export OPENFDD_MQTT_HOST="${OPENFDD_MQTT_HOST:-127.0.0.1}"
-  mkdir -p deploy/mqtt/certs deploy/mqtt/acl workspace "$OPENFDD_EDGE_KIT_DIR"
+  mkdir -p deploy/mqtt/certs workspace "$OPENFDD_EDGE_KIT_DIR"
   docker compose -f docker/compose.standalone.yml config >/dev/null
   docker compose -f docker/compose.central.yml config >/dev/null
   docker compose -f docker/compose.edge.yml config >/dev/null

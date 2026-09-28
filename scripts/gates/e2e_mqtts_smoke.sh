@@ -27,7 +27,7 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   export OPENFDD_EDGE_ID="${OPENFDD_EDGE_ID:-fieldbus-1}"
   export OPENFDD_EDGE_KIT_DIR="${OPENFDD_EDGE_KIT_DIR:-$ROOT/deploy/mqtt/kits/${OPENFDD_SITE_ID}__${OPENFDD_EDGE_ID}}"
   export OPENFDD_MQTT_HOST="${OPENFDD_MQTT_HOST:-mqtt.example.com}"
-  mkdir -p deploy/mqtt/certs deploy/mqtt/acl workspace
+  mkdir -p deploy/mqtt/certs workspace
   docker compose -f docker/compose.standalone.yml config >/dev/null
   docker compose -f docker/compose.central.yml config >/dev/null
   # edge compose requires kit path even for config-only validation

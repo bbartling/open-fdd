@@ -34,6 +34,7 @@ import { SqlAnomalySection } from "./SqlAnomalySection";
 import { mergeRuleDescriptionsFromApi } from "../lib/ruleLabels";
 import { RULES_UPDATED_EVENT } from "./RuleTuningPanel";
 import { naturalCompare } from "../lib/naturalSort";
+import { displayScalar, storeScalar } from "../api/roleUnits";
 import {
   cookbookKind,
   cookbookRuleCount,
@@ -85,13 +86,21 @@ const DEFAULT_WEEK: Record<(typeof DAYS)[number], DaySched> = {
 /** v2 defaults: M–F 07:00–17:00 occupied; weekends unoccupied. */
 const SCHEDULE_KEY = "openfdd.ui.occupancy_schedule.v2";
 
+export function detectedTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
 function loadStoredSchedule(): {
   week: Record<(typeof DAYS)[number], DaySched>;
   tz: string;
 } {
   try {
     const raw = localStorage.getItem(SCHEDULE_KEY);
-    if (!raw) return { week: DEFAULT_WEEK, tz: "America/Chicago" };
+    if (!raw) return { week: DEFAULT_WEEK, tz: detectedTimeZone() };
     const parsed = JSON.parse(raw) as {
       week?: Record<string, DaySched>;
       tz?: string;
@@ -114,10 +123,10 @@ function loadStoredSchedule(): {
       tz:
         typeof parsed.tz === "string" && parsed.tz.trim()
           ? parsed.tz
-          : "America/Chicago",
+          : detectedTimeZone(),
     };
   } catch {
-    return { week: DEFAULT_WEEK, tz: "America/Chicago" };
+    return { week: DEFAULT_WEEK, tz: detectedTimeZone() };
   }
 }
 
@@ -207,6 +216,9 @@ export function OverviewPopulated({
     sortedEquipment.find((e) => e.equipment_id === equipmentId) ??
     sortedEquipment[0];
   const tempUnit = unitSystem === "metric" ? "°C" : "°F";
+  const zoneLowDisplay = displayScalar(zoneLow, "degF", unitSystem);
+  const zoneHighDisplay = displayScalar(zoneHigh, "degF", unitSystem);
+  const comfortStep = unitSystem === "metric" ? 0.3 : 0.5;
   const bareMin = hoursPerWeek(week);
   const spanH =
     overview?.span?.span_hours != null
@@ -814,21 +826,25 @@ export function OverviewPopulated({
         <Slider
           id="zone-low"
           label={`Zone low ${tempUnit}`}
-          min={55}
-          max={72}
-          step={0.5}
-          value={zoneLow}
-          onChange={setZoneLow}
+          min={displayScalar(55, "degF", unitSystem)}
+          max={displayScalar(72, "degF", unitSystem)}
+          step={comfortStep}
+          value={zoneLowDisplay}
+          onChange={(value) =>
+            setZoneLow(storeScalar(value, "degF", unitSystem))
+          }
           testId="overview-zone-low"
         />
         <Slider
           id="zone-high"
           label={`Zone high ${tempUnit}`}
-          min={70}
-          max={85}
-          step={0.5}
-          value={zoneHigh}
-          onChange={setZoneHigh}
+          min={displayScalar(70, "degF", unitSystem)}
+          max={displayScalar(85, "degF", unitSystem)}
+          step={comfortStep}
+          value={zoneHighDisplay}
+          onChange={(value) =>
+            setZoneHigh(storeScalar(value, "degF", unitSystem))
+          }
           testId="overview-zone-high"
         />
         <Metric

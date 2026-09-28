@@ -15,7 +15,7 @@ rules:
     confirm_seconds: 0
 
   - rule_id: VAV-1
-    equipment_kinds: [vav, zone]
+    equipment_kinds: [vav, zone_other]
     sql_file: vav1_comfort_fault.sql
     pandas_function: vav1
     description: Zone comfort band violation hours with confirm window
@@ -84,7 +84,7 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: VAV-2
-    equipment_kinds: [vav, zone]
+    equipment_kinds: [vav, zone_other]
     sql_file: vav2_night_setback.sql
     pandas_function: vav2
     description: Night setback miss — unoccupied zone above heating setback
@@ -1602,7 +1602,7 @@ rules:
 # --- Ported from datafusion-sql-cookbook (feat/sql-rules-59) ---
 
   - rule_id: SV-RANGE
-    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump, meter]
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump, meter]
     sql_file: sv_range.sql
     pandas_function: null
     description: Sensor out of hard range
@@ -1681,7 +1681,7 @@ rules:
         sql_placeholder: RANGE_SCALE_PRESSURE
 
   - rule_id: SV-FLATLINE
-    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump]
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
     sql_file: sv_flatline.sql
     pandas_function: null
     description: Sensor flatline (stuck)
@@ -1751,7 +1751,7 @@ rules:
         sql_placeholder: FLATLINE_HOURS
 
   - rule_id: SV-SPIKE
-    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump]
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
     sql_file: sv_spike.sql
     pandas_function: null
     description: Sensor rate-of-change spike
@@ -1839,7 +1839,7 @@ rules:
         sql_placeholder: SPIKE_SCALE
 
   - rule_id: SV-STALE
-    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump]
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
     sql_file: sv_stale.sql
     pandas_function: null
     description: Stale data (no fresh samples)
@@ -1883,7 +1883,7 @@ rules:
         sql_placeholder: STALE_TOL
 
   - rule_id: SV-RATE
-    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump]
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
     aliases: [SV-SLEW]
     sql_file: sv_rate.sql
     pandas_function: null
@@ -1944,7 +1944,7 @@ rules:
         sql_placeholder: STEADY_FAULT_PER_HOUR
 
   - rule_id: PID-HUNT-1
-    equipment_kinds: [ahu, vav, chiller, boiler, heatpump]
+    equipment_kinds: [ahu, vav, zone_other, chiller, boiler, heatpump]
     sql_file: pid_hunt_1.sql
     pandas_function: null
     description: Suspected control-output hunting
@@ -4846,7 +4846,7 @@ rules:
         sql_placeholder: REQUEST_LO
 
   - rule_id: SCHED-1
-    equipment_kinds: [ahu]
+    equipment_kinds: [ahu, zone_other]
     sql_file: sched1_unoccupied_runtime.sql
     pandas_function: sched1
     aliases: [excess_runtime]
@@ -4892,7 +4892,7 @@ rules:
         sql_placeholder: ZONE_T_HI
 
   - rule_id: SCHED-247
-    equipment_kinds: [ahu, vav, chiller, boiler, heatpump]
+    equipment_kinds: [ahu, vav, zone_other, chiller, boiler, heatpump]
     sql_file: sched247_always_on.sql
     pandas_function: _sched247
     description: Always-on fan or pump runtime
