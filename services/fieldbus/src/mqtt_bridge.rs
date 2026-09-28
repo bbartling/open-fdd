@@ -653,8 +653,7 @@ pub async fn spawn_if_configured(
                 })
                 .collect();
             let rest_rows = rest.last_values().await;
-            let rest_out =
-                rest_telemetry_points(&rest_rows, building_id.as_deref(), &type_stamps);
+            let rest_out = rest_telemetry_points(&rest_rows, building_id.as_deref(), &type_stamps);
             let bacnet_points = points;
             if bacnet_points.is_empty() && rest_out.is_empty() {
                 continue;
