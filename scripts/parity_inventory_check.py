@@ -61,17 +61,17 @@ def main() -> int:
 
     if inv.get("schema_version") != "parity-inventory-v2":
         fail(f"schema_version={inv.get('schema_version')!r} want parity-inventory-v2")
-    if counts.get("pandas_diagnostics") != 62:
-        fail(f"inventory pandas_diagnostics={counts.get('pandas_diagnostics')} want 62")
+    if counts.get("pandas_diagnostics") != 71:
+        fail(f"inventory pandas_diagnostics={counts.get('pandas_diagnostics')} want 71")
     if counts.get("sql_analytics") != 6:
         fail(f"inventory sql_analytics={counts.get('sql_analytics')} want 6")
-    if counts.get("sql_registry") != 68:
-        fail(f"inventory sql_registry={counts.get('sql_registry')} want 68")
-    if len(concepts) != 68:
-        fail(f"inventory concepts={len(concepts)} want 68")
+    if counts.get("sql_registry") != 77:
+        fail(f"inventory sql_registry={counts.get('sql_registry')} want 77")
+    if len(concepts) != 77:
+        fail(f"inventory concepts={len(concepts)} want 77")
     matrix = inv.get("matrix") or []
-    if len(matrix) != 68:
-        fail(f"inventory matrix={len(matrix)} want 68")
+    if len(matrix) != 77:
+        fail(f"inventory matrix={len(matrix)} want 77")
     required_matrix = {
         "rule_id",
         "title",
@@ -113,11 +113,11 @@ def main() -> int:
     if sv_rate.get("difference_class") != "semantic_gap":
         fail(f"SV-RATE unexpected difference_class={sv_rate.get('difference_class')}")
     if "count_explanation" not in inv:
-        fail("missing count_explanation for 62-versus-68")
+        fail("missing count_explanation for 71-versus-77")
 
     diag = [c for c in concepts if c.get("kind") == "diagnostic"]
     analytics = [c for c in concepts if c.get("kind") == "sql_analytics"]
-    if len(diag) != 62 or len(analytics) != 6:
+    if len(diag) != 71 or len(analytics) != 6:
         fail(f"kind split diagnostic={len(diag)} analytics={len(analytics)}")
 
     analytics_ids = {c["canonical_id"] for c in analytics}
@@ -127,8 +127,8 @@ def main() -> int:
     # Registry live check
     reg = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
     rules = reg.get("rules") or []
-    if len(rules) != 68:
-        fail(f"registry rules={len(rules)} want 68")
+    if len(rules) != 77:
+        fail(f"registry rules={len(rules)} want 77")
 
     levels = Counter()
     for r in rules:
@@ -151,8 +151,8 @@ def main() -> int:
     cat = CATALOG.read_text(encoding="utf-8")
     pandas_ids = re.findall(r'CookbookRule\(\s*\n?\s*"([A-Z][A-Z0-9-]*)"', cat)
     pandas_ids = list(dict.fromkeys(pandas_ids))
-    if len(pandas_ids) != 62:
-        fail(f"cookbook_catalog CookbookRule count={len(pandas_ids)} want 62")
+    if len(pandas_ids) != 71:
+        fail(f"cookbook_catalog CookbookRule count={len(pandas_ids)} want 71")
     if "SV-SLEW" not in cat:
         fail("cookbook_catalog must document SV-SLEW alias")
 

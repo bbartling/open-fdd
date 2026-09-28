@@ -1060,6 +1060,92 @@ def vav_vs_ahu_leave(d, p, poll):
 
 
 # ---------------------------------------------------------------------------
+# Fan-coil / standalone zone controllers
+# ---------------------------------------------------------------------------
+
+
+def _fcu_fan_on(d: pd.DataFrame) -> pd.Series:
+    """Prefer fan proof; fall back to a normalized fan command above 10%."""
+    if "fan-status" in d.columns and d["fan-status"].notna().any():
+        return as_bool(d["fan-status"])
+    if "fan-cmd" in d.columns:
+        return norm_cmd(d["fan-cmd"]).fillna(0) > 0.10
+    return _false(d.index)
+
+
+def fcu_sensor_null(d, p, poll):
+    zone = pd.to_numeric(d["zone-air-temp"], errors="coerce")
+    sp = pd.to_numeric(d["zone-air-temp-sp"], errors="coerce")
+    eligible = sp.notna()
+    null_fraction = float(zone[eligible].isna().mean()) if eligible.any() else 0.0
+    return eligible & zone.isna() & (null_fraction >= _f(p, "null_fraction", 0.90))
+
+
+def fcu_htg_coil(d, p, poll):
+    heat = norm_cmd(d["heating-valve"]).fillna(0)
+    rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
+        d["zone-air-temp"], errors="coerce"
+    )
+    return _fcu_fan_on(d) & (heat >= _f(p, "valve_open", 0.80)) & (rise < _f(p, "coil_delta_f", 5.4))
+
+
+def fcu_clg_coil(d, p, poll):
+    cool = norm_cmd(d["cooling-valve"]).fillna(0)
+    heat = norm_cmd(d["heating-valve"]).fillna(0)
+    rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
+        d["zone-air-temp"], errors="coerce"
+    )
+    return _fcu_fan_on(d) & (cool >= _f(p, "valve_open", 0.80)) & (heat <= 0.05) & (rise >= 0)
+
+
+def fcu_valve_pass_htg(d, p, poll):
+    heat = norm_cmd(d["heating-valve"]).fillna(0)
+    cool = norm_cmd(d["cooling-valve"]).fillna(0)
+    rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
+        d["zone-air-temp"], errors="coerce"
+    )
+    return _fcu_fan_on(d) & (heat <= 0.05) & (cool <= 0.05) & (rise > _f(p, "pass_delta_f", 5.4))
+
+
+def fcu_valve_pass_clg(d, p, poll):
+    heat = norm_cmd(d["heating-valve"]).fillna(0)
+    cool = norm_cmd(d["cooling-valve"]).fillna(0)
+    drop = pd.to_numeric(d["zone-air-temp"], errors="coerce") - pd.to_numeric(
+        d["discharge-air-temp"], errors="coerce"
+    )
+    return _fcu_fan_on(d) & (heat <= 0.05) & (cool <= 0.05) & (drop > _f(p, "pass_delta_f", 5.4))
+
+
+def fcu_damper_pos(d, p, poll):
+    cmd = norm_cmd(d["damper-cmd"])
+    pos = norm_cmd(d["damper"])
+    return _fcu_fan_on(d) & (cmd >= _f(p, "command_min", 0.15)) & ((cmd - pos) > _f(p, "position_error", 0.15))
+
+
+def fcu_co2_damper(d, p, poll):
+    co2 = pd.to_numeric(d["zone-co2"], errors="coerce")
+    cmd = norm_cmd(d["damper-cmd"])
+    return _fcu_fan_on(d) & (co2 > _f(p, "co2_high_ppm", 1000.0)) & (co2 >= 300.0) & (cmd < _f(p, "damper_low", 0.10))
+
+
+def fcu_deadband(d, p, poll):
+    cool = pd.to_numeric(d["cooling-sp"], errors="coerce")
+    heat = pd.to_numeric(d["heating-sp"], errors="coerce")
+    return cool.notna() & heat.notna() & ((cool - heat) < _f(p, "deadband_c", 1.0))
+
+
+def fcu_mode_cycle(d, p, poll):
+    heat = norm_cmd(d["heating-valve"]).fillna(0)
+    cool = norm_cmd(d["cooling-valve"]).fillna(0)
+    mode = pd.Series(0, index=d.index, dtype=int)
+    mode = mode.mask(heat > _f(p, "mode_valve_min", 0.10), 1)
+    mode = mode.mask(cool > _f(p, "mode_valve_min", 0.10), -1)
+    active = mode.where(mode != 0).ffill().fillna(0)
+    changes = ((active != active.shift()) & (active != 0) & (active.shift().fillna(0) != 0)).astype(int).cumsum()
+    return changes >= int(_f(p, "mode_changes", 4.0))
+
+
+# ---------------------------------------------------------------------------
 # Central plants
 # ---------------------------------------------------------------------------
 
@@ -1344,7 +1430,7 @@ RULES: list[CookbookRule] = [
     # --- Sensor validation sweep (applies to every sensor present) ---
     CookbookRule(
         "SV-RANGE", "Sensor out of hard range", "sensor",
-        ["ahu", "vav", "chiller", "boiler", "weather", "zone", "heatpump"], [],
+        ["ahu", "vav", "chiller", "boiler", "weather", "zone_other", "heatpump"], [],
         "Any modeled sensor reads outside its physical hard range (e.g. OAT −60–130°F, SAT 30–150°F, CHWS 30–80°F).",
         _sweep_range,
         params=[
@@ -1358,7 +1444,7 @@ RULES: list[CookbookRule] = [
     ),
     CookbookRule(
         "SV-FLATLINE", "Sensor flatline (stuck)", "sensor",
-        ["ahu", "vav", "chiller", "boiler", "weather", "zone", "heatpump"], [],
+        ["ahu", "vav", "chiller", "boiler", "weather", "zone_other", "heatpump"], [],
         "Sensor value unchanged (Δ ≤ tolerance) across the flatline window — stuck / frozen sensor.",
         _sweep_flatline,
         params=[
@@ -1369,7 +1455,7 @@ RULES: list[CookbookRule] = [
     ),
     CookbookRule(
         "SV-SPIKE", "Sensor rate-of-change spike", "sensor",
-        ["ahu", "vav", "chiller", "boiler", "weather", "zone", "heatpump"], [],
+        ["ahu", "vav", "chiller", "boiler", "weather", "zone_other", "heatpump"], [],
         "Sample-to-sample jump exceeds the physical spike limit for the sensor type.",
         _sweep_spike, params=[
             CookbookParam("spike_scale", "Spike limit scale (global)", "x", 0.25, 3.0, 0.25, 1.0, direction="fewer"),
@@ -1381,7 +1467,7 @@ RULES: list[CookbookRule] = [
     ),
     CookbookRule(
         "SV-STALE", "Stale data (no fresh samples)", "sensor",
-        ["ahu", "vav", "chiller", "boiler", "weather", "zone", "heatpump"], [],
+        ["ahu", "vav", "chiller", "boiler", "weather", "zone_other", "heatpump"], [],
         "All modeled sensors unchanged over the stale window — data feed likely dropped.",
         _sweep_stale, params=[
             CookbookParam("stale_hours", "Stale window", "h", 0.5, 12.0, 0.5, 2.0),
@@ -1392,7 +1478,7 @@ RULES: list[CookbookRule] = [
         "SV-RATE",
         "Context-aware sensor rate of change",
         "sensor",
-        ["ahu", "vav", "chiller", "boiler", "weather", "zone", "heatpump"],
+        ["ahu", "vav", "chiller", "boiler", "weather", "zone_other", "heatpump"],
         [],
         "Implausible sustained rate-of-change for mapped sensors. Thresholds depend on "
         "quantity, location, and operating state (steady vs startup/shutdown transient). "
@@ -1713,14 +1799,74 @@ RULES: list[CookbookRule] = [
         confirm_seconds=1800,
     ),
 
+    # --- Fan coils / standalone zone controllers ---
+    CookbookRule("FCU-SENSOR-NULL", "Missing FCU zone sensor", "fcu", ["zone_other", "general", "ahu"],
+        ["zone-air-temp-sp"],
+        "Own zone setpoint is present while zone temperature is null for at least 90% of the window.",
+        fcu_sensor_null, params=[
+            CookbookParam("null_fraction", "Null fraction", "frac", 0.5, 1.0, 0.05, 0.90),
+            CONFIRM_PARAM()], optional_roles=["zone-air-temp"], confirm_seconds=0),
+    CookbookRule("FCU-HTG-COIL", "FCU heating coil under-delivery", "fcu", ["zone_other", "general", "ahu"],
+        ["discharge-air-temp", "zone-air-temp", "heating-valve"],
+        "Fan on and heating valve ≥80%, but discharge air is less than 5.4°F above zone temperature.",
+        fcu_htg_coil, params=[
+            CookbookParam("valve_open", "Valve open threshold", "frac", 0.5, 1.0, 0.05, 0.80),
+            CookbookParam("coil_delta_f", "Minimum heating rise", "°F", 1.0, 20.0, 0.5, 5.4),
+            CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
+    CookbookRule("FCU-CLG-COIL", "FCU cooling coil under-delivery", "fcu", ["zone_other", "general", "ahu"],
+        ["discharge-air-temp", "zone-air-temp", "cooling-valve", "heating-valve"],
+        "Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below zone temperature.",
+        fcu_clg_coil, params=[
+            CookbookParam("valve_open", "Valve open threshold", "frac", 0.5, 1.0, 0.05, 0.80),
+            CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
+    CookbookRule("FCU-VALVE-PASS-HTG", "FCU heating valve passing", "fcu", ["zone_other", "general", "ahu"],
+        ["discharge-air-temp", "zone-air-temp", "heating-valve", "cooling-valve"],
+        "Fan on and both valves shut, but discharge air exceeds zone temperature by more than 5.4°F.",
+        fcu_valve_pass_htg, params=[
+            CookbookParam("pass_delta_f", "Passing temperature rise", "°F", 1.0, 20.0, 0.5, 5.4),
+            CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
+    CookbookRule("FCU-VALVE-PASS-CLG", "FCU cooling valve passing", "fcu", ["zone_other", "general", "ahu"],
+        ["discharge-air-temp", "zone-air-temp", "heating-valve", "cooling-valve"],
+        "Fan on and both valves shut, but zone temperature exceeds discharge air by more than 5.4°F.",
+        fcu_valve_pass_clg, params=[
+            CookbookParam("pass_delta_f", "Passing temperature drop", "°F", 1.0, 20.0, 0.5, 5.4),
+            CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
+    CookbookRule("FCU-DAMPER-POS", "FCU damper command/position mismatch", "fcu", ["zone_other", "general", "ahu"],
+        ["damper-cmd", "damper"],
+        "Fan on and damper command ≥15%, but feedback is more than 15 percentage points below command.",
+        fcu_damper_pos, params=[
+            CookbookParam("command_min", "Minimum damper command", "frac", 0.0, 1.0, 0.05, 0.15),
+            CookbookParam("position_error", "Position error", "frac", 0.05, 0.5, 0.05, 0.15),
+            CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
+    CookbookRule("FCU-CO2-DAMPER", "FCU high CO2 with low outdoor-air command", "fcu", ["zone_other", "general", "ahu"],
+        ["zone-co2", "damper-cmd"],
+        "Fan on and valid CO₂ exceeds 1000 ppm while damper command remains below 10%.",
+        fcu_co2_damper, params=[
+            CookbookParam("co2_high_ppm", "High CO₂", "ppm", 600, 2000, 50, 1000),
+            CookbookParam("damper_low", "Low damper command", "frac", 0.0, 0.5, 0.05, 0.10),
+            CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
+    CookbookRule("FCU-DEADBAND", "FCU heat/cool deadband collapse", "fcu", ["zone_other", "general", "ahu"],
+        ["cooling-sp", "heating-sp"],
+        "Pass-through cooling setpoint minus heating setpoint is less than 1°C.",
+        fcu_deadband, params=[
+            CookbookParam("deadband_c", "Minimum deadband", "°C", 0.0, 5.0, 0.1, 1.0),
+            CONFIRM_PARAM()], confirm_seconds=0),
+    CookbookRule("FCU-MODE-CYCLE", "FCU heating/cooling mode cycling", "fcu", ["zone_other", "general", "ahu"],
+        ["heating-valve", "cooling-valve"],
+        "At least four heating/cooling valve mode changes occur in the analysis window.",
+        fcu_mode_cycle, params=[
+            CookbookParam("mode_valve_min", "Active valve threshold", "frac", 0.0, 0.5, 0.05, 0.10),
+            CookbookParam("mode_changes", "Mode changes", "count", 1, 20, 1, 4),
+            CONFIRM_PARAM()], confirm_seconds=0),
+
     # --- VAV zones ---
-    CookbookRule("VAV-1", "Zone comfort band", "vav", ["vav", "zone"],
+    CookbookRule("VAV-1", "Zone comfort band", "vav", ["vav", "zone_other"],
         ["zone-air-temp"], "Zone temp < 70°F or > 75°F.",
         vav1, params=[
             CookbookParam("zone_lo", "Zone low", "°F", 55.0, 72.0, 0.5, 70.0),
             CookbookParam("zone_hi", "Zone high", "°F", 72.0, 85.0, 0.5, 75.0),
             CONFIRM_PARAM()], confirm_seconds=900),
-    CookbookRule("VAV-2", "Night setback miss", "vav", ["vav", "zone"],
+    CookbookRule("VAV-2", "Night setback miss", "vav", ["vav", "zone_other"],
         ["zone-air-temp", "occupied"],
         "Unoccupied AND zone temp > setback_hi (default 68°F) — heating setback not taken.",
         vav2, params=[

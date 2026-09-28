@@ -15,6 +15,9 @@ EQUIPMENT_TYPES = (
     "WEATHER",
     "METER",
     "COOLING_TOWER",
+    "FCU",
+    "ZONE_OTHER",
+    "GENERAL",
     "UNKNOWN",
 )
 
@@ -141,6 +144,12 @@ _TYPE_ALIASES: dict[str, str] = {
     "WEATHER": "WEATHER",
     "METEO": "WEATHER",
     "METER": "METER",
+    "FCU": "FCU",
+    "FANCOIL": "FCU",
+    "FAN-COIL": "FCU",
+    "ZONE": "ZONE_OTHER",
+    "ZONE_OTHER": "ZONE_OTHER",
+    "GENERAL": "GENERAL",
     "UNKNOWN": "UNKNOWN",
 }
 
@@ -167,6 +176,10 @@ def equipment_type_from_id(equipment_id: str) -> str:
         return "WEATHER"
     if "VAV" in u:
         return "VAV"
+    if u.startswith("FCU") or "FANCOIL" in u or "FAN-COIL" in u:
+        return "FCU"
+    if u.startswith("ZONE") or "/ZONE" in u:
+        return "ZONE_OTHER"
     if u.startswith("AHU") or "/AHU" in u or "RTU" in u:
         return "AHU"
     if "CHILLER" in u or u.startswith("CHW"):
@@ -181,6 +194,8 @@ def equipment_type_from_id(equipment_id: str) -> str:
         return "VRF"
     if "METER" in u:
         return "METER"
+    if "GENERAL" in u:
+        return "GENERAL"
     return "UNKNOWN"
 
 
@@ -236,11 +251,8 @@ def resolve_equipment_type(
         if norm == "UNKNOWN":
             # keep looking for a stronger source; fall through
             continue
-    # Last resort: id heuristic (or UNKNOWN from a candidate)
-    for raw in candidates:
-        norm = normalize_equipment_type(raw)
-        if norm:
-            return norm
+    # UNKNOWN is a weak stamp: let the id heuristic recover a stronger kind
+    # (for example a fixture stamped UNKNOWN but named FCU_1).
     return equipment_type_from_id(equipment_id)
 
 

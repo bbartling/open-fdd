@@ -7,9 +7,9 @@ import pandas as pd
 from open_fdd.rules import CANONICAL_RULE_COUNT, RULES, RULES_BY_ID, run_rule
 
 
-def test_canonical_rule_count_is_62():
-    assert CANONICAL_RULE_COUNT == 62
-    assert len(RULES) >= 62
+def test_canonical_rule_count_is_71():
+    assert CANONICAL_RULE_COUNT == 71
+    assert len(RULES) >= 71
     assert "SCHED-1" in RULES_BY_ID
 
 

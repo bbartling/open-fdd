@@ -101,6 +101,10 @@ pub fn haystack_point_to_role(point: &str) -> String {
         "chiller-status" => "chiller_status".into(),
         "loop-enabled" => "loop_enabled".into(),
         "zone-air-temp" => "zone_t".into(),
+        "zone-air-temp-sp" => "zone_air_temp_sp".into(),
+        "cooling-sp" | "zone-cooling-sp" => "cooling_sp".into(),
+        "heating-sp" | "zone-heating-sp" => "heating_sp".into(),
+        "zone-co2" | "co2" => "zone_co2".into(),
         "zone-air-humidity" | "zone-humidity" => "zone_rh".into(),
         "zone-airflow" | "airflow" => "zone_flow".into(),
         "vav-total-airflow" => "vav_total_flow".into(),
@@ -109,7 +113,8 @@ pub fn haystack_point_to_role(point: &str) -> String {
         "compressor-status" => "compressor_status".into(),
         "building-zone-load-satisfied" => "building_zone_load_satisfied".into(),
         "building-ahu-load-satisfied" => "building_ahu_load_satisfied".into(),
-        "damper" => "damper_pct".into(),
+        "damper" | "damper-position" => "damper_pct".into(),
+        "damper-cmd" => "damper_cmd".into(),
         "reheat-valve" => "reheat_valve_pct".into(),
         "vav-discharge-air-temp" => "vav_discharge_t".into(),
         "vav-inlet-air-temp" => "vav_inlet_t".into(),
@@ -154,6 +159,10 @@ pub fn normalize_role(role: &str) -> String {
         "zone_temp" | "zone_temperature" | "space_temp" | "zonetemp" | "zn_t" | "zone_t" => {
             "zone_t".into()
         }
+        "zone_air_temp_sp" | "zone_temp_sp" | "zone_setpoint" => "zone_air_temp_sp".into(),
+        "cooling_sp" | "zone_cooling_sp" | "cooling_setpoint" | "clg_stpt" => "cooling_sp".into(),
+        "heating_sp" | "zone_heating_sp" | "heating_setpoint" | "htg_stpt" => "heating_sp".into(),
+        "zone_co2" | "co2" | "co2_ppm" | "zone_co2_ppm" => "zone_co2".into(),
         "supply_air_temp"
         | "supply_air_temperature"
         | "discharge_air_temp"
@@ -180,6 +189,7 @@ pub fn normalize_role(role: &str) -> String {
         "damper" | "zone_damper" | "vav_damper" | "damper_pct" | "damper_pos" => {
             "damper_pct".into()
         }
+        "damper_cmd" | "zone_damper_cmd" | "vav_damper_cmd" => "damper_cmd".into(),
         "cooling_valve" | "cooling_cmd" | "clg_valve" | "chw_valve" | "clg_valve_pct"
         | "chw_valve_pct" | "cooling_valve_pct" => "clg_valve_pct".into(),
         "heating_valve" | "heating_cmd" | "htg_valve" | "htg_valve_pct" | "heating_valve_pct"
@@ -212,7 +222,7 @@ pub fn normalize_role(role: &str) -> String {
         "hwr_t" | "hw_return" | "hwrt" | "hwr_t_f" | "hw_return_t" => "hw_return_t".into(),
         "oa_humidity" | "oa_h" | "relative_humidity_pct" | "oa_rh_pct" => "oa_h".into(),
         "zone_rh" | "zone_humidity" | "zone_relative_humidity" | "space_rh" => "zone_rh".into(),
-        "cooling_setpoint" | "effective_setpoint" | "clg_stpt" => "sat_sp".into(),
+        "effective_setpoint" => "sat_sp".into(),
         "occ_mode" | "occupancy" | "occupied" | "schedule" => "occ_mode".into(),
         "return_fan" => "return_fan".into(),
         other => other.to_string(),
@@ -234,10 +244,15 @@ pub const COOKBOOK_ROLES: &[&str] = &[
     "duct_static_sp",
     "oa_damper_pct",
     "damper_pct",
+    "damper_cmd",
     "clg_valve_pct",
     "htg_valve_pct",
     "reheat_valve_pct",
     "zone_t",
+    "zone_air_temp_sp",
+    "cooling_sp",
+    "heating_sp",
+    "zone_co2",
     "zone_rh",
     "zone_flow",
     "vav_total_flow",
@@ -282,10 +297,15 @@ pub fn is_known_cookbook_role(role: &str) -> bool {
             | "duct_static_sp"
             | "oa_damper_pct"
             | "damper_pct"
+            | "damper_cmd"
             | "clg_valve_pct"
             | "htg_valve_pct"
             | "reheat_valve_pct"
             | "zone_t"
+            | "zone_air_temp_sp"
+            | "cooling_sp"
+            | "heating_sp"
+            | "zone_co2"
             | "zone_rh"
             | "zone_flow"
             | "min_flow_sp"

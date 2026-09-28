@@ -8,6 +8,10 @@ permalink: /modeling/zone-terminals/
 
 # Zone terminals, FCU, and unit ventilators
 
+The shipped [FCU / zone_other rule family](../rules/cookbook/fcu-zone-other.md)
+covers coil delivery, passing valves, ventilation feedback, sensor loss,
+deadband, and heat/cool mode cycling for these controllers.
+
 Open-FDD **ZONE** is a **control definition**, not "VAV boxes only."
 
 ## ZONE control (comfort + sensor FDD)

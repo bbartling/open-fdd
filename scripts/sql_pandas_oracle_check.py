@@ -85,8 +85,8 @@ def import_oracle(require_external: bool = False):
 
     print(f"oracle package version={package_version} module={module_path}")
 
-    if len(RULES) < 62:
-        fail(f"canonical RULES shrunk: {len(RULES)} < 59")
+    if len(RULES) < 71:
+        fail(f"canonical RULES shrunk: {len(RULES)} < 71")
     if "SV-SLEW" not in RULES_BY_ID:
         fail("RULES_BY_ID missing SV-SLEW alias")
     if "SV-RATE" not in RULES_BY_ID:
