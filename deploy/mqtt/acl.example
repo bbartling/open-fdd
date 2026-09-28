@@ -1,4 +1,4 @@
-# Example Mosquitto ACL — copy/generate into deploy/mqtt/acl/ (directory) or kit path.
+# Example Mosquitto ACL — install as the regular file deploy/mqtt/certs/acl.
 # Synthetic Wave L A/B fixture (no live secrets): scripts/security/fixtures/mqtt_tenant_acl/
 # Observer: scripts/security/mqtt_tenant_acl_observer.py · gate 26 OPENFDD_MQTT_ACL_EXECUTE=1
 # Legacy (mode OFF):

@@ -105,6 +105,8 @@ describe("Data Model Results by Category", () => {
       expect(screen.getByTestId("data-model-subnav")).toBeTruthy();
       expect(screen.getByTestId("results-table")).toBeTruthy();
       expect(screen.getByText("AHU-SATDEV")).toBeTruthy();
+      expect(screen.getByText("Mark first finding open")).toBeTruthy();
     });
+    expect(screen.queryByText(/demo/i)).toBeNull();
   });
 });

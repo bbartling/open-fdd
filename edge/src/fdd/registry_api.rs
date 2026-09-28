@@ -529,7 +529,7 @@ fn infer_equipment_kind(equipment_id: &str) -> &'static str {
 }
 
 fn rule_applies_to_kind(kinds: &[String], kind: &str) -> bool {
-    if kinds.is_empty() || kind == "unknown" {
+    if kinds.is_empty() {
         return true;
     }
     kinds.iter().any(|k| k.eq_ignore_ascii_case(kind))
@@ -1665,6 +1665,46 @@ pub fn preview_sql(rule_id: &str, overrides: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn typed_rules_do_not_run_against_unknown_equipment() {
+        let kinds = vec!["ahu".to_string(), "zone_other".to_string()];
+        assert!(rule_applies_to_kind(&kinds, "zone_other"));
+        assert!(!rule_applies_to_kind(&kinds, "unknown"));
+        assert!(!rule_applies_to_kind(&kinds, "general"));
+        assert!(rule_applies_to_kind(&[], "unknown"));
+    }
+
+    #[test]
+    fn zone_other_registry_contract_covers_zone_rules() {
+        let reg = load_reg().expect("registry");
+        for id in [
+            "VAV-1",
+            "VAV-2",
+            "SV-RANGE",
+            "SV-FLATLINE",
+            "SV-SPIKE",
+            "SV-STALE",
+            "SV-RATE",
+            "PID-HUNT-1",
+            "SCHED-1",
+            "SCHED-247",
+        ] {
+            let rule = reg
+                .rules
+                .iter()
+                .find(|rule| rule.rule_id == id)
+                .unwrap_or_else(|| panic!("missing {id}"));
+            assert!(
+                rule.equipment_kinds.iter().any(|kind| kind == "zone_other"),
+                "{id} must apply to canonical zone_other equipment"
+            );
+            assert!(
+                !rule.equipment_kinds.iter().any(|kind| kind == "zone"),
+                "{id} must not use unreachable legacy zone kind"
+            );
+        }
+    }
 
     #[test]
     fn series_plot_columns_unions_optional_roles_for_portable_rules() {

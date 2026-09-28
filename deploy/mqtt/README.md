@@ -12,7 +12,8 @@ deploy/mqtt/
 │   └── ca.key.pem         # CA private key (never ship to edges)
 ├── certs/                 # broker server TLS — gitignored, bind-mount to Mosquitto
 │   ├── server.cert.pem
-│   └── server.key.pem
+│   ├── server.key.pem
+│   └── acl                    # broker ACL (regular file, mode 0644)
 ├── kits/                  # generated edge kits — gitignored
 │   └── {site_id}__{edge_id}/
 │       ├── ca.pem         # public CA only (copy of ca/ca.pem)
@@ -20,7 +21,6 @@ deploy/mqtt/
 │       ├── edge.key.pem
 │       ├── edge.json      # broker URL, site/edge IDs, cert paths
 │       └── mosquitto.acl  # ACL snippet — merge into broker config
-└── mosquitto.acl          # optional merged ACL for the broker
 ```
 
 ## Provision an edge kit
@@ -51,8 +51,15 @@ The edge kit contains **only** the public `ca.pem` plus edge client cert/key. Th
 
 1. Generate or reuse CA under `deploy/mqtt/ca/`.
 2. Place Mosquitto server certificates in `deploy/mqtt/certs/` (or your chosen path).
-3. Copy or merge the kit's `mosquitto.acl` into the broker ACL file referenced by `services/mqtt/mosquitto.conf`.
+3. Create the broker ACL as a regular file before first start, then copy or merge each kit's `mosquitto.acl` into it:
+   `install -m 0644 deploy/mqtt/acl.example deploy/mqtt/certs/acl`.
 4. Bind-mount `ca.pem`, server certs, and ACL into the `openfdd-mqtt` container at runtime.
+
+The Compose stacks mount the complete `deploy/mqtt/certs/` directory at
+`/mosquitto/certs`; Mosquitto reads `/mosquitto/certs/acl`. Do not create the
+legacy `deploy/mqtt/acl/` directory or mount an ACL at `/mosquitto/config/acl`.
+The image entrypoint assigns uid/gid 1883 read access while keeping
+`server.key.pem` at mode 0600 or 0640.
 
 ## Edge runtime
 

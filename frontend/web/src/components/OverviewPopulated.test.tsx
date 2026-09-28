@@ -1,7 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { OverviewPopulated, clearOverviewSiteCacheForTests } from "./OverviewPopulated";
+import {
+  OverviewPopulated,
+  clearOverviewSiteCacheForTests,
+  detectedTimeZone,
+} from "./OverviewPopulated";
 
 const emptyOverview = {
   ok: true,
@@ -193,14 +197,14 @@ const EQUIPMENT = [
   { equipment_id: "BOILER_1", equipment_type: "boiler" },
 ];
 
-function renderOverview() {
+function renderOverview(unitSystem: "imperial" | "metric" = "imperial") {
   return render(
     <MemoryRouter>
       <OverviewPopulated
         buildingId="B1"
         equipmentId="AHU_1"
         equipment={EQUIPMENT}
-        unitSystem="imperial"
+        unitSystem={unitSystem}
         onEquipmentChange={vi.fn()}
       />
     </MemoryRouter>,
@@ -209,9 +213,35 @@ function renderOverview() {
 
 describe("OverviewPopulated metric isolation", () => {
   beforeEach(() => {
+    localStorage.clear();
     clearOverviewSiteCacheForTests();
     fetchCentralOverview.mockClear();
     fetchCentralOverview.mockResolvedValue(emptyOverview);
+  });
+
+  it("uses the browser IANA timezone instead of a US site default", () => {
+    expect(detectedTimeZone()).toBeTruthy();
+    renderOverview();
+    expect(
+      (screen.getByTestId("overview-timezone") as HTMLInputElement).value,
+    ).toBe(detectedTimeZone());
+  });
+
+  it("converts comfort values and ranges when metric is selected", () => {
+    renderOverview("metric");
+    const low = screen
+      .getByTestId("overview-zone-low")
+      .querySelector("input") as HTMLInputElement;
+    const high = screen
+      .getByTestId("overview-zone-high")
+      .querySelector("input") as HTMLInputElement;
+    expect(screen.getByTestId("overview-zone-low").textContent).toContain("°C");
+    expect(low.value).toBe("21.1");
+    expect(low.min).toBe("12.8");
+    expect(low.max).toBe("22.2");
+    expect(high.value).toBe("23.9");
+    expect(high.min).toBe("21.1");
+    expect(high.max).toBe("29.4");
   });
 
   it("auto-loads analytics on site select (demo freshness); keeps mapping rows/span", async () => {
