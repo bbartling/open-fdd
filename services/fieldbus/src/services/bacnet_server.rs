@@ -541,6 +541,20 @@ pub fn property_value_to_json(pv: &PropertyValue) -> serde_json::Value {
     }
 }
 
+/// Explain numeric values that JSON cannot represent. Keep the wire value as
+/// `null`, but never let a failed sensor look like a healthy missing sample.
+pub fn property_value_quality_error(pv: &PropertyValue) -> Option<String> {
+    match pv {
+        PropertyValue::Real(v) if !v.is_finite() => {
+            Some(format!("bad-quality: non-finite BACnet real ({v})"))
+        }
+        PropertyValue::Double(v) if !v.is_finite() => {
+            Some(format!("bad-quality: non-finite BACnet double ({v})"))
+        }
+        _ => None,
+    }
+}
+
 fn object_type_name(ot: ObjectType) -> String {
     format!("{ot}").to_ascii_lowercase().replace('_', "-")
 }
@@ -587,6 +601,23 @@ mod tests {
             ..row
         };
         assert!(!BacnetServerManager::api_writable(&cmd));
+    }
+
+    #[test]
+    fn non_finite_numeric_values_are_null_with_bad_quality_reason() {
+        for value in [
+            PropertyValue::Real(f32::INFINITY),
+            PropertyValue::Real(f32::NEG_INFINITY),
+            PropertyValue::Real(f32::NAN),
+            PropertyValue::Double(f64::INFINITY),
+            PropertyValue::Double(f64::NAN),
+        ] {
+            assert!(property_value_to_json(&value).is_null());
+            assert!(property_value_quality_error(&value)
+                .expect("bad-quality reason")
+                .contains("non-finite"));
+        }
+        assert!(property_value_quality_error(&PropertyValue::Real(72.0)).is_none());
     }
 
     #[tokio::test]

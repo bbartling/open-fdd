@@ -5,11 +5,12 @@ use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bacnet_client::client::BACnetClient;
+use bacnet_client::discovery::RoutedDeviceConfig;
 use bacnet_encoding::primitives::{decode_application_value, encode_property_value};
 use bacnet_services::common::PropertyReference;
 use bacnet_services::rpm::ReadAccessSpecification;
 use bacnet_transport::bvll::encode_bip_mac;
-use bacnet_types::enums::{ObjectType, PropertyIdentifier};
+use bacnet_types::enums::{ObjectType, PropertyIdentifier, Segmentation};
 use bacnet_types::primitives::{ObjectIdentifier, PropertyValue};
 use bytes::BytesMut;
 use fdd_core::columns::{haystack_point_to_role, is_known_cookbook_role};
@@ -18,7 +19,9 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use crate::config::{load_field_devices, FieldDevice, FieldPoint, Settings};
-use crate::services::bacnet_server::{property_value_tag, property_value_to_json};
+use crate::services::bacnet_server::{
+    property_value_quality_error, property_value_tag, property_value_to_json,
+};
 
 const RPM_CHUNK_SIZE: usize = 25;
 
@@ -148,12 +151,15 @@ impl BacnetClientService {
                 .copied()
                 .ok_or_else(|| format!("routed device {} missing mstp_mac", d.name))?;
             client
-                .add_routed_device(
-                    d.device_instance,
-                    &router_mac,
-                    net,
-                    std::slice::from_ref(&dest_mac),
-                )
+                .add_routed_device(RoutedDeviceConfig {
+                    instance: d.device_instance,
+                    router_mac: router_mac.to_vec(),
+                    remote_network: net,
+                    remote_mac: vec![dest_mac],
+                    max_apdu_length: d.max_apdu,
+                    segmentation_supported: Segmentation::NONE,
+                    max_segments_accepted: None,
+                })
                 .await
                 .map_err(|e| e.to_string())?;
             info!(
@@ -270,6 +276,8 @@ impl BacnetClientService {
                 "property_id": property_id,
                 "tag": property_value_tag(&pv),
                 "value": property_value_to_json(&pv),
+                "quality": if property_value_quality_error(&pv).is_some() { "bad" } else { "good" },
+                "error": property_value_quality_error(&pv),
                 "client_bind_port": bind_port,
             }))
         }
@@ -560,24 +568,31 @@ impl BacnetClientService {
         let result = async {
             self.prepare(&client, Some(device), device.device_instance)
                 .await?;
-            let rpm = client
-                .read_property_multiple_from_device(device.device_instance, specs.to_vec())
-                .await
-                .map_err(|e| e.to_string())?;
-
             let mut map = HashMap::new();
-            for obj in rpm.list_of_read_access_results {
-                let oid_str = normalize_oid(&obj.object_identifier);
-                for r in obj.list_of_results {
-                    if let Some((class, code)) = r.error {
-                        map.insert(
-                            oid_str.clone(),
-                            (None, Some(format!("Error: class={class:?} code={code:?}"))),
-                        );
-                    } else if let Some(bytes) = r.property_value {
-                        let (pv, _) =
-                            decode_application_value(&bytes, 0).map_err(|e| e.to_string())?;
-                        map.insert(oid_str.clone(), (Some(property_value_to_json(&pv)), None));
+            for chunk in specs.chunks(device.rpm_chunk) {
+                let rpm = client
+                    .read_property_multiple_from_device(device.device_instance, chunk.to_vec())
+                    .await
+                    .map_err(|e| e.to_string())?;
+                for obj in rpm.list_of_read_access_results {
+                    let oid_str = normalize_oid(&obj.object_identifier);
+                    for r in obj.list_of_results {
+                        if let Some((class, code)) = r.error {
+                            map.insert(
+                                oid_str.clone(),
+                                (None, Some(format!("Error: class={class:?} code={code:?}"))),
+                            );
+                        } else if let Some(bytes) = r.property_value {
+                            let (pv, _) = decode_application_value(&bytes, 0)
+                                .map_err(|e| e.to_string())?;
+                            map.insert(
+                                oid_str.clone(),
+                                (
+                                    Some(property_value_to_json(&pv)),
+                                    property_value_quality_error(&pv),
+                                ),
+                            );
+                        }
                     }
                 }
             }
@@ -1367,6 +1382,8 @@ mod poll_select_tests {
             port: 47808,
             mstp_network: None,
             mstp_mac: vec![],
+            rpm_chunk: 25,
+            max_apdu: 480,
             points,
         }
     }

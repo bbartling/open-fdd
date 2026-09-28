@@ -45,7 +45,19 @@ const LATEST_TELEMETRY_WATERMARK: &str = "state/live-historian/latest-telemetry.
 
 type EquipmentKey = (String, String);
 type EquipmentRoles = BTreeMap<String, RoleValue>;
-type NormalizedBatches = (BTreeMap<EquipmentKey, RecordBatch>, usize, usize);
+type NormalizedBatches = (
+    BTreeMap<EquipmentKey, RecordBatch>,
+    usize,
+    usize,
+    Vec<DuplicateRole>,
+);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuplicateRole {
+    pub building_id: String,
+    pub equipment_id: String,
+    pub role: String,
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LiveHistorianIngest {
@@ -54,6 +66,9 @@ pub struct LiveHistorianIngest {
     pub flushes: usize,
     pub persisted_rows: usize,
     pub latest_persisted_timestamp_utc: Option<DateTime<Utc>>,
+    /// Later points with a canonical role already present in the same equipment
+    /// envelope. The first point wins deterministically; unique points remain valid.
+    pub duplicate_roles: Vec<DuplicateRole>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -362,10 +377,11 @@ impl LiveHistorian {
 
     pub fn ingest_envelope(&mut self, env: &TelemetryEnvelope) -> Result<LiveHistorianIngest> {
         collect_type_stamps(env, &mut self.pending_type_stamps);
-        let (groups, eligible_points, skipped_points) = normalized_batches(env)?;
+        let (groups, eligible_points, skipped_points, duplicate_roles) = normalized_batches(env)?;
         let mut report = LiveHistorianIngest {
             eligible_points,
             skipped_points,
+            duplicate_roles,
             ..LiveHistorianIngest::default()
         };
         for ((building_id, equipment_id), batch) in groups {
@@ -481,6 +497,7 @@ fn normalized_batches(env: &TelemetryEnvelope) -> Result<NormalizedBatches> {
     let mut grouped: BTreeMap<EquipmentKey, EquipmentRoles> = BTreeMap::new();
     let mut eligible = 0usize;
     let mut skipped = 0usize;
+    let mut duplicates = Vec::new();
 
     for point in &env.points {
         let Some((building_id, equipment_id, role)) = point_identity(point)? else {
@@ -491,10 +508,19 @@ fn normalized_batches(env: &TelemetryEnvelope) -> Result<NormalizedBatches> {
             skipped += 1;
             continue;
         };
-        let roles = grouped.entry((building_id, equipment_id)).or_default();
-        if roles.insert(role.clone(), value).is_some() {
-            bail!("duplicate canonical live role {role} in one equipment envelope");
+        let roles = grouped
+            .entry((building_id.clone(), equipment_id.clone()))
+            .or_default();
+        if roles.contains_key(&role) {
+            duplicates.push(DuplicateRole {
+                building_id,
+                equipment_id,
+                role,
+            });
+            skipped += 1;
+            continue;
         }
+        roles.insert(role, value);
         eligible += 1;
     }
 
@@ -530,7 +556,7 @@ fn normalized_batches(env: &TelemetryEnvelope) -> Result<NormalizedBatches> {
         let batch = RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays)?;
         out.insert(identity, batch);
     }
-    Ok((out, eligible, skipped))
+    Ok((out, eligible, skipped, duplicates))
 }
 
 fn collect_type_stamps(env: &TelemetryEnvelope, out: &mut BTreeMap<EquipmentKey, String>) {
@@ -608,10 +634,13 @@ fn validate_role(role: &str) -> Result<()> {
 fn role_value(point: &TelemetryPoint) -> Result<Option<RoleValue>> {
     let good = matches!(point.quality, Quality::Good | Quality::Uncertain);
     match point.kind {
+        // Arrow/Parquet can represent NaN even though JSON cannot represent the
+        // originating BACnet Inf/NaN. Preserve a numeric bad-quality marker so
+        // range rules can fault it instead of treating a dead sensor as missing.
         Some(ValueKind::Number) => Ok(Some(RoleValue::Number(if good {
             point.value.as_f64()
         } else {
-            None
+            Some(f64::NAN)
         }))),
         Some(ValueKind::Bool) => Ok(Some(RoleValue::Boolean(if good {
             point.value.as_bool()
@@ -681,9 +710,10 @@ mod tests {
     #[test]
     fn metadata_tags_define_identity_without_parsing_point_id() {
         let env = envelope(vec![point("sat", json!(55.0))]);
-        let (groups, eligible, skipped) = normalized_batches(&env).unwrap();
+        let (groups, eligible, skipped, duplicates) = normalized_batches(&env).unwrap();
         assert_eq!(eligible, 1);
         assert_eq!(skipped, 0);
+        assert!(duplicates.is_empty());
         let batch = groups
             .get(&("BUILDING_100".into(), "AHU_1".into()))
             .unwrap();
@@ -698,20 +728,44 @@ mod tests {
     fn untagged_point_is_not_canonicalized() {
         let mut p = point("sat", json!(55.0));
         p.tags.remove("equipment_id");
-        let (groups, eligible, skipped) = normalized_batches(&envelope(vec![p])).unwrap();
+        let (groups, eligible, skipped, _) = normalized_batches(&envelope(vec![p])).unwrap();
         assert!(groups.is_empty());
         assert_eq!(eligible, 0);
         assert_eq!(skipped, 1);
     }
 
     #[test]
-    fn bad_quality_preserves_schema_as_null() {
+    fn bad_numeric_quality_preserves_schema_as_nan_marker() {
         let mut p = point("sat", json!(55.0));
         p.quality = Quality::Bad;
-        let (groups, _, _) = normalized_batches(&envelope(vec![p])).unwrap();
+        let (groups, _, _, _) = normalized_batches(&envelope(vec![p])).unwrap();
         let batch = groups.values().next().unwrap();
         assert_eq!(batch.schema().field(1).name(), "sat");
-        assert_eq!(batch.column(1).null_count(), 1);
+        let values = batch
+            .column(1)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+        assert!(values.value(0).is_nan());
+    }
+
+    #[test]
+    fn duplicate_role_drops_later_point_and_keeps_unique_points() {
+        let env = envelope(vec![
+            point("occ_mode", json!(1.0)),
+            point("occ_mode", json!(0.0)),
+            point("sat", json!(55.0)),
+        ]);
+        let (groups, eligible, skipped, duplicates) = normalized_batches(&env).unwrap();
+        assert_eq!(eligible, 2);
+        assert_eq!(skipped, 1);
+        assert_eq!(duplicates.len(), 1);
+        assert_eq!(duplicates[0].building_id, "BUILDING_100");
+        assert_eq!(duplicates[0].equipment_id, "AHU_1");
+        assert_eq!(duplicates[0].role, "occ_mode");
+        let batch = groups.values().next().unwrap();
+        assert!(batch.schema().index_of("occ_mode").is_ok());
+        assert!(batch.schema().index_of("sat").is_ok());
     }
 
     #[test]

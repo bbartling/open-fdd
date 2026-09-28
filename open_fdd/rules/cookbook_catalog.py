@@ -438,7 +438,10 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         mid = (lim["lo"] + lim["hi"]) / 2.0
         half = (lim["hi"] - lim["lo"]) / 2.0 * max(type_scale, 1e-6)
         lo, hi = mid - half, mid + half
-        role_mask = s.notna() & ((s < lo) | (s > hi))
+        # BACnet sensor failures commonly arrive as IEEE +/-Inf. Treat any
+        # present non-finite number as a hard range fault before JSON/Parquet
+        # quality handling converts it to a NaN marker.
+        role_mask = s.notna() & (~np.isfinite(s) | (s < lo) | (s > hi))
         per_role[role] = role_mask
         mask = mask | role_mask
     _stash_sweep_evidence(d, per_role, poll=poll, rule_tag="SV-RANGE")
