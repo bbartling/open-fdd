@@ -111,8 +111,6 @@ def _missing_roles(rule: cb.CookbookRule, df: pd.DataFrame) -> list[str]:
 
     if rule.id == "FCU-SENSOR-NULL":
         missing = []
-        if "zone-air-temp" not in df.columns:
-            missing.append("zone-air-temp")
         if "zone-air-temp-sp" not in df.columns or not df["zone-air-temp-sp"].notna().any():
             missing.append("zone-air-temp-sp")
         return missing

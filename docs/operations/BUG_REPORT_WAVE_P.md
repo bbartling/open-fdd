@@ -13,8 +13,8 @@
 | #1026 | Duplicate canonical live roles keep the first point, drop later duplicates, and emit building/equipment/role audit context. |
 | #1027 | Overview timezone display uses detected IANA timezone and metric sliders convert displayed values and ranges rather than relabeling units. |
 | #1028 | MQTT ACL is mounted and seeded at `/mosquitto/certs/acl`, matching the image's read path; deployment docs and smoke setup use the same path. |
-| #1029 | Custom SQL/FDD behavior is documented across Results, Overview, and gated HITL states, including shipped rule families. |
-| #1030 | Nine FCU-* SQL and pandas rules have registry metadata, parity fixtures/tests, and cookbook documentation; `sql_screening` status is explicit where full wiring is pending. |
+| #1029 | Custom SQL/FDD behavior is documented for Results, maintained Overview summaries, and gated HITL states; custom rules do not create Overview panels or bulk HITL findings. |
+| #1030 | Nine FCU-* rules have registry metadata and cookbook documentation. Python tests exercise all nine predicates; focused Rust fixtures cover representative SQL predicates, so the family remains `sql_screening` pending full mask/duration parity. |
 
 The candidate version is **3.5.55**. Physical BACnet evidence is read-only: Who-Is, AI:1173 Present_Value, and configured RPM/poll proof against routed FEC device 5007. No write endpoint is part of this validation.
 

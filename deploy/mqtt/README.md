@@ -61,6 +61,18 @@ legacy `deploy/mqtt/acl/` directory or mount an ACL at `/mosquitto/config/acl`.
 The image entrypoint assigns uid/gid 1883 read access while keeping
 `server.key.pem` at mode 0600 or 0640.
 
+For a host bind mount, make the certificate directory traversable by the
+container user and grant the broker group read access to the key:
+
+```bash
+chgrp 1883 deploy/mqtt/certs deploy/mqtt/certs/server.key.pem
+chmod 750 deploy/mqtt/certs
+chmod 640 deploy/mqtt/certs/server.key.pem
+```
+
+Keep every parent directory on the bind-mount path searchable (`chmod 755` or
+more restrictive group/owner equivalent) so uid/gid 1883 can traverse it.
+
 ## Edge runtime
 
 Mount the generated kit at `/mqtt` (read-only) and set:
