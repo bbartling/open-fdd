@@ -567,7 +567,7 @@ impl BacnetClientService {
             self.prepare(&client, Some(device), device.device_instance)
                 .await?;
             let mut map = HashMap::new();
-            for chunk in specs.chunks(device.rpm_chunk) {
+            for chunk in rpm_request_chunks(&specs, device.rpm_chunk) {
                 let rpm = client
                     .read_property_multiple_from_device(device.device_instance, chunk.to_vec())
                     .await
@@ -1222,6 +1222,14 @@ fn rpm_chunk_ranges(length: usize, configured_chunk: usize) -> Vec<(usize, usize
         .collect()
 }
 
+/// Build the ReadPropertyMultiple request batches used by the live poll path.
+/// Keep the configured chunk independent from APDU negotiation so conservative
+/// routed profiles (for example max APDU 206 with no segmentation) can select
+/// a safe request size.
+fn rpm_request_chunks<T>(items: &[T], configured_chunk: usize) -> Vec<&[T]> {
+    items.chunks(configured_chunk.max(1)).collect()
+}
+
 fn parse_object_type(name: &str) -> Result<ObjectType, String> {
     let key = name.trim().to_ascii_lowercase();
     if let Some((_, ot)) = OBJECT_TYPE_MAP.iter().find(|(k, _)| *k == key) {
@@ -1428,20 +1436,34 @@ mod poll_select_tests {
     }
 
     #[test]
-    fn rpm_chunks_obey_206_byte_no_segmentation_profile() {
+    fn poll_rpm_path_uses_configured_chunk_for_206_byte_profile() {
         let mut fec = dev("fec-5007", 5007, vec![]);
         fec.rpm_chunk = 10;
         fec.max_apdu = 206;
         assert_eq!(fec.max_apdu, 206);
-        let ranges = rpm_chunk_ranges(25, fec.rpm_chunk);
-        assert_eq!(ranges, vec![(1, 10), (11, 20), (21, 25)]);
-
-        // This is the routed FEC profile used by the bench.  The client seeds
-        // Segmentation::NONE and uses this configured chunk for object-list,
-        // commandable-point, and poll RPM requests; keep the regression fully
-        // deterministic so CI never needs a BACnet controller.
-        assert_eq!(rpm_chunk_ranges(0, fec.rpm_chunk), Vec::new());
-        assert_eq!(rpm_chunk_ranges(3, 0), vec![(1, 1), (2, 2), (3, 3)]);
+        let specs: Vec<_> = (1..=25)
+            .map(|instance| ReadAccessSpecification {
+                object_identifier: ObjectIdentifier::new(ObjectType::ANALOG_INPUT, instance)
+                    .unwrap(),
+                list_of_property_references: vec![PropertyReference {
+                    property_identifier: PropertyIdentifier::PRESENT_VALUE,
+                    property_array_index: None,
+                }],
+            })
+            .collect();
+        // This is the planner consumed by poll_device, rather than a separate
+        // object-list range helper: every request stays at ten objects.
+        let requests = rpm_request_chunks(&specs, fec.rpm_chunk);
+        assert_eq!(
+            requests.iter().map(|r| r.len()).collect::<Vec<_>>(),
+            vec![10, 10, 5]
+        );
+        assert_eq!(requests[0][0].object_identifier.instance_number(), 1);
+        assert_eq!(requests[2][4].object_identifier.instance_number(), 25);
+        assert!(requests.iter().flatten().all(|spec| {
+            spec.list_of_property_references[0].property_identifier
+                == PropertyIdentifier::PRESENT_VALUE
+        }));
     }
 }
 

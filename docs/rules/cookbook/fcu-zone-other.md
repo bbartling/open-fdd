@@ -44,6 +44,7 @@ The files live in `sql_rules/` and are registered in
 `OPENFDD_SQL_RULES_DIR` override is needed. They remain labeled
 `sql_screening`: focused predicate fixtures cover pandas behavior and
 DataFusion SQL is compiled/executed by Rust rule tests, but production site-soak
-evidence is still required before claiming duration or site parity. The rules
-are not marked `dashboard_wired` until issue #1029 lands.
-
+evidence is still required before claiming duration or site parity. The
+`dashboard_wired` field remains false while these rules are outside the
+maintained Overview summaries; the Results and SQL FDD surfaces still expose
+their registry entries.

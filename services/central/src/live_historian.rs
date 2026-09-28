@@ -676,6 +676,9 @@ fn role_value(point: &TelemetryPoint) -> Result<Option<RoleValue>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use datafusion::prelude::SessionContext;
+    use fdd_rules::{rule_params, substitute_sql};
+    use fdd_sql::{register_historian_building, run_sql};
     use openfdd_contracts::Protocol;
     use serde_json::json;
     use tempfile::TempDir;
@@ -747,6 +750,79 @@ mod tests {
             .downcast_ref::<Float64Array>()
             .unwrap();
         assert!(values.value(0).is_nan());
+    }
+
+    #[tokio::test]
+    async fn bad_quality_flows_through_historian_nan_to_sv_range() {
+        let tmp = TempDir::new().unwrap();
+        let config = HistorianConfig {
+            storage_url: StorageUrl::File {
+                root: tmp.path().to_path_buf(),
+            },
+            flush_rows: 1,
+            flush_seconds: 60,
+            target_file_mb: 128,
+            compaction_min_files: 8,
+            compaction_enabled: true,
+            query_memory_mb: 512,
+            spill_directory: None,
+            legacy_parquet_root: None,
+        };
+        let mut live = LiveHistorian::from_config(&config).unwrap();
+        let mut bad = point("sat", json!(55.0));
+        bad.quality = Quality::Bad;
+        live.ingest_envelope(&envelope(vec![bad])).unwrap();
+
+        let ctx = SessionContext::new();
+        register_historian_building(&ctx, tmp.path(), "BUILDING_100")
+            .await
+            .unwrap();
+        // SV-RANGE is a sensor sweep and references all optional sensor lanes.
+        // Recreate the runner's optional NULL-column injection around the real
+        // persisted history table so this test exercises the shipped SQL file.
+        let optional = [
+            "oa_t",
+            "mat",
+            "zone_t",
+            "rat",
+            "chw_supply_t",
+            "chw_return_t",
+            "hw_supply_t",
+            "hw_return_t",
+            "oa_h",
+            "duct_static",
+            "fan_status",
+            "fan_cmd",
+            "pump_status",
+            "chw_pump_cmd",
+            "chiller_status",
+            "kwh",
+            "electric_kw",
+            "electric_kwh",
+        ];
+        let nulls = optional
+            .iter()
+            .map(|role| format!("CAST(NULL AS DOUBLE) AS {role}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let enriched = ctx
+            .sql(&format!("SELECT history.*, {nulls} FROM history"))
+            .await
+            .unwrap();
+        ctx.deregister_table("history").unwrap();
+        ctx.register_table("history", enriched.into_view()).unwrap();
+
+        let sql = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sql_rules/sv_range.sql"),
+        )
+        .unwrap();
+        let sql = substitute_sql(&sql, &rule_params(300.0, 0));
+        let result = run_sql(&ctx, &sql).await.unwrap();
+        let fault_hours = result.rows[0]
+            .get("fault_hours")
+            .and_then(|value| value.as_f64())
+            .unwrap();
+        assert_eq!(fault_hours, 300.0 / 3600.0);
     }
 
     #[test]

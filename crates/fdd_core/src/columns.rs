@@ -160,7 +160,7 @@ pub fn normalize_role(role: &str) -> String {
             "zone_t".into()
         }
         "zone_air_temp_sp" | "zone_temp_sp" | "zone_setpoint" => "zone_air_temp_sp".into(),
-        "cooling_sp" | "zone_cooling_sp" | "cooling_setpoint" | "clg_stpt" => "cooling_sp".into(),
+        "cooling_sp" | "zone_cooling_sp" => "cooling_sp".into(),
         "heating_sp" | "zone_heating_sp" | "heating_setpoint" | "htg_stpt" => "heating_sp".into(),
         "zone_co2" | "co2" | "co2_ppm" | "zone_co2_ppm" => "zone_co2".into(),
         "supply_air_temp"
@@ -222,7 +222,7 @@ pub fn normalize_role(role: &str) -> String {
         "hwr_t" | "hw_return" | "hwrt" | "hwr_t_f" | "hw_return_t" => "hw_return_t".into(),
         "oa_humidity" | "oa_h" | "relative_humidity_pct" | "oa_rh_pct" => "oa_h".into(),
         "zone_rh" | "zone_humidity" | "zone_relative_humidity" | "space_rh" => "zone_rh".into(),
-        "effective_setpoint" => "sat_sp".into(),
+        "cooling_setpoint" | "effective_setpoint" | "clg_stpt" => "sat_sp".into(),
         "occ_mode" | "occupancy" | "occupied" | "schedule" => "occ_mode".into(),
         "return_fan" => "return_fan".into(),
         other => other.to_string(),
@@ -610,6 +610,12 @@ mod tests {
         assert_eq!(map.get("dat_reset_f"), Some(&"sat_sp".to_string()));
         assert_eq!(map.get("discharge_air_temp_f"), Some(&"sat".to_string()));
         assert_eq!(map.get("chw_valve_pct"), Some(&"clg_valve_pct".to_string()));
+    }
+
+    #[test]
+    fn legacy_cooling_setpoint_aliases_map_to_sat_sp() {
+        assert_eq!(normalize_role("cooling_setpoint"), "sat_sp");
+        assert_eq!(normalize_role("clg_stpt"), "sat_sp");
     }
 
     #[test]

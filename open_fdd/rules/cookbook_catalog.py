@@ -1065,15 +1065,21 @@ def vav_vs_ahu_leave(d, p, poll):
 
 
 def _fcu_fan_on(d: pd.DataFrame) -> pd.Series:
-    """Prefer fan proof; fall back to a normalized fan command above 10%."""
-    if "fan-status" in d.columns and d["fan-status"].notna().any():
-        return as_bool(d["fan-status"])
+    """Use status wherever present, with command fallback per sample."""
+    if "fan-status" in d.columns:
+        status = as_bool(d["fan-status"])
+        if "fan-cmd" in d.columns:
+            command = norm_cmd(d["fan-cmd"]).fillna(0) > 0.10
+            return status.where(d["fan-status"].notna(), command)
+        return status
     if "fan-cmd" in d.columns:
         return norm_cmd(d["fan-cmd"]).fillna(0) > 0.10
     return _false(d.index)
 
 
 def fcu_sensor_null(d, p, poll):
+    if "zone-air-temp" not in d.columns:
+        return pd.Series(False, index=d.index)
     zone = pd.to_numeric(d["zone-air-temp"], errors="coerce")
     sp = pd.to_numeric(d["zone-air-temp-sp"], errors="coerce")
     eligible = sp.notna()
@@ -1082,38 +1088,38 @@ def fcu_sensor_null(d, p, poll):
 
 
 def fcu_htg_coil(d, p, poll):
-    heat = norm_cmd(d["heating-valve"]).fillna(0)
+    heat = norm_cmd(d["heating-valve"])
     rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
         d["zone-air-temp"], errors="coerce"
     )
-    return _fcu_fan_on(d) & (heat >= _f(p, "valve_open", 0.80)) & (rise < _f(p, "coil_delta_f", 5.4))
+    return _fcu_fan_on(d) & heat.notna() & (heat >= _f(p, "valve_open", 0.80)) & (rise < _f(p, "coil_delta_f", 5.4))
 
 
 def fcu_clg_coil(d, p, poll):
-    cool = norm_cmd(d["cooling-valve"]).fillna(0)
-    heat = norm_cmd(d["heating-valve"]).fillna(0)
+    cool = norm_cmd(d["cooling-valve"])
+    heat = norm_cmd(d["heating-valve"])
     rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
         d["zone-air-temp"], errors="coerce"
     )
-    return _fcu_fan_on(d) & (cool >= _f(p, "valve_open", 0.80)) & (heat <= 0.05) & (rise >= 0)
+    return _fcu_fan_on(d) & cool.notna() & heat.notna() & (cool >= _f(p, "valve_open", 0.80)) & (heat <= 0.05) & (rise >= 0)
 
 
 def fcu_valve_pass_htg(d, p, poll):
-    heat = norm_cmd(d["heating-valve"]).fillna(0)
-    cool = norm_cmd(d["cooling-valve"]).fillna(0)
+    heat = norm_cmd(d["heating-valve"])
+    cool = norm_cmd(d["cooling-valve"])
     rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
         d["zone-air-temp"], errors="coerce"
     )
-    return _fcu_fan_on(d) & (heat <= 0.05) & (cool <= 0.05) & (rise > _f(p, "pass_delta_f", 5.4))
+    return _fcu_fan_on(d) & heat.notna() & cool.notna() & (heat <= 0.05) & (cool <= 0.05) & (rise > _f(p, "pass_delta_f", 5.4))
 
 
 def fcu_valve_pass_clg(d, p, poll):
-    heat = norm_cmd(d["heating-valve"]).fillna(0)
-    cool = norm_cmd(d["cooling-valve"]).fillna(0)
+    heat = norm_cmd(d["heating-valve"])
+    cool = norm_cmd(d["cooling-valve"])
     drop = pd.to_numeric(d["zone-air-temp"], errors="coerce") - pd.to_numeric(
         d["discharge-air-temp"], errors="coerce"
     )
-    return _fcu_fan_on(d) & (heat <= 0.05) & (cool <= 0.05) & (drop > _f(p, "pass_delta_f", 5.4))
+    return _fcu_fan_on(d) & heat.notna() & cool.notna() & (heat <= 0.05) & (cool <= 0.05) & (drop > _f(p, "pass_delta_f", 5.4))
 
 
 def fcu_damper_pos(d, p, poll):
@@ -1135,14 +1141,16 @@ def fcu_deadband(d, p, poll):
 
 
 def fcu_mode_cycle(d, p, poll):
-    heat = norm_cmd(d["heating-valve"]).fillna(0)
-    cool = norm_cmd(d["cooling-valve"]).fillna(0)
+    heat = norm_cmd(d["heating-valve"])
+    cool = norm_cmd(d["cooling-valve"])
     mode = pd.Series(0, index=d.index, dtype=int)
     mode = mode.mask(heat > _f(p, "mode_valve_min", 0.10), 1)
     mode = mode.mask(cool > _f(p, "mode_valve_min", 0.10), -1)
     active = mode.where(mode != 0).ffill().fillna(0)
     changes = ((active != active.shift()) & (active != 0) & (active.shift().fillna(0) != 0)).astype(int).cumsum()
-    return changes >= int(_f(p, "mode_changes", 4.0))
+    # Idle samples are omitted from the transition sequence and must not become
+    # fault rows after the threshold is crossed.
+    return (mode != 0) & (changes >= int(_f(p, "mode_changes", 4.0)))
 
 
 # ---------------------------------------------------------------------------
