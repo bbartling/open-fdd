@@ -14,6 +14,31 @@ Canonical **rigorous stress LAST** protocol after a product tip lands on GHCR. L
 
 Entry point + profiles: [`scripts/qualification/README.md`](../../scripts/qualification/README.md).
 
+## STRESS NOTE #1 — central RAM vs building / analytics load
+
+Railway workspace plan is **Pro**. The `openfdd-central` replica memory limit is **24 GB**. The previous Hobby plan hard-capped replicas at **8 GB**. The 2026-09-28 crash was an OOM at that 8 GB cap under Overview / RCx analytics.
+
+Closeout keeps the Pro headroom and watches metrics. Do not retune DataFusion, lookback, or query memory to squeeze the service back under the Hobby cap.
+
+During Overview, RCx, and AFDD (including the ACME lab cycle), record:
+
+| Watch | Where |
+| --- | --- |
+| Replica memory **limit / current / max** | Railway service metrics (cgroup cap; OOM source of truth) |
+| Process / host RSS | Capacity sampler `capacity_samples.ndjson` → `capacity_report.json` (`memory_used_bytes`, `memory_percent_used`, `memory_source`) |
+| Historian pressure | Same samples: `historian_file_count`, `historian_small_files`, `historian_bytes` |
+| Building count | Package buildings / Jobs on the hub while analytics is running |
+
+Replica limit and process RSS are different numbers. `/api/host/stats` on a shared node can report host RAM far above 24 GB (`memory_source=host_proc_likely_shared_node`). That percent is not the replica cap. Correlate RSS and file counts with how many buildings are loaded.
+
+**Hard-fail the closeout** and clear `fully_qualified` when any of these show up, including when individual HTTP gates still returned PASS:
+
+- silent restart (uptime reset, health flaps, Railway restart with no deploy)
+- OOM (replica memory at the limit, container killed)
+- 499 storm (gateway/client disconnects while analytics is in flight)
+
+Sampler: [`scripts/nightly-ot-bench/lib_capacity_sample.sh`](../../scripts/nightly-ot-bench/lib_capacity_sample.sh), started by [`run_railway_hub_stress.sh`](../../scripts/nightly-ot-bench/run_railway_hub_stress.sh). Gate `24_capacity_pressure` is the analytics burst; gate `24b_capacity_report` records the rollup. Lead comment in the stress script is the same note.
+
 ## Three execution tiers
 
 | Tier | Where | What | Not |
@@ -62,9 +87,15 @@ Low-RAM: never local `docker build`; no local central/web/mqtt on the closeout p
 | # | Name | Command / artifact | Pass |
 |---|------|--------------------|------|
 | **19** | Synth AFDD flood | `2N_wave_m_afdd_flood.sh` | Budgeted registry flood on Synthetic-59 (authorized live) — **not** ACME continuous proof |
-| **38** | **ACME continuous AFDD** | `38_acme_afdd_qualification.sh` | Hub `continuous` + **1440**/24h + `timer_scope=ACME`; live `run-now` ok; window ≤24h+5m; durable `recent_cycles` — **continuous-AFDD SoT** |
+| **38** | **ACME continuous AFDD** | `38_acme_afdd_qualification.sh` | Hub `continuous` + **1440**/24h + `timer_scope=ACME`; live `run-now` ok; window ≤24h+5m (lookback-sized, not full history); durable `recent_cycles` — **continuous-AFDD SoT** |
 
 Compact ACME hive parts before enabling continuous AFDD (`scripts/ops/railway_compact_hub.sh`). Recipe: [`AFDD_MODES.md`](AFDD_MODES.md) § ACME.
+
+**Lookback-sized windows only.** `plan_continuous_cycle` (`crates/fdd_store/src/afdd_scheduler.rs`) sets `end` to the latest persisted telemetry watermark and `start` to `end − lookback`. The window is tied to the cadence: a daily interval uses 24h / 1 day. A cycle does not scan the whole historian.
+
+`OPENFDD_AFDD_INTERVAL_MINUTES=1440` is the gap after `last_completed_at` (checkpoint + interval). That 1440 is the cadence. It does not align the run to wall-clock 05:00. Ops preference for the ACME lab is to land that daily cycle around **05:00 America/Chicago** so it finishes before the **06:00** morning digest. Lookback stays matched to the cadence (24 hours).
+
+After downtime the next cycle is still one lookback-sized window (`catch_up`). Replaying retained history is the separate `plan_backfill_chunks` path. Gate 38 checks config truth and a bounded `run-now` window. It does not assert a 05:00 clock alignment. Watch central RAM across that cycle (STRESS NOTE #1). Live lab env: `OPENFDD_AFDD_MODE=continuous`, interval 1440, lookback 24 hours, `OPENFDD_AFDD_BUILDING_ID=ACME`.
 
 ### Truthful manifests (3.3.26+)
 

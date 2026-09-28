@@ -2,6 +2,23 @@
 # Patch-cycle stress LAST: Railway hub + CSV matrix + light ZAP + auth/MCP.
 # Field OT is bensbench x86 → Railway MQTTS (no Raspberry Pi).
 #
+# STRESS NOTE #1 — central RAM vs building / analytics load.
+# Railway is on the Pro plan. openfdd-central replica memory limit is 24 GB
+# (Hobby hard-capped replicas at 8 GB). The 2026-09-28 crash was an OOM at
+# that 8 GB cap under Overview / RCx analytics. Keep the Pro headroom and
+# watch metrics. Do not retune the app to fit the Hobby cap.
+#
+# While Overview, RCx, and AFDD gates run, watch both:
+#   - Railway metrics: memory limit, current, and max (replica cgroup; OOM truth)
+#   - this script's capacity sampler (lib_capacity_sample.sh): process/host RSS
+#     from /api/host/stats, plus historian file_count / small_files / bytes
+# Correlate those series with building count and historian file pressure.
+# Replica limit and process RSS are different numbers (shared-node host_proc
+# can sit far above the 24 GB cap).
+# Hard-fail the closeout and clear fully_qualified on a silent restart, an
+# OOM, or a 499 storm — including when individual HTTP gates still PASS.
+# Handbook: docs/operations/STRESS_CLOSEOUT.md § STRESS NOTE #1.
+#
 # Truthful qualification: SUMMARY.md is generated from qualification_manifest.json
 # via scripts/qualification/write_manifest.py — never a static PASS sentence.
 # Required SKIPPED/BLOCKED/ERROR ⇒ not fully_qualified.
