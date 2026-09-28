@@ -27,24 +27,6 @@ use crate::services::telemetry_control::{parse_telemetry_command, TelemetryContr
 
 const MAX_SEEN_COMMANDS: usize = 10_000;
 
-fn env_flag(name: &str) -> bool {
-    matches!(
-        std::env::var(name)
-            .unwrap_or_default()
-            .to_ascii_lowercase()
-            .as_str(),
-        "1" | "true" | "yes" | "on"
-    )
-}
-
-fn mqtt_cell_mode() -> bool {
-    env_flag("OPENFDD_MQTT_CELL_MODE")
-}
-
-fn mqtt_delta_enabled() -> bool {
-    env_flag("OPENFDD_MQTT_DELTA") || mqtt_cell_mode()
-}
-
 fn mqtt_publish_interval_secs(settings: &Settings) -> f64 {
     // Wave N: publish cadence matches fixed 300s poll (ignore env overrides).
     let _ = settings;
@@ -106,35 +88,6 @@ fn insert_equipment_type_tag(
     }
 }
 
-fn historian_tags_slim(
-    building_id: Option<&str>,
-    equipment_id: &str,
-    point_name: &str,
-    equipment_type: Option<String>,
-) -> serde_json::Map<String, serde_json::Value> {
-    let mut tags = serde_json::Map::new();
-    tags.insert(
-        "equipment_id".into(),
-        serde_json::Value::String(equipment_id.to_string()),
-    );
-    tags.insert(
-        "role".into(),
-        serde_json::Value::String(haystack_point_to_role(point_name)),
-    );
-    if let Some(building_id) = building_id {
-        tags.insert(
-            "building_id".into(),
-            serde_json::Value::String(building_id.to_string()),
-        );
-    }
-    insert_equipment_type_tag(&mut tags, equipment_type);
-    tags
-}
-
-fn telemetry_point_signature(point: &TelemetryPoint) -> String {
-    format!("{}:{:?}", point.value, point.quality)
-}
-
 /// Split a publish batch so each MQTT envelope stays within a single equipment
 /// (and thus well under typical MQTT packet caps on full-site HVAC polls).
 fn chunk_points_by_equipment(points: Vec<TelemetryPoint>) -> Vec<Vec<TelemetryPoint>> {
@@ -156,24 +109,6 @@ fn chunk_points_by_equipment(points: Vec<TelemetryPoint>) -> Vec<Vec<TelemetryPo
         .into_iter()
         .filter_map(|k| by_equip.remove(&k))
         .filter(|chunk| !chunk.is_empty())
-        .collect()
-}
-
-fn apply_delta_filter(
-    points: Vec<TelemetryPoint>,
-    last: &mut HashMap<String, String>,
-) -> Vec<TelemetryPoint> {
-    points
-        .into_iter()
-        .filter(|p| {
-            let sig = telemetry_point_signature(p);
-            if last.get(&p.id) == Some(&sig) {
-                false
-            } else {
-                last.insert(p.id.clone(), sig);
-                true
-            }
-        })
         .collect()
 }
 
@@ -605,14 +540,10 @@ pub async fn spawn_if_configured(
             .unwrap_or_else(|_| format!("/tmp/openfdd-spool-{edge_id}")),
     );
     let interval = mqtt_publish_interval_secs(&settings);
-    let cell_mode = mqtt_cell_mode();
-    let delta_mode = mqtt_delta_enabled();
     info!(
         publish_interval_secs = interval,
-        cell_mode,
-        delta_mode,
         tenant_id = tenant_id.as_deref(),
-        "mqtt bridge publish profile"
+        "mqtt bridge full-snapshot publish profile"
     );
 
     // Wave N: when OPENFDD_TENANT_ID is set, emit tenants/{tid}/buildings/{bid}/… topics
@@ -641,7 +572,6 @@ pub async fn spawn_if_configured(
         };
 
         let mut mqtt: Option<MqttSession> = None;
-        let mut last_published: HashMap<String, String> = HashMap::new();
         let type_stamps = load_equipment_type_stamps();
 
         let mut seq = 0u64;
@@ -685,8 +615,8 @@ pub async fn spawn_if_configured(
                     }
                     let object_type = v.get("object_type")?.as_str()?.replace('_', "-");
                     let object_instance = v.get("object_instance")?.as_u64()? as u32;
-                    // Include point_name so dual-publish of the same BACnet object
-                    // (e.g. AV 9101 → zone_t + oa_t) is not collapsed by delta filter.
+                    // Include point_name so dual roles for one BACnet object remain
+                    // distinct in every full poll snapshot.
                     let id =
                         format!("bacnet:{device}:{object_type}:{object_instance}:{point_name}");
                     let value = telemetry_point_value(&v);
@@ -700,33 +630,20 @@ pub async fn spawn_if_configured(
                         equipment_id,
                         row_equipment_type_stamp(&v).as_deref(),
                     );
-                    let tags = if cell_mode {
-                        historian_tags_slim(
-                            building_id.as_deref(),
-                            equipment_id,
-                            point_name,
-                            equipment_type,
-                        )
-                    } else {
-                        let base = serde_json::json!({"bacnet": true, "device_instance": device})
-                            .as_object()
-                            .cloned()
-                            .unwrap_or_default();
-                        historian_tags(
-                            base,
-                            building_id.as_deref(),
-                            equipment_id,
-                            point_name,
-                            equipment_type,
-                        )
-                    };
+                    let base = serde_json::json!({"bacnet": true, "device_instance": device})
+                        .as_object()
+                        .cloned()
+                        .unwrap_or_default();
+                    let tags = historian_tags(
+                        base,
+                        building_id.as_deref(),
+                        equipment_id,
+                        point_name,
+                        equipment_type,
+                    );
                     Some(TelemetryPoint {
                         id,
-                        display_name: if cell_mode {
-                            None
-                        } else {
-                            Some(point_name.to_string())
-                        },
+                        display_name: Some(point_name.to_string()),
                         kind: Some(ValueKind::Number),
                         value,
                         unit: v.get("units").and_then(|x| x.as_str()).map(str::to_string),
@@ -736,22 +653,8 @@ pub async fn spawn_if_configured(
                 })
                 .collect();
             let rest_rows = rest.last_values().await;
-            let rest_points =
-                rest_telemetry_points(&rest_rows, building_id.as_deref(), &type_stamps);
-            let mut bacnet_points = if delta_mode {
-                apply_delta_filter(points, &mut last_published)
-            } else {
-                points
-            };
-            let mut rest_out = rest_points;
-            if cell_mode {
-                for p in &mut bacnet_points {
-                    p.display_name = None;
-                }
-                for p in &mut rest_out {
-                    p.display_name = None;
-                }
-            }
+            let rest_out = rest_telemetry_points(&rest_rows, building_id.as_deref(), &type_stamps);
+            let bacnet_points = points;
             if bacnet_points.is_empty() && rest_out.is_empty() {
                 continue;
             }
@@ -828,7 +731,7 @@ mod tests {
     }
 
     #[test]
-    fn chunk_points_by_equipment_splits_and_preserves_order() {
+    fn full_snapshot_chunking_preserves_unchanged_points_every_cycle() {
         let mk = |equip: &str, id: &str| {
             let mut tags = serde_json::Map::new();
             tags.insert(
@@ -845,42 +748,25 @@ mod tests {
                 tags,
             }
         };
-        let chunks = chunk_points_by_equipment(vec![
+        let snapshot = vec![
             mk("jci_vav_8", "a"),
             mk("rtu_01", "b"),
             mk("jci_vav_8", "c"),
             mk("rtu_01", "d"),
-        ]);
+        ];
+        let chunks = chunk_points_by_equipment(snapshot.clone());
+        let next_cycle = chunk_points_by_equipment(snapshot);
         assert_eq!(chunks.len(), 2);
+        assert_eq!(next_cycle.len(), 2);
         assert_eq!(chunks[0].len(), 2);
+        assert_eq!(next_cycle[0].len(), 2);
+        assert_eq!(next_cycle[1].len(), 2);
         assert_eq!(chunks[0][0].id, "a");
         assert_eq!(chunks[0][1].id, "c");
         assert_eq!(
             chunks[1][0].tags["equipment_id"],
             serde_json::json!("rtu_01")
         );
-    }
-
-    #[test]
-    fn delta_filter_keeps_dual_roles_on_same_bacnet_object() {
-        let mut last = HashMap::new();
-        let mk = |id: &str, val: f64| TelemetryPoint {
-            id: id.to_string(),
-            display_name: None,
-            kind: Some(ValueKind::Number),
-            value: serde_json::json!(val),
-            unit: None,
-            quality: Quality::Good,
-            tags: serde_json::Map::new(),
-        };
-        let zone = "bacnet:599999:analog-value:9101:zone-air-temp";
-        let oa = "bacnet:599999:analog-value:9101:outside-air-temperature";
-        let out = apply_delta_filter(vec![mk(zone, 72.0), mk(oa, 72.0)], &mut last);
-        assert_eq!(out.len(), 2, "same AV value must publish both roles");
-        let again = apply_delta_filter(vec![mk(zone, 72.0), mk(oa, 72.0)], &mut last);
-        assert!(again.is_empty(), "unchanged values still delta-suppressed");
-        let bumped = apply_delta_filter(vec![mk(zone, 73.0), mk(oa, 73.0)], &mut last);
-        assert_eq!(bumped.len(), 2);
     }
 
     #[test]

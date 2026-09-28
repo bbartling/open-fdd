@@ -1053,3 +1053,9 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 - Completed disposable resource/recovery matrix on candidate 3.5.51: timer cycles, 1M-row low-memory queries, 1/2/4/8 concurrency, MQTTS flush/restart, compaction conservation/overlap, cancellation observation and AFDD low-memory behavior.
 - Results are recorded in `reports/issue996_exhaustion_20260923/SUMMARY.md`. Found false-success low-memory analytics and partial AFDD envelopes, one acknowledged pre-flush sample lost on SIGKILL, a scheduler catch-up gap question, and interrupted-compaction visibility gap. H10 assets and evaluator regressions passed.
 - Created GitHub milestone AFDD-996 and linked it from #996, `MILESTONES.md` and the evidence summary. Railway daily AFDD remains bulk/off. Next session starts a focused patch cycle; no further stress or GHCR refresh is needed until a patch is merged.
+
+## 2026-09-28 — Issue #1021 full MQTT snapshot patch
+
+- Confirmed the sparse actuator/status report defect was fieldbus change-only publishing, not CSV export loss: stable values were removed between successful BACnet polls before MQTTS ingestion.
+- On candidate 3.5.54, removed the MQTT change cache/filter, reduced-metadata publish mode, related configuration surface and obsolete delta test. BACnet and REST telemetry retain full historian metadata; every successful BACnet poll snapshot proceeds unchanged to per-equipment MQTT chunking.
+- Updated edge bandwidth documentation and added a repeated-identical-snapshot regression. Candidate still requires CI/GHCR, ACME fieldbus re-pin without retired env settings and a 24-hour density comparison before closing #1021.
