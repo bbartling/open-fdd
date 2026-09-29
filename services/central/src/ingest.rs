@@ -382,6 +382,10 @@ fn handle_telemetry(
                             );
                         }
                         if report.eligible_points > 0 {
+                            crate::building_sessions::note_mqtt_ingest(
+                                &env.site_id,
+                                historian.pending_rows(),
+                            );
                             debug!(
                                 message_id = %env.message_id,
                                 eligible_points = report.eligible_points,

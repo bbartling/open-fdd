@@ -2,9 +2,12 @@
 
 pub mod afdd;
 pub mod afdd_scheduler;
+pub mod analytics_cache;
 pub mod append;
+pub mod building_session;
 pub mod compaction;
 pub mod compaction_coord;
+pub mod disk_budget;
 pub mod historian;
 pub mod ingest;
 pub(crate) mod legacy_formats;
@@ -15,6 +18,21 @@ pub mod migration_exec;
 pub mod parquet_parts;
 pub mod stats;
 
+pub use analytics_cache::{
+    config_hash, freshness_for_watermark, historian_watermark_order, order_key_to_rfc3339,
+    read_plan, read_result, write_result, AnalyticsCacheKey, AnalyticsResultTable,
+    CacheFreshness, CacheProvenance, ReadPlan, StaleAction, SCHEMA_NAME,
+};
+pub use building_session::{
+    clamp_idle_secs, clamp_max_interactive, SessionBook, SessionError, SessionKind, SessionLimits,
+    SessionRecord, DEFAULT_IDLE_TIMEOUT_SECS, DEFAULT_MAX_INTERACTIVE_SESSIONS,
+    DEFAULT_MQTT_BUFFER_ROWS,
+};
+pub use disk_budget::{
+    apply_data_budget, bytes_over_budget, collect_budget_objects, order_key_from_path,
+    plan_oldest_first, preflight_update, DataBudget, EvictionPlan, EvictionReport, PreflightDecision,
+    PreflightInput, BudgetObject, DEFAULT_LOCAL_DATA_BUDGET_GIB, DEFAULT_RESERVED_FREE_PERCENT, GIB,
+};
 pub use afdd::{
     AfddConfig, AfddLookbackUnit, AfddMode, AfddOperatorSchedule, DEFAULT_AFDD_INTERVAL_MINUTES,
     DEFAULT_AFDD_LOOKBACK_UNIT, DEFAULT_AFDD_LOOKBACK_VALUE, OPERATOR_INTERVAL_MINUTES,

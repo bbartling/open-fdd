@@ -1,3 +1,8 @@
+## 2026-09-29 — Parquet analytics cache and 100 GiB disk budget (code)
+
+- Analytics/RCx/sensor-fault results persist as `analytics_results/` Parquet (`analytics-result-parquet-v1`), keyed by building, query, version, window, and config hash. Stale is a JSON flag when the historian watermark moves. CSV guest historian RAM unloads when the job finishes; leave and a 60s idle timer drop the lease. MQTTS stays a small buffer. Max interactive sessions default to 2.
+- Local/edge retention default is 100 GiB, oldest parquet first, with an update preflight that does not require 2× live data on disk. `OPENFDD_TEST_DEPLOY=1` skips release backups unless `OPENFDD_BACKUP_ON_UPDATE=1`. Railway eviction stays off unless enabled. Field proof on a real edge disk is still open. No VERSION bump.
+
 ## 2026-09-27 — Tip 3.5.53 closeout stress (not FQ)
 
 - Tip `dc32615` / VERSION 3.5.53 on Railway (`sha-dc32615`); backup `20260927T193409Z`; edge `vim-1` MQTTS fresh.

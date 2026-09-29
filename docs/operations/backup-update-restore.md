@@ -8,6 +8,8 @@ nav_exclude: true
 
 # Backup, update, restore
 
+Local/edge historian plus analytics result parquet defaults to a **100 GiB** oldest-first cap. A backup of that live set is a second copy. Do not assume a ~200 GiB host can hold both. Run `scripts/openfdd_disk_preflight.py --full-copy` before `tar` of `workspace/`. Exit 10 means skip the on-box copy (offload it). Exit 20 means free space is under the reserved percent — do not start the update. Test deploys (`OPENFDD_TEST_DEPLOY=1`, including ACME/Railway lab pins) skip the release backup unless `OPENFDD_BACKUP_ON_UPDATE=1`. Detail: [DATA_RETENTION_BUDGET.md](DATA_RETENTION_BUDGET.md).
+
 ## Local stack (`workspace/`)
 
 All persistent state for a local Compose stack lives under `workspace/`. Back it up before any image update. See [Build recipes](build-recipes.html) for the recipe/env matrix.

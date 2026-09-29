@@ -13,6 +13,7 @@ pub mod plant;
 pub mod plant_health;
 pub mod rcx;
 pub mod rcx_presets;
+pub mod result_cache;
 pub mod runtime;
 pub mod schedule;
 pub mod sensor_health;
@@ -87,6 +88,9 @@ pub struct AnalyticsRequest {
     /// Economizer |OAT−RAT| identifiability gate (°F).
     #[serde(default)]
     pub dt_min_f: Option<f64>,
+    /// Recompute even when the parquet result cache is fresh.
+    #[serde(default)]
+    pub refresh: bool,
 }
 
 /// Typed analytics response envelope (no Plotly JSON).

@@ -157,6 +157,12 @@ Same DataFusion registry. Bulk = CSV/package / manual run; continuous AFDD = opt
 
 SPA shows `GET /api/health` → `{semver}+shortsha`. On each turnkey platform patch cycle, bump the workspace **patch** version (`VERSION` + Cargo workspace) so operators see a new semver after pulling nightly — not only a new SHA.
 
+## Analytics cache and disk budget
+
+Analytics, RCx, and sensor-fault results persist as Parquet under `analytics_results/` (schema `analytics-result-parquet-v1`), keyed by `building_id`, query id, query version, window, and config hash. AFDD `{rule_id}.json` stays the rule-runner path. A newer historian watermark sets `stale: true` unless the client sends `refresh: true`. CSV buildings unload the historian working set when the job finishes; the SPA leaves the lease on `?site=` change; idle default is 60s; max interactive sessions default to 2. MQTTS keeps a small ingest buffer, not the full historian.
+
+Local/edge disk budget defaults to **100 GiB**, oldest parquet first (`OPENFDD_LOCAL_DATA_BUDGET_GIB`). Railway eviction stays off unless `OPENFDD_DATA_BUDGET_ENABLED=1`. Do not assume an edge can store 100 GiB live plus a full on-box backup. `OPENFDD_TEST_DEPLOY=1` skips release backups unless `OPENFDD_BACKUP_ON_UPDATE=1`. Docs: [`docs/operations/ANALYTICS_RESULT_CACHE.md`](docs/operations/ANALYTICS_RESULT_CACHE.md) · [`docs/operations/DATA_RETENTION_BUDGET.md`](docs/operations/DATA_RETENTION_BUDGET.md).
+
 ## Never
 
 - delete `workspace/`

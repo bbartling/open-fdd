@@ -106,8 +106,22 @@ PY
 
 echo "=== dry-run / preflight backup ==="
 BACKUP_ROOT="$OUT_ROOT/backup"
-OPENFDD_BACKUP_ROOT="$BACKUP_ROOT" ./scripts/railway_central_workspace_backup.sh \
-  || fail "validated backup required before mutation"
+# ACME/Railway test deploys skip the workspace backup unless the operator asks.
+# A real release (OPENFDD_TEST_DEPLOY unset) still backs up before mutation.
+backup_requested=0
+case "${OPENFDD_BACKUP_ON_UPDATE:-}" in
+  1|true|TRUE|yes|YES|on|ON) backup_requested=1 ;;
+esac
+test_deploy=0
+case "${OPENFDD_TEST_DEPLOY:-}" in
+  1|true|TRUE|yes|YES|on|ON) test_deploy=1 ;;
+esac
+if [[ "$test_deploy" == "1" && "$backup_requested" != "1" ]]; then
+  echo "test deploy: skipping workspace backup (set OPENFDD_BACKUP_ON_UPDATE=1 to keep it)"
+else
+  OPENFDD_BACKUP_ROOT="$BACKUP_ROOT" ./scripts/railway_central_workspace_backup.sh \
+    || fail "validated backup required before mutation"
+fi
 
 echo "=== verify hub health (current) ==="
 HEALTH_JSON="$(curl -sf --max-time 30 "$HUB_BASE/api/health" || true)"
