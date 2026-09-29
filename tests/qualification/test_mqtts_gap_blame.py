@@ -187,21 +187,16 @@ class SelectionAndInspectTests(unittest.TestCase):
         chosen = blame.select_samples(rows)
         ids = [item["equipment_id"] for item in chosen]
         self.assertEqual(ids, ["AHU_9", "VAV_14"])
+        self.assertNotIn("RTU_01", ids)
         self.assertNotIn("RTU_FOO_NOT_TYPED", ids)
-        preferred = blame.select_samples(rows, prefer_ids=("RTU_01",))
-        self.assertEqual(
-            [item["equipment_id"] for item in preferred],
-            ["RTU_01", "VAV_14"],
-        )
 
-    def test_fixture_ids_only_when_type_selection_is_empty(self):
+    def test_untyped_id_is_not_selected(self):
         rows = [
             {"equipment_id": "RTU_01", "equipment_type": "GENERAL"},
+            {"equipment_id": "RTU_010", "equipment_type": "GENERAL"},
             {"equipment_id": "OTHER", "equipment_type": "GENERAL"},
         ]
         self.assertEqual(blame.select_samples(rows), [])
-        chosen = blame.select_samples(rows, fixture_ids=("RTU_01", "MISSING"))
-        self.assertEqual([item["equipment_id"] for item in chosen], ["RTU_01"])
 
     def test_coarse_inspect_spacing_is_not_a_railway_gap(self):
         start = datetime(2026, 9, 28, tzinfo=timezone.utc)
@@ -265,9 +260,51 @@ class SelectionAndInspectTests(unittest.TestCase):
         )
         self.assertTrue(layer["present"])
         self.assertFalse(blame._text_names_equipment("RTU_010", "RTU_01"))
+        self.assertFalse(blame._text_names_equipment("notes mention RTU_01 here", "RTU_01"))
+        self.assertFalse(blame._id_list_has("RTU_010", "RTU_01"))
+        self.assertTrue(blame._id_list_has(["RTU_01"], "RTU_01"))
+        self.assertFalse(blame._id_list_has(["RTU_010"], "RTU_01"))
         self.assertTrue(
             blame._text_names_equipment("openfdd/ACME/RTU_01/telemetry", "RTU_01")
         )
+        self.assertFalse(
+            blame._text_names_equipment("openfdd/ACME/RTU_010/telemetry", "RTU_01")
+        )
+        self.assertFalse(
+            blame._text_names_equipment('{"note":"see/RTU_01/log"}', "RTU_01")
+        )
+
+    def test_ledger_id_match_is_equality(self):
+        start = datetime(2026, 9, 28, tzinfo=timezone.utc)
+        end = start + timedelta(hours=1)
+
+        def mark(minutes: int, ids):
+            return {
+                "at": (start + timedelta(minutes=minutes)).isoformat(),
+                "ok": True,
+                "equipment_ids": ids,
+            }
+
+        ledger = {"publish_acks": 2, "recent": [mark(0, "RTU_010"), mark(40, "RTU_010")]}
+        layer = blame.edge_window_from_ledger(
+            ledger,
+            equipment_id="RTU_01",
+            start=start,
+            end=end,
+            expected=12,
+            interval=300,
+        )
+        self.assertEqual(layer["samples"], 0)
+        ledger["recent"] = [mark(0, ["RTU_01"]), mark(40, ["RTU_01"])]
+        layer = blame.edge_window_from_ledger(
+            ledger,
+            equipment_id="RTU_01",
+            start=start,
+            end=end,
+            expected=12,
+            interval=300,
+        )
+        self.assertEqual(layer["samples"], 2)
 
 
 if __name__ == "__main__":

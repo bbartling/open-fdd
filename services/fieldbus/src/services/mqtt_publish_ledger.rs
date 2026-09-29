@@ -136,7 +136,7 @@ fn cap_ids(ids: &[String]) -> Vec<String> {
         if trimmed.is_empty() || out.iter().any(|seen: &String| seen == trimmed) {
             continue;
         }
-        out.push(trimmed.chars().take(64).collect());
+        out.push(trimmed.to_string());
         if out.len() >= MAX_EQUIPMENT_IDS {
             break;
         }

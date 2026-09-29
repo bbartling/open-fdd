@@ -2,9 +2,10 @@
 """MQTTS continuity blame: edge vs internet hop vs Railway vs sparse PV.
 
 Diagnostics only. Does not filter MQTT publishes and does not hard-code a
-building id into product DataFusion. Stress/ops may pass the ACME lab building
-and an exact fixture equipment id (CLI default ``RTU_01``) when that id is
-already on the inventory. Selection uses ``equipment_type`` first.
+building id into product DataFusion. Equipment samples come from
+``equipment_type`` only. An equipment id is compared with equality when a
+ledger or monitor record is already tied to a chosen row. Stress/ops may
+still name the ACME lab building and the vim-1 edge.
 
 Window length defaults to OPENFDD_DIGEST_REPORT_HOURS, then
 OPENFDD_GAP_WINDOW_HOURS, then 24 hours. Poll cadence default is the fixed
@@ -122,18 +123,11 @@ def _norm_type(label: str) -> str:
     return " ".join(label.lower().replace("_", " ").replace("-", " ").split())
 
 
-def select_samples(
-    rows: list[dict[str, Any]],
-    *,
-    prefer_ids: tuple[str, ...] = (),
-    fixture_ids: tuple[str, ...] = (),
-) -> list[dict[str, str]]:
+def select_samples(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
     """Pick one air handler and one VAV by equipment_type.
 
-    ``prefer_ids`` is an exact id match inside the already-typed air-handler
-    group (stress CLI default). ``fixture_ids`` apply only when no typed air
-    handler or VAV is present, and only when that id is on the inventory.
-    Neither path matches a name substring.
+    Inventory order is kept. The equipment id is not used to choose a row,
+    including when the id looks like a known lab device.
     """
     typed: list[dict[str, str]] = []
     for row in rows:
@@ -152,26 +146,16 @@ def select_samples(
     def is_vav(item: dict[str, str]) -> bool:
         return item["kind"] in VAV_TYPES or item["raw"] in VAV_TYPES or item["raw"] == "vav"
 
-    def prefer(group: list[dict[str, str]], ids: tuple[str, ...]) -> dict[str, str] | None:
-        for pid in ids:
-            for item in group:
-                if item["equipment_id"] == pid:
-                    return item
-        return group[0] if group else None
+    def first_of(predicate) -> dict[str, str] | None:
+        return next((item for item in typed if predicate(item)), None)
 
     chosen: list[dict[str, str]] = []
-    ahu = prefer([item for item in typed if is_ahu(item)], prefer_ids)
-    vav = prefer([item for item in typed if is_vav(item)], ())
+    ahu = first_of(is_ahu)
+    vav = first_of(is_vav)
     if ahu:
         chosen.append(ahu)
     if vav and (not ahu or vav["equipment_id"] != ahu["equipment_id"]):
         chosen.append(vav)
-    if chosen:
-        return chosen
-    by_id = {item["equipment_id"]: item for item in typed}
-    for fid in fixture_ids:
-        if fid in by_id:
-            chosen.append(by_id[fid])
     return chosen
 
 
@@ -638,8 +622,7 @@ def edge_window_from_ledger(
         if parsed is None or not (start <= parsed <= end):
             continue
         all_times.append(parsed)
-        ids = mark.get("equipment_ids") or []
-        if equipment_id in ids:
+        if _id_list_has(mark.get("equipment_ids"), equipment_id):
             equip_times.append(parsed)
     if len(all_times) < 2:
         return layer_absent(
@@ -673,21 +656,41 @@ def edge_window_from_ledger(
     )
 
 
-def _text_names_equipment(text: str, equipment_id: str) -> bool:
-    """True when ``text`` names this equipment id exactly.
+def _id_equals(left: Any, right: str) -> bool:
+    return isinstance(left, str) and bool(right) and left == right
 
-    A JSON ``equipment_id`` value must match the whole string. A topic matches
-    only when a path segment equals the id. ``RTU_01`` does not match ``RTU_010``.
+
+def _id_list_has(ids: Any, equipment_id: str) -> bool:
+    """Exact membership. A bare string is one id, not a substring search."""
+    if isinstance(ids, str):
+        return _id_equals(ids, equipment_id)
+    if not isinstance(ids, list):
+        return False
+    return any(_id_equals(item, equipment_id) for item in ids)
+
+
+def _json_names_equipment(value: Any, equipment_id: str) -> bool:
+    if isinstance(value, dict):
+        if _id_equals(value.get("equipment_id"), equipment_id):
+            return True
+        return any(_json_names_equipment(child, equipment_id) for child in value.values())
+    if isinstance(value, list):
+        return any(_json_names_equipment(child, equipment_id) for child in value)
+    return False
+
+
+def _text_names_equipment(text: str, equipment_id: str) -> bool:
+    """True when parsed JSON or one topic segment equals this equipment id.
+
+    ``RTU_01`` does not match ``RTU_010``. The raw text is not searched.
     """
     if not equipment_id or not text:
         return False
-    quoted = (
-        f'"equipment_id":"{equipment_id}"',
-        f'"equipment_id": "{equipment_id}"',
-    )
-    if any(token in text for token in quoted):
-        return True
-    return equipment_id in [part for part in text.split("/") if part]
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return any(part == equipment_id for part in text.split("/"))
+    return _json_names_equipment(parsed, equipment_id)
 
 
 def transit_window_from_monitor(
@@ -1031,8 +1034,7 @@ def collect_live(args: argparse.Namespace) -> dict[str, Any]:
         ledger, poll_status = _fetch_edge(args.edge_base.rstrip("/"), args.edge_api_key)
 
     rows_src = _equipment_rows(equipment_payload)
-    fixture = tuple(part.strip() for part in (args.fixture_ids or "").split(",") if part.strip())
-    selected = select_samples(rows_src, prefer_ids=fixture, fixture_ids=fixture)
+    selected = select_samples(rows_src)
 
     inspect_by: dict[str, list[dict[str, Any]]] = {}
     roles_by: dict[str, list[str]] = {}
@@ -1254,7 +1256,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--token", default=os.environ.get("OPENFDD_ADMIN_TOKEN") or "")
     parser.add_argument("--window-hours", type=float, default=window_hours_from_env())
     parser.add_argument("--interval-secs", type=float, default=float(os.environ.get("OPENFDD_GAP_INTERVAL_SECS") or 300))
-    parser.add_argument("--fixture-ids", default=os.environ.get("OPENFDD_GAP_FIXTURE_IDS") or "RTU_01")
     parser.add_argument(
         "--use-inspect",
         action=argparse.BooleanOptionalAction,

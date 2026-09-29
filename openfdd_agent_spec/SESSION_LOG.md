@@ -1,7 +1,7 @@
 ## 2026-09-29 — MQTTS gap blame audit (not FQ)
 
 - Gate 39 classifies continuity holes as EDGE / TRANSIT / RAILWAY / SPARSE_OK / INCONCLUSIVE. Harness and fieldbus publish ledger only. No `VERSION` bump and no FQ / ops-pin claim.
-- Equipment pick uses `equipment_type`. Stress may pass ACME, vim-1, and exact fixture id `RTU_01`. The selector does not substring-match equipment ids, and it does not invent an id that is absent from inventory.
+- Equipment pick uses `equipment_type` only. A fixture equipment id does not outrank a typed row, and ledger/monitor correlation uses id equality (a longer id is a different device). ACME and vim-1 stay building and edge fixtures.
 - Publish ledger records QoS 1 acks, fails, and no-session. It does not filter or coalesce MQTT publishes.
 
 ## 2026-09-27 — Tip 3.5.53 closeout stress (not FQ)
