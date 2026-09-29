@@ -16,6 +16,7 @@ pub async fn root() -> Json<Value> {
         "poll_status": "/bacnet/poll/status",
         "weather": "/weather",
         "telemetry_status": "/telemetry/status",
+        "mqtt_publish_ledger": "/mqtt/publish-ledger",
     }))
 }
 

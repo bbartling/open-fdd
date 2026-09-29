@@ -2,6 +2,12 @@
 
 - Rule 62 and `openfdd-site-identity` are no longer a narrow "no ACME string in two trees" ban. Product paths (SPA, central / DataFusion / historian / analytics, PyPI report / fault / oracle, RCx / FDD plot selection) never hardcode one building, campus, vendor, or fixture equipment id. Equipment selection is `equipType` / `equipment_type` / roles / registry. A fixture id is an exact match only after the type filter (`RTU_01` must not hit `RTU_010`). Stress and ops may still name a lab site as an env default. Same class as #1043. Docs only; product id-text residuals stay on #1043.
 
+## 2026-09-29 — MQTTS gap blame audit (not FQ)
+
+- Gate 39 classifies continuity holes as EDGE / TRANSIT / RAILWAY / SPARSE_OK / INCONCLUSIVE. Harness and fieldbus publish ledger only. No `VERSION` bump and no FQ / ops-pin claim.
+- Equipment pick uses `equipment_type` only. A fixture equipment id does not outrank a typed row, and ledger/monitor correlation uses id equality (a longer id is a different device). ACME and vim-1 stay building and edge fixtures.
+- Publish ledger records QoS 1 acks, fails, and no-session. It does not filter or coalesce MQTT publishes.
+
 ## 2026-09-29 — FDD/RCx series preview is the newest N rows
 
 - SPA series preview on FDD Plots and each RCx timeseries card shows the most recent samples of the figure already loaded (newest first). Per-plot dropdown default 10; options 10/20/50/100/500. No historian refetch and no VERSION bump (#1050).

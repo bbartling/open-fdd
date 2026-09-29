@@ -12,6 +12,7 @@ use crate::state::AppState;
 
 async fn api_health(State(state): State<AppState>) -> Json<Value> {
     let poll = state.poll_engine.status().await;
+    let ledger = state.publish_ledger.snapshot();
     Json(json!({
         "ok": true,
         "service": "openfdd-fieldbus",
@@ -20,6 +21,11 @@ async fn api_health(State(state): State<AppState>) -> Json<Value> {
         "poll_running": poll["running"].as_bool().unwrap_or(false),
         "telemetry_suspended": state.telemetry.is_suspended(),
         "bacnet_server_instance": state.settings.bacnet_server.device_instance,
+        "mqtt_publish_attempts": ledger["publish_attempts"],
+        "mqtt_publish_acks": ledger["publish_acks"],
+        "mqtt_publish_fails": ledger["publish_fails"],
+        "mqtt_publish_no_session": ledger["publish_no_session"],
+        "mqtt_last_ack_unix_ms": ledger["last_ack_unix_ms"],
     }))
 }
 
