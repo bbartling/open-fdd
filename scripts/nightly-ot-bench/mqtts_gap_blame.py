@@ -3,7 +3,8 @@
 
 Diagnostics only. Does not filter MQTT publishes and does not hard-code a
 building id into product DataFusion. Stress/ops may pass the ACME lab building
-and known fixture equipment ids when the data-model list is empty.
+and an exact fixture equipment id (CLI default ``RTU_01``) when that id is
+already on the inventory. Selection uses ``equipment_type`` first.
 
 Window length defaults to OPENFDD_DIGEST_REPORT_HOURS, then
 OPENFDD_GAP_WINDOW_HOURS, then 24 hours. Poll cadence default is the fixed
@@ -57,7 +58,7 @@ AHU_RAW = frozenset(
 )
 
 EDGE_PROBE = (
-    "fieldbus publish ledger from the ACME edge "
+    "fieldbus publish ledger from the field edge "
     "(GET /api/mqtt/publish-ledger: publish_acks, publish_fails, "
     "publish_no_session, recent[].equipment_ids). "
     "/bacnet/poll/status is the current poll only and is not a 24h publish journal."
@@ -124,13 +125,15 @@ def _norm_type(label: str) -> str:
 def select_samples(
     rows: list[dict[str, Any]],
     *,
-    prefer_ids: tuple[str, ...] = ("RTU_01",),
+    prefer_ids: tuple[str, ...] = (),
     fixture_ids: tuple[str, ...] = (),
 ) -> list[dict[str, str]]:
     """Pick one air handler and one VAV by equipment_type.
 
-    Exact fixture ids are used only when type selection finds nothing and that
-    id is present on the inventory. This does not SQL-filter by name pattern.
+    ``prefer_ids`` is an exact id match inside the already-typed air-handler
+    group (stress CLI default). ``fixture_ids`` apply only when no typed air
+    handler or VAV is present, and only when that id is on the inventory.
+    Neither path matches a name substring.
     """
     typed: list[dict[str, str]] = []
     for row in rows:
@@ -670,6 +673,23 @@ def edge_window_from_ledger(
     )
 
 
+def _text_names_equipment(text: str, equipment_id: str) -> bool:
+    """True when ``text`` names this equipment id exactly.
+
+    A JSON ``equipment_id`` value must match the whole string. A topic matches
+    only when a path segment equals the id. ``RTU_01`` does not match ``RTU_010``.
+    """
+    if not equipment_id or not text:
+        return False
+    quoted = (
+        f'"equipment_id":"{equipment_id}"',
+        f'"equipment_id": "{equipment_id}"',
+    )
+    if any(token in text for token in quoted):
+        return True
+    return equipment_id in [part for part in text.split("/") if part]
+
+
 def transit_window_from_monitor(
     monitor: dict[str, Any] | None,
     *,
@@ -690,14 +710,16 @@ def transit_window_from_monitor(
         if parsed is None or not (start <= parsed <= end):
             continue
         topic = str(msg.get("topic") or "")
-        if "telemetry" not in topic and "telemetry" not in str(msg.get("payload_preview") or ""):
-            # Still count mqtt traffic in the window at stream level when the
-            # preview is truncated and cannot name equipment.
-            if msg.get("truncated") is True:
-                times.append(parsed)
-            continue
         preview = str(msg.get("payload_preview") or "")
-        if msg.get("truncated") is True or equipment_id in preview or equipment_id in topic:
+        names_telemetry = "telemetry" in topic or "telemetry" in preview
+        if not names_telemetry:
+            continue
+        # Truncated previews cannot name equipment. Count them as stream-level
+        # ingress only. A complete preview must name this equipment exactly.
+        named = _text_names_equipment(preview, equipment_id) or _text_names_equipment(
+            topic, equipment_id
+        )
+        if msg.get("truncated") is True or named:
             times.append(parsed)
     times.sort()
     if len(times) < 2:
@@ -1009,13 +1031,8 @@ def collect_live(args: argparse.Namespace) -> dict[str, Any]:
         ledger, poll_status = _fetch_edge(args.edge_base.rstrip("/"), args.edge_api_key)
 
     rows_src = _equipment_rows(equipment_payload)
-    fixture = tuple(x for x in (args.fixture_ids or "").split(",") if x)
-    selected = select_samples(rows_src, fixture_ids=fixture)
-    if not selected and fixture:
-        selected = [
-            {"equipment_id": fid, "equipment_type": "", "raw": "", "kind": ""}
-            for fid in fixture
-        ]
+    fixture = tuple(part.strip() for part in (args.fixture_ids or "").split(",") if part.strip())
+    selected = select_samples(rows_src, prefer_ids=fixture, fixture_ids=fixture)
 
     inspect_by: dict[str, list[dict[str, Any]]] = {}
     roles_by: dict[str, list[str]] = {}
@@ -1114,9 +1131,9 @@ def _pick_edge_id(payload: Any) -> str | None:
         eid = str(edge.get("edge_id") or "")
         if not eid:
             continue
-        if eid == "vim-1":
+        if edge.get("has_telemetry") and preferred is None:
             preferred = eid
-        if edge.get("has_telemetry") and fallback is None:
+        if fallback is None:
             fallback = eid
     return preferred or fallback
 

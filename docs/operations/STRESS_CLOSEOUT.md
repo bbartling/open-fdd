@@ -99,7 +99,7 @@ After downtime the next cycle is still one lookback-sized window (`catch_up`). R
 
 ### MQTTS gap blame (gate 39)
 
-Gate 21 only checks that `ingest_ok` moved. Gate **39** (`39_mqtts_gap_blame.sh`) classifies each sampled IO as **EDGE**, **TRANSIT**, **RAILWAY**, **SPARSE_OK**, or **INCONCLUSIVE**. The window defaults to `OPENFDD_DIGEST_REPORT_HOURS`, then `OPENFDD_GAP_WINDOW_HOURS`, else 24h. Equipment comes from `GET /api/fdd/equipment` `equipment_type` (one air handler, preferring exact fixture id `RTU_01` when that row is already an AHU, plus one VAV). ACME / vim-1 are lab fixtures for this stress gate, not product SQL filters.
+Gate 21 only checks that `ingest_ok` moved. Gate **39** (`39_mqtts_gap_blame.sh`) classifies each sampled IO as **EDGE**, **TRANSIT**, **RAILWAY**, **SPARSE_OK**, or **INCONCLUSIVE**. The window defaults to `OPENFDD_DIGEST_REPORT_HOURS`, then `OPENFDD_GAP_WINDOW_HOURS`, else 24h. Equipment comes from `GET /api/fdd/equipment` `equipment_type` (one air handler plus one VAV). The stress CLI may pass an exact fixture id (`OPENFDD_GAP_FIXTURE_IDS`, default `RTU_01`) that wins only when that inventory row is already an air handler. A name substring does not select equipment, and an id absent from inventory is not invented. ACME / vim-1 are lab fixtures for this stress gate (`OPENFDD_GAP_BUILDING`, `EXPECTED_EDGE_ID`), not product SQL filters. The publish ledger records QoS 1 acks and does not filter MQTT publishes.
 
 | Class | Meaning | Next action |
 | --- | --- | --- |

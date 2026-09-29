@@ -186,7 +186,13 @@ class SelectionAndInspectTests(unittest.TestCase):
         ]
         chosen = blame.select_samples(rows)
         ids = [item["equipment_id"] for item in chosen]
-        self.assertEqual(ids, ["RTU_01", "VAV_14"])
+        self.assertEqual(ids, ["AHU_9", "VAV_14"])
+        self.assertNotIn("RTU_FOO_NOT_TYPED", ids)
+        preferred = blame.select_samples(rows, prefer_ids=("RTU_01",))
+        self.assertEqual(
+            [item["equipment_id"] for item in preferred],
+            ["RTU_01", "VAV_14"],
+        )
 
     def test_fixture_ids_only_when_type_selection_is_empty(self):
         rows = [
@@ -232,6 +238,36 @@ class SelectionAndInspectTests(unittest.TestCase):
         self.assertIn("RTU_01/sat", text)
         self.assertIn("next:", text)
         self.assertEqual(blame.exit_code(report), 1)
+
+    def test_monitor_match_requires_exact_equipment_id(self):
+        start = datetime(2026, 9, 28, tzinfo=timezone.utc)
+        end = start + timedelta(hours=2)
+
+        def msg(minutes: int, preview: str, topic: str = "openfdd/site/telemetry/bacnet"):
+            return {
+                "received_at_utc": (start + timedelta(minutes=minutes)).isoformat(),
+                "topic": topic,
+                "payload_preview": preview,
+            }
+
+        longer_id = '{"equipment_id":"RTU_010","role":"sat"}'
+        monitor = {
+            "recent_messages": [msg(0, longer_id), msg(30, longer_id), msg(90, longer_id)]
+        }
+        layer = blame.transit_window_from_monitor(
+            monitor, equipment_id="RTU_01", start=start, end=end
+        )
+        self.assertFalse(layer["present"])
+        exact = '{"equipment_id": "RTU_01", "role": "sat"}'
+        monitor["recent_messages"].extend([msg(0, exact), msg(90, exact)])
+        layer = blame.transit_window_from_monitor(
+            monitor, equipment_id="RTU_01", start=start, end=end
+        )
+        self.assertTrue(layer["present"])
+        self.assertFalse(blame._text_names_equipment("RTU_010", "RTU_01"))
+        self.assertTrue(
+            blame._text_names_equipment("openfdd/ACME/RTU_01/telemetry", "RTU_01")
+        )
 
 
 if __name__ == "__main__":
