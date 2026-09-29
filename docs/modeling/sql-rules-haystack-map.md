@@ -11,7 +11,11 @@ Every production **DataFusion SQL** rule in [`sql_rules/registry.yaml`](https://
 
 Ingest maps Haystack tags → SQL roles via `haystack_point_to_role` in [`crates/fdd_core/src/columns.rs`](https://github.com/bbartling/open-fdd/blob/master/crates/fdd_core/src/columns.rs). Blank / missing Haystack tags in a package = empty Overview / FDD / RCx — not a broken engine. See [Package authoring](../agent/PACKAGE_AUTHORING.md) and [Rule readiness](rule-readiness.html).
 
-**Registry count:** **68** SQL rules (live). Re-generate this page when the registry changes.
+**Registry count:** **77** SQL rules (live, including the nine `FCU-*` rows). Re-generate this page when the registry changes.
+
+The `FCU-*` rows are the roles **both** engines need before a later tip stress. The Haystack tag is the pandas oracle column. The arrow target is the DataFusion SQL role. Required cells are required on both engines. Optional cells are registry `optional_roles`: pandas duration rules read `fan-status` / `fan-cmd` from that set; the other optional columns are selected by the shared SQL CTE and may be absent (DataFusion injects NULL). Family parity stays `sql_screening` until tip and field stress, not until CI is green. Per-rule equations live in both cookbooks under Fan coil / zone_other.
+
+Those Haystack names are **flattened multi-tags**, not a second id scheme. One fan-coil `equip` carries `equip` + `fanCoilUnit` + `zone` together; each point carries its own marker set (`zone` + `air` + `temp` + `sensor` becomes `zone-air-temp`). Open-FDD consumes the equipment **stamp** (`equipType: fanCoil` → kind `zone_other` for a sensor-owning master; resolved kind `general` for a setpoint-only follower) and these **mapped roles**. It does not classify the controller from `equipment_id`. See [Zone terminals](zone-terminals.html).
 
 | Rule id | Required Haystack → SQL role | Optional Haystack → SQL role |
 |---------|------------------------------|------------------------------|
@@ -65,6 +69,15 @@ Ingest maps Haystack tags → SQL roles via `haystack_point_to_role` in [`crates
 | `VAV-REHEAT` | `reheat-valve` → `reheat_valve_pct`, `vav-discharge-air-temp` → `vav_discharge_t`, `vav-inlet-air-temp` → `vav_inlet_t`, `zone-airflow` → `zone_flow` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` |
 | `VAV-AHU-LEAVE` | `vav-discharge-air-temp` → `vav_discharge_t`, `ahu-discharge-air-temp` → `ahu_sat`, `zone-airflow` → `zone_flow` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` |
 | `VAV-7` | `zone-airflow` → `zone_flow` | `min-flow-sp` → `min_flow_sp`, `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` |
+| `FCU-SENSOR-NULL` | `zone-air-temp-sp` → `zone_air_temp_sp` | `zone-air-temp` → `zone_t` |
+| `FCU-HTG-COIL` | `discharge-air-temp` → `sat`, `zone-air-temp` → `zone_t`, `heating-valve` → `htg_valve_pct` | `cooling-valve` → `clg_valve_pct`, `damper-cmd` → `damper_cmd`, `damper` → `damper_pct`, `zone-co2` → `zone_co2`, `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` |
+| `FCU-CLG-COIL` | `discharge-air-temp` → `sat`, `zone-air-temp` → `zone_t`, `cooling-valve` → `clg_valve_pct`, `heating-valve` → `htg_valve_pct` | `damper-cmd` → `damper_cmd`, `damper` → `damper_pct`, `zone-co2` → `zone_co2`, `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` |
+| `FCU-VALVE-PASS-HTG` | `discharge-air-temp` → `sat`, `zone-air-temp` → `zone_t`, `heating-valve` → `htg_valve_pct`, `cooling-valve` → `clg_valve_pct` | `damper-cmd` → `damper_cmd`, `damper` → `damper_pct`, `zone-co2` → `zone_co2`, `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` |
+| `FCU-VALVE-PASS-CLG` | `discharge-air-temp` → `sat`, `zone-air-temp` → `zone_t`, `heating-valve` → `htg_valve_pct`, `cooling-valve` → `clg_valve_pct` | `damper-cmd` → `damper_cmd`, `damper` → `damper_pct`, `zone-co2` → `zone_co2`, `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` |
+| `FCU-DAMPER-POS` | `damper-cmd` → `damper_cmd`, `damper` → `damper_pct` | `discharge-air-temp` → `sat`, `zone-air-temp` → `zone_t`, `heating-valve` → `htg_valve_pct`, `cooling-valve` → `clg_valve_pct`, `zone-co2` → `zone_co2`, `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` |
+| `FCU-CO2-DAMPER` | `zone-co2` → `zone_co2`, `damper-cmd` → `damper_cmd` | `discharge-air-temp` → `sat`, `zone-air-temp` → `zone_t`, `heating-valve` → `htg_valve_pct`, `cooling-valve` → `clg_valve_pct`, `damper` → `damper_pct`, `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` |
+| `FCU-DEADBAND` | `cooling-sp` → `cooling_sp`, `heating-sp` → `heating_sp` | — |
+| `FCU-MODE-CYCLE` | `heating-valve` → `htg_valve_pct`, `cooling-valve` → `clg_valve_pct` | — |
 | `RESET-1` | `discharge-air-temp-sp` → `sat_sp`, `outside-air-temp` → `oa_t` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` |
 | `CHW-NOLOAD-1` | — | `chiller-status` → `chiller_status`, `chiller-cmd` → `chiller_cmd`, `chw-pump-status` → `chw_pump_status`, `chw-pump-cmd` → `chw_pump_cmd`, `building-zone-load-satisfied` → `building_zone_load_satisfied`, `building-ahu-load-satisfied` → `building_ahu_load_satisfied` |
 | `CHW-1` | `chilled-water-supply-temp` → `chw_supply_t`, `chilled-water-return-temp` → `chw_return_t` | `chw-pump-cmd` → `chw_pump_cmd`, `pump-status` → `pump_status`, `chiller-status` → `chiller_status`, `chiller-current` → `chiller_current`, `chiller-amps` → `chiller_amps`, `chiller-power` → `chiller_power`, `chw-flow` → `chw_flow` |
@@ -108,9 +121,11 @@ Ingest maps Haystack tags → SQL roles via `haystack_point_to_role` in [`crates
 | `compressor_status` | `compressor-status` |
 | `cooling_coil_entering_temp` | `cooling-coil-entering-temp` |
 | `cooling_coil_leaving_temp` | `cooling-coil-leaving-temp` |
+| `cooling_sp` | `cooling-sp` |
 | `cw_pump_cmd` | `cw-pump-cmd` |
 | `cw_return_t` | `condenser-water-return-temp` |
 | `cw_supply_t` | `condenser-water-supply-temp` |
+| `damper_cmd` | `damper-cmd` |
 | `damper_pct` | `damper` |
 | `duct_static` | `duct-static-pressure` |
 | `duct_static_sp` | `duct-static-pressure-sp` |
@@ -121,6 +136,7 @@ Ingest maps Haystack tags → SQL roles via `haystack_point_to_role` in [`crates
 | `fan_status` | `fan-status` |
 | `heating_coil_entering_temp` | `heating-coil-entering-temp` |
 | `heating_coil_leaving_temp` | `heating-coil-leaving-temp` |
+| `heating_sp` | `heating-sp` |
 | `htg_valve_pct` | `heating-valve` |
 | `hw_pump_cmd` | `hw-pump-cmd` |
 | `hw_pump_status` | `hw-pump-status` |
@@ -150,6 +166,8 @@ Ingest maps Haystack tags → SQL roles via `haystack_point_to_role` in [`crates
 | `web_oa_h` | `web-outside-air-humidity` |
 | `web_oa_t` | `web-outside-air-temp` |
 | `web_wb_t` | `web-outside-air-wetbulb` |
+| `zone_air_temp_sp` | `zone-air-temp-sp` |
+| `zone_co2` | `zone-co2` |
 | `zone_flow` | `zone-airflow` |
 | `zone_rh` | `zone-air-humidity` |
 | `zone_t` | `zone-air-temp` |
