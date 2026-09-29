@@ -6,8 +6,7 @@
 //! this cache.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::Instant;
 
 use axum::http::StatusCode;
@@ -183,7 +182,7 @@ fn storage_root() -> PathBuf {
             return PathBuf::from(trimmed);
         }
     }
-    fdd_store::local_file_root_from_env().unwrap_or_else(|| super::historian::parquet_root_base())
+    fdd_store::local_file_root_from_env().unwrap_or_else(super::historian::parquet_root_base)
 }
 
 fn stale_action_from_env() -> StaleAction {
@@ -361,6 +360,8 @@ mod tests {
     use crate::analytics::{envelope, AnalyticsQuery};
     use fdd_store::SessionLimits;
     use std::fs;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
 
     fn req(building: &str) -> AnalyticsRequest {
         AnalyticsRequest {

@@ -609,7 +609,7 @@ mod tests {
 
         let tight_test = preflight_update(&input(PreflightInput {
             test_deploy: true,
-            disk_free_bytes: 1 * gib,
+            disk_free_bytes: gib,
             ..base.clone()
         }));
         assert!(matches!(tight_test, PreflightDecision::FailClosed { .. }));

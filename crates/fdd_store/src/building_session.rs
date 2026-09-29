@@ -206,7 +206,7 @@ impl SessionBook {
         pending_rows: usize,
         now_ms: u64,
     ) -> Result<usize, SessionError> {
-        let building_id = require_building_id(&building_id)?;
+        let building_id = require_building_id(building_id)?;
         if self
             .sessions
             .get(&building_id)
