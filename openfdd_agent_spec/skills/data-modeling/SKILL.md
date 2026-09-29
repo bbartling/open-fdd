@@ -31,6 +31,7 @@ Authoritative ingest: [`edge/src/csv_ingest/package.rs`](../../../edge/src/csv_i
 
 - Stamp `equipType` / `equipment_type` in package maps — preferred over id heuristics.
 - Opaque ids are valid (`AC_1` + `equipType: ahu`).
+- **Selection** (plots, FDD, analytics, and any stress selector that claims type-first) uses that stamp, mapped roles, and the registry. Do not prefer a fixture id (`RTU_01`, `VAV_1`) over type. Do not match `equipment_id` with substring, prefix, `LIKE`, `contains`, or `starts_with`. An exact id is allowed only after the type filter (`RTU_01` must not hit `RTU_010`). `building_id` is a caller parameter. Law: [`openfdd-site-identity`](../openfdd-site-identity/SKILL.md). Open product id-text filters stay on #1043 — do not add another one.
 - **ZONE** = FCU (`fcu`, valve PID) or standalone DDC (`zone_other`) — comfort + zone sensor FDD. **UV** = CV AHU (`unitVentilator`). See [`docs/modeling/zone-terminals.md`](../../../docs/modeling/zone-terminals.md).
 - Meters: `equipType: meter` with roles `kwh`, `electric_kw` for `SV-*` and `UTIL-*` rules.
 

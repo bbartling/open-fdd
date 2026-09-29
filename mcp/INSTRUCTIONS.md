@@ -155,4 +155,4 @@ If a suspected vulnerability is discovered, do **not** create a public GitHub is
 
 ## Equipment typing
 
-During package cleaning/modeling, stamp generic `equipType` / `equipment_type` metadata. The product persists and prefers that stamp; folder/id inference is fallback. Empty Overview families on opaque ids are a package-modeling signal, not a reason to add site-specific Rust heuristics.
+During package cleaning/modeling, stamp generic `equipType` / `equipment_type` metadata. The product persists and prefers that stamp; folder/id inference is fallback. Empty Overview families on opaque ids are a package-modeling signal, not a reason to add site-specific Rust heuristics. Function calls that pick equipment use `equipType` / `equipment_type`, roles, and the registry. Do not prefer a fixture id (`RTU_01`, `VAV_1`) over type, and do not substring-match `equipment_id` (`RTU_01` must not hit `RTU_010`). `building_id` comes from the caller. See [`openfdd-site-identity`](../openfdd_agent_spec/skills/openfdd-site-identity/SKILL.md).
