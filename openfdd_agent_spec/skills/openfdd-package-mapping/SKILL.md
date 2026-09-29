@@ -36,7 +36,7 @@ Modeling (agent context, docs-only expansions):
 6. Weather lives at `{building}/weather/` with `web-outside-air-temp` → `web_oa_t`. Distinguish BAS `oa_t` from web `web_oa_t`. Lat/lon in preprocess. `prefer_web_oat`.
 7. `timestamp_utc` is RFC3339 (`Z` or `+00:00`). String `"equip": "AHU_1"` is metadata.
 8. Import with existing `POST /api/csv/import/package` + MCP `openfdd_csv_import_*` / `openfdd_csv_package_append`. For **streaming sim** on Liberty B50: host script `scripts/csv_flood_afdd_routine_sim.py` (append + AFDD routine patches). Do **not** implement SCAFFOLD `mapping_suggest` / `package_preflight` this cycle.
-9. No vendor/city hardcoding in product. Gold ids: `AHU_1` / `VAV_1` / `CHW_1` / `weather/`.
+9. No vendor, campus, or fixture-id hardcoding in product. Gold ids (`AHU_1` / `VAV_1` / `CHW_1` / `weather/`) are layout examples, not selectors. Select by `equipType` / roles; exact id only after the type filter (`RTU_01` must not hit `RTU_010`).
 10. **HP-1 caveat:** registry may list `fan_status` optional while SQL still gates on `fan_cmd` — fan-status-only packages are typically **not runnable**. Do not map binary fan status into fake percent `fan_cmd`. See rule-readiness doc.
 
 ## Live MQTT stream (bosspi → Railway)
@@ -63,7 +63,7 @@ Large package uploads need web nginx `client_max_body_size 128m` (matches centra
 
 ## Stamped equipment types
 
-Prefer stamping `equipType` (or `equipment_type`) in each equipment map. Open-FDD persists and prefers the stamp over folder-id inference. If an Overview family is empty for an opaque id such as `AC_1`, stamp the correct generic type instead of adding a vendor/site heuristic to Rust.
+Prefer stamping `equipType` (or `equipment_type`) in each equipment map. Open-FDD persists and prefers the stamp over folder-id inference. If an Overview family is empty for an opaque id such as `AC_1`, stamp the correct generic type instead of adding a vendor/site heuristic to Rust. Do not select that equipment by a fixture id or by a substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id` (`RTU_01` must not hit `RTU_010`). See [`openfdd-site-identity`](../openfdd-site-identity/SKILL.md).
 
 ## Skill home
 
