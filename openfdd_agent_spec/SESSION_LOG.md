@@ -1,3 +1,9 @@
+## 2026-09-29 — MQTTS gap blame audit (not FQ)
+
+- Gate 39 classifies continuity holes as EDGE / TRANSIT / RAILWAY / SPARSE_OK / INCONCLUSIVE. Harness and fieldbus publish ledger only. No `VERSION` bump and no FQ / ops-pin claim.
+- Equipment pick uses `equipment_type` only. A fixture equipment id does not outrank a typed row, and ledger/monitor correlation uses id equality (a longer id is a different device). ACME and vim-1 stay building and edge fixtures.
+- Publish ledger records QoS 1 acks, fails, and no-session. It does not filter or coalesce MQTT publishes.
+
 ## 2026-09-29 — FDD/RCx series preview is the newest N rows
 
 - SPA series preview on FDD Plots and each RCx timeseries card shows the most recent samples of the figure already loaded (newest first). Per-plot dropdown default 10; options 10/20/50/100/500. No historian refetch and no VERSION bump (#1050).

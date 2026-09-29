@@ -64,9 +64,14 @@ async fn resume(
     }
 }
 
+async fn publish_ledger(State(state): State<AppState>) -> Json<Value> {
+    Json(state.publish_ledger.snapshot())
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/telemetry/status", get(get_status))
         .route("/telemetry/suspend", post(suspend))
         .route("/telemetry/resume", post(resume))
+        .route("/mqtt/publish-ledger", get(publish_ledger))
 }
