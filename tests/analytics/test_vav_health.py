@@ -9,7 +9,7 @@ from open_fdd.analytics.vav_health import VavHealthConfig, vav_health_matrix, va
 
 def _week(eq: str, damper: float, zone: float, flow: float, n: int = 480) -> pd.DataFrame:
     idx = pd.date_range("2026-01-05 07:00", periods=n, freq="5min", tz="UTC")  # Mon week
-    return pd.DataFrame(
+    frame = pd.DataFrame(
         {
             "timestamp_utc": idx,
             "damper_pct": damper,
@@ -19,6 +19,25 @@ def _week(eq: str, damper: float, zone: float, flow: float, n: int = 480) -> pd.
         },
         index=idx,
     )
+    frame.attrs["equipment_type"] = "VAV"
+    return frame
+
+
+def test_membership_follows_stamp_not_id():
+    stamped = _week("jci_vav_1", 0.5, 72.0, 200, n=4)
+    unstamped = _week("bldg2-zone-loopback", 0.5, 72.0, 200, n=4)
+    unstamped.attrs.pop("equipment_type", None)
+    prefixed = _week("VAV_GHOST", 0.5, 72.0, 200, n=4)
+    prefixed.attrs["equipment_type"] = "AHU"
+    out = vav_health_matrix(
+        {
+            "jci_vav_1": stamped,
+            "bldg2-zone-loopback": unstamped,
+            "VAV_GHOST": prefixed,
+        },
+        building_id="B1",
+    )
+    assert list(out["equipment_id"]) == ["jci_vav_1"]
 
 
 def test_missing_occ_is_unknown_not_pass():

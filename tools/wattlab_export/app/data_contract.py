@@ -15,6 +15,7 @@ import pandas as pd
 from pydantic import BaseModel, Field
 
 from app.data_loader import _read_columns_map
+from app.equipment_kind import infer_parent_ahu_from_path, is_vav_equipment as _is_vav_equipment
 
 Severity = Literal["info", "warn", "error"]
 HealthGrade = Literal["ok", "degraded", "incomplete"]
@@ -246,27 +247,6 @@ def load_vav_to_ahu_map(building_root: Path) -> dict[str, str]:
     return out
 
 
-def infer_parent_ahu_from_path(eq_folder: Path, building_root: Path) -> str | None:
-    """Best-effort parent AHU from folder layout (e.g. VAV under an AHU tree)."""
-    try:
-        rel = eq_folder.resolve().relative_to(Path(building_root).resolve())
-    except Exception:
-        return None
-    parts = list(rel.parts)
-    for part in parts:
-        up = part.upper()
-        if up.startswith("AHU") and up != eq_folder.name.upper():
-            return part
-    return None
-
-
-def _is_vav_equipment(eq: dict[str, Any]) -> bool:
-    eid = str(eq.get("equipment_id") or "")
-    folder = Path(eq.get("folder") or ".")
-    parts = [p.upper() for p in folder.parts]
-    return "VAV" in parts or eid.upper().startswith("VAV")
-
-
 def audit_building_topology(
     building_root: Path,
     equipment: list[dict[str, Any]],
@@ -318,11 +298,7 @@ def audit_building_topology(
         )
         warnings.append(msg)
         # Non-VAV ids in the VAV column are a stronger signal of a bad export
-        severity: Severity = (
-            "error"
-            if any(not s.upper().startswith("VAV") for s in orphan_topo)
-            else "warn"
-        )
+        severity: Severity = "warn"
         issues.append(
             ContractIssue(
                 code="topology.stale_map_ids",
