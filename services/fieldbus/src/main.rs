@@ -18,8 +18,8 @@ use axum::middleware;
 use config::load_settings;
 use services::{
     bacnet_client::BacnetClientService, bacnet_server::BacnetServerManager,
-    haystack::HaystackService, poll::PollEngine, rest::RestClientService,
-    telemetry_control::TelemetryControl, weather::WeatherService,
+    haystack::HaystackService, mqtt_publish_ledger::MqttPublishLedger, poll::PollEngine,
+    rest::RestClientService, telemetry_control::TelemetryControl, weather::WeatherService,
 };
 use state::AppState;
 use tower_http::trace::TraceLayer;
@@ -138,12 +138,14 @@ async fn run(
     ));
     telemetry.apply_persisted_on_boot().await;
 
+    let publish_ledger = Arc::new(MqttPublishLedger::default());
     mqtt_bridge::spawn_if_configured(
         Arc::clone(&settings),
         Arc::clone(&poll_engine),
         Arc::clone(&bacnet_client),
         Arc::clone(&rest),
         Arc::clone(&telemetry),
+        Arc::clone(&publish_ledger),
     )
     .await;
 
@@ -159,6 +161,7 @@ async fn run(
         haystack,
         rest,
         telemetry,
+        publish_ledger,
     };
 
     info!(
@@ -256,6 +259,7 @@ mod tests {
             haystack,
             rest,
             telemetry,
+            publish_ledger: Arc::new(MqttPublishLedger::default()),
         }
     }
 
@@ -275,6 +279,29 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(v["ok"], true);
+    }
+
+    #[tokio::test]
+    async fn publish_ledger_route_reports_acks() {
+        let state = test_state();
+        state
+            .publish_ledger
+            .record_ack(4, 2, &["RTU_01".to_string()]);
+        let app = routes::api_routes(state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/mqtt/publish-ledger")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(v["publish_acks"], 1);
+        assert_eq!(v["recent"][0]["equipment_ids"][0], "RTU_01");
     }
 
     #[tokio::test]
