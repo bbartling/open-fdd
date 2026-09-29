@@ -188,11 +188,12 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         let end = req.query.end;
         let retain_start =
             Utc::now() - chrono::Duration::days(historian::MECH_RETAIN_FALLBACK_DAYS);
+        let deadline = tokio::time::Instant::now() + historian::MECH_QUERY_TIMEOUT;
         // Wall-clock the *entire* historian path (scan + LEAD). A large hive's ~54k tiny
         // Parquet parts can stall open_history_scoped past Railway edge budgets
         // before the inner SQL timeout ever fires.
         let hist = match tokio::time::timeout(
-            historian::MECH_QUERY_TIMEOUT,
+            historian::remaining_budget(deadline, historian::MECH_QUERY_TIMEOUT),
             historian::mech_oat_bins_from_history(
                 req.query.equipment_ids.as_deref(),
                 max_gap,
@@ -209,47 +210,54 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
                     timeout_secs = historian::MECH_QUERY_TIMEOUT.as_secs(),
                     "mechanical_cooling historian path exceeded wall budget; fail-closed"
                 );
-                let mut env = super::envelope_with_engine(
-                    QV_MECHANICAL_COOLING,
-                    &req.query,
-                    vec![format!(
-                        "mechanical_cooling historian path exceeded {}s budget (scan+query); fail-closed — compact tenants/*/history or pass a tighter query.start/end",
-                        historian::MECH_QUERY_TIMEOUT.as_secs()
-                    )],
-                    super::DF_ENGINE,
-                );
-                env = finalize_historian(req, env, QV_MECHANICAL_COOLING);
-                env.coverage = Some(json!({
-                    "fail_closed": true,
-                    "timeout_secs": historian::MECH_QUERY_TIMEOUT.as_secs(),
-                    "building_id": building_id,
-                }));
-                return env;
+                return mechanical_timeout_envelope(req, building_id);
             }
         };
         let mut used_retain_fallback = false;
         let hist = match hist {
             Ok(Some(env)) if defaulted && env_is_fail_closed(&env) => {
                 used_retain_fallback = true;
-                historian::mech_oat_bins_from_history(
-                    req.query.equipment_ids.as_deref(),
-                    max_gap,
-                    building_id,
-                    Some(retain_start),
-                    end,
+                let budget = historian::remaining_budget(deadline, historian::MECH_QUERY_TIMEOUT);
+                if budget.is_zero() {
+                    return mechanical_timeout_envelope(req, building_id);
+                }
+                match tokio::time::timeout(
+                    budget,
+                    historian::mech_oat_bins_from_history(
+                        req.query.equipment_ids.as_deref(),
+                        max_gap,
+                        building_id,
+                        Some(retain_start),
+                        end,
+                    ),
                 )
                 .await
+                {
+                    Ok(inner) => inner,
+                    Err(_) => return mechanical_timeout_envelope(req, building_id),
+                }
             }
             Ok(None) if defaulted => {
                 used_retain_fallback = true;
-                historian::mech_oat_bins_from_history(
-                    req.query.equipment_ids.as_deref(),
-                    max_gap,
-                    building_id,
-                    Some(retain_start),
-                    end,
+                let budget = historian::remaining_budget(deadline, historian::MECH_QUERY_TIMEOUT);
+                if budget.is_zero() {
+                    return mechanical_timeout_envelope(req, building_id);
+                }
+                match tokio::time::timeout(
+                    budget,
+                    historian::mech_oat_bins_from_history(
+                        req.query.equipment_ids.as_deref(),
+                        max_gap,
+                        building_id,
+                        Some(retain_start),
+                        end,
+                    ),
                 )
                 .await
+                {
+                    Ok(inner) => inner,
+                    Err(_) => return mechanical_timeout_envelope(req, building_id),
+                }
             }
             other => other,
         };
@@ -315,6 +323,28 @@ fn env_is_fail_closed(env: &AnalyticsEnvelope) -> bool {
         .and_then(|coverage| coverage.get("fail_closed"))
         .and_then(|value| value.as_bool())
         .unwrap_or(false)
+}
+
+fn mechanical_timeout_envelope(
+    req: &AnalyticsRequest,
+    building_id: Option<&str>,
+) -> AnalyticsEnvelope {
+    let mut env = super::envelope_with_engine(
+        QV_MECHANICAL_COOLING,
+        &req.query,
+        vec![format!(
+            "mechanical_cooling historian path exceeded {}s shared budget (scan+query+fallback); fail-closed — compact tenants/*/history or pass a tighter query.start/end",
+            historian::MECH_QUERY_TIMEOUT.as_secs()
+        )],
+        super::DF_ENGINE,
+    );
+    env = finalize_historian(req, env, QV_MECHANICAL_COOLING);
+    env.coverage = Some(json!({
+        "fail_closed": true,
+        "timeout_secs": historian::MECH_QUERY_TIMEOUT.as_secs(),
+        "building_id": building_id,
+    }));
+    env
 }
 
 fn parse_evidence(req: &AnalyticsRequest) -> Option<Vec<EvidenceRow>> {

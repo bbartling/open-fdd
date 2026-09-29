@@ -184,22 +184,20 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         let hist = match runtime_from_history_budgeted(filter, max_gap, building, start, end).await
         {
             Ok(Some(env)) if env_has_runtime_rows(&env) => Ok(Some(env)),
-            Ok(Some(_env)) if defaulted_start => {
-                // A default-window timeout/empty envelope is retryable once at
-                // the bounded retain floor. Never turn this into start=None.
+            Ok(None) if defaulted_start => {
+                // Only an explicit empty historian result is retryable. A
+                // timeout or bridge envelope is authoritative for this request
+                // and must not trigger a second, larger scan.
                 used_retain_fallback = true;
                 let retain_start =
                     Utc::now() - chrono::Duration::days(historian::RUNTIME_RETAIN_FALLBACK_DAYS);
                 runtime_from_history_budgeted(filter, max_gap, building, Some(retain_start), end)
                     .await
             }
-            Ok(None) if defaulted_start => {
-                // Bounded expand only — never start=None (full-history LEAD → 502).
-                used_retain_fallback = true;
-                let retain_start =
-                    Utc::now() - chrono::Duration::days(historian::RUNTIME_RETAIN_FALLBACK_DAYS);
-                runtime_from_history_budgeted(filter, max_gap, building, Some(retain_start), end)
-                    .await
+            Ok(Some(env)) if defaulted_start && env_is_fail_closed(&env) => {
+                // Keep timeout/fail-closed envelopes intact; they are not
+                // evidence that the bounded window was empty.
+                Ok(Some(env))
             }
             other => other,
         };
@@ -290,9 +288,18 @@ fn env_has_runtime_rows(env: &AnalyticsEnvelope) -> bool {
     !env.equipment.is_empty() || !env.rows.is_empty()
 }
 
+fn env_is_fail_closed(env: &AnalyticsEnvelope) -> bool {
+    env.coverage
+        .as_ref()
+        .and_then(|coverage| coverage.get("fail_closed"))
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analytics::{envelope_with_engine, AnalyticsQuery, DF_ENGINE};
     use chrono::TimeZone;
 
     fn ts(secs: i64) -> DateTime<Utc> {
@@ -321,6 +328,19 @@ mod tests {
         assert!((row.run_hours - (600.0 / 3600.0)).abs() < 1e-9);
         // Covered seconds clipped; span is still 3600 → coverage 600/3600*100
         assert!((row.coverage_pct - (600.0 / 3600.0 * 100.0)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn fail_closed_runtime_envelope_is_not_retryable() {
+        let mut env = envelope_with_engine(
+            QV_RUNTIME,
+            &AnalyticsQuery::default(),
+            vec!["timeout".into()],
+            DF_ENGINE,
+        );
+        env.coverage = Some(json!({"fail_closed": true}));
+        assert!(env_is_fail_closed(&env));
+        assert!(!env_has_runtime_rows(&env));
     }
 
     #[test]

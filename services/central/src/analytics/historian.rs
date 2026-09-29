@@ -638,6 +638,7 @@ pub async fn runtime_from_history(
     start: Option<DateTime<Utc>>,
     end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
+    let deadline = tokio::time::Instant::now() + RUNTIME_QUERY_TIMEOUT;
     let ctx = new_bounded_session()?;
     let (ok, _scan) = open_history_scan(&ctx, building_id).await?;
     if !ok {
@@ -654,8 +655,7 @@ pub async fn runtime_from_history(
     };
     let max_gap = max_gap_seconds.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
-    let stamped_types =
-        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let stamped_types = rcx_type_stamps(building_id);
 
     if cols.contains("equipment_id") {
         // Fan for air handlers; chiller/boiler/pump status for plant motors.
@@ -726,7 +726,8 @@ ORDER BY i.equipment_id
             // Keep a small portion of the request budget for the optional
             // weekly chart query. A second full historian scan must not turn a
             // usable runtime response into an HTTP-200 fail-closed envelope.
-            let timed = tokio::time::timeout(RUNTIME_MAIN_QUERY_TIMEOUT, run_sql(&ctx, &sql)).await;
+            let main_budget = remaining_budget(deadline, RUNTIME_MAIN_QUERY_TIMEOUT);
+            let timed = tokio::time::timeout(main_budget, run_sql(&ctx, &sql)).await;
             let sql_result = match timed {
                 Ok(inner) => inner,
                 Err(_) => {
@@ -802,34 +803,42 @@ ORDER BY i.equipment_id
                             ),
                         }));
                     }
-                    let weekly_rows = match tokio::time::timeout(
-                        RUNTIME_WEEKLY_QUERY_TIMEOUT,
-                        runtime_weekly_plant_rows(
-                            &ctx,
-                            RuntimeWeeklyParams {
-                                ts_col,
-                                on_sql: &on_sql,
-                                oat: weekly_oat_col(&cols),
-                                max_gap,
-                                eq_filter: &eq_filter,
-                                range_sql: &range_sql,
-                            },
-                            (plant_signal_label(&cols), &stamped_types),
-                        ),
-                    )
-                    .await
-                    {
-                        Ok(Ok(rows)) => rows,
-                        Ok(Err(e)) => {
-                            warnings.push(format!("weekly plant bins skipped: {e}"));
-                            Vec::new()
-                        }
-                        Err(_) => {
-                            warnings.push(format!(
+                    let weekly_budget = remaining_budget(deadline, RUNTIME_WEEKLY_QUERY_TIMEOUT);
+                    let weekly_rows = if weekly_budget.is_zero() {
+                        warnings.push(
+                            "weekly plant bins skipped because the shared runtime deadline was exhausted; runtime rows remain available".into(),
+                        );
+                        Vec::new()
+                    } else {
+                        match tokio::time::timeout(
+                            weekly_budget,
+                            runtime_weekly_plant_rows(
+                                &ctx,
+                                RuntimeWeeklyParams {
+                                    ts_col,
+                                    on_sql: &on_sql,
+                                    oat: weekly_oat_col(&cols),
+                                    max_gap,
+                                    eq_filter: &eq_filter,
+                                    range_sql: &range_sql,
+                                },
+                                (plant_signal_label(&cols), &stamped_types),
+                            ),
+                        )
+                        .await
+                        {
+                            Ok(Ok(rows)) => rows,
+                            Ok(Err(e)) => {
+                                warnings.push(format!("weekly plant bins skipped: {e}"));
+                                Vec::new()
+                            }
+                            Err(_) => {
+                                warnings.push(format!(
                                 "weekly plant bins skipped after {}s budget; runtime rows remain available",
                                 RUNTIME_WEEKLY_QUERY_TIMEOUT.as_secs()
                             ));
-                            Vec::new()
+                                Vec::new()
+                            }
                         }
                     };
                     if !weekly_rows.is_empty() {
@@ -1109,6 +1118,18 @@ pub const MECH_RETAIN_FALLBACK_DAYS: i64 = 365;
 
 /// Wall-clock budget for mechanical-cooling OAT bin LEAD Δt (large hives).
 pub const MECH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(12);
+
+/// Return the portion of a request budget that remains for a child operation.
+/// Every fallback/optional query must use the same request deadline rather than
+/// starting a fresh timeout window.
+pub(crate) fn remaining_budget(
+    deadline: tokio::time::Instant,
+    requested: std::time::Duration,
+) -> std::time::Duration {
+    deadline
+        .saturating_duration_since(tokio::time::Instant::now())
+        .min(requested)
+}
 
 /// Build single-pass sensor_health aggregate SQL (one scan, GROUP BY equipment_id).
 ///
@@ -2703,6 +2724,14 @@ LIMIT {limit}
 /// old name based `LIKE` heuristics (which admitted ghost ids and missed opaque
 /// vendor ids). Each caller also requires its chart role to be non-null.
 fn rcx_eq_filter(kinds: &[&str], stamped_types: &BTreeMap<String, String>) -> String {
+    rcx_eq_filter_for_column(kinds, stamped_types, "equipment_id")
+}
+
+fn rcx_eq_filter_for_column(
+    kinds: &[&str],
+    stamped_types: &BTreeMap<String, String>,
+    equipment_column: &str,
+) -> String {
     if kinds.is_empty() {
         return String::new();
     }
@@ -2732,7 +2761,20 @@ fn rcx_eq_filter(kinds: &[&str], stamped_types: &BTreeMap<String, String>) -> St
     if ids.is_empty() {
         return " AND 1=0".into();
     }
-    format!(" AND equipment_id IN ({})", ids.join(", "))
+    format!(" AND {equipment_column} IN ({})", ids.join(", "))
+}
+
+/// Load RCx type stamps from the same resolved hub/tenant root used by the
+/// scoped historian query. This prevents a tenant's history from being joined
+/// with a conflicting hub registry (or vice versa).
+fn rcx_type_stamps(building_id: Option<&str>) -> BTreeMap<String, String> {
+    let Some(bid) = safe_building_segment(building_id) else {
+        return BTreeMap::new();
+    };
+    let root = fdd_store::resolve_building_read_root(&parquet_root_base(), None, &bid)
+        .map(|resolved| resolved.root)
+        .unwrap_or_else(|_| parquet_root_base());
+    open_fdd_edge_prototype::equipment_types::load_type_map(&root, Some(&bid))
 }
 
 /// Multi-equipment role timeseries for RCx presets (vibe19 multi_equipment_timeseries).
@@ -2754,8 +2796,7 @@ pub async fn rcx_timeseries_from_history(
     if !cols.contains(role_col) {
         return Ok(None);
     }
-    let stamped_types =
-        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let stamped_types = rcx_type_stamps(building_id);
     let eq_filter = rcx_eq_filter(eq_kinds, &stamped_types);
     let fan_filter = if filter_fan_on {
         match on_expr(&cols) {
@@ -2907,11 +2948,10 @@ pub async fn rcx_oat_scatter_from_history(
     } else {
         None
     };
-    let stamped_types =
-        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
-    let eq_filter = rcx_eq_filter(eq_kinds, &stamped_types);
-    // Prefixed for JOIN aliases (history AS h).
-    let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
+    let stamped_types = rcx_type_stamps(building_id);
+    // Prefix the SQL column before interpolating literals; replacing text in
+    // the finished predicate would corrupt equipment IDs containing that text.
+    let eq_filter_h = rcx_eq_filter_for_column(eq_kinds, &stamped_types, "h.equipment_id");
     let limit = max_points.clamp(200, 20000);
     let dry_sel = if dry_ref.is_some() {
         ", d.dry_f AS dry_bulb_f".to_string()
@@ -3006,8 +3046,7 @@ pub async fn rcx_box_from_history(
     if !cols.contains(role_col) {
         return Ok(None);
     }
-    let stamped_types =
-        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let stamped_types = rcx_type_stamps(building_id);
     let eq_filter = rcx_eq_filter(eq_kinds, &stamped_types);
     let fan_filter = if filter_fan_on {
         match on_expr(&cols) {
@@ -3067,8 +3106,7 @@ pub async fn rcx_zone_comfort_rank_from_history(
     if !cols.contains("zone_t") {
         return Ok(None);
     }
-    let stamped_types =
-        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let stamped_types = rcx_type_stamps(building_id);
     let eq_filter = rcx_eq_filter(eq_kinds, &stamped_types);
     // Match schedule `occupied_expr`: Utf8 "1.0" / "0.0" from packages, not only "1".
     let occ_filter = if cols.contains("occ_mode") {
@@ -3164,10 +3202,8 @@ pub async fn rcx_metering_from_history(
     let Some(oat) = mech_oat_col(&cols) else {
         return Ok(None);
     };
-    let stamped_types =
-        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
-    let eq_filter = rcx_eq_filter(eq_kinds, &stamped_types);
-    let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
+    let stamped_types = rcx_type_stamps(building_id);
+    let eq_filter_h = rcx_eq_filter_for_column(eq_kinds, &stamped_types, "h.equipment_id");
     let cooling = kind != "gas";
     let sql = format!(
         r#"
@@ -3582,6 +3618,7 @@ mod tests {
             ("jci_vav_1".into(), "vav".into()),
             ("bldg2-zone-loopback".into(), "ahu".into()),
             ("AC_1".into(), "ahu".into()),
+            ("literal equipment_id 'quoted'".into(), "vav".into()),
         ]);
         let f = rcx_eq_filter(&["VAV"], &stamped);
         assert!(
@@ -3595,6 +3632,88 @@ mod tests {
         assert!(
             !f.contains("LIKE"),
             "RCx selection must not use id LIKE: {f}"
+        );
+        assert!(
+            f.contains("'literal equipment_id ''quoted'''")
+                && !f.contains("literal h.equipment_id"),
+            "equipment IDs must be escaped as literals, not qualified by text replacement: {f}"
+        );
+        let qualified = rcx_eq_filter_for_column(&["VAV"], &stamped, "h.equipment_id");
+        assert!(qualified.starts_with(" AND h.equipment_id IN ("));
+        assert!(qualified.contains("'literal equipment_id ''quoted'''"));
+    }
+
+    #[test]
+    fn child_query_budget_never_extends_shared_deadline() {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(50);
+        assert!(
+            remaining_budget(deadline, std::time::Duration::from_secs(2))
+                <= std::time::Duration::from_millis(50)
+        );
+        let expired = tokio::time::Instant::now() - std::time::Duration::from_secs(1);
+        assert!(remaining_budget(expired, std::time::Duration::from_secs(2)).is_zero());
+    }
+
+    #[tokio::test]
+    async fn rcx_type_stamps_follow_tenant_history_root() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let hub = tmp.path().join("hub");
+        let tenant = hub.join("tenants/tenant_a");
+        std::fs::create_dir_all(tenant.join("history/building_id=BLDG_A")).unwrap();
+        std::fs::write(
+            tenant.join("history/building_id=BLDG_A/part-20290101T000000Z-tenant.parquet"),
+            b"tenant history",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tenant.join("building=BLDG_A")).unwrap();
+        std::fs::write(
+            tenant.join("building=BLDG_A/equipment_types.json"),
+            r#"{"tenant-vav":"vav"}"#,
+        )
+        .unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &hub);
+        let stamps = rcx_type_stamps(Some("BLDG_A"));
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        assert_eq!(stamps.get("tenant-vav").map(String::as_str), Some("vav"));
+    }
+
+    #[tokio::test]
+    async fn rcx_type_stamps_follow_newer_conflicting_tenant_root() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let hub = tmp.path().join("hub");
+        std::fs::create_dir_all(hub.join("history/building_id=BLDG_A")).unwrap();
+        std::fs::write(
+            hub.join("history/building_id=BLDG_A/part-20280101T000000Z-hub.parquet"),
+            b"hub history",
+        )
+        .unwrap();
+        std::fs::create_dir_all(hub.join("building=BLDG_A")).unwrap();
+        std::fs::write(
+            hub.join("building=BLDG_A/equipment_types.json"),
+            r#"{"conflicting-id":"ahu"}"#,
+        )
+        .unwrap();
+        let tenant = hub.join("tenants/tenant_a");
+        std::fs::create_dir_all(tenant.join("history/building_id=BLDG_A")).unwrap();
+        std::fs::write(
+            tenant.join("history/building_id=BLDG_A/part-20290101T000000Z-tenant.parquet"),
+            b"tenant history",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tenant.join("building=BLDG_A")).unwrap();
+        std::fs::write(
+            tenant.join("building=BLDG_A/equipment_types.json"),
+            r#"{"conflicting-id":"vav"}"#,
+        )
+        .unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &hub);
+        let stamps = rcx_type_stamps(Some("BLDG_A"));
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        assert_eq!(
+            stamps.get("conflicting-id").map(String::as_str),
+            Some("vav")
         );
     }
 
