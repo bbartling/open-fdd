@@ -6,6 +6,18 @@
 - #1037: RCx chart predicates use canonical persisted `equipment_types.json` membership plus role presence; ID `LIKE` heuristics are removed, including the misleading ZONE/LOOPBACK case.
 - Local focused tests and read-only ACME bench validation remain required; no version bump, GHCR/Railway action, issue mutation, or BACnet write was performed.
 
+## 2026-09-29 — #1053 zone family is Haystack multi-tag (not FQ)
+
+- Family Zones membership stays the package stamp plus mapped point roles (`zone-air-temp` on FCU, heat pump, `zone_other`, and VAV). The package path is Haystack multi-tag: `equip` plus `fanCoilUnit` or `zone` plus those point roles. No equipment-id `LIKE`. No VERSION bump and no field-stress claim.
+
+## 2026-09-29 — #1053 plot filter is stamp or zone role (not FQ)
+
+- RCx preset membership is an exact equipment-id list from the package stamp (Family Zones: stamp or mapped `zone-air-temp`). The `LIKE '{kind}%'` plot filter is gone, so a shorter fixture id is not a prefix of a longer one. No ACME or equipment-id default. No VERSION bump and no ops-pin change.
+
+## 2026-09-29 — #1053 Family Zones membership audit (not FQ)
+
+- Family Zones membership is the package stamp or a mapped `zone-air-temp` role. No equipment-id LIKE on that path. A heat-pump stamp joins only when `zone-air-temp` is mapped. VAV-1 occupancy comes from `occ_mode` or the saved Overview calendar. No VERSION bump and no ops-pin change.
+
 ## 2026-09-29 — Absolute site-identity law (type-first, exact id)
 
 - Rule 62 and `openfdd-site-identity` are no longer a narrow "no ACME string in two trees" ban. Product paths (SPA, central / DataFusion / historian / analytics, PyPI report / fault / oracle, RCx / FDD plot selection) never hardcode one building, campus, vendor, or fixture equipment id. Equipment selection is `equipType` / `equipment_type` / roles / registry. A fixture id is an exact match only after the type filter (`RTU_01` must not hit `RTU_010`). Stress and ops may still name a lab site as an env default. Same class as #1043. Docs only; product id-text residuals stay on #1043.

@@ -29,6 +29,7 @@ export function plantEquipmentFamilies(
     if (isWeatherEquipment(e)) continue;
     switch (equipmentKind(e)) {
       case "vav":
+      case "baseboard":
         hasVav = true;
         break;
       case "zone_other":

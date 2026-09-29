@@ -27,6 +27,7 @@ use crate::services::rest::RestClientService;
 use crate::services::telemetry_control::{parse_telemetry_command, TelemetryControl};
 
 const MAX_SEEN_COMMANDS: usize = 10_000;
+const SINK_DRAIN_BATCH: usize = 32;
 
 fn mqtt_publish_interval_secs(settings: &Settings) -> f64 {
     // Wave N: publish cadence matches fixed 300s poll (ignore env overrides).
@@ -586,7 +587,7 @@ async fn connect_mqtt_session(
 async fn drain_local_spool(client: &LocalIngestClient, spool: &mut TelemetrySpool) {
     match spool.list_pending().await {
         Ok(pending) => {
-            for rec in pending {
+            for rec in pending.into_iter().take(SINK_DRAIN_BATCH) {
                 match client.send(&rec.envelope).await {
                     Ok(()) => {
                         if let Err(err) = spool.ack(rec.seq).await {
@@ -613,7 +614,7 @@ async fn drain_mqtt_spool(
         warn!("list spool failed");
         return false;
     };
-    for rec in pending {
+    for rec in pending.into_iter().take(SINK_DRAIN_BATCH) {
         match publish_json(&session.client, &rec.topic, &rec.envelope, false).await {
             Ok(()) => {
                 publish_ledger.record_ack(
@@ -891,20 +892,25 @@ pub async fn spawn_if_configured(
 
             // Each sink owns its spool and drains concurrently. A slow local
             // central or broker cannot hold the other sink's delivery loop.
-            if mqtt_allowed && mqtt_spool.is_some() && mqtt.is_none() {
-                mqtt = connect_mqtt_session(
-                    mqtt_config(&site_id, &edge_id, port),
-                    &topics,
-                    Arc::clone(&command_ctx),
-                )
-                .await;
-            }
             let local_future = async {
                 if let (Some(client), Some(spool)) = (local_client.as_ref(), local_spool.as_mut()) {
                     drain_local_spool(client, spool).await;
                 }
             };
             let mqtt_future = async {
+                if mqtt_allowed && mqtt_spool.is_some() && mqtt.is_none() {
+                    mqtt = tokio::time::timeout(
+                        Duration::from_secs(5),
+                        connect_mqtt_session(
+                            mqtt_config(&site_id, &edge_id, port),
+                            &topics,
+                            Arc::clone(&command_ctx),
+                        ),
+                    )
+                    .await
+                    .ok()
+                    .flatten();
+                }
                 if let (Some(session), Some(spool)) = (mqtt.as_mut(), mqtt_spool.as_mut()) {
                     Some(drain_mqtt_spool(session, spool, &publish_ledger).await)
                 } else {

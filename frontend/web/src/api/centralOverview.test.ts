@@ -96,7 +96,12 @@ vi.mock("./analyticsApi", () => ({
       { equipment_id: "AHU_1", run_hours: 170, coverage_pct: 40, plant_group: "air" },
       { equipment_id: "AHU_2", run_hours: 155, coverage_pct: 38, plant_group: "air" },
       { equipment_id: "VAV_1", equipment_type: "VAV", run_hours: 3, coverage_pct: 10 },
-      { equipment_id: "AHU_1_VAV_12", run_hours: 9, coverage_pct: 12, plant_group: "air" },
+      {
+        equipment_id: "AHU_1_VAV_12",
+        run_hours: 9,
+        coverage_pct: 12,
+        plant_group: "air",
+      },
     ],
     points: [],
     skipped: [],

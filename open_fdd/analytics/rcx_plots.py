@@ -9,8 +9,11 @@ import numpy as np
 import pandas as pd
 
 from open_fdd.analytics.role_map import apply_role_map
-from open_fdd.analytics.site_model import resolve_equipment_type
+from open_fdd.analytics.site_model import resolve_equipment_type, stamped_equipment_type
 from open_fdd.analytics.weather_psychrometrics import prefer_web_oat
+
+# Family Zones membership: stamp or a modeled zone role. Not equipment-id text.
+ZONE_TERMINAL_TYPES: tuple[str, ...] = ("VAV", "FCU", "ZONE_OTHER", "HP", "BASEBOARD")
 
 
 @dataclass(frozen=True)
@@ -50,28 +53,28 @@ RCX_FAMILY_ORDER: tuple[str, ...] = (
 PRESETS: list[RcxPreset] = [
     RcxPreset(
         "zone_comfort_rank",
-        "Zones — comfort fail ranking (occupied hours)",
-        "Rank VAVs by % of occupied time outside Overview zone low/high band.",
+        "Zones — comfort ranking (% time in band)",
+        "Rank every zone-temp terminal by % of occupied time inside the comfort band.",
         "zone-air-temp",
-        ("VAV",),
+        ZONE_TERMINAL_TYPES,
         "ranking",
         family="Zones / VAV",
     ),
     RcxPreset(
         "zone_temps",
         "Zones — all space temps (timeseries)",
-        "Every VAV/zone space temp on one chart.",
+        "Space temperature for every zone-temp terminal (VAV, FCU, zone monitor, heat pump, baseboard).",
         "zone-air-temp",
-        ("VAV",),
+        ZONE_TERMINAL_TYPES,
         "timeseries",
         family="Zones / VAV",
     ),
     RcxPreset(
         "vav_flows",
         "Zones — all VAV airflow (timeseries)",
-        "Zone airflow across boxes.",
+        "Zone airflow for zone terminals that model it.",
         "zone-airflow",
-        ("VAV",),
+        ZONE_TERMINAL_TYPES,
         "timeseries",
         family="Zones / VAV",
     ),
@@ -80,7 +83,7 @@ PRESETS: list[RcxPreset] = [
         "Zones — VAV health (broken / comfort / rogue)",
         "Canonical vav_health_matrix_v1 cohort: three independent dimensions. Not a 60th FDD rule.",
         "zone-air-temp",
-        ("VAV",),
+        ZONE_TERMINAL_TYPES,
         "ranking",
         family="Zones / VAV",
     ),
@@ -281,6 +284,35 @@ def _etype(eq_id: str, raw: pd.DataFrame, role_map: dict | None = None) -> str:
     return resolve_equipment_type(eq_id, df=raw, role_map=role_map)
 
 
+def _zone_terminal_request(equipment_types: tuple[str, ...] | None) -> bool:
+    if not equipment_types:
+        return False
+    return {t.upper() for t in equipment_types} <= set(ZONE_TERMINAL_TYPES)
+
+
+def _passes_equipment_types(
+    eq_id: str,
+    raw: pd.DataFrame,
+    role_map: dict | None,
+    equipment_types: tuple[str, ...] | None,
+    *,
+    has_zone_role: bool,
+) -> bool:
+    """Stamp/role gate for Family Zones. Other families keep typed membership."""
+    if not equipment_types:
+        return True
+    allowed = {t.upper() for t in equipment_types}
+    if _zone_terminal_request(equipment_types):
+        stamped = stamped_equipment_type(eq_id, df=raw, role_map=role_map)
+        if stamped:
+            # Plant and zone heat pumps share HP. Only a mapped zone temp joins.
+            if stamped == "HP" and not has_zone_role:
+                return False
+            return stamped in allowed
+        return has_zone_role
+    return _etype(eq_id, raw, role_map) in allowed
+
+
 def operating_mask(df: pd.DataFrame) -> tuple[pd.Series | None, str]:
     """Boolean mask when equipment looks running, plus proof role label.
 
@@ -335,14 +367,13 @@ def collect_role_series(
     for eq_id, raw in frames.items():
         if equipment_ids is not None and eq_id not in equipment_ids:
             continue
-        et = _etype(eq_id, raw, role_map)
-        if equipment_types:
-            allowed = {t.upper() for t in equipment_types}
-            # Typed membership only — no id-substring fallback
-            if et not in allowed:
-                continue
         mapped = apply_role_map(raw, eq_id, role_map)
-        if role not in mapped.columns or mapped[role].notna().sum() == 0:
+        has_role = role in mapped.columns and mapped[role].notna().sum() > 0
+        if not _passes_equipment_types(
+            eq_id, raw, role_map, equipment_types, has_zone_role=has_role
+        ):
+            continue
+        if not has_role:
             continue
         s = pd.to_numeric(mapped[role], errors="coerce")
         if mode in {"on", "off"}:
@@ -634,12 +665,13 @@ def zone_comfort_fail_ranking(
     schedule,
     comfort_low_f: float,
     comfort_high_f: float,
-    equipment_types: tuple[str, ...] = ("VAV",),
+    equipment_types: tuple[str, ...] = ZONE_TERMINAL_TYPES,
     outlier_z: float = 2.5,
 ) -> pd.DataFrame:
-    """Rank zones by % of *occupied* samples outside Overview comfort band.
+    """Rank zone terminals by % of schedule-gated samples inside the comfort band.
 
-    Uses :func:`app.occupancy.occupied_mask` with the Overview occupancy calendar.
+    Membership is a zone-terminal stamp or a modeled zone-air-temp role.
+    Uses the Overview occupancy calendar, same occupied window as VAV-1.
     """
     from open_fdd.analytics.occupancy import occupied_mask
 
@@ -647,11 +679,15 @@ def zone_comfort_fail_ranking(
     hi = float(max(comfort_low_f, comfort_high_f))
     rows: list[dict[str, Any]] = []
     for eq_id, raw in frames.items():
-        et = _etype(eq_id, raw, role_map)
-        if equipment_types and et not in {t.upper() for t in equipment_types}:
-            continue
         mapped = apply_role_map(raw, eq_id, role_map)
-        if "zone-air-temp" not in mapped.columns or mapped["zone-air-temp"].notna().sum() == 0:
+        has_role = (
+            "zone-air-temp" in mapped.columns and mapped["zone-air-temp"].notna().sum() > 0
+        )
+        if not _passes_equipment_types(
+            eq_id, raw, role_map, equipment_types, has_zone_role=has_role
+        ):
+            continue
+        if not has_role:
             continue
         zone = pd.to_numeric(mapped["zone-air-temp"], errors="coerce")
         if not isinstance(zone.index, pd.DatetimeIndex):
@@ -665,11 +701,13 @@ def zone_comfort_fail_ranking(
         outside = below | above
         n_occ = int(len(occ_vals))
         n_out = int(outside.sum())
-        pct = 100.0 * float(outside.mean())
+        pct_out = 100.0 * float(outside.mean())
+        pct_in = 100.0 - pct_out
         rows.append(
             {
                 "equipment_id": eq_id,
-                "pct_outside_comfort": round(pct, 2),
+                "pct_in_comfort": round(pct_in, 2),
+                "pct_outside_comfort": round(pct_out, 2),
                 "n_occupied": n_occ,
                 "n_outside": n_out,
                 "n_below": int(below.sum()),
@@ -685,6 +723,7 @@ def zone_comfort_fail_ranking(
         return pd.DataFrame(
             columns=[
                 "equipment_id",
+                "pct_in_comfort",
                 "pct_outside_comfort",
                 "n_occupied",
                 "n_outside",
@@ -699,16 +738,16 @@ def zone_comfort_fail_ranking(
             ]
         )
     df = pd.DataFrame(rows)
-    pcts = df["pct_outside_comfort"].astype(float).tolist()
+    pcts = df["pct_in_comfort"].astype(float).tolist()
     if len(pcts) >= 3:
         mu, sd = float(np.mean(pcts)), float(np.std(pcts))
         if sd > 1e-9:
-            df["outlier"] = (df["pct_outside_comfort"] - mu).abs() / sd >= outlier_z
+            df["outlier"] = (df["pct_in_comfort"] - mu).abs() / sd >= outlier_z
         else:
             df["outlier"] = False
     else:
         df["outlier"] = False
-    return df.sort_values(["pct_outside_comfort", "equipment_id"], ascending=[False, True]).reset_index(
+    return df.sort_values(["pct_in_comfort", "equipment_id"], ascending=[True, True]).reset_index(
         drop=True
     )
 

@@ -96,6 +96,12 @@ Do **not** stamp FCU or standalone zone DDC as `ahu`.
 
 VAV boxes remain `equipType: vav` (zone terminals with airflow/damper). They share the **same comfort gate** for zone-temp performance rules.
 
+Family Zones RCx (comfort ranking, space-temp series, airflow series, zone health) uses that same set: VAV, FCU, `zone_other` / standalone DDC, baseboard, and a heat pump that has `zone-air-temp`.
+
+Haystack puts more than one marker on the same asset. The package path keeps those tags together: `equip`, a zone-terminal marker (`fanCoilUnit`, `zone`, or `vav`), and the point roles (`zone-air-temp`, plus airflow or valve roles when the terminal has them). Compact ingest is `equipType` plus `points` (`fanCoilUnit` / `zone` / `vav` with `zone-air-temp`). Family Zones membership reads that stamp and the mapped roles. A heat-pump stamp joins only when `zone-air-temp` is mapped, because plant heat pumps share that stamp. A non-zone stamp such as `ahu` stays out. Membership never uses `equipment_id` `LIKE` or a prefix (`RTU_01` stays distinct from `RTU_010`). Other RCx presets use an exact equipment-id list from the package stamp.
+
+`VAV-1` scores the comfort band only while occupied when `occ_mode` or the Overview calendar is set (`require_occupied`, default on). Unoccupied setback stays on `VAV-2`.
+
 ## FCU / zone_other rule roles
 
 Nine registry rules (`FCU-SENSOR-NULL`, `FCU-HTG-COIL`, `FCU-CLG-COIL`, `FCU-VALVE-PASS-HTG`, `FCU-VALVE-PASS-CLG`, `FCU-DAMPER-POS`, `FCU-CO2-DAMPER`, `FCU-DEADBAND`, `FCU-MODE-CYCLE`) select equipment from the stamp and from registry `equipment_kinds`: `zone_other`, `general`, and `ahu`. Recognized stamps win over folder or id heuristics.

@@ -218,6 +218,18 @@ describe("vibeCharts", () => {
     expect(fig?.data[0]?.x?.[0]).toBe("VAV_1");
   });
 
+  it("rankingBars sorts in-band percent worst first", () => {
+    const fig = rankingBars(
+      [
+        { equipment_id: "FCU_1", value_f: 90, series: "in_band_pct" },
+        { equipment_id: "BB_1", value_f: 20, series: "in_band_pct" },
+      ],
+      { title: "rank", sort: "asc" },
+    );
+    expect(fig?.data[0]?.x?.[0]).toBe("BB_1");
+    expect(fig?.data[0]?.name).toBe("in band %");
+  });
+
   it("multiEquipmentBox groups by equipment", () => {
     const fig = multiEquipmentBox(
       [

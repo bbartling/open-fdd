@@ -274,6 +274,8 @@ pub async fn run_all_rules_with_overrides(
     if let Some((start_utc, end_utc)) = options.time_window {
         scope_history_to_time_window(&ctx, start_utc, end_utc).await?;
     }
+    // Overview calendar → occ_mode when the BAS occupied point is absent.
+    let _ = crate::occupancy_schedule::apply_session_occupancy_schedule(&ctx).await;
 
     // History columns for preflighting required_roles (case-insensitive). When
     // history cannot be described we fall back to per-rule SQL error classifying.

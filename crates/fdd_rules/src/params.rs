@@ -53,6 +53,7 @@ pub fn substitute_sql(sql: &str, params: &HashMap<String, String>) -> String {
         ("MODE_DELAY_MIN", "10"),
         ("STARTUP_DELAY_MIN", "0"),
         ("REQUIRE_OPERATIONAL_GATE", "1"),
+        ("REQUIRE_OCCUPIED", "1"),
         ("MINIMUM_ACTIVE_COVERAGE_PCT", "5"),
         ("ECON_FULL_OPEN", "0.9"),
         ("ECON_MIN_POS", "0.05"),

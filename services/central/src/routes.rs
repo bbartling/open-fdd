@@ -1628,15 +1628,11 @@ pub async fn local_fieldbus_ingest(
         trusted_building
     );
 
-    if let Some(status) = state
+    if let Some(_status) = state
         .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
         .await
     {
         *state.ingest_dup.lock().unwrap() += 1;
-        if status == crate::state::IngestReceiptStatus::Pending {
-            let _ = state.ingest_live(&envelope).await;
-            let _ = state.flush_live(false).await;
-        }
         let committed = state
             .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
             .await
@@ -1685,7 +1681,7 @@ pub async fn local_fieldbus_ingest(
         ));
     }
 
-    let report = match state.ingest_live(&envelope).await {
+    let report = match state.ingest_live(&receipt_scope, &envelope).await {
         Ok(report) => report,
         Err(error) => {
             state

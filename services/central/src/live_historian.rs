@@ -75,6 +75,19 @@ pub struct LiveHistorianIngest {
     /// A receipt stays pending until its id appears here, including time and
     /// shutdown flushes.
     pub persisted_message_ids: Vec<Uuid>,
+    /// Exact message/equipment provenance for each published row group. A
+    /// message is complete only after every eligible equipment group is
+    /// published, even when one group flushes earlier than the others.
+    pub persisted_message_groups: Vec<PersistedMessageGroup>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistedMessageGroup {
+    pub message_id: Uuid,
+    pub edge_id: String,
+    pub building_id: String,
+    pub equipment_id: String,
+    pub rows: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -333,7 +346,7 @@ pub struct LiveHistorian {
     latest_persisted_timestamp_utc: Option<DateTime<Utc>>,
     parquet_root: Option<PathBuf>,
     pending_type_stamps: BTreeMap<EquipmentKey, String>,
-    pending_message_ids: BTreeMap<EquipmentKey, Vec<Uuid>>,
+    pending_message_ids: BTreeMap<EquipmentKey, Vec<(Uuid, usize, String)>>,
 }
 
 impl LiveHistorian {
@@ -422,7 +435,7 @@ impl LiveHistorian {
             self.pending_message_ids
                 .entry(key.clone())
                 .or_default()
-                .push(env.message_id);
+                .push((env.message_id, batch.num_rows(), env.edge_id.clone()));
             let flushes = self
                 .batches
                 .push(building_id, equipment_id, batch)
@@ -480,8 +493,26 @@ impl LiveHistorian {
                 .pending_message_ids
                 .get_mut(&(flush.building_id.clone(), flush.equipment_id.clone()))
             {
-                let count = flush.rows.min(ids.len());
-                report.persisted_message_ids.extend(ids.drain(..count));
+                let mut remaining = flush.rows;
+                while remaining > 0 && !ids.is_empty() {
+                    let (message_id, queued_rows, edge_id) = &mut ids[0];
+                    let rows = remaining.min(*queued_rows);
+                    report
+                        .persisted_message_ids
+                        .extend(std::iter::repeat_n(*message_id, rows));
+                    report.persisted_message_groups.push(PersistedMessageGroup {
+                        message_id: *message_id,
+                        edge_id: edge_id.clone(),
+                        building_id: flush.building_id.clone(),
+                        equipment_id: flush.equipment_id.clone(),
+                        rows,
+                    });
+                    *queued_rows -= rows;
+                    remaining -= rows;
+                    if *queued_rows == 0 {
+                        ids.remove(0);
+                    }
+                }
                 if ids.is_empty() {
                     self.pending_message_ids
                         .remove(&(flush.building_id.clone(), flush.equipment_id.clone()));

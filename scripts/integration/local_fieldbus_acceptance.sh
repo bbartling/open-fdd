@@ -14,6 +14,10 @@ case "$MODE" in
   *) echo "FAIL: OPENFDD_INGEST_MODE must be local_fieldbus or dual (got $MODE)" >&2; exit 2 ;;
 esac
 [[ -n "$TOKEN" ]] || { echo "FAIL: OPENFDD_LOCAL_INGEST_TOKEN is required" >&2; exit 2; }
+[[ -n "${OPENFDD_ACCEPTANCE_RESTART_CMD:-}" ]] || {
+  echo "FAIL: OPENFDD_ACCEPTANCE_RESTART_CMD is required for crash/restart recovery proof" >&2
+  exit 2
+}
 if [[ "${OPENFDD_MQTT_ENABLED:-0}" =~ ^(1|true|yes|on)$ ]]; then
   echo "FAIL: broker-free local acceptance requires OPENFDD_MQTT_ENABLED=0" >&2
   exit 2
@@ -77,12 +81,13 @@ jq -e '.ok == true and .duplicate == false and .pending == false and (.eligible_
 persisted_rows="$(jq -r '.persisted_rows' "$response_file")"
 
 storage_root="${OPENFDD_ACCEPTANCE_STORAGE_ROOT:-${OPENFDD_STORAGE_ROOT:-workspace/openfdd}}"
-row_files="$(find "$storage_root" -type f -name '*.parquet' -size +0c 2>/dev/null | wc -l | tr -d ' ')"
-[[ "$row_files" -gt 0 ]] || { echo "FAIL: no non-empty Parquet storage found under $storage_root" >&2; exit 1; }
+canonical_before="$(find "$storage_root" -type f -name '*.parquet' -size +0c -printf '%p:%s\n' 2>/dev/null | sort | sha256sum | awk '{print $1}')"
+find "$storage_root" -type f -name '*.parquet' -size +0c -print -quit 2>/dev/null | grep -q . || {
+  echo "FAIL: no non-empty Parquet storage found under $storage_root" >&2
+  exit 1
+}
 
-if [[ -n "${OPENFDD_ACCEPTANCE_RESTART_CMD:-}" ]]; then
-  eval "$OPENFDD_ACCEPTANCE_RESTART_CMD"
-fi
+eval "$OPENFDD_ACCEPTANCE_RESTART_CMD"
 
 # Replaying the exact envelope must be idempotent and must not create a second
 # canonical row. This also exercises the dual local/cloud delivery guard.
@@ -94,6 +99,11 @@ jq -e '.ok == true and .duplicate == true and .pending == false' "$replay_file" 
 }
 jq -e --argjson rows "$persisted_rows" '.ok == true and .persisted_rows == $rows and .persisted_rows > 0' "$replay_file" >/dev/null || {
   echo "FAIL: replay receipt did not report the exact persisted row count ($persisted_rows): $(cat "$replay_file")" >&2
+  exit 1
+}
+canonical_after="$(find "$storage_root" -type f -name '*.parquet' -size +0c -printf '%p:%s\n' 2>/dev/null | sort | sha256sum | awk '{print $1}')"
+[[ "$canonical_after" == "$canonical_before" ]] || {
+  echo "FAIL: replay changed canonical Parquet objects (duplicate row risk)" >&2
   exit 1
 }
 

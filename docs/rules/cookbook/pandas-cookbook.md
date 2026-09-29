@@ -1598,11 +1598,12 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ## VAV terminals
 
 ### VAV-1 — Zone comfort band
-**Family:** `vav` · **Equipment:** `vav`, `zone`  
-**Equation:** Zone temp < 70°F or > 75°F.  
+**Family:** `vav` · **Equipment:** `vav`, `zone_other`, `heatpump`, `baseboard`  
+**Equation:** Zone temp outside `zone_lo`–`zone_hi` (default 70–75°F) during occupied hours when an occupancy column or Overview calendar is set (`require_occupied`, default on). Unoccupied setback stays on VAV-2.  
 **Default confirmation:** 900 s
 
-**Required roles:** `zone-air-temp`
+**Required roles:** `zone-air-temp`  
+**Optional roles:** `occupied`, `occ-mode`
 
 **Tunable params**
 
@@ -1610,6 +1611,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 |-------|-------|------|--------:|-------|
 | `zone_lo` | Zone low | °F | 70.0 | 55.0–72.0 |
 | `zone_hi` | Zone high | °F | 75.0 | 72.0–85.0 |
+| `require_occupied` | Require occupied | bool | 1.0 | 0.0–1.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -1617,7 +1619,9 @@ FAULT_CONFIRM_SECONDS = 900
 def vav1(d, p, poll):
     lo = _f(p, "zone_lo", 70.0)
     hi = _f(p, "zone_hi", 75.0)
-    return d["zone-air-temp"].notna() & ((d["zone-air-temp"] < lo) | (d["zone-air-temp"] > hi))
+    zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
+    occupied, _src = vav1_occupied_mask(d, p)  # default require_occupied=1
+    return zt.notna() & ((zt < lo) | (zt > hi)) & occupied
 
 d = apply_fault(d, vav1(d, params, POLL_SECONDS))
 d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))

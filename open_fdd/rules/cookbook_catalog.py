@@ -942,10 +942,35 @@ def _unoccupied_mask(d: pd.DataFrame) -> pd.Series:
     return label_unocc | numeric_unocc
 
 
+def vav1_occupied_mask(d: pd.DataFrame, p: dict | None = None) -> tuple[pd.Series, str]:
+    """Samples where the comfort band may be scored.
+
+    ``require_occupied`` defaults on. A mapped occupancy column or an Overview
+    weekly calendar (``occupancy_schedule``) keeps unoccupied hours off this
+    rule so night setback stays on VAV-2. With neither signal, every row is
+    eligible — the schedule is not set.
+    """
+    params = p or {}
+    if _f(params, "require_occupied", 1.0) < 0.5:
+        return pd.Series(True, index=d.index), "require_occupied_off"
+    if any(c in d.columns and d[c].notna().any() for c in ("occupied", "occ-mode")):
+        return (~_unoccupied_mask(d)).fillna(False), "occupied"
+    sched = params.get("occupancy_schedule") if isinstance(params, dict) else None
+    if isinstance(sched, dict) and isinstance(d.index, pd.DatetimeIndex):
+        from open_fdd.analytics.occupancy import OccupancySchedule, occupied_mask
+
+        mask = occupied_mask(d.index, OccupancySchedule.from_dict(sched))
+        return mask.reindex(d.index).fillna(False), "occupancy_schedule"
+    return pd.Series(True, index=d.index), "ungated_no_occ"
+
+
 def vav1(d, p, poll):
+    """Comfort band during occupied hours when a schedule or occ column is set."""
     lo = _f(p, "zone_lo", 70.0)
     hi = _f(p, "zone_hi", 75.0)
-    return d["zone-air-temp"].notna() & ((d["zone-air-temp"] < lo) | (d["zone-air-temp"] > hi))
+    zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
+    occupied, _src = vav1_occupied_mask(d, p)
+    return zt.notna() & ((zt < lo) | (zt > hi)) & occupied
 
 
 def vav2(d, p, poll):
@@ -1868,13 +1893,18 @@ RULES: list[CookbookRule] = [
             CONFIRM_PARAM()], confirm_seconds=0),
 
     # --- VAV zones ---
-    CookbookRule("VAV-1", "Zone comfort band", "vav", ["vav", "zone_other"],
-        ["zone-air-temp"], "Zone temp < 70°F or > 75°F.",
+    CookbookRule("VAV-1", "Zone comfort band", "vav", ["vav", "zone_other", "heatpump", "baseboard"],
+        ["zone-air-temp"],
+        "Zone temp outside zone_lo–zone_hi (default 70–75°F) during occupied hours when an "
+        "occupancy column or Overview calendar is set (require_occupied, default on). "
+        "Unoccupied setback stays on VAV-2.",
         vav1, params=[
             CookbookParam("zone_lo", "Zone low", "°F", 55.0, 72.0, 0.5, 70.0),
             CookbookParam("zone_hi", "Zone high", "°F", 72.0, 85.0, 0.5, 75.0),
-            CONFIRM_PARAM()], confirm_seconds=900),
-    CookbookRule("VAV-2", "Night setback miss", "vav", ["vav", "zone_other"],
+            CookbookParam("require_occupied", "Require occupied", "bool", 0.0, 1.0, 1.0, 1.0),
+            CONFIRM_PARAM()],
+        optional_roles=["occupied", "occ-mode"], confirm_seconds=900),
+    CookbookRule("VAV-2", "Night setback miss", "vav", ["vav", "zone_other", "heatpump", "baseboard"],
         ["zone-air-temp", "occupied"],
         "Unoccupied AND zone temp > setback_hi (default 68°F) — heating setback not taken.",
         vav2, params=[

@@ -1,6 +1,6 @@
 //! Shared central runtime state.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -15,13 +15,14 @@ use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 use uuid::Uuid;
 
 use crate::auth::AuthConfig;
-use crate::live_historian::{LiveHistorian, LiveHistorianIngest};
+use crate::live_historian::{LiveHistorian, LiveHistorianIngest, PersistedMessageGroup};
 use crate::tenant_budget::TenantBudgetTracker;
 
 const MQTT_MONITOR_CAPACITY: usize = 100;
 const MQTT_PREVIEW_BYTES: usize = 4096;
 const LOCAL_RECEIPTS_FILE: &str = "state/local-fieldbus-receipts.jsonl";
 const RECEIPT_CAPACITY: usize = 50_000;
+const PENDING_RECEIPT_CAPACITY: usize = 10_000;
 static LIVE_WRITER_PERMITS: std::sync::OnceLock<std::sync::Arc<Semaphore>> =
     std::sync::OnceLock::new();
 
@@ -29,6 +30,24 @@ fn live_writer_permits() -> std::sync::Arc<Semaphore> {
     LIVE_WRITER_PERMITS
         .get_or_init(|| std::sync::Arc::new(Semaphore::new(1)))
         .clone()
+}
+
+fn equipment_key(building_id: &str, equipment_id: &str) -> String {
+    format!("{building_id}\u{1f}{equipment_id}")
+}
+
+fn eligible_equipment_keys(envelope: &TelemetryEnvelope) -> BTreeSet<String> {
+    envelope
+        .points
+        .iter()
+        .filter_map(|point| {
+            let building = point.tags.get("building_id")?.as_str()?;
+            let equipment = point.tags.get("equipment_id")?.as_str()?;
+            let role = point.tags.get("role")?.as_str()?;
+            (!building.is_empty() && !equipment.is_empty() && !role.is_empty())
+                .then(|| equipment_key(building, equipment))
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +65,10 @@ pub struct IngestReceipt {
     pub envelope: TelemetryEnvelope,
     #[serde(default)]
     pub persisted_rows: usize,
+    #[serde(default)]
+    pub expected_equipment: BTreeSet<String>,
+    #[serde(default)]
+    pub persisted_equipment: BTreeSet<String>,
     #[serde(default = "default_receipt_observed_at")]
     pub observed_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -198,9 +221,19 @@ impl AppState {
         let edge_id = envelope.edge_id.clone();
         let message_id = envelope.message_id;
         let observed_at = envelope.observed_at;
+        let expected_equipment = eligible_equipment_keys(&envelope);
         let key = (scope.to_string(), edge_id.clone(), message_id);
         let mut receipts = self.ingest_receipts.lock().await;
         if receipts.contains_key(&key) {
+            return false;
+        }
+        if receipts.len() >= RECEIPT_CAPACITY
+            || receipts
+                .values()
+                .filter(|receipt| receipt.status == IngestReceiptStatus::Pending)
+                .count()
+                >= PENDING_RECEIPT_CAPACITY
+        {
             return false;
         }
         receipts.insert(
@@ -213,6 +246,8 @@ impl AppState {
                 observed_at,
                 envelope,
                 persisted_rows: 0,
+                expected_equipment,
+                persisted_equipment: BTreeSet::new(),
                 updated_at: Utc::now(),
             },
         );
@@ -252,6 +287,7 @@ impl AppState {
             .await
     }
 
+    #[cfg(test)]
     async fn commit_receipt_rows(
         &self,
         scope: &str,
@@ -289,37 +325,73 @@ impl AppState {
         }
     }
 
-    /// Mark every receipt whose message contributed to a published Parquet
-    /// part as committed. The writer reports provenance for row, timer, and
-    /// shutdown flushes, so a 202 receipt cannot become 200 early.
+    /// Apply published row provenance to one tenant/building and edge scope.
+    /// A receipt is committed only after all eligible equipment groups arrive.
+    pub async fn commit_persisted_receipts_for(
+        &self,
+        scope: &str,
+        edge_id: &str,
+        groups: &[PersistedMessageGroup],
+    ) -> usize {
+        let mut committed = 0;
+        for group in groups {
+            let key = (scope.to_string(), edge_id.to_string(), group.message_id);
+            let mut receipts = self.ingest_receipts.lock().await;
+            let Some(previous) = receipts.get(&key).cloned() else {
+                continue;
+            };
+            if previous.status == IngestReceiptStatus::Committed {
+                continue;
+            }
+            let mut updated = previous.clone();
+            updated.persisted_rows = updated.persisted_rows.saturating_add(group.rows);
+            updated
+                .persisted_equipment
+                .insert(equipment_key(&group.building_id, &group.equipment_id));
+            if updated.expected_equipment.is_empty()
+                || updated
+                    .expected_equipment
+                    .is_subset(&updated.persisted_equipment)
+            {
+                updated.status = IngestReceiptStatus::Committed;
+                committed += 1;
+            }
+            updated.updated_at = Utc::now();
+            let event = Some(updated.clone());
+            if append_receipt_event(
+                &self.ingest_receipts_path,
+                scope,
+                edge_id,
+                group.message_id,
+                event.as_ref(),
+            )
+            .await
+            {
+                receipts.insert(key, updated);
+                maybe_compact_receipt_journal(&self.ingest_receipts_path, &receipts).await;
+            }
+        }
+        committed
+    }
+
+    #[cfg(test)]
     pub async fn commit_persisted_receipts(&self, message_ids: &[Uuid]) -> usize {
-        if message_ids.is_empty() {
-            return 0;
+        let mut counts = HashMap::<Uuid, usize>::new();
+        for id in message_ids {
+            *counts.entry(*id).or_default() += 1;
         }
-        let mut counts = std::collections::HashMap::<Uuid, usize>::new();
-        for message_id in message_ids {
-            *counts.entry(*message_id).or_default() += 1;
-        }
-        let keys: Vec<(String, String, Uuid)> = self
+        let keys: Vec<_> = self
             .ingest_receipts
             .lock()
             .await
             .iter()
-            .filter(|(_, receipt)| {
-                counts.contains_key(&receipt.message_id)
-                    && receipt.status == IngestReceiptStatus::Pending
-            })
+            .filter(|(_, receipt)| counts.contains_key(&receipt.message_id))
             .map(|(key, _)| key.clone())
             .collect();
         let mut committed = 0;
-        for (scope, edge_id, message_id) in keys {
+        for (scope, edge, id) in keys {
             if self
-                .commit_receipt_rows(
-                    &scope,
-                    &edge_id,
-                    message_id,
-                    counts.get(&message_id).copied(),
-                )
+                .commit_receipt_rows(&scope, &edge, id, counts.get(&id).copied())
                 .await
             {
                 committed += 1;
@@ -330,6 +402,7 @@ impl AppState {
 
     pub async fn ingest_live(
         &self,
+        scope: &str,
         env: &TelemetryEnvelope,
     ) -> anyhow::Result<LiveHistorianIngest> {
         let permit = live_writer_permits()
@@ -353,7 +426,7 @@ impl AppState {
         .await
         .map_err(|error| anyhow::anyhow!("live historian writer task failed: {error}"))??;
         drop(permit);
-        self.commit_persisted_receipts(&report.persisted_message_ids)
+        self.commit_persisted_receipts_for(scope, &env.edge_id, &report.persisted_message_groups)
             .await;
         Ok(report)
     }
@@ -380,8 +453,15 @@ impl AppState {
         .await
         .map_err(|error| anyhow::anyhow!("live historian writer task failed: {error}"))??;
         drop(permit);
-        self.commit_persisted_receipts(&report.persisted_message_ids)
-            .await;
+        for group in &report.persisted_message_groups {
+            let scope = format!(
+                "tenant={};building={}",
+                std::env::var("OPENFDD_TENANT_ID").unwrap_or_else(|_| "-".into()),
+                group.building_id
+            );
+            self.commit_persisted_receipts_for(&scope, &group.edge_id, std::slice::from_ref(group))
+                .await;
+        }
         Ok(report)
     }
 
@@ -616,20 +696,10 @@ async fn append_receipt_event(
 }
 
 fn enforce_receipt_capacity(receipts: &mut HashMap<(String, String, Uuid), IngestReceipt>) -> bool {
-    while receipts.len() > RECEIPT_CAPACITY {
-        let Some(key) = receipts
-            .iter()
-            .filter(|(_, receipt)| receipt.status == IngestReceiptStatus::Committed)
-            .min_by_key(|(_, receipt)| receipt.updated_at)
-            .map(|(key, _)| key.clone())
-        else {
-            // Pending work is never evicted. A temporary oversize is safer
-            // than losing the replay key needed after a crash.
-            break;
-        };
-        receipts.remove(&key);
-    }
-    true
+    // Replay keys are retained for the full bounded ledger horizon. Never
+    // evict a committed id without a durable tombstone: once the cap is
+    // reached reserve_receipt_at applies backpressure instead.
+    receipts.len() <= RECEIPT_CAPACITY
 }
 
 const RECEIPT_COMPACTION_BYTES: u64 = 8 * 1024 * 1024;
@@ -796,6 +866,88 @@ mod tests {
         assert_eq!(
             state
                 .receipt_persisted_rows("tenant-a/building-local", "edge-local", persisted_id)
+                .await,
+            Some(2)
+        );
+    }
+
+    #[tokio::test]
+    async fn scoped_receipt_waits_for_every_equipment_group() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = AppState::new();
+        state.ingest_receipts_path = temp.path().join("receipts.jsonl");
+        let mut envelope = TelemetryEnvelope::new(
+            "building-local",
+            "edge-local",
+            openfdd_contracts::Protocol::Bacnet,
+            1,
+            vec![],
+        );
+        envelope.points = ["equipment-a", "equipment-b"]
+            .into_iter()
+            .map(|equipment| openfdd_contracts::TelemetryPoint {
+                id: equipment.into(),
+                display_name: None,
+                kind: None,
+                value: serde_json::json!(1),
+                unit: None,
+                quality: openfdd_contracts::Quality::Good,
+                tags: serde_json::json!({
+                    "building_id": "building-local",
+                    "equipment_id": equipment,
+                    "role": "sample"
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            })
+            .collect();
+        let message_id = envelope.message_id;
+        assert!(
+            state
+                .reserve_receipt_at("tenant-a/building-local", envelope)
+                .await
+        );
+        let first = PersistedMessageGroup {
+            message_id,
+            edge_id: "edge-local".into(),
+            building_id: "building-local".into(),
+            equipment_id: "equipment-a".into(),
+            rows: 1,
+        };
+        assert_eq!(
+            state
+                .commit_persisted_receipts_for(
+                    "tenant-a/building-local",
+                    "edge-local",
+                    std::slice::from_ref(&first)
+                )
+                .await,
+            0
+        );
+        assert_eq!(
+            state
+                .receipt_status("tenant-a/building-local", "edge-local", message_id)
+                .await,
+            Some(IngestReceiptStatus::Pending)
+        );
+        let second = PersistedMessageGroup {
+            equipment_id: "equipment-b".into(),
+            ..first
+        };
+        assert_eq!(
+            state
+                .commit_persisted_receipts_for(
+                    "tenant-a/building-local",
+                    "edge-local",
+                    std::slice::from_ref(&second)
+                )
+                .await,
+            1
+        );
+        assert_eq!(
+            state
+                .receipt_persisted_rows("tenant-a/building-local", "edge-local", message_id)
                 .await,
             Some(2)
         );

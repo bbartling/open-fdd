@@ -343,7 +343,7 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
                 return;
             }
 
-            match state.ingest_live(&env).await {
+            match state.ingest_live(&scope, &env).await {
                 Ok(report) => {
                     for duplicate in &report.duplicate_roles {
                         warn!(

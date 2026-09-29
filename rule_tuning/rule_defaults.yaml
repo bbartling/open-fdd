@@ -2136,6 +2136,15 @@ VAV-1:
     min: 55.0
     step: 0.5
     unit: "\xB0F"
+  require_occupied:
+    default: 1.0
+    direction: ''
+    help: Score the comfort band only while occupied when occ_mode or the Overview calendar is set. Unoccupied setback stays on VAV-2.
+    label: Require occupied
+    max: 1.0
+    min: 0.0
+    step: 1.0
+    unit: bool
 VAV-3:
   confirm_min:
     default: 5.0
