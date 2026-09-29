@@ -41,6 +41,11 @@ description: >-
    Collapsed sidebar: `+shortsha` only.
 9. After Lab **Update this rule** (`RULES_UPDATED`), FDD Plots / Reports must
    refetch results + series so `confirm_min` session overlays show up.
+9b. **Series preview:** FDD Plots and each RCx plot card preview the most recent
+   N samples of the window already loaded for that figure (newest timestamp
+   first). Dropdown default **10**; options **10 / 20 / 50 / 100 / 500**. Each
+   card keeps its own N. Do not refetch the historian for the table. Charts
+   without a time axis (donut, ranking bars, OAT scatter) have no preview.
 10. Do not drop `REQUIRED_RCX_PRESET_IDS`. Health row tint uses existing
     `--health-broken-1/2/3` tokens (`n/3`; `?/3` is not red).
 11. **Operations** (`/operations`) includes Sites inventory + MQTT + AFDD radios

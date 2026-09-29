@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { RcxPage } from "./RcxPage";
 import {
@@ -186,5 +186,72 @@ describe("RcxPage vibe19 catalog", () => {
     expect(screen.getByTestId("rcx-companion-note").textContent).toMatch(
       /Broken-box flags unknown/,
     );
+    expect(screen.queryByTestId("rcx-plot-preview-table")).toBeNull();
+  });
+
+  it("previews the newest samples on a timeseries preset", async () => {
+    const tempsFirst = [
+      {
+        id: "zone_temps",
+        title: "Zones temps",
+        family: "Zones / VAV",
+        chart: "timeseries",
+        frozen: true,
+      },
+      ...ALL_PRESETS.filter((p) => p.id !== "zone_temps"),
+    ];
+    vi.mocked(listRcxPresets).mockResolvedValueOnce(tempsFirst);
+    const points = Array.from({ length: 12 }, (_, i) => ({
+      equipment_id: "VAV_1",
+      timestamp_utc: `2024-06-01T00:${String(i).padStart(2, "0")}:00Z`,
+      value_f: 70 + i,
+      series: "primary",
+    }));
+    vi.mocked(postRcxPreset).mockResolvedValueOnce({
+      schema_version: "1",
+      query_version: "rcx-preset-zone_temps-v1",
+      generated_at: "",
+      engine: "datafusion",
+      warnings: [],
+      coverage: {
+        chart_kind: "timeseries",
+        title: "Zones temps",
+        family: "Zones / VAV",
+        role_col: "zone_t",
+      },
+      rows: [],
+      equipment: [],
+      points,
+      skipped: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/rcx?site=BUILDING_100"]}>
+        <RcxPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("rcx-plot-preview-table").querySelector("tbody td")
+          ?.textContent,
+      ).toBe("2024-06-01T00:11:00Z");
+    });
+    const select = screen
+      .getByTestId("rcx-plot-preview-rows")
+      .querySelector("select");
+    expect(select?.value).toBe("10");
+    expect(
+      screen.getByTestId("rcx-plot-preview-table").querySelectorAll("tbody tr"),
+    ).toHaveLength(10);
+    expect(screen.queryByText(/first rows/i)).toBeNull();
+    fireEvent.change(select!, { target: { value: "500" } });
+    expect(
+      screen.getByTestId("rcx-plot-preview-table").querySelectorAll("tbody tr"),
+    ).toHaveLength(12);
+    expect(
+      screen.getByTestId("rcx-plot-preview-table").querySelector("tbody td")
+        ?.textContent,
+    ).toBe("2024-06-01T00:11:00Z");
   });
 });
