@@ -22,8 +22,8 @@ pub use object_store::{
 };
 pub use query::{collect_sql_bounded, stream_sql, DEFAULT_INTERACTIVE_MAX_ROWS};
 pub use session::{
-    register_utility_if_present, register_weather_if_present, run_sql, run_sql_bounded,
-    run_sql_file, run_sql_file_bounded, QueryResult,
+    register_utility_if_present, register_weather_for_building, register_weather_if_present,
+    run_sql, run_sql_bounded, run_sql_file, run_sql_file_bounded, QueryResult,
 };
 pub use tuning::{historian_session_config_from_env, DataFusionTuning};
 
@@ -100,7 +100,7 @@ mod smoke {
     }
 
     #[tokio::test]
-    async fn weather_view_falls_back_to_history() {
+    async fn weather_view_ignores_id_substrings() {
         use std::sync::Arc;
 
         use datafusion::arrow::array::{Float64Array, StringArray};
@@ -118,22 +118,126 @@ mod smoke {
         let batch = RecordBatch::try_new(
             schema.clone(),
             vec![
-                Arc::new(StringArray::from(vec!["AHU_1", "weather_station"])) as _,
-                Arc::new(Float64Array::from(vec![70.0, 55.0])) as _,
+                Arc::new(StringArray::from(vec![
+                    "AHU_1",
+                    "weather_station",
+                    "jci_oat_sensor",
+                    "OA_REF",
+                ])) as _,
+                Arc::new(Float64Array::from(vec![70.0, 55.0, 40.0, 33.0])) as _,
             ],
         )
         .unwrap();
         let mem = MemTable::try_new(schema, vec![vec![batch]]).unwrap();
         ctx.register_table("history", Arc::new(mem)).unwrap();
 
-        // No sidecar dir → register a `weather` view from weather-like history.
         let registered =
             register_weather_if_present(&ctx, std::path::Path::new("/nonexistent/xyz"))
                 .await
                 .unwrap();
-        assert!(registered, "expected weather view to register from history");
-        let res = run_sql(&ctx, "SELECT oa_t FROM weather").await.unwrap();
-        assert_eq!(res.row_count, 1, "only the weather-station row: {res:?}");
-        assert!((res.rows[0]["oa_t"].as_f64().unwrap() - 55.0).abs() < 1e-6);
+        assert!(
+            !registered,
+            "id text weather/oat must not register a weather view"
+        );
+    }
+
+    #[tokio::test]
+    async fn weather_view_uses_equipment_type_stamp() {
+        use std::sync::Arc;
+
+        use datafusion::arrow::array::{Float64Array, StringArray};
+        use datafusion::arrow::datatypes::{DataType, Field, Schema};
+        use datafusion::arrow::record_batch::RecordBatch;
+        use datafusion::datasource::MemTable;
+
+        use crate::register_weather_if_present;
+
+        let ctx = SessionContext::new();
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("equipment_id", DataType::Utf8, false),
+            Field::new("equipment_type", DataType::Utf8, true),
+            Field::new("oa_t", DataType::Float64, false),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(StringArray::from(vec![
+                    "jci_oat_sensor",
+                    "OA_REF",
+                    "AHU_WEATHER",
+                ])) as _,
+                Arc::new(StringArray::from(vec![
+                    Some("ahu"),
+                    Some("weather"),
+                    Some("ahu"),
+                ])) as _,
+                Arc::new(Float64Array::from(vec![40.0, 33.0, 70.0])) as _,
+            ],
+        )
+        .unwrap();
+        let mem = MemTable::try_new(schema, vec![vec![batch]]).unwrap();
+        ctx.register_table("history", Arc::new(mem)).unwrap();
+
+        let registered =
+            register_weather_if_present(&ctx, std::path::Path::new("/nonexistent/xyz"))
+                .await
+                .unwrap();
+        assert!(registered, "stamped weather kind should register");
+        let res = run_sql(
+            &ctx,
+            "SELECT equipment_id, oa_t FROM weather ORDER BY equipment_id",
+        )
+        .await
+        .unwrap();
+        assert_eq!(res.row_count, 1, "only OA_REF: {res:?}");
+        assert_eq!(res.rows[0]["equipment_id"], "OA_REF");
+        assert!((res.rows[0]["oa_t"].as_f64().unwrap() - 33.0).abs() < 1e-6);
+    }
+
+    #[tokio::test]
+    async fn weather_view_uses_equipment_types_json() {
+        use std::sync::Arc;
+
+        use datafusion::arrow::array::{Float64Array, StringArray};
+        use datafusion::arrow::datatypes::{DataType, Field, Schema};
+        use datafusion::arrow::record_batch::RecordBatch;
+        use datafusion::datasource::MemTable;
+
+        use crate::register_weather_for_building;
+
+        let ctx = SessionContext::new();
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("equipment_id", DataType::Utf8, false),
+            Field::new("oa_t", DataType::Float64, false),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(StringArray::from(vec!["jci_met", "AHU_1"])) as _,
+                Arc::new(Float64Array::from(vec![51.0, 70.0])) as _,
+            ],
+        )
+        .unwrap();
+        let mem = MemTable::try_new(schema, vec![vec![batch]]).unwrap();
+        ctx.register_table("history", Arc::new(mem)).unwrap();
+
+        let root = tempfile::tempdir().unwrap();
+        let building = root.path().join("building=ACME");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(
+            building.join("equipment_types.json"),
+            r#"{"jci_met":"weather","AHU_1":"ahu"}"#,
+        )
+        .unwrap();
+
+        let registered = register_weather_for_building(&ctx, root.path(), Some("ACME"))
+            .await
+            .unwrap();
+        assert!(registered);
+        let res = run_sql(&ctx, "SELECT equipment_id FROM weather")
+            .await
+            .unwrap();
+        assert_eq!(res.row_count, 1, "{res:?}");
+        assert_eq!(res.rows[0]["equipment_id"], "jci_met");
     }
 }

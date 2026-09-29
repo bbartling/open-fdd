@@ -9,30 +9,68 @@ import {
   inventoryWithoutWeather,
   isWeatherEquipment,
   isZoneTerminalEquipment,
-  isZoneTerminalId,
+  pickWeatherFaultRow,
   SQL_ROLLUP_RULE_IDS,
 } from "./overviewMetrics";
 
 describe("overviewMetrics", () => {
   it("excludes weather from inventory", () => {
     const items = inventoryWithoutWeather([
-      { equipment_id: "weather", equipment_type: "weather" },
+      { equipment_id: "OA_REF", equipment_type: "WEATHER" },
       { equipment_id: "AHU_10", equipment_type: "AHU" },
       { equipment_id: "AHU_2", equipment_type: "AHU" },
+      { equipment_id: "weather_station", equipment_type: "AHU" },
     ]);
-    expect(items.map((e) => e.equipment_id)).toEqual(["AHU_2", "AHU_10"]);
-    expect(isWeatherEquipment({ equipment_id: "weather" })).toBe(true);
+    expect(items.map((e) => e.equipment_id)).toEqual([
+      "AHU_2",
+      "AHU_10",
+      "weather_station",
+    ]);
+    expect(isWeatherEquipment({ equipment_id: "weather" })).toBe(false);
+    expect(isWeatherEquipment({ equipment_type: "weather" })).toBe(true);
+    expect(
+      isWeatherEquipment({ equipment_id: "jci_met", equipment_type_raw: "weather" }),
+    ).toBe(true);
   });
 
-  it("treats VAV/zone ids as terminals even when prefixed with AHU", () => {
-    expect(isZoneTerminalId("VAV_1")).toBe(true);
-    expect(isZoneTerminalId("AHU_1_VAV_12")).toBe(true);
+  it("treats zone membership as a stamp, not an id substring", () => {
     expect(isZoneTerminalEquipment({ equipment_id: "AHU-1-VAV-03" })).toBe(
-      true,
+      false,
     );
+    expect(
+      isZoneTerminalEquipment({
+        equipment_id: "AHU-1-VAV-03",
+        equipment_type: "AHU",
+      }),
+    ).toBe(false);
     expect(isZoneTerminalEquipment({ equipment_type: "VAV" })).toBe(true);
-    expect(isZoneTerminalId("AHU_1")).toBe(false);
-    expect(isZoneTerminalId("CH-1")).toBe(false);
+    expect(
+      isZoneTerminalEquipment({
+        equipment_id: "jci_vav_1",
+        equipment_type_raw: "vav",
+      }),
+    ).toBe(true);
+    expect(
+      isZoneTerminalEquipment({ equipment_id: "bldg2-zone-loopback" }),
+    ).toBe(false);
+    expect(isZoneTerminalEquipment({ equipment_type: "FCU" })).toBe(true);
+  });
+
+  it("picks the OAT-METEO row by weather kind", () => {
+    const row = pickWeatherFaultRow(
+      [
+        { equipment_id: "AHU_WEATHER", equipment_type: "AHU", fault_hours: 9 },
+        { equipment_id: "OA_REF", equipment_type: "WEATHER", fault_hours: 1 },
+      ],
+      new Set(["OA_REF"]),
+    );
+    expect(row?.equipment_id).toBe("OA_REF");
+    expect(
+      pickWeatherFaultRow(
+        [{ equipment_id: "weather_station", fault_hours: 4 }],
+        new Set(),
+      ),
+    ).toBeUndefined();
   });
 
   it("formats timestamps like vibe19 and lowercases kind", () => {
@@ -51,7 +89,8 @@ describe("overviewMetrics", () => {
         },
       },
       {
-        equipment_id: "weather",
+        equipment_id: "OA_REF",
+        equipment_type: "WEATHER",
         sampling: {
           first_timestamp: "2020-01-01T00:00:00",
           last_timestamp: "2029-12-31T00:00:00",

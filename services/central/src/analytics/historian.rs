@@ -423,89 +423,53 @@ fn round2(x: f64) -> f64 {
     (x * 100.0).round() / 100.0
 }
 
-/// Map equipment_id → Overview plant chart group (air / boiler / chiller).
-/// Zone terminals (VAV / ZONE) and unknown meters return `None`.
+/// Map a stamped equipment kind → Overview plant chart group (air / boiler / chiller).
+///
+/// Missing or unrecognized stamps return `None`. Equipment-id text is not a group.
 pub fn plant_group_for_typed(
-    equipment_id: &str,
+    _equipment_id: &str,
     stamped_type: Option<&str>,
 ) -> Option<&'static str> {
-    if let Some(kind) =
-        stamped_type.and_then(open_fdd_edge_prototype::equipment_types::canonical_kind)
-    {
-        return match kind {
-            "ahu" => Some("air"),
-            "chiller" | "cooling_tower" | "heatpump" => Some("chiller"),
-            "boiler" => Some("boiler"),
-            "vav" | "weather" => None,
-            _ => None,
+    let kind = stamped_type.and_then(open_fdd_edge_prototype::equipment_types::canonical_kind)?;
+    match kind {
+        "ahu" => Some("air"),
+        "chiller" | "cooling_tower" | "heatpump" => Some("chiller"),
+        "boiler" => Some("boiler"),
+        _ => None,
+    }
+}
+
+/// SQL predicate for equipment whose package stamp is canonical kind `weather`.
+///
+/// An empty stamp set matches nothing (`AND 1 = 0`) or, when `negate`, leaves
+/// the predicate off so non-weather rows are not invented from id text.
+fn stamped_weather_id_predicate(building_id: Option<&str>, negate: bool) -> String {
+    let map = open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let mut ids: Vec<String> = map
+        .into_iter()
+        .filter(|(_, stamp)| {
+            open_fdd_edge_prototype::equipment_types::canonical_kind(stamp) == Some("weather")
+        })
+        .map(|(id, _)| id)
+        .collect();
+    ids.sort();
+    if ids.is_empty() {
+        return if negate {
+            String::new()
+        } else {
+            " AND 1 = 0".to_string()
         };
     }
-    plant_group_for(equipment_id)
-}
-
-pub fn plant_group_for(equipment_id: &str) -> Option<&'static str> {
-    let eq = equipment_id.to_ascii_uppercase().replace('\\', "/");
-    if is_zone_terminal_id(&eq) {
-        return None;
+    let list = ids
+        .iter()
+        .map(|id| format!("'{}'", id.replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(", ");
+    if negate {
+        format!(" AND CAST(equipment_id AS VARCHAR) NOT IN ({list})")
+    } else {
+        format!(" AND CAST(equipment_id AS VARCHAR) IN ({list})")
     }
-    if eq.starts_with("AHU")
-        || eq.contains("/AHU")
-        || eq.contains("RTU")
-        || eq.contains("MAU")
-        || eq.contains("DOAS")
-    {
-        return Some("air");
-    }
-    if eq.contains("TOWER")
-        || eq.starts_with("CT_")
-        || eq.contains("/CT")
-        || (eq.starts_with("CT") && eq.chars().nth(2).is_some_and(|c| c.is_ascii_digit()))
-        || eq.contains("CHILLER")
-        || eq.contains("CHLR")
-        || is_short_chiller_id(&eq)
-        || eq.starts_with("CHW")
-        || eq.contains("CWP")
-        || eq.contains("_DX")
-        || eq.starts_with("DX")
-        || eq.starts_with("HP_")
-        || (eq.contains("PUMP") && (eq.contains("CHW") || eq.contains("CW")))
-    {
-        return Some("chiller");
-    }
-    if eq.contains("BOILER")
-        || eq.contains("HWP")
-        || (eq.contains("PUMP") && eq.contains("HW") && !eq.contains("CHW"))
-        || eq.contains("BOILERS")
-    {
-        return Some("boiler");
-    }
-    // Do not catch bare FAN/SUPPLY — too broad (exhaust/return/etc.).
-    None
-}
-
-fn is_zone_terminal_id(eq: &str) -> bool {
-    eq.contains("/VAV")
-        || eq.starts_with("VAV")
-        || eq.contains("VAVFC")
-        || eq.contains("VAVH")
-        || eq.contains("VAV")
-        || eq.contains("ZONE")
-}
-
-/// Building-100 style ids: CH-1, CH_1, CH1 — not CHANNEL / CHECK / CHW_*.
-fn is_short_chiller_id(eq: &str) -> bool {
-    eq.split('/').any(|part| {
-        let p = part.trim();
-        if p.starts_with("CHW") || p.starts_with("CHECK") || p.starts_with("CHAN") {
-            return false;
-        }
-        if p.starts_with("CH-") || p.starts_with("CH_") {
-            return p.chars().nth(3).is_some_and(|c| c.is_ascii_digit());
-        }
-        p.len() >= 3
-            && p.starts_with("CH")
-            && p.as_bytes().get(2).is_some_and(|b| b.is_ascii_digit())
-    })
 }
 
 /// OAT for mech-cooling bins: prefer web/meteo OAT (pandas Overview default).
@@ -599,8 +563,10 @@ fn time_range_sql(
     out
 }
 
-/// SQL fragment restricting to chiller/DX/tower-like equipment ids.
-/// Kept aligned with [`plant_group_for`] (no bare `CT%` — that matches CTRL_*).
+/// SQL fragment restricting mechanical-cooling rows by equipment-id tokens.
+///
+/// Cohort membership for matrices and motor groups uses the package stamp.
+/// This fragment is a separate filter and must not grow new id tokens.
 pub fn chiller_like_equipment_sql() -> &'static str {
     // LIKE `_` is a wildcard — do not use `CH_%` (matches CHANNEL / CHW…).
     " AND (\
@@ -798,16 +764,16 @@ ORDER BY i.equipment_id
                             .get("on_samples")
                             .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|i| i as u64)))
                             .unwrap_or(0);
+                        let stamp = stamped_types.get(&eq).map(String::as_str);
                         equipment.push(json!({
                             "equipment_id": eq,
+                            "equipment_type": open_fdd_edge_prototype::equipment_types::api_equipment_type_for(&eq, stamp),
+                            "equipment_type_raw": stamp,
                             "run_hours": round2(run_hours),
                             "coverage_pct": round2(coverage_pct),
                             "samples": samples,
                             "on_samples": on_samples,
-                            "plant_group": plant_group_for_typed(
-                                &eq,
-                                stamped_types.get(&eq).map(String::as_str),
-                            ),
+                            "plant_group": plant_group_for_typed(&eq, stamp),
                         }));
                     }
                     let weekly_rows = runtime_weekly_plant_rows(
@@ -988,8 +954,8 @@ ORDER BY week_start, equipment_id
             .get("equipment_id")
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        let Some(plant) = plant_group_for_typed(eq, stamped_types.get(eq).map(String::as_str))
-        else {
+        let stamp = stamped_types.get(eq).map(String::as_str);
+        let Some(plant) = plant_group_for_typed(eq, stamp) else {
             continue;
         };
         let week = row
@@ -1012,6 +978,8 @@ ORDER BY week_start, equipment_id
             "kind": "weekly_equipment",
             "query_version": "runtime-weekly-v2",
             "equipment_id": eq,
+            "equipment_type": open_fdd_edge_prototype::equipment_types::api_equipment_type_for(eq, stamp),
+            "equipment_type_raw": stamp,
             "label": label,
             "plant_group": plant,
             "week_label": week,
@@ -2076,6 +2044,7 @@ pub async fn mech_oat_bins_from_history(
     let max_gap = max_gap_seconds.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
     let chiller_filter = chiller_like_equipment_sql();
+    let weather_ids = stamped_weather_id_predicate(building_id, false);
     let range_sql = time_range_sql(ts_col, start, end);
     let range_sql_h = time_range_sql(&format!("h.{ts_col}"), start, end);
     let oat_f = history_temp_sql(oat);
@@ -2100,8 +2069,7 @@ pub async fn mech_oat_bins_from_history(
                 "weather_oat AS (
   SELECT {ts_col} AS ts, AVG({oa_t_f}) AS oat_f
   FROM history
-  WHERE oa_t IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0{range_sql}
-    AND UPPER(CAST(equipment_id AS VARCHAR)) LIKE '%WEATHER%'
+  WHERE oa_t IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0{range_sql}{weather_ids}
   GROUP BY {ts_col}
 ),
 fallback_oat AS (
@@ -2350,6 +2318,8 @@ pub async fn bas_vs_web_from_history(
         return Ok(None);
     }
     let _eq_filter = equipment_filter_sql(equipment_filter);
+    let weather_only = stamped_weather_id_predicate(building_id, false);
+    let weather_excluded = stamped_weather_id_predicate(building_id, true);
     let limit = max_points.clamp(100, 5000);
     let (web_label, sql) = if let Some(web) = web_col {
         (
@@ -2402,15 +2372,13 @@ LIMIT {limit}
 WITH bas_by_ts AS (
   SELECT {ts_col} AS ts, AVG({bas}) AS bas_oat_f
   FROM history
-  WHERE {bas} IS NOT NULL
-    AND UPPER(CAST(equipment_id AS VARCHAR)) NOT LIKE '%WEATHER%'
+  WHERE {bas} IS NOT NULL{weather_excluded}
   GROUP BY {ts_col}
 ),
 web_by_ts AS (
   SELECT {ts_col} AS ts, AVG({bas}) AS web_oat_f
   FROM history
-  WHERE {bas} IS NOT NULL
-    AND UPPER(CAST(equipment_id AS VARCHAR)) LIKE '%WEATHER%'
+  WHERE {bas} IS NOT NULL{weather_only}
   GROUP BY {ts_col}
 ),
 joined AS (
@@ -2475,7 +2443,7 @@ LIMIT {limit}
     ];
     if weather_split {
         warnings.push(
-            "web OAT sourced from equipment_id matching WEATHER (single oa_t column site)".into(),
+            "web OAT sourced from equipment stamped kind weather (single oa_t column site)".into(),
         );
     }
     let query = AnalyticsQuery::default();
@@ -2682,6 +2650,8 @@ LIMIT {limit}
 }
 
 fn rcx_eq_filter(kinds: &[&str]) -> String {
+    // This predicate still matches equipment_id text. Replacing it with a stamp
+    // is #1037 and is not part of this change. Do not add id tokens here.
     if kinds.is_empty() {
         return String::new();
     }
@@ -2689,9 +2659,6 @@ fn rcx_eq_filter(kinds: &[&str]) -> String {
     for k in kinds {
         let ku = k.to_ascii_uppercase();
         if ku == "VAV" {
-            // Name heuristics for package VAVs PLUS MQTT / Zone Other sites whose
-            // equipment_id does not contain "VAV" (e.g. bldg2-zone-loopback).
-            // Keep id-only predicates so history tables without equipment_type still work.
             parts.push(
                 "(UPPER(equipment_id) LIKE 'VAV%' OR UPPER(equipment_id) LIKE '%/VAV%' \
                  OR UPPER(equipment_id) LIKE '%VAVH%' OR UPPER(equipment_id) LIKE '%VAVFC%' \
@@ -4007,25 +3974,43 @@ mod tests {
     }
 
     #[test]
-    fn plant_group_for_maps_common_ids() {
-        assert_eq!(plant_group_for("AHU_1"), Some("air"));
-        assert_eq!(plant_group_for("RTU_WEST"), Some("air"));
-        assert_eq!(plant_group_for("MAU_1"), Some("air"));
-        assert_eq!(plant_group_for("CHILLER_1"), Some("chiller"));
-        assert_eq!(plant_group_for("CT_1"), Some("chiller"));
-        assert_eq!(plant_group_for("HP_3"), Some("chiller"));
-        assert_eq!(plant_group_for("BOILER_1"), Some("boiler"));
-        assert_eq!(plant_group_for("VAV_101"), None);
-        assert_eq!(plant_group_for("BUILDING/VAVFC_2"), None);
-        assert_eq!(plant_group_for("AHU_1_VAV_12"), None);
-        assert_eq!(plant_group_for("AHU-1-VAV-03"), None);
-        assert_eq!(plant_group_for("CH-1"), Some("chiller"));
-        assert_eq!(plant_group_for("CH_1"), Some("chiller"));
-        assert_eq!(plant_group_for("CHLR_2"), Some("chiller"));
-        assert_eq!(plant_group_for("CHANNEL_1"), None);
-        // Bare FAN/SUPPLY must not swallow unrelated motors.
-        assert_eq!(plant_group_for("EXHAUST_FAN_1"), None);
-        assert_eq!(plant_group_for("SUPPLY_METER"), None);
+    fn plant_group_follows_stamp_not_id() {
+        assert_eq!(plant_group_for_typed("AHU_1", Some("ahu")), Some("air"));
+        assert_eq!(plant_group_for_typed("jci_ahu_1", Some("rtu")), Some("air"));
+        assert_eq!(plant_group_for_typed("AC_1", Some("ahu")), Some("air"));
+        assert_eq!(
+            plant_group_for_typed("CHILLER_1", Some("chwPlant")),
+            Some("chiller")
+        );
+        assert_eq!(
+            plant_group_for_typed("CT_1", Some("coolingTower")),
+            Some("chiller")
+        );
+        assert_eq!(
+            plant_group_for_typed("HP_3", Some("heatPump")),
+            Some("chiller")
+        );
+        assert_eq!(
+            plant_group_for_typed("BOILER_1", Some("boiler")),
+            Some("boiler")
+        );
+        assert_eq!(plant_group_for_typed("jci_vav_1", Some("vav")), None);
+        assert_eq!(plant_group_for_typed("trane_vav_2", Some("vav")), None);
+        assert_eq!(plant_group_for_typed("OA_REF", Some("weather")), None);
+        assert_eq!(plant_group_for_typed("bldg2-zone-loopback", None), None);
+        assert_eq!(plant_group_for_typed("AHU_1", None), None);
+        assert_eq!(plant_group_for_typed("VAV_101", None), None);
+        assert_eq!(plant_group_for_typed("CHILLER_1", None), None);
+        assert_eq!(plant_group_for_typed("HP_3", None), None);
+        assert_eq!(plant_group_for_typed("EXHAUST_FAN_1", None), None);
+        assert_eq!(
+            plant_group_for_typed("AHU_1_VAV_12", Some("ahu")),
+            Some("air")
+        );
+        assert_eq!(
+            plant_group_for_typed("HP_HEAT_PUMP_X", Some("chiller")),
+            Some("chiller")
+        );
     }
 
     #[test]

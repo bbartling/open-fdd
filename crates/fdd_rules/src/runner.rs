@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use datafusion::prelude::*;
 use fdd_sql::{
     new_historian_session, register_historian_building, register_parquet_tree,
-    register_utility_if_present, register_weather_if_present, run_sql,
+    register_utility_if_present, register_weather_for_building, run_sql,
 };
 use fdd_store::{merge_windowed_rule_result, HistorianConfig};
 use serde::Serialize;
@@ -270,7 +270,7 @@ pub async fn run_all_rules_with_overrides(
         register_parquet_tree(&ctx, parquet_root).await?;
     }
     let wx_root = options.weather_root.unwrap_or(parquet_root);
-    register_weather_if_present(&ctx, wx_root).await?;
+    register_weather_for_building(&ctx, wx_root, options.building_id).await?;
     if let Some((start_utc, end_utc)) = options.time_window {
         scope_history_to_time_window(&ctx, start_utc, end_utc).await?;
     }

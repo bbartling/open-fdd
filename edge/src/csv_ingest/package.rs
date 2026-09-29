@@ -1141,11 +1141,6 @@ fn find_equipment_dir(building_root: &Path, equipment_id: &str) -> Option<PathBu
     None
 }
 
-fn infer_equipment_type_local(equipment_id: &str) -> &'static str {
-    // Display label fallback when no package stamp is present (DM-04 prefers stamps).
-    crate::equipment_types::api_equipment_type_for(equipment_id, None)
-}
-
 /// Load package stamps from csv_buildings and/or Parquet `equipment_types.json`.
 fn load_stamped_types_for_building(
     building_id: &str,
@@ -1174,15 +1169,7 @@ fn resolve_mapping_equipment_type(
     let raw = stamped_types.get(equipment_id).cloned();
     let display =
         crate::equipment_types::api_equipment_type_for(equipment_id, raw.as_deref()).to_string();
-    let source = if raw
-        .as_deref()
-        .and_then(crate::equipment_types::canonical_kind)
-        .is_some()
-    {
-        "package"
-    } else {
-        "id"
-    };
+    let source = crate::equipment_types::equipment_type_source(raw.as_deref());
     (display, raw, source)
 }
 
@@ -1206,9 +1193,11 @@ fn infer_parent_ahu(equipment_id: &str, siblings: &[String]) -> Option<String> {
         }
     }
     // Embedded `…AHU…N…` substring match against known AHU siblings.
+    // Parent proposals still notice an AHU token in a sibling id (#1041).
+    // Plot, matrix, and rule cohorts do not use this.
     let ahus: Vec<&String> = siblings
         .iter()
-        .filter(|s| infer_equipment_type_local(s) == "AHU")
+        .filter(|s| sibling_id_has_air_handler_token(s))
         .collect();
     for ahu in &ahus {
         let ahu_u = ahu.to_ascii_uppercase();
@@ -1220,6 +1209,19 @@ fn infer_parent_ahu(equipment_id: &str, siblings: &[String]) -> Option<String> {
         return Some(ahus[0].clone());
     }
     None
+}
+
+/// Id-token check used only by [`infer_parent_ahu`] proposals (#1041).
+///
+/// Same token order the old display fallback used: a VAV/ZONE id stays a
+/// terminal even when it embeds `AHU` (`VAV_2_AHU_1`). Plot, matrix, and rule
+/// cohorts do not call this.
+fn sibling_id_has_air_handler_token(equipment_id: &str) -> bool {
+    let id = equipment_id.to_ascii_uppercase();
+    if id.contains("WEATHER") || id.contains("METER") || id.contains("VAV") || id.contains("ZONE") {
+        return false;
+    }
+    id.contains("AHU") || id.contains("RTU") || id.contains("MAU") || id.contains("DOAS")
 }
 
 /// Raw columns.csv parse — empty roles stay empty (no silent inference for the editor).
@@ -2155,7 +2157,7 @@ mod tests {
         assert_eq!(source, "package");
         let (display2, _, source2) = resolve_mapping_equipment_type("AC_1", &BTreeMap::new());
         assert_eq!(display2, "GENERAL");
-        assert_eq!(source2, "id");
+        assert_eq!(source2, "unclassified");
     }
 
     #[test]
