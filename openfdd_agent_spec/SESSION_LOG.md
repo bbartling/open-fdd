@@ -17,6 +17,11 @@
 
 - SPA series preview on FDD Plots and each RCx timeseries card shows the most recent samples of the figure already loaded (newest first). Per-plot dropdown default 10; options 10/20/50/100/500. No historian refetch and no VERSION bump (#1050).
 
+## 2026-09-29 — Equipment kind is the stamp (#1043)
+
+- Rule 64 (absolute): the framework never hardcodes one building, never prefers a fixture id over `equipType` / `equipment_type`, and never substrings or `LIKE`s `equipment_id`. Prefix `LIKE` is the plot-filter defect (`RTU_01` must not select `RTU_010`). A missing stamp matches nothing. Plot and mech-cooling cohorts use the stamp, then exact equipment ids. Parent-AHU id proposals are not a plot filter (#1041). No MQTT delta payload.
+- Opaque ids stay stamp-selected after #1062: `AC_1` + `equipType: fanCoil` is `zone_other`. Soft-OPEN; no FQ claim.
+
 ## 2026-09-27 — Tip 3.5.53 closeout stress (not FQ)
 
 - Tip `dc32615` / VERSION 3.5.53 on Railway (`sha-dc32615`); backup `20260927T193409Z`; edge `vim-1` MQTTS fresh.
