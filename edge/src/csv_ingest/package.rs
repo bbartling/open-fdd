@@ -1211,11 +1211,9 @@ fn infer_parent_ahu(equipment_id: &str, siblings: &[String]) -> Option<String> {
     None
 }
 
-/// Id-token check used only by [`infer_parent_ahu`] proposals (#1041).
+/// Parent-link proposal only (#1041). Not a kind, plot, matrix, or rule filter.
 ///
-/// Same token order the old display fallback used: a VAV/ZONE id stays a
-/// terminal even when it embeds `AHU` (`VAV_2_AHU_1`). Plot, matrix, and rule
-/// cohorts do not call this.
+/// A VAV/ZONE id stays a terminal even when it embeds `AHU` (`VAV_2_AHU_1`).
 fn sibling_id_has_air_handler_token(equipment_id: &str) -> bool {
     let id = equipment_id.to_ascii_uppercase();
     if id.contains("WEATHER") || id.contains("METER") || id.contains("VAV") || id.contains("ZONE") {

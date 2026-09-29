@@ -222,7 +222,7 @@ mod smoke {
         ctx.register_table("history", Arc::new(mem)).unwrap();
 
         let root = tempfile::tempdir().unwrap();
-        let building = root.path().join("building=ACME");
+        let building = root.path().join("building=site_a");
         std::fs::create_dir_all(&building).unwrap();
         std::fs::write(
             building.join("equipment_types.json"),
@@ -230,7 +230,7 @@ mod smoke {
         )
         .unwrap();
 
-        let registered = register_weather_for_building(&ctx, root.path(), Some("ACME"))
+        let registered = register_weather_for_building(&ctx, root.path(), Some("site_a"))
             .await
             .unwrap();
         assert!(registered);

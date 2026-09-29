@@ -1274,25 +1274,18 @@ fn role_to_haystack(role: &str) -> String {
     }
 }
 
-fn infer_eq_type(equipment_id: &str) -> &'static str {
-    let id = equipment_id.to_ascii_uppercase();
-    if id.contains("VAV") || id.contains("ZONE") {
-        "VAV"
-    } else if id.contains("AHU") || id.contains("RTU") || id.contains("MAU") {
-        "AHU"
-    } else if id.contains("CHILL") {
-        "CHILLER"
-    } else if id.contains("BOILER") {
-        "BOILER"
-    } else if id.contains("TOWER") {
-        "COOLING_TOWER"
-    } else if id.contains("HP") || id.contains("HEAT") {
-        "HEAT_PUMP"
-    } else if id.contains("WEATHER") {
-        "WEATHER"
-    } else {
-        "GENERAL"
-    }
+fn equipment_stamp_map(building_id: Option<&str>) -> BTreeMap<String, String> {
+    open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id)
+}
+
+fn stamped_display_type(types: &BTreeMap<String, String>, equipment_id: &str) -> &'static str {
+    let stamp = types.get(equipment_id).map(String::as_str);
+    open_fdd_edge_prototype::equipment_types::api_equipment_type_for(equipment_id, stamp)
+}
+
+fn stamped_kind(types: &BTreeMap<String, String>, equipment_id: &str) -> &'static str {
+    let stamp = types.get(equipment_id).map(String::as_str);
+    open_fdd_edge_prototype::equipment_types::kind_for(equipment_id, stamp)
 }
 
 fn fan_on_sql(cols: &HashSet<String>) -> String {
@@ -1342,6 +1335,7 @@ pub async fn sensor_stats_from_history(
         selects.join(" UNION ALL ")
     );
     let result = run_sql(&ctx, &sql).await?;
+    let stamps = equipment_stamp_map(building_id);
     let mut rows = Vec::with_capacity(result.rows.len());
     for r in &result.rows {
         let n_finite = as_u64(r.get("n_finite"));
@@ -1356,7 +1350,7 @@ pub async fn sensor_stats_from_history(
         let role = r.get("role").and_then(|v| v.as_str()).unwrap_or("");
         rows.push(json!({
             "equipment_id": eq,
-            "equipment_type": infer_eq_type(&eq),
+            "equipment_type": stamped_display_type(&stamps, &eq),
             "role": role_to_haystack(role),
             "source": "historian",
             "n": as_u64(r.get("n")),
@@ -1451,6 +1445,7 @@ pub async fn setpoints_from_history(
             run_sql(&ctx, &selects.join(" UNION ALL ")).await?
         }
     };
+    let stamps = equipment_stamp_map(building_id);
     let mut rows = Vec::new();
     for r in &result.rows {
         let eq = r
@@ -1461,7 +1456,7 @@ pub async fn setpoints_from_history(
         let role = r.get("role").and_then(|v| v.as_str()).unwrap_or("");
         rows.push(json!({
             "equipment_id": eq,
-            "equipment_type": infer_eq_type(&eq),
+            "equipment_type": stamped_display_type(&stamps, &eq),
             "role": role_to_haystack(role),
             "median_occupied": as_f64(r.get("median_occupied")).map(round4),
             "median_unoccupied": as_f64(r.get("median_unoccupied")).map(round4),
@@ -1525,6 +1520,7 @@ pub async fn diurnal_from_history(
         selects.join(" UNION ALL ")
     );
     let result = run_sql(&ctx, &sql).await?;
+    let stamps = equipment_stamp_map(building_id);
     let mut rows = Vec::new();
     for r in &result.rows {
         let eq = r
@@ -1535,7 +1531,7 @@ pub async fn diurnal_from_history(
         let role = r.get("role").and_then(|v| v.as_str()).unwrap_or("");
         rows.push(json!({
             "equipment_id": eq,
-            "equipment_type": infer_eq_type(&eq),
+            "equipment_type": stamped_display_type(&stamps, &eq),
             "role": role_to_haystack(role),
             "source": "historian",
             "day_type": "all",
@@ -1559,7 +1555,7 @@ pub async fn diurnal_from_history(
     Ok(Some(env))
 }
 
-/// Equipment topology (feeds / fedBy) inferred from equipment ids.
+/// Equipment topology (feeds / fedBy). Membership is the package stamp.
 pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<AnalyticsEnvelope>> {
     let Some((ctx, _cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
@@ -1578,26 +1574,27 @@ pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<A
                 .map(str::to_string)
         })
         .collect();
+    let stamps = equipment_stamp_map(building_id);
     let ahus: Vec<&str> = ids
         .iter()
-        .filter(|id| infer_eq_type(id) == "AHU")
+        .filter(|id| stamped_kind(&stamps, id) == "ahu")
         .map(|s| s.as_str())
         .collect();
+    let parent = infer_parent_ahu(&ahus);
     let mut rows = Vec::new();
     let mut data_model = Vec::new();
     for id in &ids {
-        let kind = infer_eq_type(id);
+        let kind = stamped_kind(&stamps, id);
         data_model.push(json!({
             "equipment_id": id,
-            "equipment_type": kind,
+            "equipment_type": stamped_display_type(&stamps, id),
             "haystack_point": "",
             "csv_column": "",
             "present_in_history": true,
             "required_by_rules": "",
         }));
-        if kind == "VAV" {
-            let parent = infer_parent_ahu(id, &ahus);
-            if let Some(ahu) = parent {
+        if kind == "vav" {
+            if let Some(ahu) = parent.clone() {
                 rows.push(json!({
                     "equipment_id": id,
                     "relation": "fedBy",
@@ -1620,7 +1617,7 @@ pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<A
     let mut env = envelope_with_engine(
         QV_TOPOLOGY,
         &AnalyticsQuery::default(),
-        vec!["topology inferred from historian equipment ids".into()],
+        vec!["topology uses equipment stamps; a missing stamp is unclassified".into()],
         DF_ENGINE,
     );
     env.rows = rows;
@@ -1629,18 +1626,13 @@ pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<A
     Ok(Some(env))
 }
 
-fn infer_parent_ahu(vav_id: &str, ahus: &[&str]) -> Option<String> {
-    let up = vav_id.to_ascii_uppercase();
-    for ahu in ahus {
-        let a = ahu.to_ascii_uppercase();
-        if up.contains(&a) {
-            return Some((*ahu).to_string());
-        }
-    }
+/// One stamped AHU in the building can be the parent. Id text does not pick it.
+fn infer_parent_ahu(ahus: &[&str]) -> Option<String> {
     if ahus.len() == 1 {
-        return Some(ahus[0].to_string());
+        Some(ahus[0].to_string())
+    } else {
+        None
     }
-    None
 }
 
 /// Boolean occupied-expression from `occ_mode` (Utf8).
@@ -3335,6 +3327,7 @@ pub async fn sql_anomaly_from_history(
         parts.join(" UNION ALL ")
     );
     let result = run_sql(&ctx, &sql).await?;
+    let stamps = equipment_stamp_map(building_id);
     let mut rows = Vec::with_capacity(result.rows.len());
     for r in &result.rows {
         let eq = r
@@ -3349,7 +3342,7 @@ pub async fn sql_anomaly_from_history(
             .unwrap_or(if use_robust { "robust" } else { "zscore" });
         rows.push(json!({
             "equipment_id": eq,
-            "equipment_type": infer_eq_type(&eq),
+            "equipment_type": stamped_display_type(&stamps, &eq),
             "role": role_to_haystack(role),
             "metric": role,
             "method": method_out,
@@ -3971,6 +3964,23 @@ mod tests {
             .unwrap();
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
         assert!(out.is_none());
+    }
+
+    #[test]
+    fn analytics_label_follows_stamp_not_id() {
+        let types = BTreeMap::from([
+            ("AC_1".into(), "ahu".into()),
+            ("CHILLER_HEAT_PUMP".into(), "chiller".into()),
+            ("jci_vav_1".into(), "vav".into()),
+        ]);
+        assert_eq!(stamped_display_type(&types, "AC_1"), "AHU");
+        assert_eq!(stamped_kind(&types, "CHILLER_HEAT_PUMP"), "chiller");
+        assert_eq!(stamped_kind(&types, "jci_vav_1"), "vav");
+        assert_eq!(stamped_display_type(&types, "AHU_1"), "GENERAL");
+        assert_eq!(stamped_kind(&types, "AHU_1"), "unknown");
+        assert_eq!(stamped_kind(&types, "bldg2-zone-loopback"), "unknown");
+        assert_eq!(infer_parent_ahu(&["AHU_1"]), Some("AHU_1".into()));
+        assert_eq!(infer_parent_ahu(&["AHU_1", "AHU_2"]), None);
     }
 
     #[test]
