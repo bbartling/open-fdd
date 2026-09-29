@@ -8,11 +8,11 @@ nav_order: 2
 
 **Oracle / documentation catalog:** packaged as `open_fdd.rules` on PyPI (`pip install "open-fdd[oracle]"`) — **71** executable diagnostics. Source of truth: [`open_fdd/rules/cookbook_catalog.py`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py). Consumers pin the wheel rather than maintaining a second copy.
 
-This cookbook is **intentionally maintained**. Production Open-FDD FDD math runs **Rust + Apache Arrow + DataFusion SQL** (`sql_rules/registry.yaml`, **77** entries = 71 diagnostic twins + 4 SQL analytics + 2 UTIL). Use this pandas catalog for notebooks, CSV exports, RCx studies, and SQL↔pandas parity testing. The nine FCU / `zone_other` rules are documented in [FCU and zone_other rules](fcu-zone-other.html).
+This cookbook is **intentionally maintained**. Production Open-FDD FDD math runs **Rust + Apache Arrow + DataFusion SQL** (`sql_rules/registry.yaml`, **77** entries = 71 diagnostic twins + 4 SQL analytics + 2 UTIL). Use this pandas catalog for notebooks, CSV exports, RCx studies, and SQL↔pandas parity testing. The nine FCU / `zone_other` rules are cataloged under [Fan coil / zone_other](#fan-coil--zone_other). Unit boundary and equipment kinds are in [FCU and zone_other rules](fcu-zone-other.html).
 
 See also the [DataFusion SQL cookbook](datafusion-sql-cookbook.html), [parity matrix](parity-matrix.html), [generated parity report](generated-parity-report.html), and [P0 rule catalog](p0-rule-catalog.html).
 
-**Updated:** 2026-08-15 · PyPI `open-fdd` 4.4.1 (`open_fdd.rules`)
+**Updated:** 2026-09-29 (FCU / zone_other catalog) · PyPI `open-fdd` 4.4.1 (`open_fdd.rules`)
 
 
 ---
@@ -25,13 +25,14 @@ See also the [DataFusion SQL cookbook](datafusion-sql-cookbook.html), [parity ma
 4. [Control-loop hunting](#control-loop-hunting)
 5. [Air handling units](#air-handling-units)
 6. [VAV terminals](#vav-terminals)
-7. [Central plant / condenser water](#central-plant--condenser-water)
-8. [Heat pumps](#heat-pumps)
-9. [Weather station](#weather-station)
-10. [Trim & respond advisory](#trim--respond-advisory)
-11. [Schedule & occupancy](#schedule--occupancy)
-12. [Not yet in validated catalog](#not-yet-in-validated-catalog)
-13. [Framework docs](#framework-docs)
+7. [Fan coil / zone_other](#fan-coil--zone_other)
+8. [Central plant / condenser water](#central-plant--condenser-water)
+9. [Heat pumps](#heat-pumps)
+10. [Weather station](#weather-station)
+11. [Trim & respond advisory](#trim--respond-advisory)
+12. [Schedule & occupancy](#schedule--occupancy)
+13. [Not yet in validated catalog](#not-yet-in-validated-catalog)
+14. [Framework docs](#framework-docs)
 
 ---
 
@@ -1890,6 +1891,330 @@ def vav7(d, p, poll):
 
 d = apply_fault(d, vav7(d, params, POLL_SECONDS))
 d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+## Fan coil / zone_other
+
+Nine `FCU-*` oracle functions in `open_fdd.rules.cookbook_catalog` (`family: fcu`). Equipment kinds are `zone_other`, `general`, and `ahu`. Each function returns a raw boolean mask. `confirm_fault` (`open_fdd.rules.base`) keeps that mask when `confirm_seconds` is 0 and otherwise requires the mask to hold for `confirm_seconds`. Registry defaults are 900 s for the duration rules and 0 s for sensor-null, deadband, and mode-cycle. The slider key is `confirm_min`, and its default is `confirm_seconds / 60` after catalog load.
+
+Haystack role names below match the oracle (hyphens). SQL role names and the °F / °C trap are in [FCU and zone_other rules](fcu-zone-other.html) and the [DataFusion cookbook](datafusion-sql-cookbook.html#fan-coil--zone_other). Parity level remains `sql_screening`.
+
+Fan proof is `_fcu_fan_on`: where `fan-status` is present and non-null, `as_bool` treats a numeric status as on when it is `> 0.5`; null status samples fall back to normalized `fan-cmd > 0.10`. If the status column is absent, command alone is used. The DataFusion twin uses `fan_status > 0.05` on non-null status. That threshold difference is part of why the family stays `sql_screening`.
+
+`norm_cmd` divides values `> 1.0` by 100. Valve-shut tests use a fixed `0.05`. CO₂ below `300` ppm does not fault.
+
+```python
+def _fcu_fan_on(d: pd.DataFrame) -> pd.Series:
+    """Use status wherever present, with command fallback per sample."""
+    if "fan-status" in d.columns:
+        status = as_bool(d["fan-status"])
+        if "fan-cmd" in d.columns:
+            command = norm_cmd(d["fan-cmd"]).fillna(0) > 0.10
+            return status.where(d["fan-status"].notna(), command)
+        return status
+    if "fan-cmd" in d.columns:
+        return norm_cmd(d["fan-cmd"]).fillna(0) > 0.10
+    return _false(d.index)
+```
+
+### FCU-SENSOR-NULL — Missing FCU zone sensor
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Own zone setpoint is present, and zone temperature is null for at least 90% of those rows. Every eligible null sample is then a raw fault.  
+**Default confirmation:** 0 s
+
+**Required roles:** `zone-air-temp-sp`  
+**Optional roles:** `zone-air-temp`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `null_fraction` | Null fraction | frac | 0.90 | 0.50–1.0 |
+
+If `zone-air-temp` is not a column, the mask is all false (same outcome as the SQL rewrite to zero hours when `zone_t` is absent).
+
+```python
+FAULT_CONFIRM_SECONDS = 0
+
+def fcu_sensor_null(d, p, poll):
+    if "zone-air-temp" not in d.columns:
+        return pd.Series(False, index=d.index)
+    zone = pd.to_numeric(d["zone-air-temp"], errors="coerce")
+    sp = pd.to_numeric(d["zone-air-temp-sp"], errors="coerce")
+    eligible = sp.notna()
+    null_fraction = float(zone[eligible].isna().mean()) if eligible.any() else 0.0
+    return eligible & zone.isna() & (null_fraction >= _f(p, "null_fraction", 0.90))
+
+d = apply_fault(d, fcu_sensor_null(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(
+    d["fault_raw"], poll_seconds=POLL_SECONDS, confirm_seconds=FAULT_CONFIRM_SECONDS
+)
+```
+
+### FCU-HTG-COIL — FCU heating coil under-delivery
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Fan on, heating valve ≥ 80%, and discharge air is less than 5.4°F above zone temperature.  
+**Default confirmation:** 900 s
+
+**Required roles:** `discharge-air-temp`, `zone-air-temp`, `heating-valve`  
+**Optional roles:** `fan-status`, `fan-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `valve_open` | Valve open threshold | frac | 0.80 | 0.50–1.0 |
+| `coil_delta_f` | Minimum heating rise | °F | 5.4 | 1.0–20.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def fcu_htg_coil(d, p, poll):
+    heat = norm_cmd(d["heating-valve"])
+    rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
+        d["zone-air-temp"], errors="coerce"
+    )
+    return _fcu_fan_on(d) & heat.notna() & (heat >= _f(p, "valve_open", 0.80)) & (rise < _f(p, "coil_delta_f", 5.4))
+
+d = apply_fault(d, fcu_htg_coil(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(
+    d["fault_raw"], poll_seconds=POLL_SECONDS, confirm_seconds=FAULT_CONFIRM_SECONDS
+)
+```
+
+### FCU-CLG-COIL — FCU cooling coil under-delivery
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Fan on, cooling valve ≥ 80%, heating shut (≤ 0.05), and discharge air is not below zone temperature (`rise >= 0`).  
+**Default confirmation:** 900 s
+
+**Required roles:** `discharge-air-temp`, `zone-air-temp`, `cooling-valve`, `heating-valve`  
+**Optional roles:** `fan-status`, `fan-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `valve_open` | Valve open threshold | frac | 0.80 | 0.50–1.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def fcu_clg_coil(d, p, poll):
+    cool = norm_cmd(d["cooling-valve"])
+    heat = norm_cmd(d["heating-valve"])
+    rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
+        d["zone-air-temp"], errors="coerce"
+    )
+    return (
+        _fcu_fan_on(d) & cool.notna() & heat.notna()
+        & (cool >= _f(p, "valve_open", 0.80)) & (heat <= 0.05) & (rise >= 0)
+    )
+
+d = apply_fault(d, fcu_clg_coil(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(
+    d["fault_raw"], poll_seconds=POLL_SECONDS, confirm_seconds=FAULT_CONFIRM_SECONDS
+)
+```
+
+### FCU-VALVE-PASS-HTG — FCU heating valve passing
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Fan on, both valves shut (≤ 0.05), and discharge air exceeds zone temperature by more than 5.4°F.  
+**Default confirmation:** 900 s
+
+**Required roles:** `discharge-air-temp`, `zone-air-temp`, `heating-valve`, `cooling-valve`  
+**Optional roles:** `fan-status`, `fan-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `pass_delta_f` | Passing temperature rise | °F | 5.4 | 1.0–20.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def fcu_valve_pass_htg(d, p, poll):
+    heat = norm_cmd(d["heating-valve"])
+    cool = norm_cmd(d["cooling-valve"])
+    rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
+        d["zone-air-temp"], errors="coerce"
+    )
+    return (
+        _fcu_fan_on(d) & heat.notna() & cool.notna()
+        & (heat <= 0.05) & (cool <= 0.05) & (rise > _f(p, "pass_delta_f", 5.4))
+    )
+
+d = apply_fault(d, fcu_valve_pass_htg(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(
+    d["fault_raw"], poll_seconds=POLL_SECONDS, confirm_seconds=FAULT_CONFIRM_SECONDS
+)
+```
+
+### FCU-VALVE-PASS-CLG — FCU cooling valve passing
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Fan on, both valves shut (≤ 0.05), and zone temperature exceeds discharge air by more than 5.4°F.  
+**Default confirmation:** 900 s
+
+**Required roles:** `discharge-air-temp`, `zone-air-temp`, `heating-valve`, `cooling-valve`  
+**Optional roles:** `fan-status`, `fan-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `pass_delta_f` | Passing temperature drop | °F | 5.4 | 1.0–20.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def fcu_valve_pass_clg(d, p, poll):
+    heat = norm_cmd(d["heating-valve"])
+    cool = norm_cmd(d["cooling-valve"])
+    drop = pd.to_numeric(d["zone-air-temp"], errors="coerce") - pd.to_numeric(
+        d["discharge-air-temp"], errors="coerce"
+    )
+    return (
+        _fcu_fan_on(d) & heat.notna() & cool.notna()
+        & (heat <= 0.05) & (cool <= 0.05) & (drop > _f(p, "pass_delta_f", 5.4))
+    )
+
+d = apply_fault(d, fcu_valve_pass_clg(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(
+    d["fault_raw"], poll_seconds=POLL_SECONDS, confirm_seconds=FAULT_CONFIRM_SECONDS
+)
+```
+
+### FCU-DAMPER-POS — FCU damper command/position mismatch
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Fan on, damper command ≥ 15%, and feedback is more than 15 percentage points below command.  
+**Default confirmation:** 900 s
+
+**Required roles:** `damper-cmd`, `damper`  
+**Optional roles:** `fan-status`, `fan-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `command_min` | Minimum damper command | frac | 0.15 | 0.0–1.0 |
+| `position_error` | Position error | frac | 0.15 | 0.05–0.50 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def fcu_damper_pos(d, p, poll):
+    cmd = norm_cmd(d["damper-cmd"])
+    pos = norm_cmd(d["damper"])
+    return (
+        _fcu_fan_on(d)
+        & (cmd >= _f(p, "command_min", 0.15))
+        & ((cmd - pos) > _f(p, "position_error", 0.15))
+    )
+
+d = apply_fault(d, fcu_damper_pos(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(
+    d["fault_raw"], poll_seconds=POLL_SECONDS, confirm_seconds=FAULT_CONFIRM_SECONDS
+)
+```
+
+### FCU-CO2-DAMPER — FCU high CO₂ with low outdoor-air command
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Fan on, valid CO₂ exceeds 1000 ppm (and is at least 300 ppm), while damper command stays below 10%.  
+**Default confirmation:** 900 s
+
+**Required roles:** `zone-co2`, `damper-cmd`  
+**Optional roles:** `fan-status`, `fan-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `co2_high_ppm` | High CO₂ | ppm | 1000 | 600–2000 |
+| `damper_low` | Low damper command | frac | 0.10 | 0.0–0.50 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def fcu_co2_damper(d, p, poll):
+    co2 = pd.to_numeric(d["zone-co2"], errors="coerce")
+    cmd = norm_cmd(d["damper-cmd"])
+    return (
+        _fcu_fan_on(d)
+        & (co2 > _f(p, "co2_high_ppm", 1000.0))
+        & (co2 >= 300.0)
+        & (cmd < _f(p, "damper_low", 0.10))
+    )
+
+d = apply_fault(d, fcu_co2_damper(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(
+    d["fault_raw"], poll_seconds=POLL_SECONDS, confirm_seconds=FAULT_CONFIRM_SECONDS
+)
+```
+
+### FCU-DEADBAND — FCU heat/cool deadband collapse
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Pass-through cooling setpoint minus heating setpoint is less than 1°C. These two roles stay site-native Celsius. Do not map Fahrenheit setpoints into them.  
+**Default confirmation:** 0 s
+
+**Required roles:** `cooling-sp`, `heating-sp`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `deadband_c` | Minimum deadband | °C | 1.0 | 0.0–5.0 |
+
+The pandas runner also skips Fahrenheit quality ranges on `cooling-sp`, `heating-sp`, and `zone-air-temp-sp` for every `FCU-*` rule so those pass-through columns are not nulled before this test.
+
+```python
+FAULT_CONFIRM_SECONDS = 0
+
+def fcu_deadband(d, p, poll):
+    cool = pd.to_numeric(d["cooling-sp"], errors="coerce")
+    heat = pd.to_numeric(d["heating-sp"], errors="coerce")
+    return cool.notna() & heat.notna() & ((cool - heat) < _f(p, "deadband_c", 1.0))
+
+d = apply_fault(d, fcu_deadband(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(
+    d["fault_raw"], poll_seconds=POLL_SECONDS, confirm_seconds=FAULT_CONFIRM_SECONDS
+)
+```
+
+### FCU-MODE-CYCLE — FCU heating/cooling mode cycling
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** At least four heating/cooling valve mode changes in the analysis window. Cooling (`-1`) wins when both valves exceed the active threshold. Idle samples are left out of the transition sequence and are not fault rows after the count crosses the threshold.  
+**Default confirmation:** 0 s
+
+**Required roles:** `heating-valve`, `cooling-valve`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mode_valve_min` | Active valve threshold | frac | 0.10 | 0.0–0.50 |
+| `mode_changes` | Mode changes | count | 4 | 1–20 |
+
+```python
+FAULT_CONFIRM_SECONDS = 0
+
+def fcu_mode_cycle(d, p, poll):
+    heat = norm_cmd(d["heating-valve"])
+    cool = norm_cmd(d["cooling-valve"])
+    mode = pd.Series(0, index=d.index, dtype=int)
+    mode = mode.mask(heat > _f(p, "mode_valve_min", 0.10), 1)
+    mode = mode.mask(cool > _f(p, "mode_valve_min", 0.10), -1)
+    active = mode.where(mode != 0).ffill().fillna(0)
+    changes = (
+        (active != active.shift()) & (active != 0) & (active.shift().fillna(0) != 0)
+    ).astype(int).cumsum()
+    # Idle samples are omitted from the transition sequence and must not become
+    # fault rows after the threshold is crossed.
+    return (mode != 0) & (changes >= int(_f(p, "mode_changes", 4.0)))
+
+d = apply_fault(d, fcu_mode_cycle(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(
+    d["fault_raw"], poll_seconds=POLL_SECONDS, confirm_seconds=FAULT_CONFIRM_SECONDS
+)
 ```
 
 ## Central plant / condenser water

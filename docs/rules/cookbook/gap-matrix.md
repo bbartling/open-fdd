@@ -27,6 +27,7 @@ Comparison of **Open-FDD cookbook coverage** against public FDD, re-tuning, and 
 | Control hunting | ✅ PID-HUNT-1 (+ FC4) |
 | Economizer & ventilation | ✅ ECON-1–7, OA-1, OAT-METEO, MECH-OAT-1 |
 | VAV terminals | ✅ VAV-1–7, VAV-REHEAT, VAV-AHU-LEAVE |
+| Fan coil / zone_other | ✅ FCU-SENSOR-NULL, FCU-HTG-COIL, FCU-CLG-COIL, FCU-VALVE-PASS-HTG, FCU-VALVE-PASS-CLG, FCU-DAMPER-POS, FCU-CO2-DAMPER, FCU-DEADBAND, FCU-MODE-CYCLE (`sql_screening`) |
 | Reset / schedule / override | ✅ SCHED-1, SCHED-247, RESET-1 · 🚩 OVR-1, SP-HIGH/LOW, PLANT-1 |
 | Command vs status | ✅ CMD-1 |
 | Valve / damper leakage | ✅ VLV-1, DMP-1, FC14–15 |

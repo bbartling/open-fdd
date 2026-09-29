@@ -26,6 +26,7 @@ Open-source, **standards-first** HVAC fault detection. Production rules are **Da
 | [DataFusion SQL cookbook](cookbook/datafusion-sql-cookbook.html) | Copy-paste production rules |
 | [Pandas cookbook](cookbook/pandas-cookbook.html) | Same recipes for analyst workflows outside Open-FDD |
 | [Taxonomy](cookbook/taxonomy.html) | Families and naming |
+| [FCU / zone_other](cookbook/fcu-zone-other.html) | Fan-coil stamps, roles, and the °F / °C boundary; catalog sections are in the SQL and Pandas cookbooks |
 
 ## Anomaly & sensor quality (quick map)
 

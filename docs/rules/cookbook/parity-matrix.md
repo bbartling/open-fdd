@@ -80,6 +80,8 @@ P0 correctness backlog (Wave 1): `SV-STALE`, `FC2`, `FC4`, `FC6`, `FC14`/`FC15`,
 | schedule | SCHED-1, SCHED-247 | ✅ | ✅ | screening |
 | fcu / zone | FCU-* | ✅ | ✅ | screening |
 
+Per-rule equations, parameters, and shipped SQL / pandas live in the [DataFusion cookbook](datafusion-sql-cookbook.html#fan-coil--zone_other) and the [Pandas cookbook](pandas-cookbook.html#fan-coil--zone_other). Unit boundary and equipment kinds: [FCU and zone_other rules](fcu-zone-other.html).
+
 ---
 
 ## Backend-specific caveats

@@ -8,8 +8,11 @@ permalink: /rules/cookbook/
 
 # HVAC FDD Rule Cookbook
 
-See [FCU / zone_other rules](fcu-zone-other.md) for the nine fan-coil and
-standalone controller diagnostics, role requirements, and unit boundary.
+The nine fan-coil and standalone-controller diagnostics are in the cookbook
+catalogs: [DataFusion SQL](datafusion-sql-cookbook.html#fan-coil--zone_other)
+and [Pandas](pandas-cookbook.html#fan-coil--zone_other). Role requirements,
+equipment kinds, and the °F / °C unit boundary stay on
+[FCU / zone_other rules](fcu-zone-other.md).
 
 Open-source, **standards-first** fault detection for commercial HVAC. Rules use generic semantic variables / Haystack roles (`discharge-air-temp`, `outside-air-temp`, `fan-cmd`, …) — portable across modeled sites and generic BAS telemetry.
 
@@ -37,7 +40,8 @@ Product UI is the React SPA. Pandas stays on PyPI for third-party tooling.
 
 | Doc | Description |
 |-----|-------------|
-| [**P0 rule catalog**](p0-rule-catalog.html) | Full metadata for every validated rule |
+| [**P0 rule catalog**](p0-rule-catalog.html) | Full metadata for every validated rule, including the nine `FCU-*` rows |
+| [FCU / zone_other](fcu-zone-other.html) | Fan-coil unit boundary, stamps, and role map (catalog sections live in the two cookbooks) |
 | [Public taxonomy](taxonomy.html) | Equipment classes, rule families, severity |
 | [Rule schema](rule-schema.html) | Declarative metadata — compiles to SQL + Pandas |
 | [Gap matrix](gap-matrix.html) | Coverage vs ASHRAE GL36, Berkeley, PNNL, NIST |

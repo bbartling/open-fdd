@@ -8,9 +8,9 @@ nav_order: 1
 
 Open-FDD executes production fault detection as **DataFusion SQL** against Apache Arrow / parquet historian tables via the canonical registry [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) (**77** entries = 71 diagnostic twins + 4 SQL analytics + 2 UTIL). Operator path: React **Run Rules** → `POST /api/fdd/run` (`mode=registry`). Integrators may also exercise rules through the registry APIs — raw arbitrary SQL is rejected.
 
-**Pandas mirror:** the [Pandas cookbook](pandas-cookbook.html) documents the **71**-rule PyPI oracle (`open_fdd.rules`). Do **not** treat “71” as the production registry size. See [parity matrix](parity-matrix.html) and the [generated parity report](generated-parity-report.html). The nine FCU / `zone_other` rules are documented in [FCU and zone_other rules](fcu-zone-other.html).
+**Pandas mirror:** the [Pandas cookbook](pandas-cookbook.html) documents the **71**-rule PyPI oracle (`open_fdd.rules`). Do **not** treat “71” as the production registry size. See [parity matrix](parity-matrix.html) and the [generated parity report](generated-parity-report.html). The nine FCU / `zone_other` rules are cataloged under [Fan coil / zone_other](#fan-coil--zone_other). Unit boundary (°F canonical temperatures versus °C pass-through setpoints) and equipment kinds are in [FCU and zone_other rules](fcu-zone-other.html).
 
-**Updated:** 2026-08-15 · PyPI `open-fdd` 4.4.1
+**Updated:** 2026-09-29 (FCU / zone_other catalog) · PyPI `open-fdd` 4.4.1
 
 ---
 
@@ -24,13 +24,14 @@ Open-FDD executes production fault detection as **DataFusion SQL** against Apach
 6. [Control-loop hunting](#control-loop-hunting)
 7. [Air handling units](#air-handling-units)
 8. [VAV terminals](#vav-terminals)
-9. [Central plant / condenser water](#central-plant--condenser-water)
-10. [Heat pumps](#heat-pumps)
-11. [Weather station](#weather-station)
-12. [Trim & respond advisory](#trim--respond-advisory)
-13. [Schedule & occupancy](#schedule--occupancy)
-14. [Not yet in validated catalog](#not-yet-in-validated-catalog)
-15. [Framework & parity docs](#framework--parity-docs)
+9. [Fan coil / zone_other](#fan-coil--zone_other)
+10. [Central plant / condenser water](#central-plant--condenser-water)
+11. [Heat pumps](#heat-pumps)
+12. [Weather station](#weather-station)
+13. [Trim & respond advisory](#trim--respond-advisory)
+14. [Schedule & occupancy](#schedule--occupancy)
+15. [Not yet in validated catalog](#not-yet-in-validated-catalog)
+16. [Framework & parity docs](#framework--parity-docs)
 
 ---
 
@@ -1466,6 +1467,220 @@ WHERE equipment_id = 'equip:your-id'
 -- Three pandas branches: under-min OR fixed-high rolling std/mean OR high min_flow_sp.
 -- SQL: sql_rules/vav7_min_airflow.sql (timestamp-ordered windows).
 SELECT equipment_id, fault_hours FROM vav7_min_airflow_result
+```
+
+## Fan coil / zone_other
+
+Nine `FCU-*` screening rules (`family: fcu`, priority P1, `parity_status: sql_screening`, `dashboard_wired: false`). Registry equipment kinds are `zone_other`, `general`, and `ahu`. Stamp a sensor-owning fan coil or standalone zone controller so `canonical_kind` is `zone_other` (`equipType` `zone_other`, `zone`, `fcu`, `fanCoil`, or a standalone-DDC alias). A follower without its own zone sensor is registry kind `general`. A fan coil's stamp stays `zone_other`; `ahu` is on the list so a stamped air handler that carries these roles can run the same SQL. Stamp details are in [FCU and zone_other rules](fcu-zone-other.html).
+
+Shipped files: `sql_rules/fcu_*.sql`, registered in `sql_rules/registry.yaml`. Output column is `fault_hours`. The predicates below are copied from those files. Unit boundary, the °F / °C pass-through trap, and the fan-proof screening note are in [FCU and zone_other rules](fcu-zone-other.html). Pandas twins are in the [Pandas cookbook](pandas-cookbook.html#fan-coil--zone_other).
+
+Commands accept 0–1 or 0–100: a value `> 1.0` is divided by 100. Fan proof prefers `fan_status`; `fan_cmd > 0.10` is the fallback when status is null. Valve-shut tests use a fixed `0.05` (not a slider). CO₂ below `300` ppm is invalid and does not fault.
+
+Six duration rules (`FCU-HTG-COIL`, `FCU-CLG-COIL`, `FCU-VALVE-PASS-HTG`, `FCU-VALVE-PASS-CLG`, `FCU-DAMPER-POS`, `FCU-CO2-DAMPER`) share one file shape:
+
+1. Normalize valve and damper columns (NULL stays NULL; `> 1.0` divides by 100).
+2. `fan_on`: when `fan_status` is not null, on if `fan_status > 0.05`; else when `fan_cmd` is not null, on if the normalized command is `> 0.10`; else off.
+3. The `base` CASE below is `raw_fault`.
+4. A consecutive streak (`LAG` / `streak_id` / `ROW_NUMBER` as `streak_len`) must reach `{{CONFIRM_ROWS}}` before those rows count. `{{CONFIRM_ROWS}}` is `ceil(confirm_seconds / poll_seconds)` with a floor of 1. Hours are confirmed rows times `{{POLL_SECONDS}} / 3600`.
+
+`FCU-SENSOR-NULL`, `FCU-DEADBAND`, and `FCU-MODE-CYCLE` do not use that streak. Their registry `confirm_seconds` is 0.
+
+### FCU-SENSOR-NULL — Missing FCU zone sensor
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Own zone setpoint is present, and `zone_t` is null on at least `null_fraction` (default 90%) of those rows. Fault hours are the null-row count times the poll interval.  
+**Default confirmation:** 0 s  
+**Roles:** required `zone_air_temp_sp`; optional `zone_t`
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `null_fraction` | Null fraction | frac | 0.90 | 0.50–1.0 |
+
+When `zone_t` is absent from history, the runner rewrites this file to zero hours. A setpoint-only follower must not look like a dead sensor. A mapped `zone_t` column that is present and null still runs the SQL below (`sql_rules/fcu_sensor_null.sql`).
+
+```sql
+-- FCU-SENSOR-NULL — own zone setpoint exists while a mapped zone sensor is predominantly null.
+WITH coverage AS (
+  SELECT equipment_id,
+    SUM(CASE WHEN zone_air_temp_sp IS NOT NULL THEN 1 ELSE 0 END) AS eligible_rows,
+    SUM(CASE WHEN zone_air_temp_sp IS NOT NULL AND zone_t IS NULL THEN 1 ELSE 0 END) AS null_rows
+  FROM history
+  GROUP BY equipment_id
+)
+SELECT equipment_id,
+  CASE WHEN eligible_rows > 0 AND CAST(null_rows AS DOUBLE) / eligible_rows >= {{NULL_FRACTION}}
+    THEN null_rows * {{POLL_SECONDS}} / 3600.0 ELSE 0.0 END AS fault_hours
+FROM coverage;
+```
+
+### FCU-HTG-COIL — FCU heating coil under-delivery
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Fan on, heating valve ≥ `valve_open` (default 80%), and `sat − zone_t` < `coil_delta_f` (default 5.4°F).  
+**Default confirmation:** 900 s  
+**Roles:** required `sat`, `zone_t`, `htg_valve_pct`; fan proof `fan_status` or `fan_cmd`
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `valve_open` | Valve open threshold | frac | 0.80 | 0.50–1.0 |
+| `coil_delta_f` | Minimum heating rise | °F | 5.4 | 1.0–20.0 |
+
+`sat` and `zone_t` are canonical °F roles. 5.4°F is 3°C. Predicate from `sql_rules/fcu_htg_coil.sql` (shared streak tail follows):
+
+```sql
+CAST(CASE
+  WHEN sat IS NOT NULL AND zone_t IS NOT NULL AND fan_on = 1
+   AND htg >= {{VALVE_OPEN}}
+   AND sat - zone_t < {{COIL_DELTA_F}}
+  THEN 1 ELSE 0 END AS INT) AS raw_fault
+```
+
+### FCU-CLG-COIL — FCU cooling coil under-delivery
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Fan on, cooling valve ≥ `valve_open` (default 80%), heating valve ≤ 0.05, and `sat − zone_t` ≥ 0 (discharge is not below the zone).  
+**Default confirmation:** 900 s  
+**Roles:** required `sat`, `zone_t`, `clg_valve_pct`, `htg_valve_pct`; fan proof `fan_status` or `fan_cmd`
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `valve_open` | Valve open threshold | frac | 0.80 | 0.50–1.0 |
+
+The “not colder than the zone” test is fixed at `sat - zone_t >= 0`. There is no delta slider. Predicate from `sql_rules/fcu_clg_coil.sql`:
+
+```sql
+CAST(CASE
+  WHEN sat IS NOT NULL AND zone_t IS NOT NULL AND fan_on = 1
+   AND clg >= {{VALVE_OPEN}} AND htg <= 0.05
+   AND sat - zone_t >= 0.0
+  THEN 1 ELSE 0 END AS INT) AS raw_fault
+```
+
+### FCU-VALVE-PASS-HTG — FCU heating valve passing
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Fan on, both valves ≤ 0.05, and `sat − zone_t` > `pass_delta_f` (default 5.4°F).  
+**Default confirmation:** 900 s  
+**Roles:** required `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`; fan proof `fan_status` or `fan_cmd`
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `pass_delta_f` | Passing temperature rise | °F | 5.4 | 1.0–20.0 |
+
+Predicate from `sql_rules/fcu_valve_pass_htg.sql`:
+
+```sql
+CAST(CASE
+  WHEN sat IS NOT NULL AND zone_t IS NOT NULL AND fan_on = 1
+   AND htg <= 0.05 AND clg <= 0.05
+   AND sat - zone_t > {{PASS_DELTA_F}}
+  THEN 1 ELSE 0 END AS INT) AS raw_fault
+```
+
+### FCU-VALVE-PASS-CLG — FCU cooling valve passing
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Fan on, both valves ≤ 0.05, and `zone_t − sat` > `pass_delta_f` (default 5.4°F).  
+**Default confirmation:** 900 s  
+**Roles:** required `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`; fan proof `fan_status` or `fan_cmd`
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `pass_delta_f` | Passing temperature drop | °F | 5.4 | 1.0–20.0 |
+
+Predicate from `sql_rules/fcu_valve_pass_clg.sql`:
+
+```sql
+CAST(CASE
+  WHEN sat IS NOT NULL AND zone_t IS NOT NULL AND fan_on = 1
+   AND htg <= 0.05 AND clg <= 0.05
+   AND zone_t - sat > {{PASS_DELTA_F}}
+  THEN 1 ELSE 0 END AS INT) AS raw_fault
+```
+
+### FCU-DAMPER-POS — FCU damper command/position mismatch
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Fan on, normalized damper command ≥ `command_min` (default 15%), and command minus feedback > `position_error` (default 0.15). Feedback stuck low is the fault; feedback above command is not.  
+**Default confirmation:** 900 s  
+**Roles:** required `damper_cmd`, `damper_pct`; fan proof `fan_status` or `fan_cmd`
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `command_min` | Minimum command | frac | 0.15 | 0.0–1.0 |
+| `position_error` | Position error | frac | 0.15 | 0.05–0.50 |
+
+Predicate from `sql_rules/fcu_damper_pos.sql`:
+
+```sql
+CAST(CASE
+  WHEN fan_on = 1 AND dcmd IS NOT NULL AND dpos IS NOT NULL
+   AND dcmd >= {{COMMAND_MIN}}
+   AND dcmd - dpos > {{POSITION_ERROR}}
+  THEN 1 ELSE 0 END AS INT) AS raw_fault
+```
+
+### FCU-CO2-DAMPER — FCU high CO₂ with low outdoor-air command
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Fan on, `zone_co2` > `co2_high_ppm` (default 1000) and `zone_co2` ≥ 300, and normalized damper command < `damper_low` (default 10%).  
+**Default confirmation:** 900 s  
+**Roles:** required `zone_co2`, `damper_cmd`; fan proof `fan_status` or `fan_cmd`
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `co2_high_ppm` | High CO₂ | ppm | 1000 | 600–2000 |
+| `damper_low` | Low damper command | frac | 0.10 | 0.0–0.50 |
+
+Predicate from `sql_rules/fcu_co2_damper.sql`:
+
+```sql
+CAST(CASE
+  WHEN fan_on = 1 AND zone_co2 IS NOT NULL
+   AND zone_co2 > {{CO2_HIGH_PPM}} AND zone_co2 >= 300.0
+   AND dcmd IS NOT NULL AND dcmd < {{DAMPER_LOW}}
+  THEN 1 ELSE 0 END AS INT) AS raw_fault
+```
+
+### FCU-DEADBAND — FCU heat/cool deadband collapse
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Both pass-through setpoints are present and `cooling_sp − heating_sp` < `deadband_c` (default 1°C).  
+**Default confirmation:** 0 s  
+**Roles:** required `cooling_sp`, `heating_sp`
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `deadband_c` | Minimum deadband | °C | 1.0 | 0.0–5.0 |
+
+`cooling_sp` and `heating_sp` are not canonical temperature roles. Metric `history_si` does not convert them to °F. Map site-native Celsius into these two roles. Full file `sql_rules/fcu_deadband.sql`:
+
+```sql
+-- FCU-DEADBAND — pass-through FCU setpoints remain site-native Celsius
+SELECT equipment_id,
+  SUM(CASE WHEN cooling_sp IS NOT NULL AND heating_sp IS NOT NULL
+    AND cooling_sp - heating_sp < {{DEADBAND_C}} THEN 1 ELSE 0 END)
+    * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+FROM history
+GROUP BY equipment_id;
+```
+
+### FCU-MODE-CYCLE — FCU heating/cooling mode cycling
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
+**Equation:** Among samples where a valve is active, count changes between heating and cooling. Cooling wins when both exceed `mode_valve_min` (default 10%). Fault hours start once the change count reaches `mode_changes` (default 4). Idle samples (both valves shut) are omitted from the sequence.  
+**Default confirmation:** 0 s  
+**Roles:** required `htg_valve_pct`, `clg_valve_pct`
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mode_valve_min` | Active valve threshold | frac | 0.10 | 0.0–0.50 |
+| `mode_changes` | Mode changes | count | 4 | 1–20 |
+
+Mode assignment from `sql_rules/fcu_mode_cycle.sql`. The rest of the file keeps `mode <> 0` rows, counts changes with `LAG`, and sums rows whose running `change_count` is at least `{{MODE_CHANGES}}`:
+
+```sql
+CASE
+  WHEN clg_valve_pct IS NOT NULL
+   AND (CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END) > {{MODE_VALVE_MIN}}
+  THEN -1
+  WHEN htg_valve_pct IS NOT NULL
+   AND (CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END) > {{MODE_VALVE_MIN}}
+  THEN 1
+  ELSE 0
+END AS mode
 ```
 
 ## Central plant / condenser water
