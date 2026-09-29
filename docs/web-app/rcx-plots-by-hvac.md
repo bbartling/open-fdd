@@ -50,7 +50,7 @@ Operator exports from the product UI — illustrative only. Empty series still m
 
 ## Family → presets (equipment kinds)
 
-Kinds are the preset’s `eq_kinds` filter. Family Zones uses package `equipment_type` / canonical kind plus a modeled zone role (`zone-air-temp` or `zone-airflow`). It does not match `equipment_id` text. Empty series when roles are missing — not a silent invent.
+Kinds are the preset’s `eq_kinds` tokens. Every preset resolves those tokens to canonical equipment kinds and keeps the equipment whose package stamp matches, then filters with an exact `equipment_id` list. A kind token is not an id prefix: `RTU` does not mean `equipment_id LIKE 'RTU%'`, so `RTU_01` does not pull `RTU_010`. Unstamped names are not members. Family Zones is the exception that also keeps unstamped equipment when the plot role (`zone-air-temp` or `zone-airflow`) is modeled. Empty series when the stamp or role is missing — not a silent invent.
 
 ### Zones / VAV (zone terminals)
 
@@ -64,6 +64,8 @@ Same family and the same plot cards for any equipment stamped `vav`, `fcu` / `zo
 | `vav_health_matrix` | vav_health | Broken / comfort / rogue donut + worst bars |
 
 ### AHU / air (`AHU`, `RTU`, `MAU`)
+
+Stamp `ahu` / `rtu` / `mau` (canonical kind `ahu`). Opaque ids such as `AC_1` are included when that stamp is set. A name that merely starts with `RTU` is not.
 
 | Preset id | Chart | What you see |
 |-----------|-------|----------------|

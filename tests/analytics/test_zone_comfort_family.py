@@ -79,3 +79,31 @@ def test_zone_temp_series_uses_the_same_family():
         equipment_types=ZONE_TERMINAL_TYPES,
     )
     assert set(series) == {"AC_FCU", "PLAIN"}
+
+
+def test_prefix_ids_are_not_a_zone_plot_filter():
+    """RTU_01 must not admit RTU_010, and neither joins without a zone role or stamp."""
+    frames = {
+        "RTU_01": _zone(80.0),
+        "RTU_010": _zone(80.0),
+    }
+    role_map = {
+        "RTU_01": {"equipment_type": "ahu", "zone-air-temp": "zt"},
+        "RTU_010": {},
+    }
+    ranked = zone_comfort_fail_ranking(
+        frames,
+        role_map,
+        schedule=OccupancySchedule(),
+        comfort_low_f=70.0,
+        comfort_high_f=75.0,
+        equipment_types=ZONE_TERMINAL_TYPES,
+    )
+    assert ranked.empty
+    series = collect_role_series(
+        frames,
+        {"RTU_010": {"zone-air-temp": "zt"}},
+        role="zone-air-temp",
+        equipment_types=ZONE_TERMINAL_TYPES,
+    )
+    assert set(series) == {"RTU_010"}

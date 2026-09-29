@@ -13,31 +13,67 @@ export function isWeatherEquipmentId(id: string): boolean {
   return s === "weather" || s === "(weather)";
 }
 
-/** Zone terminals — never plant weekly motors or compressor OAT bins. */
-export function isZoneTerminalId(id: string): boolean {
-  const u = id.trim().toUpperCase().replace(/\\/g, "/");
-  if (!u) return false;
-  return (
-    u.includes("VAV") ||
-    u.includes("ZONE") ||
-    u.includes("VAVFC") ||
-    u.includes("VAVH")
-  );
+const ZONE_TERMINAL_TYPES = new Set([
+  "VAV",
+  "FCU",
+  "ZONE",
+  "ZONE_OTHER",
+  "ZONEOTHER",
+  "BASEBOARD",
+  "FANCOIL",
+  "FAN_COIL",
+  "STANDALONE_DDC",
+  "ZONEDDC",
+  "ZONE_DDC",
+]);
+
+function normalizedEquipmentType(raw: unknown): string {
+  return String(raw ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
 }
 
+function hasZoneAirTempRole(e: {
+  has_zone_role?: unknown;
+  roles?: unknown;
+  mapped_roles?: unknown;
+}): boolean {
+  if (e.has_zone_role === true) return true;
+  const bags = [e.roles, e.mapped_roles];
+  for (const bag of bags) {
+    if (!Array.isArray(bag)) continue;
+    for (const role of bag) {
+      const u = String(role).trim().toLowerCase().replace(/[\s_]+/g, "-");
+      if (u === "zone-air-temp" || u === "zone-t" || u === "zonet") return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Zone terminal for Overview / RCx motor exclusion.
+ * Stamp or a modeled zone-air-temp role. Equipment id text is not a type.
+ */
 export function isZoneTerminalEquipment(e: {
   equipment_id?: unknown;
   equipment_type?: unknown;
+  equipment_type_raw?: unknown;
+  equipType?: unknown;
   label?: unknown;
+  has_zone_role?: unknown;
+  roles?: unknown;
+  mapped_roles?: unknown;
 }): boolean {
-  const et = String(e.equipment_type ?? "")
-    .trim()
-    .toUpperCase();
-  if (et === "VAV" || et === "ZONE") return true;
-  return (
-    isZoneTerminalId(String(e.equipment_id ?? "")) ||
-    isZoneTerminalId(String(e.label ?? ""))
+  const et = normalizedEquipmentType(
+    e.equipment_type ?? e.equipment_type_raw ?? e.equipType,
   );
+  if (ZONE_TERMINAL_TYPES.has(et)) return true;
+  if (et === "HEAT_PUMP" || et === "HEATPUMP" || et === "HP") {
+    return hasZoneAirTempRole(e);
+  }
+  if (et && et !== "GENERAL" && et !== "UNKNOWN") return false;
+  return hasZoneAirTempRole(e);
 }
 
 export function isWeatherEquipment(e: {

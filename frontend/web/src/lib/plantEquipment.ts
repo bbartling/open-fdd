@@ -39,10 +39,13 @@ export function isCoolingTowerEquipment(equipment: FddEquipmentItem): boolean {
   return id.includes("TOWER") || id.startsWith("CT_") || id.includes("/CT_");
 }
 
-/** Rough plant group from equipment id (historian `plant_group_for`). */
+/**
+ * Rough plant group from an equipment id when no stamp is present.
+ * This is not the RCx plot filter. Plot membership uses the package stamp.
+ */
 export function plantGroupFor(equipmentId: string): "air" | "chiller" | "boiler" | null {
   const u = equipmentId.trim().toUpperCase().replace(/\\/g, "/");
-  if (!u || isZoneTerminalId(u)) return null;
+  if (!u) return null;
   if (u.includes("BOILER") || u.includes("HW_PUMP") || u.includes("HW-")) {
     return "boiler";
   }
@@ -59,12 +62,6 @@ export function plantGroupFor(equipmentId: string): "air" | "chiller" | "boiler"
     return "air";
   }
   return null;
-}
-
-function isZoneTerminalId(id: string): boolean {
-  return (
-    id.includes("VAV") || id.includes("ZONE") || id.includes("VAVFC") || id.includes("VAVH")
-  );
 }
 
 export interface PlantEquipmentFamilies {
@@ -96,15 +93,23 @@ export function plantEquipmentFamilies(
     const id = String(e.equipment_id ?? "");
     const kind = String(e.equipment_type ?? "").trim().toUpperCase();
     const tower = isCoolingTowerEquipment(e);
-    if (kind === "VAV" || isZoneTerminalEquipment(e)) hasVav = true;
-    if (
-      kind === "ZONE_OTHER" ||
-      kind === "ZONE OTHER" ||
-      kind === "ZONEOTHER"
-    ) {
-      hasZoneOther = true;
+    if (isZoneTerminalEquipment(e)) {
+      hasVav = true;
+      if (
+        kind === "ZONE_OTHER" ||
+        kind === "ZONE OTHER" ||
+        kind === "ZONEOTHER"
+      ) {
+        hasZoneOther = true;
+      }
+      if (kind === "HEAT_PUMP" || kind === "HEATPUMP" || kind === "HP") {
+        hasHeatPump = true;
+      }
+      continue;
     }
-    if (kind === "AHU" || plantGroupFor(id) === "air") hasAhu = true;
+    if (kind === "AHU" || kind === "RTU" || kind === "MAU" || plantGroupFor(id) === "air") {
+      hasAhu = true;
+    }
     if (tower) hasCoolingTower = true;
     if (kind === "PLANT" && plantGroupFor(id) === "boiler") hasBoiler = true;
     if (kind === "PLANT" && plantGroupFor(id) === "chiller" && !tower) hasChiller = true;

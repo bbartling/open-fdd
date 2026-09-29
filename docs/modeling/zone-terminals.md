@@ -32,7 +32,7 @@ Do **not** stamp FCU or standalone zone DDC as `ahu`.
 
 VAV boxes remain `equipType: vav` (zone terminals with airflow/damper). They share the **same comfort gate** for zone-temp performance rules.
 
-Family Zones RCx (comfort ranking, space-temp series, airflow series, zone health) uses that same set: VAV, FCU, `zone_other` / standalone DDC, baseboard, and a heat pump that has `zone-air-temp`. Membership is the package stamp or a modeled `zone-air-temp` role. A heat-pump stamp alone is not enough, because plant heat pumps use the same kind. An id that merely contains `ZONE` or `VAV` is not enough, and a non-zone stamp excludes the equipment.
+Family Zones RCx (comfort ranking, space-temp series, airflow series, zone health) uses that same set: VAV, FCU, `zone_other` / standalone DDC, baseboard, and a heat pump that has `zone-air-temp`. Membership is the package stamp or a modeled `zone-air-temp` role. A heat-pump stamp alone is not enough, because plant heat pumps use the same kind. An id that merely contains `ZONE` or `VAV` is not enough, and a non-zone stamp excludes the equipment. Other RCx presets use the same exact-id stamp filter. They do not use an equipment-id prefix (`RTU_01` does not select `RTU_010`).
 
 `VAV-1` scores the comfort band only while occupied when `occ_mode` or the Overview calendar is set (`require_occupied`, default on). Unoccupied setback stays on `VAV-2`.
 

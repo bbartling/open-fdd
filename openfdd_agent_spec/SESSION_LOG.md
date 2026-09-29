@@ -1,3 +1,7 @@
+## 2026-09-29 — #1053 plot filter is stamp or zone role (not FQ)
+
+- RCx preset membership is an exact equipment-id list from the package stamp (Family Zones: stamp or mapped `zone-air-temp`). The `LIKE '{kind}%'` plot filter is gone, so a shorter fixture id is not a prefix of a longer one. No ACME or equipment-id default. No VERSION bump and no ops-pin change.
+
 ## 2026-09-29 — #1053 Family Zones membership audit (not FQ)
 
 - Family Zones membership is the package stamp or a mapped `zone-air-temp` role. No equipment-id LIKE on that path. A heat-pump stamp joins only when `zone-air-temp` is mapped. VAV-1 occupancy comes from `occ_mode` or the saved Overview calendar. No VERSION bump and no ops-pin change.

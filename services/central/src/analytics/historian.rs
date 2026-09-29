@@ -2744,66 +2744,92 @@ async fn zone_family_eq_filter(
     Ok(equipment_filter_sql(Some(&ids)))
 }
 
+/// Preset kind token → canonical equipment kind. Does not read equipment ids.
+///
+/// `RTU` / `MAU` share `ahu`. A token that is a fixture id (`RTU_01`) matches
+/// nothing here, so it cannot pull a longer id (`RTU_010`) by prefix.
+fn eq_kind_canonical(token: &str) -> Option<&'static str> {
+    match token.to_ascii_uppercase().as_str() {
+        "AHU" | "RTU" | "MAU" | "DOAS" => Some("ahu"),
+        "CHILLER" | "CHW" | "CHW_PLANT" => Some("chiller"),
+        "BOILER" => Some("boiler"),
+        "TOWER" | "CT" | "COOLING_TOWER" => Some("cooling_tower"),
+        "METER" => Some("meter"),
+        "WEATHER" => Some("weather"),
+        "HP" | "HEATPUMP" | "HEAT_PUMP" => Some("heatpump"),
+        _ => None,
+    }
+}
+
+fn stamp_matches_kinds(stamped: Option<&str>, kinds: &[&str]) -> bool {
+    let Some(canon) = stamped.and_then(open_fdd_edge_prototype::equipment_types::canonical_kind)
+    else {
+        return false;
+    };
+    kinds.iter().any(|k| eq_kind_canonical(k) == Some(canon))
+}
+
+/// Ids whose package stamp matches the preset kinds.
+///
+/// Membership is the stamp. `RTU_01` is not a prefix of `RTU_010`.
+fn stamped_member_ids(rows: &[(String, Option<String>)], kinds: &[&str]) -> Vec<String> {
+    let mut ids: Vec<String> = rows
+        .iter()
+        .filter(|(eq, stamp)| !eq.is_empty() && stamp_matches_kinds(stamp.as_deref(), kinds))
+        .map(|(eq, _)| eq.clone())
+        .collect();
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
 async fn equipment_eq_filter(
     ctx: &SessionContext,
     building_id: Option<&str>,
     role_col: &str,
     eq_kinds: &[&str],
 ) -> Result<String> {
+    if eq_kinds.is_empty() {
+        return Ok(String::new());
+    }
     if kinds_use_zone_family(eq_kinds) {
         zone_family_eq_filter(ctx, building_id, role_col).await
     } else {
-        Ok(rcx_eq_filter(eq_kinds))
+        stamp_kind_eq_filter(ctx, building_id, role_col, eq_kinds).await
     }
 }
 
-fn rcx_eq_filter(kinds: &[&str]) -> String {
-    if kinds.is_empty() {
-        return String::new();
+/// Non-zone presets: canonical stamp plus the plot role, exact `equipment_id`s.
+async fn stamp_kind_eq_filter(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    role_col: &str,
+    eq_kinds: &[&str],
+) -> Result<String> {
+    if !safe_ident(role_col) {
+        return Err(anyhow!("refusing unsafe role column"));
     }
-    let mut parts = Vec::new();
-    for k in kinds {
-        let ku = k.to_ascii_uppercase();
-        if ku == "VAV"
-            || ku == "ZONE_FAMILY"
-            || ku == "FCU"
-            || ku == "ZONE_OTHER"
-            || ku == "BASEBOARD"
-        {
-            // Zone family is resolved in `zone_family_eq_filter` (stamp + role).
-            // Do not admit equipment by id text.
-            parts.push("1 = 0".to_string());
-        } else if ku == "CHW" || ku == "CHW_PLANT" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE '%CHILLER%' OR UPPER(equipment_id) LIKE 'CHW%' \
-                 OR UPPER(equipment_id) LIKE '%CHW_PLANT%')"
-                    .to_string(),
-            );
-        } else if ku == "BOILER" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE 'BOILER%' OR UPPER(equipment_id) LIKE '%/BOILER%' \
-                 OR UPPER(equipment_id) LIKE '%BOILERS%')"
-                    .to_string(),
-            );
-        } else if ku == "TOWER" || ku == "CT" || ku == "COOLING_TOWER" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE '%TOWER%' OR UPPER(equipment_id) LIKE 'CT%' \
-                 OR UPPER(equipment_id) LIKE '%COOLING_TOWER%')"
-                    .to_string(),
-            );
-        } else if ku == "METER" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE 'METER%' OR UPPER(equipment_id) LIKE '%/METER%' \
-                 OR UPPER(equipment_id) LIKE '%_METER%')"
-                    .to_string(),
-            );
-        } else {
-            parts.push(format!(
-                "(UPPER(equipment_id) LIKE '{ku}%' OR UPPER(equipment_id) LIKE '%/{ku}%')"
-            ));
-        }
+    let sql = format!(
+        "SELECT DISTINCT equipment_id FROM history \
+         WHERE equipment_id IS NOT NULL AND {role_col} IS NOT NULL"
+    );
+    let result = run_sql(ctx, &sql).await?;
+    let stamps =
+        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let rows: Vec<(String, Option<String>)> = result
+        .rows
+        .iter()
+        .filter_map(|row| {
+            let eq = row.get("equipment_id").and_then(|v| v.as_str())?;
+            let stamped = stamps.get(eq).cloned();
+            Some((eq.to_string(), stamped))
+        })
+        .collect();
+    let ids = stamped_member_ids(&rows, eq_kinds);
+    if ids.is_empty() {
+        return Ok(" AND 1 = 0".to_string());
     }
-    format!(" AND ({})", parts.join(" OR "))
+    Ok(equipment_filter_sql(Some(&ids)))
 }
 
 /// Multi-equipment role timeseries for RCx presets (vibe19 multi_equipment_timeseries).
@@ -3681,6 +3707,49 @@ mod tests {
         );
         assert!(sql.contains("jci_vav_12"));
         assert!(sql.contains("AC_FCU"));
+        assert!(
+            !sql.contains("RTU_010"),
+            "exact ids, not a prefix class: {sql}"
+        );
+        let air = stamped_member_ids(
+            &[
+                ("RTU_01".into(), Some("rtu".into())),
+                ("RTU_010".into(), Some("ahu".into())),
+                ("RTU_010".into(), None),
+                ("jci_ahu_4".into(), Some("ahu".into())),
+                ("AC_1".into(), Some("ahu".into())),
+                ("bldg2-zone-loopback".into(), None),
+            ],
+            &["AHU", "RTU", "MAU"],
+        );
+        assert_eq!(
+            air,
+            vec![
+                "AC_1".to_string(),
+                "RTU_01".to_string(),
+                "RTU_010".to_string(),
+                "jci_ahu_4".to_string(),
+            ]
+        );
+        let named_only = stamped_member_ids(
+            &[("RTU_01".into(), None), ("RTU_010".into(), None)],
+            &["RTU"],
+        );
+        assert!(
+            named_only.is_empty(),
+            "fixture ids are not a plot filter: {named_only:?}"
+        );
+        let prefix = stamped_member_ids(
+            &[
+                ("RTU_01".into(), Some("meter".into())),
+                ("RTU_010".into(), Some("ahu".into())),
+            ],
+            &["RTU_01"],
+        );
+        assert!(
+            prefix.is_empty(),
+            "RTU_01 must not prefix-match RTU_010 or ignore the stamp: {prefix:?}"
+        );
         assert!(!open_fdd_edge_prototype::equipment_types::zone_comfort_member(Some("ahu"), true));
         assert!(
             !open_fdd_edge_prototype::equipment_types::zone_comfort_member(Some("heatpump"), false)

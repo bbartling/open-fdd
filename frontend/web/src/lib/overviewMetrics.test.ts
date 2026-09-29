@@ -9,7 +9,6 @@ import {
   inventoryWithoutWeather,
   isWeatherEquipment,
   isZoneTerminalEquipment,
-  isZoneTerminalId,
   SQL_ROLLUP_RULE_IDS,
 } from "./overviewMetrics";
 
@@ -24,15 +23,38 @@ describe("overviewMetrics", () => {
     expect(isWeatherEquipment({ equipment_id: "weather" })).toBe(true);
   });
 
-  it("treats VAV/zone ids as terminals even when prefixed with AHU", () => {
-    expect(isZoneTerminalId("VAV_1")).toBe(true);
-    expect(isZoneTerminalId("AHU_1_VAV_12")).toBe(true);
-    expect(isZoneTerminalEquipment({ equipment_id: "AHU-1-VAV-03" })).toBe(
-      true,
-    );
+  it("uses zone type or zone-air-temp, not fixture id text", () => {
     expect(isZoneTerminalEquipment({ equipment_type: "VAV" })).toBe(true);
-    expect(isZoneTerminalId("AHU_1")).toBe(false);
-    expect(isZoneTerminalId("CH-1")).toBe(false);
+    expect(isZoneTerminalEquipment({ equipment_type: "fcu" })).toBe(true);
+    expect(isZoneTerminalEquipment({ equipment_type: "zone_other" })).toBe(true);
+    expect(isZoneTerminalEquipment({ equipment_type: "baseboard" })).toBe(true);
+    expect(
+      isZoneTerminalEquipment({
+        equipment_type: "HEAT_PUMP",
+        has_zone_role: true,
+      }),
+    ).toBe(true);
+    expect(
+      isZoneTerminalEquipment({ equipment_type: "HEAT_PUMP" }),
+    ).toBe(false);
+    expect(
+      isZoneTerminalEquipment({
+        equipment_id: "GENERIC_1",
+        roles: ["zone-air-temp"],
+      }),
+    ).toBe(true);
+    expect(
+      isZoneTerminalEquipment({
+        equipment_id: "AHU_1_VAV_12",
+        equipment_type: "AHU",
+      }),
+    ).toBe(false);
+    expect(isZoneTerminalEquipment({ equipment_id: "VAV_1" })).toBe(false);
+    expect(isZoneTerminalEquipment({ equipment_id: "RTU_01" })).toBe(false);
+    expect(isZoneTerminalEquipment({ equipment_id: "RTU_010" })).toBe(false);
+    expect(isZoneTerminalEquipment({ equipment_id: "AHU-1-VAV-03" })).toBe(
+      false,
+    );
   });
 
   it("formats timestamps like vibe19 and lowercases kind", () => {
