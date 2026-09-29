@@ -17,16 +17,19 @@ def equipment_system(equipment_type: str, rule_id: str) -> str:
 
     RTU maps to AHU; heatPump / HP map to HP (dashboard contract).
     """
-    et = (equipment_type or "").upper().replace(" ", "")
-    if "AHU" in et or "RTU" in et or rule_id.startswith("SCHED") or rule_id == "FAN-OFF-STATIC":
+    from open_fdd.analytics.site_model import normalize_equipment_type
+
+    _ = rule_id
+    et = normalize_equipment_type(equipment_type)
+    if et == "AHU":
         return "AHU"
-    if "HEATPUMP" in et or et == "HP" or et.endswith("HP"):
+    if et == "HP":
         return "HP"
-    if "CHILL" in et or rule_id.startswith("CHW"):
+    if et == "CHW_PLANT":
         return "CHW"
-    if "BOIL" in et or rule_id.startswith("HW"):
+    if et == "BOILER":
         return "HW"
-    if "VAV" in et or rule_id.startswith("VAV") or rule_id.startswith("SV-"):
+    if et == "VAV":
         return "VAV"
     return et or "Other"
 
@@ -108,13 +111,7 @@ def filter_candidates(
 
 def is_terminal_finding(f: EngineeringFinding) -> bool:
     systems = {s.upper() for s in (f.systems or [])}
-    if "VAV" in systems:
-        return True
-    if any((eid or "").upper().startswith("VAV") for eid in (f.equipment_ids or [])):
-        return True
-    if any((rid or "").upper().startswith("VAV") or (rid or "").upper().startswith("SV-") for rid in (f.rule_ids or [])):
-        return True
-    return False
+    return "VAV" in systems
 
 
 def sort_key_for_finding(

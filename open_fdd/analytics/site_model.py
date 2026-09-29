@@ -122,6 +122,15 @@ _TYPE_ALIASES: dict[str, str] = {
     "RTU": "AHU",
     "ROOFTOP": "AHU",
     "ROOFTOPUNIT": "AHU",
+    "MAU": "AHU",
+    "DOAS": "AHU",
+    "CV_AHU": "AHU",
+    "CVAHU": "AHU",
+    "VAV_AHU": "AHU",
+    "VAVAHU": "AHU",
+    "UNITVENTILATOR": "AHU",
+    "UV": "AHU",
+    "ERV": "AHU",
     "VAV": "VAV",
     "VAVBOX": "VAV",
     "TERMINAL": "VAV",
@@ -171,31 +180,11 @@ def normalize_equipment_type(raw: str | None) -> str:
 
 
 def equipment_type_from_id(equipment_id: str) -> str:
-    u = equipment_id.upper().replace("\\", "/")
-    if "WEATHER" in u:
-        return "WEATHER"
-    if "VAV" in u:
-        return "VAV"
-    if u.startswith("FCU") or "FANCOIL" in u or "FAN-COIL" in u:
-        return "FCU"
-    if u.startswith("ZONE") or "/ZONE" in u:
-        return "ZONE_OTHER"
-    if u.startswith("AHU") or "/AHU" in u or "RTU" in u:
-        return "AHU"
-    if "CHILLER" in u or u.startswith("CHW"):
-        return "CHW_PLANT"
-    if "TOWER" in u or "COOLING_TOWER" in u or "CT_" in u:
-        return "COOLING_TOWER"
-    if "BOILER" in u:
-        return "BOILER"
-    if ("HEAT" in u and "PUMP" in u) or u.startswith("HP") or "/HP" in u:
-        return "HP"
-    if "VRF" in u or "VRV" in u:
-        return "VRF"
-    if "METER" in u:
-        return "METER"
-    if "GENERAL" in u:
-        return "GENERAL"
+    """Missing stamps stay unclassified. ``equipment_id`` text is not a kind.
+
+    The name remains so existing imports keep working. It does not inspect the id.
+    """
+    _ = equipment_id
     return "UNKNOWN"
 
 
@@ -211,7 +200,8 @@ def resolve_equipment_type(
     """Canonical typed equipment resolver.
 
     Order: ``df.attrs['equipment_type']`` → ``explicit`` → role_map / site /
-    column_map ``equipment_type`` / ``equipType`` → ``equipment_type_from_id`` only.
+    column_map ``equipment_type`` / ``equipType``. A missing or ``UNKNOWN``
+    stamp stays ``UNKNOWN``. Equipment-id text is not consulted.
     """
     candidates: list[str] = []
     if df is not None:
@@ -249,11 +239,8 @@ def resolve_equipment_type(
         if norm and norm != "UNKNOWN":
             return norm
         if norm == "UNKNOWN":
-            # keep looking for a stronger source; fall through
             continue
-    # UNKNOWN is a weak stamp: let the id heuristic recover a stronger kind
-    # (for example a fixture stamped UNKNOWN but named FCU_1).
-    return equipment_type_from_id(equipment_id)
+    return "UNKNOWN"
 
 
 def stamp_equipment_type(

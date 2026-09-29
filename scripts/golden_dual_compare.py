@@ -51,8 +51,10 @@ def run_fixture(path: Path) -> dict:
     else:
         df = apply_columns(load_history(hist), path / "columns.csv")
     df.attrs["equipment_id"] = meta.get("equipment_id", "EQ_1")
-    default_type = "VAV" if meta.get("expect_missing_roles") else "AHU"
-    df.attrs["equipment_type"] = meta.get("equipment_type", default_type)
+    et = meta.get("equipment_type")
+    if not et:
+        raise SystemExit(f"FAIL {path}: expected.json must set equipment_type")
+    df.attrs["equipment_type"] = et
     result = run_rule(
         rule_id,
         df,

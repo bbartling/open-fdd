@@ -29,8 +29,13 @@ Authoritative ingest: [`edge/src/csv_ingest/package.rs`](../../../edge/src/csv_i
 
 ## Equipment typing
 
-- Stamp `equipType` / `equipment_type` in package maps — preferred over id heuristics.
-- Opaque ids are valid (`AC_1` + `equipType: ahu`).
+- Stamp `equipType` / `equipment_type` in package maps. That stamp is the classifier (agent rule 64, [#1043](https://github.com/bbartling/open-fdd/issues/1043)).
+- Opaque ids are valid when stamped (`AC_1` + `equipType: ahu` is an AHU). A missing or unrecognized stamp is unclassified for plots, RCx cohorts, overview families, weather selection, motor groups, VAV health, and rule applicability. Do not infer kind from `equipment_id`.
+- The framework never hardcodes one building. `building_id` is a parameter (package, JWT, request, or env). Tests and lab fixtures may name a site; product defaults must not (rule 62).
+- Never prefer a fixture id (`AHU_1`, `RTU_01`, `VAV_1`) over the stamp. A missing or unrecognized stamp matches nothing.
+- Never substring, prefix, `LIKE`, `ILIKE`, `contains`, or `starts_with` on `equipment_id`. Prefix match is the plot-filter defect: `RTU_01` must not select `RTU_010`. Preset tokens name canonical kinds. Selection is the stamp, then exact `equipment_id` equality. An exact id is allowed only after the type filter. Id text cannot add or remove equipment that has a stamp.
+- Do not invent an MQTT delta payload. MQTT historian uses the same package data model; topic text is not an equipment kind.
+- Parent-AHU id proposals are link suggestions, not cohort membership and not a plot filter.
 - **ZONE** = FCU (`fcu`, valve PID) or standalone DDC (`zone_other`) — comfort + zone sensor FDD. **UV** = CV AHU (`unitVentilator`). See [`docs/modeling/zone-terminals.md`](../../../docs/modeling/zone-terminals.md).
 - Meters: `equipType: meter` with roles `kwh`, `electric_kw` for `SV-*` and `UTIL-*` rules.
 

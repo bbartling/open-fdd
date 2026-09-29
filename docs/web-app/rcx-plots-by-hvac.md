@@ -50,12 +50,7 @@ Operator exports from the product UI — illustrative only. Empty series still m
 
 ## Family → presets (equipment kinds)
 
-Kinds are the preset’s `eq_kinds` filter over the persisted canonical
-`equipment_type` / `equipType` registry. Each chart also requires its mapped
-role column to be present for the selected equipment. Opaque ids therefore
-work when stamped, while an id containing a misleading token (such as
-`ZONE`/`LOOPBACK`) does not change membership. Empty series when roles are
-missing — not a silent invent.
+Kinds are the preset’s `eq_kinds` tokens (package `equipType` / `equipment_type`). `AHU` / `RTU` / `CHW` / `CT` name canonical kinds. They are not `equipment_id` prefixes. A missing or unrecognized stamp is unclassified and the plot matches nothing. Selection is exact `equipment_id` equality after the stamp, so `RTU_01` does not select `RTU_010`. Each chart also requires its mapped role column to be present for the selected equipment. Empty series when roles are missing — not a silent invent.
 
 ### Zones / VAV (`VAV`, zone equipment)
 

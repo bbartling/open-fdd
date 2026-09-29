@@ -9,6 +9,7 @@ anyhow.workspace = true
 arrow.workspace = true
 arrow-schema.workspace = true
 chrono.workspace = true
+chrono-tz = "0.10"
 csv.workspace = true
 fdd_core = { path = "../fdd_core" }
 parquet = { workspace = true, features = ["arrow"] }

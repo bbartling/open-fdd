@@ -101,9 +101,7 @@ def vav_health_matrix(
 
     for eq_id, raw in frames.items():
         et = resolve_equipment_type(eq_id, df=raw)
-        if str(et).upper() not in {"VAV", "ZONE", "VAVBOX"} and not str(eq_id).upper().startswith(
-            "VAV"
-        ):
+        if str(et).upper() != "VAV":
             continue
         df = raw.copy()
         if not isinstance(df.index, pd.DatetimeIndex):

@@ -88,7 +88,7 @@ Ask for the affected component/version, complete reproduction steps, proof of im
 
 ## Package authoring (any BAS job)
 
-Open-FDD is a **generic** DataFusion consumer. Charts / FDD / RCx / motors / mixing / OAT-METEO read **SQL roles** after `POST /api/csv/import/package`. They do **not** know a vendor or campus. Empty Overview tables, RCx plots, Inspect traces, or `?/3` health scores mean the **package map is incomplete** — map in the zip. Gold shape: `AHU_1`, `VAV_1`, `CHW_1`, `weather/`. Never hard-code a site, vendor suffix table, or city as a product default. That ban is PyPI report/fault/oracle tooling (`open_fdd` reporting, rules, Typst, anomaly CLI) and the Rust DataFusion / historian / analytics runtime: `building_id` is a parameter. Tests, stress, ops, migrate helpers, and lab fixtures may name ACME, BUILDING_100, or LAKESIDE. See [`openfdd_agent_spec/AGENTS.md`](openfdd_agent_spec/AGENTS.md) rule 62 and [`openfdd-site-identity`](openfdd_agent_spec/skills/openfdd-site-identity/SKILL.md).
+Open-FDD is a **generic** data-model-driven framework. Charts / FDD / RCx / motors / mixing / OAT-METEO read **SQL roles** after `POST /api/csv/import/package`. They do **not** know a vendor or campus. Empty Overview tables, RCx plots, Inspect traces, or `?/3` health scores mean the **package map is incomplete** — map in the zip. Gold shape (`AHU_1`, `VAV_1`, `CHW_1`, `weather/`) is a layout example, not a selector. Product paths — SPA, central / DataFusion / historian / analytics, PyPI report / fault / oracle (`open_fdd` reporting, rules, Typst, anomaly CLI), and RCx / FDD plot selection — never hard-code one building, campus, vendor suffix table, or fixture equipment id. `building_id` is always a caller, request, JWT, or env parameter. Equipment selection uses `equipType` / `equipment_type`, roles, and the registry: never prefer `RTU_01` or `VAV_1` over type, and never substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id` (`RTU_01` must not hit `RTU_010`). An exact id is allowed only after the type filter. Tests, stress, ops, migrate helpers, and lab fixtures may **name** ACME, BUILDING_100, or LAKESIDE as env defaults; their selectors stay type-first and exact-id-only. See [`openfdd_agent_spec/AGENTS.md`](openfdd_agent_spec/AGENTS.md) rule 62 and [`openfdd-site-identity`](openfdd_agent_spec/skills/openfdd-site-identity/SKILL.md).
 
 | Need | Haystack → SQL | If the BAS has no binary point |
 | --- | --- | --- |
@@ -106,6 +106,7 @@ Aliases: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](docs/migration/vibe19/
 - **Overview:** tabulated analytics + plant/VAV **health matrices** (AHU → chiller → boiler → HP → VAV). No Plotly on Overview. Motor / mech / econ / BAS figures live on **RCx Plots** (additive presets). CSV overlay is the **Inspect** radio (`/inspect`).
 - **Sidebar revision:** `data-testid="app-revision"` shows `GET /api/health` `semver+shortsha` (fallback `version.json`).
 - **Lab → FDD Plots:** `session_config` `confirm_min` (and rule params) apply to the series overlay (`sql_detail_session`). After **Update this rule**, Reports/FDD Plots must refetch on `RULES_UPDATED`.
+- **Series preview:** FDD Plots and each RCx timeseries card show the most recent N rows of the plot window already loaded (newest first). Per-plot dropdown default 10 (10/20/50/100/500). Do not load the historian again for the table.
 - **SCHED-1 occupancy:** treat numeric `0` / `0.0` / `false` **and** string `unoccupied` (and related tokens) as unoccupied — SQL + pandas cookbook stay aligned.
 - **Synthetic-59:** soak via `scripts/synthetic_59_*.py` under `reports/eplus-dump/fixtures/synthetic_59/` (legacy `reports/wattlab-parity/` still works). Do not greenwash `expected_faults.csv`. Vibe19 dual-parity is **retired** — use OpenFDD-only soaks + `scripts/eplus_dump_clustering_export.py` for E+ dump/clustering.
 - **Units:** FDD SQL is °F canonical. Metric CSVs convert at query (`unit_system=metric|si`). Lab sliders show °C when metric is selected; Run all rules after switching.
@@ -165,6 +166,12 @@ coverage remain deferred dependencies.
 
 SPA shows `GET /api/health` → `{semver}+shortsha`. On each turnkey platform patch cycle, bump the workspace **patch** version (`VERSION` + Cargo workspace) so operators see a new semver after pulling nightly — not only a new SHA.
 
+## Analytics cache and disk budget
+
+Analytics, RCx, and sensor-fault results persist as Parquet under `analytics_results/` (schema `analytics-result-parquet-v1`), keyed by the caller `building_id`, query id, query version, window, and config hash. Request `equipment_ids` are part of that config hash. This cache does not classify equipment with `equipment_id` text filters and does not invent `equipType`. AFDD `{rule_id}.json` stays the rule-runner path. A newer historian watermark sets `stale: true` unless the client sends `refresh: true`. CSV buildings unload the historian working set when the job finishes; the SPA leaves the lease on `?site=` change; idle default is 60s; max interactive sessions default to 2. MQTTS keeps a small ingest buffer keyed by the envelope site id. It does not load the full historian and it does not add a CELL or DELTA topic mode. Soft-OPEN until edge disk proof; no VERSION bump and no FQ claim.
+
+Local/edge disk budget defaults to **100 GiB**, oldest parquet first (`OPENFDD_LOCAL_DATA_BUDGET_GIB`). Railway eviction stays off unless `OPENFDD_DATA_BUDGET_ENABLED=1`. Do not assume an edge can store 100 GiB live plus a full on-box backup. `OPENFDD_TEST_DEPLOY=1` skips release backups unless `OPENFDD_BACKUP_ON_UPDATE=1`. Docs: [`docs/operations/ANALYTICS_RESULT_CACHE.md`](docs/operations/ANALYTICS_RESULT_CACHE.md) · [`docs/operations/DATA_RETENTION_BUDGET.md`](docs/operations/DATA_RETENTION_BUDGET.md).
+
 ## Never
 
 - delete `workspace/`
@@ -177,6 +184,7 @@ SPA shows `GET /api/health` → `{semver}+shortsha`. On each turnkey platform pa
 - embed vendor chat relays or model API keys in the stack
 - add Python to the product central/web request path
 - local stack image builds on low-RAM hosts (use GHCR)
+- hardcode a building, campus, vendor, or fixture equipment id into product code, or select equipment by a substring or prefix match on `equipment_id` (type, roles, and registry only; exact id only after the type filter)
 
 See [docs/agent/index.md](docs/agent/index.md) for external-agent architecture.
 
@@ -184,6 +192,6 @@ For library/migration/PR missions (Milestone A), start at [openfdd_agent_spec/AG
 
 ### Stamped equipment type precedence
 
-Package ingest persists `equipType` / `equipment_type`; recognized stamps win over folder/id heuristics in inventory and plant-health grouping. Opaque BAS ids are supported (`AC_1` + `equipType: ahu` → AHU). Vendor/campus aliases remain preprocess concerns and must not be hard-coded into product Rust.
+Package ingest persists `equipType` / `equipment_type`. A recognized stamp is the classifier for inventory, plant-health grouping, plots, RCx cohorts, weather selection, motor groups, VAV health, and rule applicability (`AC_1` + `equipType: ahu` → AHU). A missing or unrecognized stamp is unclassified and matches nothing. Plots, FDD, analytics, and type-first stress selectors use that stamp, roles, and the registry. The framework never hardcodes one building. Never prefer a fixture id over the stamp. Never substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id` (`RTU_01` must not select `RTU_010`). An exact id is allowed only after the type filter. Do not invent an MQTT delta payload. Parent-AHU id proposals are not cohort membership and are not a plot filter. Vendor/campus aliases remain preprocess concerns and must not be hard-coded into product Rust. Epic: [#1043](https://github.com/bbartling/open-fdd/issues/1043). Agent rule 64 in [`openfdd_agent_spec/AGENTS.md`](openfdd_agent_spec/AGENTS.md).
 
 ZONE = FCU (valve PID) or standalone DDC monitor (`fcu` / `zone_other`); UV = CV AHU (`unitVentilator`). Detail: [`docs/modeling/zone-terminals.md`](docs/modeling/zone-terminals.md).

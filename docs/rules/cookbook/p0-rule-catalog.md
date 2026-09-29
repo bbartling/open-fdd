@@ -60,6 +60,15 @@ All **thresholds are defaults** — site-adjustable. **confirmation_seconds** de
 | `VAV-REHEAT` | `vav` | vav | reheat-valve, vav-discharge-air-temp, vav-inlet-air-temp | 900 | Air flowing AND reheat valve > 30% AND box discharge temp rises < 3°F above duct inlet (air from AHU) — stuck or fail… |
 | `VAV-AHU-LEAVE` | `vav` | vav | vav-discharge-air-temp, ahu-discharge-air-temp | 900 | Air flowing AND \\|VAV discharge − parent AHU SAT\\| > band. Needs package topology (vav_to_ahu) so ahu_sat is enrich… |
 | `VAV-7` | `vav` | vav | zone-airflow | 900 | Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too hig… |
+| `FCU-SENSOR-NULL` | `fcu` | zone_other, general, ahu | zone-air-temp-sp | 0 | Own zone setpoint present and zone temperature null for at least 90% of the window. |
+| `FCU-HTG-COIL` | `fcu` | zone_other, general, ahu | discharge-air-temp, zone-air-temp, heating-valve | 900 | Fan on, heating valve ≥ 80%, SAT − zone < 5.4°F. |
+| `FCU-CLG-COIL` | `fcu` | zone_other, general, ahu | discharge-air-temp, zone-air-temp, cooling-valve, heating-valve | 900 | Fan on, cooling ≥ 80%, heating shut, SAT not below zone. |
+| `FCU-VALVE-PASS-HTG` | `fcu` | zone_other, general, ahu | discharge-air-temp, zone-air-temp, heating-valve, cooling-valve | 900 | Fan on, both valves shut, SAT − zone > 5.4°F. |
+| `FCU-VALVE-PASS-CLG` | `fcu` | zone_other, general, ahu | discharge-air-temp, zone-air-temp, heating-valve, cooling-valve | 900 | Fan on, both valves shut, zone − SAT > 5.4°F. |
+| `FCU-DAMPER-POS` | `fcu` | zone_other, general, ahu | damper-cmd, damper | 900 | Fan on, damper command ≥ 15%, feedback more than 15 points below command. |
+| `FCU-CO2-DAMPER` | `fcu` | zone_other, general, ahu | zone-co2, damper-cmd | 900 | Fan on, valid CO₂ > 1000 ppm, damper command < 10%. |
+| `FCU-DEADBAND` | `fcu` | zone_other, general, ahu | cooling-sp, heating-sp | 0 | Pass-through cooling SP − heating SP < 1°C. |
+| `FCU-MODE-CYCLE` | `fcu` | zone_other, general, ahu | heating-valve, cooling-valve | 0 | At least four heat/cool valve mode changes in the window. |
 | `CHW-1` | `plant` | chiller | chilled-water-supply-temp, chilled-water-return-temp | 900 | Pump on AND (CHWR − CHWS) < 4°F. |
 | `CHW-2` | `plant` | chiller | chw-diff-pressure, chw-diff-pressure-sp, chw-pump-cmd | 300 | Pump ≥ 87% AND CHW DP < DP SP − 2.2. |
 | `CHW-3` | `plant` | chiller | chilled-water-supply-temp, chilled-water-supply-temp-sp, chw-pump-cmd | 300 | Pump on AND \\|CHWS − CHWS SP\\| > 2.2°F. |

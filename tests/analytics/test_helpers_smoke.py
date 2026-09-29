@@ -21,5 +21,7 @@ def test_hours_under_mask():
     assert hours_under_mask(mask, nominal_seconds=3600.0) >= 0.0
 
 
-def test_equipment_type_from_id():
-    assert "AHU" in equipment_type_from_id("AHU_1").upper()
+def test_equipment_type_from_id_does_not_guess():
+    assert equipment_type_from_id("AHU_1") == "UNKNOWN"
+    assert equipment_type_from_id("jci_vav_1") == "UNKNOWN"
+    assert equipment_type_from_id("AC_1") == "UNKNOWN"

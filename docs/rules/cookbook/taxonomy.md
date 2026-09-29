@@ -52,6 +52,7 @@ Neutral, standards-first taxonomy for Open-FDD rule cookbooks. Names are **gener
 | `actuator.leakage` | Valve / damper leakage | Flow/temp when commanded closed |
 | `plant.performance` | Plant performance | CHW ΔT/DP/flow, CHW-NOLOAD-1, CW approach/fan/opt |
 | `terminal.vav` | VAV terminals | Comfort band, reheat, damper stuck, airflow bias |
+| `terminal.fcu` | Fan coil / zone_other | Missing zone sensor, coil under-delivery, passing valves, damper feedback, high CO₂, deadband collapse, heat/cool mode cycling (`FCU-*`) |
 | `command.status` | Command vs status | Fan/pump/damper cmd ≠ feedback |
 | `kpi.advisory` | Performance KPI | Trim/respond, energy opportunity scoring |
 | `safety.envelope` | Safety envelopes | GL36-style MAT/SAT/OAT consistency checks |
@@ -71,6 +72,7 @@ Examples:
 - `control.loop.ahu.fc1_duct_static_low`
 - `schedule.ahu.sched_1_unoccupied_runtime`
 - `schedule.ahu.sched_247_always_on`
+- `terminal.fcu.fcu_htg_coil`
 
 ---
 

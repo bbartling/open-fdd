@@ -26,6 +26,7 @@ def test_metric_bins_same_physical_hours():
     frames_f = _chiller_frame(oat_f=72.0)
     role_map = {
         "CHILLER_1": {
+            "equipType": "chiller",
             "chiller-status": "chiller-status",
             "outside-air-temp": "outside-air-temp",
         }

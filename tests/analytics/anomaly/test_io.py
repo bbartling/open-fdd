@@ -72,6 +72,18 @@ def test_iter_ahu_io_points_nested_equipment_keeps_ahu_only():
     ]
 
 
+def test_iter_ahu_io_points_requires_stamp():
+    column_map = {
+        "equipment": {
+            "AC_1": {"equipType": "ahu", "points": {"discharge-air-temp": "SAT"}},
+            "jci_ahu_1": {"points": {"discharge-air-temp": "SAT2"}},
+            "jci_vav_1": {"equipType": "vav", "points": {"zone-air-temp": "ZT"}},
+        }
+    }
+    assert iter_ahu_io_points(column_map) == [("discharge-air-temp", "SAT")]
+    assert iter_ahu_io_points({"points": {"discharge-air-temp": "DAT"}}) == []
+
+
 def test_load_mini_fixture_resolves_roles_and_skips_missing():
     device = load_device_folder(FIXTURE)
     assert device.frame.index.tz is not None

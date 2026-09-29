@@ -21,7 +21,7 @@ from app.analytics import (
 )
 from app.data_loader import infer_poll_seconds
 from app.role_map import apply_role_map
-from app.site_model import resolve_equipment_type
+from app.site_model import normalize_equipment_type, resolve_equipment_type
 
 
 def _fan_on_mask(df: pd.DataFrame) -> tuple[pd.Series | None, str]:
@@ -335,8 +335,7 @@ def build_model_seed_dict(
     equip = schedule_payload.get("equipment") or {}
     hint: dict[str, Any] = {}
     for eq_id, info in equip.items():
-        et = str(info.get("equipment_type") or "").upper()
-        if et == "AHU" or eq_id.upper().startswith("AHU"):
+        if normalize_equipment_type(str(info.get("equipment_type") or "")) == "AHU":
             hint = {
                 "equipment_id": eq_id,
                 "weekday_start_hour": info.get("weekday_start_hour"),
@@ -347,15 +346,6 @@ def build_model_seed_dict(
                 "likely_always_on": info.get("likely_always_on"),
             }
             break
-    if not hint and equip:
-        eq_id, info = next(iter(equip.items()))
-        hint = {
-            "equipment_id": eq_id,
-            "weekday_start_hour": info.get("weekday_start_hour"),
-            "weekday_stop_hour": info.get("weekday_stop_hour"),
-            "always_on_fraction": info.get("always_on_fraction"),
-            "likely_always_on": info.get("likely_always_on"),
-        }
 
     inferred = list(schedule_payload.get("inferred_parameters") or [])
     if not inferred and equip:

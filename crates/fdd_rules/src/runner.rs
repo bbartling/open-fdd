@@ -5,9 +5,9 @@ use anyhow::{Context, Result};
 use datafusion::prelude::*;
 use fdd_sql::{
     new_historian_session, register_historian_building, register_parquet_tree,
-    register_utility_if_present, register_weather_if_present, run_sql,
+    register_utility_if_present, register_weather_for_building, run_sql,
 };
-use fdd_store::HistorianConfig;
+use fdd_store::{merge_windowed_rule_result, HistorianConfig};
 use serde::Serialize;
 
 use crate::params::{read_poll_from_cache, rule_params, substitute_sql};
@@ -52,6 +52,26 @@ fn is_missing_schema_error(msg: &str) -> bool {
         || (m.contains("weather") && m.contains("not found"))
 }
 
+/// Publish a rule body. Windowed AFDD upserts only `[start, end)` and leaves
+/// every other stored slice unchanged. Bulk runs (no window) replace the file.
+fn publish_rule_body(
+    out_path: &Path,
+    body: &serde_json::Value,
+    time_window: Option<(&str, &str)>,
+) -> std::io::Result<()> {
+    if let Some((start, end)) = time_window {
+        let existing = std::fs::read_to_string(out_path)
+            .ok()
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
+        let merged =
+            merge_windowed_rule_result(existing.as_ref(), start, end, body).map_err(|err| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, err.to_string())
+            })?;
+        return write_json_atomic(out_path, &merged);
+    }
+    write_json_atomic(out_path, body)
+}
+
 /// Wave M D2 - atomic publish so readers never observe truncated JSON.
 fn write_json_atomic(out_path: &Path, body: &serde_json::Value) -> std::io::Result<()> {
     if let Some(parent) = out_path.parent() {
@@ -66,7 +86,12 @@ fn write_json_atomic(out_path: &Path, body: &serde_json::Value) -> std::io::Resu
 
 /// Write a pandas-shaped SKIPPED_MISSING_ROLES marker for a rule that could not
 /// run because required roles/columns were absent.
-fn write_skip_marker(out_path: &Path, missing_roles: &[String], note: &str) -> std::io::Result<()> {
+fn write_skip_marker(
+    out_path: &Path,
+    missing_roles: &[String],
+    note: &str,
+    time_window: Option<(&str, &str)>,
+) -> std::io::Result<()> {
     let body = serde_json::json!({
         "rows": [{
             "status": "SKIPPED_MISSING_ROLES",
@@ -77,7 +102,7 @@ fn write_skip_marker(out_path: &Path, missing_roles: &[String], note: &str) -> s
         "missing_roles": missing_roles,
         "skipped": true,
     });
-    write_json_atomic(out_path, &body)
+    publish_rule_body(out_path, &body, time_window)
 }
 
 /// Inject NULL columns for optional roles missing from history via a WITH CTE
@@ -245,7 +270,7 @@ pub async fn run_all_rules_with_overrides(
         register_parquet_tree(&ctx, parquet_root).await?;
     }
     let wx_root = options.weather_root.unwrap_or(parquet_root);
-    register_weather_if_present(&ctx, wx_root).await?;
+    register_weather_for_building(&ctx, wx_root, options.building_id).await?;
     if let Some((start_utc, end_utc)) = options.time_window {
         scope_history_to_time_window(&ctx, start_utc, end_utc).await?;
     }
@@ -309,7 +334,7 @@ pub async fn run_all_rules_with_overrides(
                 .collect();
             if !missing.is_empty() {
                 let note = format!("missing roles/columns in history: {}", missing.join(", "));
-                let _ = write_skip_marker(&out_path, &missing, &note);
+                let _ = write_skip_marker(&out_path, &missing, &note, options.time_window);
                 timings.push(RuleTiming {
                     rule_id: rule.rule_id.clone(),
                     row_count: 0,
@@ -395,7 +420,11 @@ pub async fn run_all_rules_with_overrides(
         );
         match run_sql(&ctx, &sql).await {
             Ok(result) => {
-                write_json_atomic(&out_path, &serde_json::json!({"rows": result.rows}))?;
+                publish_rule_body(
+                    &out_path,
+                    &serde_json::json!({"rows": result.rows}),
+                    options.time_window,
+                )?;
                 timings.push(RuleTiming {
                     rule_id: rule.rule_id.clone(),
                     row_count: result.row_count,
@@ -411,7 +440,12 @@ pub async fn run_all_rules_with_overrides(
                     // Schema/weather miss classified at runtime -> skip, not fail
                     // (OFDD-066/068). Keeps Liberty runs at rules_failed == 0.
                     let note = format!("schema miss: {msg}");
-                    let _ = write_skip_marker(&out_path, &rule.required_roles, &note);
+                    let _ = write_skip_marker(
+                        &out_path,
+                        &rule.required_roles,
+                        &note,
+                        options.time_window,
+                    );
                     timings.push(RuleTiming {
                         rule_id: rule.rule_id.clone(),
                         row_count: 0,
@@ -422,7 +456,7 @@ pub async fn run_all_rules_with_overrides(
                     rules_skipped += 1;
                 } else {
                     let err_body = serde_json::json!({"rows": [], "error": msg});
-                    let _ = write_json_atomic(&out_path, &err_body);
+                    let _ = publish_rule_body(&out_path, &err_body, options.time_window);
                     timings.push(RuleTiming {
                         rule_id: rule.rule_id.clone(),
                         row_count: 0,

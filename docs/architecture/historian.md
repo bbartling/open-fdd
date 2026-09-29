@@ -299,12 +299,15 @@ Target configuration:
 
 ```text
 OPENFDD_AFDD_MODE=bulk|continuous
+OPENFDD_AFDD_SCHEDULE=interval|wall_clock
 OPENFDD_AFDD_INTERVAL_MINUTES=60
 OPENFDD_AFDD_LOOKBACK_VALUE=24
 OPENFDD_AFDD_LOOKBACK_UNIT=hours
+OPENFDD_AFDD_WALL_CLOCK_HHMM=05:00
+OPENFDD_AFDD_WALL_CLOCK_TIMEZONE=America/Chicago
 ```
 
-A continuous run ends at the latest successfully persisted eligible telemetry timestamp, not blindly at wall clock. Rolling windows intentionally overlap so late-arriving BAS data can be evaluated on a subsequent cycle. Ingest durability and AFDD scheduling remain decoupled.
+`wall_clock` chooses when the cycle is due (local `HH:MM` in an operator IANA timezone). The analysis window still ends at the latest successfully persisted eligible telemetry timestamp. Result upserts cover that window only. Rolling windows may overlap so late-arriving BAS data can be evaluated on a subsequent cycle. Ingest durability and AFDD scheduling remain decoupled. `America/Chicago` above is the lab recipe, not a building id and not a silent product default (`SCHEDULE` defaults to `interval`).
 
 ## Migration and operator tooling
 

@@ -160,6 +160,13 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/faults/summary", get(faults_summary))
         .route("/api/export/meta", get(export_meta))
         .route("/api/data-management/summary", get(data_management_summary))
+        .route("/api/data-management/budget", get(data_management_budget))
+        .route(
+            "/api/data-management/retention/apply",
+            post(data_management_retention_apply),
+        )
+        .route("/api/sessions/buildings", get(building_sessions_list))
+        .route("/api/sessions/building/leave", post(building_session_leave))
         .route("/api/host/stats", get(host_stats))
         .route(
             "/api/historian/compaction",
@@ -3032,6 +3039,7 @@ pub async fn csv_list_datasets(
     if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id) {
         return Err(deny);
     }
+    crate::building_sessions::note_catalog_list();
     let mut body = open_fdd_edge_prototype::csv_ingest::list_datasets();
     // When a building filter is present, only return that building's rows
     // (defense in depth after ACL). Hub-admin unfiltered list stays full.
@@ -3183,6 +3191,133 @@ pub async fn export_meta() -> Json<Value> {
 
 pub async fn data_management_summary() -> Json<Value> {
     Json(open_fdd_edge_prototype::data_management::storage_summary())
+}
+
+fn data_budget_root() -> std::path::PathBuf {
+    crate::analytics::historian::parquet_root_base()
+}
+
+pub async fn data_management_budget(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let _admin = require_hub_admin(&state, &headers)?;
+    let budget = fdd_store::DataBudget::from_env();
+    let root = data_budget_root();
+    let objects = fdd_store::collect_budget_objects(&root);
+    let used: u64 = objects.iter().map(|o| o.bytes).sum();
+    let plan = fdd_store::plan_oldest_first(&objects, budget.budget_bytes);
+    Ok(Json(json!({
+        "ok": true,
+        "enabled": budget.enabled,
+        "budget_bytes": budget.budget_bytes,
+        "budget_gib": budget.budget_bytes / fdd_store::GIB,
+        "default_budget_gib": fdd_store::DEFAULT_LOCAL_DATA_BUDGET_GIB,
+        "reserved_free_percent": budget.reserved_free_percent,
+        "used_bytes": used,
+        "bytes_over_budget": fdd_store::bytes_over_budget(used, budget.budget_bytes),
+        "object_count": objects.len(),
+        "would_drop_count": plan.drop.len(),
+        "would_drop_bytes": plan.drop_bytes,
+        "keep_bytes": plan.keep_bytes,
+        "policy": "oldest-first; newest parquet kept; backups and archives excluded",
+        "storage_root": root.display().to_string(),
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DataBudgetApplyBody {
+    /// Exact confirm phrase: `APPLY DATA BUDGET`.
+    #[serde(default)]
+    pub confirm: String,
+}
+
+pub async fn data_management_retention_apply(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<DataBudgetApplyBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let admin = require_hub_admin(&state, &headers)?;
+    if body.confirm.trim() != "APPLY DATA BUDGET" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "confirm must be the phrase APPLY DATA BUDGET",
+            })),
+        ));
+    }
+    let budget = fdd_store::DataBudget::from_env();
+    let root = data_budget_root();
+    tracing::info!(
+        target: "security_audit",
+        event = "data_budget_apply",
+        subject = %admin.sub,
+        enabled = budget.enabled,
+        budget_bytes = budget.budget_bytes,
+        "hub admin requested oldest-first data budget eviction"
+    );
+    let report = fdd_store::apply_data_budget(&root, &budget).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": e.to_string()})),
+        )
+    })?;
+    Ok(Json(json!({
+        "ok": true,
+        "applied": report.applied,
+        "reason": report.reason,
+        "dropped_count": report.dropped.len(),
+        "dropped_bytes": report.dropped_bytes,
+        "keep_bytes": report.keep_bytes,
+    })))
+}
+
+pub async fn building_sessions_list(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let _admin = require_hub_admin(&state, &headers)?;
+    let mut body = crate::building_sessions::snapshot();
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert("ok".into(), json!(true));
+    }
+    Ok(Json(body))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BuildingLeaveBody {
+    #[serde(default)]
+    pub building_id: String,
+}
+
+pub async fn building_session_leave(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<BuildingLeaveBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let _user = state.auth.user_from_headers(&headers).map_err(|e| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    let building_id = body.building_id.trim();
+    if building_id.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "building_id required"})),
+        ));
+    }
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(building_id)) {
+        return Err(deny);
+    }
+    let left = crate::building_sessions::leave(building_id);
+    Ok(Json(json!({
+        "ok": true,
+        "left": left,
+        "building_id": building_id,
+    })))
 }
 
 pub async fn host_stats() -> Json<Value> {
@@ -3792,8 +3927,8 @@ async fn jobs_attach_eplus_artifact(
 fn gate_analytics(
     state: &AppState,
     headers: &HeaderMap,
-    mut req: AnalyticsRequest,
-) -> Result<AnalyticsRequest, (StatusCode, Json<Value>)> {
+    req: &mut AnalyticsRequest,
+) -> Result<(), (StatusCode, Json<Value>)> {
     if let Some(deny) =
         deny_if_building_out_of_scope(state, headers, req.query.building_id.as_deref())
     {
@@ -3810,351 +3945,434 @@ fn gate_analytics(
             "analytics start clamped to historian retain floor"
         );
     }
-    Ok(req)
+    Ok(())
+}
+
+macro_rules! cached_analytics {
+    ($query_id:expr, $query_version:expr, $state:expr, $headers:expr, $req:expr, $compute:expr) => {{
+        gate_analytics($state, $headers, &mut $req)?;
+        crate::analytics::result_cache::respond($query_id, $query_version, &$req, async || {
+            $compute.await
+        })
+        .await
+    }};
 }
 
 async fn analytics_runtime(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    let env = analytics::runtime::handle_async(&req).await;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": env.to_json(),
-    })))
+    cached_analytics!(
+        "runtime",
+        analytics::QV_RUNTIME,
+        &state,
+        &headers,
+        req,
+        analytics::runtime::handle_async(&req)
+    )
 }
 
 async fn analytics_vav_health(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::vav_health::handle_async(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "vav-health",
+        analytics::vav_health::QV_VAV_HEALTH,
+        &state,
+        &headers,
+        req,
+        analytics::vav_health::handle_async(&req)
+    )
 }
 
 async fn analytics_ahu_health(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::plant_health::handle_ahu(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "ahu-health",
+        analytics::plant_health::QV_AHU_HEALTH,
+        &state,
+        &headers,
+        req,
+        analytics::plant_health::handle_ahu(&req)
+    )
 }
 
 async fn analytics_ahu_temperature_health(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::plant_health::handle_ahu_temperature(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "ahu-temperature-health",
+        analytics::plant_health::QV_AHU_TEMPERATURE_HEALTH,
+        &state,
+        &headers,
+        req,
+        analytics::plant_health::handle_ahu_temperature(&req)
+    )
 }
 
 async fn analytics_ahu_pressure_health(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::plant_health::handle_ahu_pressure(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "ahu-pressure-health",
+        analytics::plant_health::QV_AHU_PRESSURE_HEALTH,
+        &state,
+        &headers,
+        req,
+        analytics::plant_health::handle_ahu_pressure(&req)
+    )
 }
 
 async fn analytics_ahu_economizer_health(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::plant_health::handle_ahu_economizer(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "ahu-economizer-health",
+        analytics::plant_health::QV_AHU_ECONOMIZER_HEALTH,
+        &state,
+        &headers,
+        req,
+        analytics::plant_health::handle_ahu_economizer(&req)
+    )
 }
 
 async fn analytics_chiller_health(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::plant_health::handle_chiller(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "chiller-health",
+        analytics::plant_health::QV_CHILLER_HEALTH,
+        &state,
+        &headers,
+        req,
+        analytics::plant_health::handle_chiller(&req)
+    )
 }
 
 async fn analytics_cooling_tower_health(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::plant_health::handle_cooling_tower(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "cooling-tower-health",
+        analytics::plant_health::QV_COOLING_TOWER_HEALTH,
+        &state,
+        &headers,
+        req,
+        analytics::plant_health::handle_cooling_tower(&req)
+    )
 }
 
 async fn analytics_sensor_faults(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::plant_health::handle_sensor_faults(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "sensor-faults",
+        analytics::plant_health::QV_SENSOR_FAULTS,
+        &state,
+        &headers,
+        req,
+        analytics::plant_health::handle_sensor_faults(&req)
+    )
 }
 
 async fn analytics_pid_hunting(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::plant_health::handle_pid_hunting(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "pid-hunting",
+        analytics::plant_health::QV_PID_HUNTING,
+        &state,
+        &headers,
+        req,
+        analytics::plant_health::handle_pid_hunting(&req)
+    )
 }
 
 async fn analytics_boiler_health(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::plant_health::handle_boiler(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "boiler-health",
+        analytics::plant_health::QV_BOILER_HEALTH,
+        &state,
+        &headers,
+        req,
+        analytics::plant_health::handle_boiler(&req)
+    )
 }
 
 async fn analytics_hp_health(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::plant_health::handle_hp(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "hp-health",
+        analytics::plant_health::QV_HP_HEALTH,
+        &state,
+        &headers,
+        req,
+        analytics::plant_health::handle_hp(&req)
+    )
 }
 
 async fn analytics_zone_other_health(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::plant_health::handle_zone_other(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "zone-other-health",
+        analytics::plant_health::QV_ZONE_OTHER_HEALTH,
+        &state,
+        &headers,
+        req,
+        analytics::plant_health::handle_zone_other(&req)
+    )
 }
 
 async fn analytics_sensor_health(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::sensor_health::handle_async(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "sensor-health",
+        analytics::QV_SENSOR_HEALTH,
+        &state,
+        &headers,
+        req,
+        analytics::sensor_health::handle_async(&req)
+    )
 }
 
 async fn analytics_schedule(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::schedule::handle_async(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "schedule",
+        analytics::QV_SCHEDULE,
+        &state,
+        &headers,
+        req,
+        analytics::schedule::handle_async(&req)
+    )
 }
 
 async fn analytics_mechanical_cooling(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::mechanical_cooling::handle_async(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "mechanical-cooling",
+        analytics::QV_MECHANICAL_COOLING,
+        &state,
+        &headers,
+        req,
+        analytics::mechanical_cooling::handle_async(&req)
+    )
 }
 
 async fn analytics_bas_vs_web_oat(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    let max_points = req.query.max_points.unwrap_or(2000);
-    let env = match analytics::historian::bas_vs_web_from_history(
-        req.query.equipment_ids.as_deref(),
-        max_points,
-        req.query.building_id.as_deref(),
-    )
-    .await
-    {
-        Ok(Some(env)) => env,
-        Ok(None) => analytics::envelope_with_engine(
-            "bas-vs-web-oat-v2",
-            &req.query,
-            vec![
-                "BAS vs web OAT unavailable — need distinct oa_t and web OAT \
-                 columns on historian Parquet (site-broadcast join)"
-                    .into(),
-            ],
-            analytics::DF_ENGINE,
-        ),
-        Err(e) => {
-            tracing::warn!(error = %e, "bas-vs-web-oat historian path failed");
-            analytics::envelope(
-                "bas-vs-web-oat-v2",
-                &req.query,
-                vec![format!("bas-vs-web-oat failed: {e}")],
+    cached_analytics!(
+        "bas-vs-web-oat",
+        "bas-vs-web-oat-v2",
+        &state,
+        &headers,
+        req,
+        async {
+            let max_points = req.query.max_points.unwrap_or(2000);
+            match analytics::historian::bas_vs_web_from_history(
+                req.query.equipment_ids.as_deref(),
+                max_points,
+                req.query.building_id.as_deref(),
             )
+            .await
+            {
+                Ok(Some(env)) => env,
+                Ok(None) => analytics::envelope_with_engine(
+                    "bas-vs-web-oat-v2",
+                    &req.query,
+                    vec![
+                        "BAS vs web OAT unavailable — need distinct oa_t and web OAT \
+                         columns on historian Parquet (site-broadcast join)"
+                            .into(),
+                    ],
+                    analytics::DF_ENGINE,
+                ),
+                Err(e) => {
+                    tracing::warn!(error = %e, "bas-vs-web-oat historian path failed");
+                    analytics::envelope(
+                        "bas-vs-web-oat-v2",
+                        &req.query,
+                        vec![format!("bas-vs-web-oat failed: {e}")],
+                    )
+                }
+            }
         }
-    };
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": env.to_json(),
-    })))
+    )
 }
 
 async fn analytics_inspect(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    let eq = req
-        .query
-        .equipment_ids
-        .as_ref()
-        .and_then(|ids| ids.first())
-        .map(|s| s.as_str())
-        .unwrap_or("");
-    let columns: Option<Vec<String>> = req.series.as_ref().and_then(|s| {
-        s.get("columns").and_then(|c| c.as_array()).map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(str::to_string))
-                .collect()
-        })
-    });
-    let max_points = req.query.max_points.unwrap_or(2000);
-    let env = match analytics::historian::inspect_from_history(
-        req.query.building_id.as_deref(),
-        eq,
-        columns.as_deref(),
-        max_points,
-    )
-    .await
-    {
-        Ok(Some(env)) => env,
-        Ok(None) => analytics::envelope_with_engine(
-            "equipment-inspect-v1",
-            &req.query,
-            vec!["equipment inspection unavailable — need historian parquet for equipment".into()],
-            analytics::DF_ENGINE,
-        ),
-        Err(e) => {
-            tracing::warn!(error = %e, "equipment inspect historian path failed");
-            analytics::envelope(
-                "equipment-inspect-v1",
-                &req.query,
-                vec![format!("inspect failed: {e}")],
+    cached_analytics!(
+        "equipment-inspect",
+        "equipment-inspect-v1",
+        &state,
+        &headers,
+        req,
+        async {
+            let eq = req
+                .query
+                .equipment_ids
+                .as_ref()
+                .and_then(|ids| ids.first())
+                .map(|s| s.as_str())
+                .unwrap_or("");
+            let columns: Option<Vec<String>> = req.series.as_ref().and_then(|s| {
+                s.get("columns").and_then(|c| c.as_array()).map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+            });
+            let max_points = req.query.max_points.unwrap_or(2000);
+            match analytics::historian::inspect_from_history(
+                req.query.building_id.as_deref(),
+                eq,
+                columns.as_deref(),
+                max_points,
             )
+            .await
+            {
+                Ok(Some(env)) => env,
+                Ok(None) => analytics::envelope_with_engine(
+                    "equipment-inspect-v1",
+                    &req.query,
+                    vec![
+                        "equipment inspection unavailable — need historian parquet for equipment"
+                            .into(),
+                    ],
+                    analytics::DF_ENGINE,
+                ),
+                Err(e) => {
+                    tracing::warn!(error = %e, "equipment inspect historian path failed");
+                    analytics::envelope(
+                        "equipment-inspect-v1",
+                        &req.query,
+                        vec![format!("inspect failed: {e}")],
+                    )
+                }
+            }
         }
-    };
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": env.to_json(),
-    })))
+    )
 }
 
 async fn analytics_economizer(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::economizer::handle_async(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "economizer",
+        analytics::QV_ECONOMIZER,
+        &state,
+        &headers,
+        req,
+        analytics::economizer::handle_async(&req)
+    )
 }
 
 async fn analytics_rcx_ahu(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::rcx::handle_ahu_async(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "rcx-ahu",
+        analytics::QV_RCX_AHU,
+        &state,
+        &headers,
+        req,
+        analytics::rcx::handle_ahu_async(&req)
+    )
 }
 
 async fn analytics_rcx_vav(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::rcx::handle_vav_async(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "rcx-vav",
+        analytics::QV_RCX_VAV,
+        &state,
+        &headers,
+        req,
+        analytics::rcx::handle_vav_async(&req)
+    )
 }
 
 async fn analytics_rcx_chiller(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::plant::handle_chiller_async(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "rcx-chiller",
+        analytics::plant::QV_RCX_CHILLER,
+        &state,
+        &headers,
+        req,
+        analytics::plant::handle_chiller_async(&req)
+    )
 }
 
 async fn analytics_rcx_boiler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::plant::handle_boiler_async(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "rcx-boiler",
+        analytics::plant::QV_RCX_BOILER,
+        &state,
+        &headers,
+        req,
+        analytics::plant::handle_boiler_async(&req)
+    )
 }
 
 async fn analytics_rcx_presets_list(
@@ -4176,237 +4394,296 @@ async fn analytics_rcx_presets_list(
 async fn analytics_rcx_preset(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    let preset_id = req
-        .query
-        .query_version
-        .as_deref()
-        .or_else(|| {
-            req.series
-                .as_ref()
-                .and_then(|s| s.get("preset_id"))
-                .and_then(|v| v.as_str())
-        })
-        .unwrap_or("")
-        .to_string();
-    let building_id = req.query.building_id.clone();
-    let max_points = req.query.max_points.unwrap_or(8000);
-    let action_id = actions::start_action(
-        "analytics_rcx",
-        &format!(
-            "RCx preset · {} · {}",
-            building_id.as_deref().unwrap_or("(no building)"),
-            if preset_id.is_empty() {
-                "(none)"
-            } else {
-                &preset_id
+    gate_analytics(&state, &headers, &mut req)?;
+    let action_slot: std::sync::Arc<std::sync::Mutex<Option<String>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(None));
+    let slot = action_slot.clone();
+    let served = crate::analytics::result_cache::serve(
+        "rcx-preset",
+        "rcx-preset-v1",
+        &req,
+        async || {
+            let preset_id = req
+                .query
+                .query_version
+                .as_deref()
+                .or_else(|| {
+                    req.series
+                        .as_ref()
+                        .and_then(|s| s.get("preset_id"))
+                        .and_then(|v| v.as_str())
+                })
+                .unwrap_or("")
+                .to_string();
+            let building_id = req.query.building_id.clone();
+            let max_points = req.query.max_points.unwrap_or(8000);
+            let action_id = actions::start_action(
+                "analytics_rcx",
+                &format!(
+                    "RCx preset · {} · {}",
+                    building_id.as_deref().unwrap_or("(no building)"),
+                    if preset_id.is_empty() {
+                        "(none)"
+                    } else {
+                        &preset_id
+                    }
+                ),
+                Some(json!({
+                    "building_id": building_id.clone(),
+                    "preset_id": preset_id.clone(),
+                })),
+            )
+            .ok();
+            if let Ok(mut guard) = slot.lock() {
+                *guard = action_id.clone();
             }
-        ),
-        Some(json!({
-            "building_id": building_id.clone(),
-            "preset_id": preset_id.clone(),
-        })),
-    )
-    .ok();
-    let mut hard_fail = false;
-    let env =
-        match analytics::rcx_presets::run_preset(building_id.as_deref(), &preset_id, max_points)
+            let mut hard_fail = false;
+            let env = match analytics::rcx_presets::run_preset(
+                building_id.as_deref(),
+                &preset_id,
+                max_points,
+            )
             .await
-        {
-            Ok(Some(env)) => env,
-            Ok(None) => analytics::envelope_with_engine(
-                "rcx-preset-v1",
-                &req.query,
-                vec![format!(
-                "RCx preset '{preset_id}' unavailable — unknown id or missing historian columns"
-            )],
-                analytics::DF_ENGINE,
-            ),
-            Err(e) => {
-                hard_fail = true;
-                tracing::warn!(error = %e, preset = %preset_id, "rcx preset failed");
-                analytics::envelope(
+            {
+                Ok(Some(env)) => env,
+                Ok(None) => analytics::envelope_with_engine(
                     "rcx-preset-v1",
                     &req.query,
-                    vec![format!("rcx preset failed: {e}")],
-                )
+                    vec![format!(
+                        "RCx preset '{preset_id}' unavailable — unknown id or missing historian columns"
+                    )],
+                    analytics::DF_ENGINE,
+                ),
+                Err(e) => {
+                    hard_fail = true;
+                    tracing::warn!(error = %e, preset = %preset_id, "rcx preset failed");
+                    analytics::envelope(
+                        "rcx-preset-v1",
+                        &req.query,
+                        vec![format!("rcx preset failed: {e}")],
+                    )
+                }
+            };
+            if let Some(ref aid) = action_id {
+                let warnings = env.warnings.len();
+                let status = if hard_fail { "fail" } else { "ok" };
+                let _ = actions::finish_action(
+                    aid,
+                    status,
+                    Some(json!({
+                        "ok": status == "ok",
+                        "building_id": building_id,
+                        "preset_id": preset_id,
+                        "warning_count": warnings,
+                    })),
+                );
             }
-        };
-    let analytics_json = env.to_json();
-    if let Some(ref aid) = action_id {
-        // Soft empty / missing-column warnings are not Action ❌ — only hard Err.
-        let warnings = analytics_json
-            .get("warnings")
-            .and_then(|v| v.as_array())
-            .map(|a| a.len())
-            .unwrap_or(0);
-        let status = if hard_fail { "fail" } else { "ok" };
-        let _ = actions::finish_action(
-            aid,
-            status,
-            Some(json!({
-                "ok": status == "ok",
-                "building_id": building_id,
-                "preset_id": preset_id,
-                "warning_count": warnings,
-            })),
-        );
+            env
+        },
+    )
+    .await?;
+    let action_id = action_slot
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone();
+    let mut body = crate::analytics::result_cache::json_body(&served).0;
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert("action_id".into(), json!(action_id));
     }
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics_json,
-        "action_id": action_id,
-    })))
+    Ok(Json(body))
 }
 
 async fn analytics_metering(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::metering::handle_async(&req).await.to_json(),
-    })))
+    cached_analytics!(
+        "metering",
+        analytics::QV_METERING,
+        &state,
+        &headers,
+        req,
+        analytics::metering::handle_async(&req)
+    )
 }
 
 async fn analytics_mv_change_point(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    Ok(Json(json!({
-        "ok": true,
-        "analytics": analytics::mv_change_point::handle(&req).to_json(),
-    })))
+    cached_analytics!(
+        "mv-change-point",
+        analytics::QV_MV_CHANGE_POINT,
+        &state,
+        &headers,
+        req,
+        async { analytics::mv_change_point::handle(&req) }
+    )
 }
 
 async fn analytics_setpoints(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    let env = match analytics::historian::setpoints_from_history(
-        req.query.equipment_ids.as_deref(),
-        req.query.building_id.as_deref(),
+    cached_analytics!(
+        "setpoints",
+        analytics::QV_SETPOINTS,
+        &state,
+        &headers,
+        req,
+        async {
+            match analytics::historian::setpoints_from_history(
+                req.query.equipment_ids.as_deref(),
+                req.query.building_id.as_deref(),
+            )
+            .await
+            {
+                Ok(Some(env)) => analytics::finalize_historian(&req, env, analytics::QV_SETPOINTS),
+                Ok(None) => analytics::envelope_with_engine(
+                    analytics::QV_SETPOINTS,
+                    &req.query,
+                    vec!["setpoints unavailable — no setpoint columns on historian".into()],
+                    analytics::DF_ENGINE,
+                ),
+                Err(e) => analytics::envelope(
+                    analytics::QV_SETPOINTS,
+                    &req.query,
+                    vec![format!("setpoints failed: {e}")],
+                ),
+            }
+        }
     )
-    .await
-    {
-        Ok(Some(env)) => analytics::finalize_historian(&req, env, analytics::QV_SETPOINTS),
-        Ok(None) => analytics::envelope_with_engine(
-            analytics::QV_SETPOINTS,
-            &req.query,
-            vec!["setpoints unavailable — no setpoint columns on historian".into()],
-            analytics::DF_ENGINE,
-        ),
-        Err(e) => analytics::envelope(
-            analytics::QV_SETPOINTS,
-            &req.query,
-            vec![format!("setpoints failed: {e}")],
-        ),
-    };
-    Ok(Json(json!({"ok": true, "analytics": env.to_json()})))
 }
 
 async fn analytics_diurnal(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    let env = match analytics::historian::diurnal_from_history(
-        req.query.equipment_ids.as_deref(),
-        req.query.building_id.as_deref(),
+    cached_analytics!(
+        "diurnal",
+        analytics::QV_DIURNAL,
+        &state,
+        &headers,
+        req,
+        async {
+            match analytics::historian::diurnal_from_history(
+                req.query.equipment_ids.as_deref(),
+                req.query.building_id.as_deref(),
+            )
+            .await
+            {
+                Ok(Some(env)) => analytics::finalize_historian(&req, env, analytics::QV_DIURNAL),
+                Ok(None) => analytics::envelope_with_engine(
+                    analytics::QV_DIURNAL,
+                    &req.query,
+                    vec!["diurnal unavailable — no historian timestamp/roles".into()],
+                    analytics::DF_ENGINE,
+                ),
+                Err(e) => analytics::envelope(
+                    analytics::QV_DIURNAL,
+                    &req.query,
+                    vec![format!("diurnal failed: {e}")],
+                ),
+            }
+        }
     )
-    .await
-    {
-        Ok(Some(env)) => analytics::finalize_historian(&req, env, analytics::QV_DIURNAL),
-        Ok(None) => analytics::envelope_with_engine(
-            analytics::QV_DIURNAL,
-            &req.query,
-            vec!["diurnal unavailable — no historian timestamp/roles".into()],
-            analytics::DF_ENGINE,
-        ),
-        Err(e) => analytics::envelope(
-            analytics::QV_DIURNAL,
-            &req.query,
-            vec![format!("diurnal failed: {e}")],
-        ),
-    };
-    Ok(Json(json!({"ok": true, "analytics": env.to_json()})))
 }
 
 async fn analytics_topology(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    let env =
-        match analytics::historian::topology_from_history(req.query.building_id.as_deref()).await {
-            Ok(Some(env)) => analytics::finalize_historian(&req, env, analytics::QV_TOPOLOGY),
-            Ok(None) => analytics::envelope_with_engine(
-                analytics::QV_TOPOLOGY,
-                &req.query,
-                vec!["topology unavailable — no historian equipment".into()],
-                analytics::DF_ENGINE,
-            ),
-            Err(e) => analytics::envelope(
-                analytics::QV_TOPOLOGY,
-                &req.query,
-                vec![format!("topology failed: {e}")],
-            ),
-        };
-    Ok(Json(json!({"ok": true, "analytics": env.to_json()})))
+    cached_analytics!(
+        "topology",
+        analytics::QV_TOPOLOGY,
+        &state,
+        &headers,
+        req,
+        async {
+            match analytics::historian::topology_from_history(req.query.building_id.as_deref())
+                .await
+            {
+                Ok(Some(env)) => analytics::finalize_historian(&req, env, analytics::QV_TOPOLOGY),
+                Ok(None) => analytics::envelope_with_engine(
+                    analytics::QV_TOPOLOGY,
+                    &req.query,
+                    vec!["topology unavailable — no historian equipment".into()],
+                    analytics::DF_ENGINE,
+                ),
+                Err(e) => analytics::envelope(
+                    analytics::QV_TOPOLOGY,
+                    &req.query,
+                    vec![format!("topology failed: {e}")],
+                ),
+            }
+        }
+    )
 }
 
 async fn analytics_sql_anomaly(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    let env = crate::sql_anomaly::handle_analytics(&req).await;
-    Ok(Json(json!({"ok": true, "analytics": env.to_json()})))
+    cached_analytics!(
+        "sql-anomaly",
+        analytics::QV_SQL_ANOMALY,
+        &state,
+        &headers,
+        req,
+        crate::sql_anomaly::handle_analytics(&req)
+    )
 }
 
 async fn analytics_sensor_stats(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<AnalyticsRequest>,
+    Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let req = gate_analytics(&state, &headers, req)?;
-    let fan_state = req
-        .series
-        .as_ref()
-        .and_then(|s| s.get("fan_state"))
-        .and_then(|v| v.as_str());
-    let env = match analytics::historian::sensor_stats_from_history(
-        req.query.equipment_ids.as_deref(),
-        req.query.building_id.as_deref(),
-        fan_state,
+    cached_analytics!(
+        "sensor-stats",
+        analytics::QV_SENSOR_STATS,
+        &state,
+        &headers,
+        req,
+        async {
+            let fan_state = req
+                .series
+                .as_ref()
+                .and_then(|s| s.get("fan_state"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            match analytics::historian::sensor_stats_from_history(
+                req.query.equipment_ids.as_deref(),
+                req.query.building_id.as_deref(),
+                fan_state.as_deref(),
+            )
+            .await
+            {
+                Ok(Some(env)) => {
+                    analytics::finalize_historian(&req, env, analytics::QV_SENSOR_STATS)
+                }
+                Ok(None) => analytics::envelope_with_engine(
+                    analytics::QV_SENSOR_STATS,
+                    &req.query,
+                    vec!["sensor-stats unavailable — no numeric roles".into()],
+                    analytics::DF_ENGINE,
+                ),
+                Err(e) => analytics::envelope(
+                    analytics::QV_SENSOR_STATS,
+                    &req.query,
+                    vec![format!("sensor-stats failed: {e}")],
+                ),
+            }
+        }
     )
-    .await
-    {
-        Ok(Some(env)) => analytics::finalize_historian(&req, env, analytics::QV_SENSOR_STATS),
-        Ok(None) => analytics::envelope_with_engine(
-            analytics::QV_SENSOR_STATS,
-            &req.query,
-            vec!["sensor-stats unavailable — no numeric roles".into()],
-            analytics::DF_ENGINE,
-        ),
-        Err(e) => analytics::envelope(
-            analytics::QV_SENSOR_STATS,
-            &req.query,
-            vec![format!("sensor-stats failed: {e}")],
-        ),
-    };
-    Ok(Json(json!({"ok": true, "analytics": env.to_json()})))
 }
 
 async fn analytics_fuel(

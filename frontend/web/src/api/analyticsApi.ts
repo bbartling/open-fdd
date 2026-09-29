@@ -17,6 +17,8 @@ export interface AnalyticsRequest extends AnalyticsQuery {
   series?: unknown;
   max_gap_seconds?: number;
   dt_min_f?: number;
+  /** Recompute even when the parquet result cache is fresh. */
+  refresh?: boolean;
 }
 
 export interface AnalyticsEnvelope {
@@ -38,7 +40,10 @@ export interface AnalyticsEnvelope {
 /** Wire shape from central: `{ ok, analytics: <envelope> }` (see routes.rs). */
 export interface AnalyticsApiResponse {
   ok?: boolean;
+  /** True when a cached parquet result is older than the historian watermark. */
+  stale?: boolean;
   analytics?: AnalyticsEnvelope;
+  cache?: Record<string, unknown>;
   error?: string;
 }
 

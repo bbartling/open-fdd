@@ -20,7 +20,7 @@ export interface MappingEquipment {
   equipment_type_raw?: string | null;
   equipment_type_source?: string | null;
   parent_ahu?: string | null;
-  /** `package` = confirmed; `inferred` = id heuristic proposal (not TTL fact). */
+  /** `package` = confirmed stamp; `inferred` = sibling-id parent proposal (not a kind, not a TTL fact). */
   parent_ahu_source?: string | null;
   ok: boolean;
   error?: string;

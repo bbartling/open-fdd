@@ -30,7 +30,6 @@ import {
   analyticsWindowFromSampling,
   datasetTimeSpan,
   isWeatherEquipment,
-  isWeatherEquipmentId,
   isZoneTerminalEquipment,
 } from "../lib/overviewMetrics";
 import { naturalCompare } from "../lib/naturalSort";
@@ -736,9 +735,11 @@ export async function fetchCentralOverview(opts: {
   const equipmentIds = [
     ...new Set(
       [
-        ...equipmentTotals.map((r) => String(r.equipment_id ?? "")),
+        ...equipmentTotals
+          .filter((r) => !isWeatherEquipment(r))
+          .map((r) => String(r.equipment_id ?? "")),
         ...inventory.map((e) => String(e.equipment_id)),
-      ].filter((id) => id && !isWeatherEquipmentId(id)),
+      ].filter((id) => id),
     ),
   ].sort(naturalCompare);
 
@@ -752,9 +753,7 @@ export async function fetchCentralOverview(opts: {
         })),
       )
     : groupByType(
-        equipmentTotals.filter(
-          (r) => !isWeatherEquipmentId(String(r.equipment_id ?? "")),
-        ),
+        equipmentTotals.filter((r) => !isWeatherEquipment(r)),
       );
 
   const weeklyPlants = weeklyPlantFigures(runtimeRows);
@@ -762,7 +761,7 @@ export async function fetchCentralOverview(opts: {
     (r) =>
       r.kind !== "weekly_plant" &&
       r.kind !== "weekly_equipment" &&
-      !isWeatherEquipmentId(String(r.equipment_id ?? "")) &&
+      !isWeatherEquipment(r) &&
       !isZoneTerminalEquipment(r),
   );
   const motorFig = motorFigure(plantMotorTotals);

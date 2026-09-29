@@ -31,9 +31,11 @@ N/A gate needs a nonblank reason. Reasons alone do not prove feature applicabili
 
 The security dimension includes recorded role/tenant/ACL/header gates **and**
 Python harness gates `25_security_python_harness` / `25b_security_post_stress` /
-`26_security_mqtt_acl` when required by the runner. MQTT continuity (21) and
-telemetry pause/resume (35) are transport evidence, not broker authorization
-tests. All-N/A security remains `NOT_APPLICABLE`; no security evidence remains
+`26_security_mqtt_acl` when required by the runner. MQTT continuity (21),
+telemetry pause/resume (35), and MQTTS gap blame (39) are transport evidence,
+not broker authorization tests. Gate 39 prints EDGE / TRANSIT / RAILWAY /
+SPARSE_OK / INCONCLUSIVE; exit 2 is BLOCKED (missing probe), not a pass.
+All-N/A security remains `NOT_APPLICABLE`; no security evidence remains
 `null`. Dry-run harness artifacts cannot fully qualify.
 
 **Wave S4 M&V twin (Soft-OPEN):** `scripts/qualification/mv_sql_oracle_twin_gate.py`

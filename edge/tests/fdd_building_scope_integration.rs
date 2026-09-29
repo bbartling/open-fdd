@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 /// Write `building={id}/equipment=VAV_1/part-0.parquet`. When `zone_t` is
 /// `Some`, a constant zone temp makes VAV-1 comfort faults deterministic; when
 /// `None`, the `zone_t` role is absent so VAV-1 must SKIP (not fail).
-/// Equipment id is VAV_1 so `equipment_kinds: [vav, zone]` applies (AHU_1 is N/A).
+/// The parquet id is `VAV_1`. Kind comes from `equipment_types.json`, not the id.
 fn write_building(parquet_root: &Path, building_id: &str, zone_t: Option<f64>, rows: usize) {
     let dir = parquet_root
         .join(format!("building={building_id}"))
@@ -66,6 +66,12 @@ fn write_building(parquet_root: &Path, building_id: &str, zone_t: Option<f64>, r
     writer.close().unwrap();
 }
 
+fn write_vav_stamp(parquet_root: &Path, building_id: &str) {
+    let dir = parquet_root.join(format!("building={building_id}"));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("equipment_types.json"), "{\"VAV_1\":\"vav\"}\n").unwrap();
+}
+
 fn total_fault_hours(v: &Value) -> f64 {
     v["results"]
         .as_array()
@@ -87,10 +93,13 @@ fn building_id_scopes_results_and_faults() {
 
     // B50 sits inside the comfort band (no faults); B100 is far above it so
     // VAV-1 confirms a fault streak — the two sites MUST differ.
+    // Both sites stamp VAV_1 as vav. The id string is not the kind.
     write_building(&parquet_root, "B50", Some(72.0), 60);
     write_building(&parquet_root, "B100", Some(95.0), 60);
+    write_vav_stamp(&parquet_root, "B50");
+    write_vav_stamp(&parquet_root, "B100");
     // BNOROLE lacks a package type stamp. VAV-1 is type-gated, so the
-    // untyped/general equipment row is N/A rather than a missing-role skip.
+    // unstamped equipment row is N/A rather than a missing-role skip.
     write_building(&parquet_root, "BNOROLE", None, 60);
 
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));

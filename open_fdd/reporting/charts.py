@@ -20,16 +20,10 @@ def _detection_label(c: dict[str, Any], *, max_label: int = 42) -> str:
 
 
 def _is_vav_candidate(c: dict[str, Any]) -> bool:
-    """Data-model / id / rule driven — not a hardcoded building list."""
-    et = str(c.get("equipment_type") or "").upper()
-    eid = str(c.get("equipment_id") or "").upper()
-    rid = str(c.get("rule_id") or "").upper()
-    return (
-        "VAV" in et
-        or eid.startswith("VAV")
-        or rid.startswith("VAV")
-        or "ZONE" in et
-    )
+    """VAV chart membership is the equipment stamp, not an id or rule prefix."""
+    from open_fdd.analytics.site_model import normalize_equipment_type
+
+    return normalize_equipment_type(str(c.get("equipment_type") or "")) == "VAV"
 
 
 def _rainbow_bar_colors(n: int) -> list[str]:

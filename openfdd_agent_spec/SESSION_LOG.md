@@ -6,6 +6,30 @@
 - #1037: RCx chart predicates use canonical persisted `equipment_types.json` membership plus role presence; ID `LIKE` heuristics are removed, including the misleading ZONE/LOOPBACK case.
 - Local focused tests and read-only ACME bench validation remain required; no version bump, GHCR/Railway action, issue mutation, or BACnet write was performed.
 
+## 2026-09-29 — Absolute site-identity law (type-first, exact id)
+
+- Rule 62 and `openfdd-site-identity` are no longer a narrow "no ACME string in two trees" ban. Product paths (SPA, central / DataFusion / historian / analytics, PyPI report / fault / oracle, RCx / FDD plot selection) never hardcode one building, campus, vendor, or fixture equipment id. Equipment selection is `equipType` / `equipment_type` / roles / registry. A fixture id is an exact match only after the type filter (`RTU_01` must not hit `RTU_010`). Stress and ops may still name a lab site as an env default. Same class as #1043. Docs only; product id-text residuals stay on #1043.
+
+## 2026-09-29 — Parquet analytics cache and 100 GiB disk budget (code)
+
+- Analytics/RCx/sensor-fault results persist as `analytics_results/` Parquet (`analytics-result-parquet-v1`), keyed by building, query, version, window, and config hash. Stale is a JSON flag when the historian watermark moves. CSV guest historian RAM unloads when the job finishes; leave and a 60s idle timer drop the lease. MQTTS stays a small buffer. Max interactive sessions default to 2.
+- Local/edge retention default is 100 GiB, oldest parquet first, for every building. `OPENFDD_TEST_DEPLOY=1` skips release backups unless `OPENFDD_BACKUP_ON_UPDATE=1`. Cache and sessions take `building_id` from the caller. No `equipment_id` text filters, no site-name branch, no MQTT CELL/DELTA mode. Soft-OPEN. No VERSION bump. Not FQ.
+
+## 2026-09-29 — MQTTS gap blame audit (not FQ)
+
+- Gate 39 classifies continuity holes as EDGE / TRANSIT / RAILWAY / SPARSE_OK / INCONCLUSIVE. Harness and fieldbus publish ledger only. No `VERSION` bump and no FQ / ops-pin claim.
+- Equipment pick uses `equipment_type` only. A fixture equipment id does not outrank a typed row, and ledger/monitor correlation uses id equality (a longer id is a different device). ACME and vim-1 stay building and edge fixtures.
+- Publish ledger records QoS 1 acks, fails, and no-session. It does not filter or coalesce MQTT publishes.
+
+## 2026-09-29 — FDD/RCx series preview is the newest N rows
+
+- SPA series preview on FDD Plots and each RCx timeseries card shows the most recent samples of the figure already loaded (newest first). Per-plot dropdown default 10; options 10/20/50/100/500. No historian refetch and no VERSION bump (#1050).
+
+## 2026-09-29 — Equipment kind is the stamp (#1043)
+
+- Rule 64 (absolute): the framework never hardcodes one building, never prefers a fixture id over `equipType` / `equipment_type`, and never substrings or `LIKE`s `equipment_id`. Prefix `LIKE` is the plot-filter defect (`RTU_01` must not select `RTU_010`). A missing stamp matches nothing. Plot and mech-cooling cohorts use the stamp, then exact equipment ids. Parent-AHU id proposals are not a plot filter (#1041). No MQTT delta payload.
+- Opaque ids stay stamp-selected after #1062: `AC_1` + `equipType: fanCoil` is `zone_other`. Soft-OPEN; no FQ claim.
+
 ## 2026-09-27 — Tip 3.5.53 closeout stress (not FQ)
 
 - Tip `dc32615` / VERSION 3.5.53 on Railway (`sha-dc32615`); backup `20260927T193409Z`; edge `vim-1` MQTTS fresh.
