@@ -1,6 +1,6 @@
 //! Historian Parquet bridge for DataFusion analytics (Milestone D1).
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
@@ -563,26 +563,105 @@ fn time_range_sql(
     out
 }
 
-/// SQL fragment restricting mechanical-cooling rows by equipment-id tokens.
+/// Preset tokens name canonical kinds. They are not `equipment_id` prefixes.
 ///
-/// Cohort membership for matrices and motor groups uses the package stamp.
-/// This fragment is a separate filter and must not grow new id tokens.
-pub fn chiller_like_equipment_sql() -> &'static str {
-    // LIKE `_` is a wildcard — do not use `CH_%` (matches CHANNEL / CHW…).
-    " AND (\
-        UPPER(equipment_id) LIKE '%CHILLER%' \
-        OR UPPER(equipment_id) LIKE '%CHLR%' \
-        OR UPPER(equipment_id) LIKE '%TOWER%' \
-        OR UPPER(equipment_id) LIKE 'CT_%' \
-        OR UPPER(equipment_id) LIKE '%/CT_%' \
-        OR UPPER(equipment_id) LIKE '%_DX%' \
-        OR UPPER(equipment_id) LIKE 'DX%' \
-        OR UPPER(equipment_id) LIKE 'HP_%' \
-        OR UPPER(equipment_id) LIKE '%CWP%' \
-        OR UPPER(equipment_id) LIKE 'CHW%' \
-        OR UPPER(equipment_id) LIKE 'CH-%' \
-        OR UPPER(equipment_id) LIKE '%/CH-%' \
-     ) AND UPPER(equipment_id) NOT LIKE '%VAV%'"
+/// `RTU` is kind `ahu`. It must not become `LIKE 'RTU%'`, which selects
+/// `RTU_010` whenever the operator asked for `RTU_01`.
+fn preset_token_kind(token: &str) -> Option<&'static str> {
+    match token.trim().to_ascii_lowercase().as_str() {
+        "chw" | "chw_plant" => Some("chiller"),
+        "ct" => Some("cooling_tower"),
+        other => open_fdd_edge_prototype::equipment_types::canonical_kind(other),
+    }
+}
+
+fn wanted_kinds(kinds: &[&str]) -> BTreeSet<&'static str> {
+    kinds
+        .iter()
+        .filter_map(|token| preset_token_kind(token))
+        .collect()
+}
+
+fn ids_from_stamp_map(building_id: Option<&str>, wanted: &BTreeSet<&str>) -> BTreeSet<String> {
+    open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id)
+        .into_iter()
+        .filter(|(_, stamp)| {
+            open_fdd_edge_prototype::equipment_types::canonical_kind(stamp)
+                .is_some_and(|kind| wanted.contains(kind))
+        })
+        .map(|(id, _)| id)
+        .collect()
+}
+
+async fn ids_from_history_type_column(
+    ctx: &SessionContext,
+    cols: &HashSet<String>,
+    wanted: &BTreeSet<&str>,
+) -> BTreeSet<String> {
+    let Some(col) = ["equipment_type", "equiptype"]
+        .into_iter()
+        .find(|name| cols.contains(*name))
+    else {
+        return BTreeSet::new();
+    };
+    let sql = format!(
+        "SELECT DISTINCT CAST(equipment_id AS VARCHAR) AS equipment_id, \
+         CAST({col} AS VARCHAR) AS equipment_type \
+         FROM history WHERE {col} IS NOT NULL AND equipment_id IS NOT NULL"
+    );
+    let Ok(result) = run_sql(ctx, &sql).await else {
+        return BTreeSet::new();
+    };
+    let mut ids = BTreeSet::new();
+    for row in result.rows {
+        let eq = row
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let stamp = row
+            .get("equipment_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if eq.is_empty() {
+            continue;
+        }
+        if open_fdd_edge_prototype::equipment_types::canonical_kind(stamp)
+            .is_some_and(|kind| wanted.contains(kind))
+        {
+            ids.insert(eq.to_string());
+        }
+    }
+    ids
+}
+
+/// Exact `equipment_id` list for a stamp cohort.
+///
+/// An empty kind list is no filter. A kind list with no matching stamp matches
+/// nothing. The predicate never uses `LIKE` or a prefix of `equipment_id`.
+async fn stamped_cohort_sql(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    kinds: &[&str],
+    cols: &HashSet<String>,
+) -> String {
+    if kinds.is_empty() {
+        return String::new();
+    }
+    let wanted = wanted_kinds(kinds);
+    if wanted.is_empty() {
+        return " AND 1 = 0".to_string();
+    }
+    let mut ids = ids_from_stamp_map(building_id, &wanted);
+    ids.extend(ids_from_history_type_column(ctx, cols, &wanted).await);
+    if ids.is_empty() {
+        return " AND 1 = 0".to_string();
+    }
+    let list = ids
+        .iter()
+        .map(|id| format!("'{}'", id.replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(" AND CAST(equipment_id AS VARCHAR) IN ({list})")
 }
 
 /// Load runtime hours from historian Parquet via DataFusion.
@@ -2035,7 +2114,13 @@ pub async fn mech_oat_bins_from_history(
     };
     let max_gap = max_gap_seconds.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
-    let chiller_filter = chiller_like_equipment_sql();
+    let chiller_filter = stamped_cohort_sql(
+        &ctx,
+        building_id,
+        &["chiller", "cooling_tower", "heatpump"],
+        &cols,
+    )
+    .await;
     let weather_ids = stamped_weather_id_predicate(building_id, false);
     let range_sql = time_range_sql(ts_col, start, end);
     let range_sql_h = time_range_sql(&format!("h.{ts_col}"), start, end);
@@ -2641,53 +2726,13 @@ LIMIT {limit}
     Ok(Some(env))
 }
 
-fn rcx_eq_filter(kinds: &[&str]) -> String {
-    // This predicate still matches equipment_id text. Replacing it with a stamp
-    // is #1037 and is not part of this change. Do not add id tokens here.
-    if kinds.is_empty() {
-        return String::new();
-    }
-    let mut parts = Vec::new();
-    for k in kinds {
-        let ku = k.to_ascii_uppercase();
-        if ku == "VAV" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE 'VAV%' OR UPPER(equipment_id) LIKE '%/VAV%' \
-                 OR UPPER(equipment_id) LIKE '%VAVH%' OR UPPER(equipment_id) LIKE '%VAVFC%' \
-                 OR UPPER(equipment_id) LIKE '%ZONE%' OR UPPER(equipment_id) LIKE '%LOOPBACK%')"
-                    .to_string(),
-            );
-        } else if ku == "CHW" || ku == "CHW_PLANT" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE '%CHILLER%' OR UPPER(equipment_id) LIKE 'CHW%' \
-                 OR UPPER(equipment_id) LIKE '%CHW_PLANT%')"
-                    .to_string(),
-            );
-        } else if ku == "BOILER" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE 'BOILER%' OR UPPER(equipment_id) LIKE '%/BOILER%' \
-                 OR UPPER(equipment_id) LIKE '%BOILERS%')"
-                    .to_string(),
-            );
-        } else if ku == "TOWER" || ku == "CT" || ku == "COOLING_TOWER" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE '%TOWER%' OR UPPER(equipment_id) LIKE 'CT%' \
-                 OR UPPER(equipment_id) LIKE '%COOLING_TOWER%')"
-                    .to_string(),
-            );
-        } else if ku == "METER" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE 'METER%' OR UPPER(equipment_id) LIKE '%/METER%' \
-                 OR UPPER(equipment_id) LIKE '%_METER%')"
-                    .to_string(),
-            );
-        } else {
-            parts.push(format!(
-                "(UPPER(equipment_id) LIKE '{ku}%' OR UPPER(equipment_id) LIKE '%/{ku}%')"
-            ));
-        }
-    }
-    format!(" AND ({})", parts.join(" OR "))
+async fn rcx_eq_filter(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    kinds: &[&str],
+    cols: &HashSet<String>,
+) -> String {
+    stamped_cohort_sql(ctx, building_id, kinds, cols).await
 }
 
 /// Multi-equipment role timeseries for RCx presets (vibe19 multi_equipment_timeseries).
@@ -2709,7 +2754,7 @@ pub async fn rcx_timeseries_from_history(
     if !cols.contains(role_col) {
         return Ok(None);
     }
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols).await;
     let fan_filter = if filter_fan_on {
         match on_expr(&cols) {
             Some(expr) => format!(" AND ({expr})"),
@@ -2860,7 +2905,7 @@ pub async fn rcx_oat_scatter_from_history(
     } else {
         None
     };
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols).await;
     // Prefixed for JOIN aliases (history AS h).
     let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
     let limit = max_points.clamp(200, 20000);
@@ -2957,7 +3002,7 @@ pub async fn rcx_box_from_history(
     if !cols.contains(role_col) {
         return Ok(None);
     }
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols).await;
     let fan_filter = if filter_fan_on {
         match on_expr(&cols) {
             Some(expr) => format!(" AND ({expr})"),
@@ -3016,7 +3061,7 @@ pub async fn rcx_zone_comfort_rank_from_history(
     if !cols.contains("zone_t") {
         return Ok(None);
     }
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols).await;
     // Match schedule `occupied_expr`: Utf8 "1.0" / "0.0" from packages, not only "1".
     let occ_filter = if cols.contains("occ_mode") {
         " AND (occ_mode IS NULL OR \
@@ -3111,7 +3156,7 @@ pub async fn rcx_metering_from_history(
     let Some(oat) = mech_oat_col(&cols) else {
         return Ok(None);
     };
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols).await;
     let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
     let cooling = kind != "gas";
     let sql = format!(
@@ -3230,20 +3275,24 @@ pub async fn descriptive_counts_from_history(
     .await
 }
 
-/// Like [`descriptive_counts_from_history`] with an optional extra SQL fragment
-/// (e.g. [`chiller_like_equipment_sql`] for mechanical-cooling fallback).
+/// Like [`descriptive_counts_from_history`] with an optional stamp cohort.
+///
+/// Kinds select exact equipment ids. They are not an `equipment_id` substring.
 pub async fn descriptive_counts_from_history_filtered(
     query_version: &str,
     equipment_filter: Option<&[String]>,
     note: &str,
     building_id: Option<&str>,
-    extra_equipment_sql: Option<&str>,
+    cohort_kinds: Option<&[&str]>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, _cols, n, _scan)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let eq_filter = equipment_filter_sql(equipment_filter);
-    let extra = extra_equipment_sql.unwrap_or("");
+    let extra = match cohort_kinds {
+        Some(kinds) => stamped_cohort_sql(&ctx, building_id, kinds, &cols).await,
+        None => String::new(),
+    };
     let sql = format!(
         "SELECT equipment_id, COUNT(*) AS history_rows FROM history \
          WHERE equipment_id IS NOT NULL{eq_filter}{extra} \
@@ -3521,17 +3570,44 @@ mod tests {
         assert!(sql.contains("anomaly_events"));
     }
 
-    #[test]
-    fn rcx_eq_filter_vav_includes_mqtt_zone_loopback() {
-        let f = rcx_eq_filter(&["VAV"]);
-        assert!(
-            f.contains("%LOOPBACK%"),
-            "MQTT zone loopback must match VAV zone presets: {f}"
+    #[tokio::test]
+    async fn plot_cohort_uses_exact_stamp_not_id_prefix() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dir = tmp.path().join("building=site_plot");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("equipment_types.json"),
+            r#"{"RTU_01":"rtu","RTU_010":"vav","bldg2-zone-loopback":"vav"}"#,
+        )
+        .unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.path());
+        let ctx = SessionContext::new();
+        let cols = HashSet::new();
+        let ahu = stamped_cohort_sql(&ctx, Some("site_plot"), &["AHU", "RTU"], &cols).await;
+        let vav = stamped_cohort_sql(&ctx, Some("site_plot"), &["VAV"], &cols).await;
+        let missing = stamped_cohort_sql(&ctx, Some("site_plot"), &["BOILER"], &cols).await;
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        let listed = |sql: &str| -> Vec<String> {
+            let Some(list) = sql.split("IN (").nth(1) else {
+                return Vec::new();
+            };
+            list.trim_end_matches(')')
+                .split(',')
+                .map(|part| part.trim().trim_matches('\'').to_string())
+                .filter(|id| !id.is_empty())
+                .collect()
+        };
+        assert_eq!(listed(&ahu), vec!["RTU_01".to_string()], "{ahu}");
+        assert!(!ahu.to_ascii_uppercase().contains("LIKE"), "{ahu}");
+        assert_eq!(
+            listed(&vav),
+            vec!["RTU_010".to_string(), "bldg2-zone-loopback".to_string()],
+            "{vav}"
         );
-        assert!(
-            f.contains("%ZONE%"),
-            "zone_* equipment ids must match VAV zone presets: {f}"
-        );
+        assert!(!vav.contains("LOOPBACK%"), "{vav}");
+        assert_eq!(missing, " AND 1 = 0");
     }
 
     #[tokio::test]
@@ -4178,6 +4254,11 @@ mod tests {
                 "timestamp_utc,chiller_status\n2026-07-01T00:00:00Z,1\n",
             ),
             (
+                "CHILLER_10",
+                "col,point_role\nchiller_status,chiller_status\n",
+                "timestamp_utc,chiller_status\n2026-07-01T00:00:00Z,1\n",
+            ),
+            (
                 "VAV_101",
                 "col,point_role\ndamper_pct,damper\n",
                 "timestamp_utc,damper_pct\n2026-07-01T00:00:00Z,50\n",
@@ -4191,6 +4272,13 @@ mod tests {
 
         let parquet = tmp.path().join("parquet_mix");
         fdd_store::ingest_building(tmp.path(), "BUILDING_MIX", &parquet).unwrap();
+        let stamp_dir = parquet.join("building=BUILDING_MIX");
+        std::fs::create_dir_all(&stamp_dir).unwrap();
+        std::fs::write(
+            stamp_dir.join("equipment_types.json"),
+            r#"{"CHILLER_1":"chiller","CHILLER_10":"vav","VAV_101":"vav"}"#,
+        )
+        .unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = descriptive_counts_from_history_filtered(
@@ -4198,7 +4286,7 @@ mod tests {
             None,
             "test",
             Some("BUILDING_MIX"),
-            Some(chiller_like_equipment_sql()),
+            Some(&["chiller", "cooling_tower", "heatpump"]),
         )
         .await
         .unwrap()
@@ -4210,8 +4298,7 @@ mod tests {
             .iter()
             .filter_map(|r| r.get("equipment_id").and_then(|v| v.as_str()))
             .collect();
-        assert!(ids.iter().any(|id| id.contains("CHILLER")));
-        assert!(!ids.iter().any(|id| id.contains("VAV")));
+        assert_eq!(ids, vec!["CHILLER_1"]);
     }
 
     #[tokio::test]
@@ -4444,8 +4531,28 @@ mod tests {
         writeln!(wf, "2026-07-01T00:05:00Z,61").unwrap();
         writeln!(wf, "2026-07-01T00:10:00Z,62").unwrap();
 
+        let lookalike = building.join("AHU_10");
+        std::fs::create_dir_all(&lookalike).unwrap();
+        std::fs::write(
+            lookalike.join("columns.csv"),
+            "col,point_role\nsat,sat\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut lf = std::fs::File::create(lookalike.join("history_wide.csv")).unwrap();
+        writeln!(lf, "timestamp_utc,sat,web_oa_t").unwrap();
+        writeln!(lf, "2026-07-01T00:00:00Z,99,60").unwrap();
+        writeln!(lf, "2026-07-01T00:05:00Z,99,61").unwrap();
+        writeln!(lf, "2026-07-01T00:10:00Z,99,62").unwrap();
+
         let parquet = tmp.path().join("parquet_oatsc");
         fdd_store::ingest_building(tmp.path(), "BUILDING_OATSC", &parquet).unwrap();
+        let stamp_dir = parquet.join("building=BUILDING_OATSC");
+        std::fs::create_dir_all(&stamp_dir).unwrap();
+        std::fs::write(
+            stamp_dir.join("equipment_types.json"),
+            r#"{"AHU_1":"ahu","AHU_10":"vav","weather":"weather"}"#,
+        )
+        .unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = rcx_oat_scatter_from_history(Some("BUILDING_OATSC"), "sat", &["AHU"], false, 500)
@@ -4459,6 +4566,7 @@ mod tests {
         assert!(env.points[0].get("oat_f").is_some());
         assert!(env.points[0].get("y_f").is_some());
         assert_eq!(env.engine, DF_ENGINE);
+        assert!(env.points.iter().all(|p| p["equipment_id"] == "AHU_1"));
     }
 
     #[test]
