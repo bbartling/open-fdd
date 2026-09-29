@@ -10,7 +10,6 @@ use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use bytes::Bytes;
 use chrono::Utc;
-use fdd_store::{tenant_storage_prefix, tenant_storage_root, HistorianConfig, StorageUrl};
 use openfdd_contracts::{CommandEnvelope, Protocol, TelemetryEnvelope, TopicBuilder, TopicKind};
 use openfdd_mqtt::publish_json;
 use serde::Deserialize;
@@ -640,31 +639,6 @@ fn workspace_path() -> std::path::PathBuf {
     std::path::PathBuf::from(
         std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()),
     )
-}
-
-fn local_fieldbus_historian() -> anyhow::Result<crate::live_historian::LiveHistorian> {
-    let mut config = HistorianConfig::from_env()?;
-    if crate::tenant::multi_tenant_enabled() {
-        let tenant_id = std::env::var("OPENFDD_TENANT_ID")
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| anyhow::anyhow!("OPENFDD_TENANT_ID required in multi-tenant mode"))?;
-        config.storage_url = match config.storage_url {
-            StorageUrl::File { root } => StorageUrl::File {
-                root: tenant_storage_root(&root, Some(&tenant_id))?,
-            },
-            StorageUrl::S3 { bucket, prefix } => {
-                let tenant_prefix = tenant_storage_prefix(Some(&tenant_id))?;
-                let prefix = if prefix.is_empty() {
-                    tenant_prefix
-                } else {
-                    format!("{prefix}/{tenant_prefix}")
-                };
-                StorageUrl::S3 { bucket, prefix }
-            }
-        };
-    }
-    Ok(crate::live_historian::LiveHistorian::from_config(&config)?)
 }
 
 pub async fn admin_list_users(
@@ -1470,7 +1444,7 @@ pub async fn local_fieldbus_ingest(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     body: Bytes,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
     const MAX_LOCAL_PAYLOAD_BYTES: usize = 1024 * 1024;
 
     if body.len() > MAX_LOCAL_PAYLOAD_BYTES {
@@ -1535,29 +1509,88 @@ pub async fn local_fieldbus_ingest(
         ));
     }
 
-    let expected_site = std::env::var("OPENFDD_SITE_ID")
+    let trusted_building = std::env::var("OPENFDD_BUILDING_ID")
         .ok()
-        .filter(|value| !value.trim().is_empty());
-    if expected_site
-        .as_deref()
-        .is_some_and(|site| site != envelope.site_id)
+        .or_else(|| std::env::var("OPENFDD_SITE_ID").ok())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"ok": false, "error": "local ingest has no trusted building binding"})),
+            )
+        })?;
+    let allowed_buildings = std::env::var("OPENFDD_LOCAL_ALLOWED_BUILDINGS")
+        .ok()
+        .map(|raw| {
+            raw.split(',')
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect::<Vec<_>>()
+        });
+    if allowed_buildings
+        .as_ref()
+        .is_some_and(|allowed| !allowed.iter().any(|value| *value == trusted_building))
     {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(
+                json!({"ok": false, "error": "trusted building is not in the local ingest allowlist"}),
+            ),
+        ));
+    }
+    if envelope.site_id != trusted_building {
         return Err((
             StatusCode::FORBIDDEN,
             Json(json!({"ok": false, "error": "site/building identity mismatch"})),
         ));
     }
-
-    let expected_tenant = std::env::var("OPENFDD_TENANT_ID")
+    if let Some(supplied_building) = headers
+        .get("x-openfdd-building-id")
+        .and_then(|value| value.to_str().ok())
+    {
+        if supplied_building != trusted_building {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({"ok": false, "error": "caller building is not trusted"})),
+            ));
+        }
+    }
+    let allowed_edges_raw = std::env::var("OPENFDD_LOCAL_ALLOWED_EDGE_IDS")
         .ok()
-        .filter(|value| !value.trim().is_empty());
-    if crate::tenant::multi_tenant_enabled() {
-        let expected_tenant = expected_tenant.ok_or_else(|| {
+        .or_else(|| std::env::var("OPENFDD_EDGE_ID").ok());
+    let allowed_edges = allowed_edges_raw
+        .map(|raw| {
+            raw.split(',')
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .filter(|values| !values.is_empty())
+        .ok_or_else(|| {
             (
                 StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({"ok": false, "error": "multi-tenant local ingest has no tenant binding"})),
+                Json(json!({"ok": false, "error": "local ingest has no trusted edge binding"})),
             )
         })?;
+    if !allowed_edges
+        .iter()
+        .any(|value| value == "*" || *value == envelope.edge_id)
+    {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "edge is not in the local ingest allowlist"})),
+        ));
+    }
+
+    if crate::tenant::multi_tenant_enabled() {
+        let expected_tenant = std::env::var("OPENFDD_TENANT_ID")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"ok": false, "error": "multi-tenant local ingest has no tenant binding"})),
+            ))?;
         let supplied_tenant = headers
             .get("x-openfdd-tenant-id")
             .and_then(|value| value.to_str().ok())
@@ -1569,84 +1602,100 @@ pub async fn local_fieldbus_ingest(
             ));
         }
     }
-
-    let expected_building = headers
-        .get("x-openfdd-building-id")
-        .and_then(|value| value.to_str().ok())
-        .or_else(|| expected_site.as_deref());
-    if let Some(building) = expected_building.filter(|value| !value.trim().is_empty()) {
-        if envelope.points.iter().any(|point| {
-            point
-                .tags
-                .get("building_id")
-                .and_then(|value| value.as_str())
-                .is_some_and(|value| value != building)
-        }) {
-            return Err((
-                StatusCode::FORBIDDEN,
-                Json(json!({"ok": false, "error": "point building identity mismatch"})),
-            ));
-        }
+    if envelope.points.iter().any(|point| {
+        point
+            .tags
+            .get("building_id")
+            .and_then(|value| value.as_str())
+            .is_some_and(|value| value != trusted_building)
+    }) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "point building identity mismatch"})),
+        ));
     }
 
-    let key = (envelope.edge_id.clone(), envelope.message_id);
-    if state.seen_messages.insert(key.clone(), ()).is_some() {
+    if let Some(status) = state
+        .receipt_status(&envelope.edge_id, envelope.message_id)
+        .await
+    {
         *state.ingest_dup.lock().unwrap() += 1;
-        return Ok(Json(json!({"ok": true, "duplicate": true})));
+        if status == crate::state::IngestReceiptStatus::Pending {
+            let _ = state.flush_live(false).await;
+        }
+        let committed = state
+            .receipt_status(&envelope.edge_id, envelope.message_id)
+            .await
+            == Some(crate::state::IngestReceiptStatus::Committed);
+        return Ok((
+            if committed {
+                StatusCode::OK
+            } else {
+                StatusCode::ACCEPTED
+            },
+            Json(
+                json!({"ok": true, "duplicate": true, "pending": !committed, "persisted_rows": 0, "eligible_points": 0}),
+            ),
+        ));
     }
-    if let Some(message) = crate::historian_limits::deny_building_over_size(
-        &std::path::PathBuf::from(
-            std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()),
-        ),
-        &envelope.site_id,
-    ) {
-        state.seen_messages.remove(&key);
+    if let Some(message) =
+        crate::historian_limits::deny_building_over_size(&workspace_path(), &envelope.site_id)
+    {
         *state.ingest_reject.lock().unwrap() += 1;
         return Err((
             StatusCode::PAYLOAD_TOO_LARGE,
             Json(json!({"ok": false, "error": message})),
         ));
     }
-
-    let report = {
-        let mut historian = state.local_historian.lock().unwrap();
-        if historian.is_none() {
-            *historian = Some(local_fieldbus_historian().map_err(|error| {
-                state.seen_messages.remove(&key);
-                (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    Json(json!({"ok": false, "error": format!("local historian unavailable: {error}")})),
-                )
-            })?);
-        }
-        let Some(historian) = historian.as_mut() else {
-            state.seen_messages.remove(&key);
+    if !state
+        .reserve_receipt_at(&envelope.edge_id, envelope.message_id, envelope.observed_at)
+        .await
+    {
+        if state
+            .receipt_status(&envelope.edge_id, envelope.message_id)
+            .await
+            .is_none()
+        {
             return Err((
                 StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({"ok": false, "error": "local historian initialization failed"})),
+                Json(json!({"ok": false, "error": "local receipt ledger unavailable"})),
             ));
-        };
-        let report = historian.ingest_envelope(&envelope).map_err(|error| {
-            state.seen_messages.remove(&key);
-            (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({"ok": false, "error": format!("local historian ingest failed: {error}")})),
-            )
-        })?;
-        // Local acceptance is a durability boundary: make the same envelope
-        // visible in Parquet before acknowledging the edge.
-        historian.shutdown_flush().map_err(|error| {
-            state.seen_messages.remove(&key);
-            (
+        }
+        return Ok((
+            StatusCode::ACCEPTED,
+            Json(json!({"ok": true, "duplicate": true, "pending": true})),
+        ));
+    }
+
+    let report = match state.ingest_live(&envelope).await {
+        Ok(report) => report,
+        Err(error) => {
+            state
+                .release_receipt(&envelope.edge_id, envelope.message_id)
+                .await;
+            return Err((
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(
-                    json!({"ok": false, "error": format!("local historian flush failed: {error}")}),
+                    json!({"ok": false, "error": format!("local historian ingest failed: {error}")}),
                 ),
-            )
-        })?;
-        report
+            ));
+        }
     };
-
+    let flush = match state.flush_live(false).await {
+        Ok(report) => report,
+        Err(error) => {
+            return Ok((
+                StatusCode::ACCEPTED,
+                Json(
+                    json!({"ok": true, "duplicate": false, "pending": true, "eligible_points": report.eligible_points, "persisted_rows": report.persisted_rows, "error": format!("flush pending: {error}")}),
+                ),
+            ));
+        }
+    };
+    let committed = state
+        .receipt_status(&envelope.edge_id, envelope.message_id)
+        .await
+        == Some(crate::state::IngestReceiptStatus::Committed);
     let entry = state.edges.entry(envelope.edge_id.clone()).or_default();
     let mut shadow = entry.lock().unwrap();
     shadow
@@ -1655,13 +1704,21 @@ pub async fn local_fieldbus_ingest(
     shadow.registered_site_id = Some(envelope.site_id.clone());
     shadow.last_telemetry = Some(envelope);
     state.note_ingest_ok();
-    Ok(Json(json!({
-        "ok": true,
-        "duplicate": false,
-        "persisted_rows": report.persisted_rows,
-        "eligible_points": report.eligible_points,
-        "skipped_points": report.skipped_points,
-    })))
+    Ok((
+        if committed {
+            StatusCode::OK
+        } else {
+            StatusCode::ACCEPTED
+        },
+        Json(json!({
+            "ok": true,
+            "duplicate": false,
+            "pending": !committed,
+            "persisted_rows": report.persisted_rows + flush.persisted_rows,
+            "eligible_points": report.eligible_points,
+            "skipped_points": report.skipped_points,
+        })),
+    ))
 }
 
 #[utoipa::path(
@@ -4468,7 +4525,14 @@ pub async fn fuel_campus_weather_fetch(Json(body): Json<FuelWeatherFetchBody>) -
 
 #[cfg(test)]
 mod version_tests {
-    use super::resolve_build_version;
+    use super::{local_fieldbus_ingest, resolve_build_version};
+    use crate::state::AppState;
+    use axum::http::{HeaderMap, HeaderValue, StatusCode};
+    use axum::Json;
+    use bytes::Bytes;
+    use openfdd_contracts::{Protocol, Quality, TelemetryEnvelope, TelemetryPoint, ValueKind};
+    use serde_json::Value;
+    use std::sync::Arc;
 
     // Single test so the shared `OPENFDD_GIT_SHA` env var is never raced by a
     // parallel sibling test.
@@ -4489,5 +4553,97 @@ mod version_tests {
             fallback.starts_with(env!("CARGO_PKG_VERSION")),
             "v={fallback}"
         );
+    }
+
+    #[tokio::test]
+    async fn local_ingest_own_identity_is_accepted_and_foreign_point_is_denied() {
+        let _env_lock = crate::test_env_lock::lock_env();
+        let temp = tempfile::tempdir().unwrap();
+        std::env::set_var("OPENFDD_LOCAL_INGEST_TOKEN", "route-test-token");
+        std::env::set_var("OPENFDD_SITE_ID", "site-http-test");
+        std::env::set_var("OPENFDD_BUILDING_ID", "building-http-test");
+        std::env::set_var("OPENFDD_LOCAL_ALLOWED_EDGE_IDS", "edge-http-test");
+        std::env::set_var("OPENFDD_WORKSPACE", temp.path());
+        std::env::set_var(
+            "OPENFDD_STORAGE_URL",
+            format!("file://{}", temp.path().join("history").display()),
+        );
+        std::env::set_var("OPENFDD_PARQUET_FLUSH_ROWS", "1");
+
+        let state = Arc::new(AppState::new());
+        let envelope = TelemetryEnvelope::new(
+            "building-http-test",
+            "edge-http-test",
+            Protocol::Bacnet,
+            1,
+            vec![TelemetryPoint {
+                id: "point-http-test".into(),
+                display_name: None,
+                kind: Some(ValueKind::Number),
+                value: serde_json::json!(1.0),
+                unit: None,
+                quality: Quality::Good,
+                tags: serde_json::json!({
+                    "building_id": "building-http-test",
+                    "equipment_id": "equipment-http-test",
+                    "role": "sample"
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            }],
+        );
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "authorization",
+            HeaderValue::from_static("Bearer route-test-token"),
+        );
+        headers.insert(
+            "x-openfdd-message-id",
+            HeaderValue::from_str(&envelope.message_id.to_string()).unwrap(),
+        );
+        headers.insert(
+            "x-openfdd-building-id",
+            HeaderValue::from_static("building-http-test"),
+        );
+        let body = Bytes::from(serde_json::to_vec(&envelope).unwrap());
+        let (status, Json(body)): (_, Json<Value>) = local_fieldbus_ingest(
+            axum::extract::State(Arc::clone(&state)),
+            headers.clone(),
+            body,
+        )
+        .await
+        .unwrap();
+        assert!(status == StatusCode::OK || status == StatusCode::ACCEPTED);
+        assert_eq!(body["ok"], true);
+
+        let mut foreign = envelope;
+        foreign.message_id = uuid::Uuid::new_v4();
+        foreign.points[0].tags.insert(
+            "building_id".into(),
+            Value::String("foreign-building".into()),
+        );
+        headers.insert(
+            "x-openfdd-message-id",
+            HeaderValue::from_str(&foreign.message_id.to_string()).unwrap(),
+        );
+        let result = local_fieldbus_ingest(
+            axum::extract::State(state),
+            headers,
+            Bytes::from(serde_json::to_vec(&foreign).unwrap()),
+        )
+        .await;
+        assert_eq!(result.unwrap_err().0, StatusCode::FORBIDDEN);
+        for key in [
+            "OPENFDD_LOCAL_INGEST_TOKEN",
+            "OPENFDD_SITE_ID",
+            "OPENFDD_BUILDING_ID",
+            "OPENFDD_LOCAL_ALLOWED_EDGE_IDS",
+            "OPENFDD_WORKSPACE",
+            "OPENFDD_STORAGE_URL",
+            "OPENFDD_PARQUET_FLUSH_ROWS",
+        ] {
+            std::env::remove_var(key);
+        }
     }
 }

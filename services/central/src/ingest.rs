@@ -13,7 +13,6 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
-use crate::live_historian::LiveHistorian;
 use crate::state::AppState;
 use crate::tenant::multi_tenant_enabled;
 
@@ -61,6 +60,33 @@ pub fn spawn_mqtt_ingest_with_shutdown(
     spawn_mqtt_ingest_inner(state, Some(shutdown))
 }
 
+pub fn spawn_live_historian_flush_with_shutdown(
+    state: Arc<AppState>,
+    mut shutdown: watch::Receiver<bool>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(1));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tokio::select! {
+                _ = tick.tick() => {
+                    if let Err(error) = state.flush_live(false).await {
+                        warn!(%error, "canonical live historian time flush failed; buffered rows retained for retry");
+                    }
+                }
+                changed = shutdown.changed() => {
+                    if changed.is_err() || *shutdown.borrow() {
+                        if let Err(error) = state.flush_live(true).await {
+                            warn!(%error, "canonical live historian graceful flush failed");
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+    })
+}
+
 fn spawn_mqtt_ingest_inner(
     state: Arc<AppState>,
     mut shutdown: Option<watch::Receiver<bool>>,
@@ -77,20 +103,6 @@ fn spawn_mqtt_ingest_inner(
     }
 
     tokio::spawn(async move {
-        let mut live_historian = match LiveHistorian::from_env() {
-            Ok(historian) => {
-                info!("H7 canonical live historian buffering enabled");
-                Some(historian)
-            }
-            Err(err) => {
-                warn!(%err, "canonical live historian unavailable; refusing durability downgrade");
-                state.mqtt_record_error("canonical live historian unavailable");
-                return;
-            }
-        };
-        let mut flush_tick = tokio::time::interval(Duration::from_secs(1));
-        flush_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
         let site = std::env::var("OPENFDD_SITE_ID").unwrap_or_else(|_| "local".into());
         let edge = std::env::var("OPENFDD_EDGE_ID").unwrap_or_else(|_| "+".into());
         let host = std::env::var("OPENFDD_MQTT_HOST").unwrap_or_else(|_| "127.0.0.1".into());
@@ -120,7 +132,6 @@ fn spawn_mqtt_ingest_inner(
             let connection = tokio::select! {
                 _ = wait_for_shutdown(&mut shutdown) => {
                     state.mqtt_mark_disconnected("Central shutting down");
-                    drain_live_historian(&mut live_historian);
                     return;
                 }
                 result = MqttHandle::connect(cfg.clone()) => result,
@@ -148,7 +159,6 @@ fn spawn_mqtt_ingest_inner(
                             _ = wait_for_shutdown(&mut shutdown) => {
                                 *state.mqtt_publisher.lock().unwrap() = None;
                                 state.mqtt_mark_disconnected("Central shutting down");
-                                drain_live_historian(&mut live_historian);
                                 return;
                             }
                             maybe_event = events.recv() => {
@@ -163,28 +173,7 @@ fn spawn_mqtt_ingest_inner(
                                         format!("{:?}", p.qos),
                                         p.retain,
                                     );
-                                    handle_payload(
-                                        &state,
-                                        live_historian.as_mut(),
-                                        &topic,
-                                        &p.payload,
-                                    );
-                                }
-                            }
-                            _ = flush_tick.tick() => {
-                                if let Some(historian) = live_historian.as_mut() {
-                                    match historian.flush_due() {
-                                        Ok(report) if report.flushes > 0 => {
-                                            debug!(
-                                                flushes = report.flushes,
-                                                persisted_rows = report.persisted_rows,
-                                                latest_persisted_timestamp_utc = ?report.latest_persisted_timestamp_utc,
-                                                "flushed due canonical live historian batches"
-                                            );
-                                        }
-                                        Ok(_) => {}
-                                        Err(err) => warn!(%err, "canonical live historian time flush failed; buffered rows retained for retry"),
-                                    }
+                                    handle_payload(&state, &topic, &p.payload).await;
                                 }
                             }
                         }
@@ -196,7 +185,6 @@ fn spawn_mqtt_ingest_inner(
                     tokio::select! {
                         _ = wait_for_shutdown(&mut shutdown) => {
                             state.mqtt_mark_disconnected("Central shutting down");
-                            drain_live_historian(&mut live_historian);
                             return;
                         }
                         _ = tokio::time::sleep(Duration::from_secs(2)) => {}
@@ -208,7 +196,6 @@ fn spawn_mqtt_ingest_inner(
                     tokio::select! {
                         _ = wait_for_shutdown(&mut shutdown) => {
                             state.mqtt_mark_disconnected("Central shutting down");
-                            drain_live_historian(&mut live_historian);
                             return;
                         }
                         _ = tokio::time::sleep(Duration::from_secs(3)) => {}
@@ -230,31 +217,7 @@ async fn wait_for_shutdown(shutdown: &mut Option<watch::Receiver<bool>>) {
     let _ = receiver.changed().await;
 }
 
-fn drain_live_historian(live_historian: &mut Option<LiveHistorian>) {
-    let Some(historian) = live_historian.as_mut() else {
-        return;
-    };
-    match historian.shutdown_flush() {
-        Ok(report) => info!(
-            flushes = report.flushes,
-            persisted_rows = report.persisted_rows,
-            latest_persisted_timestamp_utc = ?report.latest_persisted_timestamp_utc,
-            "drained canonical live historian on graceful shutdown"
-        ),
-        Err(error) => warn!(
-            %error,
-            pending_rows = historian.pending_rows(),
-            "canonical live historian shutdown drain failed"
-        ),
-    }
-}
-
-fn handle_payload(
-    state: &AppState,
-    live_historian: Option<&mut LiveHistorian>,
-    topic: &str,
-    payload: &[u8],
-) {
+async fn handle_payload(state: &AppState, topic: &str, payload: &[u8]) {
     let Some(parsed) = parse_topic(topic) else {
         handle_untyped_payload(state, payload);
         return;
@@ -271,7 +234,7 @@ fn handle_payload(
     }
 
     match parsed.kind {
-        TopicKind::Telemetry => handle_telemetry(state, live_historian, &parsed, payload),
+        TopicKind::Telemetry => handle_telemetry(state, &parsed, payload).await,
         TopicKind::Metadata => {
             if let Ok(value) = serde_json::from_slice(payload) {
                 store_shadow_payload(state, &parsed.edge_id, parsed.site_id(), |shadow| {
@@ -320,12 +283,7 @@ fn store_shadow_payload(
     update(&mut guard);
 }
 
-fn handle_telemetry(
-    state: &AppState,
-    live_historian: Option<&mut LiveHistorian>,
-    topic: &TopicIdentity,
-    payload: &[u8],
-) {
+async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8]) {
     match serde_json::from_slice::<TelemetryEnvelope>(payload) {
         Ok(env) => {
             if let Err(err) = env.validate() {
@@ -347,14 +305,24 @@ fn handle_telemetry(
                 return;
             }
             let key = (env.edge_id.clone(), env.message_id);
-            // Reserve the id before writing. Local HTTP and MQTT can carry the
-            // same envelope in dual mode; an atomic reservation makes the
-            // first accepted path authoritative and prevents double Parquet
-            // appends when both arrive concurrently.
-            if state.seen_messages.insert(key.clone(), ()).is_some() {
+            // Durable reservation is shared with local HTTP. Pending and
+            // committed receipts both suppress a concurrent/replayed copy.
+            if !state
+                .reserve_receipt_at(&env.edge_id, env.message_id, env.observed_at)
+                .await
+            {
+                if state
+                    .receipt_status(&env.edge_id, env.message_id)
+                    .await
+                    .is_none()
+                {
+                    state.mqtt_record_error("durable ingest receipt ledger unavailable");
+                    return;
+                }
                 *state.ingest_dup.lock().unwrap() += 1;
                 return;
             }
+            state.seen_messages.insert(key.clone(), ());
 
             // Wave O6: refuse MQTT append when building historian size cap is already hit.
             if let Some(msg) = crate::historian_limits::deny_building_over_size(
@@ -363,56 +331,54 @@ fn handle_telemetry(
             ) {
                 record_reject(state, payload, &msg);
                 state.seen_messages.remove(&key);
+                state.release_receipt(&env.edge_id, env.message_id).await;
                 return;
             }
 
-            if let Some(historian) = live_historian {
-                match historian.ingest_envelope(&env) {
-                    Ok(report) => {
-                        for duplicate in &report.duplicate_roles {
-                            warn!(
-                                building_id = %duplicate.building_id,
-                                equipment_id = %duplicate.equipment_id,
-                                role = %duplicate.role,
-                                "dropped later duplicate canonical live role"
-                            );
-                            open_fdd_edge_prototype::auth::audit::log_event(
-                                "mqtt_ingest_duplicate_role",
-                                serde_json::json!({
-                                    "building_id": duplicate.building_id,
-                                    "equipment_id": duplicate.equipment_id,
-                                    "role": duplicate.role,
-                                    "resolution": "first_point_wins",
-                                }),
-                            );
-                        }
-                        if report.eligible_points > 0 {
-                            debug!(
-                                message_id = %env.message_id,
-                                eligible_points = report.eligible_points,
-                                skipped_points = report.skipped_points,
-                                persisted_rows = report.persisted_rows,
-                                pending_rows = historian.pending_rows(),
-                                latest_persisted_timestamp_utc = ?historian.latest_persisted_timestamp_utc(),
-                                "accepted canonical live historian telemetry"
-                            );
-                        } else if report.skipped_points > 0 {
-                            debug!(
-                                message_id = %env.message_id,
-                                skipped_points = report.skipped_points,
-                                "telemetry has no explicit canonical historian identity"
-                            );
-                        }
-                    }
-                    Err(err) => {
-                        record_reject(
-                            state,
-                            payload,
-                            &format!("canonical historian ingest failed: {err}"),
+            match state.ingest_live(&env).await {
+                Ok(report) => {
+                    for duplicate in &report.duplicate_roles {
+                        warn!(
+                            building_id = %duplicate.building_id,
+                            equipment_id = %duplicate.equipment_id,
+                            role = %duplicate.role,
+                            "dropped later duplicate canonical live role"
                         );
-                        state.seen_messages.remove(&key);
-                        return;
+                        open_fdd_edge_prototype::auth::audit::log_event(
+                            "mqtt_ingest_duplicate_role",
+                            serde_json::json!({
+                                "building_id": duplicate.building_id,
+                                "equipment_id": duplicate.equipment_id,
+                                "role": duplicate.role,
+                                "resolution": "first_point_wins",
+                            }),
+                        );
                     }
+                    if report.eligible_points > 0 {
+                        debug!(
+                            message_id = %env.message_id,
+                            eligible_points = report.eligible_points,
+                            skipped_points = report.skipped_points,
+                            persisted_rows = report.persisted_rows,
+                            "accepted canonical live historian telemetry"
+                        );
+                    } else if report.skipped_points > 0 {
+                        debug!(
+                            message_id = %env.message_id,
+                            skipped_points = report.skipped_points,
+                            "telemetry has no explicit canonical historian identity"
+                        );
+                    }
+                }
+                Err(err) => {
+                    record_reject(
+                        state,
+                        payload,
+                        &format!("canonical historian ingest failed: {err}"),
+                    );
+                    state.seen_messages.remove(&key);
+                    state.release_receipt(&env.edge_id, env.message_id).await;
+                    return;
                 }
             }
 
@@ -549,11 +515,11 @@ mod tests {
         assert_eq!(redacted, "<redacted empty utf8 payload: 0 bytes>");
     }
 
-    #[test]
-    fn status_topic_registers_site_without_telemetry() {
+    #[tokio::test]
+    async fn status_topic_registers_site_without_telemetry() {
         let state = AppState::new();
         let topic = "openfdd/v1/tenants/acme/buildings/ACME/edges/vim-1/status";
-        handle_payload(&state, None, topic, br#"{"ok":true,"suspended":false}"#);
+        handle_payload(&state, topic, br#"{"ok":true,"suspended":false}"#).await;
         let entry = state.edges.get("vim-1").expect("edge shadow from status");
         let shadow = entry.lock().unwrap();
         assert!(shadow.last_telemetry.is_none());

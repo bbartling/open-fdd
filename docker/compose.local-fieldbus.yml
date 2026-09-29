@@ -1,0 +1,54 @@
+# Broker-free local fieldbus profile.
+# It contains only the fieldbus edge and the central local ingest endpoint.
+# Set OPENFDD_LOCAL_INGEST_TOKEN and OPENFDD_JWT_SECRET in the environment.
+name: openfdd-local-fieldbus
+
+services:
+  central:
+    image: ${OPENFDD_CENTRAL_IMAGE:-ghcr.io/bbartling/openfdd-central:nightly}
+    build:
+      context: ..
+      dockerfile: services/central/Dockerfile
+    environment:
+      OPENFDD_MQTT_ENABLED: "0"
+      OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:-local}
+      OPENFDD_BUILDING_ID: ${OPENFDD_BUILDING_ID:-local}
+      OPENFDD_EDGE_ID: ${OPENFDD_EDGE_ID:-fieldbus-1}
+      OPENFDD_LOCAL_ALLOWED_EDGE_IDS: ${OPENFDD_LOCAL_ALLOWED_EDGE_IDS:-*}
+      OPENFDD_LOCAL_INGEST_TOKEN: ${OPENFDD_LOCAL_INGEST_TOKEN:-}
+      OPENFDD_WORKSPACE: /workspace
+      OPENFDD_STORAGE_URL: file:///workspace/openfdd
+      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
+      OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
+      OPENFDD_REACT_UI: "1"
+    ports:
+      - "${OPENFDD_CENTRAL_BIND:-127.0.0.1}:8080:8080"
+    volumes:
+      - ../workspace:/workspace
+    restart: unless-stopped
+
+  fieldbus:
+    image: ${OPENFDD_FIELDBUS_IMAGE:-ghcr.io/bbartling/openfdd-fieldbus:nightly}
+    build:
+      context: ..
+      dockerfile: services/fieldbus/Dockerfile
+    environment:
+      OPENFDD_INGEST_MODE: local_fieldbus
+      OPENFDD_MQTT_ENABLED: "0"
+      OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:-local}
+      OPENFDD_BUILDING_ID: ${OPENFDD_BUILDING_ID:-local}
+      OPENFDD_EDGE_ID: ${OPENFDD_EDGE_ID:-fieldbus-1}
+      OPENFDD_LOCAL_CENTRAL_URL: http://central:8080
+      OPENFDD_LOCAL_INGEST_TOKEN: ${OPENFDD_LOCAL_INGEST_TOKEN:-}
+      OPENFDD_LOCAL_SPOOL_DIR: /local-spool
+      OPENFDD_LOCAL_SPOOL_MAX_RECORDS: ${OPENFDD_LOCAL_SPOOL_MAX_RECORDS:-50000}
+      OPENFDD_FIELDBUS_CONFIG_DIR: /app/config
+    volumes:
+      - ../config/fieldbus:/app/config:ro
+      - local-fieldbus-spool:/local-spool
+    depends_on:
+      - central
+    restart: unless-stopped
+
+volumes:
+  local-fieldbus-spool:

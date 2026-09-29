@@ -153,6 +153,14 @@ A Railway one-click template should eventually encode **central → mqtt → web
 
 Same DataFusion registry. Bulk = CSV/package / manual run; continuous AFDD = opt-in timer + lookback on live MQTT. Multi-site isolation is by `building_id`. Full contract: [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md). Combined OT+synth gate: `./scripts/gates/combined_ot_synth_validate.sh`.
 
+Local fieldbus ingest (#1048) uses explicit `OPENFDD_INGEST_MODE=mqtts|local_fieldbus|dual`.
+The broker-free path requires deployment-token auth and trusted tenant/building/edge
+configuration; dual mode keeps local delivery independent of broker outage. Central
+uses one shared writer with durable pending/committed receipts, so 202 is pending
+and 200 is committed. Acceptance must verify storage rows, replay/restart behavior,
+authz, and broker-off compose. #1049 cloud retention/backup and #1044 Modbus/driver
+coverage remain deferred dependencies.
+
 ## Platform revision (sidebar)
 
 SPA shows `GET /api/health` → `{semver}+shortsha`. On each turnkey platform patch cycle, bump the workspace **patch** version (`VERSION` + Cargo workspace) so operators see a new semver after pulling nightly — not only a new SHA.

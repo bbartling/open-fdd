@@ -23,7 +23,7 @@ ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
 |-----------|-------|------|
 | `central` | `openfdd-central` | REST API (`:8080`), JWT auth, historian, DataFusion FDD engine, reports, MCP API surface |
 | `ui` | `openfdd-web` | React product SPA (`:3000`); talks to central REST for SQL FDD |
-| `fieldbus` | `openfdd-fieldbus` | BACnet/IP poll (`network_mode: host`), publishes over MQTTS |
+| `fieldbus` | `openfdd-fieldbus` | Fixed 300 s health-only field poll; publishes the full versioned snapshot over MQTTS, local authenticated HTTP, or both |
 | `mqtt` | `openfdd-mqtt` | Mosquitto broker, MQTTS on `:8883` |
 | `mcp` | `openfdd-mcp` | Slim Rust MCP server for external agents |
 
@@ -32,12 +32,12 @@ ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
 │ ui (React :3000) │───────▶│ central (:8080)              │
 └──────────────────────┘  REST  │ JWT · historian · SQL FDD    │
                                  └──────────────────────────────┘
-                                          ▲ MQTTS (8883)
+                                          ▲ MQTTS (8883, optional)
                                           │
               ┌───────────────────────────┴───────────────┐
-              │ mqtt (Mosquitto)                            │
+              │ mqtt (Mosquitto, optional)                   │
               └───────────────────────────▲─────────────────┘
-                                          │ MQTTS haystack kv
+                                          │ MQTTS or local HTTP
                                  ┌────────┴─────────┐
                                  │ fieldbus (BACnet)│
                                  └──────────────────┘

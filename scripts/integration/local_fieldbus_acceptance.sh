@@ -14,6 +14,10 @@ case "$MODE" in
   *) echo "FAIL: OPENFDD_INGEST_MODE must be local_fieldbus or dual (got $MODE)" >&2; exit 2 ;;
 esac
 [[ -n "$TOKEN" ]] || { echo "FAIL: OPENFDD_LOCAL_INGEST_TOKEN is required" >&2; exit 2; }
+if [[ "${OPENFDD_MQTT_ENABLED:-0}" =~ ^(1|true|yes|on)$ ]]; then
+  echo "FAIL: broker-free local acceptance requires OPENFDD_MQTT_ENABLED=0" >&2
+  exit 2
+fi
 
 curl -fsS "$FIELD_BASE/api/health" >/dev/null
 curl -fsS "$CENTRAL_BASE/api/health" >/dev/null
@@ -30,7 +34,7 @@ PAYLOAD="$(jq -cn \
   --arg site "$SITE" \
   --arg edge "$EDGE" \
   --arg building "$BUILDING" \
-  '{schema:$schema,message_id:$message_id,sequence:1,observed_at:$observed_at,site_id:$site,edge_id:$edge,protocol:"bacnet",points:[{id:"acceptance:outside-air-temperature",display_name:"outside-air-temperature",kind:"number",value:70.0,quality:"good",tags:{building_id:$building,equipment_id:"acceptance-equipment",role:"oat"}}]}')"
+  '{schema:$schema,message_id:$message_id,sequence:1,observed_at:$observed_at,site_id:$site,edge_id:$edge,protocol:"bacnet",points:[{id:"acceptance-point",display_name:"acceptance-point",kind:"number",value:70.0,quality:"good",tags:{building_id:$building,equipment_id:"acceptance-equipment",role:"sample"}}]}')"
 
 headers=(
   -H "Authorization: Bearer $TOKEN"
@@ -43,12 +47,64 @@ if [[ -n "${OPENFDD_TENANT_ID:-}" ]]; then
   headers+=( -H "X-OpenFDD-Tenant-ID: ${OPENFDD_TENANT_ID}" )
 fi
 
-response="$(curl -fsS "${CENTRAL_BASE%/}/api/ingest/local" "${headers[@]}" --data "$PAYLOAD")"
-echo "$response" | jq -e '.ok == true and .duplicate == false' >/dev/null
+unauth_status="$(curl -sS -o /dev/null -w '%{http_code}' "${CENTRAL_BASE%/}/api/ingest/local" \
+  -H "Content-Type: application/json" --data "$PAYLOAD")"
+[[ "$unauth_status" == "401" ]] || { echo "FAIL: unauthenticated local ingest returned $unauth_status" >&2; exit 1; }
+
+post() {
+  local body_file="$1"
+  curl -sS -o "$body_file" -w '%{http_code}' "${CENTRAL_BASE%/}/api/ingest/local" \
+    "${headers[@]}" --data "$PAYLOAD"
+}
+
+response_file="$(mktemp)"
+replay_file=""
+foreign_file=""
+empty_file=""
+trap 'rm -f "$response_file" "$replay_file" "$foreign_file" "$empty_file"' EXIT
+status=""
+for _ in $(seq 1 30); do
+  status="$(post "$response_file")"
+  if [[ "$status" == "200" ]] && jq -e '.ok == true and .duplicate == false and .pending == false and (.eligible_points > 0) and (.persisted_rows > 0)' "$response_file" >/dev/null; then
+    break
+  fi
+  sleep 1
+done
+[[ "$status" == "200" ]] || { echo "FAIL: local ingest did not reach durable 200: HTTP $status $(cat "$response_file")" >&2; exit 1; }
+jq -e '.ok == true and .duplicate == false and .pending == false and (.eligible_points > 0) and (.persisted_rows > 0)' "$response_file" >/dev/null || {
+  echo "FAIL: zero eligible or persisted rows: $(cat "$response_file")" >&2; exit 1;
+}
+
+storage_root="${OPENFDD_ACCEPTANCE_STORAGE_ROOT:-${OPENFDD_STORAGE_ROOT:-workspace/openfdd}}"
+row_files="$(find "$storage_root" -type f -name '*.parquet' -size +0c 2>/dev/null | wc -l | tr -d ' ')"
+[[ "$row_files" -gt 0 ]] || { echo "FAIL: no non-empty Parquet storage found under $storage_root" >&2; exit 1; }
+
+if [[ -n "${OPENFDD_ACCEPTANCE_RESTART_CMD:-}" ]]; then
+  eval "$OPENFDD_ACCEPTANCE_RESTART_CMD"
+fi
 
 # Replaying the exact envelope must be idempotent and must not create a second
 # canonical row. This also exercises the dual local/cloud delivery guard.
-replay="$(curl -fsS "${CENTRAL_BASE%/}/api/ingest/local" "${headers[@]}" --data "$PAYLOAD")"
-echo "$replay" | jq -e '.ok == true and .duplicate == true' >/dev/null
+replay_file="$(mktemp)"
+replay_status="$(curl -sS -o "$replay_file" -w '%{http_code}' "${CENTRAL_BASE%/}/api/ingest/local" "${headers[@]}" --data "$PAYLOAD")"
+[[ "$replay_status" == "200" ]] || { echo "FAIL: replay returned HTTP $replay_status" >&2; exit 1; }
+jq -e '.ok == true and .duplicate == true and .pending == false' "$replay_file" >/dev/null || {
+  echo "FAIL: replay was not a committed duplicate: $(cat "$replay_file")" >&2; exit 1;
+}
 
-echo "PASS: $MODE local fieldbus envelope accepted, persisted, and replay-deduplicated"
+foreign_file="$(mktemp)"
+foreign_payload="$(jq '.points[0].tags.building_id = "foreign-building"' <<<"$PAYLOAD")"
+foreign_status="$(curl -sS -o "$foreign_file" -w '%{http_code}' "${CENTRAL_BASE%/}/api/ingest/local" \
+  "${headers[@]}" --data "$foreign_payload")"
+[[ "$foreign_status" == "403" ]] || { echo "FAIL: foreign building accepted with HTTP $foreign_status" >&2; exit 1; }
+
+empty_file="$(mktemp)"
+empty_payload="$(jq '.points[0].tags = {}' <<<"$PAYLOAD")"
+empty_status="$(curl -sS -o "$empty_file" -w '%{http_code}' "${CENTRAL_BASE%/}/api/ingest/local" \
+  "${headers[@]}" --data "$empty_payload")"
+if [[ "$empty_status" == "200" ]] && jq -e '.pending == false and (.eligible_points // 0) == 0' "$empty_file" >/dev/null; then
+  echo "FAIL: zero eligible points reached durable success" >&2
+  exit 1
+fi
+
+echo "PASS: $MODE local fieldbus envelope authenticated, persisted, storage-verified, broker-free, foreign-building-denied, and replay-deduplicated"

@@ -122,6 +122,14 @@ pub fn mqtt_enabled() -> bool {
     )
 }
 
+fn mqtt_delivery_enabled(mode: IngestMode) -> bool {
+    mqtt_delivery_enabled_with(mode, mqtt_enabled())
+}
+
+fn mqtt_delivery_enabled_with(mode: IngestMode, broker_enabled: bool) -> bool {
+    mode.uses_mqtt() && broker_enabled
+}
+
 fn ingest_mode() -> Result<IngestMode, String> {
     IngestMode::from_env()
 }
@@ -186,7 +194,7 @@ impl LocalIngestClient {
             .send()
             .await
             .map_err(|error| format!("local ingest request: {error}"))?;
-        if !response.status().is_success() {
+        if !response.status().is_success() || response.status() == reqwest::StatusCode::ACCEPTED {
             return Err(format!("local ingest returned HTTP {}", response.status()));
         }
         Ok(())
@@ -632,8 +640,9 @@ pub async fn spawn_if_configured(
         return;
     }
 
-    if mode.uses_mqtt() && !mqtt_enabled() {
-        warn!("MQTT ingest is disabled; local delivery remains enabled only when OPENFDD_INGEST_MODE=local_fieldbus");
+    let mqtt_allowed = mqtt_delivery_enabled(mode);
+    if mode.uses_mqtt() && !mqtt_allowed {
+        warn!("MQTT ingest is disabled; local delivery remains enabled for local_fieldbus and dual modes");
         if !mode.uses_local() {
             return;
         }
@@ -701,7 +710,7 @@ pub async fn spawn_if_configured(
     });
 
     tokio::spawn(async move {
-        let mut mqtt_spool = if mode.uses_mqtt() {
+        let mut mqtt_spool = if mqtt_allowed {
             match TelemetrySpool::open(SpoolConfig::new(&mqtt_spool_dir)).await {
                 Ok(s) => Some(s),
                 Err(err) => {
@@ -742,16 +751,6 @@ pub async fn spawn_if_configured(
                 tokio::time::sleep(Duration::from_secs_f64(interval)).await;
             }
             first_cycle = false;
-
-            // Keep MQTT command subscription alive even while suspended.
-            if mode.uses_mqtt() && mqtt_spool.is_some() && mqtt.is_none() {
-                mqtt = connect_mqtt_session(
-                    mqtt_config(&site_id, &edge_id, port),
-                    &topics,
-                    Arc::clone(&command_ctx),
-                )
-                .await;
-            }
 
             if telemetry.is_suspended() {
                 continue;
@@ -856,6 +855,18 @@ pub async fn spawn_if_configured(
                 }
             }
 
+            // Local delivery is drained before any broker connection attempt.
+            // A remote outage therefore cannot prevent the authoritative local
+            // snapshot from being queued and sent.
+            if mqtt_allowed && mqtt_spool.is_some() && mqtt.is_none() {
+                mqtt = connect_mqtt_session(
+                    mqtt_config(&site_id, &edge_id, port),
+                    &topics,
+                    Arc::clone(&command_ctx),
+                )
+                .await;
+            }
+
             if let (Some(session), Some(spool)) = (mqtt.as_ref(), mqtt_spool.as_mut()) {
                 match spool.list_pending().await {
                     Ok(pending) => {
@@ -926,6 +937,13 @@ mod tests {
         assert!(IngestMode::Dual.uses_mqtt());
         assert!(IngestMode::Dual.uses_local());
         assert!(IngestMode::parse("mqtt").is_err());
+    }
+
+    #[test]
+    fn dual_without_broker_is_local_only() {
+        assert!(!mqtt_delivery_enabled_with(IngestMode::Dual, false));
+        assert!(mqtt_delivery_enabled_with(IngestMode::Dual, true));
+        assert!(!mqtt_delivery_enabled_with(IngestMode::LocalFieldbus, true));
     }
 
     #[test]

@@ -23,8 +23,9 @@ use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use datafusion::arrow::record_batch::RecordBatch;
 use fdd_core::columns::normalize_role;
 use fdd_store::{
-    safe_partition_value, CompletePartPublisher, HistorianConfig, LocalStorage, MicroBatchFlush,
-    MicroBatchHistorian, ParquetPartWriter, StorageUrl,
+    safe_partition_value, tenant_storage_prefix, tenant_storage_root, CompletePartPublisher,
+    HistorianConfig, LocalStorage, MicroBatchFlush, MicroBatchHistorian, ParquetPartWriter,
+    StorageUrl,
 };
 use object_store::aws::AmazonS3Builder;
 use object_store::path::Path as ObjectPath;
@@ -335,8 +336,33 @@ impl LiveHistorian {
     /// Local storage publishes with crash-safe rename. S3-compatible storage
     /// publishes complete Parquet payloads directly through object_store; S3
     /// never falls back to ephemeral container disk as canonical history.
-    pub fn from_env() -> Result<Self> {
-        Self::from_config(&HistorianConfig::from_env()?)
+    /// Build from deployment configuration while applying the trusted tenant
+    /// partition used by local HTTP and MQTT delivery alike.
+    pub fn from_env_scoped() -> Result<Self> {
+        let mut config = HistorianConfig::from_env()?;
+        if crate::tenant::multi_tenant_enabled() {
+            let tenant_id = std::env::var("OPENFDD_TENANT_ID")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| anyhow!("OPENFDD_TENANT_ID required in multi-tenant mode"))?;
+            config.storage_url = match config.storage_url {
+                StorageUrl::File { root } => StorageUrl::File {
+                    root: tenant_storage_root(&root, Some(&tenant_id))?,
+                },
+                StorageUrl::S3 { bucket, prefix } => {
+                    let tenant_prefix = tenant_storage_prefix(Some(&tenant_id))?;
+                    StorageUrl::S3 {
+                        bucket,
+                        prefix: if prefix.is_empty() {
+                            tenant_prefix
+                        } else {
+                            format!("{prefix}/{tenant_prefix}")
+                        },
+                    }
+                }
+            };
+        }
+        Self::from_config(&config)
     }
 
     pub fn from_config(config: &HistorianConfig) -> Result<Self> {
@@ -411,10 +437,6 @@ impl LiveHistorian {
                 .context("persist live historian telemetry watermark during shutdown")?;
         }
         Ok(report)
-    }
-
-    pub fn pending_rows(&self) -> usize {
-        self.batches.pending_rows()
     }
 
     pub fn latest_persisted_timestamp_utc(&self) -> Option<DateTime<Utc>> {

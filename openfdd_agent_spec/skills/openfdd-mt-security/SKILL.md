@@ -45,6 +45,19 @@ Foreign building / tenant / job / command IDs must never return **200 + data** (
 
 ## MQTT (staging / Kali next)
 
+### Local fieldbus ingest identity
+
+The broker-free `local_fieldbus` and `dual` paths use deployment-token bearer
+authentication on `/api/ingest/local`. Central binds tenant, building, and edge
+to trusted deployment configuration (`OPENFDD_TENANT_ID`, configured
+building/site, and `OPENFDD_LOCAL_ALLOWED_EDGE_IDS`); caller headers may confirm
+that identity but cannot choose a foreign building. The same envelope is written
+through the shared asynchronous canonical historian writer. Durable pending and
+committed receipts make a 202 pending response retryable and a 200 response
+truthful after response loss or restart. Tests must cover own identity,
+foreign-building denial, concurrent duplicate delivery, and broker-free compose;
+do not claim #1049 cloud retention from this local proof.
+
 Example ACL comments: [`deploy/mqtt/acl.example`](../../../deploy/mqtt/acl.example). Edge cert for
 Tenant A may pub telemetry/status under `openfdd/v1/tenants/{tid}/buildings/{bid}/…`
 and sub commands for that edge only — **deny** Tenant B topics and `#` wildcards
