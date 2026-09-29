@@ -1615,16 +1615,29 @@ pub async fn local_fieldbus_ingest(
         ));
     }
 
+    let receipt_scope = format!(
+        "tenant={};building={}",
+        std::env::var("OPENFDD_TENANT_ID").unwrap_or_else(|_| "-".into()),
+        trusted_building
+    );
+
     if let Some(status) = state
-        .receipt_status(&envelope.edge_id, envelope.message_id)
+        .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
         .await
     {
         *state.ingest_dup.lock().unwrap() += 1;
         if status == crate::state::IngestReceiptStatus::Pending {
+            if let Ok(report) = state.ingest_live(&envelope).await {
+                if report.persisted_rows > 0 {
+                    let _ = state
+                        .commit_receipt(&receipt_scope, &envelope.edge_id, envelope.message_id)
+                        .await;
+                }
+            }
             let _ = state.flush_live(false).await;
         }
         let committed = state
-            .receipt_status(&envelope.edge_id, envelope.message_id)
+            .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
             .await
             == Some(crate::state::IngestReceiptStatus::Committed);
         return Ok((
@@ -1648,11 +1661,11 @@ pub async fn local_fieldbus_ingest(
         ));
     }
     if !state
-        .reserve_receipt_at(&envelope.edge_id, envelope.message_id, envelope.observed_at)
+        .reserve_receipt_at(&receipt_scope, envelope.clone())
         .await
     {
         if state
-            .receipt_status(&envelope.edge_id, envelope.message_id)
+            .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
             .await
             .is_none()
         {
@@ -1671,7 +1684,7 @@ pub async fn local_fieldbus_ingest(
         Ok(report) => report,
         Err(error) => {
             state
-                .release_receipt(&envelope.edge_id, envelope.message_id)
+                .release_receipt(&receipt_scope, &envelope.edge_id, envelope.message_id)
                 .await;
             return Err((
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -1692,8 +1705,20 @@ pub async fn local_fieldbus_ingest(
             ));
         }
     };
+    if report.persisted_rows > 0
+        && !state
+            .commit_receipt(&receipt_scope, &envelope.edge_id, envelope.message_id)
+            .await
+    {
+        return Ok((
+            StatusCode::ACCEPTED,
+            Json(
+                json!({"ok": true, "duplicate": false, "pending": true, "eligible_points": report.eligible_points, "persisted_rows": report.persisted_rows}),
+            ),
+        ));
+    }
     let committed = state
-        .receipt_status(&envelope.edge_id, envelope.message_id)
+        .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
         .await
         == Some(crate::state::IngestReceiptStatus::Committed);
     let entry = state.edges.entry(envelope.edge_id.clone()).or_default();

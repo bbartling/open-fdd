@@ -99,9 +99,20 @@ foreign_status="$(curl -sS -o "$foreign_file" -w '%{http_code}' "${CENTRAL_BASE%
 [[ "$foreign_status" == "403" ]] || { echo "FAIL: foreign building accepted with HTTP $foreign_status" >&2; exit 1; }
 
 empty_file="$(mktemp)"
-empty_payload="$(jq '.points[0].tags = {}' <<<"$PAYLOAD")"
+EMPTY_MESSAGE_ID="$(cat /proc/sys/kernel/random/uuid)"
+empty_payload="$(jq --arg id "$EMPTY_MESSAGE_ID" '.message_id = $id | .points[0].tags = {}' <<<"$PAYLOAD")"
+empty_headers=(
+  -H "Authorization: Bearer $TOKEN"
+  -H "Content-Type: application/json"
+  -H "X-OpenFDD-Message-ID: $EMPTY_MESSAGE_ID"
+  -H "X-OpenFDD-Sequence: 2"
+  -H "X-OpenFDD-Building-ID: $BUILDING"
+)
+if [[ -n "${OPENFDD_TENANT_ID:-}" ]]; then
+  empty_headers+=( -H "X-OpenFDD-Tenant-ID: ${OPENFDD_TENANT_ID}" )
+fi
 empty_status="$(curl -sS -o "$empty_file" -w '%{http_code}' "${CENTRAL_BASE%/}/api/ingest/local" \
-  "${headers[@]}" --data "$empty_payload")"
+  "${empty_headers[@]}" --data "$empty_payload")"
 if [[ "$empty_status" == "200" ]] && jq -e '.pending == false and (.eligible_points // 0) == 0' "$empty_file" >/dev/null; then
   echo "FAIL: zero eligible points reached durable success" >&2
   exit 1

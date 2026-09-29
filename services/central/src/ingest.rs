@@ -20,6 +20,14 @@ fn workspace_path_ingest() -> PathBuf {
     PathBuf::from(std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()))
 }
 
+fn receipt_scope(topic: &TopicIdentity) -> String {
+    format!(
+        "tenant={};building={}",
+        topic.tenant_id.as_deref().unwrap_or("-"),
+        topic.site_id()
+    )
+}
+
 fn redact_payload(payload: &[u8]) -> String {
     if payload.is_empty() {
         return "<redacted empty utf8 payload: 0 bytes>".into();
@@ -305,14 +313,12 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
                 return;
             }
             let key = (env.edge_id.clone(), env.message_id);
+            let scope = receipt_scope(topic);
             // Durable reservation is shared with local HTTP. Pending and
             // committed receipts both suppress a concurrent/replayed copy.
-            if !state
-                .reserve_receipt_at(&env.edge_id, env.message_id, env.observed_at)
-                .await
-            {
+            if !state.reserve_receipt_at(&scope, env.clone()).await {
                 if state
-                    .receipt_status(&env.edge_id, env.message_id)
+                    .receipt_status(&scope, &env.edge_id, env.message_id)
                     .await
                     .is_none()
                 {
@@ -331,12 +337,22 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
             ) {
                 record_reject(state, payload, &msg);
                 state.seen_messages.remove(&key);
-                state.release_receipt(&env.edge_id, env.message_id).await;
+                state
+                    .release_receipt(&scope, &env.edge_id, env.message_id)
+                    .await;
                 return;
             }
 
             match state.ingest_live(&env).await {
                 Ok(report) => {
+                    if report.persisted_rows > 0
+                        && !state
+                            .commit_receipt(&scope, &env.edge_id, env.message_id)
+                            .await
+                    {
+                        state.mqtt_record_error("durable ingest receipt commit failed");
+                        return;
+                    }
                     for duplicate in &report.duplicate_roles {
                         warn!(
                             building_id = %duplicate.building_id,
@@ -377,7 +393,9 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
                         &format!("canonical historian ingest failed: {err}"),
                     );
                     state.seen_messages.remove(&key);
-                    state.release_receipt(&env.edge_id, env.message_id).await;
+                    state
+                        .release_receipt(&scope, &env.edge_id, env.message_id)
+                        .await;
                     return;
                 }
             }

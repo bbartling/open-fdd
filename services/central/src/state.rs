@@ -20,7 +20,8 @@ use crate::tenant_budget::TenantBudgetTracker;
 
 const MQTT_MONITOR_CAPACITY: usize = 100;
 const MQTT_PREVIEW_BYTES: usize = 4096;
-const LOCAL_RECEIPTS_FILE: &str = "state/local-fieldbus-receipts.json";
+const LOCAL_RECEIPTS_FILE: &str = "state/local-fieldbus-receipts.jsonl";
+const RECEIPT_CAPACITY: usize = 50_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IngestReceiptStatus {
@@ -30,12 +31,22 @@ pub enum IngestReceiptStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IngestReceipt {
+    pub scope: String,
     pub edge_id: String,
     pub message_id: Uuid,
     pub status: IngestReceiptStatus,
+    pub envelope: TelemetryEnvelope,
     #[serde(default = "default_receipt_observed_at")]
     pub observed_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ReceiptJournalEntry {
+    scope: String,
+    edge_id: String,
+    message_id: Uuid,
+    receipt: Option<IngestReceipt>,
 }
 
 #[derive(Debug, Default)]
@@ -144,7 +155,7 @@ pub struct AppState {
     /// One canonical writer shared by MQTT and local HTTP delivery.
     pub live_historian: AsyncMutex<Option<LiveHistorian>>,
     /// Durable pending/committed receipt ledger for replay-safe local ingest.
-    pub ingest_receipts: AsyncMutex<HashMap<(String, Uuid), IngestReceipt>>,
+    pub ingest_receipts: AsyncMutex<HashMap<(String, String, Uuid), IngestReceipt>>,
     pub ingest_receipts_path: PathBuf,
 }
 
@@ -173,13 +184,11 @@ impl AppState {
         }
     }
 
-    pub async fn reserve_receipt_at(
-        &self,
-        edge_id: &str,
-        message_id: Uuid,
-        observed_at: DateTime<Utc>,
-    ) -> bool {
-        let key = (edge_id.to_string(), message_id);
+    pub async fn reserve_receipt_at(&self, scope: &str, envelope: TelemetryEnvelope) -> bool {
+        let edge_id = envelope.edge_id.clone();
+        let message_id = envelope.message_id;
+        let observed_at = envelope.observed_at;
+        let key = (scope.to_string(), edge_id.clone(), message_id);
         let mut receipts = self.ingest_receipts.lock().await;
         if receipts.contains_key(&key) {
             return false;
@@ -187,40 +196,66 @@ impl AppState {
         receipts.insert(
             key,
             IngestReceipt {
-                edge_id: edge_id.to_string(),
+                scope: scope.to_string(),
+                edge_id: edge_id.clone(),
                 message_id,
                 status: IngestReceiptStatus::Pending,
                 observed_at,
+                envelope,
                 updated_at: Utc::now(),
             },
         );
-        if persist_receipts(&self.ingest_receipts_path, &receipts).await {
+        let receipt = receipts
+            .get(&(scope.to_string(), edge_id.clone(), message_id))
+            .cloned();
+        if enforce_receipt_capacity(&mut receipts)
+            && append_receipt_event(
+                &self.ingest_receipts_path,
+                scope,
+                &edge_id,
+                message_id,
+                receipt.as_ref(),
+            )
+            .await
+        {
             true
         } else {
-            receipts.remove(&(edge_id.to_string(), message_id));
+            receipts.remove(&(scope.to_string(), edge_id, message_id));
             false
         }
     }
 
-    pub async fn release_receipt(&self, edge_id: &str, message_id: Uuid) {
+    pub async fn release_receipt(&self, scope: &str, edge_id: &str, message_id: Uuid) {
         let mut receipts = self.ingest_receipts.lock().await;
-        receipts.remove(&(edge_id.to_string(), message_id));
-        persist_receipts(&self.ingest_receipts_path, &receipts).await;
+        receipts.remove(&(scope.to_string(), edge_id.to_string(), message_id));
+        let _ = append_receipt_event(&self.ingest_receipts_path, scope, edge_id, message_id, None)
+            .await;
     }
 
-    pub async fn commit_persisted_receipts(&self, watermark: Option<DateTime<Utc>>) {
-        let Some(watermark) = watermark else { return };
+    pub async fn commit_receipt(&self, scope: &str, edge_id: &str, message_id: Uuid) -> bool {
         let mut receipts = self.ingest_receipts.lock().await;
-        let before = receipts.clone();
-        let now = Utc::now();
-        for receipt in receipts.values_mut() {
-            if receipt.status == IngestReceiptStatus::Pending && receipt.observed_at <= watermark {
-                receipt.status = IngestReceiptStatus::Committed;
-                receipt.updated_at = now;
-            }
-        }
-        if !persist_receipts(&self.ingest_receipts_path, &receipts).await {
-            *receipts = before;
+        let key = (scope.to_string(), edge_id.to_string(), message_id);
+        let Some(previous) = receipts.get(&key).cloned() else {
+            return false;
+        };
+        let mut updated = previous.clone();
+        updated.status = IngestReceiptStatus::Committed;
+        updated.updated_at = Utc::now();
+        receipts.insert(key.clone(), updated.clone());
+        let snapshot = Some(updated);
+        if append_receipt_event(
+            &self.ingest_receipts_path,
+            scope,
+            edge_id,
+            message_id,
+            snapshot.as_ref(),
+        )
+        .await
+        {
+            true
+        } else {
+            receipts.insert(key, previous);
+            false
         }
     }
 
@@ -240,7 +275,7 @@ impl AppState {
     }
 
     pub async fn flush_live(&self, graceful: bool) -> anyhow::Result<LiveHistorianIngest> {
-        let (report, watermark) = {
+        let report = {
             let mut historian = self.live_historian.lock().await;
             let Some(historian) = historian.as_mut() else {
                 return Ok(LiveHistorianIngest::default());
@@ -250,21 +285,21 @@ impl AppState {
             } else {
                 historian.flush_due()?
             };
-            (report, historian.latest_persisted_timestamp_utc())
+            report
         };
-        self.commit_persisted_receipts(watermark).await;
         Ok(report)
     }
 
     pub async fn receipt_status(
         &self,
+        scope: &str,
         edge_id: &str,
         message_id: Uuid,
     ) -> Option<IngestReceiptStatus> {
         self.ingest_receipts
             .lock()
             .await
-            .get(&(edge_id.to_string(), message_id))
+            .get(&(scope.to_string(), edge_id.to_string(), message_id))
             .map(|receipt| receipt.status)
     }
 
@@ -403,24 +438,41 @@ fn default_receipt_observed_at() -> DateTime<Utc> {
     Utc::now()
 }
 
-fn load_receipts() -> HashMap<(String, Uuid), IngestReceipt> {
-    load_receipts_at(&receipts_path())
+fn load_receipts() -> HashMap<(String, String, Uuid), IngestReceipt> {
+    load_receipts_at(&receipts_path()).unwrap_or_else(|error| {
+        panic!("local fieldbus receipt journal is corrupt; refusing startup: {error}")
+    })
 }
 
-fn load_receipts_at(path: &std::path::Path) -> HashMap<(String, Uuid), IngestReceipt> {
-    let Ok(bytes) = std::fs::read(path) else {
-        return HashMap::new();
-    };
-    serde_json::from_slice::<Vec<IngestReceipt>>(&bytes)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|receipt| ((receipt.edge_id.clone(), receipt.message_id), receipt))
-        .collect()
-}
-
-async fn persist_receipts(
+fn load_receipts_at(
     path: &std::path::Path,
-    receipts: &HashMap<(String, Uuid), IngestReceipt>,
+) -> Result<HashMap<(String, String, Uuid), IngestReceipt>, String> {
+    let Ok(bytes) = std::fs::read(path) else {
+        return Ok(HashMap::new());
+    };
+    let mut receipts = HashMap::new();
+    for line in bytes
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+    {
+        let event: ReceiptJournalEntry = serde_json::from_slice(line)
+            .map_err(|error| format!("decode receipt journal entry: {error}"))?;
+        let key = (event.scope, event.edge_id, event.message_id);
+        if let Some(receipt) = event.receipt {
+            receipts.insert(key, receipt);
+        } else {
+            receipts.remove(&key);
+        }
+    }
+    Ok(receipts)
+}
+
+async fn append_receipt_event(
+    path: &std::path::Path,
+    scope: &str,
+    edge_id: &str,
+    message_id: Uuid,
+    receipt: Option<&IngestReceipt>,
 ) -> bool {
     let Some(parent) = path.parent() else {
         return false;
@@ -428,12 +480,45 @@ async fn persist_receipts(
     if tokio::fs::create_dir_all(parent).await.is_err() {
         return false;
     }
-    let values: Vec<_> = receipts.values().cloned().collect();
-    let Ok(bytes) = serde_json::to_vec_pretty(&values) else {
+    let Ok(mut bytes) = serde_json::to_vec(&ReceiptJournalEntry {
+        scope: scope.to_string(),
+        edge_id: edge_id.to_string(),
+        message_id,
+        receipt: receipt.cloned(),
+    }) else {
         return false;
     };
-    let temp = path.with_extension("json.tmp");
-    tokio::fs::write(&temp, bytes).await.is_ok() && tokio::fs::rename(temp, path).await.is_ok()
+    bytes.push(b'\n');
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        use std::io::Write;
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .ok()?;
+        file.write_all(&bytes).ok()?;
+        file.sync_data().ok()?;
+        Some(())
+    })
+    .await
+    .ok()
+    .flatten()
+    .is_some()
+}
+
+fn enforce_receipt_capacity(receipts: &mut HashMap<(String, String, Uuid), IngestReceipt>) -> bool {
+    while receipts.len() > RECEIPT_CAPACITY {
+        let Some(key) = receipts
+            .iter()
+            .min_by_key(|(_, receipt)| receipt.updated_at)
+            .map(|(key, _)| key.clone())
+        else {
+            return false;
+        };
+        receipts.remove(&key);
+    }
+    true
 }
 
 #[cfg(test)]
@@ -445,21 +530,39 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let mut state = AppState::new();
         state.ingest_receipts_path = temp.path().join("receipts.json");
-        let message_id = Uuid::new_v4();
+        let envelope = TelemetryEnvelope::new(
+            "building-local",
+            "edge-local",
+            openfdd_contracts::Protocol::Bacnet,
+            1,
+            vec![openfdd_contracts::TelemetryPoint {
+                id: "point-local".into(),
+                display_name: None,
+                kind: None,
+                value: serde_json::json!(1),
+                unit: None,
+                quality: openfdd_contracts::Quality::Good,
+                tags: serde_json::json!({"building_id":"building-local", "equipment_id":"equipment-local", "role":"sample"}).as_object().unwrap().clone(),
+            }],
+        );
+        let message_id = envelope.message_id;
         let results = futures_util::future::join_all(
-            (0..16).map(|_| state.reserve_receipt_at("edge-local", message_id, Utc::now())),
+            (0..16).map(|_| state.reserve_receipt_at("tenant-a/building-local", envelope.clone())),
         )
         .await;
         assert_eq!(results.into_iter().filter(|accepted| *accepted).count(), 1);
 
-        state.commit_persisted_receipts(Some(Utc::now())).await;
-        let bytes = tokio::fs::read(&state.ingest_receipts_path).await.unwrap();
-        let receipts: Vec<IngestReceipt> = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(receipts[0].status, IngestReceiptStatus::Committed);
-        let restarted = load_receipts_at(&state.ingest_receipts_path);
+        state
+            .commit_receipt("tenant-a/building-local", "edge-local", message_id)
+            .await;
+        let restarted = load_receipts_at(&state.ingest_receipts_path).unwrap();
         assert_eq!(
             restarted
-                .get(&("edge-local".to_string(), message_id))
+                .get(&(
+                    "tenant-a/building-local".to_string(),
+                    "edge-local".to_string(),
+                    message_id
+                ))
                 .map(|receipt| receipt.status),
             Some(IngestReceiptStatus::Committed)
         );
@@ -468,7 +571,7 @@ mod tests {
         // initial write failure can be released and retried with the same ID.
         assert!(
             !state
-                .reserve_receipt_at("edge-local", message_id, Utc::now())
+                .reserve_receipt_at("tenant-a/building-local", envelope.clone())
                 .await
         );
         let failed_id = Uuid::new_v4();
@@ -476,22 +579,36 @@ mod tests {
         failed_state.ingest_receipts_path = temp.path().to_path_buf();
         assert!(
             !failed_state
-                .reserve_receipt_at("edge-local", failed_id, Utc::now())
+                .reserve_receipt_at("tenant-a/building-local", {
+                    let mut copy = envelope.clone();
+                    copy.message_id = failed_id;
+                    copy
+                })
                 .await
         );
         assert!(failed_state
-            .receipt_status("edge-local", failed_id)
+            .receipt_status("tenant-a/building-local", "edge-local", failed_id)
             .await
             .is_none());
         assert!(
             state
-                .reserve_receipt_at("edge-local", failed_id, Utc::now())
+                .reserve_receipt_at("tenant-a/building-local", {
+                    let mut copy = envelope.clone();
+                    copy.message_id = failed_id;
+                    copy
+                })
                 .await
         );
-        state.release_receipt("edge-local", failed_id).await;
+        state
+            .release_receipt("tenant-a/building-local", "edge-local", failed_id)
+            .await;
         assert!(
             state
-                .reserve_receipt_at("edge-local", failed_id, Utc::now())
+                .reserve_receipt_at("tenant-a/building-local", {
+                    let mut copy = envelope;
+                    copy.message_id = failed_id;
+                    copy
+                })
                 .await
         );
     }
