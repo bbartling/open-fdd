@@ -91,11 +91,11 @@ Low-RAM: never local `docker build`; no local central/web/mqtt on the closeout p
 
 Compact ACME hive parts before enabling continuous AFDD (`scripts/ops/railway_compact_hub.sh`). Recipe: [`AFDD_MODES.md`](AFDD_MODES.md) § ACME.
 
-**Lookback-sized windows only.** `plan_continuous_cycle` (`crates/fdd_store/src/afdd_scheduler.rs`) sets `end` to the latest persisted telemetry watermark and `start` to `end − lookback`. The window is tied to the cadence: a daily interval uses 24h / 1 day. A cycle does not scan the whole historian.
+**Lookback-sized windows only.** `plan_continuous_cycle` (`crates/fdd_store/src/afdd_scheduler.rs`) sets `end` to the latest persisted telemetry watermark and `start` to `end − lookback`. The window stays the configured lookback. A cycle does not scan the whole historian, and `merge_windowed_rule_result` leaves result slices outside that window unchanged.
 
-`OPENFDD_AFDD_INTERVAL_MINUTES=1440` is the gap after `last_completed_at` (checkpoint + interval). That 1440 is the cadence. It does not align the run to wall-clock 05:00. Ops preference for the ACME lab is to land that daily cycle around **05:00 America/Chicago** so it finishes before the **06:00** morning digest. Lookback stays matched to the cadence (24 hours).
+**Wall clock (product, not yet the field pin).** `OPENFDD_AFDD_SCHEDULE=wall_clock` with `OPENFDD_AFDD_WALL_CLOCK_HHMM` and `OPENFDD_AFDD_WALL_CLOCK_TIMEZONE` runs once per local day. The lab recipe is **05:00 America/Chicago** so the cycle can finish before the **06:00** digest, with lookback 24h. `OPENFDD_AFDD_INTERVAL_MINUTES=1440` remains the checkpoint-relative cadence when schedule kind is `interval`. The current field hub is still interval until this build is pinned. Soft-open: do not claim field qualification from the unit tests.
 
-After downtime the next cycle is still one lookback-sized window (`catch_up`). Replaying retained history is the separate `plan_backfill_chunks` path. Gate 38 checks config truth and a bounded `run-now` window. It does not assert a 05:00 clock alignment. Watch central RAM across that cycle (STRESS NOTE #1). Live lab env: `OPENFDD_AFDD_MODE=continuous`, interval 1440, lookback 24 hours, `OPENFDD_AFDD_BUILDING_ID=ACME`.
+After downtime the next cycle is still one lookback-sized window (`catch_up`). Replaying a chosen range is `POST /api/afdd/scheduler/backfill` (`plan_bounded_backfill`). Scheduler config rejects `update_all`. Gate 38 checks config truth and a bounded `run-now` window. It records `schedule_kind` / `result_scope` when the hub sends them and does not require 05:00 until the field pin flips. Watch central RAM across that cycle (STRESS NOTE #1). Live lab env until re-pin: `OPENFDD_AFDD_MODE=continuous`, interval 1440, lookback 24 hours, `OPENFDD_AFDD_BUILDING_ID=ACME`.
 
 ### Truthful manifests (3.3.26+)
 
