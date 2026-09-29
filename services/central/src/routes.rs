@@ -1697,17 +1697,17 @@ pub async fn local_fieldbus_ingest(
             ));
         }
     };
-    let flush = match state.flush_live(false).await {
-        Ok(report) => report,
-        Err(error) => {
-            return Ok((
-                StatusCode::ACCEPTED,
-                Json(
-                    json!({"ok": true, "duplicate": false, "pending": true, "eligible_points": report.eligible_points, "persisted_rows": report.persisted_rows, "error": format!("flush pending: {error}")}),
-                ),
-            ));
-        }
-    };
+    // Publish this request before the ACK. The shared row/time threshold is
+    // for MQTT micro-batches; a local sample must not sit on HTTP 202 while
+    // its rows are only buffered.
+    if let Err(error) = state.publish_pending(&receipt_scope).await {
+        return Ok((
+            StatusCode::ACCEPTED,
+            Json(
+                json!({"ok": true, "duplicate": false, "pending": true, "eligible_points": report.eligible_points, "persisted_rows": 0, "error": format!("flush pending: {error}")}),
+            ),
+        ));
+    }
     let committed = state
         .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
         .await
@@ -1717,7 +1717,8 @@ pub async fn local_fieldbus_ingest(
     let persisted_rows = state
         .receipt_persisted_rows(&receipt_scope, &receipt_edge_id, receipt_message_id)
         .await
-        .unwrap_or(report.persisted_rows + flush.persisted_rows);
+        .unwrap_or(0);
+    let durable = committed && persisted_rows > 0;
     let entry = state.edges.entry(envelope.edge_id.clone()).or_default();
     let mut shadow = entry.lock().unwrap();
     shadow
@@ -1725,9 +1726,11 @@ pub async fn local_fieldbus_ingest(
         .insert(format!("{:?}", envelope.protocol), envelope.sequence);
     shadow.registered_site_id = Some(envelope.site_id.clone());
     shadow.last_telemetry = Some(envelope);
-    state.note_ingest_ok();
+    if durable {
+        state.note_ingest_ok();
+    }
     Ok((
-        if committed {
+        if durable {
             StatusCode::OK
         } else {
             StatusCode::ACCEPTED
@@ -1735,7 +1738,7 @@ pub async fn local_fieldbus_ingest(
         Json(json!({
             "ok": true,
             "duplicate": false,
-            "pending": !committed,
+            "pending": !durable,
             "persisted_rows": persisted_rows,
             "eligible_points": report.eligible_points,
             "skipped_points": report.skipped_points,
@@ -4864,7 +4867,8 @@ mod version_tests {
             "OPENFDD_STORAGE_URL",
             format!("file://{}", temp.path().join("history").display()),
         );
-        std::env::set_var("OPENFDD_PARQUET_FLUSH_ROWS", "1");
+        std::env::set_var("OPENFDD_PARQUET_FLUSH_ROWS", "5000");
+        std::env::set_var("OPENFDD_PARQUET_FLUSH_SECONDS", "3600");
 
         let state = Arc::new(AppState::new());
         let envelope = TelemetryEnvelope::new(
@@ -4902,16 +4906,31 @@ mod version_tests {
             "x-openfdd-building-id",
             HeaderValue::from_static("building-http-test"),
         );
-        let body = Bytes::from(serde_json::to_vec(&envelope).unwrap());
+        let request_body = Bytes::from(serde_json::to_vec(&envelope).unwrap());
         let (status, Json(body)): (_, Json<Value>) = local_fieldbus_ingest(
             axum::extract::State(Arc::clone(&state)),
             headers.clone(),
-            body,
+            request_body.clone(),
         )
         .await
         .unwrap();
-        assert!(status == StatusCode::OK || status == StatusCode::ACCEPTED);
+        assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], true);
+        assert_eq!(body["pending"], false);
+        assert_eq!(body["duplicate"], false);
+        assert_eq!(body["persisted_rows"], serde_json::json!(1));
+
+        let (replay_status, Json(replay)): (_, Json<Value>) = local_fieldbus_ingest(
+            axum::extract::State(Arc::clone(&state)),
+            headers.clone(),
+            request_body,
+        )
+        .await
+        .unwrap();
+        assert_eq!(replay_status, StatusCode::OK);
+        assert_eq!(replay["duplicate"], true);
+        assert_eq!(replay["pending"], false);
+        assert_eq!(replay["persisted_rows"], serde_json::json!(1));
 
         let mut foreign = envelope;
         foreign.message_id = uuid::Uuid::new_v4();
@@ -4938,6 +4957,7 @@ mod version_tests {
             "OPENFDD_WORKSPACE",
             "OPENFDD_STORAGE_URL",
             "OPENFDD_PARQUET_FLUSH_ROWS",
+            "OPENFDD_PARQUET_FLUSH_SECONDS",
         ] {
             std::env::remove_var(key);
         }

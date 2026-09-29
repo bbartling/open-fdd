@@ -39,6 +39,17 @@ pub enum FlushReason {
     Shutdown,
 }
 
+/// Identity of one input batch that was included in a successful publish.
+///
+/// The token is whatever the caller attached at `push`. A flush report lists
+/// only the batches that were encoded into the immutable part, so durability
+/// is not reconstructed from a side queue after the fact.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BatchProvenance {
+    pub rows: usize,
+    pub token: Option<u64>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct MicroBatchFlush {
     pub building_id: String,
@@ -46,11 +57,19 @@ pub struct MicroBatchFlush {
     pub rows: usize,
     pub reason: FlushReason,
     pub parts: Vec<ParquetPart>,
+    #[serde(skip)]
+    pub provenance: Vec<BatchProvenance>,
+}
+
+#[derive(Debug, Clone)]
+struct PendingInput {
+    batch: RecordBatch,
+    token: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
 struct PendingBatch {
-    batches: Vec<RecordBatch>,
+    inputs: Vec<PendingInput>,
     rows: usize,
     first_buffered_at: Instant,
 }
@@ -108,7 +127,18 @@ impl MicroBatchHistorian {
         equipment_id: impl Into<String>,
         batch: RecordBatch,
     ) -> Result<Vec<MicroBatchFlush>> {
-        self.push_at(building_id, equipment_id, batch, Instant::now())
+        self.push_with_token(building_id, equipment_id, batch, None)
+    }
+
+    /// Buffer one batch and attach the caller token returned if this push publishes.
+    pub fn push_with_token(
+        &mut self,
+        building_id: impl Into<String>,
+        equipment_id: impl Into<String>,
+        batch: RecordBatch,
+        token: Option<u64>,
+    ) -> Result<Vec<MicroBatchFlush>> {
+        self.push_at_with_token(building_id, equipment_id, batch, Instant::now(), token)
     }
 
     /// Deterministic variant used by runtimes/tests that already own a clock.
@@ -119,6 +149,17 @@ impl MicroBatchHistorian {
         batch: RecordBatch,
         now: Instant,
     ) -> Result<Vec<MicroBatchFlush>> {
+        self.push_at_with_token(building_id, equipment_id, batch, now, None)
+    }
+
+    pub fn push_at_with_token(
+        &mut self,
+        building_id: impl Into<String>,
+        equipment_id: impl Into<String>,
+        batch: RecordBatch,
+        now: Instant,
+        token: Option<u64>,
+    ) -> Result<Vec<MicroBatchFlush>> {
         if batch.num_rows() == 0 {
             return Ok(Vec::new());
         }
@@ -126,9 +167,9 @@ impl MicroBatchHistorian {
         let key = HistorianBatchKey::new(building_id, equipment_id);
         if let Some(existing) = self.pending.get(&key) {
             if existing
-                .batches
+                .inputs
                 .first()
-                .is_some_and(|first| first.schema() != batch.schema())
+                .is_some_and(|first| first.batch.schema() != batch.schema())
             {
                 bail!(
                     "micro-batch schema changed before flush for {}/{}",
@@ -143,12 +184,12 @@ impl MicroBatchHistorian {
             .pending
             .entry(key.clone())
             .or_insert_with(|| PendingBatch {
-                batches: Vec::new(),
+                inputs: Vec::new(),
                 rows: 0,
                 first_buffered_at: now,
             });
         pending.rows += rows;
-        pending.batches.push(batch);
+        pending.inputs.push(PendingInput { batch, token });
 
         if pending.rows >= self.flush_rows {
             return Ok(vec![self.flush_key(&key, FlushReason::RowThreshold)?]);
@@ -201,14 +242,25 @@ impl MicroBatchHistorian {
             .get(key)
             .ok_or_else(|| anyhow!("micro-batch key is not pending"))?;
         let rows = pending.rows;
-        let combined = match pending.batches.as_slice() {
-            [only] => only.clone(),
-            batches => {
-                let schema = batches
+        let provenance: Vec<BatchProvenance> = pending
+            .inputs
+            .iter()
+            .map(|input| BatchProvenance {
+                rows: input.batch.num_rows(),
+                token: input.token,
+            })
+            .collect();
+        let combined = match pending.inputs.as_slice() {
+            [only] => only.batch.clone(),
+            inputs => {
+                let schema = inputs
                     .first()
                     .ok_or_else(|| anyhow!("pending micro-batch has no record batches"))?
+                    .batch
                     .schema();
-                concat_batches(&schema, batches)?
+                let batches: Vec<RecordBatch> =
+                    inputs.iter().map(|input| input.batch.clone()).collect();
+                concat_batches(&schema, &batches)?
             }
         };
 
@@ -217,6 +269,7 @@ impl MicroBatchHistorian {
                 .write_history_batch(&key.building_id, &key.equipment_id, &combined)?;
 
         // Remove only after every immutable part was successfully published.
+        // Provenance is the input list that was encoded, not a later guess.
         self.pending.remove(key);
         Ok(MicroBatchFlush {
             building_id: key.building_id.clone(),
@@ -224,6 +277,7 @@ impl MicroBatchHistorian {
             rows,
             reason,
             parts,
+            provenance,
         })
     }
 }
@@ -333,6 +387,87 @@ mod tests {
         assert_eq!(flushed.len(), 1);
         assert_eq!(flushed[0].reason, FlushReason::TimeThreshold);
         assert_eq!(historian.pending_keys(), 0);
+    }
+
+    #[test]
+    fn time_and_row_flushes_return_only_the_published_batch_tokens() {
+        let tmp = TempDir::new().unwrap();
+        let start = Instant::now();
+        let mut timed_historian = historian(&tmp, 2, Duration::from_secs(30));
+        assert!(timed_historian
+            .push_at_with_token(
+                "building-local",
+                "equipment-a",
+                batch_for_equipment(&["2026-08-20T12:00:00Z"], "equipment-a"),
+                start,
+                Some(11),
+            )
+            .unwrap()
+            .is_empty());
+        assert!(timed_historian
+            .push_at_with_token(
+                "building-local",
+                "equipment-b",
+                batch_for_equipment(&["2026-08-20T12:00:00Z"], "equipment-b"),
+                start,
+                Some(22),
+            )
+            .unwrap()
+            .is_empty());
+        let timed = timed_historian
+            .flush_due_at(start + Duration::from_secs(30))
+            .unwrap();
+        let mut tokens: Vec<_> = timed
+            .iter()
+            .flat_map(|flush| flush.provenance.iter().map(|item| (item.token, item.rows)))
+            .collect();
+        tokens.sort();
+        assert_eq!(tokens, vec![(Some(11), 1), (Some(22), 1)]);
+        assert!(timed.iter().all(|flush| flush
+            .provenance
+            .iter()
+            .map(|item| item.rows)
+            .sum::<usize>()
+            == flush.rows));
+
+        let mut row_historian = historian(&tmp, 2, Duration::from_secs(60));
+        row_historian
+            .push_at_with_token(
+                "building-local",
+                "equipment-a",
+                batch_for_equipment(&["2026-08-20T12:00:00Z"], "equipment-a"),
+                start,
+                Some(1),
+            )
+            .unwrap();
+        let flushed = row_historian
+            .push_at_with_token(
+                "building-local",
+                "equipment-a",
+                batch_for_equipment(&["2026-08-20T12:05:00Z"], "equipment-a"),
+                start,
+                Some(2),
+            )
+            .unwrap();
+        assert_eq!(
+            flushed[0]
+                .provenance
+                .iter()
+                .map(|item| item.token)
+                .collect::<Vec<_>>(),
+            vec![Some(1), Some(2)]
+        );
+        assert!(row_historian
+            .push_at_with_token(
+                "building-local",
+                "equipment-b",
+                batch_for_equipment(&["2026-08-20T12:00:00Z"], "equipment-b"),
+                start,
+                Some(3),
+            )
+            .unwrap()
+            .is_empty());
+        assert_eq!(row_historian.pending_rows(), 1);
     }
 
     #[test]

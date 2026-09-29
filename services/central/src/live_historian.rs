@@ -5,13 +5,13 @@
 //! come from trusted/operator-authored fieldbus metadata; this module never
 //! parses BACnet/REST point IDs to invent historian identity.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fmt;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bytes::Bytes;
@@ -89,6 +89,15 @@ pub struct PersistedMessageGroup {
     pub building_id: String,
     pub equipment_id: String,
     pub rows: usize,
+}
+
+#[derive(Clone, Debug)]
+struct BufferedProvenance {
+    message_id: Uuid,
+    edge_id: String,
+    building_id: String,
+    equipment_id: String,
+    rows: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -197,6 +206,10 @@ fn run_object_store<F, T>(future: F) -> Result<T>
 where
     F: Future<Output = object_store::Result<T>>,
 {
+    // Production publication runs on the dedicated `openfdd-live-writer` thread,
+    // which has no Tokio context. That path builds a private current-thread
+    // runtime below. `block_in_place` stays only for a caller that is already
+    // on a multi-thread runtime and is not inside `spawn_blocking`.
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
         match handle.runtime_flavor() {
             tokio::runtime::RuntimeFlavor::MultiThread => {
@@ -348,7 +361,10 @@ pub struct LiveHistorian {
     latest_persisted_timestamp_utc: Option<DateTime<Utc>>,
     parquet_root: Option<PathBuf>,
     pending_type_stamps: BTreeMap<EquipmentKey, String>,
-    pending_message_ids: BTreeMap<EquipmentKey, Vec<(Uuid, usize, String)>>,
+    /// Token attached to a buffered batch. Resolved only from a flush report
+    /// that lists that token, including time-threshold and shutdown flushes.
+    provenance: HashMap<u64, BufferedProvenance>,
+    next_provenance_token: u64,
 }
 
 impl LiveHistorian {
@@ -425,7 +441,8 @@ impl LiveHistorian {
             latest_persisted_timestamp_utc,
             parquet_root,
             pending_type_stamps: BTreeMap::new(),
-            pending_message_ids: BTreeMap::new(),
+            provenance: HashMap::new(),
+            next_provenance_token: 1,
         })
     }
 
@@ -439,34 +456,53 @@ impl LiveHistorian {
             ..LiveHistorianIngest::default()
         };
         for ((building_id, equipment_id), batch) in groups {
-            let key = (building_id.clone(), equipment_id.clone());
-            self.pending_message_ids
-                .entry(key.clone())
-                .or_default()
-                .push((env.message_id, batch.num_rows(), env.edge_id.clone()));
-            let flushes = self
-                .batches
-                .push(building_id, equipment_id, batch)
-                .context("buffer canonical live historian batch");
+            let token = self.next_provenance_token;
+            self.next_provenance_token = self.next_provenance_token.saturating_add(1);
+            self.provenance.insert(
+                token,
+                BufferedProvenance {
+                    message_id: env.message_id,
+                    edge_id: env.edge_id.clone(),
+                    building_id: building_id.clone(),
+                    equipment_id: equipment_id.clone(),
+                    rows: batch.num_rows(),
+                },
+            );
+            let flushes =
+                self.batches
+                    .push_with_token(building_id, equipment_id, batch, Some(token));
             let flushes = match flushes {
                 Ok(flushes) => flushes,
                 Err(error) => {
-                    if let Some(ids) = self.pending_message_ids.get_mut(&key) {
-                        ids.pop();
-                        if ids.is_empty() {
-                            self.pending_message_ids.remove(&key);
-                        }
-                    }
-                    return Err(error);
+                    self.provenance.remove(&token);
+                    return Err(error.context("buffer canonical live historian batch"));
                 }
             };
-            self.apply_flushes(&flushes, &mut report)?;
+            if let Err(error) = self.apply_flushes(&flushes, &mut report) {
+                self.provenance.remove(&token);
+                return Err(error);
+            }
         }
         Ok(report)
     }
 
     pub fn flush_due(&mut self) -> Result<LiveHistorianIngest> {
-        let flushes = self.batches.flush_due()?;
+        self.flush_due_at(Instant::now())
+    }
+
+    /// Publish every batch still buffered for this historian, ignoring the
+    /// row and time thresholds. Local HTTP ingest calls this before it
+    /// acknowledges a sample so a single row is durable without waiting for
+    /// the MQTT micro-batch interval.
+    pub fn publish_pending(&mut self) -> Result<LiveHistorianIngest> {
+        let flushes = self.batches.shutdown_flush()?;
+        let mut report = LiveHistorianIngest::default();
+        self.apply_flushes(&flushes, &mut report)?;
+        Ok(report)
+    }
+
+    fn flush_due_at(&mut self, now: Instant) -> Result<LiveHistorianIngest> {
+        let flushes = self.batches.flush_due_at(now)?;
         let mut report = LiveHistorianIngest::default();
         self.apply_flushes(&flushes, &mut report)?;
         Ok(report)
@@ -496,36 +532,45 @@ impl LiveHistorian {
     ) -> Result<()> {
         report.flushes += flushes.len();
         for flush in flushes {
+            let mut resolved = Vec::with_capacity(flush.provenance.len());
+            for item in &flush.provenance {
+                let Some(token) = item.token else {
+                    bail!("published historian batch is missing receipt provenance");
+                };
+                let Some(note) = self.provenance.get(&token) else {
+                    bail!("published historian batch {token} has no receipt provenance");
+                };
+                if note.rows != item.rows
+                    || note.building_id != flush.building_id
+                    || note.equipment_id != flush.equipment_id
+                {
+                    bail!("published historian batch does not match its receipt provenance");
+                }
+                resolved.push((token, note.clone()));
+            }
+            let proven_rows: usize = resolved.iter().map(|(_, note)| note.rows).sum();
+            if proven_rows != flush.rows {
+                bail!(
+                    "published flush of {} rows does not match receipt provenance of {proven_rows} rows",
+                    flush.rows
+                );
+            }
+            for (token, _) in &resolved {
+                self.provenance.remove(token);
+            }
             report.persisted_rows += flush.rows;
-            if let Some(ids) = self
-                .pending_message_ids
-                .get_mut(&(flush.building_id.clone(), flush.equipment_id.clone()))
-            {
-                let mut remaining = flush.rows;
-                while remaining > 0 && !ids.is_empty() {
-                    let (message_id, queued_rows, edge_id) = &mut ids[0];
-                    let rows = remaining.min(*queued_rows);
-                    report
-                        .persisted_message_ids
-                        .extend(std::iter::repeat_n(*message_id, rows));
-                    report.persisted_message_groups.push(PersistedMessageGroup {
-                        message_id: *message_id,
-                        scope: self.scope.clone(),
-                        edge_id: edge_id.clone(),
-                        building_id: flush.building_id.clone(),
-                        equipment_id: flush.equipment_id.clone(),
-                        rows,
-                    });
-                    *queued_rows -= rows;
-                    remaining -= rows;
-                    if *queued_rows == 0 {
-                        ids.remove(0);
-                    }
-                }
-                if ids.is_empty() {
-                    self.pending_message_ids
-                        .remove(&(flush.building_id.clone(), flush.equipment_id.clone()));
-                }
+            for (_, note) in resolved {
+                report
+                    .persisted_message_ids
+                    .extend(std::iter::repeat_n(note.message_id, note.rows));
+                report.persisted_message_groups.push(PersistedMessageGroup {
+                    message_id: note.message_id,
+                    scope: self.scope.clone(),
+                    edge_id: note.edge_id,
+                    building_id: note.building_id,
+                    equipment_id: note.equipment_id,
+                    rows: note.rows,
+                });
             }
             for part in &flush.parts {
                 let timestamp = DateTime::parse_from_rfc3339(&part.last_timestamp_utc)
@@ -582,6 +627,190 @@ impl LiveHistorian {
             }
         }
     }
+}
+
+enum WriterCommand {
+    Ingest {
+        scope: String,
+        envelope: TelemetryEnvelope,
+        reply: tokio::sync::oneshot::Sender<Result<LiveHistorianIngest>>,
+    },
+    Flush {
+        graceful: bool,
+        reply: tokio::sync::oneshot::Sender<Result<LiveHistorianIngest>>,
+    },
+    PublishPending {
+        scope: String,
+        reply: tokio::sync::oneshot::Sender<Result<LiveHistorianIngest>>,
+    },
+    #[cfg(test)]
+    Probe {
+        reply: tokio::sync::oneshot::Sender<bool>,
+    },
+    Shutdown,
+}
+
+/// Owns every canonical live historian and performs Parquet publication on one
+/// blocking thread. Request handlers await the reply; they do not publish from
+/// the async runtime or the shared Tokio blocking pool.
+pub struct LiveWriter {
+    tx: std::sync::mpsc::Sender<WriterCommand>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl LiveWriter {
+    pub fn start() -> Self {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let thread = std::thread::Builder::new()
+            .name("openfdd-live-writer".into())
+            .spawn(move || writer_loop(rx))
+            .expect("openfdd live writer thread");
+        Self {
+            tx,
+            thread: Some(thread),
+        }
+    }
+
+    pub async fn ingest(
+        &self,
+        scope: &str,
+        envelope: &TelemetryEnvelope,
+    ) -> Result<LiveHistorianIngest> {
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        self.tx
+            .send(WriterCommand::Ingest {
+                scope: scope.to_string(),
+                envelope: envelope.clone(),
+                reply: reply_tx,
+            })
+            .map_err(|_| anyhow!("live historian writer stopped"))?;
+        reply_rx
+            .await
+            .map_err(|_| anyhow!("live historian writer dropped the reply"))?
+    }
+
+    pub async fn flush(&self, graceful: bool) -> Result<LiveHistorianIngest> {
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        self.tx
+            .send(WriterCommand::Flush {
+                graceful,
+                reply: reply_tx,
+            })
+            .map_err(|_| anyhow!("live historian writer stopped"))?;
+        reply_rx
+            .await
+            .map_err(|_| anyhow!("live historian writer dropped the reply"))?
+    }
+
+    pub async fn publish_pending(&self, scope: &str) -> Result<LiveHistorianIngest> {
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        self.tx
+            .send(WriterCommand::PublishPending {
+                scope: scope.to_string(),
+                reply: reply_tx,
+            })
+            .map_err(|_| anyhow!("live historian writer stopped"))?;
+        reply_rx
+            .await
+            .map_err(|_| anyhow!("live historian writer dropped the reply"))?
+    }
+
+    #[cfg(test)]
+    pub async fn runs_without_tokio_context(&self) -> Result<bool> {
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        self.tx
+            .send(WriterCommand::Probe { reply: reply_tx })
+            .map_err(|_| anyhow!("live historian writer stopped"))?;
+        reply_rx
+            .await
+            .map_err(|_| anyhow!("live historian writer dropped the reply"))
+    }
+}
+
+impl Drop for LiveWriter {
+    fn drop(&mut self) {
+        let _ = self.tx.send(WriterCommand::Shutdown);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+fn writer_loop(rx: std::sync::mpsc::Receiver<WriterCommand>) {
+    let mut historians: HashMap<String, LiveHistorian> = HashMap::new();
+    while let Ok(command) = rx.recv() {
+        match command {
+            WriterCommand::Shutdown => break,
+            WriterCommand::Ingest {
+                scope,
+                envelope,
+                reply,
+            } => {
+                let _ = reply.send(ingest_scoped(&mut historians, &scope, &envelope));
+            }
+            WriterCommand::Flush { graceful, reply } => {
+                let _ = reply.send(flush_all(&mut historians, graceful));
+            }
+            WriterCommand::PublishPending { scope, reply } => {
+                let _ = reply.send(publish_pending_scope(&mut historians, &scope));
+            }
+            #[cfg(test)]
+            WriterCommand::Probe { reply } => {
+                let _ = reply.send(tokio::runtime::Handle::try_current().is_err());
+            }
+        }
+    }
+}
+
+fn ingest_scoped(
+    historians: &mut HashMap<String, LiveHistorian>,
+    scope: &str,
+    envelope: &TelemetryEnvelope,
+) -> Result<LiveHistorianIngest> {
+    if !historians.contains_key(scope) {
+        let writer = LiveHistorian::from_env_scoped_for(scope)?;
+        historians.insert(scope.to_string(), writer);
+    }
+    let Some(writer) = historians.get_mut(scope) else {
+        bail!("live historian writer missing after insert");
+    };
+    writer.ingest_envelope(envelope)
+}
+
+fn publish_pending_scope(
+    historians: &mut HashMap<String, LiveHistorian>,
+    scope: &str,
+) -> Result<LiveHistorianIngest> {
+    let Some(historian) = historians.get_mut(scope) else {
+        return Ok(LiveHistorianIngest::default());
+    };
+    historian.publish_pending()
+}
+
+fn flush_all(
+    historians: &mut HashMap<String, LiveHistorian>,
+    graceful: bool,
+) -> Result<LiveHistorianIngest> {
+    let mut combined = LiveHistorianIngest::default();
+    for historian in historians.values_mut() {
+        let report = if graceful {
+            historian.shutdown_flush()?
+        } else {
+            historian.flush_due()?
+        };
+        combined.flushes += report.flushes;
+        combined.persisted_rows += report.persisted_rows;
+        combined
+            .persisted_message_ids
+            .extend(report.persisted_message_ids);
+        combined
+            .persisted_message_groups
+            .extend(report.persisted_message_groups);
+        combined.latest_persisted_timestamp_utc = combined
+            .latest_persisted_timestamp_utc
+            .max(report.latest_persisted_timestamp_utc);
+    }
+    Ok(combined)
 }
 
 #[derive(Debug, Clone)]
@@ -1054,5 +1283,100 @@ mod tests {
             key.as_ref(),
             "tenant-a/history/building_id=BUILDING_100/equipment_id=AHU_1/year=2026/month=08/part-x.parquet"
         );
+    }
+
+    fn tagged_point(equipment_id: &str, role: &str, value: f64) -> TelemetryPoint {
+        TelemetryPoint {
+            id: format!("point-{equipment_id}-{role}"),
+            display_name: Some(role.into()),
+            kind: Some(ValueKind::Number),
+            value: json!(value),
+            unit: None,
+            quality: Quality::Good,
+            tags: json!({
+                "building_id": "building-local",
+                "equipment_id": equipment_id,
+                "role": role,
+            })
+            .as_object()
+            .cloned()
+            .unwrap(),
+        }
+    }
+
+    fn envelope_for(edge_id: &str, points: Vec<TelemetryPoint>) -> TelemetryEnvelope {
+        let mut env =
+            TelemetryEnvelope::new("building-local", edge_id, Protocol::Bacnet, 1, points);
+        env.observed_at = DateTime::parse_from_rfc3339("2026-08-21T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        env
+    }
+
+    #[test]
+    fn time_flush_provenance_lists_only_published_batches() {
+        let tmp = TempDir::new().unwrap();
+        let config = HistorianConfig {
+            storage_url: StorageUrl::File {
+                root: tmp.path().to_path_buf(),
+            },
+            flush_rows: 10,
+            flush_seconds: 60,
+            target_file_mb: 128,
+            compaction_min_files: 8,
+            compaction_enabled: true,
+            query_memory_mb: 512,
+            spill_directory: None,
+            legacy_parquet_root: None,
+        };
+        let mut live =
+            LiveHistorian::from_config_with_scope(&config, "tenant=-;building=building-local")
+                .unwrap();
+        let first = envelope_for("edge-a", vec![tagged_point("equipment-a", "sat", 55.0)]);
+        let second = envelope_for("edge-b", vec![tagged_point("equipment-b", "sat", 56.0)]);
+        let first_id = first.message_id;
+        let second_id = second.message_id;
+        assert!(live
+            .ingest_envelope(&first)
+            .unwrap()
+            .persisted_message_groups
+            .is_empty());
+        assert!(live
+            .ingest_envelope(&second)
+            .unwrap()
+            .persisted_message_groups
+            .is_empty());
+        let report = live
+            .flush_due_at(std::time::Instant::now() + std::time::Duration::from_secs(120))
+            .unwrap();
+        let mut groups = report.persisted_message_groups;
+        groups.sort_by_key(|group| group.edge_id.clone());
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].message_id, first_id);
+        assert_eq!(groups[0].edge_id, "edge-a");
+        assert_eq!(groups[0].equipment_id, "equipment-a");
+        assert_eq!(groups[0].rows, 1);
+        assert_eq!(groups[0].scope, "tenant=-;building=building-local");
+        assert_eq!(groups[1].message_id, second_id);
+        assert_eq!(groups[1].edge_id, "edge-b");
+        assert_eq!(report.persisted_rows, 2);
+
+        let third = envelope_for("edge-c", vec![tagged_point("equipment-c", "sat", 57.0)]);
+        let third_id = third.message_id;
+        assert!(live
+            .ingest_envelope(&third)
+            .unwrap()
+            .persisted_message_groups
+            .is_empty());
+        let later = live.shutdown_flush().unwrap();
+        assert_eq!(later.persisted_message_groups.len(), 1);
+        assert_eq!(later.persisted_message_groups[0].message_id, third_id);
+        assert_eq!(later.persisted_message_groups[0].edge_id, "edge-c");
+    }
+
+    #[tokio::test]
+    async fn dedicated_writer_publishes_outside_the_tokio_runtime() {
+        let writer = LiveWriter::start();
+        assert!(writer.runs_without_tokio_context().await.unwrap());
     }
 }

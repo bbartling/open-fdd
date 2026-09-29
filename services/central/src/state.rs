@@ -1,6 +1,7 @@
 //! Shared central runtime state.
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -12,11 +13,12 @@ use openfdd_contracts::{CommandAck, CommandEnvelope, TelemetryEnvelope};
 use openfdd_mqtt::AsyncClient;
 use serde::Deserialize;
 use serde::Serialize;
-use tokio::sync::{Mutex as AsyncMutex, Semaphore};
+use tokio::sync::Mutex as AsyncMutex;
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::auth::AuthConfig;
-use crate::live_historian::{LiveHistorian, LiveHistorianIngest, PersistedMessageGroup};
+use crate::live_historian::{LiveHistorianIngest, LiveWriter, PersistedMessageGroup};
 use crate::tenant_budget::TenantBudgetTracker;
 
 const MQTT_MONITOR_CAPACITY: usize = 100;
@@ -24,14 +26,10 @@ const MQTT_PREVIEW_BYTES: usize = 4096;
 const LOCAL_RECEIPTS_FILE: &str = "state/local-fieldbus-receipts.jsonl";
 const RECEIPT_CAPACITY: usize = 50_000;
 const PENDING_RECEIPT_CAPACITY: usize = 10_000;
-static LIVE_WRITER_PERMITS: std::sync::OnceLock<std::sync::Arc<Semaphore>> =
-    std::sync::OnceLock::new();
-
-fn live_writer_permits() -> std::sync::Arc<Semaphore> {
-    LIVE_WRITER_PERMITS
-        .get_or_init(|| std::sync::Arc::new(Semaphore::new(1)))
-        .clone()
-}
+/// Compaction folds the append log. It does not expire committed tombstones:
+/// a replay of a committed message id must stay a duplicate for the life of
+/// the bounded ledger. Pending envelopes are never reduced to tombstones.
+const RECEIPT_COMPACTION_BYTES: u64 = 8 * 1024 * 1024;
 
 fn equipment_key(building_id: &str, equipment_id: &str) -> String {
     format!("{building_id}\u{1f}{equipment_id}")
@@ -202,7 +200,8 @@ pub struct AppState {
     /// Wave L L5 — per-tenant sliding-window budgets (noop when disabled).
     pub tenant_budgets: TenantBudgetTracker,
     /// One canonical writer shared by MQTT and local HTTP delivery.
-    pub live_historian: std::sync::Arc<Mutex<HashMap<String, LiveHistorian>>>,
+    /// Parquet publication runs on this writer's dedicated blocking thread.
+    pub live_writer: LiveWriter,
     /// Durable pending/committed receipt ledger for replay-safe local ingest.
     pub ingest_receipts: AsyncMutex<HashMap<(String, String, Uuid), IngestReceipt>>,
     pub ingest_receipts_path: PathBuf,
@@ -228,7 +227,7 @@ impl AppState {
             mqtt_monitor: Mutex::new(MqttMonitorState::default()),
             login_failures: Mutex::new(HashMap::new()),
             tenant_budgets: TenantBudgetTracker::new(),
-            live_historian: std::sync::Arc::new(Mutex::new(HashMap::new())),
+            live_writer: LiveWriter::start(),
             ingest_receipts: AsyncMutex::new(load_receipts()),
             ingest_receipts_path: receipts_path(),
             recovery_started: AtomicBool::new(false),
@@ -312,13 +311,23 @@ impl AppState {
         }
     }
 
-    pub async fn release_receipt(&self, scope: &str, edge_id: &str, message_id: Uuid) {
+    pub async fn release_receipt(&self, scope: &str, edge_id: &str, message_id: Uuid) -> bool {
         let mut receipts = self.ingest_receipts.lock().await;
-        receipts.remove(&(scope.to_string(), edge_id.to_string(), message_id));
-        if append_receipt_event(&self.ingest_receipts_path, scope, edge_id, message_id, None).await
-        {
-            maybe_compact_receipt_journal(&self.ingest_receipts_path, &receipts).await;
+        let key = (scope.to_string(), edge_id.to_string(), message_id);
+        if !receipts.contains_key(&key) {
+            return true;
         }
+        // The delete tombstone must hit disk before the in-memory entry is
+        // forgotten. A failed append leaves the pending receipt in place so
+        // restart replay cannot lose it and a later retry cannot double-insert
+        // around a missing tombstone.
+        if !append_receipt_event(&self.ingest_receipts_path, scope, edge_id, message_id, None).await
+        {
+            return false;
+        }
+        receipts.remove(&key);
+        maybe_compact_receipt_journal(&self.ingest_receipts_path, &receipts).await;
+        true
     }
 
     #[cfg(test)]
@@ -445,77 +454,45 @@ impl AppState {
         scope: &str,
         env: &TelemetryEnvelope,
     ) -> anyhow::Result<LiveHistorianIngest> {
-        let permit = live_writer_permits()
-            .acquire_owned()
-            .await
-            .map_err(|_| anyhow::anyhow!("live historian writer stopped"))?;
-        let historian = std::sync::Arc::clone(&self.live_historian);
-        let writer_scope = scope.to_string();
-        let envelope = env.clone();
-        let report = tokio::task::spawn_blocking(move || -> anyhow::Result<LiveHistorianIngest> {
-            let mut historian = historian
-                .lock()
-                .map_err(|_| anyhow::anyhow!("live historian writer lock poisoned"))?;
-            if !historian.contains_key(&writer_scope) {
-                let writer = LiveHistorian::from_env_scoped_for(&writer_scope)?;
-                historian.insert(writer_scope.clone(), writer);
-            }
-            let writer = historian
-                .get_mut(&writer_scope)
-                .expect("live historian inserted above");
-            writer.ingest_envelope(&envelope)
-        })
-        .await
-        .map_err(|error| anyhow::anyhow!("live historian writer task failed: {error}"))??;
-        drop(permit);
-        self.commit_persisted_receipts_for(scope, &env.edge_id, &report.persisted_message_groups)
+        let report = self.live_writer.ingest(scope, env).await?;
+        self.commit_published_groups(&report.persisted_message_groups)
             .await;
         Ok(report)
     }
 
     pub async fn flush_live(&self, graceful: bool) -> anyhow::Result<LiveHistorianIngest> {
-        let permit = live_writer_permits()
-            .acquire_owned()
-            .await
-            .map_err(|_| anyhow::anyhow!("live historian writer stopped"))?;
-        let historian = std::sync::Arc::clone(&self.live_historian);
-        let report = tokio::task::spawn_blocking(move || -> anyhow::Result<LiveHistorianIngest> {
-            let mut historian = historian
-                .lock()
-                .map_err(|_| anyhow::anyhow!("live historian writer lock poisoned"))?;
-            let mut combined = LiveHistorianIngest::default();
-            for historian in historian.values_mut() {
-                let report = if graceful {
-                    historian.shutdown_flush()?
-                } else {
-                    historian.flush_due()?
-                };
-                combined.flushes += report.flushes;
-                combined.persisted_rows += report.persisted_rows;
-                combined
-                    .persisted_message_ids
-                    .extend(report.persisted_message_ids);
-                combined
-                    .persisted_message_groups
-                    .extend(report.persisted_message_groups);
-                combined.latest_persisted_timestamp_utc = combined
-                    .latest_persisted_timestamp_utc
-                    .max(report.latest_persisted_timestamp_utc);
-            }
-            Ok(combined)
-        })
-        .await
-        .map_err(|error| anyhow::anyhow!("live historian writer task failed: {error}"))??;
-        drop(permit);
-        for group in &report.persisted_message_groups {
-            self.commit_persisted_receipts_for(
-                &group.scope,
-                &group.edge_id,
-                std::slice::from_ref(group),
-            )
+        let report = self.live_writer.flush(graceful).await?;
+        self.commit_published_groups(&report.persisted_message_groups)
             .await;
-        }
         Ok(report)
+    }
+
+    /// Publish the scope's buffered rows and commit those receipts. Local HTTP
+    /// uses this so the response is not a 202 while the row waits for the
+    /// shared micro-batch threshold.
+    pub async fn publish_pending(&self, scope: &str) -> anyhow::Result<LiveHistorianIngest> {
+        let report = self.live_writer.publish_pending(scope).await?;
+        self.commit_published_groups(&report.persisted_message_groups)
+            .await;
+        Ok(report)
+    }
+
+    /// Commit each published group under the scope and edge carried on that
+    /// group. A row-threshold flush can include an earlier edge's batch; using
+    /// the triggering request's edge would leave that receipt pending after
+    /// its rows were already published.
+    async fn commit_published_groups(&self, groups: &[PersistedMessageGroup]) -> usize {
+        let mut committed = 0;
+        for group in groups {
+            committed += self
+                .commit_persisted_receipts_for(
+                    &group.scope,
+                    &group.edge_id,
+                    std::slice::from_ref(group),
+                )
+                .await;
+        }
+        committed
     }
 
     pub async fn receipt_status(
@@ -755,54 +732,110 @@ fn enforce_receipt_capacity(receipts: &mut HashMap<(String, String, Uuid), Inges
     receipts.len() <= RECEIPT_CAPACITY
 }
 
-const RECEIPT_COMPACTION_BYTES: u64 = 8 * 1024 * 1024;
-
 /// Rewrite the receipt journal from the live map once it grows beyond a fixed
-/// bound. The temporary file is fsynced before rename, so a crash leaves either
-/// the old complete journal or the new complete snapshot.
+/// bound. Pending receipts keep their envelopes for crash replay. Committed
+/// receipts become tombstones (identity, status, and row counts, without point
+/// payloads). Released ids are already absent from the map and stay absent.
+/// A failed snapshot leaves the previous journal in place.
 async fn maybe_compact_receipt_journal(
     path: &std::path::Path,
     receipts: &HashMap<(String, String, Uuid), IngestReceipt>,
 ) {
+    maybe_compact_receipt_journal_at(path, receipts, RECEIPT_COMPACTION_BYTES).await;
+}
+
+async fn maybe_compact_receipt_journal_at(
+    path: &std::path::Path,
+    receipts: &HashMap<(String, String, Uuid), IngestReceipt>,
+    min_bytes: u64,
+) {
     let oversized = tokio::fs::metadata(path)
         .await
-        .map(|metadata| metadata.len() >= RECEIPT_COMPACTION_BYTES)
+        .map(|metadata| metadata.len() >= min_bytes)
         .unwrap_or(false);
     if !oversized {
         return;
     }
-    let entries: Vec<ReceiptJournalEntry> = receipts
+    let entries = snapshot_entries(receipts);
+    if entries.len() != receipts.len() {
+        warn!("receipt journal compaction refused because the snapshot dropped a live receipt");
+        return;
+    }
+    let path = path.to_path_buf();
+    let compacted =
+        tokio::task::spawn_blocking(move || compact_receipt_snapshot(&path, &entries)).await;
+    match compacted {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            warn!(%error, "receipt journal compaction failed; previous journal retained");
+        }
+        Err(error) => {
+            warn!(%error, "receipt journal compaction task failed; previous journal retained");
+        }
+    }
+}
+
+fn snapshot_entries(
+    receipts: &HashMap<(String, String, Uuid), IngestReceipt>,
+) -> Vec<ReceiptJournalEntry> {
+    let mut entries: Vec<ReceiptJournalEntry> = receipts
         .values()
         .map(|receipt| ReceiptJournalEntry {
             scope: receipt.scope.clone(),
             edge_id: receipt.edge_id.clone(),
             message_id: receipt.message_id,
-            receipt: Some(receipt.clone()),
+            receipt: Some(compacted_receipt(receipt)),
         })
         .collect();
-    let path = path.to_path_buf();
-    let _ = tokio::task::spawn_blocking(move || {
-        use std::io::Write;
-        let temp = path.with_extension("jsonl.compact.tmp");
+    entries.sort_by(|left, right| {
+        (&left.scope, &left.edge_id, left.message_id).cmp(&(
+            &right.scope,
+            &right.edge_id,
+            right.message_id,
+        ))
+    });
+    entries
+}
+
+fn compacted_receipt(receipt: &IngestReceipt) -> IngestReceipt {
+    let mut tombstone = receipt.clone();
+    if tombstone.status == IngestReceiptStatus::Committed {
+        tombstone.envelope.points.clear();
+    }
+    tombstone
+}
+
+fn compact_receipt_snapshot(
+    path: &std::path::Path,
+    entries: &[ReceiptJournalEntry],
+) -> std::io::Result<()> {
+    let temp = path.with_extension("jsonl.compact.tmp");
+    let write_snapshot = (|| -> std::io::Result<()> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         let mut file = std::fs::OpenOptions::new()
             .create(true)
             .truncate(true)
             .write(true)
-            .open(&temp)
-            .ok()?;
+            .open(&temp)?;
         for entry in entries {
-            let mut line = serde_json::to_vec(&entry).ok()?;
+            let mut line = serde_json::to_vec(entry)
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
             line.push(b'\n');
-            file.write_all(&line).ok()?;
+            file.write_all(&line)?;
         }
-        file.sync_all().ok()?;
-        std::fs::rename(&temp, &path).ok()?;
+        file.sync_all()?;
+        std::fs::rename(&temp, path)?;
         if let Some(parent) = path.parent() {
-            std::fs::File::open(parent).ok()?.sync_all().ok()?;
+            std::fs::File::open(parent)?.sync_all()?;
         }
-        Some(())
-    })
-    .await;
+        Ok(())
+    })();
+    if write_snapshot.is_err() {
+        let _ = std::fs::remove_file(&temp);
+    }
+    write_snapshot
 }
 
 #[cfg(test)]
@@ -1005,5 +1038,182 @@ mod tests {
                 .await,
             Some(2)
         );
+    }
+
+    fn local_envelope(edge_id: &str, equipment_id: &str) -> TelemetryEnvelope {
+        TelemetryEnvelope::new(
+            "building-local",
+            edge_id,
+            openfdd_contracts::Protocol::Bacnet,
+            1,
+            vec![openfdd_contracts::TelemetryPoint {
+                id: format!("point-{equipment_id}"),
+                display_name: None,
+                kind: None,
+                value: serde_json::json!(70.0),
+                unit: None,
+                quality: openfdd_contracts::Quality::Good,
+                tags: serde_json::json!({
+                    "building_id": "building-local",
+                    "equipment_id": equipment_id,
+                    "role": "sat"
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            }],
+        )
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize process environment while the writer thread reads flush settings"
+    )]
+    async fn row_flush_commits_the_buffered_edge_not_only_the_triggering_edge() {
+        let _env = crate::test_env_lock::lock_env();
+        let temp = tempfile::tempdir().unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", temp.path());
+        std::env::set_var(
+            "OPENFDD_STORAGE_URL",
+            format!("file://{}", temp.path().join("history").display()),
+        );
+        std::env::set_var("OPENFDD_PARQUET_FLUSH_ROWS", "2");
+        std::env::set_var("OPENFDD_PARQUET_FLUSH_SECONDS", "3600");
+        std::env::set_var("OPENFDD_MULTI_TENANT", "0");
+        let state = AppState::new();
+        let scope = "tenant=-;building=building-local";
+        let edge_a = local_envelope("edge-a", "equipment-local");
+        let edge_b = local_envelope("edge-b", "equipment-local");
+        let edge_a_id = edge_a.message_id;
+        let edge_b_id = edge_b.message_id;
+        assert!(state.reserve_receipt_at(scope, edge_a.clone()).await);
+        assert!(state.reserve_receipt_at(scope, edge_b.clone()).await);
+        let first = state.ingest_live(scope, &edge_a).await.unwrap();
+        assert!(first.persisted_message_groups.is_empty());
+        let second = state.ingest_live(scope, &edge_b).await.unwrap();
+        assert_eq!(second.persisted_message_groups.len(), 2);
+        assert_eq!(
+            state.receipt_status(scope, "edge-a", edge_a_id).await,
+            Some(IngestReceiptStatus::Committed)
+        );
+        assert_eq!(
+            state.receipt_status(scope, "edge-b", edge_b_id).await,
+            Some(IngestReceiptStatus::Committed)
+        );
+        assert_eq!(
+            state
+                .receipt_persisted_rows(scope, "edge-a", edge_a_id)
+                .await,
+            Some(1)
+        );
+        for key in [
+            "OPENFDD_WORKSPACE",
+            "OPENFDD_STORAGE_URL",
+            "OPENFDD_PARQUET_FLUSH_ROWS",
+            "OPENFDD_PARQUET_FLUSH_SECONDS",
+            "OPENFDD_MULTI_TENANT",
+        ] {
+            std::env::remove_var(key);
+        }
+    }
+
+    #[tokio::test]
+    async fn compaction_keeps_pending_envelopes_and_committed_tombstones() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = AppState::new();
+        state.ingest_receipts_path = temp.path().join("receipts.jsonl");
+        let pending = local_envelope("edge-local", "equipment-pending");
+        let committed = local_envelope("edge-local", "equipment-committed");
+        let released = local_envelope("edge-local", "equipment-released");
+        let pending_id = pending.message_id;
+        let committed_id = committed.message_id;
+        let released_id = released.message_id;
+        let scope = "tenant-a/building-local";
+        assert!(state.reserve_receipt_at(scope, pending).await);
+        assert!(state.reserve_receipt_at(scope, committed.clone()).await);
+        assert!(state.reserve_receipt_at(scope, released).await);
+        assert!(
+            state
+                .commit_receipt(scope, "edge-local", committed_id)
+                .await
+        );
+        assert!(
+            state
+                .release_receipt(scope, "edge-local", released_id)
+                .await
+        );
+        {
+            let receipts = state.ingest_receipts.lock().await;
+            maybe_compact_receipt_journal_at(&state.ingest_receipts_path, &receipts, 0).await;
+        }
+        let reloaded = load_receipts_at(&state.ingest_receipts_path).unwrap();
+        let pending_key = (scope.to_string(), "edge-local".to_string(), pending_id);
+        let committed_key = (scope.to_string(), "edge-local".to_string(), committed_id);
+        let released_key = (scope.to_string(), "edge-local".to_string(), released_id);
+        assert_eq!(
+            reloaded.get(&pending_key).map(|receipt| receipt.status),
+            Some(IngestReceiptStatus::Pending)
+        );
+        assert_eq!(
+            reloaded
+                .get(&pending_key)
+                .map(|receipt| receipt.envelope.points.len()),
+            Some(1)
+        );
+        let committed_receipt = reloaded.get(&committed_key).unwrap();
+        assert_eq!(committed_receipt.status, IngestReceiptStatus::Committed);
+        assert!(committed_receipt.envelope.points.is_empty());
+        assert!(!reloaded.contains_key(&released_key));
+        assert!(
+            !state
+                .reserve_receipt_at(scope, {
+                    let mut copy = committed;
+                    copy.message_id = committed_id;
+                    copy
+                })
+                .await
+        );
+    }
+
+    #[tokio::test]
+    async fn failed_release_keeps_the_pending_receipt() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = AppState::new();
+        state.ingest_receipts_path = temp.path().join("receipts.jsonl");
+        let envelope = local_envelope("edge-local", "equipment-local");
+        let message_id = envelope.message_id;
+        assert!(
+            state
+                .reserve_receipt_at("tenant-a/building-local", envelope)
+                .await
+        );
+        state.ingest_receipts_path = PathBuf::from("/proc/openfdd-receipt-test/receipts.jsonl");
+        assert!(
+            !state
+                .release_receipt("tenant-a/building-local", "edge-local", message_id)
+                .await
+        );
+        assert_eq!(
+            state
+                .receipt_status("tenant-a/building-local", "edge-local", message_id)
+                .await,
+            Some(IngestReceiptStatus::Pending)
+        );
+    }
+
+    #[test]
+    fn failed_compaction_keeps_the_previous_journal() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("receipts.jsonl");
+        let original = b"{\"scope\":\"s\",\"edge_id\":\"e\",\"message_id\":\"00000000-0000-0000-0000-000000000001\",\"receipt\":null}\n";
+        std::fs::write(&path, original).unwrap();
+        let blocking_temp = path.with_extension("jsonl.compact.tmp");
+        std::fs::create_dir(&blocking_temp).unwrap();
+        let error = compact_receipt_snapshot(&path, &[]).unwrap_err();
+        assert!(
+            error.kind() == std::io::ErrorKind::AlreadyExists || error.raw_os_error().is_some()
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), original);
     }
 }

@@ -1,3 +1,12 @@
+## 2026-09-29 — #1061 local ingest correctness (not FQ)
+
+- Local HTTP publishes the request's rows before ACK. HTTP 200 requires a committed receipt with `persisted_rows > 0`. HTTP 202 stays pending, and fieldbus does not treat 202 as delivery success.
+- Receipt durability follows the published micro-batch token, including time flush, and commits each group's own edge.
+- Canonical Parquet publication runs on the `openfdd-live-writer` thread, not the async runtime or the shared blocking pool.
+- Receipt journal compaction retains pending envelopes and committed tombstones, refuses a snapshot that drops a live key, and leaves the previous journal in place when the snapshot fails. Released ids are tombstoned before they leave memory.
+- Local and remote fieldbus sinks enqueue and publish on separate tasks. Acceptance counts the unique persisted row and requires that replay leave that count unchanged.
+- No VERSION bump past 3.5.56. No Railway/GHCR/ACME action. FEC 5007 and #1049 eviction proof stay on the OptiPlex lane.
+
 ## 2026-09-29 — Analytics / RCx cycle-2 local patch (#1019, #1020, #1037)
 
 - Worktree `fix/analytics-rcx-1019-1037` implements bounded mechanical-cooling retain-floor retry, runtime historian scan pruning, and stamp-first RCx equipment selection.

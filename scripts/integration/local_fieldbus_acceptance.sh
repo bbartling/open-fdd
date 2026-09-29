@@ -81,9 +81,57 @@ jq -e '.ok == true and .duplicate == false and .pending == false and (.eligible_
 persisted_rows="$(jq -r '.persisted_rows' "$response_file")"
 
 storage_root="${OPENFDD_ACCEPTANCE_STORAGE_ROOT:-${OPENFDD_STORAGE_ROOT:-workspace/openfdd}}"
-canonical_before="$(find "$storage_root" -type f -name '*.parquet' -size +0c -printf '%p:%s\n' 2>/dev/null | sort | sha256sum | awk '{print $1}')"
-find "$storage_root" -type f -name '*.parquet' -size +0c -print -quit 2>/dev/null | grep -q . || {
-  echo "FAIL: no non-empty Parquet storage found under $storage_root" >&2
+EQUIPMENT="acceptance-equipment"
+query_persisted_rows() {
+  python3 - "$storage_root" "$BUILDING" "$EQUIPMENT" "$OBSERVED_AT" <<'PY'
+import datetime
+import sys
+from pathlib import Path
+
+root, building, equipment, observed = sys.argv[1:]
+try:
+    import pyarrow as pa
+    import pyarrow.compute as pc
+    import pyarrow.parquet as pq
+except ImportError as error:
+    print(f"FAIL: acceptance row query requires pyarrow ({error})", file=sys.stderr)
+    sys.exit(3)
+
+building_part = f"building_id={building}"
+equipment_part = f"equipment_id={equipment}"
+files = [
+    path
+    for path in Path(root).rglob("*.parquet")
+    if building_part in path.parts and equipment_part in path.parts and path.stat().st_size > 0
+]
+if not files:
+    print("0")
+    sys.exit(0)
+# Path components are exact Hive segments, so a longer equipment id is a different partition.
+table = pa.concat_tables([pq.read_table(path, columns=["timestamp_utc", "sample"]) for path in files])
+target = datetime.datetime.fromisoformat(observed.replace("Z", "+00:00"))
+timestamps = table.column("timestamp_utc")
+# Canonical parts store UTC timestamps. Compare on the instant, not a file hash.
+epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+target_us = int((target - epoch).total_seconds() * 1_000_000)
+ts_us = pc.cast(timestamps, pa.timestamp("us", tz="UTC"))
+matched_time = pc.equal(ts_us, pa.scalar(target_us, type=pa.timestamp("us", tz="UTC")))
+matched_value = pc.equal(table.column("sample"), pa.scalar(70.0))
+matched = pc.and_(matched_time, matched_value)
+print(int(pc.sum(pc.cast(matched, pa.int64())).as_py() or 0))
+PY
+}
+if ! row_count="$(query_persisted_rows)"; then
+  query_status=$?
+  echo "FAIL: could not query the persisted acceptance row" >&2
+  exit "$query_status"
+fi
+[[ "$row_count" == "1" ]] || {
+  echo "FAIL: expected exactly one persisted acceptance row, found $row_count" >&2
+  exit 1
+}
+[[ "$persisted_rows" == "$row_count" ]] || {
+  echo "FAIL: receipt persisted_rows $persisted_rows != queried row count $row_count" >&2
   exit 1
 }
 
@@ -101,9 +149,13 @@ jq -e --argjson rows "$persisted_rows" '.ok == true and .persisted_rows == $rows
   echo "FAIL: replay receipt did not report the exact persisted row count ($persisted_rows): $(cat "$replay_file")" >&2
   exit 1
 }
-canonical_after="$(find "$storage_root" -type f -name '*.parquet' -size +0c -printf '%p:%s\n' 2>/dev/null | sort | sha256sum | awk '{print $1}')"
-[[ "$canonical_after" == "$canonical_before" ]] || {
-  echo "FAIL: replay changed canonical Parquet objects (duplicate row risk)" >&2
+if ! row_count_after="$(query_persisted_rows)"; then
+  query_status=$?
+  echo "FAIL: could not query the acceptance row after replay" >&2
+  exit "$query_status"
+fi
+[[ "$row_count_after" == "$row_count" ]] || {
+  echo "FAIL: replay changed the persisted row count from $row_count to $row_count_after" >&2
   exit 1
 }
 
