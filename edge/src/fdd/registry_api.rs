@@ -8,7 +8,7 @@ use fdd_rules::{
     rule_params, run_all_rules_with_overrides, substitute_sql, RuleRegistry, RuleSpec, RunOptions,
 };
 use fdd_sql::{
-    register_historian_building, register_parquet_tree, register_weather_if_present, run_sql,
+    register_historian_building, register_parquet_tree, register_weather_for_building, run_sql,
 };
 use serde_json::{json, Value};
 
@@ -496,38 +496,6 @@ fn walkdir_count(root: &Path, ext: &str) -> usize {
         .count()
 }
 
-fn infer_equipment_type(equipment_id: &str) -> &'static str {
-    match infer_equipment_kind(equipment_id) {
-        "vav" => "VAV",
-        "ahu" => "AHU",
-        "chiller" | "boiler" | "cooling_tower" => "PLANT",
-        "heatpump" => "HEAT_PUMP",
-        "weather" => "WEATHER",
-        _ => "GENERAL",
-    }
-}
-
-fn infer_equipment_kind(equipment_id: &str) -> &'static str {
-    let id = equipment_id.to_ascii_uppercase();
-    if id.contains("WEATHER") {
-        "weather"
-    } else if id.contains("VAV") || id.contains("ZONE") {
-        "vav"
-    } else if id.contains("AHU") || id.contains("RTU") || id.contains("MAU") {
-        "ahu"
-    } else if id.contains("CHILL") {
-        "chiller"
-    } else if id.contains("BOILER") {
-        "boiler"
-    } else if id.contains("TOWER") {
-        "cooling_tower"
-    } else if id.contains("HP") || id.contains("HEAT_PUMP") || id.contains("HEATPUMP") {
-        "heatpump"
-    } else {
-        "unknown"
-    }
-}
-
 fn rule_applies_to_kind(kinds: &[String], kind: &str) -> bool {
     if kinds.is_empty() {
         return true;
@@ -692,7 +660,7 @@ pub fn results_response(building_id: Option<&str>) -> Value {
                     "equipment_id": equipment_id,
                     "equipment_type": crate::equipment_types::api_equipment_type_for(equipment_id, stamped),
                     "equipment_type_raw": stamped,
-                    "equipment_type_source": if stamped.and_then(crate::equipment_types::canonical_kind).is_some() { "package" } else { "id" },
+                    "equipment_type_source": crate::equipment_types::equipment_type_source(stamped),
                     "status": status,
                     "fault_hours": fault_hours,
                     "fault_pct": row.get("fault_pct").and_then(Value::as_f64),
@@ -839,7 +807,7 @@ pub fn series_response_scoped(
         } else if let Err(e) = register_parquet_tree(&ctx, &storage_root).await {
             return json!({"ok": false, "error": e.to_string()});
         }
-        let _ = register_weather_if_present(&ctx, &weather_root).await;
+        let _ = register_weather_for_building(&ctx, &weather_root, scoped_bid.as_deref()).await;
         // Prefer columns present on this equipment's history schema. Required
         // roles still hard-fail when missing; optional roles are skipped so
         // portable SV/PID rules can plot whatever is mapped.
@@ -983,10 +951,17 @@ LIMIT {limit}
                         }
                     }
                 }
+                let stamped_types = crate::equipment_types::load_type_map(
+                    &storage_root,
+                    scoped_bid.as_deref(),
+                );
+                let stamped = stamped_types.get(equipment_id).map(String::as_str);
                 json!({
                     "ok": true,
                     "equipment_id": equipment_id,
-                    "equipment_type": infer_equipment_type(equipment_id),
+                    "equipment_type": crate::equipment_types::api_equipment_type_for(equipment_id, stamped),
+                    "equipment_type_raw": stamped,
+                    "equipment_type_source": crate::equipment_types::equipment_type_source(stamped),
                     "rule_id": rule.rule_id,
                     "roles": columns,
                     "rows": result.rows,

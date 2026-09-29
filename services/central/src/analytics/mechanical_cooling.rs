@@ -251,9 +251,9 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         match historian::descriptive_counts_from_history_filtered(
             QV_MECHANICAL_COOLING,
             req.query.equipment_ids.as_deref(),
-            "mechanical_cooling: OAT bins unavailable — chiller/DX descriptive counts only (VAV excluded)",
+            "mechanical_cooling: OAT bins unavailable — stamped chiller, tower, and heat pump counts only",
             building_id,
-            Some(historian::chiller_like_equipment_sql()),
+            Some(&["chiller", "cooling_tower", "heatpump"]),
         )
         .await
         {
