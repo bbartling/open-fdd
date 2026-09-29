@@ -18,8 +18,17 @@ Registry equipment kinds are `zone_other`, `general`, and `ahu`
 (`sql_rules/registry.yaml` and `CookbookRule` in
 `open_fdd/rules/cookbook_catalog.py`). Stamps `zone_other`, `zone`, `fcu`,
 `fanCoil`, `fanCoilUnit`, and the standalone-DDC aliases canonicalize to
-`zone_other` (`edge/src/equipment_types.rs`). Selection is that stamp and the
-registry kind list.
+`zone_other` (`edge/src/equipment_types.rs`).
+
+Haystack tags stack on one record: an equip carries `equip` + `fanCoilUnit` +
+`zone` together, and each point carries its own markers (`zone` + `air` +
+`temp` + `sensor`, `discharge` + `air` + `temp`, `heating` + `valve` + `cmd`,
+and so on). Open-FDD consumes that stack as **one stamp** plus the **flattened
+point-role map** (`zone-air-temp`, `discharge-air-temp`, `heating-valve`, …).
+The equipment id is only the historian key. Master versus follower is the
+stamp (`zone_other` versus resolved kind `general`) together with whether
+`zone-air-temp` is mapped. Detail:
+[Zone terminals]({{ site.baseurl }}/modeling/zone-terminals/).
 
 | Rule | Screening condition | Confirm |
 | --- | --- | ---: |

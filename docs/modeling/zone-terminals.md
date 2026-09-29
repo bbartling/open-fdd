@@ -20,6 +20,64 @@ Haystack tags for each rule are on the
 
 Open-FDD **ZONE** is a **control definition**, not "VAV boxes only."
 
+## Haystack multi-tag, then the Open-FDD stamp
+
+Project Haystack puts **several markers on one record**. A fan coil is one `equip` that also carries `fanCoilUnit` and `zone` (and usually `hvac`). Each point on that equip is its own record with several markers. Open-FDD does not select the controller by reading the equipment id. It consumes two things from that multi-tag model:
+
+1. **One equipment stamp** — `equipType` or `equipment_type`. Markers `equip` + `fanCoilUnit` + `zone` collapse to a stamp `canonical_kind` maps to `zone_other` (`fanCoil`, `fanCoilUnit`, `fcu`, `zone_other`, `zone`, or a standalone-DDC alias).
+2. **Mapped point roles** — each point's markers flatten to one package key (`zone` + `air` + `temp` + `sensor` → `zone-air-temp`). Ingest sends that key through `haystack_point_to_role` to a SQL column. The pandas oracle uses the Haystack key as the column name.
+
+The equipment id is only the historian key. `AC_1`, a BAS guid, or any other opaque id is valid when the stamp and the point map are present. A missing stamp is not repaired by putting `FCU` or `ZONE` in the id.
+
+| Haystack markers on one record | Open-FDD input |
+|--------------------------------|----------------|
+| Equip: `equip`, `fanCoilUnit`, `zone` | Stamp `equipType: fanCoil` → kind `zone_other` (master) |
+| Equip: follower with no zone sensor | Resolved kind `general` (stamp-based; see below) |
+| Point: `zone`, `air`, `temp`, `sensor` | `zone-air-temp` → `zone_t` |
+| Point: `discharge`, `air`, `temp`, `sensor` | `discharge-air-temp` → `sat` |
+| Point: `heating`, `valve`, `cmd` | `heating-valve` → `htg_valve_pct` |
+| Point: `cooling`, `valve`, `cmd` | `cooling-valve` → `clg_valve_pct` |
+| Point: `damper`, `cmd` and `damper` feedback | `damper-cmd` → `damper_cmd`, `damper` → `damper_pct` |
+| Point: `zone`, `co2`, `sensor` | `zone-co2` → `zone_co2` |
+| Point: `fan`, `status` and `fan`, `cmd` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` |
+| Point: `cooling`, `sp` and `heating`, `sp` | `cooling-sp` → `cooling_sp`, `heating-sp` → `heating_sp` (site °C) |
+| Point: `zone`, `air`, `temp`, `sp` | `zone-air-temp-sp` → `zone_air_temp_sp` |
+
+Compact package map (the shipped ingest shape). The id `AC_1` is opaque. The stamp and the `points` keys are the model:
+
+```json
+{
+  "equipType": "fanCoil",
+  "equip": "AC_1",
+  "points": {
+    "zone-air-temp": "zn_t",
+    "zone-air-temp-sp": "zn_sp",
+    "discharge-air-temp": "da_t",
+    "heating-valve": "htg_cmd",
+    "cooling-valve": "clg_cmd",
+    "damper-cmd": "oa_cmd",
+    "damper": "oa_pos",
+    "zone-co2": "co2",
+    "fan-status": "fan_s",
+    "fan-cmd": "fan_c",
+    "cooling-sp": "clg_sp",
+    "heating-sp": "htg_sp"
+  }
+}
+```
+
+**Master vs follower stays a stamp, plus which roles are mapped.**
+
+| | Master | Follower |
+|--|--------|----------|
+| Haystack equip markers | `equip` + `fanCoilUnit` (or zone DDC) + `zone` | `equip` without a zone-sensor point |
+| Open-FDD stamp | token that `canonical_kind` maps to `zone_other` | resolved kind `general` |
+| Point roles | includes `zone-air-temp` | omits `zone-air-temp`; may still map `zone-air-temp-sp` |
+
+`canonical_kind` does not map the token `general`. Product `kind_for` returns `zone_other` from the master stamps above. The pandas oracle maps a resolved `GENERAL` type to kind `general`, which is on the FCU `equipment_kinds` list. `FCU-SENSOR-NULL` reports zero hours when the `zone_t` column is absent, so a setpoint-only follower is not a dead-sensor fault.
+
+A fan coil's stamp stays `zone_other`. An air handler that also carries these point roles uses an `ahu` stamp. Unit ventilators stay CV AHU (`unitVentilator`), not `fanCoilUnit`.
+
 ## ZONE control (comfort + sensor FDD)
 
 Stamp as **ZONE** (`equipType: zone_other`, `zone`, `fcu`, `fanCoil`, or standalone-DDC aliases). Applies when the asset is a **zone-level** controller or monitor:
@@ -123,4 +181,4 @@ Authoritative product map: `edge/src/equipment_types.rs`. Agent contract: `openf
 
 ## Opaque ids (DM-04)
 
-Stamp wins over folder/id heuristics. Example: `AC_1` with `equipType: ahu` exports as **AHU** (`equipment_type_source: package`), not GENERAL. Inferred VAV→AHU parents are **proposals** (`parent_ahu_source: inferred`) and are omitted from Turtle `ofdd:parentAhu` facts until confirmed in package metadata.
+The stamp plus the mapped point roles select the equipment. Example: `AC_1` with `equipType: fanCoil` is a fan coil (`equipment_type_source: package`, kind `zone_other`) even though the id does not say FCU. The same id with `equipType: ahu` exports as **AHU**. Inferred VAV→AHU parents are **proposals** (`parent_ahu_source: inferred`) and are omitted from Turtle `ofdd:parentAhu` facts until confirmed in package metadata.

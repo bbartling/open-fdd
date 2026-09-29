@@ -28,7 +28,7 @@ in the package**, not a broken engine. See
 | [**SQL rules → Haystack map**](sql-rules-haystack-map.html) | All production SQL rules + Haystack tags / SQL roles for the data model |
 | [Package schema](package-schema.html) | Compact ingest maps vs rich (SCAFFOLD) evidence |
 | [Heat-pump buildings](heat-pump-buildings.html) | WSHP topology, role tiers, anti-patterns |
-| [Zone terminals / FCU / UV](zone-terminals.html) | ZONE = FCU or standalone DDC; UV = CV AHU; nine `FCU-*` roles, stamps, and the °F / °C trap |
+| [Zone terminals / FCU / UV](zone-terminals.html) | Haystack multi-tag (`equip` + `fanCoilUnit` + `zone`, point roles) collapses to a stamp plus mapped roles; UV = CV AHU |
 | [Tenant storage honesty](tenant-storage-honesty.html) | DM-05 hub-root paths vs optional `tenants/{tid}/` |
 | [Rule readiness](rule-readiness.html) | Runnable / missing / not applicable |
 | [Haystack model](haystack-model.html) | Sites, equipment, points, RDF APIs |
