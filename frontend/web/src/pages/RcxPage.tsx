@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
+import { SeriesPreview } from "../components/SeriesPreview";
 import { LockedSiteCaption } from "../components/LockedSiteCaption";
 import {
   InlineAlert,
@@ -511,6 +512,11 @@ export function RcxPage() {
           }
           testId="rcx-plot"
         />
+        <SeriesPreview
+          id="rcx-plot-preview"
+          figure={figure}
+          testId="rcx-plot-preview"
+        />
         {donutFigure ? (
           <PlotlyHost
             id="rcx-comfort-donut"
@@ -521,6 +527,11 @@ export function RcxPage() {
             testId="rcx-comfort-donut"
           />
         ) : null}
+        <SeriesPreview
+          id="rcx-donut-preview"
+          figure={donutFigure}
+          testId="rcx-donut-preview"
+        />
         {companionFigure ? (
           <PlotlyHost
             id="rcx-worst-zones"
@@ -533,6 +544,11 @@ export function RcxPage() {
             testId="rcx-worst-zones"
           />
         ) : null}
+        <SeriesPreview
+          id="rcx-companion-preview"
+          figure={companionFigure}
+          testId="rcx-companion-preview"
+        />
         {companionNote ? (
           <p className="oracle-sidebar__caption" data-testid="rcx-companion-note">
             {companionNote}

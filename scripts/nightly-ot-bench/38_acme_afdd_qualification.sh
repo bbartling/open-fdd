@@ -11,12 +11,15 @@
 # (catch_up). Explicit history replay is plan_backfill_chunks, separate
 # from the timer.
 #
-# Cadence: OPENFDD_AFDD_INTERVAL_MINUTES=1440 is last_completed_at + interval
-# (checkpoint-relative). It is not wall-clock aligned. Ops preference for
-# this ACME lab: land the daily cycle around 05:00 America/Chicago so it
-# finishes before the 06:00 morning digest, with lookback kept at 24h.
-# This gate checks config truth and a bounded run-now window. It does not
-# assert a 05:00 clock alignment.
+# Cadence: interval mode uses OPENFDD_AFDD_INTERVAL_MINUTES=1440
+# (last_completed_at + interval). Wall-clock mode
+# (OPENFDD_AFDD_SCHEDULE=wall_clock, HH:MM + IANA timezone) pins a local
+# day. The lab recipe is 05:00 America/Chicago before the 06:00 digest.
+# This gate still expects the live interval pin (1440 / 24h). It records
+# schedule_kind and result_scope when the hub sends them. It does not fail
+# a hub that has not been re-pinned onto wall clock (soft-open).
+# Outside-window result immutability is the fdd_store merge fixture, not a
+# live rule_results snapshot.
 #
 # Live lab env (Railway, not a product default): OPENFDD_AFDD_MODE=continuous,
 # INTERVAL_MINUTES=1440, LOOKBACK_VALUE=24, LOOKBACK_UNIT=hours,
@@ -121,6 +124,8 @@ cfg_ok = (
     and abs(lookback_hours - expect_lb_h) < 0.01
     and timer_scope.upper() == building.upper()
 )
+schedule_kind = (cfg.get("schedule_kind") or status.get("schedule_kind") or "interval")
+result_write = status.get("result_write")
 report["checks"]["config"] = {
     "ok": cfg_ok,
     "mode": mode,
@@ -129,7 +134,20 @@ report["checks"]["config"] = {
     "lookback_unit": lb_unit,
     "lookback_hours": lookback_hours,
     "timer_scope": timer_scope,
+    "schedule_kind": schedule_kind,
+    "wall_clock_hhmm": cfg.get("wall_clock_hhmm"),
+    "wall_clock_timezone": cfg.get("wall_clock_timezone"),
+    "next_due_at_utc": status.get("next_due_at_utc"),
+    "next_due_local": status.get("next_due_local"),
+    "result_write": result_write,
 }
+# Soft-open: older hubs omit result_write. A present value must be the
+# lookback upsert, never an update-all scope.
+if result_write not in (None, "", "lookback_window"):
+    report["error"] = f"scheduler result_write={result_write!r} is not lookback_window"
+    open(out, "w").write(json.dumps(report, indent=2))
+    open(summary, "w").write(f"# Gate 38 FAIL\n\n{report['error']}\n")
+    raise SystemExit(1)
 if not cfg_ok:
     report["error"] = (
         f"config truth failed: want continuous/{expect_interval}min/"
@@ -174,9 +192,18 @@ window_hours = None
 if start and end:
     window_hours = (end - start).total_seconds() / 3600.0
 
+result_scope = cycle.get("result_scope")
+if result_scope not in (None, "", "lookback_window"):
+    report["error"] = f"cycle result_scope={result_scope!r} is not lookback_window"
+    report["checks"]["run_now"] = {"ok": False, "result_scope": result_scope}
+    open(out, "w").write(json.dumps(report, indent=2))
+    open(summary, "w").write(f"# Gate 38 FAIL\n\n{report['error']}\n")
+    raise SystemExit(1)
+
 report["checks"]["run_now"] = {
     "ok": ok and scope.upper() == building.upper() and elapsed <= max_wall,
     "http": st,
+    "result_scope": result_scope,
     "elapsed_secs": round(elapsed, 3),
     "scope": scope,
     "run_id": run_id,

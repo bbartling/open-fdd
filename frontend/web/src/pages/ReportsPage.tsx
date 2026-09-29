@@ -3,6 +3,7 @@ import { AppShell } from "../components/AppShell";
 import { LockedSiteCaption } from "../components/LockedSiteCaption";
 import { ruleLabelStandard, mergeRuleDescriptionsFromApi } from "../lib/ruleLabels";
 import { RULES_UPDATED_EVENT } from "../components/RuleTuningPanel";
+import { SeriesPreview } from "../components/SeriesPreview";
 import {
   Button,
   Checkbox,
@@ -493,30 +494,6 @@ export function ReportsPage() {
       .join(" · ");
   }, [figure]);
 
-  const previewRows = useMemo(() => {
-    if (!figure?.data[0]) return [];
-    const x0 = figure.data[0].x ?? [];
-    const n = Math.min(8, x0.length);
-    return Array.from({ length: n }, (_, i) => {
-      const row: Record<string, string> = {
-        timestamp: String(x0[i] ?? ""),
-      };
-      for (const t of figure.data) {
-        const name = t.name ?? "series";
-        const y = t.y ?? [];
-        row[name] = y[i] == null ? "" : String(y[i]);
-      }
-      return row;
-    });
-  }, [figure]);
-
-  const previewColumns = useMemo(() => {
-    if (!previewRows[0]) {
-      return [{ key: "timestamp", header: "timestamp" }];
-    }
-    return Object.keys(previewRows[0]).map((k) => ({ key: k, header: k }));
-  }, [previewRows]);
-
   return (
     <AppShell
       title="FDD Plots"
@@ -631,17 +608,11 @@ export function ReportsPage() {
             </p>
           ) : null}
 
-          {previewRows.length ? (
-            <DataTable
-              id="plots-preview"
-              label="Series preview (first rows)"
-              columns={
-                previewColumns as Array<{ key: string; header: string }>
-              }
-              rows={previewRows}
-              testId="plots-preview-table"
-            />
-          ) : null}
+          <SeriesPreview
+            id="plots-preview"
+            figure={figure}
+            testId="plots-preview"
+          />
 
           <Expander
             id="sensor-health"
