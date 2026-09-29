@@ -186,6 +186,8 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
             Some(Utc::now() - chrono::Duration::days(historian::MECH_DEFAULT_LOOKBACK_DAYS))
         });
         let end = req.query.end;
+        let retain_start =
+            Utc::now() - chrono::Duration::days(historian::MECH_RETAIN_FALLBACK_DAYS);
         // Wall-clock the *entire* historian path (scan + LEAD). A large hive's ~54k tiny
         // Parquet parts can stall open_history_scoped past Railway edge budgets
         // before the inner SQL timeout ever fires.
@@ -225,9 +227,41 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
                 return env;
             }
         };
+        let mut used_retain_fallback = false;
+        let hist = match hist {
+            Ok(Some(env)) if defaulted && env_is_fail_closed(&env) => {
+                used_retain_fallback = true;
+                historian::mech_oat_bins_from_history(
+                    req.query.equipment_ids.as_deref(),
+                    max_gap,
+                    building_id,
+                    Some(retain_start),
+                    end,
+                )
+                .await
+            }
+            Ok(None) if defaulted => {
+                used_retain_fallback = true;
+                historian::mech_oat_bins_from_history(
+                    req.query.equipment_ids.as_deref(),
+                    max_gap,
+                    building_id,
+                    Some(retain_start),
+                    end,
+                )
+                .await
+            }
+            other => other,
+        };
         match hist {
             Ok(Some(mut env)) => {
-                if defaulted {
+                if used_retain_fallback {
+                    diag_warnings.push(format!(
+                        "mechanical_cooling {}-day default window was empty or timed out; expanded to bounded {}-day historian retain floor",
+                        historian::MECH_DEFAULT_LOOKBACK_DAYS,
+                        historian::MECH_RETAIN_FALLBACK_DAYS
+                    ));
+                } else if defaulted {
                     diag_warnings.push(format!(
                         "mechanical_cooling defaulted start to last {} days; pass query.start for a custom window",
                         historian::MECH_DEFAULT_LOOKBACK_DAYS
@@ -273,6 +307,14 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         env.warnings.extend(diag_warnings);
     }
     env
+}
+
+fn env_is_fail_closed(env: &AnalyticsEnvelope) -> bool {
+    env.coverage
+        .as_ref()
+        .and_then(|coverage| coverage.get("fail_closed"))
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
 }
 
 fn parse_evidence(req: &AnalyticsRequest) -> Option<Vec<EvidenceRow>> {

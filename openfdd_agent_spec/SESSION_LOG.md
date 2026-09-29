@@ -1,3 +1,11 @@
+## 2026-09-29 — Analytics / RCx cycle-2 local patch (#1019, #1020, #1037)
+
+- Worktree `fix/analytics-rcx-1019-1037` implements bounded mechanical-cooling retain-floor retry, runtime historian scan pruning, and stamp-first RCx equipment selection.
+- #1019: the 14-day default retries once at the bounded 365-day retain floor for historical synthetic fixtures; no unbounded `start=None` fallback.
+- #1020: runtime removes the preflight `COUNT(*)` scan and budgets optional weekly bins independently so a slow additive chart query cannot turn usable runtime rows into an HTTP-200 fail-closed envelope.
+- #1037: RCx chart predicates use canonical persisted `equipment_types.json` membership plus role presence; ID `LIKE` heuristics are removed, including the misleading ZONE/LOOPBACK case.
+- Local focused tests and read-only ACME bench validation remain required; no version bump, GHCR/Railway action, issue mutation, or BACnet write was performed.
+
 ## 2026-09-27 — Tip 3.5.53 closeout stress (not FQ)
 
 - Tip `dc32615` / VERSION 3.5.53 on Railway (`sha-dc32615`); backup `20260927T193409Z`; edge `vim-1` MQTTS fresh.

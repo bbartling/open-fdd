@@ -50,7 +50,12 @@ Operator exports from the product UI — illustrative only. Empty series still m
 
 ## Family → presets (equipment kinds)
 
-Kinds are the preset’s `eq_kinds` filter (package stamp / id heuristics). Empty series when roles are missing — not a silent invent.
+Kinds are the preset’s `eq_kinds` filter over the persisted canonical
+`equipment_type` / `equipType` registry. Each chart also requires its mapped
+role column to be present for the selected equipment. Opaque ids therefore
+work when stamped, while an id containing a misleading token (such as
+`ZONE`/`LOOPBACK`) does not change membership. Empty series when roles are
+missing — not a silent invent.
 
 ### Zones / VAV (`VAV`, zone equipment)
 

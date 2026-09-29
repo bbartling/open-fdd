@@ -183,10 +183,17 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         let mut used_retain_fallback = false;
         let hist = match runtime_from_history_budgeted(filter, max_gap, building, start, end).await
         {
-            Ok(Some(env)) if env_is_fail_closed(&env) || env_has_runtime_rows(&env) => {
-                Ok(Some(env))
+            Ok(Some(env)) if env_has_runtime_rows(&env) => Ok(Some(env)),
+            Ok(Some(_env)) if defaulted_start => {
+                // A default-window timeout/empty envelope is retryable once at
+                // the bounded retain floor. Never turn this into start=None.
+                used_retain_fallback = true;
+                let retain_start =
+                    Utc::now() - chrono::Duration::days(historian::RUNTIME_RETAIN_FALLBACK_DAYS);
+                runtime_from_history_budgeted(filter, max_gap, building, Some(retain_start), end)
+                    .await
             }
-            Ok(Some(_)) | Ok(None) if defaulted_start => {
+            Ok(None) if defaulted_start => {
                 // Bounded expand only — never start=None (full-history LEAD → 502).
                 used_retain_fallback = true;
                 let retain_start =
@@ -281,14 +288,6 @@ async fn runtime_from_history_budgeted(
 
 fn env_has_runtime_rows(env: &AnalyticsEnvelope) -> bool {
     !env.equipment.is_empty() || !env.rows.is_empty()
-}
-
-fn env_is_fail_closed(env: &AnalyticsEnvelope) -> bool {
-    env.coverage
-        .as_ref()
-        .and_then(|c| c.get("fail_closed"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
 }
 
 #[cfg(test)]

@@ -645,19 +645,6 @@ pub async fn runtime_from_history(
     }
 
     let cols = history_columns_async(&ctx).await?;
-    let ts_col_probe = pick_ts_col(&cols).unwrap_or("timestamp_utc");
-    let range_filter = time_range_sql(ts_col_probe, start, end);
-    let count_sql = format!("SELECT COUNT(*) AS n FROM history WHERE 1=1{range_filter}");
-    let count = run_sql(&ctx, &count_sql).await?;
-    let n = count
-        .rows
-        .first()
-        .and_then(|r| r.get("n"))
-        .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
-        .unwrap_or(0);
-    if n <= 0 {
-        return Ok(None);
-    }
 
     let query = AnalyticsQuery {
         building_id: building_id.map(str::to_string),
@@ -736,12 +723,15 @@ ORDER BY i.equipment_id
 "#
             );
 
-            let timed = tokio::time::timeout(RUNTIME_QUERY_TIMEOUT, run_sql(&ctx, &sql)).await;
+            // Keep a small portion of the request budget for the optional
+            // weekly chart query. A second full historian scan must not turn a
+            // usable runtime response into an HTTP-200 fail-closed envelope.
+            let timed = tokio::time::timeout(RUNTIME_MAIN_QUERY_TIMEOUT, run_sql(&ctx, &sql)).await;
             let sql_result = match timed {
                 Ok(inner) => inner,
                 Err(_) => {
                     tracing::warn!(
-                        timeout_secs = RUNTIME_QUERY_TIMEOUT.as_secs(),
+                        timeout_secs = RUNTIME_MAIN_QUERY_TIMEOUT.as_secs(),
                         "runtime historian LEAD query exceeded budget; fail-closed empty rows"
                     );
                     let query = AnalyticsQuery {
@@ -755,12 +745,11 @@ ORDER BY i.equipment_id
                         &query,
                         vec![format!(
                             "runtime historian query exceeded {}s budget; fail-closed empty rows — pass a tighter query.start/end or compact the hive",
-                            RUNTIME_QUERY_TIMEOUT.as_secs()
+                            RUNTIME_MAIN_QUERY_TIMEOUT.as_secs()
                         )],
                         DF_ENGINE,
                     );
                     env.coverage = Some(json!({
-                        "history_rows": n,
                         "max_gap_seconds": max_gap,
                         "source": "historian_parquet",
                         "building_id": safe_building_segment(building_id),
@@ -774,6 +763,9 @@ ORDER BY i.equipment_id
             };
             match sql_result {
                 Ok(result) => {
+                    if result.rows.is_empty() {
+                        return Ok(None);
+                    }
                     let mut warnings = vec![
                         "runtime hours from historian Parquet via DataFusion Δt integration".into(),
                     ];
@@ -810,23 +802,36 @@ ORDER BY i.equipment_id
                             ),
                         }));
                     }
-                    let weekly_rows = runtime_weekly_plant_rows(
-                        &ctx,
-                        RuntimeWeeklyParams {
-                            ts_col,
-                            on_sql: &on_sql,
-                            oat: weekly_oat_col(&cols),
-                            max_gap,
-                            eq_filter: &eq_filter,
-                            range_sql: &range_sql,
-                        },
-                        (plant_signal_label(&cols), &stamped_types),
+                    let weekly_rows = match tokio::time::timeout(
+                        RUNTIME_WEEKLY_QUERY_TIMEOUT,
+                        runtime_weekly_plant_rows(
+                            &ctx,
+                            RuntimeWeeklyParams {
+                                ts_col,
+                                on_sql: &on_sql,
+                                oat: weekly_oat_col(&cols),
+                                max_gap,
+                                eq_filter: &eq_filter,
+                                range_sql: &range_sql,
+                            },
+                            (plant_signal_label(&cols), &stamped_types),
+                        ),
                     )
                     .await
-                    .unwrap_or_else(|e| {
-                        warnings.push(format!("weekly plant bins skipped: {e}"));
-                        Vec::new()
-                    });
+                    {
+                        Ok(Ok(rows)) => rows,
+                        Ok(Err(e)) => {
+                            warnings.push(format!("weekly plant bins skipped: {e}"));
+                            Vec::new()
+                        }
+                        Err(_) => {
+                            warnings.push(format!(
+                                "weekly plant bins skipped after {}s budget; runtime rows remain available",
+                                RUNTIME_WEEKLY_QUERY_TIMEOUT.as_secs()
+                            ));
+                            Vec::new()
+                        }
+                    };
                     if !weekly_rows.is_empty() {
                         warnings.push(
                             "rows include weekly per-equipment plant bins (runtime-weekly-v2)"
@@ -843,7 +848,6 @@ ORDER BY i.equipment_id
                     env.coverage = Some(json!({
                         "equipment_count": env.equipment.len(),
                         "weekly_row_count": env.rows.len(),
-                        "history_rows": n,
                         "max_gap_seconds": max_gap,
                         "source": "historian_parquet",
                         "building_id": safe_building_segment(building_id),
@@ -854,7 +858,7 @@ ORDER BY i.equipment_id
                     return Ok(Some(env));
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "historian Δt runtime SQL failed; falling back to count probe");
+                    tracing::warn!(error = %e, "historian Δt runtime SQL failed; returning registered-history envelope");
                 }
             }
         }
@@ -868,7 +872,6 @@ ORDER BY i.equipment_id
     ];
     let mut env = envelope_with_engine(QV_RUNTIME, &query, warnings, DF_ENGINE);
     env.coverage = Some(json!({
-        "history_rows": n,
         "max_gap_seconds": max_gap,
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
@@ -1090,8 +1093,19 @@ const SENSOR_HEALTH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::fr
 /// ~15–40s; fail-closed HTTP 200 beats nginx 502.
 pub const RUNTIME_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(12);
 
+/// Reserve part of the request budget for the optional weekly chart query.
+const RUNTIME_MAIN_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Weekly plant bins are additive chart data; they must not make base runtime
+/// rows fail closed when a loaded historian needs more time.
+const RUNTIME_WEEKLY_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// Default lookback for `/api/analytics/mechanical-cooling` when start omitted.
 pub const MECH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
+
+/// Bounded expand when the default lookback is empty (synthetic fixtures can
+/// be outside wall-clock). Never use `start=None` for this LEAD query.
+pub const MECH_RETAIN_FALLBACK_DAYS: i64 = 365;
 
 /// Wall-clock budget for mechanical-cooling OAT bin LEAD Δt (large hives).
 pub const MECH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(12);
@@ -2681,54 +2695,44 @@ LIMIT {limit}
     Ok(Some(env))
 }
 
-fn rcx_eq_filter(kinds: &[&str]) -> String {
+/// Build the RCx equipment predicate from the persisted canonical type map.
+///
+/// RCx chart membership is a model decision, so equipment ids are only used
+/// as the join key for the already validated `equipment_types.json` entries.
+/// An empty map intentionally selects no equipment rather than reviving the
+/// old name based `LIKE` heuristics (which admitted ghost ids and missed opaque
+/// vendor ids). Each caller also requires its chart role to be non-null.
+fn rcx_eq_filter(kinds: &[&str], stamped_types: &BTreeMap<String, String>) -> String {
     if kinds.is_empty() {
         return String::new();
     }
-    let mut parts = Vec::new();
-    for k in kinds {
-        let ku = k.to_ascii_uppercase();
-        if ku == "VAV" {
-            // Name heuristics for package VAVs PLUS MQTT / Zone Other sites whose
-            // equipment_id does not contain "VAV" (e.g. bldg2-zone-loopback).
-            // Keep id-only predicates so history tables without equipment_type still work.
-            parts.push(
-                "(UPPER(equipment_id) LIKE 'VAV%' OR UPPER(equipment_id) LIKE '%/VAV%' \
-                 OR UPPER(equipment_id) LIKE '%VAVH%' OR UPPER(equipment_id) LIKE '%VAVFC%' \
-                 OR UPPER(equipment_id) LIKE '%ZONE%' OR UPPER(equipment_id) LIKE '%LOOPBACK%')"
-                    .to_string(),
-            );
-        } else if ku == "CHW" || ku == "CHW_PLANT" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE '%CHILLER%' OR UPPER(equipment_id) LIKE 'CHW%' \
-                 OR UPPER(equipment_id) LIKE '%CHW_PLANT%')"
-                    .to_string(),
-            );
-        } else if ku == "BOILER" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE 'BOILER%' OR UPPER(equipment_id) LIKE '%/BOILER%' \
-                 OR UPPER(equipment_id) LIKE '%BOILERS%')"
-                    .to_string(),
-            );
-        } else if ku == "TOWER" || ku == "CT" || ku == "COOLING_TOWER" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE '%TOWER%' OR UPPER(equipment_id) LIKE 'CT%' \
-                 OR UPPER(equipment_id) LIKE '%COOLING_TOWER%')"
-                    .to_string(),
-            );
-        } else if ku == "METER" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE 'METER%' OR UPPER(equipment_id) LIKE '%/METER%' \
-                 OR UPPER(equipment_id) LIKE '%_METER%')"
-                    .to_string(),
-            );
-        } else {
-            parts.push(format!(
-                "(UPPER(equipment_id) LIKE '{ku}%' OR UPPER(equipment_id) LIKE '%/{ku}%')"
-            ));
-        }
+    let requested: HashSet<&'static str> = kinds
+        .iter()
+        .filter_map(|kind| match kind.to_ascii_uppercase().as_str() {
+            "AHU" | "RTU" | "MAU" | "DOAS" => Some("ahu"),
+            "VAV" => Some("vav"),
+            "CHW" | "CHW_PLANT" | "CHILLER" => Some("chiller"),
+            "BOILER" => Some("boiler"),
+            "TOWER" | "CT" | "COOLING_TOWER" => Some("cooling_tower"),
+            "HP" | "HEATPUMP" | "HEAT_PUMP" => Some("heatpump"),
+            "METER" => Some("meter"),
+            "WEATHER" => Some("weather"),
+            _ => None,
+        })
+        .collect();
+    let ids: Vec<String> = stamped_types
+        .iter()
+        .filter_map(|(equipment_id, raw_type)| {
+            let canonical = open_fdd_edge_prototype::equipment_types::canonical_kind(raw_type)?;
+            requested
+                .contains(canonical)
+                .then(|| format!("'{}'", equipment_id.replace('\'', "''")))
+        })
+        .collect();
+    if ids.is_empty() {
+        return " AND 1=0".into();
     }
-    format!(" AND ({})", parts.join(" OR "))
+    format!(" AND equipment_id IN ({})", ids.join(", "))
 }
 
 /// Multi-equipment role timeseries for RCx presets (vibe19 multi_equipment_timeseries).
@@ -2750,7 +2754,9 @@ pub async fn rcx_timeseries_from_history(
     if !cols.contains(role_col) {
         return Ok(None);
     }
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let stamped_types =
+        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let eq_filter = rcx_eq_filter(eq_kinds, &stamped_types);
     let fan_filter = if filter_fan_on {
         match on_expr(&cols) {
             Some(expr) => format!(" AND ({expr})"),
@@ -2901,7 +2907,9 @@ pub async fn rcx_oat_scatter_from_history(
     } else {
         None
     };
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let stamped_types =
+        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let eq_filter = rcx_eq_filter(eq_kinds, &stamped_types);
     // Prefixed for JOIN aliases (history AS h).
     let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
     let limit = max_points.clamp(200, 20000);
@@ -2998,7 +3006,9 @@ pub async fn rcx_box_from_history(
     if !cols.contains(role_col) {
         return Ok(None);
     }
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let stamped_types =
+        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let eq_filter = rcx_eq_filter(eq_kinds, &stamped_types);
     let fan_filter = if filter_fan_on {
         match on_expr(&cols) {
             Some(expr) => format!(" AND ({expr})"),
@@ -3057,7 +3067,9 @@ pub async fn rcx_zone_comfort_rank_from_history(
     if !cols.contains("zone_t") {
         return Ok(None);
     }
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let stamped_types =
+        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let eq_filter = rcx_eq_filter(eq_kinds, &stamped_types);
     // Match schedule `occupied_expr`: Utf8 "1.0" / "0.0" from packages, not only "1".
     let occ_filter = if cols.contains("occ_mode") {
         " AND (occ_mode IS NULL OR \
@@ -3152,7 +3164,9 @@ pub async fn rcx_metering_from_history(
     let Some(oat) = mech_oat_col(&cols) else {
         return Ok(None);
     };
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let stamped_types =
+        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let eq_filter = rcx_eq_filter(eq_kinds, &stamped_types);
     let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
     let cooling = kind != "gas";
     let sql = format!(
@@ -3544,6 +3558,7 @@ fn round6(x: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analytics::AnalyticsRequest;
     use chrono::TimeZone;
     use std::io::Write;
     use tokio::sync::Mutex;
@@ -3562,15 +3577,24 @@ mod tests {
     }
 
     #[test]
-    fn rcx_eq_filter_vav_includes_mqtt_zone_loopback() {
-        let f = rcx_eq_filter(&["VAV"]);
+    fn rcx_eq_filter_uses_canonical_stamps_and_ignores_misleading_ids() {
+        let stamped = BTreeMap::from([
+            ("jci_vav_1".into(), "vav".into()),
+            ("bldg2-zone-loopback".into(), "ahu".into()),
+            ("AC_1".into(), "ahu".into()),
+        ]);
+        let f = rcx_eq_filter(&["VAV"], &stamped);
         assert!(
-            f.contains("%LOOPBACK%"),
-            "MQTT zone loopback must match VAV zone presets: {f}"
+            f.contains("'jci_vav_1'"),
+            "stamped opaque/vendor VAV must match: {f}"
         );
         assert!(
-            f.contains("%ZONE%"),
-            "zone_* equipment ids must match VAV zone presets: {f}"
+            !f.contains("bldg2-zone-loopback"),
+            "misleading unstamped name must not match VAV: {f}"
+        );
+        assert!(
+            !f.contains("LIKE"),
+            "RCx selection must not use id LIKE: {f}"
         );
     }
 
@@ -4363,6 +4387,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn mechanical_cooling_default_uses_bounded_retain_floor_for_old_fixture() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_MECH_FALLBACK");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ch = building.join("CHILLER_OPAQUE");
+        std::fs::create_dir_all(&ch).unwrap();
+        std::fs::write(
+            ch.join("columns.csv"),
+            "col,point_role\nchiller_status,chiller_status\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ch.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,chiller_status,web_oa_t").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,1,82").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,1,83").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,0,84").unwrap();
+
+        let parquet = tmp.path().join("parquet_mech_fallback");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_MECH_FALLBACK", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let req = AnalyticsRequest {
+            query: AnalyticsQuery {
+                building_id: Some("BUILDING_MECH_FALLBACK".into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let env = crate::analytics::mechanical_cooling::handle_async(&req).await;
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(
+            env.rows.iter().any(|row| row["kind"] == "oat_bin"),
+            "old synthetic fixture must use bounded retain-floor fallback: {:?}",
+            env.rows
+        );
+        assert!(env
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("retain floor")));
+    }
+
+    #[tokio::test]
     async fn runtime_weekly_emits_per_equipment_not_plant_sum() {
         let _guard = ENV_LOCK.lock().await;
         let tmp = tempfile::TempDir::new().unwrap();
@@ -4451,6 +4520,12 @@ mod tests {
 
         let parquet = tmp.path().join("parquet_oatsc");
         fdd_store::ingest_building(tmp.path(), "BUILDING_OATSC", &parquet).unwrap();
+        std::fs::create_dir_all(parquet.join("building=BUILDING_OATSC")).unwrap();
+        std::fs::write(
+            parquet.join("building=BUILDING_OATSC/equipment_types.json"),
+            r#"{"AHU_1":"ahu","weather":"weather"}"#,
+        )
+        .unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = rcx_oat_scatter_from_history(Some("BUILDING_OATSC"), "sat", &["AHU"], false, 500)
