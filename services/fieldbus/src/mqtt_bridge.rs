@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
 
-use crate::config::Settings;
+use crate::config::{IngestMode, Settings};
 use crate::services::bacnet_client::BacnetClientService;
 use crate::services::poll::PollEngine;
 use crate::services::rest::RestClientService;
@@ -120,6 +120,92 @@ pub fn mqtt_enabled() -> bool {
             .as_str(),
         "1" | "true" | "yes" | "on"
     )
+}
+
+fn ingest_mode() -> Result<IngestMode, String> {
+    IngestMode::from_env()
+}
+
+#[derive(Clone)]
+struct LocalIngestClient {
+    client: reqwest::Client,
+    endpoint: String,
+    token: Option<String>,
+    tenant_id: Option<String>,
+    building_id: Option<String>,
+}
+
+impl LocalIngestClient {
+    fn from_env(site_id: &str) -> Result<Self, String> {
+        let base = std::env::var("OPENFDD_LOCAL_CENTRAL_URL")
+            .unwrap_or_else(|_| "http://127.0.0.1:8080".into());
+        let endpoint = format!("{}/api/ingest/local", base.trim_end_matches('/'));
+        let timeout_secs = std::env::var("OPENFDD_LOCAL_INGEST_TIMEOUT_SECS")
+            .ok()
+            .and_then(|raw| raw.parse::<u64>().ok())
+            .unwrap_or(10)
+            .clamp(1, 60);
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(timeout_secs))
+            .build()
+            .map_err(|error| format!("local ingest HTTP client: {error}"))?;
+        Ok(Self {
+            client,
+            endpoint,
+            token: std::env::var("OPENFDD_LOCAL_INGEST_TOKEN")
+                .ok()
+                .filter(|value| !value.trim().is_empty()),
+            tenant_id: std::env::var("OPENFDD_TENANT_ID")
+                .ok()
+                .filter(|value| !value.trim().is_empty()),
+            building_id: std::env::var("OPENFDD_BUILDING_ID")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .or_else(|| Some(site_id.to_string())),
+        })
+    }
+
+    async fn send(&self, envelope: &TelemetryEnvelope) -> Result<(), String> {
+        let mut request = self
+            .client
+            .post(&self.endpoint)
+            .header("content-type", "application/json")
+            .header("x-openfdd-message-id", envelope.message_id.to_string())
+            .header("x-openfdd-sequence", envelope.sequence.to_string())
+            .json(envelope);
+        if let Some(token) = &self.token {
+            request = request.bearer_auth(token);
+        }
+        if let Some(tenant_id) = &self.tenant_id {
+            request = request.header("x-openfdd-tenant-id", tenant_id);
+        }
+        if let Some(building_id) = &self.building_id {
+            request = request.header("x-openfdd-building-id", building_id);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|error| format!("local ingest request: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!("local ingest returned HTTP {}", response.status()));
+        }
+        Ok(())
+    }
+}
+
+fn local_spool_dir(edge_id: &str) -> PathBuf {
+    PathBuf::from(
+        std::env::var("OPENFDD_LOCAL_SPOOL_DIR")
+            .unwrap_or_else(|_| format!("/tmp/openfdd-local-spool-{edge_id}")),
+    )
+}
+
+fn local_spool_max_records() -> usize {
+    std::env::var("OPENFDD_LOCAL_SPOOL_MAX_RECORDS")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .unwrap_or(50_000)
+        .clamp(1, 50_000)
 }
 
 fn mqtt_config(site_id: &str, edge_id: &str, port: u16) -> MqttConfig {
@@ -534,9 +620,23 @@ pub async fn spawn_if_configured(
     rest: Arc<RestClientService>,
     telemetry: Arc<TelemetryControl>,
 ) {
-    if !mqtt_enabled() {
-        info!("MQTT bridge disabled (set OPENFDD_MQTT_ENABLED=1 to enable)");
+    let mode = match ingest_mode() {
+        Ok(mode) => mode,
+        Err(error) => {
+            warn!(%error, "telemetry bridge disabled because ingest mode is invalid");
+            return;
+        }
+    };
+    if !mode.uses_mqtt() && !mode.uses_local() {
+        info!("telemetry bridge disabled");
         return;
+    }
+
+    if mode.uses_mqtt() && !mqtt_enabled() {
+        warn!("MQTT ingest is disabled; local delivery remains enabled only when OPENFDD_INGEST_MODE=local_fieldbus");
+        if !mode.uses_local() {
+            return;
+        }
     }
 
     let site_id = std::env::var("OPENFDD_SITE_ID").unwrap_or_else(|_| "local".into());
@@ -558,15 +658,30 @@ pub async fn spawn_if_configured(
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(8883);
-    let spool_dir = PathBuf::from(
+    let mqtt_spool_dir = PathBuf::from(
         std::env::var("OPENFDD_MQTT_SPOOL_DIR")
             .unwrap_or_else(|_| format!("/tmp/openfdd-spool-{edge_id}")),
     );
+    let local_client = if mode.uses_local() {
+        match LocalIngestClient::from_env(&site_id) {
+            Ok(client) => Some(client),
+            Err(error) => {
+                warn!(%error, "local fieldbus delivery disabled");
+                None
+            }
+        }
+    } else {
+        None
+    };
+    if mode.uses_local() && local_client.is_none() && !mode.uses_mqtt() {
+        return;
+    }
     let interval = mqtt_publish_interval_secs(&settings);
     info!(
         publish_interval_secs = interval,
         tenant_id = tenant_id.as_deref(),
-        "mqtt bridge full-snapshot publish profile"
+        mode = ?mode,
+        "fieldbus full-snapshot delivery profile"
     );
 
     // Wave N: when OPENFDD_TENANT_ID is set, emit tenants/{tid}/buildings/{bid}/… topics
@@ -586,12 +701,33 @@ pub async fn spawn_if_configured(
     });
 
     tokio::spawn(async move {
-        let mut spool = match TelemetrySpool::open(SpoolConfig::new(&spool_dir)).await {
-            Ok(s) => s,
-            Err(err) => {
-                warn!(%err, "mqtt spool open failed");
-                return;
+        let mut mqtt_spool = if mode.uses_mqtt() {
+            match TelemetrySpool::open(SpoolConfig::new(&mqtt_spool_dir)).await {
+                Ok(s) => Some(s),
+                Err(err) => {
+                    warn!(%err, "mqtt spool open failed");
+                    None
+                }
             }
+        } else {
+            None
+        };
+        let mut local_spool = if let Some(client) = local_client.as_ref() {
+            let _ = client;
+            match TelemetrySpool::open(
+                SpoolConfig::new(local_spool_dir(&edge_id))
+                    .with_max_records(local_spool_max_records()),
+            )
+            .await
+            {
+                Ok(s) => Some(s),
+                Err(err) => {
+                    warn!(%err, "local fieldbus spool open failed");
+                    None
+                }
+            }
+        } else {
+            None
         };
 
         let mut mqtt: Option<MqttSession> = None;
@@ -608,7 +744,7 @@ pub async fn spawn_if_configured(
             first_cycle = false;
 
             // Keep MQTT command subscription alive even while suspended.
-            if mqtt.is_none() {
+            if mode.uses_mqtt() && mqtt_spool.is_some() && mqtt.is_none() {
                 mqtt = connect_mqtt_session(
                     mqtt_config(&site_id, &edge_id, port),
                     &topics,
@@ -686,10 +822,7 @@ pub async fn spawn_if_configured(
                     seq += 1;
                     let env =
                         TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Bacnet, seq, chunk);
-                    if let Err(err) = spool.enqueue(&topic, env).await {
-                        warn!(%err, "spool enqueue failed");
-                        break;
-                    }
+                    enqueue_delivery(&mut mqtt_spool, &mut local_spool, &topic, env).await;
                 }
             }
             if !rest_out.is_empty() {
@@ -698,14 +831,32 @@ pub async fn spawn_if_configured(
                     seq += 1;
                     let env =
                         TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Rest, seq, chunk);
-                    if let Err(err) = spool.enqueue(&topic, env).await {
-                        warn!(%err, "rest spool enqueue failed");
-                        break;
-                    }
+                    enqueue_delivery(&mut mqtt_spool, &mut local_spool, &topic, env).await;
                 }
             }
 
-            if let Some(ref session) = mqtt {
+            if let (Some(client), Some(spool)) = (local_client.as_ref(), local_spool.as_mut()) {
+                match spool.list_pending().await {
+                    Ok(pending) => {
+                        for rec in pending {
+                            match client.send(&rec.envelope).await {
+                                Ok(()) => {
+                                    if let Err(err) = spool.ack(rec.seq).await {
+                                        warn!(%err, "local spool ack failed");
+                                    }
+                                }
+                                Err(err) => {
+                                    warn!(%err, "local central delivery failed; will retry without blocking MQTT");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Err(err) => warn!(%err, "list local spool failed"),
+                }
+            }
+
+            if let (Some(session), Some(spool)) = (mqtt.as_ref(), mqtt_spool.as_mut()) {
                 match spool.list_pending().await {
                     Ok(pending) => {
                         for rec in pending {
@@ -731,6 +882,24 @@ pub async fn spawn_if_configured(
     });
 }
 
+async fn enqueue_delivery(
+    mqtt_spool: &mut Option<TelemetrySpool>,
+    local_spool: &mut Option<TelemetrySpool>,
+    topic: &str,
+    envelope: TelemetryEnvelope,
+) {
+    if let Some(spool) = mqtt_spool.as_mut() {
+        if let Err(err) = spool.enqueue(topic, envelope.clone()).await {
+            warn!(%err, "mqtt spool enqueue failed");
+        }
+    }
+    if let Some(spool) = local_spool.as_mut() {
+        if let Err(err) = spool.enqueue("local", envelope).await {
+            warn!(%err, "local spool enqueue failed");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -740,6 +909,23 @@ mod tests {
         let mut s = Settings::default();
         s.poll.interval_secs = 30.0;
         assert!((mqtt_publish_interval_secs(&s) - 300.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn ingest_modes_are_explicit_and_non_overlapping() {
+        assert_eq!(IngestMode::parse("mqtts").unwrap(), IngestMode::Mqtts);
+        assert_eq!(
+            IngestMode::parse("local_fieldbus").unwrap(),
+            IngestMode::LocalFieldbus
+        );
+        assert_eq!(IngestMode::parse("dual").unwrap(), IngestMode::Dual);
+        assert!(IngestMode::Mqtts.uses_mqtt());
+        assert!(!IngestMode::Mqtts.uses_local());
+        assert!(!IngestMode::LocalFieldbus.uses_mqtt());
+        assert!(IngestMode::LocalFieldbus.uses_local());
+        assert!(IngestMode::Dual.uses_mqtt());
+        assert!(IngestMode::Dual.uses_local());
+        assert!(IngestMode::parse("mqtt").is_err());
     }
 
     #[test]

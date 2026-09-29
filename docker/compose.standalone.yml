@@ -43,6 +43,7 @@ services:
       # and sign in as admin/operator/viewer from React (compose.react / Caddy :80).
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
       OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
+      OPENFDD_LOCAL_INGEST_TOKEN: ${OPENFDD_LOCAL_INGEST_TOKEN:-}
     ports:
       # Prefer OPENFDD_CENTRAL_BIND=127.0.0.1 when Caddy fronts :80 on the LAN.
       - "${OPENFDD_CENTRAL_BIND:-0.0.0.0}:8080:8080"
@@ -72,10 +73,16 @@ services:
       OPENFDD_MQTT_CERT_PEM: /mqtt/edge.cert.pem
       OPENFDD_MQTT_KEY_PEM: /mqtt/edge.key.pem
       OPENFDD_MQTT_SPOOL_DIR: /spool
+      OPENFDD_INGEST_MODE: ${OPENFDD_INGEST_MODE:-mqtts}
+      OPENFDD_LOCAL_CENTRAL_URL: ${OPENFDD_LOCAL_CENTRAL_URL:-http://127.0.0.1:8080}
+      OPENFDD_LOCAL_INGEST_TOKEN: ${OPENFDD_LOCAL_INGEST_TOKEN:-}
+      OPENFDD_LOCAL_SPOOL_DIR: /local-spool
+      OPENFDD_LOCAL_SPOOL_MAX_RECORDS: ${OPENFDD_LOCAL_SPOOL_MAX_RECORDS:-50000}
     volumes:
       - ../config/fieldbus:/app/config:ro
       - ../deploy/mqtt/kits/${OPENFDD_SITE_ID:-local}__${OPENFDD_EDGE_ID:-fieldbus-1}:/mqtt:ro
       - fieldbus-spool:/spool
+      - fieldbus-local-spool:/local-spool
     restart: unless-stopped
 
   mcp:
@@ -96,3 +103,4 @@ services:
 volumes:
   mqtt-data:
   fieldbus-spool:
+  fieldbus-local-spool:

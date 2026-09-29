@@ -109,6 +109,34 @@ OPENFDD_IMAGE_TAG=<previous-sha> ./scripts/openfdd_stack_up.sh standalone
 | `OPENFDD_SITE_ID` | central, fieldbus | Site identifier in topic prefix |
 | `OPENFDD_EDGE_ID` | fieldbus | Edge identifier; central may use `+` wildcard subscriber |
 
+### Local fieldbus delivery (#1048)
+
+Fieldbus telemetry has one explicit delivery mode, selected with
+`OPENFDD_INGEST_MODE`:
+
+| Mode | Delivery |
+| --- | --- |
+| `mqtts` | MQTTS broker only (the existing default) |
+| `local_fieldbus` | Authenticated HTTP to central `/api/ingest/local`; no broker or MQTTS files are read |
+| `dual` | The same full snapshot is queued for local central first and optionally forwarded over MQTTS; a cloud outage does not block local delivery |
+
+Set `OPENFDD_LOCAL_INGEST_TOKEN` to the same deployment-unique value on central
+and fieldbus. Central rejects local ingest when the token is unset, and checks
+the bearer, envelope message ID, site/building identity, tenant header when
+multi-tenant mode is enabled, and a 1 MiB payload limit. Duplicate message IDs
+are acknowledged without a second Parquet append, which makes dual delivery
+safe during retries and reconnects.
+
+`OPENFDD_LOCAL_CENTRAL_URL` defaults to `http://127.0.0.1:8080`.
+`OPENFDD_LOCAL_SPOOL_DIR` and `OPENFDD_LOCAL_SPOOL_MAX_RECORDS` bound the local
+retry queue (default 50,000 records). The queue is a delivery buffer; canonical
+retention remains central Parquet under `OPENFDD_STORAGE_URL`.
+
+The local acceptance proof covers contract validation, authentication,
+immediate Parquet persistence, and replay deduplication. It does not replace
+the cloud retention/backup qualification owned by the central historian
+program; that dependency remains open for #1049.
+
 ### Central API / auth
 
 | Variable | Description |

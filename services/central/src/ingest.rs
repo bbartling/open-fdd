@@ -347,7 +347,11 @@ fn handle_telemetry(
                 return;
             }
             let key = (env.edge_id.clone(), env.message_id);
-            if state.seen_messages.contains_key(&key) {
+            // Reserve the id before writing. Local HTTP and MQTT can carry the
+            // same envelope in dual mode; an atomic reservation makes the
+            // first accepted path authoritative and prevents double Parquet
+            // appends when both arrive concurrently.
+            if state.seen_messages.insert(key.clone(), ()).is_some() {
                 *state.ingest_dup.lock().unwrap() += 1;
                 return;
             }
@@ -358,6 +362,7 @@ fn handle_telemetry(
                 &env.site_id,
             ) {
                 record_reject(state, payload, &msg);
+                state.seen_messages.remove(&key);
                 return;
             }
 
@@ -405,12 +410,12 @@ fn handle_telemetry(
                             payload,
                             &format!("canonical historian ingest failed: {err}"),
                         );
+                        state.seen_messages.remove(&key);
                         return;
                     }
                 }
             }
 
-            state.seen_messages.insert(key, ());
             let entry = state.edges.entry(env.edge_id.clone()).or_default();
             let mut shadow = entry.lock().unwrap();
             shadow

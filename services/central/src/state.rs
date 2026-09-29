@@ -12,6 +12,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use crate::auth::AuthConfig;
+use crate::live_historian::LiveHistorian;
 use crate::tenant_budget::TenantBudgetTracker;
 
 const MQTT_MONITOR_CAPACITY: usize = 100;
@@ -120,6 +121,10 @@ pub struct AppState {
     pub login_failures: Mutex<HashMap<String, (u32, std::time::Instant)>>,
     /// Wave L L5 — per-tenant sliding-window budgets (noop when disabled).
     pub tenant_budgets: TenantBudgetTracker,
+    /// HTTP local-fieldbus ingest writer. MQTT ingest owns its own writer;
+    /// message-id reservation prevents the two paths from persisting a dual
+    /// delivery twice.
+    pub local_historian: Mutex<Option<LiveHistorian>>,
 }
 
 impl AppState {
@@ -141,6 +146,7 @@ impl AppState {
             mqtt_monitor: Mutex::new(MqttMonitorState::default()),
             login_failures: Mutex::new(HashMap::new()),
             tenant_budgets: TenantBudgetTracker::new(),
+            local_historian: Mutex::new(None),
         }
     }
 

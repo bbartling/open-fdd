@@ -29,6 +29,25 @@ Haystack — and consume JSON only. The sidecar:
 - exposes `/api/health` with `git_sha`/service shape and a write-safety
   **dry-run / approval** gate for supervised writes.
 
+### Telemetry delivery modes
+
+The edge publishes one complete `TelemetryEnvelope` snapshot every fixed
+300-second production cycle. Select the sink with `OPENFDD_INGEST_MODE`:
+
+- `mqtts` (default): publish through the existing MQTTS broker and spool.
+- `local_fieldbus`: POST the same envelope to central
+  `/api/ingest/local`; no MQTT broker or MQTTS certificate is required.
+- `dual`: queue the local copy and cloud copy independently. Local central is
+  authoritative for the deployment, while cloud forwarding may be unavailable
+  without delaying local retries.
+
+For local or dual mode set `OPENFDD_LOCAL_CENTRAL_URL` and a deployment-unique
+`OPENFDD_LOCAL_INGEST_TOKEN` (the same token is configured on central).
+`OPENFDD_LOCAL_SPOOL_DIR` and `OPENFDD_LOCAL_SPOOL_MAX_RECORDS` provide a
+bounded retry queue. Central validates the bearer, tenant/building identity,
+message ID replay binding, payload size, and atomically deduplicates a dual
+delivery before writing canonical Parquet.
+
 ## Quick start (local dev)
 
 Requires sibling checkouts: `../rusty-bacnet`, `../rusty-haystack`.

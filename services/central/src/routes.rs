@@ -10,7 +10,8 @@ use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use bytes::Bytes;
 use chrono::Utc;
-use openfdd_contracts::{CommandEnvelope, Protocol, TopicBuilder, TopicKind};
+use fdd_store::{tenant_storage_prefix, tenant_storage_root, HistorianConfig, StorageUrl};
+use openfdd_contracts::{CommandEnvelope, Protocol, TelemetryEnvelope, TopicBuilder, TopicKind};
 use openfdd_mqtt::publish_json;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -38,7 +39,14 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/health", get(health))
         .route("/api/auth/status", get(auth_status))
         .route("/api/auth/me", get(auth_me))
-        .route("/api/auth/login", post(auth_login));
+        .route("/api/auth/login", post(auth_login))
+        // Fieldbus local ingest authenticates with its edge-scoped bearer
+        // token. It deliberately does not depend on a cloud MQTT credential
+        // or a browser JWT session.
+        .route(
+            "/api/ingest/local",
+            post(local_fieldbus_ingest).layer(DefaultBodyLimit::max(1024 * 1024)),
+        );
     // Kali O2c: detailed tenants / capabilities / stack / snapshot / summary
     // require JWT when auth is ON (moved onto protected router below).
 
@@ -632,6 +640,31 @@ fn workspace_path() -> std::path::PathBuf {
     std::path::PathBuf::from(
         std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()),
     )
+}
+
+fn local_fieldbus_historian() -> anyhow::Result<crate::live_historian::LiveHistorian> {
+    let mut config = HistorianConfig::from_env()?;
+    if crate::tenant::multi_tenant_enabled() {
+        let tenant_id = std::env::var("OPENFDD_TENANT_ID")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| anyhow::anyhow!("OPENFDD_TENANT_ID required in multi-tenant mode"))?;
+        config.storage_url = match config.storage_url {
+            StorageUrl::File { root } => StorageUrl::File {
+                root: tenant_storage_root(&root, Some(&tenant_id))?,
+            },
+            StorageUrl::S3 { bucket, prefix } => {
+                let tenant_prefix = tenant_storage_prefix(Some(&tenant_id))?;
+                let prefix = if prefix.is_empty() {
+                    tenant_prefix
+                } else {
+                    format!("{prefix}/{tenant_prefix}")
+                };
+                StorageUrl::S3 { bucket, prefix }
+            }
+        };
+    }
+    Ok(crate::live_historian::LiveHistorian::from_config(&config)?)
 }
 
 pub async fn admin_list_users(
@@ -1426,6 +1459,209 @@ pub async fn get_edge_metadata(
             error: Some("edge not found".into()),
         }),
     }
+}
+
+/// Accept one fieldbus envelope over the local, authenticated HTTP path.
+///
+/// The envelope is the same `TelemetryEnvelope` used by MQTTS. Message IDs
+/// are reserved before persistence so dual mode is idempotent even when the
+/// local and cloud copies arrive concurrently.
+pub async fn local_fieldbus_ingest(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    const MAX_LOCAL_PAYLOAD_BYTES: usize = 1024 * 1024;
+
+    if body.len() > MAX_LOCAL_PAYLOAD_BYTES {
+        return Err((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(json!({"ok": false, "error": "local ingest payload exceeds 1 MiB"})),
+        ));
+    }
+
+    let expected_token = std::env::var("OPENFDD_LOCAL_INGEST_TOKEN")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({
+                    "ok": false,
+                    "error": "local ingest is not configured"
+                })),
+            )
+        })?;
+    let supplied_token = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .map(str::trim)
+        .unwrap_or_default();
+    if supplied_token != expected_token {
+        tracing::warn!(target: "security_audit", event = "local_ingest_auth_failure", "local ingest bearer rejected");
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": "local ingest bearer required"})),
+        ));
+    }
+
+    let envelope: TelemetryEnvelope = serde_json::from_slice(&body).map_err(|error| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": format!("invalid telemetry envelope: {error}")})),
+        )
+    })?;
+    envelope.validate().map_err(|error| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": error})),
+        )
+    })?;
+
+    let message_header = headers
+        .get("x-openfdd-message-id")
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"ok": false, "error": "x-openfdd-message-id required"})),
+            )
+        })?;
+    if message_header != envelope.message_id.to_string() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "message id header does not match envelope"})),
+        ));
+    }
+
+    let expected_site = std::env::var("OPENFDD_SITE_ID")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    if expected_site
+        .as_deref()
+        .is_some_and(|site| site != envelope.site_id)
+    {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "site/building identity mismatch"})),
+        ));
+    }
+
+    let expected_tenant = std::env::var("OPENFDD_TENANT_ID")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    if crate::tenant::multi_tenant_enabled() {
+        let expected_tenant = expected_tenant.ok_or_else(|| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"ok": false, "error": "multi-tenant local ingest has no tenant binding"})),
+            )
+        })?;
+        let supplied_tenant = headers
+            .get("x-openfdd-tenant-id")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default();
+        if supplied_tenant != expected_tenant {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({"ok": false, "error": "tenant identity mismatch"})),
+            ));
+        }
+    }
+
+    let expected_building = headers
+        .get("x-openfdd-building-id")
+        .and_then(|value| value.to_str().ok())
+        .or_else(|| expected_site.as_deref());
+    if let Some(building) = expected_building.filter(|value| !value.trim().is_empty()) {
+        if envelope.points.iter().any(|point| {
+            point
+                .tags
+                .get("building_id")
+                .and_then(|value| value.as_str())
+                .is_some_and(|value| value != building)
+        }) {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({"ok": false, "error": "point building identity mismatch"})),
+            ));
+        }
+    }
+
+    let key = (envelope.edge_id.clone(), envelope.message_id);
+    if state.seen_messages.insert(key.clone(), ()).is_some() {
+        *state.ingest_dup.lock().unwrap() += 1;
+        return Ok(Json(json!({"ok": true, "duplicate": true})));
+    }
+    if let Some(message) = crate::historian_limits::deny_building_over_size(
+        &std::path::PathBuf::from(
+            std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()),
+        ),
+        &envelope.site_id,
+    ) {
+        state.seen_messages.remove(&key);
+        *state.ingest_reject.lock().unwrap() += 1;
+        return Err((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(json!({"ok": false, "error": message})),
+        ));
+    }
+
+    let report = {
+        let mut historian = state.local_historian.lock().unwrap();
+        if historian.is_none() {
+            *historian = Some(local_fieldbus_historian().map_err(|error| {
+                state.seen_messages.remove(&key);
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({"ok": false, "error": format!("local historian unavailable: {error}")})),
+                )
+            })?);
+        }
+        let Some(historian) = historian.as_mut() else {
+            state.seen_messages.remove(&key);
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"ok": false, "error": "local historian initialization failed"})),
+            ));
+        };
+        let report = historian.ingest_envelope(&envelope).map_err(|error| {
+            state.seen_messages.remove(&key);
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"ok": false, "error": format!("local historian ingest failed: {error}")})),
+            )
+        })?;
+        // Local acceptance is a durability boundary: make the same envelope
+        // visible in Parquet before acknowledging the edge.
+        historian.shutdown_flush().map_err(|error| {
+            state.seen_messages.remove(&key);
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(
+                    json!({"ok": false, "error": format!("local historian flush failed: {error}")}),
+                ),
+            )
+        })?;
+        report
+    };
+
+    let entry = state.edges.entry(envelope.edge_id.clone()).or_default();
+    let mut shadow = entry.lock().unwrap();
+    shadow
+        .sequences
+        .insert(format!("{:?}", envelope.protocol), envelope.sequence);
+    shadow.registered_site_id = Some(envelope.site_id.clone());
+    shadow.last_telemetry = Some(envelope);
+    state.note_ingest_ok();
+    Ok(Json(json!({
+        "ok": true,
+        "duplicate": false,
+        "persisted_rows": report.persisted_rows,
+        "eligible_points": report.eligible_points,
+        "skipped_points": report.skipped_points,
+    })))
 }
 
 #[utoipa::path(

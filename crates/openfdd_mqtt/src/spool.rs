@@ -20,6 +20,13 @@ impl SpoolConfig {
             max_records: 50_000,
         }
     }
+
+    /// Bound an edge spool for deployments with a deliberately small local
+    /// disk. The default remains 50,000 records for the MQTT path.
+    pub fn with_max_records(mut self, max_records: usize) -> Self {
+        self.max_records = max_records.max(1);
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
