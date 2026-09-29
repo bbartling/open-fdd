@@ -212,7 +212,9 @@ pub fn collect_budget_objects(storage_root: &Path) -> Vec<BudgetObject> {
 }
 
 pub fn apply_eviction(storage_root: &Path, plan: &EvictionPlan) -> Result<u64> {
-    let root = storage_root.canonicalize().unwrap_or_else(|_| storage_root.to_path_buf());
+    let root = storage_root
+        .canonicalize()
+        .unwrap_or_else(|_| storage_root.to_path_buf());
     let mut deleted = 0u64;
     for path in &plan.drop {
         let Ok(meta) = fs::metadata(path) else {
@@ -329,7 +331,9 @@ fn part_stamp_key(text: &str) -> Option<u64> {
         let rest = &bytes.get(start..)?;
         if rest.len() >= 15
             && rest[8] == b'T'
-            && rest.get(15).is_some_and(|c| *c == b'Z' || *c == b'-' || *c == b'.')
+            && rest
+                .get(15)
+                .is_some_and(|c| *c == b'Z' || *c == b'-' || *c == b'.')
         {
             let digits = format!(
                 "{}{}{}{}{}{}",
@@ -445,8 +449,7 @@ fn budget_tree(parts: &[String]) -> bool {
         return true;
     }
     if parts[0] == "tenants" {
-        return parts.iter().any(|p| p == "history" || p == RESULTS_DIR)
-            || parts.len() <= 2;
+        return parts.iter().any(|p| p == "history" || p == RESULTS_DIR) || parts.len() <= 2;
     }
     false
 }
@@ -499,10 +502,7 @@ mod tests {
             obj("new", 40, 20241201000000),
         ];
         let plan = plan_oldest_first(&objects, 50);
-        assert_eq!(
-            plan.drop,
-            vec![PathBuf::from("old"), PathBuf::from("mid")]
-        );
+        assert_eq!(plan.drop, vec![PathBuf::from("old"), PathBuf::from("mid")]);
         assert_eq!(plan.keep_bytes, 40);
         let under = plan_oldest_first(&objects, 120);
         assert!(under.drop.is_empty());
@@ -526,9 +526,9 @@ mod tests {
         let new = tmp.path().join(
             "history/building_id=site-a/equipment_id=ahu/year=2026/month=06/part-20260601T000000Z-live.parquet",
         );
-        let analytics = tmp
-            .path()
-            .join("analytics_results/building_id=site-a/query_id=runtime/part-20240102T000000Z.parquet");
+        let analytics = tmp.path().join(
+            "analytics_results/building_id=site-a/query_id=runtime/part-20240102T000000Z.parquet",
+        );
         let archive = tmp.path().join("archives/keep.parquet");
         for path in [&old, &new, &analytics, &archive] {
             fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -544,7 +544,10 @@ mod tests {
         assert!(!old.exists());
         assert!(!analytics.exists());
         assert!(new.exists(), "newest historian part stays");
-        assert!(archive.exists(), "off-box archives are not eviction targets");
+        assert!(
+            archive.exists(),
+            "off-box archives are not eviction targets"
+        );
     }
 
     #[test]

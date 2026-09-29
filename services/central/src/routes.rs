@@ -3633,12 +3633,9 @@ fn gate_analytics(
 macro_rules! cached_analytics {
     ($query_id:expr, $query_version:expr, $state:expr, $headers:expr, $req:expr, $compute:expr) => {{
         gate_analytics($state, $headers, &mut $req)?;
-        crate::analytics::result_cache::respond(
-            $query_id,
-            $query_version,
-            &$req,
-            async || $compute.await,
-        )
+        crate::analytics::result_cache::respond($query_id, $query_version, &$req, async || {
+            $compute.await
+        })
         .await
     }};
 }

@@ -89,9 +89,7 @@ pub async fn serve_with(
     };
 
     {
-        let mut guard = sessions
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+        let mut guard = sessions.lock().unwrap_or_else(|poison| poison.into_inner());
         let now = crate::building_sessions::now_ms();
         guard.evict_idle(now);
         if let Err(err) = guard.open(&key.building_id, SessionKind::CsvGuest, now) {
@@ -115,9 +113,7 @@ pub async fn serve_with(
     }
 
     {
-        let mut guard = sessions
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+        let mut guard = sessions.lock().unwrap_or_else(|poison| poison.into_inner());
         let now = crate::building_sessions::now_ms();
         if let Err(err) = guard.begin_job(&key.building_id, now) {
             return Err(session_error(err));
@@ -187,8 +183,7 @@ fn storage_root() -> PathBuf {
             return PathBuf::from(trimmed);
         }
     }
-    fdd_store::local_file_root_from_env()
-        .unwrap_or_else(|| super::historian::parquet_root_base())
+    fdd_store::local_file_root_from_env().unwrap_or_else(|| super::historian::parquet_root_base())
 }
 
 fn stale_action_from_env() -> StaleAction {
@@ -228,9 +223,7 @@ fn config_material(req: &AnalyticsRequest) -> String {
     format!(
         "req_qv={}\ndt_min={}\ngap={}\nmax_points={}\nequipment={}\nseries={}",
         req.query.query_version.as_deref().unwrap_or(""),
-        req.dt_min_f
-            .map(|v| v.to_string())
-            .unwrap_or_default(),
+        req.dt_min_f.map(|v| v.to_string()).unwrap_or_default(),
         req.max_gap_seconds
             .map(|v| v.to_string())
             .unwrap_or_default(),
@@ -404,7 +397,8 @@ mod tests {
             async || {
                 calls_hit.fetch_add(1, Ordering::SeqCst);
                 let mut env = envelope("runtime-v1", &req("site-a").query, Vec::new());
-                env.rows.push(json!({"equipment_id": "AHU_1", "run_hours": 3.5}));
+                env.rows
+                    .push(json!({"equipment_id": "AHU_1", "run_hours": 3.5}));
                 env.engine = "datafusion".into();
                 env
             },
@@ -454,7 +448,8 @@ mod tests {
             async || {
                 c1.fetch_add(1, Ordering::SeqCst);
                 let mut env = envelope("sensor-faults-v1", &req("site-a").query, Vec::new());
-                env.rows.push(json!({"equipment_id": "AHU_1", "fault_hours": 1.0}));
+                env.rows
+                    .push(json!({"equipment_id": "AHU_1", "fault_hours": 1.0}));
                 env
             },
         )
@@ -498,7 +493,8 @@ mod tests {
             async || {
                 c3.fetch_add(1, Ordering::SeqCst);
                 let mut env = envelope("sensor-faults-v1", &req("site-a").query, Vec::new());
-                env.rows.push(json!({"equipment_id": "AHU_1", "fault_hours": 2.0}));
+                env.rows
+                    .push(json!({"equipment_id": "AHU_1", "fault_hours": 2.0}));
                 env
             },
         )

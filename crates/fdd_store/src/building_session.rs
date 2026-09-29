@@ -200,7 +200,12 @@ impl SessionBook {
     }
 
     /// Record a live ingest buffer. Does not load historian parquet.
-    pub fn note_mqtt(&mut self, building_id: &str, pending_rows: usize, now_ms: u64) -> Result<usize, SessionError> {
+    pub fn note_mqtt(
+        &mut self,
+        building_id: &str,
+        pending_rows: usize,
+        now_ms: u64,
+    ) -> Result<usize, SessionError> {
         let building_id = require_building_id(&building_id)?;
         if self
             .sessions
@@ -384,7 +389,10 @@ mod tests {
         assert_eq!(rec.mqtt_buffered_rows, DEFAULT_MQTT_BUFFER_ROWS);
         assert!(!rec.historian_loaded);
         book.open("site-a", SessionKind::CsvGuest, 0).unwrap();
-        assert!(book.evict_idle(120_000).contains(&"site-a".to_string()) || book.interactive_slots().is_empty());
+        assert!(
+            book.evict_idle(120_000).contains(&"site-a".to_string())
+                || book.interactive_slots().is_empty()
+        );
         assert!(book.ram_resident().iter().any(|id| id == "site-live"));
     }
 
