@@ -348,8 +348,8 @@ function AfddPanel() {
         <div>
           <h2 id="afdd-config-heading">AFDD Scheduler</h2>
           <p className="muted">
-            Continuous AFDD can run on an interval or at a fixed local time. Each cycle upserts
-            only its lookback window. Mode stays deployment-owned. Run Now uses that same window.
+            Continuous AFDD frequency and rolling lookback are operator-selectable (hours / days).
+            Mode stays deployment-owned. Run Now uses the same H8 engine as scheduled cycles.
           </p>
         </div>
         <div className="button-row">
@@ -432,16 +432,8 @@ function AfddPanel() {
           </span>
         ) : null}
       </div>
-      <p className="muted">
-        Daily wall clock runs once per local day. Lookback stays the rolling window (ops recipe: 05:00
-        in the site timezone, 1 day lookback, finished before the morning digest). Scheduled AFDD has
-        no update-all control.
-      </p>
 
       <h3>Bounded backfill</h3>
-      <p className="muted">
-        Re-run an explicit historical range. This does not scan retained history outside that range.
-      </p>
       <div className="form-row" data-testid="afdd-backfill-controls">
         <label htmlFor="afdd-backfill-start">Start</label>
         <input
