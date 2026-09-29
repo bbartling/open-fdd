@@ -167,7 +167,7 @@ Phase 2 consolidates into shared contracts.
 
 ## Equipment type precedence
 
-`equipType` / `equipment_type` is durable package metadata. When present and recognized, it is authoritative for Open-FDD equipment classification; generic equipment-id heuristics are fallback only. `AC_1 + equipType: ahu` must classify as AHU. Keep vendor/campus naming remaps in preprocessors rather than product code.
+`equipType` / `equipment_type` is durable package metadata and the only classifier for plots, RCx cohorts, overview families, and rule applicability. A recognized stamp is authoritative (`AC_1` + `equipType: ahu` is an AHU). A missing or unrecognized stamp is unclassified. Do not infer kind from `equipment_id`. Id text cannot add or remove equipment that already has a stamp. Keep vendor/campus naming remaps in preprocessors rather than product code. Epic: [#1043](https://github.com/bbartling/open-fdd/issues/1043).
 
 **ZONE vs AHU (do not drift):**
 

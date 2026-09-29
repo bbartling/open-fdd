@@ -25,7 +25,7 @@ commissioning-grade FDD.
 | Mixing / economizer | `fan-status` (on) + `outside-air-temp` + `return-air-temp` + `mixed-air-temp` plus enough `\|OAT−RAT\|≥10°F` samples | Copy **site-global** BAS OA onto every AHU as `outside-air-temp`. Missing any role → skip, don’t crash. |
 | VAV / zone | `zone-air-temp`, `zone-airflow`, `damper`, `reheat-valve` | `zone-airflow` = **actual CFM**, never the airflow setpoint. Stamp `equipType: vav`. |
 | BAS vs web OAT | BAS `outside-air-temp` **and** `{building}/weather/history_wide.csv` → `web-outside-air-temp` (`web_oa_t`) | Fetch weather at **this job’s** lat/lon; interpolate onto the HVAC UTC grid. `prefer_web_oat: true`. Weather folder is **not** equipment. |
-| Equipment typing | `equipType` (preferred; `equipment_type` accepted) | `rtu`→AHU; unit vent / FCU with fans → `ahu`; chiller plant → `chwPlant`; `heatPump`→`HP`; electricity meter → `meter`. Stamp the type. Do not add an id-substring selector. |
+| Equipment typing | `equipType` (preferred; `equipment_type` accepted) | `rtu`→AHU; unit vent → `ahu`; FCU / standalone DDC → `zone_other`; chiller plant → `chwPlant`; `heatPump`→`HP`; electricity meter → `meter`. Stamp the type. A missing or unrecognized stamp stays unclassified. Do not infer kind from the equipment id, and do not add an id-substring selector. |
 | Electricity meter (UTIL / SV / RCx metering) | Stamp `equipType: meter`; map `elec_power` / `electric_kw` / `kwh` (do not invent points) | BAS BACnet meter columns already named cookbook roles ingest as identity. Package `utilities_v1` monthly bills feed Metering UI. |
 
 Setpoints (`*-sp`, airflow SP) must never steal process-variable roles.
@@ -38,7 +38,7 @@ Empty Overview tables, RCx figures, Inspect overlays, or `?/3` health scores mea
 
 ### D2. Stamp types — do not rely on folder names
 
-Canonical `equipType`: `ahu` `vav` `chwPlant` `boiler` `heatPump` `weather` `meter`. Folder `JRH-RM717-VMA-…` is **UNKNOWN** if unstamped. Stamp the type. Existing id-text helpers (`plant_group_for`, `chiller_like_equipment_sql`) are the open #1043 family. Do not extend them, and do not add another substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id`.
+Canonical `equipType`: `ahu` `vav` `chwPlant` `boiler` `heatPump` `weather` `meter`. Folder `JRH-RM717-VMA-…` is unclassified when the stamp is absent or unrecognized. Overview families, motor groups, VAV health, weather selection, and rule applicability follow that stamp. Do not infer kind from the equipment id. Do not add a substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id` ([#1043](https://github.com/bbartling/open-fdd/issues/1043)).
 
 ### D3. Web weather — package sidecar, not product config
 
@@ -103,4 +103,4 @@ Vendor long-format BAS grids are a **preprocess example** (pivot before ingest),
 
 ## Equipment type precedence
 
-Stamp each equipment block with `equipType` (preferred) or `equipment_type`. Open-FDD persists that stamp during package ingest and uses it before generic folder/id heuristics for inventory and analytics. The persisted building-scoped type metadata is part of the ingest contract, not a transient mapping hint. Example: a folder named `AC_1` with `equipType: ahu` is treated as an AHU. If the stamp is absent or unrecognized, vendor-neutral id heuristics remain the fallback. Vendor/site-specific aliases belong in the preprocess package generator, never in product Rust.
+Stamp each equipment block with `equipType` (preferred) or `equipment_type`. Open-FDD persists that stamp during package ingest and uses it as the classifier for inventory and analytics. The persisted building-scoped type metadata is part of the ingest contract, not a transient mapping hint. A folder named `AC_1` with `equipType: ahu` is an AHU. If the stamp is absent or unrecognized, the equipment stays unclassified. Id text cannot add or remove equipment that already has a stamp. Vendor/site-specific aliases belong in the preprocess package generator, never in product Rust.

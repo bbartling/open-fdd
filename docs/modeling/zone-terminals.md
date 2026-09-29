@@ -58,4 +58,4 @@ Authoritative product map: `edge/src/equipment_types.rs`. Agent contract: `openf
 
 ## Opaque ids (DM-04)
 
-Stamp wins over folder/id heuristics. Example: `AC_1` with `equipType: ahu` exports as **AHU** (`equipment_type_source: package`), not GENERAL. Inferred VAV→AHU parents are **proposals** (`parent_ahu_source: inferred`) and are omitted from Turtle `ofdd:parentAhu` facts until confirmed in package metadata.
+A recognized stamp is the classifier. `AC_1` with `equipType: ahu` exports as **AHU** (`equipment_type_source: package`). A missing or unrecognized stamp is unclassified (`equipment_type_source: unclassified`); equipment-id text is not a kind. VAV→AHU parent links proposed from sibling ids stay proposals (`parent_ahu_source: inferred`) and are omitted from Turtle `ofdd:parentAhu` until the package map confirms them. Those proposals are not cohort membership.

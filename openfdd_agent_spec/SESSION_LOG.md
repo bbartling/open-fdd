@@ -12,6 +12,10 @@
 
 - SPA series preview on FDD Plots and each RCx timeseries card shows the most recent samples of the figure already loaded (newest first). Per-plot dropdown default 10; options 10/20/50/100/500. No historian refetch and no VERSION bump (#1050).
 
+## 2026-09-29 — Equipment kind is the stamp (#1043)
+
+- Plots, RCx cohorts, overview families, weather selection, pandas/WattLab cohorts, and rule applicability follow `equipType` / `equipment_type`. A missing or unrecognized stamp is unclassified. Equipment-id text is not a kind. Agent docs no longer authorize id heuristics as the fallback. DataFusion `rcx_eq_filter` id matching stays a separate open item (#1037).
+
 ## 2026-09-27 — Tip 3.5.53 closeout stress (not FQ)
 
 - Tip `dc32615` / VERSION 3.5.53 on Railway (`sha-dc32615`); backup `20260927T193409Z`; edge `vim-1` MQTTS fresh.
