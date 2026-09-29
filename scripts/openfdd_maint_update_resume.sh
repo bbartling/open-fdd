@@ -207,7 +207,47 @@ PY
   "$ROOT/scripts/openfdd_stack_up.sh" "$RECIPE" --no-pull
 }
 
+disk_preflight() {
+  local root="${OPENFDD_PARQUET_ROOT:-$ROOT/workspace}"
+  if [[ ! -d "$root" ]]; then
+    root="$ROOT"
+  fi
+  local args=(--storage-root "$root" --metadata-snapshot --json)
+  if [[ "${OPENFDD_TEST_DEPLOY:-0}" == "1" ]]; then
+    args+=(--test-deploy)
+  fi
+  if [[ "${OPENFDD_BACKUP_ON_UPDATE:-0}" == "1" ]]; then
+    args+=(--operator-requested-backup)
+  fi
+  # Metadata snapshot is a tag/env pin, not a second historian. A full
+  # workspace tar must call openfdd_disk_preflight.py --full-copy instead.
+  set +e
+  local out
+  out="$(python3 "$ROOT/scripts/openfdd_disk_preflight.py" "${args[@]}")"
+  local code=$?
+  set -e
+  echo "$out"
+  case "$code" in
+    0) return 0 ;;
+    10)
+      log "Disk preflight: skip on-box backup"
+      DO_BACKUP=0
+      return 0
+      ;;
+    11) return 0 ;;
+    20)
+      echo "ERROR: disk preflight fail-closed (reserved free space). Refusing update." >&2
+      exit 1
+      ;;
+    *)
+      echo "ERROR: disk preflight exited $code" >&2
+      exit 1
+      ;;
+  esac
+}
+
 main() {
+  disk_preflight
   if [[ "$DO_BACKUP" -eq 1 ]]; then
     snapshot
   else

@@ -5,6 +5,7 @@ mod admin_cp;
 mod afdd_scheduler;
 mod analytics;
 mod auth;
+mod building_sessions;
 mod canonical_state;
 mod contract;
 mod csv_site_export;
@@ -62,6 +63,12 @@ async fn main() -> anyhow::Result<()> {
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let ingest_task = ingest::spawn_mqtt_ingest_with_shutdown(Arc::clone(&state), shutdown_rx);
+    let session_evictor = tokio::spawn(async {
+        loop {
+            tokio::time::sleep(Duration::from_secs(15)).await;
+            building_sessions::evict_idle();
+        }
+    });
 
     let app = Router::new()
         .merge(routes::router(Arc::clone(&state)))
@@ -108,6 +115,7 @@ async fn main() -> anyhow::Result<()> {
     if let Some(task) = afdd_task {
         task.abort();
     }
+    session_evictor.abort();
     if let Err(error) = ingest_task.await {
         warn!(%error, "MQTT ingest task ended unexpectedly during shutdown");
     }
