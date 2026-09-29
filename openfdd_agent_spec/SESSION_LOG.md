@@ -14,7 +14,7 @@
 
 ## 2026-09-29 — Equipment kind is the stamp (#1043)
 
-- Rule 63: plots, RCx cohorts, overview families, weather selection, motor groups, VAV health, pandas/WattLab cohorts, and rule applicability follow `equipType` / `equipment_type` only. A missing or unrecognized stamp is unclassified. Equipment-id text is not a kind. Agent docs do not authorize id heuristics, `LIKE` / prefix / name filters, a hardcoded building id, or an MQTT delta payload. Parent-AHU id proposals are not cohort membership (#1041). DataFusion `rcx_eq_filter` (#1037) and `chiller_like_equipment_sql` (#1038) are not the classifier and must not grow tokens.
+- Rule 63 (absolute): the framework never hardcodes one building, never prefers a fixture id over `equipType` / `equipment_type`, and never substrings or `LIKE`s `equipment_id`. Prefix `LIKE` is the plot-filter defect (`RTU_01` must not select `RTU_010`). A missing stamp matches nothing. Plot and mech-cooling cohorts use the stamp, then exact equipment ids. Parent-AHU id proposals are not a plot filter (#1041). No MQTT delta payload.
 
 ## 2026-09-27 — Tip 3.5.53 closeout stress (not FQ)
 

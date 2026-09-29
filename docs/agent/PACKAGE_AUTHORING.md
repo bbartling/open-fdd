@@ -38,7 +38,7 @@ Empty Overview tables, RCx figures, Inspect overlays, or `?/3` health scores mea
 
 ### D2. Stamp types — do not rely on folder names
 
-Canonical `equipType`: `ahu` `vav` `chwPlant` `boiler` `heatPump` `weather` `meter`. Folder `JRH-RM717-VMA-…` is unclassified when the stamp is absent or unrecognized. Overview families, motor groups, VAV health, weather selection, and rule applicability follow that stamp. Do not infer kind from the equipment id. Do not add a substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id`. Do not hard-code a building id. Do not invent an MQTT delta payload ([#1043](https://github.com/bbartling/open-fdd/issues/1043), agent rule 63).
+Canonical `equipType`: `ahu` `vav` `chwPlant` `boiler` `heatPump` `weather` `meter`. Folder `JRH-RM717-VMA-…` is unclassified when the stamp is absent or unrecognized, and it matches nothing. Overview families, motor groups, VAV health, weather selection, plot cohorts, and rule applicability follow that stamp, then exact equipment ids. Never prefer a fixture id over the stamp. Never substring, prefix, `LIKE`, `contains`, or `starts_with` on the equipment id (`RTU_01` must not select `RTU_010`). Do not hard-code a building id. Do not invent an MQTT delta payload ([#1043](https://github.com/bbartling/open-fdd/issues/1043), agent rule 63).
 
 ### D3. Web weather — package sidecar, not product config
 
