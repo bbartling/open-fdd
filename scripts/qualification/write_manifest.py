@@ -244,6 +244,7 @@ def finalize(manifest: dict[str, Any]) -> dict[str, Any]:
             "00_hub_health_edges",
             "21_wave_n_mqtts_continuity",
             "35_mqtt_telemetry_pause_resume",
+            "39_mqtts_gap_blame",
         ),
         "browser_behavior": None,
         "api_mcp_contracts": any_status("07_auth_role_matrix", "08_mcp_accuracy"),

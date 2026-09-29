@@ -10,9 +10,73 @@ permalink: /modeling/zone-terminals/
 
 The shipped [FCU / zone_other rule family](../rules/cookbook/fcu-zone-other.md)
 covers coil delivery, passing valves, ventilation feedback, sensor loss,
-deadband, and heat/cool mode cycling for these controllers.
+deadband, and heat/cool mode cycling for these controllers. Per-rule SQL and
+pandas live in the
+[DataFusion cookbook](../rules/cookbook/datafusion-sql-cookbook.md#fan-coil--zone_other)
+and the
+[Pandas cookbook](../rules/cookbook/pandas-cookbook.md#fan-coil--zone_other).
+Haystack tags for each rule are on the
+[SQL rules → Haystack map](sql-rules-haystack-map.html).
 
 Open-FDD **ZONE** is a **control definition**, not "VAV boxes only."
+
+## Haystack multi-tag, then the Open-FDD stamp
+
+Project Haystack puts **several markers on one record**. A fan coil is one `equip` that also carries `fanCoilUnit` and `zone` (and usually `hvac`). Each point on that equip is its own record with several markers. Open-FDD does not select the controller by reading the equipment id. It consumes two things from that multi-tag model:
+
+1. **One equipment stamp** — `equipType` or `equipment_type`. Markers `equip` + `fanCoilUnit` + `zone` collapse to a stamp `canonical_kind` maps to `zone_other` (`fanCoil`, `fanCoilUnit`, `fcu`, `zone_other`, `zone`, or a standalone-DDC alias).
+2. **Mapped point roles** — each point's markers flatten to one package key (`zone` + `air` + `temp` + `sensor` → `zone-air-temp`). Ingest sends that key through `haystack_point_to_role` to a SQL column. The pandas oracle uses the Haystack key as the column name.
+
+The equipment id is only the historian key. `AC_1`, a BAS guid, or any other opaque id is valid when the stamp and the point map are present. A missing stamp is not repaired by putting `FCU` or `ZONE` in the id.
+
+| Haystack markers on one record | Open-FDD input |
+|--------------------------------|----------------|
+| Equip: `equip`, `fanCoilUnit`, `zone` | Stamp `equipType: fanCoil` → kind `zone_other` (master) |
+| Equip: follower with no zone sensor | Resolved kind `general` (stamp-based; see below) |
+| Point: `zone`, `air`, `temp`, `sensor` | `zone-air-temp` → `zone_t` |
+| Point: `discharge`, `air`, `temp`, `sensor` | `discharge-air-temp` → `sat` |
+| Point: `heating`, `valve`, `cmd` | `heating-valve` → `htg_valve_pct` |
+| Point: `cooling`, `valve`, `cmd` | `cooling-valve` → `clg_valve_pct` |
+| Point: `damper`, `cmd` and `damper` feedback | `damper-cmd` → `damper_cmd`, `damper` → `damper_pct` |
+| Point: `zone`, `co2`, `sensor` | `zone-co2` → `zone_co2` |
+| Point: `fan`, `status` and `fan`, `cmd` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` |
+| Point: `cooling`, `sp` and `heating`, `sp` | `cooling-sp` → `cooling_sp`, `heating-sp` → `heating_sp` (site °C) |
+| Point: `zone`, `air`, `temp`, `sp` | `zone-air-temp-sp` → `zone_air_temp_sp` |
+
+Compact package map (the shipped ingest shape). The id `AC_1` is opaque. The stamp and the `points` keys are the model:
+
+```json
+{
+  "equipType": "fanCoil",
+  "equip": "AC_1",
+  "points": {
+    "zone-air-temp": "zn_t",
+    "zone-air-temp-sp": "zn_sp",
+    "discharge-air-temp": "da_t",
+    "heating-valve": "htg_cmd",
+    "cooling-valve": "clg_cmd",
+    "damper-cmd": "oa_cmd",
+    "damper": "oa_pos",
+    "zone-co2": "co2",
+    "fan-status": "fan_s",
+    "fan-cmd": "fan_c",
+    "cooling-sp": "clg_sp",
+    "heating-sp": "htg_sp"
+  }
+}
+```
+
+**Master vs follower stays a stamp, plus which roles are mapped.**
+
+| | Master | Follower |
+|--|--------|----------|
+| Haystack equip markers | `equip` + `fanCoilUnit` (or zone DDC) + `zone` | `equip` without a zone-sensor point |
+| Open-FDD stamp | token that `canonical_kind` maps to `zone_other` | resolved kind `general` |
+| Point roles | includes `zone-air-temp` | omits `zone-air-temp`; may still map `zone-air-temp-sp` |
+
+`canonical_kind` does not map the token `general`. Product `kind_for` returns `zone_other` from the master stamps above. The pandas oracle maps a resolved `GENERAL` type to kind `general`, which is on the FCU `equipment_kinds` list. `FCU-SENSOR-NULL` reports zero hours when the `zone_t` column is absent, so a setpoint-only follower is not a dead-sensor fault.
+
+A fan coil's stamp stays `zone_other`. An air handler that also carries these point roles uses an `ahu` stamp. Unit ventilators stay CV AHU (`unitVentilator`), not `fanCoilUnit`.
 
 ## ZONE control (comfort + sensor FDD)
 
@@ -32,9 +96,70 @@ Do **not** stamp FCU or standalone zone DDC as `ahu`.
 
 VAV boxes remain `equipType: vav` (zone terminals with airflow/damper). They share the **same comfort gate** for zone-temp performance rules.
 
-Family Zones RCx (comfort ranking, space-temp series, airflow series, zone health) uses that same set: VAV, FCU, `zone_other` / standalone DDC, baseboard, and a heat pump that has `zone-air-temp`. Membership is the package stamp or a modeled `zone-air-temp` role. A heat-pump stamp alone is not enough, because plant heat pumps use the same kind. An id that merely contains `ZONE` or `VAV` is not enough, and a non-zone stamp excludes the equipment. Other RCx presets use the same exact-id stamp filter. They do not use an equipment-id prefix (`RTU_01` does not select `RTU_010`).
+Family Zones RCx (comfort ranking, space-temp series, airflow series, zone health) uses that same set: VAV, FCU, `zone_other` / standalone DDC, baseboard, and a heat pump that has `zone-air-temp`.
+
+Haystack puts more than one marker on the same asset. The package path keeps those tags together: `equip`, a zone-terminal marker (`fanCoilUnit`, `zone`, or `vav`), and the point roles (`zone-air-temp`, plus airflow or valve roles when the terminal has them). Compact ingest is `equipType` plus `points` (`fanCoilUnit` / `zone` / `vav` with `zone-air-temp`). Family Zones membership reads that stamp and the mapped roles. A heat-pump stamp joins only when `zone-air-temp` is mapped, because plant heat pumps share that stamp. A non-zone stamp such as `ahu` stays out. Membership never uses `equipment_id` `LIKE` or a prefix (`RTU_01` stays distinct from `RTU_010`). Other RCx presets use an exact equipment-id list from the package stamp.
 
 `VAV-1` scores the comfort band only while occupied when `occ_mode` or the Overview calendar is set (`require_occupied`, default on). Unoccupied setback stays on `VAV-2`.
+
+## FCU / zone_other rule roles
+
+Nine registry rules (`FCU-SENSOR-NULL`, `FCU-HTG-COIL`, `FCU-CLG-COIL`, `FCU-VALVE-PASS-HTG`, `FCU-VALVE-PASS-CLG`, `FCU-DAMPER-POS`, `FCU-CO2-DAMPER`, `FCU-DEADBAND`, `FCU-MODE-CYCLE`) select equipment from the stamp and from registry `equipment_kinds`: `zone_other`, `general`, and `ahu`. Recognized stamps win over folder or id heuristics.
+
+| Role | How it is selected | Why |
+|------|--------------------|-----|
+| Master (owns a zone sensor) | `equipType` that `canonical_kind` maps to `zone_other`: `zone_other`, `zone`, `fcu`, `fanCoil`, `fanCoilUnit`, or a standalone-DDC alias | Product `kind_for` returns `zone_other`, so the family applies |
+| Follower (setpoint only, no `zone_t` column) | registry kind `general` | The kind is on the FCU list. `FCU-SENSOR-NULL` forces zero hours when `zone_t` is absent, so the follower is not a dead-sensor fault. `canonical_kind` does not map the token `general`; the pandas oracle maps a resolved `GENERAL` type to `general` |
+| Air handler that carries the same roles | stamp that canonicalizes to `ahu` | The kind is on the registry list. A fan coil stays on the `zone_other` stamp |
+
+### Haystack tags the nine rules read
+
+Preferred tags are the `haystack_point_to_role` arms in `crates/fdd_core/src/columns.rs`. Map these in the package. Empty FCU results mean the map is missing a required role.
+
+| Need | Haystack tag | SQL role | Rules |
+|------|--------------|----------|-------|
+| Zone temperature | `zone-air-temp` | `zone_t` | sensor-null (optional), both coils, both passing valves |
+| Own zone setpoint | `zone-air-temp-sp` | `zone_air_temp_sp` | `FCU-SENSOR-NULL` (required) |
+| Discharge / supply air | `discharge-air-temp` | `sat` | both coils, both passing valves |
+| Heating valve | `heating-valve` | `htg_valve_pct` | heating coil, cooling coil, both passing valves, mode cycle |
+| Cooling valve | `cooling-valve` | `clg_valve_pct` | cooling coil, both passing valves, mode cycle |
+| Damper command | `damper-cmd` | `damper_cmd` | `FCU-DAMPER-POS`, `FCU-CO2-DAMPER` |
+| Damper feedback | `damper` | `damper_pct` | `FCU-DAMPER-POS` |
+| Zone CO₂ | `zone-co2` | `zone_co2` | `FCU-CO2-DAMPER` |
+| Cooling setpoint | `cooling-sp` or `zone-cooling-sp` | `cooling_sp` | `FCU-DEADBAND` |
+| Heating setpoint | `heating-sp` or `zone-heating-sp` | `heating_sp` | `FCU-DEADBAND` |
+| Fan proof | `fan-status` | `fan_status` | duration rules (optional; preferred) |
+| Fan command fallback | `fan-cmd` | `fan_cmd` | duration rules when status is null |
+
+Commands may be 0–1 or 0–100. Fan proof prefers `fan_status`. `fan_cmd` above 10% is the fallback. CO₂ below 300 ppm is invalid. Valve-shut tests use 0.05.
+
+### Per-rule roles both engines need
+
+Use this table to map a package before tip stress. The Haystack tag is the pandas column. The SQL role is the DataFusion column. Required roles are required on both engines. Fan proof is optional on both duration rules. The last column is registry `optional_roles` that the shared SQL CTE selects and the pandas predicate does not read; DataFusion injects NULL when they are absent.
+
+Parity stays `sql_screening` until tip and field stress on issue-mapped gates. A green CI run does not close Soft-OPEN for this family.
+
+| Rule | Confirm | Required Haystack tag (pandas) | SQL role | Optional both engines | SQL registry optional only |
+|------|--------:|--------------------------------|----------|-----------------------|----------------------------|
+| `FCU-SENSOR-NULL` | 0 s | `zone-air-temp-sp` | `zone_air_temp_sp` | `zone-air-temp` → `zone_t` | — |
+| `FCU-HTG-COIL` | 900 s | `discharge-air-temp`, `zone-air-temp`, `heating-valve` | `sat`, `zone_t`, `htg_valve_pct` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` | `clg_valve_pct`, `damper_cmd`, `damper_pct`, `zone_co2` |
+| `FCU-CLG-COIL` | 900 s | `discharge-air-temp`, `zone-air-temp`, `cooling-valve`, `heating-valve` | `sat`, `zone_t`, `clg_valve_pct`, `htg_valve_pct` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` | `damper_cmd`, `damper_pct`, `zone_co2` |
+| `FCU-VALVE-PASS-HTG` | 900 s | `discharge-air-temp`, `zone-air-temp`, `heating-valve`, `cooling-valve` | `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` | `damper_cmd`, `damper_pct`, `zone_co2` |
+| `FCU-VALVE-PASS-CLG` | 900 s | `discharge-air-temp`, `zone-air-temp`, `heating-valve`, `cooling-valve` | `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` | `damper_cmd`, `damper_pct`, `zone_co2` |
+| `FCU-DAMPER-POS` | 900 s | `damper-cmd`, `damper` | `damper_cmd`, `damper_pct` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` | `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`, `zone_co2` |
+| `FCU-CO2-DAMPER` | 900 s | `zone-co2`, `damper-cmd` | `zone_co2`, `damper_cmd` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` | `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`, `damper_pct` |
+| `FCU-DEADBAND` | 0 s | `cooling-sp`, `heating-sp` | `cooling_sp`, `heating_sp` | — | — |
+| `FCU-MODE-CYCLE` | 0 s | `heating-valve`, `cooling-valve` | `htg_valve_pct`, `clg_valve_pct` | — | — |
+
+`FCU-SENSOR-NULL` forces zero hours when the `zone_t` / `zone-air-temp` column is absent, so a setpoint-only follower is not a dead-sensor fault. A present column that is null still runs the 90% coverage test.
+
+### °F canonical vs °C pass-through
+
+`sat` and `zone_t` are canonical temperature roles. Coil and passing-valve thresholds are °F (default 5.4°F, which is 3°C). On a metric session those two columns are converted to °F through `history_si`.
+
+`cooling_sp` and `heating_sp` are not temperature roles. `FCU-DEADBAND` subtracts them in site-native °C (default minimum 1°C). Map Celsius setpoints into those two roles. A Fahrenheit number in `cooling_sp` or `heating_sp` will not be rewritten to °C, and the deadband test will not mean what the slider says.
+
+`zone_air_temp_sp` is also pass-through. `FCU-SENSOR-NULL` only tests that it is present, so its unit does not enter a temperature comparison. The pandas quality pass skips `zone-air-temp-sp`, `cooling-sp`, and `heating-sp` on `FCU-*` rules so Fahrenheit sensor ranges do not null them first.
 
 ## Unit ventilator = CV AHU
 
@@ -62,4 +187,4 @@ Authoritative product map: `edge/src/equipment_types.rs`. Agent contract: `openf
 
 ## Opaque ids (DM-04)
 
-Stamp wins over folder/id heuristics. Example: `AC_1` with `equipType: ahu` exports as **AHU** (`equipment_type_source: package`), not GENERAL. Inferred VAV→AHU parents are **proposals** (`parent_ahu_source: inferred`) and are omitted from Turtle `ofdd:parentAhu` facts until confirmed in package metadata.
+The stamp plus the mapped point roles select the equipment. Example: `AC_1` with `equipType: fanCoil` is a fan coil (`equipment_type_source: package`, kind `zone_other`) even though the id does not say FCU. The same id with `equipType: ahu` exports as **AHU**. Inferred VAV→AHU parents are **proposals** (`parent_ahu_source: inferred`) and are omitted from Turtle `ofdd:parentAhu` facts until confirmed in package metadata.

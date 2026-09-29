@@ -4,7 +4,7 @@ Open-FDD consumes a generic `openfdd_package_v1` zip. Analytics, FDD, RCx, motor
 
 If Overview tables, RCx plots, Inspect traces, or health matrices are empty, the **package map is incomplete**. That is not an engine bug. Map or synthesize columns **in the zip**, then `POST /api/csv/import/package`.
 
-**Never** hard-code a site, vendor suffix table, city, or equipment id in product code (`services/`, `sql_rules/`, `frontend/web`, `mcp/`). Gold ids: `AHU_1`, `VAV_1`, `CHW_1`, `weather/`.
+**Never** hard-code a site, vendor suffix table, city, or fixture equipment id in product code (`services/`, `sql_rules/`, `frontend/web`, `mcp/`, PyPI report / fault / oracle). Gold ids (`AHU_1`, `VAV_1`, `CHW_1`, `weather/`) are layout examples, not selectors. Select equipment by `equipType` / `equipment_type`, roles, and the registry. Do not prefer `RTU_01` or `VAV_1` over type, and do not match `equipment_id` with a substring, prefix, `LIKE`, `contains`, or `starts_with` (`RTU_01` must not hit `RTU_010`). An exact id is allowed only after the type filter. `building_id` is a caller, request, JWT, or env parameter. Ops and stress may name a lab site as an env default; their selectors stay type-first and exact-id-only. Law: [`openfdd-site-identity`](../../openfdd_agent_spec/skills/openfdd-site-identity/SKILL.md).
 
 **UI export is not SoT:** Mapping → Export site data model (JSON) / Export TTL (Turtle) are **derived views** of the same package inventory. Agents and FDD still author and resolve roles via zip maps → `columns.csv` → DataFusion SQL. Do not replace package authoring with Brick/SPARQL or treat downloaded `.ttl` as the ingest contract. Detail: [`docs/modeling/data-model-ttl.md`](../modeling/data-model-ttl.md).
 
@@ -25,7 +25,7 @@ commissioning-grade FDD.
 | Mixing / economizer | `fan-status` (on) + `outside-air-temp` + `return-air-temp` + `mixed-air-temp` plus enough `\|OAT−RAT\|≥10°F` samples | Copy **site-global** BAS OA onto every AHU as `outside-air-temp`. Missing any role → skip, don’t crash. |
 | VAV / zone | `zone-air-temp`, `zone-airflow`, `damper`, `reheat-valve` | `zone-airflow` = **actual CFM**, never the airflow setpoint. Stamp `equipType: vav`. |
 | BAS vs web OAT | BAS `outside-air-temp` **and** `{building}/weather/history_wide.csv` → `web-outside-air-temp` (`web_oa_t`) | Fetch weather at **this job’s** lat/lon; interpolate onto the HVAC UTC grid. `prefer_web_oat: true`. Weather folder is **not** equipment. |
-| Equipment typing | `equipType` (preferred; `equipment_type` accepted) | `rtu`→AHU; unit vent / FCU with fans → `ahu`; chiller plant → `chwPlant`; `heatPump`→`HP`; electricity meter → `meter`. Id-substring fallback is last resort. |
+| Equipment typing | `equipType` (preferred; `equipment_type` accepted) | `rtu`→AHU; unit vent / FCU with fans → `ahu`; chiller plant → `chwPlant`; `heatPump`→`HP`; electricity meter → `meter`. Stamp the type. Do not add an id-substring selector. |
 | Electricity meter (UTIL / SV / RCx metering) | Stamp `equipType: meter`; map `elec_power` / `electric_kw` / `kwh` (do not invent points) | BAS BACnet meter columns already named cookbook roles ingest as identity. Package `utilities_v1` monthly bills feed Metering UI. |
 
 Setpoints (`*-sp`, airflow SP) must never steal process-variable roles.
@@ -38,7 +38,7 @@ Empty Overview tables, RCx figures, Inspect overlays, or `?/3` health scores mea
 
 ### D2. Stamp types — do not rely on folder names
 
-Canonical `equipType`: `ahu` `vav` `chwPlant` `boiler` `heatPump` `weather` `meter`. Folder `JRH-RM717-VMA-…` is **UNKNOWN** if unstamped. Product SQL helpers (`plant_group_for`, `chiller_like_equipment_sql`) still help CH-1, but agents must stamp types.
+Canonical `equipType`: `ahu` `vav` `chwPlant` `boiler` `heatPump` `weather` `meter`. Folder `JRH-RM717-VMA-…` is **UNKNOWN** if unstamped. Stamp the type. Existing id-text helpers (`plant_group_for`, `chiller_like_equipment_sql`) are the open #1043 family. Do not extend them, and do not add another substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id`.
 
 ### D3. Web weather — package sidecar, not product config
 

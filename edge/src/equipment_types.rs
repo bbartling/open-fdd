@@ -1,7 +1,7 @@
 //! Building-scoped equipment type metadata persisted from package sidecars.
 //!
-//! Product code prefers an explicit `equipType` / `equipment_type` stamp when
-//! present and falls back to vendor-neutral equipment-id heuristics otherwise.
+//! Product cohorts use a recognized `equipType` / `equipment_type` stamp.
+//! A missing or unrecognized stamp is unclassified. Equipment-id text is not a kind.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -54,31 +54,14 @@ pub fn canonical_kind(raw: &str) -> Option<&'static str> {
     }
 }
 
-pub fn infer_kind_from_id(equipment_id: &str) -> &'static str {
-    let id = equipment_id.to_ascii_uppercase().replace('\\', "/");
-    if id.contains("WEATHER") {
-        "weather"
-    } else if id.contains("METER") {
-        "meter"
-    } else if id.contains("VAV") || id.contains("ZONE") {
-        "vav"
-    } else if id.contains("AHU") || id.contains("RTU") || id.contains("MAU") || id.contains("DOAS")
-    {
-        "ahu"
-    } else if id.contains("CHILL") || id.contains("CHLR") || id.starts_with("CHW") {
-        "chiller"
-    } else if id.contains("TOWER") || id.starts_with("CT_") || id.contains("/CT_") {
-        "cooling_tower"
-    } else if id.contains("BOILER") {
-        "boiler"
-    } else if id.starts_with("HP_") || id.contains("HEAT_PUMP") || id.contains("HEATPUMP") {
-        "heatpump"
-    } else {
-        "unknown"
-    }
+/// Canonical kind from a package stamp.
+///
+/// `equipment_id` is unused. Missing and unrecognized stamps are `unknown`
+/// and do not enter an AHU, VAV, plant, or weather cohort.
+pub fn kind_for(_equipment_id: &str, stamped_type: Option<&str>) -> &'static str {
+    stamped_type.and_then(canonical_kind).unwrap_or("unknown")
 }
 
-/// Prefer stamped package type; fall back to generic id inference.
 /// Zone-terminal kinds. Heat pumps are not in this set: plant and zone heat
 /// pumps share `heatpump`, so a zone role is required (see `zone_comfort_member`).
 pub fn is_zone_terminal_kind(kind: &str) -> bool {
@@ -109,10 +92,13 @@ pub fn zone_comfort_type_label(stamped_type: Option<&str>) -> &'static str {
     }
 }
 
-pub fn kind_for(equipment_id: &str, stamped_type: Option<&str>) -> &'static str {
-    stamped_type
-        .and_then(canonical_kind)
-        .unwrap_or_else(|| infer_kind_from_id(equipment_id))
+/// `package` when the stamp is a recognized kind, otherwise `unclassified`.
+pub fn equipment_type_source(stamped_type: Option<&str>) -> &'static str {
+    if stamped_type.and_then(canonical_kind).is_some() {
+        "package"
+    } else {
+        "unclassified"
+    }
 }
 
 /// Display label for Overview inventory / devices-by-type tables.
@@ -205,7 +191,7 @@ pub fn type_report(equipment_id: &str, stamped_type: Option<&str>) -> Value {
         "equipment_id": equipment_id,
         "equipment_type": api_equipment_type_for(equipment_id, stamped_type),
         "equipment_type_raw": stamped_type,
-        "equipment_type_source": if stamped_type.and_then(canonical_kind).is_some() { "package" } else { "id" },
+        "equipment_type_source": equipment_type_source(stamped_type),
     })
 }
 
@@ -215,9 +201,17 @@ mod tests {
 
     #[test]
     fn stamped_ahu_beats_unknown_folder_id() {
-        assert_eq!(infer_kind_from_id("AC_1"), "unknown");
+        assert_eq!(kind_for("AC_1", None), "unknown");
+        assert_eq!(kind_for("jci_ahu_1", None), "unknown");
+        assert_eq!(kind_for("jci_vav_1", None), "unknown");
+        assert_eq!(kind_for("bldg2-zone-loopback", None), "unknown");
         assert_eq!(kind_for("AC_1", Some("ahu")), "ahu");
         assert_eq!(api_equipment_type_for("AC_1", Some("ahu")), "AHU");
+        assert_eq!(kind_for("CHILLER_HEAT_PUMP", Some("chiller")), "chiller");
+        assert_eq!(kind_for("AHU_1_VAV_12", Some("ahu")), "ahu");
+        assert_eq!(equipment_type_source(None), "unclassified");
+        assert_eq!(equipment_type_source(Some("not-a-kind")), "unclassified");
+        assert_eq!(equipment_type_source(Some("vav")), "package");
     }
 
     #[test]
@@ -293,11 +287,13 @@ mod tests {
     }
 
     #[test]
-    fn meter_stamp_and_id_inference() {
+    fn meter_stamp_is_required() {
         assert_eq!(canonical_kind("meter"), Some("meter"));
         assert_eq!(canonical_kind("electricMeter"), Some("meter"));
-        assert_eq!(infer_kind_from_id("CS_ELEC_METER"), "meter");
-        assert_eq!(api_equipment_type_for("CS_ELEC_METER", None), "METER");
+        assert_eq!(kind_for("CS_ELEC_METER", None), "unknown");
+        assert_eq!(api_equipment_type_for("CS_ELEC_METER", None), "GENERAL");
         assert_eq!(api_equipment_type_for("MTR_1", Some("meter")), "METER");
+        assert_eq!(kind_for("OA_REF", Some("weather")), "weather");
+        assert_eq!(kind_for("jci_oat_sensor", None), "unknown");
     }
 }

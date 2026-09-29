@@ -8,30 +8,84 @@ export const SQL_ROLLUP_RULE_IDS = new Set([
   "FAULT-ELAPSED-HOURS",
 ]);
 
-export function isWeatherEquipmentId(id: string): boolean {
-  const s = id.trim().toLowerCase();
-  return s === "weather" || s === "(weather)";
+/** Canonical product kind from a stamp or display label. Id text is ignored. */
+export function canonicalEquipmentKind(
+  raw: string | null | undefined,
+): string | null {
+  const key = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  switch (key) {
+    case "ahu":
+    case "airhandler":
+    case "airhandlingunit":
+    case "rtu":
+    case "mau":
+    case "doas":
+    case "cvahu":
+    case "vavahu":
+    case "unitventilator":
+    case "uv":
+    case "erv":
+    case "energyrecoveryventilator":
+      return "ahu";
+    case "vav":
+    case "vavbox":
+    case "zoneterminal":
+      return "vav";
+    case "zoneother":
+    case "zone":
+    case "fcu":
+    case "fancoil":
+    case "fancoilunit":
+    case "standaloneddc":
+    case "ddczone":
+    case "zoneddc":
+      return "zone_other";
+    case "chiller":
+    case "chwplant":
+    case "chilledwaterplant":
+      return "chiller";
+    case "coolingtower":
+    case "tower":
+      return "cooling_tower";
+    case "boiler":
+    case "hwplant":
+    case "hotwaterplant":
+      return "boiler";
+    case "heatpump":
+    case "hp":
+      return "heatpump";
+    case "baseboard":
+    case "baseboardheat":
+      return "baseboard";
+    case "weather":
+      return "weather";
+    case "meter":
+    case "electricmeter":
+    case "utilitymeter":
+    case "powermeter":
+      return "meter";
+    case "vrf":
+      return "vrf";
+    default:
+      return null;
+  }
 }
 
-const ZONE_TERMINAL_TYPES = new Set([
-  "VAV",
-  "FCU",
-  "ZONE",
-  "ZONE_OTHER",
-  "ZONEOTHER",
-  "BASEBOARD",
-  "FANCOIL",
-  "FAN_COIL",
-  "STANDALONE_DDC",
-  "ZONEDDC",
-  "ZONE_DDC",
-]);
-
-function normalizedEquipmentType(raw: unknown): string {
-  return String(raw ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/[\s-]+/g, "_");
+export function equipmentKind(e: {
+  equipment_id?: unknown;
+  equipment_type?: unknown;
+  equipment_type_raw?: unknown;
+  equipType?: unknown;
+}): string | null {
+  const raw = e.equipment_type_raw ?? e.equipType;
+  const fromRaw = canonicalEquipmentKind(raw == null ? "" : String(raw));
+  if (fromRaw) return fromRaw;
+  return canonicalEquipmentKind(
+    e.equipment_type == null ? "" : String(e.equipment_type),
+  );
 }
 
 function hasZoneAirTempRole(e: {
@@ -51,10 +105,7 @@ function hasZoneAirTempRole(e: {
   return false;
 }
 
-/**
- * Zone terminal for Overview / RCx motor exclusion.
- * Stamp or a modeled zone-air-temp role. Equipment id text is not a type.
- */
+/** Zone terminals and zone-other controls stay out of plant motor groups. */
 export function isZoneTerminalEquipment(e: {
   equipment_id?: unknown;
   equipment_type?: unknown;
@@ -65,23 +116,35 @@ export function isZoneTerminalEquipment(e: {
   roles?: unknown;
   mapped_roles?: unknown;
 }): boolean {
-  const et = normalizedEquipmentType(
-    e.equipment_type ?? e.equipment_type_raw ?? e.equipType,
-  );
-  if (ZONE_TERMINAL_TYPES.has(et)) return true;
-  if (et === "HEAT_PUMP" || et === "HEATPUMP" || et === "HP") {
-    return hasZoneAirTempRole(e);
-  }
-  if (et && et !== "GENERAL" && et !== "UNKNOWN") return false;
-  return hasZoneAirTempRole(e);
+  const kind = equipmentKind(e);
+  if (kind === "vav" || kind === "zone_other" || kind === "baseboard") return true;
+  if (kind === "heatpump" || kind == null) return hasZoneAirTempRole(e);
+  return false;
 }
 
 export function isWeatherEquipment(e: {
-  equipment_id?: string;
-  equipment_type?: string;
+  equipment_id?: unknown;
+  equipment_type?: unknown;
+  equipment_type_raw?: unknown;
+  equipType?: unknown;
 }): boolean {
-  if (isWeatherEquipmentId(String(e.equipment_id ?? ""))) return true;
-  return String(e.equipment_type ?? "").trim().toLowerCase() === "weather";
+  return equipmentKind(e) === "weather";
+}
+
+/** OAT-METEO row for weather equipment. Id substrings do not qualify. */
+export function pickWeatherFaultRow<
+  T extends {
+    equipment_id?: unknown;
+    equipment_type?: unknown;
+    equipment_type_raw?: unknown;
+    equipType?: unknown;
+  },
+>(rows: T[], weatherIds: ReadonlySet<string>): T | undefined {
+  return rows.find((r) => {
+    const id = String(r.equipment_id ?? "");
+    if (id && weatherIds.has(id)) return true;
+    return isWeatherEquipment(r);
+  });
 }
 
 /** Cookbook kind is lowercase (`ahu`), not display `AHU`. */

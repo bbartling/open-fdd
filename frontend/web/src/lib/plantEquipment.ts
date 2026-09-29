@@ -1,68 +1,5 @@
 import type { FddEquipmentItem } from "../api/analyticsApi";
-import { isWeatherEquipment, isZoneTerminalEquipment } from "./overviewMetrics";
-
-/** Mirror `plant_health::is_heat_pump_id`. */
-export function isHeatPumpId(equipmentId: string): boolean {
-  const u = equipmentId
-    .trim()
-    .toUpperCase()
-    .replace(/\\/g, "/")
-    .replace(/-/g, "_");
-  return (
-    u.startsWith("HP_") ||
-    u.includes("/HP_") ||
-    u.includes("HEAT_PUMP") ||
-    u.includes("HEATPUMP")
-  );
-}
-
-function normalizedType(equipment: FddEquipmentItem): string {
-  const raw = String(
-    equipment.equipment_type_raw ??
-      equipment.equipType ??
-      equipment.equipment_type ??
-      "",
-  );
-  return raw.trim().toUpperCase().replace(/[\s-]+/g, "_");
-}
-
-export function isCoolingTowerEquipment(equipment: FddEquipmentItem): boolean {
-  const kind = normalizedType(equipment);
-  if (
-    kind === "COOLING_TOWER" ||
-    kind === "COOLINGTOWER" ||
-    kind === "TOWER"
-  ) {
-    return true;
-  }
-  const id = String(equipment.equipment_id ?? "").trim().toUpperCase();
-  return id.includes("TOWER") || id.startsWith("CT_") || id.includes("/CT_");
-}
-
-/**
- * Rough plant group from an equipment id when no stamp is present.
- * This is not the RCx plot filter. Plot membership uses the package stamp.
- */
-export function plantGroupFor(equipmentId: string): "air" | "chiller" | "boiler" | null {
-  const u = equipmentId.trim().toUpperCase().replace(/\\/g, "/");
-  if (!u) return null;
-  if (u.includes("BOILER") || u.includes("HW_PUMP") || u.includes("HW-")) {
-    return "boiler";
-  }
-  if (
-    u.includes("CHILLER") ||
-    u.includes("CHW") ||
-    u.includes("CW_PUMP") ||
-    u.includes("TOWER") ||
-    u.startsWith("CH-")
-  ) {
-    return "chiller";
-  }
-  if (u.includes("AHU") || u.includes("RTU") || u.includes("MAU") || u.includes("DOAS")) {
-    return "air";
-  }
-  return null;
-}
+import { equipmentKind, isWeatherEquipment } from "./overviewMetrics";
 
 export interface PlantEquipmentFamilies {
   hasAhu: boolean;
@@ -75,11 +12,10 @@ export interface PlantEquipmentFamilies {
   hasZoneOther: boolean;
 }
 
-/** Data-model driven — only show health matrices when equipment exists in package. */
+/** Show a health matrix only when a recognized equipment kind is present. */
 export function plantEquipmentFamilies(
   equipment: FddEquipmentItem[],
 ): PlantEquipmentFamilies {
-  const items = equipment.filter((e) => !isWeatherEquipment(e));
   let hasAhu = false;
   let hasChiller = false;
   let hasCoolingTower = false;
@@ -89,35 +25,34 @@ export function plantEquipmentFamilies(
   let hasZoneOther = false;
   const hasWeather = equipment.some((e) => isWeatherEquipment(e));
 
-  for (const e of items) {
-    const id = String(e.equipment_id ?? "");
-    const kind = String(e.equipment_type ?? "").trim().toUpperCase();
-    const tower = isCoolingTowerEquipment(e);
-    if (isZoneTerminalEquipment(e)) {
-      hasVav = true;
-      if (
-        kind === "ZONE_OTHER" ||
-        kind === "ZONE OTHER" ||
-        kind === "ZONEOTHER"
-      ) {
+  for (const e of equipment) {
+    if (isWeatherEquipment(e)) continue;
+    switch (equipmentKind(e)) {
+      case "vav":
+      case "baseboard":
+        hasVav = true;
+        break;
+      case "zone_other":
         hasZoneOther = true;
-      }
-      if (kind === "HEAT_PUMP" || kind === "HEATPUMP" || kind === "HP") {
+        break;
+      case "ahu":
+        hasAhu = true;
+        break;
+      case "cooling_tower":
+        hasCoolingTower = true;
+        break;
+      case "chiller":
+        hasChiller = true;
+        break;
+      case "boiler":
+        hasBoiler = true;
+        break;
+      case "heatpump":
         hasHeatPump = true;
-      }
-      continue;
+        break;
+      default:
+        break;
     }
-    if (kind === "AHU" || kind === "RTU" || kind === "MAU" || plantGroupFor(id) === "air") {
-      hasAhu = true;
-    }
-    if (tower) hasCoolingTower = true;
-    if (kind === "PLANT" && plantGroupFor(id) === "boiler") hasBoiler = true;
-    if (kind === "PLANT" && plantGroupFor(id) === "chiller" && !tower) hasChiller = true;
-    if (isHeatPumpId(id) || kind === "HEAT_PUMP" || kind === "HEATPUMP") {
-      hasHeatPump = true;
-    }
-    if (plantGroupFor(id) === "chiller" && !isHeatPumpId(id) && !tower) hasChiller = true;
-    if (plantGroupFor(id) === "boiler") hasBoiler = true;
   }
 
   return {

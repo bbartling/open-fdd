@@ -300,7 +300,7 @@ ORDER BY equipment_id
     }));
     if env.rows.is_empty() {
         env.warnings
-            .push("no VAV equipment in historian (stamp equipType:vav or use VAV* ids)".into());
+            .push("no VAV equipment in historian (stamp equipType: vav)".into());
     }
     if !has_fdd {
         env.warnings

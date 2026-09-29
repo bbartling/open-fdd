@@ -5,8 +5,8 @@ use std::sync::Arc;
 use crate::config::Settings;
 use crate::services::{
     bacnet_client::BacnetClientService, bacnet_server::BacnetServerManager,
-    haystack::HaystackService, poll::PollEngine, rest::RestClientService,
-    telemetry_control::TelemetryControl, weather::WeatherService,
+    haystack::HaystackService, mqtt_publish_ledger::MqttPublishLedger, poll::PollEngine,
+    rest::RestClientService, telemetry_control::TelemetryControl, weather::WeatherService,
 };
 
 #[derive(Clone)]
@@ -20,4 +20,6 @@ pub struct AppState {
     pub haystack: Arc<HaystackService>,
     pub rest: Arc<RestClientService>,
     pub telemetry: Arc<TelemetryControl>,
+    /// Diagnostics: QoS 1 publish attempts / acks. Does not filter telemetry.
+    pub publish_ledger: Arc<MqttPublishLedger>,
 }
