@@ -1,6 +1,6 @@
 //! Historian Parquet bridge for DataFusion analytics (Milestone D1).
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
@@ -423,89 +423,53 @@ fn round2(x: f64) -> f64 {
     (x * 100.0).round() / 100.0
 }
 
-/// Map equipment_id → Overview plant chart group (air / boiler / chiller).
-/// Zone terminals (VAV / ZONE) and unknown meters return `None`.
+/// Map a stamped equipment kind → Overview plant chart group (air / boiler / chiller).
+///
+/// Missing or unrecognized stamps return `None`. Equipment-id text is not a group.
 pub fn plant_group_for_typed(
-    equipment_id: &str,
+    _equipment_id: &str,
     stamped_type: Option<&str>,
 ) -> Option<&'static str> {
-    if let Some(kind) =
-        stamped_type.and_then(open_fdd_edge_prototype::equipment_types::canonical_kind)
-    {
-        return match kind {
-            "ahu" => Some("air"),
-            "chiller" | "cooling_tower" | "heatpump" => Some("chiller"),
-            "boiler" => Some("boiler"),
-            "vav" | "weather" => None,
-            _ => None,
+    let kind = stamped_type.and_then(open_fdd_edge_prototype::equipment_types::canonical_kind)?;
+    match kind {
+        "ahu" => Some("air"),
+        "chiller" | "cooling_tower" | "heatpump" => Some("chiller"),
+        "boiler" => Some("boiler"),
+        _ => None,
+    }
+}
+
+/// SQL predicate for equipment whose package stamp is canonical kind `weather`.
+///
+/// An empty stamp set matches nothing (`AND 1 = 0`) or, when `negate`, leaves
+/// the predicate off so non-weather rows are not invented from id text.
+fn stamped_weather_id_predicate(building_id: Option<&str>, negate: bool) -> String {
+    let map = open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let mut ids: Vec<String> = map
+        .into_iter()
+        .filter(|(_, stamp)| {
+            open_fdd_edge_prototype::equipment_types::canonical_kind(stamp) == Some("weather")
+        })
+        .map(|(id, _)| id)
+        .collect();
+    ids.sort();
+    if ids.is_empty() {
+        return if negate {
+            String::new()
+        } else {
+            " AND 1 = 0".to_string()
         };
     }
-    plant_group_for(equipment_id)
-}
-
-pub fn plant_group_for(equipment_id: &str) -> Option<&'static str> {
-    let eq = equipment_id.to_ascii_uppercase().replace('\\', "/");
-    if is_zone_terminal_id(&eq) {
-        return None;
+    let list = ids
+        .iter()
+        .map(|id| format!("'{}'", id.replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(", ");
+    if negate {
+        format!(" AND CAST(equipment_id AS VARCHAR) NOT IN ({list})")
+    } else {
+        format!(" AND CAST(equipment_id AS VARCHAR) IN ({list})")
     }
-    if eq.starts_with("AHU")
-        || eq.contains("/AHU")
-        || eq.contains("RTU")
-        || eq.contains("MAU")
-        || eq.contains("DOAS")
-    {
-        return Some("air");
-    }
-    if eq.contains("TOWER")
-        || eq.starts_with("CT_")
-        || eq.contains("/CT")
-        || (eq.starts_with("CT") && eq.chars().nth(2).is_some_and(|c| c.is_ascii_digit()))
-        || eq.contains("CHILLER")
-        || eq.contains("CHLR")
-        || is_short_chiller_id(&eq)
-        || eq.starts_with("CHW")
-        || eq.contains("CWP")
-        || eq.contains("_DX")
-        || eq.starts_with("DX")
-        || eq.starts_with("HP_")
-        || (eq.contains("PUMP") && (eq.contains("CHW") || eq.contains("CW")))
-    {
-        return Some("chiller");
-    }
-    if eq.contains("BOILER")
-        || eq.contains("HWP")
-        || (eq.contains("PUMP") && eq.contains("HW") && !eq.contains("CHW"))
-        || eq.contains("BOILERS")
-    {
-        return Some("boiler");
-    }
-    // Do not catch bare FAN/SUPPLY — too broad (exhaust/return/etc.).
-    None
-}
-
-fn is_zone_terminal_id(eq: &str) -> bool {
-    eq.contains("/VAV")
-        || eq.starts_with("VAV")
-        || eq.contains("VAVFC")
-        || eq.contains("VAVH")
-        || eq.contains("VAV")
-        || eq.contains("ZONE")
-}
-
-/// Building-100 style ids: CH-1, CH_1, CH1 — not CHANNEL / CHECK / CHW_*.
-fn is_short_chiller_id(eq: &str) -> bool {
-    eq.split('/').any(|part| {
-        let p = part.trim();
-        if p.starts_with("CHW") || p.starts_with("CHECK") || p.starts_with("CHAN") {
-            return false;
-        }
-        if p.starts_with("CH-") || p.starts_with("CH_") {
-            return p.chars().nth(3).is_some_and(|c| c.is_ascii_digit());
-        }
-        p.len() >= 3
-            && p.starts_with("CH")
-            && p.as_bytes().get(2).is_some_and(|b| b.is_ascii_digit())
-    })
 }
 
 /// OAT for mech-cooling bins: prefer web/meteo OAT (pandas Overview default).
@@ -599,24 +563,105 @@ fn time_range_sql(
     out
 }
 
-/// SQL fragment restricting to chiller/DX/tower-like equipment ids.
-/// Kept aligned with [`plant_group_for`] (no bare `CT%` — that matches CTRL_*).
-pub fn chiller_like_equipment_sql() -> &'static str {
-    // LIKE `_` is a wildcard — do not use `CH_%` (matches CHANNEL / CHW…).
-    " AND (\
-        UPPER(equipment_id) LIKE '%CHILLER%' \
-        OR UPPER(equipment_id) LIKE '%CHLR%' \
-        OR UPPER(equipment_id) LIKE '%TOWER%' \
-        OR UPPER(equipment_id) LIKE 'CT_%' \
-        OR UPPER(equipment_id) LIKE '%/CT_%' \
-        OR UPPER(equipment_id) LIKE '%_DX%' \
-        OR UPPER(equipment_id) LIKE 'DX%' \
-        OR UPPER(equipment_id) LIKE 'HP_%' \
-        OR UPPER(equipment_id) LIKE '%CWP%' \
-        OR UPPER(equipment_id) LIKE 'CHW%' \
-        OR UPPER(equipment_id) LIKE 'CH-%' \
-        OR UPPER(equipment_id) LIKE '%/CH-%' \
-     ) AND UPPER(equipment_id) NOT LIKE '%VAV%'"
+/// Preset tokens name canonical kinds. They are not `equipment_id` prefixes.
+///
+/// `RTU` is kind `ahu`. It must not become `LIKE 'RTU%'`, which selects
+/// `RTU_010` whenever the operator asked for `RTU_01`.
+fn preset_token_kind(token: &str) -> Option<&'static str> {
+    match token.trim().to_ascii_lowercase().as_str() {
+        "chw" | "chw_plant" => Some("chiller"),
+        "ct" => Some("cooling_tower"),
+        other => open_fdd_edge_prototype::equipment_types::canonical_kind(other),
+    }
+}
+
+fn wanted_kinds(kinds: &[&str]) -> BTreeSet<&'static str> {
+    kinds
+        .iter()
+        .filter_map(|token| preset_token_kind(token))
+        .collect()
+}
+
+fn ids_from_stamp_map(building_id: Option<&str>, wanted: &BTreeSet<&str>) -> BTreeSet<String> {
+    open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id)
+        .into_iter()
+        .filter(|(_, stamp)| {
+            open_fdd_edge_prototype::equipment_types::canonical_kind(stamp)
+                .is_some_and(|kind| wanted.contains(kind))
+        })
+        .map(|(id, _)| id)
+        .collect()
+}
+
+async fn ids_from_history_type_column(
+    ctx: &SessionContext,
+    cols: &HashSet<String>,
+    wanted: &BTreeSet<&str>,
+) -> BTreeSet<String> {
+    let Some(col) = ["equipment_type", "equiptype"]
+        .into_iter()
+        .find(|name| cols.contains(*name))
+    else {
+        return BTreeSet::new();
+    };
+    let sql = format!(
+        "SELECT DISTINCT CAST(equipment_id AS VARCHAR) AS equipment_id, \
+         CAST({col} AS VARCHAR) AS equipment_type \
+         FROM history WHERE {col} IS NOT NULL AND equipment_id IS NOT NULL"
+    );
+    let Ok(result) = run_sql(ctx, &sql).await else {
+        return BTreeSet::new();
+    };
+    let mut ids = BTreeSet::new();
+    for row in result.rows {
+        let eq = row
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let stamp = row
+            .get("equipment_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if eq.is_empty() {
+            continue;
+        }
+        if open_fdd_edge_prototype::equipment_types::canonical_kind(stamp)
+            .is_some_and(|kind| wanted.contains(kind))
+        {
+            ids.insert(eq.to_string());
+        }
+    }
+    ids
+}
+
+/// Exact `equipment_id` list for a stamp cohort.
+///
+/// An empty kind list is no filter. A kind list with no matching stamp matches
+/// nothing. The predicate never uses `LIKE` or a prefix of `equipment_id`.
+async fn stamped_cohort_sql(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    kinds: &[&str],
+    cols: &HashSet<String>,
+) -> String {
+    if kinds.is_empty() {
+        return String::new();
+    }
+    let wanted = wanted_kinds(kinds);
+    if wanted.is_empty() {
+        return " AND 1 = 0".to_string();
+    }
+    let mut ids = ids_from_stamp_map(building_id, &wanted);
+    ids.extend(ids_from_history_type_column(ctx, cols, &wanted).await);
+    if ids.is_empty() {
+        return " AND 1 = 0".to_string();
+    }
+    let list = ids
+        .iter()
+        .map(|id| format!("'{}'", id.replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(" AND CAST(equipment_id AS VARCHAR) IN ({list})")
 }
 
 /// Load runtime hours from historian Parquet via DataFusion.
@@ -798,16 +843,16 @@ ORDER BY i.equipment_id
                             .get("on_samples")
                             .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|i| i as u64)))
                             .unwrap_or(0);
+                        let stamp = stamped_types.get(&eq).map(String::as_str);
                         equipment.push(json!({
                             "equipment_id": eq,
+                            "equipment_type": open_fdd_edge_prototype::equipment_types::api_equipment_type_for(&eq, stamp),
+                            "equipment_type_raw": stamp,
                             "run_hours": round2(run_hours),
                             "coverage_pct": round2(coverage_pct),
                             "samples": samples,
                             "on_samples": on_samples,
-                            "plant_group": plant_group_for_typed(
-                                &eq,
-                                stamped_types.get(&eq).map(String::as_str),
-                            ),
+                            "plant_group": plant_group_for_typed(&eq, stamp),
                         }));
                     }
                     let weekly_rows = runtime_weekly_plant_rows(
@@ -988,8 +1033,8 @@ ORDER BY week_start, equipment_id
             .get("equipment_id")
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        let Some(plant) = plant_group_for_typed(eq, stamped_types.get(eq).map(String::as_str))
-        else {
+        let stamp = stamped_types.get(eq).map(String::as_str);
+        let Some(plant) = plant_group_for_typed(eq, stamp) else {
             continue;
         };
         let week = row
@@ -1012,6 +1057,8 @@ ORDER BY week_start, equipment_id
             "kind": "weekly_equipment",
             "query_version": "runtime-weekly-v2",
             "equipment_id": eq,
+            "equipment_type": open_fdd_edge_prototype::equipment_types::api_equipment_type_for(eq, stamp),
+            "equipment_type_raw": stamp,
             "label": label,
             "plant_group": plant,
             "week_label": week,
@@ -1306,25 +1353,18 @@ fn role_to_haystack(role: &str) -> String {
     }
 }
 
-fn infer_eq_type(equipment_id: &str) -> &'static str {
-    let id = equipment_id.to_ascii_uppercase();
-    if id.contains("VAV") || id.contains("ZONE") {
-        "VAV"
-    } else if id.contains("AHU") || id.contains("RTU") || id.contains("MAU") {
-        "AHU"
-    } else if id.contains("CHILL") {
-        "CHILLER"
-    } else if id.contains("BOILER") {
-        "BOILER"
-    } else if id.contains("TOWER") {
-        "COOLING_TOWER"
-    } else if id.contains("HP") || id.contains("HEAT") {
-        "HEAT_PUMP"
-    } else if id.contains("WEATHER") {
-        "WEATHER"
-    } else {
-        "GENERAL"
-    }
+fn equipment_stamp_map(building_id: Option<&str>) -> BTreeMap<String, String> {
+    open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id)
+}
+
+fn stamped_display_type(types: &BTreeMap<String, String>, equipment_id: &str) -> &'static str {
+    let stamp = types.get(equipment_id).map(String::as_str);
+    open_fdd_edge_prototype::equipment_types::api_equipment_type_for(equipment_id, stamp)
+}
+
+fn stamped_kind(types: &BTreeMap<String, String>, equipment_id: &str) -> &'static str {
+    let stamp = types.get(equipment_id).map(String::as_str);
+    open_fdd_edge_prototype::equipment_types::kind_for(equipment_id, stamp)
 }
 
 fn fan_on_sql(cols: &HashSet<String>) -> String {
@@ -1374,6 +1414,7 @@ pub async fn sensor_stats_from_history(
         selects.join(" UNION ALL ")
     );
     let result = run_sql(&ctx, &sql).await?;
+    let stamps = equipment_stamp_map(building_id);
     let mut rows = Vec::with_capacity(result.rows.len());
     for r in &result.rows {
         let n_finite = as_u64(r.get("n_finite"));
@@ -1388,7 +1429,7 @@ pub async fn sensor_stats_from_history(
         let role = r.get("role").and_then(|v| v.as_str()).unwrap_or("");
         rows.push(json!({
             "equipment_id": eq,
-            "equipment_type": infer_eq_type(&eq),
+            "equipment_type": stamped_display_type(&stamps, &eq),
             "role": role_to_haystack(role),
             "source": "historian",
             "n": as_u64(r.get("n")),
@@ -1483,6 +1524,7 @@ pub async fn setpoints_from_history(
             run_sql(&ctx, &selects.join(" UNION ALL ")).await?
         }
     };
+    let stamps = equipment_stamp_map(building_id);
     let mut rows = Vec::new();
     for r in &result.rows {
         let eq = r
@@ -1493,7 +1535,7 @@ pub async fn setpoints_from_history(
         let role = r.get("role").and_then(|v| v.as_str()).unwrap_or("");
         rows.push(json!({
             "equipment_id": eq,
-            "equipment_type": infer_eq_type(&eq),
+            "equipment_type": stamped_display_type(&stamps, &eq),
             "role": role_to_haystack(role),
             "median_occupied": as_f64(r.get("median_occupied")).map(round4),
             "median_unoccupied": as_f64(r.get("median_unoccupied")).map(round4),
@@ -1557,6 +1599,7 @@ pub async fn diurnal_from_history(
         selects.join(" UNION ALL ")
     );
     let result = run_sql(&ctx, &sql).await?;
+    let stamps = equipment_stamp_map(building_id);
     let mut rows = Vec::new();
     for r in &result.rows {
         let eq = r
@@ -1567,7 +1610,7 @@ pub async fn diurnal_from_history(
         let role = r.get("role").and_then(|v| v.as_str()).unwrap_or("");
         rows.push(json!({
             "equipment_id": eq,
-            "equipment_type": infer_eq_type(&eq),
+            "equipment_type": stamped_display_type(&stamps, &eq),
             "role": role_to_haystack(role),
             "source": "historian",
             "day_type": "all",
@@ -1591,7 +1634,7 @@ pub async fn diurnal_from_history(
     Ok(Some(env))
 }
 
-/// Equipment topology (feeds / fedBy) inferred from equipment ids.
+/// Equipment topology (feeds / fedBy). Membership is the package stamp.
 pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<AnalyticsEnvelope>> {
     let Some((ctx, _cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
@@ -1610,26 +1653,27 @@ pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<A
                 .map(str::to_string)
         })
         .collect();
+    let stamps = equipment_stamp_map(building_id);
     let ahus: Vec<&str> = ids
         .iter()
-        .filter(|id| infer_eq_type(id) == "AHU")
+        .filter(|id| stamped_kind(&stamps, id) == "ahu")
         .map(|s| s.as_str())
         .collect();
+    let parent = infer_parent_ahu(&ahus);
     let mut rows = Vec::new();
     let mut data_model = Vec::new();
     for id in &ids {
-        let kind = infer_eq_type(id);
+        let kind = stamped_kind(&stamps, id);
         data_model.push(json!({
             "equipment_id": id,
-            "equipment_type": kind,
+            "equipment_type": stamped_display_type(&stamps, id),
             "haystack_point": "",
             "csv_column": "",
             "present_in_history": true,
             "required_by_rules": "",
         }));
-        if kind == "VAV" {
-            let parent = infer_parent_ahu(id, &ahus);
-            if let Some(ahu) = parent {
+        if kind == "vav" {
+            if let Some(ahu) = parent.clone() {
                 rows.push(json!({
                     "equipment_id": id,
                     "relation": "fedBy",
@@ -1652,7 +1696,7 @@ pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<A
     let mut env = envelope_with_engine(
         QV_TOPOLOGY,
         &AnalyticsQuery::default(),
-        vec!["topology inferred from historian equipment ids".into()],
+        vec!["topology uses equipment stamps; a missing stamp is unclassified".into()],
         DF_ENGINE,
     );
     env.rows = rows;
@@ -1661,18 +1705,13 @@ pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<A
     Ok(Some(env))
 }
 
-fn infer_parent_ahu(vav_id: &str, ahus: &[&str]) -> Option<String> {
-    let up = vav_id.to_ascii_uppercase();
-    for ahu in ahus {
-        let a = ahu.to_ascii_uppercase();
-        if up.contains(&a) {
-            return Some((*ahu).to_string());
-        }
-    }
+/// One stamped AHU in the building can be the parent. Id text does not pick it.
+fn infer_parent_ahu(ahus: &[&str]) -> Option<String> {
     if ahus.len() == 1 {
-        return Some(ahus[0].to_string());
+        Some(ahus[0].to_string())
+    } else {
+        None
     }
-    None
 }
 
 /// Boolean occupied-expression from `occ_mode` (Utf8).
@@ -2075,7 +2114,14 @@ pub async fn mech_oat_bins_from_history(
     };
     let max_gap = max_gap_seconds.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
-    let chiller_filter = chiller_like_equipment_sql();
+    let chiller_filter = stamped_cohort_sql(
+        &ctx,
+        building_id,
+        &["chiller", "cooling_tower", "heatpump"],
+        &cols,
+    )
+    .await;
+    let weather_ids = stamped_weather_id_predicate(building_id, false);
     let range_sql = time_range_sql(ts_col, start, end);
     let range_sql_h = time_range_sql(&format!("h.{ts_col}"), start, end);
     let oat_f = history_temp_sql(oat);
@@ -2100,8 +2146,7 @@ pub async fn mech_oat_bins_from_history(
                 "weather_oat AS (
   SELECT {ts_col} AS ts, AVG({oa_t_f}) AS oat_f
   FROM history
-  WHERE oa_t IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0{range_sql}
-    AND UPPER(CAST(equipment_id AS VARCHAR)) LIKE '%WEATHER%'
+  WHERE oa_t IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0{range_sql}{weather_ids}
   GROUP BY {ts_col}
 ),
 fallback_oat AS (
@@ -2350,6 +2395,8 @@ pub async fn bas_vs_web_from_history(
         return Ok(None);
     }
     let _eq_filter = equipment_filter_sql(equipment_filter);
+    let weather_only = stamped_weather_id_predicate(building_id, false);
+    let weather_excluded = stamped_weather_id_predicate(building_id, true);
     let limit = max_points.clamp(100, 5000);
     let (web_label, sql) = if let Some(web) = web_col {
         (
@@ -2402,15 +2449,13 @@ LIMIT {limit}
 WITH bas_by_ts AS (
   SELECT {ts_col} AS ts, AVG({bas}) AS bas_oat_f
   FROM history
-  WHERE {bas} IS NOT NULL
-    AND UPPER(CAST(equipment_id AS VARCHAR)) NOT LIKE '%WEATHER%'
+  WHERE {bas} IS NOT NULL{weather_excluded}
   GROUP BY {ts_col}
 ),
 web_by_ts AS (
   SELECT {ts_col} AS ts, AVG({bas}) AS web_oat_f
   FROM history
-  WHERE {bas} IS NOT NULL
-    AND UPPER(CAST(equipment_id AS VARCHAR)) LIKE '%WEATHER%'
+  WHERE {bas} IS NOT NULL{weather_only}
   GROUP BY {ts_col}
 ),
 joined AS (
@@ -2475,7 +2520,7 @@ LIMIT {limit}
     ];
     if weather_split {
         warnings.push(
-            "web OAT sourced from equipment_id matching WEATHER (single oa_t column site)".into(),
+            "web OAT sourced from equipment stamped kind weather (single oa_t column site)".into(),
         );
     }
     let query = AnalyticsQuery::default();
@@ -2681,54 +2726,13 @@ LIMIT {limit}
     Ok(Some(env))
 }
 
-fn rcx_eq_filter(kinds: &[&str]) -> String {
-    if kinds.is_empty() {
-        return String::new();
-    }
-    let mut parts = Vec::new();
-    for k in kinds {
-        let ku = k.to_ascii_uppercase();
-        if ku == "VAV" {
-            // Name heuristics for package VAVs PLUS MQTT / Zone Other sites whose
-            // equipment_id does not contain "VAV" (e.g. bldg2-zone-loopback).
-            // Keep id-only predicates so history tables without equipment_type still work.
-            parts.push(
-                "(UPPER(equipment_id) LIKE 'VAV%' OR UPPER(equipment_id) LIKE '%/VAV%' \
-                 OR UPPER(equipment_id) LIKE '%VAVH%' OR UPPER(equipment_id) LIKE '%VAVFC%' \
-                 OR UPPER(equipment_id) LIKE '%ZONE%' OR UPPER(equipment_id) LIKE '%LOOPBACK%')"
-                    .to_string(),
-            );
-        } else if ku == "CHW" || ku == "CHW_PLANT" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE '%CHILLER%' OR UPPER(equipment_id) LIKE 'CHW%' \
-                 OR UPPER(equipment_id) LIKE '%CHW_PLANT%')"
-                    .to_string(),
-            );
-        } else if ku == "BOILER" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE 'BOILER%' OR UPPER(equipment_id) LIKE '%/BOILER%' \
-                 OR UPPER(equipment_id) LIKE '%BOILERS%')"
-                    .to_string(),
-            );
-        } else if ku == "TOWER" || ku == "CT" || ku == "COOLING_TOWER" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE '%TOWER%' OR UPPER(equipment_id) LIKE 'CT%' \
-                 OR UPPER(equipment_id) LIKE '%COOLING_TOWER%')"
-                    .to_string(),
-            );
-        } else if ku == "METER" {
-            parts.push(
-                "(UPPER(equipment_id) LIKE 'METER%' OR UPPER(equipment_id) LIKE '%/METER%' \
-                 OR UPPER(equipment_id) LIKE '%_METER%')"
-                    .to_string(),
-            );
-        } else {
-            parts.push(format!(
-                "(UPPER(equipment_id) LIKE '{ku}%' OR UPPER(equipment_id) LIKE '%/{ku}%')"
-            ));
-        }
-    }
-    format!(" AND ({})", parts.join(" OR "))
+async fn rcx_eq_filter(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    kinds: &[&str],
+    cols: &HashSet<String>,
+) -> String {
+    stamped_cohort_sql(ctx, building_id, kinds, cols).await
 }
 
 /// Multi-equipment role timeseries for RCx presets (vibe19 multi_equipment_timeseries).
@@ -2750,7 +2754,7 @@ pub async fn rcx_timeseries_from_history(
     if !cols.contains(role_col) {
         return Ok(None);
     }
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols).await;
     let fan_filter = if filter_fan_on {
         match on_expr(&cols) {
             Some(expr) => format!(" AND ({expr})"),
@@ -2901,7 +2905,7 @@ pub async fn rcx_oat_scatter_from_history(
     } else {
         None
     };
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols).await;
     // Prefixed for JOIN aliases (history AS h).
     let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
     let limit = max_points.clamp(200, 20000);
@@ -2998,7 +3002,7 @@ pub async fn rcx_box_from_history(
     if !cols.contains(role_col) {
         return Ok(None);
     }
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols).await;
     let fan_filter = if filter_fan_on {
         match on_expr(&cols) {
             Some(expr) => format!(" AND ({expr})"),
@@ -3057,7 +3061,7 @@ pub async fn rcx_zone_comfort_rank_from_history(
     if !cols.contains("zone_t") {
         return Ok(None);
     }
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols).await;
     // Match schedule `occupied_expr`: Utf8 "1.0" / "0.0" from packages, not only "1".
     let occ_filter = if cols.contains("occ_mode") {
         " AND (occ_mode IS NULL OR \
@@ -3152,7 +3156,7 @@ pub async fn rcx_metering_from_history(
     let Some(oat) = mech_oat_col(&cols) else {
         return Ok(None);
     };
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols).await;
     let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
     let cooling = kind != "gas";
     let sql = format!(
@@ -3271,20 +3275,24 @@ pub async fn descriptive_counts_from_history(
     .await
 }
 
-/// Like [`descriptive_counts_from_history`] with an optional extra SQL fragment
-/// (e.g. [`chiller_like_equipment_sql`] for mechanical-cooling fallback).
+/// Like [`descriptive_counts_from_history`] with an optional stamp cohort.
+///
+/// Kinds select exact equipment ids. They are not an `equipment_id` substring.
 pub async fn descriptive_counts_from_history_filtered(
     query_version: &str,
     equipment_filter: Option<&[String]>,
     note: &str,
     building_id: Option<&str>,
-    extra_equipment_sql: Option<&str>,
+    cohort_kinds: Option<&[&str]>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, _cols, n, _scan)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let eq_filter = equipment_filter_sql(equipment_filter);
-    let extra = extra_equipment_sql.unwrap_or("");
+    let extra = match cohort_kinds {
+        Some(kinds) => stamped_cohort_sql(&ctx, building_id, kinds, &cols).await,
+        None => String::new(),
+    };
     let sql = format!(
         "SELECT equipment_id, COUNT(*) AS history_rows FROM history \
          WHERE equipment_id IS NOT NULL{eq_filter}{extra} \
@@ -3368,6 +3376,7 @@ pub async fn sql_anomaly_from_history(
         parts.join(" UNION ALL ")
     );
     let result = run_sql(&ctx, &sql).await?;
+    let stamps = equipment_stamp_map(building_id);
     let mut rows = Vec::with_capacity(result.rows.len());
     for r in &result.rows {
         let eq = r
@@ -3382,7 +3391,7 @@ pub async fn sql_anomaly_from_history(
             .unwrap_or(if use_robust { "robust" } else { "zscore" });
         rows.push(json!({
             "equipment_id": eq,
-            "equipment_type": infer_eq_type(&eq),
+            "equipment_type": stamped_display_type(&stamps, &eq),
             "role": role_to_haystack(role),
             "metric": role,
             "method": method_out,
@@ -3552,6 +3561,12 @@ mod tests {
     /// Async-aware so the guard may be held across `.await` (clippy-clean).
     static ENV_LOCK: Mutex<()> = Mutex::const_new(());
 
+    fn write_stamps(parquet: &std::path::Path, building_id: &str, body: &str) {
+        let dir = parquet.join(format!("building={building_id}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("equipment_types.json"), body).unwrap();
+    }
+
     #[test]
     fn zscore_role_sql_rolling_window_and_lag_transition() {
         let sql = zscore_anomaly_role_sql("sat", "timestamp_utc", 24, 3.0, "", true);
@@ -3561,17 +3576,44 @@ mod tests {
         assert!(sql.contains("anomaly_events"));
     }
 
-    #[test]
-    fn rcx_eq_filter_vav_includes_mqtt_zone_loopback() {
-        let f = rcx_eq_filter(&["VAV"]);
-        assert!(
-            f.contains("%LOOPBACK%"),
-            "MQTT zone loopback must match VAV zone presets: {f}"
+    #[tokio::test]
+    async fn plot_cohort_uses_exact_stamp_not_id_prefix() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dir = tmp.path().join("building=site_plot");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("equipment_types.json"),
+            r#"{"RTU_01":"rtu","RTU_010":"vav","bldg2-zone-loopback":"vav"}"#,
+        )
+        .unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.path());
+        let ctx = SessionContext::new();
+        let cols = HashSet::new();
+        let ahu = stamped_cohort_sql(&ctx, Some("site_plot"), &["AHU", "RTU"], &cols).await;
+        let vav = stamped_cohort_sql(&ctx, Some("site_plot"), &["VAV"], &cols).await;
+        let missing = stamped_cohort_sql(&ctx, Some("site_plot"), &["BOILER"], &cols).await;
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        let listed = |sql: &str| -> Vec<String> {
+            let Some(list) = sql.split("IN (").nth(1) else {
+                return Vec::new();
+            };
+            list.trim_end_matches(')')
+                .split(',')
+                .map(|part| part.trim().trim_matches('\'').to_string())
+                .filter(|id| !id.is_empty())
+                .collect()
+        };
+        assert_eq!(listed(&ahu), vec!["RTU_01".to_string()], "{ahu}");
+        assert!(!ahu.to_ascii_uppercase().contains("LIKE"), "{ahu}");
+        assert_eq!(
+            listed(&vav),
+            vec!["RTU_010".to_string(), "bldg2-zone-loopback".to_string()],
+            "{vav}"
         );
-        assert!(
-            f.contains("%ZONE%"),
-            "zone_* equipment ids must match VAV zone presets: {f}"
-        );
+        assert!(!vav.contains("LOOPBACK%"), "{vav}");
+        assert_eq!(missing, " AND 1 = 0");
     }
 
     #[tokio::test]
@@ -4007,25 +4049,60 @@ mod tests {
     }
 
     #[test]
-    fn plant_group_for_maps_common_ids() {
-        assert_eq!(plant_group_for("AHU_1"), Some("air"));
-        assert_eq!(plant_group_for("RTU_WEST"), Some("air"));
-        assert_eq!(plant_group_for("MAU_1"), Some("air"));
-        assert_eq!(plant_group_for("CHILLER_1"), Some("chiller"));
-        assert_eq!(plant_group_for("CT_1"), Some("chiller"));
-        assert_eq!(plant_group_for("HP_3"), Some("chiller"));
-        assert_eq!(plant_group_for("BOILER_1"), Some("boiler"));
-        assert_eq!(plant_group_for("VAV_101"), None);
-        assert_eq!(plant_group_for("BUILDING/VAVFC_2"), None);
-        assert_eq!(plant_group_for("AHU_1_VAV_12"), None);
-        assert_eq!(plant_group_for("AHU-1-VAV-03"), None);
-        assert_eq!(plant_group_for("CH-1"), Some("chiller"));
-        assert_eq!(plant_group_for("CH_1"), Some("chiller"));
-        assert_eq!(plant_group_for("CHLR_2"), Some("chiller"));
-        assert_eq!(plant_group_for("CHANNEL_1"), None);
-        // Bare FAN/SUPPLY must not swallow unrelated motors.
-        assert_eq!(plant_group_for("EXHAUST_FAN_1"), None);
-        assert_eq!(plant_group_for("SUPPLY_METER"), None);
+    fn analytics_label_follows_stamp_not_id() {
+        let types = BTreeMap::from([
+            ("AC_1".into(), "ahu".into()),
+            ("CHILLER_HEAT_PUMP".into(), "chiller".into()),
+            ("jci_vav_1".into(), "vav".into()),
+        ]);
+        assert_eq!(stamped_display_type(&types, "AC_1"), "AHU");
+        assert_eq!(stamped_kind(&types, "CHILLER_HEAT_PUMP"), "chiller");
+        assert_eq!(stamped_kind(&types, "jci_vav_1"), "vav");
+        assert_eq!(stamped_display_type(&types, "AHU_1"), "GENERAL");
+        assert_eq!(stamped_kind(&types, "AHU_1"), "unknown");
+        assert_eq!(stamped_kind(&types, "bldg2-zone-loopback"), "unknown");
+        assert_eq!(infer_parent_ahu(&["AHU_1"]), Some("AHU_1".into()));
+        assert_eq!(infer_parent_ahu(&["AHU_1", "AHU_2"]), None);
+    }
+
+    #[test]
+    fn plant_group_follows_stamp_not_id() {
+        assert_eq!(plant_group_for_typed("AHU_1", Some("ahu")), Some("air"));
+        assert_eq!(plant_group_for_typed("jci_ahu_1", Some("rtu")), Some("air"));
+        assert_eq!(plant_group_for_typed("AC_1", Some("ahu")), Some("air"));
+        assert_eq!(
+            plant_group_for_typed("CHILLER_1", Some("chwPlant")),
+            Some("chiller")
+        );
+        assert_eq!(
+            plant_group_for_typed("CT_1", Some("coolingTower")),
+            Some("chiller")
+        );
+        assert_eq!(
+            plant_group_for_typed("HP_3", Some("heatPump")),
+            Some("chiller")
+        );
+        assert_eq!(
+            plant_group_for_typed("BOILER_1", Some("boiler")),
+            Some("boiler")
+        );
+        assert_eq!(plant_group_for_typed("jci_vav_1", Some("vav")), None);
+        assert_eq!(plant_group_for_typed("trane_vav_2", Some("vav")), None);
+        assert_eq!(plant_group_for_typed("OA_REF", Some("weather")), None);
+        assert_eq!(plant_group_for_typed("bldg2-zone-loopback", None), None);
+        assert_eq!(plant_group_for_typed("AHU_1", None), None);
+        assert_eq!(plant_group_for_typed("VAV_101", None), None);
+        assert_eq!(plant_group_for_typed("CHILLER_1", None), None);
+        assert_eq!(plant_group_for_typed("HP_3", None), None);
+        assert_eq!(plant_group_for_typed("EXHAUST_FAN_1", None), None);
+        assert_eq!(
+            plant_group_for_typed("AHU_1_VAV_12", Some("ahu")),
+            Some("air")
+        );
+        assert_eq!(
+            plant_group_for_typed("HP_HEAT_PUMP_X", Some("chiller")),
+            Some("chiller")
+        );
     }
 
     #[test]
@@ -4123,6 +4200,7 @@ mod tests {
 
         let parquet = tmp.path().join("parquet_pwr");
         fdd_store::ingest_building(tmp.path(), "BUILDING_PWR", &parquet).unwrap();
+        write_stamps(&parquet, "BUILDING_PWR", r#"{"CHILLER_PWR":"chiller"}"#);
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_PWR"), None, None)
@@ -4183,6 +4261,11 @@ mod tests {
                 "timestamp_utc,chiller_status\n2026-07-01T00:00:00Z,1\n",
             ),
             (
+                "CHILLER_10",
+                "col,point_role\nchiller_status,chiller_status\n",
+                "timestamp_utc,chiller_status\n2026-07-01T00:00:00Z,1\n",
+            ),
+            (
                 "VAV_101",
                 "col,point_role\ndamper_pct,damper\n",
                 "timestamp_utc,damper_pct\n2026-07-01T00:00:00Z,50\n",
@@ -4196,6 +4279,13 @@ mod tests {
 
         let parquet = tmp.path().join("parquet_mix");
         fdd_store::ingest_building(tmp.path(), "BUILDING_MIX", &parquet).unwrap();
+        let stamp_dir = parquet.join("building=BUILDING_MIX");
+        std::fs::create_dir_all(&stamp_dir).unwrap();
+        std::fs::write(
+            stamp_dir.join("equipment_types.json"),
+            r#"{"CHILLER_1":"chiller","CHILLER_10":"vav","VAV_101":"vav"}"#,
+        )
+        .unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = descriptive_counts_from_history_filtered(
@@ -4203,7 +4293,7 @@ mod tests {
             None,
             "test",
             Some("BUILDING_MIX"),
-            Some(chiller_like_equipment_sql()),
+            Some(&["chiller", "cooling_tower", "heatpump"]),
         )
         .await
         .unwrap()
@@ -4215,8 +4305,7 @@ mod tests {
             .iter()
             .filter_map(|r| r.get("equipment_id").and_then(|v| v.as_str()))
             .collect();
-        assert!(ids.iter().any(|id| id.contains("CHILLER")));
-        assert!(!ids.iter().any(|id| id.contains("VAV")));
+        assert_eq!(ids, vec!["CHILLER_1"]);
     }
 
     #[tokio::test]
@@ -4275,6 +4364,7 @@ mod tests {
 
         let parquet = tmp.path().join("parquet_ch");
         fdd_store::ingest_building(tmp.path(), "BUILDING_CH", &parquet).unwrap();
+        write_stamps(&parquet, "BUILDING_CH", r#"{"CHILLER_1":"chiller"}"#);
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_CH"), None, None)
@@ -4341,6 +4431,7 @@ mod tests {
 
         let parquet = tmp.path().join("parquet_split");
         fdd_store::ingest_building(tmp.path(), "BUILDING_SPLIT", &parquet).unwrap();
+        write_stamps(&parquet, "BUILDING_SPLIT", r#"{"CHILLER_2":"chiller"}"#);
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_SPLIT"), None, None)
@@ -4387,6 +4478,7 @@ mod tests {
 
         let parquet = tmp.path().join("parquet_air");
         fdd_store::ingest_building(tmp.path(), "BUILDING_AIR", &parquet).unwrap();
+        write_stamps(&parquet, "BUILDING_AIR", r#"{"AHU_1":"ahu","AHU_2":"ahu"}"#);
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = runtime_from_history(None, 900.0, Some("BUILDING_AIR"), None, None)
@@ -4449,8 +4541,28 @@ mod tests {
         writeln!(wf, "2026-07-01T00:05:00Z,61").unwrap();
         writeln!(wf, "2026-07-01T00:10:00Z,62").unwrap();
 
+        let lookalike = building.join("AHU_10");
+        std::fs::create_dir_all(&lookalike).unwrap();
+        std::fs::write(
+            lookalike.join("columns.csv"),
+            "col,point_role\nsat,sat\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut lf = std::fs::File::create(lookalike.join("history_wide.csv")).unwrap();
+        writeln!(lf, "timestamp_utc,sat,web_oa_t").unwrap();
+        writeln!(lf, "2026-07-01T00:00:00Z,99,60").unwrap();
+        writeln!(lf, "2026-07-01T00:05:00Z,99,61").unwrap();
+        writeln!(lf, "2026-07-01T00:10:00Z,99,62").unwrap();
+
         let parquet = tmp.path().join("parquet_oatsc");
         fdd_store::ingest_building(tmp.path(), "BUILDING_OATSC", &parquet).unwrap();
+        let stamp_dir = parquet.join("building=BUILDING_OATSC");
+        std::fs::create_dir_all(&stamp_dir).unwrap();
+        std::fs::write(
+            stamp_dir.join("equipment_types.json"),
+            r#"{"AHU_1":"ahu","AHU_10":"vav","weather":"weather"}"#,
+        )
+        .unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = rcx_oat_scatter_from_history(Some("BUILDING_OATSC"), "sat", &["AHU"], false, 500)
@@ -4464,6 +4576,7 @@ mod tests {
         assert!(env.points[0].get("oat_f").is_some());
         assert!(env.points[0].get("y_f").is_some());
         assert_eq!(env.engine, DF_ENGINE);
+        assert!(env.points.iter().all(|p| p["equipment_id"] == "AHU_1"));
     }
 
     #[test]
@@ -4512,6 +4625,11 @@ mod tests {
 
         let parquet = tmp.path().join("parquet_mqtt_oat");
         fdd_store::ingest_building(tmp.path(), "bldg2_mqtt_oat", &parquet).unwrap();
+        write_stamps(
+            &parquet,
+            "bldg2_mqtt_oat",
+            r#"{"hosted-weather":"weather"}"#,
+        );
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = bas_vs_web_from_history(None, 500, Some("bldg2_mqtt_oat"))

@@ -138,9 +138,8 @@ pub async fn vav_health_from_history(
         env.coverage = Some(json!({"schema_version": SCHEMA_VAV_HEALTH, "building_id": bid}));
         return Ok(Some(env));
     }
-    // No id-prefix SQL filter: opaque package ids (e.g. B100 terminals) are
-    // stamped `equipType: vav` in equipment_types.json. Prefer stamp via
-    // kind_for; fall back to id heuristics that resolve to "vav".
+    // No id-prefix SQL filter. Membership is canonical kind `vav` from
+    // equipment_types.json. An unstamped id is not a VAV.
     let sql = r#"
 SELECT
   equipment_id,
@@ -298,7 +297,7 @@ ORDER BY equipment_id
     }));
     if env.rows.is_empty() {
         env.warnings
-            .push("no VAV equipment in historian (stamp equipType:vav or use VAV* ids)".into());
+            .push("no VAV equipment in historian (stamp equipType: vav)".into());
     }
     if !has_fdd {
         env.warnings

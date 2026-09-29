@@ -1,7 +1,7 @@
 import type { AnalyticsEnvelope } from "./analyticsApi";
 import { mechFigure } from "./centralOverview";
 import {
-  isWeatherEquipmentId,
+  isWeatherEquipment,
   isZoneTerminalEquipment,
 } from "../lib/overviewMetrics";
 
@@ -52,7 +52,7 @@ export function rcxPresetTables(
       (r) =>
         r.kind !== "weekly_plant" &&
         r.kind !== "weekly_equipment" &&
-        !isWeatherEquipmentId(String(r.equipment_id ?? "")) &&
+        !isWeatherEquipment(r) &&
         !isZoneTerminalEquipment(r),
     );
     if (totals.length) {

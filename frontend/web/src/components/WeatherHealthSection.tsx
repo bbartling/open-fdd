@@ -3,6 +3,7 @@ import { DataTable, InlineAlert } from "./widgets";
 import { getFddResults } from "../api/fddApi";
 import { postBasVsWebOat } from "../api/analyticsApi";
 import { plantEquipmentFamilies } from "../lib/plantEquipment";
+import { isWeatherEquipment, pickWeatherFaultRow } from "../lib/overviewMetrics";
 import type { FddEquipmentItem } from "../api/analyticsApi";
 
 function fmtHours(v: unknown): string {
@@ -73,11 +74,12 @@ export function WeatherHealthSection({
 
         const out: Array<Record<string, unknown>> = [];
 
-        const oatFault = oatMeteo.find(
-          (r) =>
-            String(r.equipment_id ?? "").toLowerCase().includes("weather") ||
-            String(r.equipment_id ?? "") === "weather",
-        ) ?? oatMeteo[0];
+        const weatherIds = new Set(
+          equipment
+            .filter((e) => isWeatherEquipment(e))
+            .map((e) => String(e.equipment_id ?? "")),
+        );
+        const oatFault = pickWeatherFaultRow(oatMeteo, weatherIds);
 
         out.push({
           point: "outsideAir drybulb",

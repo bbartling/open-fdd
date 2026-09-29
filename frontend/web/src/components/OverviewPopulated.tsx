@@ -40,7 +40,7 @@ import {
   cookbookRuleCount,
   datasetTimeSpan,
   formatOverviewTs,
-  isWeatherEquipmentId,
+  isWeatherEquipment,
   spanHoursBetween,
 } from "../lib/overviewMetrics";
 
@@ -280,9 +280,9 @@ export function OverviewPopulated({
         frames.find(
           (e) =>
             e.equipment_id === equipmentId &&
-            !isWeatherEquipmentId(String(e.equipment_id)),
+            !isWeatherEquipment(e),
         ) ??
-        frames.find((e) => !isWeatherEquipmentId(String(e.equipment_id ?? "")));
+        frames.find((e) => !isWeatherEquipment(e));
       setRowCount(eq?.sampling?.row_count ?? 0);
       setEqKind(
         cookbookKind(eq?.equipment_type || selected?.equipment_type || "—"),
