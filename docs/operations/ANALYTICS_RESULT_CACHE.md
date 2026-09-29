@@ -20,7 +20,7 @@ Schema name: `analytics-result-parquet-v1`.
 
 Nested objects and arrays are utf8 JSON cells. Provenance is Parquet key/value metadata (`openfdd.*`): full config hash, watermark order, query version, window. The path hash is the first 16 hex chars. A different query version or config hash is a different partition (cache miss).
 
-`building_id` is a request parameter. Empty or unsafe ids (`/`, `\`, `..`, NUL) skip the cache and compute uncached.
+`building_id` is a request parameter. Empty or unsafe ids (`/`, `\`, `..`, NUL) skip the cache and compute uncached. Request `equipment_ids` are sorted into the config hash. They are not a path segment and they are not a `LIKE` / prefix / contains filter. This cache does not infer `equipType`. The watermark matches hive segments `building_id=` and `building=` only. `equipment_id=` text does not select a building, and a longer id is not a prefix match.
 
 ## Freshness
 
@@ -63,3 +63,14 @@ Listing datasets (`note_catalog_list`) does not open a session. A hub with hundr
 - `cache_hit_does_not_recompute_and_records_elapsed` shows a second call does not recompute and records `elapsed_ms`.
 - `watermark_advance_is_stale_until_refresh` serves stale rows until `refresh: true`.
 - Session tests in `fdd_store` cover idle eviction, capacity, MQTT buffer, and `finish_job` clearing `historian_resident`.
+- `watermark_ignores_equipment_id_text_and_id_prefixes` rejects `equipment_id=` text and a longer `building_id` prefix.
+
+## Compliance (Soft-OPEN, not FQ)
+
+| Rule | This change |
+| --- | --- |
+| No `equipment_id` text filters in product paths | Hive match is `building_id=` / `building=` only. Equipment ids enter the config hash from the request. No `LIKE`, prefix, or contains classifier. `equipType` stays the package stamp. |
+| No hardcoded building or site ids in product DataFusion | Cache, session book, and retention take the caller id. Tests use `site-a`. |
+| No MQTT CELL/DELTA | Ingest records a row-count buffer under the envelope site id. No new topic mode. |
+| Building-agnostic session, cache, and retention | Same limits and layout for every building. `OPENFDD_TEST_DEPLOY` is an env flag, not a site-name branch. |
+| No VERSION bump / not FQ | Workspace `VERSION` is unchanged. Edge disk proof is still open. |

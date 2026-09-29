@@ -213,7 +213,11 @@ pub fn order_key_to_rfc3339(key: u64) -> String {
     rest %= 10_000;
     let minute = rest / 100;
     let second = rest % 100;
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || minute > 59 || second > 59
+    if !(1..=12).contains(&month)
+        || !(1..=31).contains(&day)
+        || hour > 23
+        || minute > 59
+        || second > 59
     {
         return String::new();
     }
@@ -254,8 +258,8 @@ pub fn write_result(
     let final_path = dir.join("results.parquet");
     let tmp_path = dir.join("results.parquet.tmp");
     {
-        let file = File::create(&tmp_path)
-            .with_context(|| format!("create {}", tmp_path.display()))?;
+        let file =
+            File::create(&tmp_path).with_context(|| format!("create {}", tmp_path.display()))?;
         let mut writer = ArrowWriter::try_new(file, batch.schema(), Some(props))?;
         writer.write(&batch)?;
         writer.close()?;
@@ -316,7 +320,10 @@ fn provenance_kvs(p: &CacheProvenance) -> Vec<KeyValue> {
         ("openfdd.watermark_utc", p.watermark_utc.clone()),
         ("openfdd.generated_at", p.generated_at.clone()),
         ("openfdd.engine", p.engine.clone()),
-        ("openfdd.result_query_version", p.result_query_version.clone()),
+        (
+            "openfdd.result_query_version",
+            p.result_query_version.clone(),
+        ),
     ];
     pairs
         .into_iter()
@@ -593,7 +600,10 @@ fn cells_to_array(acc: ColAcc) -> ArrayRef {
     }
 }
 
-fn batch_to_table(batch: &RecordBatch, meta: &HashMap<String, String>) -> Result<AnalyticsResultTable> {
+fn batch_to_table(
+    batch: &RecordBatch,
+    meta: &HashMap<String, String>,
+) -> Result<AnalyticsResultTable> {
     let mut grouped: BTreeMap<(String, u32), Map<String, Value>> = BTreeMap::new();
     let section_col = string_col(batch, COL_SECTION)?;
     let index_col = batch
@@ -697,11 +707,13 @@ fn path_is_analytics_results(path: &Path) -> bool {
         .is_some_and(|n| n == RESULTS_DIR)
 }
 
+/// Hive partition match only. `equipment_id=…` text is not a building key.
 fn path_belongs_to_building(path: &Path, building_id: &str) -> bool {
     let text = path.to_string_lossy();
     let hive = format!("building_id={building_id}");
     let legacy = format!("building={building_id}");
-    text.split(['/', '\\']).any(|seg| seg == hive || seg == legacy)
+    text.split(['/', '\\'])
+        .any(|seg| seg == hive || seg == legacy)
 }
 
 fn safe_window_token(raw: &str) -> Result<String> {
@@ -893,7 +905,9 @@ mod tests {
             .join("history/building_id=site-a/equipment_id=ahu/year=2026/month=01");
         fs::create_dir_all(&mine).unwrap();
         fs::write(mine.join("part-20260115T120000Z-live.parquet"), b"x").unwrap();
-        let other = tmp.path().join("history/building_id=site-b/year=2026/month=06");
+        let other = tmp
+            .path()
+            .join("history/building_id=site-b/year=2026/month=06");
         fs::create_dir_all(&other).unwrap();
         fs::write(other.join("part-20260601T000000Z-live.parquet"), b"x").unwrap();
         let cache = tmp.path().join(
@@ -903,10 +917,25 @@ mod tests {
         fs::write(&cache, b"x").unwrap();
         let order = historian_watermark_order(tmp.path(), "site-a").unwrap();
         assert_eq!(order, 20260115120000);
-        assert_eq!(
-            order_key_to_rfc3339(order),
-            "2026-01-15T12:00:00Z"
-        );
+        assert_eq!(order_key_to_rfc3339(order), "2026-01-15T12:00:00Z");
+    }
+
+    #[test]
+    fn watermark_ignores_equipment_id_text_and_id_prefixes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let by_equipment = tmp.path().join("history/equipment_id=site-a");
+        fs::create_dir_all(&by_equipment).unwrap();
+        fs::write(
+            by_equipment.join("part-20260301T000000Z-live.parquet"),
+            b"x",
+        )
+        .unwrap();
+        let prefix = tmp
+            .path()
+            .join("history/building_id=site-ab/equipment_id=AHU_1");
+        fs::create_dir_all(&prefix).unwrap();
+        fs::write(prefix.join("part-20260601T000000Z-live.parquet"), b"x").unwrap();
+        assert_eq!(historian_watermark_order(tmp.path(), "site-a").unwrap(), 0);
     }
 
     #[test]

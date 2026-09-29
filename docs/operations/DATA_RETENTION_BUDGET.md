@@ -47,10 +47,12 @@ python3 scripts/openfdd_disk_preflight.py --self-test
 
 `scripts/openfdd_maint_update_resume.sh` runs the preflight in metadata-snapshot mode (tag/env pin, not a second historian) before its snapshot. Exit 10 clears that snapshot. Exit 20 refuses the update. A full `tar` of `workspace/` must use `--full-copy` first.
 
-`scripts/openfdd_railway_release.sh` still backs up before a real release. **`OPENFDD_TEST_DEPLOY=1` skips that backup** unless `OPENFDD_BACKUP_ON_UPDATE=1`. Do not treat a test deploy as a production backup drill.
+`scripts/openfdd_railway_release.sh` still backs up before a real release. **`OPENFDD_TEST_DEPLOY=1` skips that backup** for any site unless `OPENFDD_BACKUP_ON_UPDATE=1`. The flag is not a site-name branch. Do not treat a test deploy as a production backup drill.
+
+Eviction walks hive trees (`history/`, `analytics_results/`, `building=`, tenant history). It does not select files by `equipment_id` text. `building_id` stays a path parameter.
 
 ## Soft-OPEN
 
-Logic and tests ship here. Proof on a real edge disk (live cap, prune, update with and without headroom) is a field pass, not this change. Do not delete operator archives to make a lab green.
+Logic and tests ship here. Proof on a real edge disk (live cap, prune, update with and without headroom) is a field pass, not this change. Do not delete operator archives to make a lab green. No VERSION bump. Not an FQ claim. Scorecard: [ANALYTICS_RESULT_CACHE.md](ANALYTICS_RESULT_CACHE.md) § Compliance.
 
 Per-building day/size retention in `scripts/openfdd_data_retention_sidecar.sh` still needs `OPENFDD_RETENTION_SIDECAR_ENABLED=1`. The 100 GiB pool does not replace that sidecar.

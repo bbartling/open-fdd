@@ -106,8 +106,8 @@ PY
 
 echo "=== dry-run / preflight backup ==="
 BACKUP_ROOT="$OUT_ROOT/backup"
-# ACME/Railway test deploys skip the workspace backup unless the operator asks.
-# A real release (OPENFDD_TEST_DEPLOY unset) still backs up before mutation.
+# OPENFDD_TEST_DEPLOY=1 skips this backup for any site unless the operator asks.
+# A real release (flag unset) still backs up before mutation.
 backup_requested=0
 case "${OPENFDD_BACKUP_ON_UPDATE:-}" in
   1|true|TRUE|yes|YES|on|ON) backup_requested=1 ;;
