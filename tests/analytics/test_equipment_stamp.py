@@ -25,7 +25,7 @@ if str(_WATT) not in sys.path:
     sys.path.insert(0, str(_WATT))
 
 from app.column_map_json import haystack_equip_type_to_cookbook  # noqa: E402
-from app.data_contract import _is_vav_equipment, infer_parent_ahu_from_path  # noqa: E402
+from app.equipment_kind import infer_parent_ahu_from_path, is_vav_equipment  # noqa: E402
 from app.model_seed import build_model_seed_dict  # noqa: E402
 
 
@@ -94,8 +94,8 @@ def test_wattlab_stamp_only():
     assert haystack_equip_type_to_cookbook("", "jci_vav_1") == "UNKNOWN"
     assert haystack_equip_type_to_cookbook("ahu", "jci_vav_1") == "AHU"
     assert haystack_equip_type_to_cookbook("vav", "AHU_1") == "VAV"
-    assert _is_vav_equipment({"equipment_id": "VAV_1"}) is False
-    assert _is_vav_equipment({"equipment_id": "AC_1", "equipType": "vav"}) is True
+    assert is_vav_equipment({"equipment_id": "VAV_1"}) is False
+    assert is_vav_equipment({"equipment_id": "AC_1", "equipType": "vav"}) is True
     assert infer_parent_ahu_from_path(Path("VAV_2_AHU_1"), Path(".")) is None
     seed = build_model_seed_dict(
         building_id="B1",

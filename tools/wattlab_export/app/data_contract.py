@@ -15,6 +15,7 @@ import pandas as pd
 from pydantic import BaseModel, Field
 
 from app.data_loader import _read_columns_map
+from app.equipment_kind import infer_parent_ahu_from_path, is_vav_equipment as _is_vav_equipment
 
 Severity = Literal["info", "warn", "error"]
 HealthGrade = Literal["ok", "degraded", "incomplete"]
@@ -244,19 +245,6 @@ def load_vav_to_ahu_map(building_root: Path) -> dict[str, str]:
             continue
         out[v] = a
     return out
-
-
-def infer_parent_ahu_from_path(eq_folder: Path, building_root: Path) -> str | None:
-    """Parent AHU comes from a stamped map, not a folder name prefix."""
-    _ = (eq_folder, building_root)
-    return None
-
-
-def _is_vav_equipment(eq: dict[str, Any]) -> bool:
-    from app.site_model import normalize_equipment_type
-
-    raw = eq.get("equipment_type") or eq.get("equipType") or ""
-    return normalize_equipment_type(str(raw)) == "VAV"
 
 
 def audit_building_topology(
