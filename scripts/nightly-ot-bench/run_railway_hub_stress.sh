@@ -174,6 +174,7 @@ python3 "$MANIFEST_PY" create \
   --required 19_wave_m_afdd_flood \
   --required 20_wave_n_tenant_acl \
   --required 21_wave_n_mqtts_continuity \
+  --required 39_mqtts_gap_blame \
   --required 22_wave_o_admin_datamodel_acl \
   --required 23_wave_o_security \
   --required 24_capacity_pressure \
@@ -461,6 +462,36 @@ if [[ "${WAVE_N_CONTINUITY:-1}" == "1" ]]; then
 else
   record_gate "21_wave_n_mqtts_continuity" SKIPPED "21 Wave N MQTTS continuity" \
     "WAVE_N_CONTINUITY=0"
+fi
+
+# --- 39 MQTTS gap blame (edge vs transit vs Railway). Runs when ACME/vim-1 is live. ---
+# Exit 2 is BLOCKED (missing probe), not a green pass. Proven loss is FAIL.
+if [[ "${MQTTS_GAP_BLAME:-1}" == "1" ]]; then
+  set +e
+  env ARTIFACT_DIR="$ART/gate39_mqtts_gap_blame" \
+    OPENFDD_ADMIN_TOKEN="${OPENFDD_ADMIN_TOKEN:-}" \
+    OPENFDD_GAP_BUILDING="${OPENFDD_GAP_BUILDING:-ACME}" \
+    EXPECTED_EDGE_ID="${EXPECTED_EDGE_ID:-}" \
+    bash "$DIR/39_mqtts_gap_blame.sh" 2>&1 | tee "$ART/39_mqtts_gap_blame.log"
+  GAP_RC=${PIPESTATUS[0]}
+  set -e
+  if [[ "$GAP_RC" -eq 0 ]]; then
+    record_gate "39_mqtts_gap_blame" PASS "39 MQTTS gap blame" "" \
+      "$ART/39_mqtts_gap_blame.log" \
+      "$ART/gate39_mqtts_gap_blame/mqtts_gap_blame.json"
+  elif [[ "$GAP_RC" -eq 2 ]]; then
+    record_gate "39_mqtts_gap_blame" BLOCKED "39 MQTTS gap blame" \
+      "instrumentation incomplete — scorecard names the missing EDGE/TRANSIT/RAILWAY probe" \
+      "$ART/39_mqtts_gap_blame.log" \
+      "$ART/gate39_mqtts_gap_blame/mqtts_gap_blame.json"
+  else
+    record_gate "39_mqtts_gap_blame" FAIL "39 MQTTS gap blame" "exit=$GAP_RC" \
+      "$ART/39_mqtts_gap_blame.log" \
+      "$ART/gate39_mqtts_gap_blame/mqtts_gap_blame.json"
+  fi
+else
+  record_gate "39_mqtts_gap_blame" SKIPPED "39 MQTTS gap blame" \
+    "MQTTS_GAP_BLAME=0"
 fi
 
 # --- 22 Wave O admin + data-model/session ACL ---

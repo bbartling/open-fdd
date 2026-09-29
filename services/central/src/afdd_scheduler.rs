@@ -4,9 +4,10 @@
 //! A per-scope Tokio mutex prevents overlapping AFDD runs for the same building,
 //! while failures are recorded without advancing the persisted checkpoint.
 //!
-//! Mode remains deployment/env-owned. Interval + rolling lookback may be updated
-//! via authenticated `POST /api/afdd/scheduler/config` using an allowlisted set
-//! (1/3/6/12 hour frequency; 1/2/3 day lookback) and persist under canonical state.
+//! Mode remains deployment/env-owned. Interval, wall-clock local time, and rolling
+//! lookback may be updated via authenticated `POST /api/afdd/scheduler/config`.
+//! The timer upserts only the cycle window. Unbounded "update all" is rejected.
+//! An explicit historical range is `POST /api/afdd/scheduler/backfill`.
 
 use std::collections::VecDeque;
 use std::path::Path;
@@ -21,9 +22,11 @@ use axum::{Json, Router};
 use chrono::{DateTime, Duration, Utc};
 use dashmap::DashMap;
 use fdd_store::{
-    next_due_at, plan_continuous_cycle, AfddConfig, AfddCycleWindow, AfddLookbackUnit, AfddMode,
-    AfddOperatorSchedule, AfddSchedulerCheckpoint, AFDD_SCHEDULER_CHECKPOINT_PATH,
-    AFDD_SCHEDULER_RUNTIME_CONFIG_PATH, OPERATOR_INTERVAL_MINUTES, OPERATOR_LOOKBACK_DAYS,
+    apply_scheduler_config_update, next_due_at, parse_backfill_request, plan_bounded_backfill,
+    plan_continuous_cycle, wall_clock_local_rfc3339, AfddConfig, AfddCycleWindow, AfddMode,
+    AfddOperatorSchedule, AfddSchedulerCheckpoint, SchedulerConfigUpdate,
+    AFDD_SCHEDULER_CHECKPOINT_PATH, AFDD_SCHEDULER_RUNTIME_CONFIG_PATH, OPERATOR_INTERVAL_MINUTES,
+    OPERATOR_LOOKBACK_DAYS,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -55,6 +58,9 @@ pub struct AfddCycleRecord {
     pub start_utc: DateTime<Utc>,
     pub end_utc: DateTime<Utc>,
     pub catch_up: bool,
+    /// `lookback_window` for the timer and run-now. `bounded_backfill` for an
+    /// explicit range. Never an unbounded rewrite.
+    pub result_scope: String,
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -185,7 +191,7 @@ impl AfddSchedulerRuntime {
         let Some(window) = plan_continuous_cycle(checkpoint.as_ref(), now, latest, &config)? else {
             return Ok(None);
         };
-        self.execute_cycle(scope, "scheduled", window)
+        self.execute_cycle(scope, "scheduled", window, true)
             .await
             .map(Some)
     }
@@ -203,7 +209,29 @@ impl AfddSchedulerRuntime {
             scheduled_for_utc: now,
             catch_up: false,
         };
-        self.execute_cycle(scope, "run_now", window).await
+        self.execute_cycle(scope, "run_now", window, true).await
+    }
+
+    async fn run_backfill(
+        &self,
+        scope: &str,
+        start_utc: DateTime<Utc>,
+        end_utc: DateTime<Utc>,
+        chunk_hours: u64,
+    ) -> Result<Vec<AfddCycleRecord>> {
+        let chunks = plan_bounded_backfill(start_utc, end_utc, chunk_hours)?;
+        let mut records = Vec::with_capacity(chunks.len());
+        for chunk in chunks {
+            let window = AfddCycleWindow {
+                start_utc: chunk.start_utc,
+                end_utc: chunk.end_utc,
+                scheduled_for_utc: Utc::now(),
+                catch_up: false,
+            };
+            // Backfill does not move the continuous checkpoint.
+            records.push(self.execute_cycle(scope, "backfill", window, false).await?);
+        }
+        Ok(records)
     }
 
     async fn execute_cycle(
@@ -211,6 +239,7 @@ impl AfddSchedulerRuntime {
         scope: &str,
         trigger: &str,
         window: AfddCycleWindow,
+        advance_checkpoint: bool,
     ) -> Result<AfddCycleRecord> {
         let scope_lock = self.scope_lock(scope);
         let Ok(_guard) = scope_lock.try_lock() else {
@@ -246,7 +275,9 @@ impl AfddSchedulerRuntime {
             .filter(|value| !value.is_empty());
         let rules_failed = result.get("rules_failed").and_then(Value::as_u64);
         // Partial success: registry ok but some rules failed - do not advance checkpoint.
-        let advance_checkpoint = ok && rules_failed.unwrap_or(0) == 0;
+        // Backfill passes advance_checkpoint=false so a historical range cannot
+        // move the continuous watermark.
+        let rules_clean = ok && rules_failed.unwrap_or(0) == 0;
         let status = if !ok {
             "failed"
         } else if rules_failed.unwrap_or(0) > 0 {
@@ -264,6 +295,7 @@ impl AfddSchedulerRuntime {
             start_utc: window.start_utc,
             end_utc: window.end_utc,
             catch_up: window.catch_up,
+            result_scope: result_scope_for(trigger).to_string(),
             ok,
             error: if ok {
                 None
@@ -278,7 +310,7 @@ impl AfddSchedulerRuntime {
         // Persist run metadata before advancing the success checkpoint so a
         // failed write cannot leave an advanced watermark without a run record.
         self.persist_run_record(&record)?;
-        if advance_checkpoint {
+        if advance_checkpoint && rules_clean {
             self.persist_checkpoint(&AfddSchedulerCheckpoint {
                 last_completed_at_utc: record.finished_at_utc,
                 analyzed_through_utc: record.end_utc,
@@ -292,16 +324,26 @@ impl AfddSchedulerRuntime {
         let config = self.config_snapshot();
         let checkpoint = self.checkpoint()?;
         let latest_telemetry = self.latest_telemetry()?;
-        let next_due = next_due_at(checkpoint.as_ref(), Utc::now(), &config)?;
+        let now = Utc::now();
+        let next_due = next_due_at(checkpoint.as_ref(), now, &config)?;
+        let next_due_local = config
+            .wall_clock_timezone
+            .as_deref()
+            .and_then(|tz| wall_clock_local_rfc3339(next_due, tz).ok());
         let status = self.status.lock().unwrap();
         let timer_scope =
             normalize_scope(std::env::var("OPENFDD_AFDD_BUILDING_ID").ok().as_deref());
+        let timer_enabled = config.mode == AfddMode::Continuous;
+        let schedule_kind = config.schedule_kind;
         Ok(json!({
             "ok": true,
             "config": config,
+            "schedule_kind": schedule_kind,
             "checkpoint": checkpoint,
             "latest_persisted_telemetry_utc": latest_telemetry,
-            "next_due_at_utc": if config.mode == AfddMode::Continuous { Some(next_due) } else { None },
+            "next_due_at_utc": if timer_enabled { Some(next_due) } else { None },
+            "next_due_local": if timer_enabled { next_due_local } else { None },
+            "result_write": "lookback_window",
             "timer_scope": timer_scope,
             "last_error": status.last_error,
             "recent_cycles": status.recent_cycles,
@@ -309,6 +351,13 @@ impl AfddSchedulerRuntime {
             "operator_interval_minutes": OPERATOR_INTERVAL_MINUTES,
             "operator_lookback_days": OPERATOR_LOOKBACK_DAYS,
         }))
+    }
+}
+
+fn result_scope_for(trigger: &str) -> &'static str {
+    match trigger {
+        "backfill" => "bounded_backfill",
+        _ => "lookback_window",
     }
 }
 
@@ -327,12 +376,6 @@ pub struct RunNowRequest {
     building_id: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct UpdateConfigRequest {
-    interval_minutes: u64,
-    lookback_days: u64,
-}
-
 fn normalize_scope(building_id: Option<&str>) -> String {
     building_id
         .map(str::trim)
@@ -346,6 +389,7 @@ pub fn router(state: Arc<AppState>, runtime: Arc<AfddSchedulerRuntime>) -> Route
         .route("/api/afdd/scheduler/status", get(scheduler_status))
         .route("/api/afdd/scheduler/run-now", post(scheduler_run_now))
         .route("/api/afdd/scheduler/config", post(scheduler_update_config))
+        .route("/api/afdd/scheduler/backfill", post(scheduler_backfill))
         .layer(Extension(runtime))
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
@@ -374,18 +418,46 @@ async fn scheduler_run_now(
 
 async fn scheduler_update_config(
     Extension(runtime): Extension<Arc<AfddSchedulerRuntime>>,
-    Json(body): Json<UpdateConfigRequest>,
+    Json(body): Json<Value>,
 ) -> Json<Value> {
-    let schedule = AfddOperatorSchedule {
-        interval_minutes: body.interval_minutes,
-        lookback_value: body.lookback_days,
-        lookback_unit: AfddLookbackUnit::Days,
+    let update = match SchedulerConfigUpdate::from_json(&body) {
+        Ok(update) => update,
+        Err(error) => return Json(json!({"ok": false, "error": error.to_string()})),
+    };
+    let schedule = match apply_scheduler_config_update(&runtime.config_snapshot(), &update) {
+        Ok(schedule) => schedule,
+        Err(error) => return Json(json!({"ok": false, "error": error.to_string()})),
     };
     match runtime.update_operator_schedule(schedule) {
         Ok(config) => Json(json!({
             "ok": true,
             "config": config,
         })),
+        Err(error) => Json(json!({"ok": false, "error": error.to_string()})),
+    }
+}
+
+async fn scheduler_backfill(
+    Extension(runtime): Extension<Arc<AfddSchedulerRuntime>>,
+    Json(body): Json<Value>,
+) -> Json<Value> {
+    let parsed = match parse_backfill_request(&body) {
+        Ok(parsed) => parsed,
+        Err(error) => return Json(json!({"ok": false, "error": error.to_string()})),
+    };
+    let scope = normalize_scope(parsed.building_id.as_deref());
+    match runtime
+        .run_backfill(&scope, parsed.start_utc, parsed.end_utc, parsed.chunk_hours)
+        .await
+    {
+        Ok(cycles) => {
+            let ok = cycles.iter().all(|cycle| cycle.ok);
+            Json(json!({
+                "ok": ok,
+                "result_scope": "bounded_backfill",
+                "cycles": cycles,
+            }))
+        }
         Err(error) => Json(json!({"ok": false, "error": error.to_string()})),
     }
 }
@@ -427,5 +499,12 @@ mod tests {
         assert_eq!(normalize_scope(None), "all");
         assert_eq!(normalize_scope(Some("   ")), "all");
         assert_eq!(normalize_scope(Some(" building-a ")), "building-a");
+    }
+
+    #[test]
+    fn result_scope_never_means_full_history() {
+        assert_eq!(result_scope_for("scheduled"), "lookback_window");
+        assert_eq!(result_scope_for("run_now"), "lookback_window");
+        assert_eq!(result_scope_for("backfill"), "bounded_backfill");
     }
 }

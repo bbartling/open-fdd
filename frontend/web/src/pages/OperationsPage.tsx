@@ -6,6 +6,12 @@ import { getStoredActiveTenant } from "../api/tenantApi";
 import { AppShell } from "../components/AppShell";
 import { SitesPanel } from "../components/SitesPanel";
 import { Button } from "../components/widgets";
+import {
+  buildAfddBackfillPayload,
+  buildAfddSchedulePayload,
+  localInputToUtc,
+  type AfddScheduleKind,
+} from "./afddSchedule";
 
 type OperationsView = "afdd" | "mqtt" | "sites";
 type AfddMode = "bulk" | "continuous";
@@ -15,6 +21,9 @@ interface AfddConfig {
   interval_minutes: number;
   lookback_value: number;
   lookback_unit: "minutes" | "hours" | "days";
+  schedule_kind?: AfddScheduleKind;
+  wall_clock_hhmm?: string | null;
+  wall_clock_timezone?: string | null;
 }
 
 interface AfddCheckpoint {
@@ -43,6 +52,9 @@ interface AfddSchedulerStatus {
   checkpoint?: AfddCheckpoint | null;
   latest_persisted_telemetry_utc?: string | null;
   next_due_at_utc?: string | null;
+  next_due_local?: string | null;
+  schedule_kind?: AfddScheduleKind;
+  result_write?: string;
   last_error?: string | null;
   recent_cycles: AfddCycleRecord[];
   operator_schedule_editable?: boolean;
@@ -66,6 +78,7 @@ const AFDD_INTERVAL_OPTIONS: Array<{ minutes: number; label: string }> = [
   { minutes: 180, label: "Every 3 hours" },
   { minutes: 360, label: "Every 6 hours" },
   { minutes: 720, label: "Every 12 hours" },
+  { minutes: 1440, label: "Every 24 hours" },
 ];
 
 const AFDD_LOOKBACK_OPTIONS: Array<{ days: number; label: string }> = [
@@ -195,6 +208,12 @@ function AfddPanel() {
   const [saving, setSaving] = useState(false);
   const [intervalMinutes, setIntervalMinutes] = useState(60);
   const [lookbackDays, setLookbackDays] = useState(1);
+  const [scheduleKind, setScheduleKind] = useState<AfddScheduleKind>("interval");
+  const [wallClockHhmm, setWallClockHhmm] = useState("05:00");
+  const [wallClockTimezone, setWallClockTimezone] = useState("");
+  const [backfillStart, setBackfillStart] = useState("");
+  const [backfillEnd, setBackfillEnd] = useState("");
+  const [backfilling, setBackfilling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -213,6 +232,9 @@ function AfddPanel() {
         setIntervalMinutes(nearestIntervalMinutes(next.config.interval_minutes));
         const days = lookbackDaysFromConfig(next.config);
         setLookbackDays([1, 2, 3].includes(days) ? days : 1);
+        setScheduleKind(next.config.schedule_kind === "wall_clock" ? "wall_clock" : "interval");
+        setWallClockHhmm(next.config.wall_clock_hhmm || "05:00");
+        setWallClockTimezone(next.config.wall_clock_timezone || "");
       }
       setError(next.ok ? null : next.error ?? "AFDD scheduler status unavailable");
     } catch (err) {
@@ -255,16 +277,23 @@ function AfddPanel() {
       const result = await apiFetch<AfddConfigSaveResponse>("/api/afdd/scheduler/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          interval_minutes: intervalMinutes,
-          lookback_days: lookbackDays,
-        }),
+        body: JSON.stringify(
+          buildAfddSchedulePayload({
+            scheduleKind,
+            intervalMinutes,
+            lookbackDays,
+            wallClockHhmm,
+            wallClockTimezone,
+          }),
+        ),
       });
       if (!result.ok) {
         throw new Error(result.error ?? "Failed to save AFDD schedule");
       }
       setNotice(
-        `Saved AFDD schedule: every ${intervalMinutes / 60}h · lookback ${lookbackDays} day${lookbackDays === 1 ? "" : "s"}.`,
+        scheduleKind === "wall_clock"
+          ? `Saved daily wall-clock AFDD at ${wallClockHhmm} ${wallClockTimezone} · lookback ${lookbackDays} day${lookbackDays === 1 ? "" : "s"}.`
+          : `Saved AFDD schedule: every ${intervalMinutes / 60}h · lookback ${lookbackDays} day${lookbackDays === 1 ? "" : "s"}.`,
       );
       await refresh();
     } catch (err) {
@@ -272,7 +301,35 @@ function AfddPanel() {
     } finally {
       setSaving(false);
     }
-  }, [intervalMinutes, lookbackDays, refresh]);
+  }, [intervalMinutes, lookbackDays, refresh, scheduleKind, wallClockHhmm, wallClockTimezone]);
+
+  const runBackfill = useCallback(async () => {
+    setBackfilling(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await apiFetch<{ ok: boolean; error?: string }>("/api/afdd/scheduler/backfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          buildAfddBackfillPayload({
+            startUtc: localInputToUtc(backfillStart),
+            endUtc: localInputToUtc(backfillEnd),
+            chunkHours: 24,
+          }),
+        ),
+      });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Bounded backfill failed");
+      }
+      setNotice("Bounded backfill finished. Rows outside that range were not rewritten.");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBackfilling(false);
+    }
+  }, [backfillEnd, backfillStart, refresh]);
 
   const recent = status?.recent_cycles ?? [];
   const latestCycle = recent[0];
@@ -306,11 +363,41 @@ function AfddPanel() {
       {status?.last_error ? <div className="inline-alert inline-alert--error" role="status">Last scheduler error: {status.last_error}</div> : null}
 
       <div className="form-row" data-testid="afdd-schedule-controls">
+        <label htmlFor="afdd-schedule-kind">Schedule</label>
+        <select
+          id="afdd-schedule-kind"
+          data-testid="afdd-schedule-kind"
+          value={scheduleKind}
+          disabled={!scheduleEditable || saving}
+          onChange={(event) => setScheduleKind(event.target.value as AfddScheduleKind)}
+        >
+          <option value="interval">Interval since last run</option>
+          <option value="wall_clock">Daily wall clock</option>
+        </select>
+        <label htmlFor="afdd-wall-clock">Local time</label>
+        <input
+          id="afdd-wall-clock"
+          data-testid="afdd-wall-clock"
+          type="time"
+          value={wallClockHhmm}
+          disabled={!scheduleEditable || saving || scheduleKind !== "wall_clock"}
+          onChange={(event) => setWallClockHhmm(event.target.value)}
+        />
+        <label htmlFor="afdd-timezone">Timezone</label>
+        <input
+          id="afdd-timezone"
+          data-testid="afdd-timezone"
+          type="text"
+          value={wallClockTimezone}
+          placeholder="IANA name, for example America/Chicago"
+          disabled={!scheduleEditable || saving || scheduleKind !== "wall_clock"}
+          onChange={(event) => setWallClockTimezone(event.target.value)}
+        />
         <label htmlFor="afdd-frequency">Frequency</label>
         <select
           id="afdd-frequency"
           value={intervalMinutes}
-          disabled={!scheduleEditable || saving}
+          disabled={!scheduleEditable || saving || scheduleKind === "wall_clock"}
           onChange={(event) => setIntervalMinutes(Number(event.target.value))}
         >
           {AFDD_INTERVAL_OPTIONS.map((option) => (
@@ -346,8 +433,41 @@ function AfddPanel() {
         ) : null}
       </div>
 
+      <h3>Bounded backfill</h3>
+      <div className="form-row" data-testid="afdd-backfill-controls">
+        <label htmlFor="afdd-backfill-start">Start</label>
+        <input
+          id="afdd-backfill-start"
+          type="datetime-local"
+          value={backfillStart}
+          disabled={backfilling}
+          onChange={(event) => setBackfillStart(event.target.value)}
+        />
+        <label htmlFor="afdd-backfill-end">End</label>
+        <input
+          id="afdd-backfill-end"
+          type="datetime-local"
+          value={backfillEnd}
+          disabled={backfilling}
+          onChange={(event) => setBackfillEnd(event.target.value)}
+        />
+        <Button
+          id="afdd-backfill"
+          label={backfilling ? "Running…" : "Run bounded backfill"}
+          loading={backfilling}
+          disabled={!backfillStart || !backfillEnd}
+          onClick={() => void runBackfill()}
+        />
+      </div>
+
       <div className="summary-grid">
         {metric("Mode", config?.mode ?? "—")}
+        {metric(
+          "Schedule",
+          config?.schedule_kind === "wall_clock"
+            ? `Daily ${config.wall_clock_hhmm ?? "—"} ${config.wall_clock_timezone ?? ""}`.trim()
+            : "Interval",
+        )}
         {metric("Frequency", config ? `every ${config.interval_minutes / 60} h (${config.interval_minutes} min)` : "—")}
         {metric(
           "Rolling lookback",
@@ -361,7 +481,18 @@ function AfddPanel() {
         {metric("BAS freshness", basFreshness(status?.latest_persisted_telemetry_utc))}
         {metric("Analyzed through", formatTime(status?.checkpoint?.analyzed_through_utc))}
         {metric("Last completed", formatTime(status?.checkpoint?.last_completed_at_utc))}
-        {metric("Next due", config?.mode === "continuous" ? formatTime(status?.next_due_at_utc) : "Bulk mode")}
+        {metric(
+          "Next due",
+          config?.mode === "continuous"
+            ? status?.next_due_local
+              ? `${formatTime(status.next_due_at_utc)} · local ${status.next_due_local}`
+              : formatTime(status?.next_due_at_utc)
+            : "Bulk mode",
+        )}
+        {metric(
+          "Result write",
+          status?.result_write === "lookback_window" ? "Lookback window only" : status?.result_write ?? "—",
+        )}
         {metric("Catch-up", latestCycle?.catch_up ? "Yes" : "No")}
       </div>
 

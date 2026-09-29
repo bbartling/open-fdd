@@ -106,6 +106,7 @@ Aliases: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](docs/migration/vibe19/
 - **Overview:** tabulated analytics + plant/VAV **health matrices** (AHU → chiller → boiler → HP → VAV). No Plotly on Overview. Motor / mech / econ / BAS figures live on **RCx Plots** (additive presets). CSV overlay is the **Inspect** radio (`/inspect`).
 - **Sidebar revision:** `data-testid="app-revision"` shows `GET /api/health` `semver+shortsha` (fallback `version.json`).
 - **Lab → FDD Plots:** `session_config` `confirm_min` (and rule params) apply to the series overlay (`sql_detail_session`). After **Update this rule**, Reports/FDD Plots must refetch on `RULES_UPDATED`.
+- **Series preview:** FDD Plots and each RCx timeseries card show the most recent N rows of the plot window already loaded (newest first). Per-plot dropdown default 10 (10/20/50/100/500). Do not load the historian again for the table.
 - **SCHED-1 occupancy:** treat numeric `0` / `0.0` / `false` **and** string `unoccupied` (and related tokens) as unoccupied — SQL + pandas cookbook stay aligned.
 - **Synthetic-59:** soak via `scripts/synthetic_59_*.py` under `reports/eplus-dump/fixtures/synthetic_59/` (legacy `reports/wattlab-parity/` still works). Do not greenwash `expected_faults.csv`. Vibe19 dual-parity is **retired** — use OpenFDD-only soaks + `scripts/eplus_dump_clustering_export.py` for E+ dump/clustering.
 - **Units:** FDD SQL is °F canonical. Metric CSVs convert at query (`unit_system=metric|si`). Lab sliders show °C when metric is selected; Run all rules after switching.

@@ -1569,6 +1569,9 @@ pub fn run_registry(payload: &Value) -> Value {
             });
         }
     };
+    if let Err(err) = fdd_store::enforce_routine_result_scope(payload, time_window.is_some()) {
+        return json!({"ok": false, "error": err.to_string()});
+    }
     match rt.block_on(run_all_rules_with_overrides(
         &history_root,
         &effective,

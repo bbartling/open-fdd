@@ -91,11 +91,41 @@ Low-RAM: never local `docker build`; no local central/web/mqtt on the closeout p
 
 Compact ACME hive parts before enabling continuous AFDD (`scripts/ops/railway_compact_hub.sh`). Recipe: [`AFDD_MODES.md`](AFDD_MODES.md) § ACME.
 
-**Lookback-sized windows only.** `plan_continuous_cycle` (`crates/fdd_store/src/afdd_scheduler.rs`) sets `end` to the latest persisted telemetry watermark and `start` to `end − lookback`. The window is tied to the cadence: a daily interval uses 24h / 1 day. A cycle does not scan the whole historian.
+**Lookback-sized windows only.** `plan_continuous_cycle` (`crates/fdd_store/src/afdd_scheduler.rs`) sets `end` to the latest persisted telemetry watermark and `start` to `end − lookback`. The window stays the configured lookback. A cycle does not scan the whole historian, and `merge_windowed_rule_result` leaves result slices outside that window unchanged.
 
-`OPENFDD_AFDD_INTERVAL_MINUTES=1440` is the gap after `last_completed_at` (checkpoint + interval). That 1440 is the cadence. It does not align the run to wall-clock 05:00. Ops preference for the ACME lab is to land that daily cycle around **05:00 America/Chicago** so it finishes before the **06:00** morning digest. Lookback stays matched to the cadence (24 hours).
+**Wall clock (product, not yet the field pin).** `OPENFDD_AFDD_SCHEDULE=wall_clock` with `OPENFDD_AFDD_WALL_CLOCK_HHMM` and `OPENFDD_AFDD_WALL_CLOCK_TIMEZONE` runs once per local day. The lab recipe is **05:00 America/Chicago** so the cycle can finish before the **06:00** digest, with lookback 24h. `OPENFDD_AFDD_INTERVAL_MINUTES=1440` remains the checkpoint-relative cadence when schedule kind is `interval`. The current field hub is still interval until this build is pinned. Soft-open: do not claim field qualification from the unit tests.
 
-After downtime the next cycle is still one lookback-sized window (`catch_up`). Replaying retained history is the separate `plan_backfill_chunks` path. Gate 38 checks config truth and a bounded `run-now` window. It does not assert a 05:00 clock alignment. Watch central RAM across that cycle (STRESS NOTE #1). Live lab env: `OPENFDD_AFDD_MODE=continuous`, interval 1440, lookback 24 hours, `OPENFDD_AFDD_BUILDING_ID=ACME`.
+After downtime the next cycle is still one lookback-sized window (`catch_up`). Replaying a chosen range is `POST /api/afdd/scheduler/backfill` (`plan_bounded_backfill`). Scheduler config rejects `update_all`. Gate 38 checks config truth and a bounded `run-now` window. It records `schedule_kind` / `result_scope` when the hub sends them and does not require 05:00 until the field pin flips. Watch central RAM across that cycle (STRESS NOTE #1). Live lab env until re-pin: `OPENFDD_AFDD_MODE=continuous`, interval 1440, lookback 24 hours, `OPENFDD_AFDD_BUILDING_ID=ACME`.
+
+### MQTTS gap blame (gate 39)
+
+Gate 21 only checks that `ingest_ok` moved. Gate **39** (`39_mqtts_gap_blame.sh`) classifies each sampled IO as **EDGE**, **TRANSIT**, **RAILWAY**, **SPARSE_OK**, or **INCONCLUSIVE**. The window defaults to `OPENFDD_DIGEST_REPORT_HOURS`, then `OPENFDD_GAP_WINDOW_HOURS`, else 24h. Equipment comes from `GET /api/fdd/equipment` `equipment_type` (the first air handler and the first VAV in inventory order). The equipment id is not used to choose a row. Ledger and monitor correlation use equality on that chosen id. ACME / vim-1 are lab building and edge fixtures for this stress gate (`OPENFDD_GAP_BUILDING`, `EXPECTED_EDGE_ID`), not equipment filters. The publish ledger records QoS 1 acks and does not filter MQTT publishes.
+
+| Class | Meaning | Next action |
+| --- | --- | --- |
+| **EDGE** | Poll did not run, the MQTT session was down, or the publish never got a broker ack while the cloud is equally short | Field edge: BACnet poll, fieldbus MQTT session, `publish_fails` / `publish_no_session` |
+| **TRANSIT** | Edge attempted publish, no QoS 1 broker ack, Railway mqtt ingress quiet | Internet hop from the field edge to the Railway broker |
+| **RAILWAY** | Broker acked the publisher, or `/api/mqtt/monitor` saw the message, but ingest / historian is gapped | Central subscriber, `ingest_reject` bucket `historian_persist`, parquet flush |
+| **SPARSE_OK** | Cadence is intact and the PV did not change, or poll/heartbeat succeeded and the point was not published (health-role omit) while transit and historian are also empty | Not a gap. Full-snapshot publish still sends unchanged PVs; a flat trace with timestamps is not loss |
+| **INCONCLUSIVE** | A layer has no probe | The scorecard names it |
+
+QoS 1 ack means the **broker accepted** the packet. Ack plus a quiet central monitor is **RAILWAY**, not the internet. Poll success alone is not proof the envelope left the edge — that needs `GET /api/mqtt/publish-ledger` on fieldbus (acks, fails, no-session, recent equipment ids). `/bacnet/poll/status` is the current cycle only. `/api/mqtt/monitor` is about 100 messages, not a 24h ledger. Inspect points are used for historian gaps only when in-window median spacing stays near 300s; a coarse stride is **INCONCLUSIVE** (downsample hides holes).
+
+Scorecard counts plus the worst IOs are the BUG_REPORT lines. Exit 0 is a complete window with no loss. Exit 1 is a proven loss class. Exit 2 is recorded **BLOCKED** (missing probe — not a green pass). `MQTTS_GAP_BLAME=0` skips the gate.
+
+Standalone from the OptiPlex against Railway:
+
+```bash
+export OPENFDD_API_BASE=https://<railway-web-or-central>
+export OPENFDD_ADMIN_PASSWORD=...   # do not print
+export OPENFDD_EDGE_BASE=http://127.0.0.1:8081
+export OPENFDD_FIELDBUS_API_KEY=... # when the edge API requires it
+export OPENFDD_GAP_BUILDING=ACME
+export EXPECTED_EDGE_ID=vim-1
+./scripts/nightly-ot-bench/39_mqtts_gap_blame.sh
+```
+
+Offline check (no hub): `python3 -B -m unittest tests.qualification.test_mqtts_gap_blame -v`.
 
 ### Truthful manifests (3.3.26+)
 
