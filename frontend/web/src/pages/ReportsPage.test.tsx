@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { ReportsPage } from "./ReportsPage";
 
@@ -150,6 +150,55 @@ describe("ReportsPage FDD Plots", () => {
     expect(screen.queryByTestId("plots-fault-lane")).toBeNull();
     expect(screen.queryByText(/last_axis=/)).toBeNull();
     expect(screen.queryByText(/domain0=/)).toBeNull();
+    const preview = screen.getByTestId("plots-preview-table");
+    expect(preview.querySelector("tbody td")?.textContent).toBe(
+      "2024-01-01T00:05:00Z",
+    );
+    expect(
+      screen.getByTestId("plots-preview-rows").querySelector("select")?.value,
+    ).toBe("10");
+    expect(screen.queryByText(/first rows/i)).toBeNull();
+  });
+
+  it("previews the newest samples and changes only this plot's row count", async () => {
+    const rows = Array.from({ length: 15 }, (_, i) => ({
+      timestamp_utc: `2024-02-01T00:${String(i).padStart(2, "0")}:00Z`,
+      zone_t: 60 + i,
+      confirmed_fault: i === 14 ? 1 : 0,
+    }));
+    vi.mocked(getFddSeries).mockResolvedValue({
+      ok: true,
+      equipment_id: "VAV_1",
+      rule_id: "VAV-1",
+      roles: ["zone_t"],
+      rows,
+      downsampled: false,
+      max_points: 5000,
+      has_confirmed_fault: true,
+    });
+    renderPlots();
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("plots-preview-table").querySelector("tbody td")
+          ?.textContent,
+      ).toBe("2024-02-01T00:14:00Z");
+    });
+    const table = screen.getByTestId("plots-preview-table");
+    expect(table.querySelectorAll("tbody tr")).toHaveLength(10);
+    const select = screen.getByTestId("plots-preview-rows").querySelector("select");
+    expect([...(select?.options ?? [])].map((o) => o.value)).toEqual([
+      "10",
+      "20",
+      "50",
+      "100",
+      "500",
+    ]);
+    fireEvent.change(select!, { target: { value: "20" } });
+    expect(table.querySelectorAll("tbody tr")).toHaveLength(15);
+    expect(table.querySelector("tbody td")?.textContent).toBe(
+      "2024-02-01T00:14:00Z",
+    );
+    expect(screen.getByText("Series preview (most recent 20)")).toBeTruthy();
   });
 
   it("fails when results exist but confirmed_fault overlay is absent", async () => {

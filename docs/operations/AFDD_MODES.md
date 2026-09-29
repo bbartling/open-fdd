@@ -20,14 +20,29 @@ Historian and FDD scope by **`building_id`**. Switching Jobs in the UI must not 
 
 ```text
 OPENFDD_AFDD_MODE=continuous
+OPENFDD_AFDD_SCHEDULE=interval
 OPENFDD_AFDD_INTERVAL_MINUTES=180
 OPENFDD_AFDD_LOOKBACK_VALUE=3
 OPENFDD_AFDD_LOOKBACK_UNIT=days
 ```
 
-Lookback bounds are passed as `start_utc` / `end_utc` on the registry run and applied as DataFusion predicates on `history` (and `weather` when present) so Apache partition/stats pruning stays effective.
+`OPENFDD_AFDD_SCHEDULE=wall_clock` pins the run to a local time instead of `last_completed_at + interval`:
 
-Operator UI / `POST /api/afdd/scheduler/config` allowlist: interval **1 / 3 / 6 / 12 / 24 hours** (`60…1440` minutes); lookback **1 / 2 / 3 days**. Mode stays env-owned. A persisted `state/afdd/scheduler-runtime-config.json` overlay overwrites interval/lookback on boot — clear it when pinning env lookback in **hours**.
+```text
+OPENFDD_AFDD_SCHEDULE=wall_clock
+OPENFDD_AFDD_WALL_CLOCK_HHMM=05:00
+OPENFDD_AFDD_WALL_CLOCK_TIMEZONE=America/Chicago
+OPENFDD_AFDD_LOOKBACK_VALUE=24
+OPENFDD_AFDD_LOOKBACK_UNIT=hours
+```
+
+The timezone is an operator IANA name. `America/Chicago` is the lab recipe so the cycle can finish before a 06:00 digest. It is not a product default and it is not a building id. The analysis window still ends at the latest persisted telemetry watermark (`start = end − lookback`). A missed day while the process is down is one lookback-sized cycle (`catch_up`), not one full-history pass per missed day.
+
+Lookback bounds are passed as `start_utc` / `end_utc` on the registry run and applied as DataFusion predicates on `history` (and `weather` when present) so Apache partition/stats pruning stays effective. The result write upserts only that window. Slices outside the window stay unchanged. There is no scheduler "update all".
+
+Operator UI / `POST /api/afdd/scheduler/config` allowlist: schedule `interval` or `wall_clock`; interval **1 / 3 / 6 / 12 / 24 hours** (`60…1440` minutes); lookback **1 / 2 / 3 days**; wall clock requires `HH:MM` plus an IANA timezone. `update_all` / `lookback=all` is rejected. Mode stays env-owned. A persisted `state/afdd/scheduler-runtime-config.json` overlay overwrites interval/lookback/schedule on boot — clear it when pinning env lookback in **hours**.
+
+`POST /api/afdd/scheduler/backfill` re-runs an explicit `start_utc`/`end_utc` (max 366 days, max 64 chunks). It does not move the continuous checkpoint. Bulk `POST /api/fdd/run` without a window remains the imported-package registry scan; it is not the timer.
 
 ## ACME = continuous AFDD qualification building (Railway)
 
@@ -42,9 +57,9 @@ OPENFDD_AFDD_BUILDING_ID=ACME
 OPENFDD_PARQUET_FLUSH_SECONDS=300
 ```
 
-- **Cadence:** `OPENFDD_AFDD_INTERVAL_MINUTES=1440` (once per 24h) measured from the last checkpoint (`last_completed_at + interval`). That 1440 is the cadence. It does not pin the run to wall-clock 05:00.
-- **Ops clock (ACME lab):** prefer the daily cycle around **05:00 America/Chicago** so it finishes before the **06:00** morning digest. Lookback stays tied to the cadence (daily → 24h / 1 day).
-- **Window:** lookback-sized only. `end` = latest persisted telemetry watermark; `start` = `end − lookback` (`plan_continuous_cycle` in `crates/fdd_store/src/afdd_scheduler.rs`). The cycle does not scan the entire dataset. After downtime, catch-up is still one lookback-sized window (`catch_up`). Full-history replay is explicit backfill (`plan_backfill_chunks`), separate from the timer.
+- **Cadence:** either `OPENFDD_AFDD_INTERVAL_MINUTES=1440` (checkpoint + interval) or `OPENFDD_AFDD_SCHEDULE=wall_clock` at `05:00` `America/Chicago`. Interval 1440 does not pin the clock. Wall-clock does. The live hub stays on interval until this build is the field tip.
+- **Ops clock (lab):** daily **05:00 America/Chicago**, lookback 24h / 1 day, so the cycle can finish before the **06:00** digest. That timezone is operator config for the lab, not a hardcoded site.
+- **Window:** lookback-sized only. `end` = latest persisted telemetry watermark; `start` = `end − lookback` (`plan_continuous_cycle`). Result rows outside that window are left unchanged (`merge_windowed_rule_result`). After downtime, catch-up is still one lookback-sized window (`catch_up`). Historical rebuild is `POST /api/afdd/scheduler/backfill` with an explicit range (`plan_bounded_backfill`), never an update-all flag.
 - Compact ACME hive parts before enabling continuous AFDD (`scripts/ops/railway_compact_hub.sh` / hub-admin compaction).
 - Stress SoT: gate **38** `38_acme_afdd_qualification.sh` (MEGA required). Gate **19** remains synth flood only.
 - **RAM:** Pro `openfdd-central` replica limit is 24 GB. Watch Railway memory limit/current/max and the hub capacity sampler during Overview / RCx / this cycle ([`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) § STRESS NOTE #1). The 2026-09-28 OOM was the old Hobby 8 GB cap. Keep the headroom.

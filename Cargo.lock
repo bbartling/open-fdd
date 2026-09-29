@@ -2049,6 +2049,7 @@ dependencies = [
  "arrow",
  "arrow-schema",
  "chrono",
+ "chrono-tz",
  "csv",
  "fdd_core",
  "parquet",
