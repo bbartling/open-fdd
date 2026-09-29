@@ -16,6 +16,19 @@
 | #1029 | Custom SQL/FDD behavior is documented for Results, maintained Overview summaries, and gated HITL states; custom rules do not create Overview panels or bulk HITL findings. |
 | #1030 | Nine FCU-* rules have registry metadata and cookbook documentation. Python tests exercise all nine predicates; focused Rust fixtures cover representative SQL predicates, so the family remains `sql_screening` pending full mask/duration parity. |
 
+## Analytics / RCx cycle-2 local patch (issues #1019, #1020, #1037)
+
+This worktree contains the bounded product patch only; no version bump, GHCR
+publish, Railway re-pin, issue mutation, or BACnet write is implied. Local
+acceptance remains focused Rust tests followed by the required read-only ACME
+bench re-probe.
+
+| Issue | Local patch scope / remaining proof |
+|------:|-------------------------------------|
+| #1019 | Mechanical-cooling defaults retry once at the 365-day historian retain floor when the 14-day window is empty or fail-closed. Synthetic-59 must show non-empty OAT/device/aggregate bins after the focused test and staged fixture soak. |
+| #1020 | Runtime removes the preflight full-history `COUNT(*)` scan, reserves a bounded budget for optional weekly bins, and keeps usable base runtime rows when that additive chart query is slow. ACME load proof must show no fail-closed/timeout envelope. |
+| #1037 | RCx chart membership uses canonical persisted `equipment_types.json` stamps and role presence, with no equipment-id `LIKE` fallback. Opaque/vendor ids are included by stamp; misleading names stay out. |
+
 The candidate version is **3.5.55**. Physical BACnet evidence is read-only: Who-Is, AI:1173 Present_Value, and configured RPM/poll proof against routed FEC device 5007. No write endpoint is part of this validation.
 
 ## Tip / GHCR / Railway
@@ -86,7 +99,8 @@ The candidate version is **3.5.55**. Physical BACnet evidence is read-only: Who-
 | **wu-query-memory-unenforced** | **CLOSED (#995 / sha-6914098)** · Bounded DataFusion sessions honor `OPENFDD_QUERY_MEMORY_MB=512` on live hub `3.5.51+69140983c783`. |
 | **wu-996-compact-hive-envelope** | **CLOSED (2026-09-24)** · ACME compaction APPLY + flush 300s + bounded queries — Railway smooth/fast; [#996](https://github.com/bbartling/open-fdd/issues/996) closed. Keep hive compacted; re-open only on fan-out/502 regression. |
 | **wu-352-mqtt-reconnect-on-hub-repin** | **CLOSED (observed 2026-09-24)** · Hub re-pin `sha-b19d72f` / 3.5.52 central→mqtt→web; **fieldbus not re-pinned**. After mqtt bounce, `ingest_ok` flat ~6m (`has_telemetry=false`); then edge resumed without operator field action (`ingest_ok` 2→4, `last_ingest_at` advancing ~300s). Evidence: `reports/tip_3.5.52_repin_20260924T163448Z/`. |
-| **wu-analytics-http200-failclosed** | **OPEN (reconfirmed 3.5.53 MEGA)** · Gate 37 `analytics/runtime` HTTP 200 fail-closed/timeout on ACME; gate17 mech-cooling `n_oat_bins=0` on synth59 Overview soak · ART `20260927T201408Z` · not FQ. |
+| **wu-analytics-http200-failclosed** | **PATCHED LOCALLY / bench proof pending** · Issues [#1019](https://github.com/bbartling/open-fdd/issues/1019) and [#1020](https://github.com/bbartling/open-fdd/issues/1020): bounded mech retain-floor retry, runtime query pruning, and additive weekly-query budget. Re-run synth59 plus read-only ACME load before changing this row to patched. |
+| **rcx-equipment-type-selection** | **PATCHED LOCALLY / bench proof pending** · [#1037](https://github.com/bbartling/open-fdd/issues/1037): RCx predicates use persisted canonical equipment types and required roles; opaque/vendor ids and misleading-name regressions are covered by focused tests. |
 | **mqtt-full-snapshot-1021** | **PATCHED / candidate pending** · [#1021](https://github.com/bbartling/open-fdd/issues/1021): fieldbus change filtering caused sparse steady fan/damper/valve/status historian cells and weak reports despite successful BACnet polls. 3.5.54 removes the change cache, filter and reduced-metadata path; every cycle publishes the complete successful poll snapshot. Acceptance still requires green CI, GHCR fieldbus publication, ACME edge re-pin without the retired env settings, and a trailing-24h density check. |
 | **admin-capacity-gauges** | **CLOSED (branch)** · cgroup memory + workspace `statvfs` + Parquet small-file strip on Admin |
 | **railway-capacity-stress** | **CITED** Tip B FQ `20260917T215437Z` gates 24/24b PASS |

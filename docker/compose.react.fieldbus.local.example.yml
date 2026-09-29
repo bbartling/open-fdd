@@ -9,6 +9,12 @@ services:
       OPENFDD_FIELDBUS_API_KEY: "bench-demo-key-1234567890"
       OPENFDD_FIELDBUS_OPENAPI: "1"
       OPENFDD_FIELDBUS_SWAGGER_BENCH: "1"
+      # Set local_fieldbus for an air-gapped central. Set dual to retain an
+      # optional cloud forward; local delivery is retried independently.
+      # OPENFDD_INGEST_MODE: "local_fieldbus"
+      # OPENFDD_LOCAL_CENTRAL_URL: "http://127.0.0.1:8080"
+      # OPENFDD_LOCAL_INGEST_TOKEN: "set-the-same-random-token-on-central"
+      # OPENFDD_LOCAL_SPOOL_MAX_RECORDS: "10000"
       # HAYSTACK_BASE_URL: "https://<niagara-host>/haystack"
       # HAYSTACK_USER: "${OPENFDD_HAYSTACK_USER}"
       # HAYSTACK_PASS: "${OPENFDD_HAYSTACK_PASS}"

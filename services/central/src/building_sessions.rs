@@ -35,14 +35,6 @@ pub fn note_catalog_list() {
     lock().note_catalog_list();
 }
 
-pub fn note_mqtt_ingest(site_id: &str, pending_rows: usize) {
-    if site_id.trim().is_empty() {
-        return;
-    }
-    let now = now_ms();
-    let _ = lock().note_mqtt(site_id, pending_rows, now);
-}
-
 pub fn leave(building_id: &str) -> bool {
     lock().leave(building_id)
 }

@@ -252,6 +252,44 @@ pub struct PollSettings {
 /// Wave N: fixed HVAC health / FDD poll interval (seconds). Not operator-adjustable.
 pub const FIXED_POLL_INTERVAL_SECS: f64 = 300.0;
 
+/// Fieldbus telemetry delivery profiles.
+///
+/// `mqtts` is the historical cloud/edge path. `local_fieldbus` sends the
+/// same versioned envelope to a central instance over its authenticated local
+/// HTTP ingest endpoint. `dual` enables both sinks; local delivery remains
+/// independent of the optional MQTT connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IngestMode {
+    Mqtts,
+    LocalFieldbus,
+    Dual,
+}
+
+impl IngestMode {
+    pub fn parse(raw: &str) -> Result<Self, String> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "mqtts" => Ok(Self::Mqtts),
+            "local_fieldbus" => Ok(Self::LocalFieldbus),
+            "dual" => Ok(Self::Dual),
+            other => Err(format!(
+                "invalid OPENFDD_INGEST_MODE '{other}' (expected mqtts | local_fieldbus | dual)"
+            )),
+        }
+    }
+
+    pub fn from_env() -> Result<Self, String> {
+        Self::parse(&std::env::var("OPENFDD_INGEST_MODE").unwrap_or_else(|_| "mqtts".into()))
+    }
+
+    pub fn uses_mqtt(self) -> bool {
+        matches!(self, Self::Mqtts | Self::Dual)
+    }
+
+    pub fn uses_local(self) -> bool {
+        matches!(self, Self::LocalFieldbus | Self::Dual)
+    }
+}
+
 impl Default for PollSettings {
     fn default() -> Self {
         Self {

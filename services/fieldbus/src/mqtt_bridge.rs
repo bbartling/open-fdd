@@ -15,11 +15,11 @@ use openfdd_mqtt::{
     publish_json, AsyncClient, Incoming, MqttConfig, MqttHandle, Publish, SpoolConfig,
     TelemetrySpool,
 };
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
 
-use crate::config::Settings;
+use crate::config::{IngestMode, Settings};
 use crate::services::bacnet_client::BacnetClientService;
 use crate::services::mqtt_publish_ledger::MqttPublishLedger;
 use crate::services::poll::PollEngine;
@@ -27,6 +27,14 @@ use crate::services::rest::RestClientService;
 use crate::services::telemetry_control::{parse_telemetry_command, TelemetryControl};
 
 const MAX_SEEN_COMMANDS: usize = 10_000;
+const SINK_DRAIN_BATCH: usize = 32;
+const SINK_IDLE_WAIT: Duration = Duration::from_millis(200);
+
+#[derive(Debug)]
+struct QueuedDelivery {
+    topic: String,
+    envelope: TelemetryEnvelope,
+}
 
 fn mqtt_publish_interval_secs(settings: &Settings) -> f64 {
     // Wave N: publish cadence matches fixed 300s poll (ignore env overrides).
@@ -121,6 +129,128 @@ pub fn mqtt_enabled() -> bool {
             .as_str(),
         "1" | "true" | "yes" | "on"
     )
+}
+
+fn mqtt_delivery_enabled(mode: IngestMode) -> bool {
+    mqtt_delivery_enabled_with(mode, mqtt_enabled())
+}
+
+fn mqtt_delivery_enabled_with(mode: IngestMode, broker_enabled: bool) -> bool {
+    mode.uses_mqtt() && broker_enabled
+}
+
+fn ingest_mode() -> Result<IngestMode, String> {
+    IngestMode::from_env()
+}
+
+#[derive(Clone)]
+struct LocalIngestClient {
+    client: reqwest::Client,
+    endpoint: String,
+    token: Option<String>,
+    tenant_id: Option<String>,
+    building_id: Option<String>,
+}
+
+impl LocalIngestClient {
+    fn from_env(site_id: &str) -> Result<Self, String> {
+        let base = std::env::var("OPENFDD_LOCAL_CENTRAL_URL")
+            .unwrap_or_else(|_| "http://127.0.0.1:8080".into());
+        let endpoint = format!("{}/api/ingest/local", base.trim_end_matches('/'));
+        let timeout_secs = std::env::var("OPENFDD_LOCAL_INGEST_TIMEOUT_SECS")
+            .ok()
+            .and_then(|raw| raw.parse::<u64>().ok())
+            .unwrap_or(10)
+            .clamp(1, 60);
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(timeout_secs))
+            .build()
+            .map_err(|error| format!("local ingest HTTP client: {error}"))?;
+        Ok(Self {
+            client,
+            endpoint,
+            token: std::env::var("OPENFDD_LOCAL_INGEST_TOKEN")
+                .ok()
+                .filter(|value| !value.trim().is_empty()),
+            tenant_id: std::env::var("OPENFDD_TENANT_ID")
+                .ok()
+                .filter(|value| !value.trim().is_empty()),
+            building_id: std::env::var("OPENFDD_BUILDING_ID")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .or_else(|| Some(site_id.to_string())),
+        })
+    }
+
+    async fn send(&self, envelope: &TelemetryEnvelope) -> Result<(), String> {
+        let mut request = self
+            .client
+            .post(&self.endpoint)
+            .header("content-type", "application/json")
+            .header("x-openfdd-message-id", envelope.message_id.to_string())
+            .header("x-openfdd-sequence", envelope.sequence.to_string())
+            .json(envelope);
+        if let Some(token) = &self.token {
+            request = request.bearer_auth(token);
+        }
+        if let Some(tenant_id) = &self.tenant_id {
+            request = request.header("x-openfdd-tenant-id", tenant_id);
+        }
+        if let Some(building_id) = &self.building_id {
+            request = request.header("x-openfdd-building-id", building_id);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|error| format!("local ingest request: {error}"))?;
+        let status = response.status();
+        let body: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|error| format!("local ingest response: {error}"))?;
+        if !durable_local_ack(status, &body) {
+            let pending = body
+                .get("pending")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            let rows = body
+                .get("persisted_rows")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            return Err(format!(
+                "local ingest not durable: HTTP {status} pending={pending} persisted_rows={rows}"
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// 200 is success only when this message's rows are already committed.
+/// 202 means the sample is still pending, so the spool must keep it.
+fn durable_local_ack(status: reqwest::StatusCode, body: &serde_json::Value) -> bool {
+    status == reqwest::StatusCode::OK
+        && body.get("ok").and_then(|value| value.as_bool()) == Some(true)
+        && body.get("pending").and_then(|value| value.as_bool()) == Some(false)
+        && body
+            .get("persisted_rows")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0)
+            > 0
+}
+
+fn local_spool_dir(edge_id: &str) -> PathBuf {
+    PathBuf::from(
+        std::env::var("OPENFDD_LOCAL_SPOOL_DIR")
+            .unwrap_or_else(|_| format!("/tmp/openfdd-local-spool-{edge_id}")),
+    )
+}
+
+fn local_spool_max_records() -> usize {
+    std::env::var("OPENFDD_LOCAL_SPOOL_MAX_RECORDS")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .unwrap_or(50_000)
+        .clamp(1, 50_000)
 }
 
 fn mqtt_config(site_id: &str, edge_id: &str, port: u16) -> MqttConfig {
@@ -489,6 +619,106 @@ async fn connect_mqtt_session(
     })
 }
 
+enum DrainPace {
+    Progress,
+    Idle,
+    Blocked,
+}
+
+async fn drain_local_spool(client: &LocalIngestClient, spool: &Mutex<TelemetrySpool>) -> DrainPace {
+    let pending = {
+        let guard = spool.lock().await;
+        match guard.list_pending().await {
+            Ok(pending) => pending
+                .into_iter()
+                .take(SINK_DRAIN_BATCH)
+                .collect::<Vec<_>>(),
+            Err(err) => {
+                warn!(%err, "list local spool failed");
+                return DrainPace::Blocked;
+            }
+        }
+    };
+    if pending.is_empty() {
+        return DrainPace::Idle;
+    }
+    for rec in pending {
+        match client.send(&rec.envelope).await {
+            Ok(()) => {
+                if let Err(err) = spool.lock().await.ack(rec.seq).await {
+                    warn!(%err, "local spool ack failed");
+                }
+            }
+            Err(err) => {
+                warn!(%err, "local central delivery failed; local spool will retry");
+                return DrainPace::Blocked;
+            }
+        }
+    }
+    DrainPace::Progress
+}
+
+async fn drain_mqtt_spool(
+    session: &mut MqttSession,
+    spool: &Mutex<TelemetrySpool>,
+    publish_ledger: &MqttPublishLedger,
+) -> bool {
+    let pending = {
+        let guard = spool.lock().await;
+        match guard.list_pending().await {
+            Ok(pending) => pending
+                .into_iter()
+                .take(SINK_DRAIN_BATCH)
+                .collect::<Vec<_>>(),
+            Err(_) => {
+                warn!("list spool failed");
+                return false;
+            }
+        }
+    };
+    for rec in pending {
+        match publish_json(&session.client, &rec.topic, &rec.envelope, false).await {
+            Ok(()) => {
+                publish_ledger.record_ack(
+                    rec.envelope.sequence,
+                    u32::try_from(rec.envelope.points.len()).unwrap_or(u32::MAX),
+                    &equipment_ids_in(&rec.envelope),
+                );
+                if let Err(err) = spool.lock().await.ack(rec.seq).await {
+                    warn!(%err, "mqtt spool ack failed");
+                }
+            }
+            Err(err) => {
+                publish_ledger.record_fail();
+                warn!(%err, "publish failed; will retry");
+                session.command_task.abort();
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn spawn_spool_ingress(
+    mut rx: mpsc::UnboundedReceiver<QueuedDelivery>,
+    spool: Arc<Mutex<TelemetrySpool>>,
+    label: &'static str,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        while let Some(item) = rx.recv().await {
+            if let Err(err) = spool.lock().await.enqueue(&item.topic, item.envelope).await {
+                warn!(%err, label, "spool enqueue failed");
+            }
+        }
+    })
+}
+
+async fn pace_after(pace: DrainPace) {
+    if !matches!(pace, DrainPace::Progress) {
+        tokio::time::sleep(SINK_IDLE_WAIT).await;
+    }
+}
+
 /// Map REST poll rows into telemetry points (`rest:<device>:<point>` ids).
 fn rest_telemetry_points(
     rows: &[serde_json::Value],
@@ -536,9 +766,24 @@ pub async fn spawn_if_configured(
     telemetry: Arc<TelemetryControl>,
     publish_ledger: Arc<MqttPublishLedger>,
 ) {
-    if !mqtt_enabled() {
-        info!("MQTT bridge disabled (set OPENFDD_MQTT_ENABLED=1 to enable)");
+    let mode = match ingest_mode() {
+        Ok(mode) => mode,
+        Err(error) => {
+            warn!(%error, "telemetry bridge disabled because ingest mode is invalid");
+            return;
+        }
+    };
+    if !mode.uses_mqtt() && !mode.uses_local() {
+        info!("telemetry bridge disabled");
         return;
+    }
+
+    let mqtt_allowed = mqtt_delivery_enabled(mode);
+    if mode.uses_mqtt() && !mqtt_allowed {
+        warn!("MQTT ingest is disabled; local delivery remains enabled for local_fieldbus and dual modes");
+        if !mode.uses_local() {
+            return;
+        }
     }
 
     let site_id = std::env::var("OPENFDD_SITE_ID").unwrap_or_else(|_| "local".into());
@@ -560,15 +805,30 @@ pub async fn spawn_if_configured(
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(8883);
-    let spool_dir = PathBuf::from(
+    let mqtt_spool_dir = PathBuf::from(
         std::env::var("OPENFDD_MQTT_SPOOL_DIR")
             .unwrap_or_else(|_| format!("/tmp/openfdd-spool-{edge_id}")),
     );
+    let local_client = if mode.uses_local() {
+        match LocalIngestClient::from_env(&site_id) {
+            Ok(client) => Some(client),
+            Err(error) => {
+                warn!(%error, "local fieldbus delivery disabled");
+                None
+            }
+        }
+    } else {
+        None
+    };
+    if mode.uses_local() && local_client.is_none() && !mode.uses_mqtt() {
+        return;
+    }
     let interval = mqtt_publish_interval_secs(&settings);
     info!(
         publish_interval_secs = interval,
         tenant_id = tenant_id.as_deref(),
-        "mqtt bridge full-snapshot publish profile"
+        mode = ?mode,
+        "fieldbus full-snapshot delivery profile"
     );
 
     // Wave N: when OPENFDD_TENANT_ID is set, emit tenants/{tid}/buildings/{bid}/… topics
@@ -588,15 +848,94 @@ pub async fn spawn_if_configured(
     });
 
     tokio::spawn(async move {
-        let mut spool = match TelemetrySpool::open(SpoolConfig::new(&spool_dir)).await {
-            Ok(s) => s,
-            Err(err) => {
-                warn!(%err, "mqtt spool open failed");
-                return;
+        let local_tx = if let Some(client) = local_client {
+            match TelemetrySpool::open(
+                SpoolConfig::new(local_spool_dir(&edge_id))
+                    .with_max_records(local_spool_max_records()),
+            )
+            .await
+            {
+                Ok(spool) => {
+                    let spool = Arc::new(Mutex::new(spool));
+                    let (tx, rx) = mpsc::unbounded_channel();
+                    spawn_spool_ingress(rx, Arc::clone(&spool), "local");
+                    tokio::spawn(async move {
+                        loop {
+                            let pace = drain_local_spool(&client, &spool).await;
+                            pace_after(pace).await;
+                        }
+                    });
+                    Some(tx)
+                }
+                Err(err) => {
+                    warn!(%err, "local fieldbus spool open failed");
+                    None
+                }
             }
+        } else {
+            None
+        };
+        let remote_tx = if mqtt_allowed {
+            match TelemetrySpool::open(SpoolConfig::new(&mqtt_spool_dir)).await {
+                Ok(spool) => {
+                    let spool = Arc::new(Mutex::new(spool));
+                    let (tx, rx) = mpsc::unbounded_channel();
+                    spawn_spool_ingress(rx, Arc::clone(&spool), "remote");
+                    let remote_topics = topics.clone();
+                    let remote_site = site_id.clone();
+                    let remote_edge = edge_id.clone();
+                    let remote_ctx = Arc::clone(&command_ctx);
+                    let remote_ledger = Arc::clone(&publish_ledger);
+                    tokio::spawn(async move {
+                        let mut mqtt: Option<MqttSession> = None;
+                        loop {
+                            let pending = spool.lock().await.list_pending().await.ok();
+                            let pending_count =
+                                pending.as_ref().map(|rows| rows.len()).unwrap_or(0);
+                            if pending_count == 0 {
+                                pace_after(DrainPace::Idle).await;
+                                continue;
+                            }
+                            if mqtt.is_none() {
+                                mqtt = tokio::time::timeout(
+                                    Duration::from_secs(5),
+                                    connect_mqtt_session(
+                                        mqtt_config(&remote_site, &remote_edge, port),
+                                        &remote_topics,
+                                        Arc::clone(&remote_ctx),
+                                    ),
+                                )
+                                .await
+                                .ok()
+                                .flatten();
+                                if mqtt.is_none() {
+                                    remote_ledger.record_no_session();
+                                    pace_after(DrainPace::Blocked).await;
+                                    continue;
+                                }
+                            }
+                            let failed = if let Some(session) = mqtt.as_mut() {
+                                drain_mqtt_spool(session, &spool, &remote_ledger).await
+                            } else {
+                                false
+                            };
+                            if failed {
+                                mqtt = None;
+                                pace_after(DrainPace::Blocked).await;
+                            }
+                        }
+                    });
+                    Some(tx)
+                }
+                Err(err) => {
+                    warn!(%err, "mqtt spool open failed");
+                    None
+                }
+            }
+        } else {
+            None
         };
 
-        let mut mqtt: Option<MqttSession> = None;
         let type_stamps = load_equipment_type_stamps();
 
         let mut seq = 0u64;
@@ -608,16 +947,6 @@ pub async fn spawn_if_configured(
                 tokio::time::sleep(Duration::from_secs_f64(interval)).await;
             }
             first_cycle = false;
-
-            // Keep MQTT command subscription alive even while suspended.
-            if mqtt.is_none() {
-                mqtt = connect_mqtt_session(
-                    mqtt_config(&site_id, &edge_id, port),
-                    &topics,
-                    Arc::clone(&command_ctx),
-                )
-                .await;
-            }
 
             if telemetry.is_suspended() {
                 continue;
@@ -688,10 +1017,7 @@ pub async fn spawn_if_configured(
                     seq += 1;
                     let env =
                         TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Bacnet, seq, chunk);
-                    if let Err(err) = spool.enqueue(&topic, env).await {
-                        warn!(%err, "spool enqueue failed");
-                        break;
-                    }
+                    enqueue_isolated(local_tx.as_ref(), remote_tx.as_ref(), &topic, env);
                 }
             }
             if !rest_out.is_empty() {
@@ -700,50 +1026,44 @@ pub async fn spawn_if_configured(
                     seq += 1;
                     let env =
                         TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Rest, seq, chunk);
-                    if let Err(err) = spool.enqueue(&topic, env).await {
-                        warn!(%err, "rest spool enqueue failed");
-                        break;
-                    }
+                    enqueue_isolated(local_tx.as_ref(), remote_tx.as_ref(), &topic, env);
                 }
-            }
-
-            if let Some(ref session) = mqtt {
-                match spool.list_pending().await {
-                    Ok(pending) => {
-                        for rec in pending {
-                            match publish_json(&session.client, &rec.topic, &rec.envelope, false)
-                                .await
-                            {
-                                Ok(()) => {
-                                    // QoS 1 ack: the broker accepted this packet.
-                                    publish_ledger.record_ack(
-                                        rec.envelope.sequence,
-                                        u32::try_from(rec.envelope.points.len())
-                                            .unwrap_or(u32::MAX),
-                                        &equipment_ids_in(&rec.envelope),
-                                    );
-                                    let _ = spool.ack(rec.seq).await;
-                                }
-                                Err(err) => {
-                                    publish_ledger.record_fail();
-                                    warn!(%err, "publish failed; will retry");
-                                    session.command_task.abort();
-                                    mqtt = None;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    Err(err) => warn!(%err, "list spool failed"),
-                }
-            } else {
-                // Points were snapshotted (empty snapshots already `continue`)
-                // but the MQTT session is down, so nothing left the edge.
-                // The spool still holds them for retry.
-                publish_ledger.record_no_session();
             }
         }
     });
+}
+
+fn enqueue_isolated(
+    local_tx: Option<&mpsc::UnboundedSender<QueuedDelivery>>,
+    remote_tx: Option<&mpsc::UnboundedSender<QueuedDelivery>>,
+    topic: &str,
+    envelope: TelemetryEnvelope,
+) {
+    // Sends on an unbounded channel return immediately. Each sink enqueues to
+    // its own spool on its own task, and publish/HTTP delivery is a second
+    // task, so a remote backlog cannot stall local collection.
+    if let Some(tx) = local_tx {
+        if tx
+            .send(QueuedDelivery {
+                topic: "local".into(),
+                envelope: envelope.clone(),
+            })
+            .is_err()
+        {
+            warn!("local sink worker stopped");
+        }
+    }
+    if let Some(tx) = remote_tx {
+        if tx
+            .send(QueuedDelivery {
+                topic: topic.to_string(),
+                envelope,
+            })
+            .is_err()
+        {
+            warn!("remote sink worker stopped");
+        }
+    }
 }
 
 fn equipment_ids_in(env: &TelemetryEnvelope) -> Vec<String> {
@@ -774,6 +1094,30 @@ mod tests {
         let mut s = Settings::default();
         s.poll.interval_secs = 30.0;
         assert!((mqtt_publish_interval_secs(&s) - 300.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn ingest_modes_are_explicit_and_non_overlapping() {
+        assert_eq!(IngestMode::parse("mqtts").unwrap(), IngestMode::Mqtts);
+        assert_eq!(
+            IngestMode::parse("local_fieldbus").unwrap(),
+            IngestMode::LocalFieldbus
+        );
+        assert_eq!(IngestMode::parse("dual").unwrap(), IngestMode::Dual);
+        assert!(IngestMode::Mqtts.uses_mqtt());
+        assert!(!IngestMode::Mqtts.uses_local());
+        assert!(!IngestMode::LocalFieldbus.uses_mqtt());
+        assert!(IngestMode::LocalFieldbus.uses_local());
+        assert!(IngestMode::Dual.uses_mqtt());
+        assert!(IngestMode::Dual.uses_local());
+        assert!(IngestMode::parse("mqtt").is_err());
+    }
+
+    #[test]
+    fn dual_without_broker_is_local_only() {
+        assert!(!mqtt_delivery_enabled_with(IngestMode::Dual, false));
+        assert!(mqtt_delivery_enabled_with(IngestMode::Dual, true));
+        assert!(!mqtt_delivery_enabled_with(IngestMode::LocalFieldbus, true));
     }
 
     #[test]
@@ -934,5 +1278,127 @@ mod tests {
         assert!(d.record(id1));
         assert!(!d.record(id1));
         assert!(d.record(id2));
+    }
+
+    #[test]
+    fn local_ack_requires_committed_rows() {
+        let durable = serde_json::json!({
+            "ok": true,
+            "duplicate": false,
+            "pending": false,
+            "persisted_rows": 1
+        });
+        assert!(durable_local_ack(reqwest::StatusCode::OK, &durable));
+        let replay = serde_json::json!({
+            "ok": true,
+            "duplicate": true,
+            "pending": false,
+            "persisted_rows": 1
+        });
+        assert!(durable_local_ack(reqwest::StatusCode::OK, &replay));
+        let pending = serde_json::json!({
+            "ok": true,
+            "duplicate": false,
+            "pending": true,
+            "persisted_rows": 0
+        });
+        assert!(!durable_local_ack(reqwest::StatusCode::ACCEPTED, &pending));
+        assert!(!durable_local_ack(reqwest::StatusCode::OK, &pending));
+        let empty = serde_json::json!({
+            "ok": true,
+            "pending": false,
+            "persisted_rows": 0
+        });
+        assert!(!durable_local_ack(reqwest::StatusCode::OK, &empty));
+    }
+
+    #[tokio::test]
+    async fn remote_publish_backlog_does_not_block_local_collection() {
+        let local_dir =
+            std::env::temp_dir().join(format!("ofdd-local-sink-{}", uuid::Uuid::new_v4()));
+        let remote_dir =
+            std::env::temp_dir().join(format!("ofdd-remote-sink-{}", uuid::Uuid::new_v4()));
+        let local_spool = Arc::new(Mutex::new(
+            TelemetrySpool::open(SpoolConfig::new(&local_dir))
+                .await
+                .unwrap(),
+        ));
+        let remote_spool = Arc::new(Mutex::new(
+            TelemetrySpool::open(SpoolConfig::new(&remote_dir))
+                .await
+                .unwrap(),
+        ));
+        let (local_tx, local_rx) = mpsc::unbounded_channel();
+        let (remote_tx, remote_rx) = mpsc::unbounded_channel();
+        spawn_spool_ingress(local_rx, Arc::clone(&local_spool), "local");
+        spawn_spool_ingress(remote_rx, Arc::clone(&remote_spool), "remote");
+        let remote_held = Arc::clone(&remote_spool);
+        let (held_tx, held_rx) = tokio::sync::oneshot::channel();
+        let blocked = tokio::spawn(async move {
+            let _guard = remote_held.lock().await;
+            let _ = held_tx.send(());
+            tokio::time::sleep(Duration::from_millis(400)).await;
+        });
+        held_rx.await.unwrap();
+        let envelope = TelemetryEnvelope::new(
+            "building-local",
+            "edge-local",
+            Protocol::Bacnet,
+            1,
+            vec![TelemetryPoint {
+                id: "point-local".into(),
+                display_name: None,
+                kind: Some(ValueKind::Number),
+                value: serde_json::json!(1),
+                unit: None,
+                quality: Quality::Good,
+                tags: Default::default(),
+            }],
+        );
+        let started = std::time::Instant::now();
+        for _ in 0..5 {
+            enqueue_isolated(
+                Some(&local_tx),
+                Some(&remote_tx),
+                "remote/topic",
+                envelope.clone(),
+            );
+        }
+        let deadline = std::time::Instant::now() + Duration::from_millis(250);
+        loop {
+            let local_n = local_spool.lock().await.list_pending().await.unwrap().len();
+            if local_n == 5 {
+                break;
+            }
+            if std::time::Instant::now() > deadline {
+                panic!("local collection stalled at {local_n} rows while remote publish held the remote spool");
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(started.elapsed() < Duration::from_millis(250));
+        blocked.await.unwrap();
+        let remote_deadline = std::time::Instant::now() + Duration::from_millis(500);
+        loop {
+            let remote_n = remote_spool
+                .lock()
+                .await
+                .list_pending()
+                .await
+                .unwrap()
+                .len();
+            if remote_n == 5 {
+                break;
+            }
+            if std::time::Instant::now() > remote_deadline {
+                panic!(
+                    "remote spool did not retain the backlog after publish unblocked: {remote_n}"
+                );
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        drop(local_tx);
+        drop(remote_tx);
+        let _ = tokio::fs::remove_dir_all(&local_dir).await;
+        let _ = tokio::fs::remove_dir_all(&remote_dir).await;
     }
 }

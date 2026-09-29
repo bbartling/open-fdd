@@ -351,7 +351,9 @@ The key continuous-mode benchmark is not “how fast can Open-FDD scan 1 TB?” 
 4. **H4 Offline local compaction** — merged.
 5. **H5 S3-compatible backend + central/Railway/MinIO wiring** — next.
 6. **H6 Migration + historian operator tooling** — not landed.
-7. **H7 Live ingest durability cutover** — not landed.
+7. **H7 Live ingest durability cutover** — shared micro-batch writer, graceful
+   flush, local fieldbus HTTP delivery, and durable pending/committed receipts
+   are landed. Cloud retention/backup qualification remains deferred under #1049.
 8. **H8 Continuous AFDD scheduler/findings/API** — not landed.
 9. **H9 React historian/AFDD operations UX** — not landed.
 10. **H10 Scale and release qualification** — not landed.

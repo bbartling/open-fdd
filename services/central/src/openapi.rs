@@ -122,6 +122,18 @@ mod live_routes {
     pub fn datasets_delete() {}
 
     #[utoipa::path(
+        post, path = "/api/ingest/local", tag = "central",
+        request_body = openfdd_contracts::TelemetryEnvelope,
+        responses(
+            (status = 200, description = "Persist one local fieldbus telemetry envelope", body = serde_json::Value),
+            (status = 401, description = "Missing or invalid local ingest bearer"),
+            (status = 403, description = "Tenant or building identity mismatch"),
+            (status = 413, description = "Payload exceeds the local ingest limit")
+        )
+    )]
+    pub fn local_fieldbus_ingest() {}
+
+    #[utoipa::path(
         get, path = "/api/fdd/results", tag = "fdd",
         params(("building_id" = Option<String>, Query, description = "Scope results to building={id}")),
         responses((status = 200, description = "Site-scoped FDD rule results", body = serde_json::Value))
@@ -315,6 +327,7 @@ mod live_routes {
         live_routes::jobs_queue_eplus_run,
         live_routes::datasets_list,
         live_routes::datasets_delete,
+        live_routes::local_fieldbus_ingest,
         live_routes::fuel_weather_fetch,
         live_routes::fdd_results,
         live_routes::fdd_equipment,

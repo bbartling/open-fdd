@@ -53,6 +53,7 @@ services:
       # Compose config fails loudly if unset — set in host .env / CI.
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:?Set a unique OPENFDD_JWT_SECRET}
       OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
+      OPENFDD_LOCAL_INGEST_TOKEN: ${OPENFDD_LOCAL_INGEST_TOKEN:-}
       OPENFDD_REACT_UI: "1"
       # P2-M4: React is the production default UI generation.
       OPENFDD_UI_GENERATION_DEFAULT: react

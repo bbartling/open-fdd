@@ -109,6 +109,42 @@ OPENFDD_IMAGE_TAG=<previous-sha> ./scripts/openfdd_stack_up.sh standalone
 | `OPENFDD_SITE_ID` | central, fieldbus | Site identifier in topic prefix |
 | `OPENFDD_EDGE_ID` | fieldbus | Edge identifier; central may use `+` wildcard subscriber |
 
+### Local fieldbus delivery (#1048)
+
+Fieldbus telemetry has one explicit delivery mode, selected with
+`OPENFDD_INGEST_MODE`:
+
+| Mode | Delivery |
+| --- | --- |
+| `mqtts` | MQTTS broker only (the existing default) |
+| `local_fieldbus` | Authenticated HTTP to central `/api/ingest/local`; no broker or MQTTS files are read |
+| `dual` | The same full snapshot is queued for local central first and optionally forwarded over MQTTS; a cloud outage does not block local delivery |
+
+Set `OPENFDD_LOCAL_INGEST_TOKEN` to the same deployment-unique value on central
+and fieldbus. Central rejects local ingest when the token is unset, and checks
+the bearer, envelope message ID, trusted configured building and edge allowlists,
+tenant header when multi-tenant mode is enabled, and a 1 MiB payload limit. The
+caller header cannot select a different building. One shared asynchronous
+micro-batch writer serves MQTT and local HTTP; durable pending/committed receipts
+make ACKs truthful across concurrent delivery, response loss, restart, and retry.
+HTTP 202 means the receipt is pending; HTTP 200 means canonical rows are
+committed. Duplicate message IDs are acknowledged without a second append.
+
+`OPENFDD_LOCAL_CENTRAL_URL` defaults to `http://127.0.0.1:8080`.
+`OPENFDD_LOCAL_SPOOL_DIR` and `OPENFDD_LOCAL_SPOOL_MAX_RECORDS` bound the local
+retry queue (default 50,000 records). The queue is a delivery buffer; canonical
+retention remains central Parquet under `OPENFDD_STORAGE_URL`.
+
+Use `docker/compose.local-fieldbus.yml` for the broker-free profile and
+`scripts/integration/local_fieldbus_compose_check.sh` to prove it has no broker
+service or MQTTS certificate dependency. The local acceptance proof checks
+authentication, foreign-building denial, eligible and persisted row counts,
+non-empty Parquet storage, broker-off configuration, replay, and optional
+restart proof via `OPENFDD_ACCEPTANCE_RESTART_CMD`; zero eligible rows fail it.
+Cloud retention/backup qualification remains an honest #1049 dependency.
+#1044 Modbus/driver coverage and live Modbus mapping also remain commissioning
+dependencies. This path performs no BACnet writes.
+
 ### Central API / auth
 
 | Variable | Description |

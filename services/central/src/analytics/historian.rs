@@ -683,6 +683,7 @@ pub async fn runtime_from_history(
     start: Option<DateTime<Utc>>,
     end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
+    let deadline = tokio::time::Instant::now() + RUNTIME_QUERY_TIMEOUT;
     let ctx = new_bounded_session()?;
     let (ok, _scan) = open_history_scan(&ctx, building_id).await?;
     if !ok {
@@ -690,19 +691,6 @@ pub async fn runtime_from_history(
     }
 
     let cols = history_columns_async(&ctx).await?;
-    let ts_col_probe = pick_ts_col(&cols).unwrap_or("timestamp_utc");
-    let range_filter = time_range_sql(ts_col_probe, start, end);
-    let count_sql = format!("SELECT COUNT(*) AS n FROM history WHERE 1=1{range_filter}");
-    let count = run_sql(&ctx, &count_sql).await?;
-    let n = count
-        .rows
-        .first()
-        .and_then(|r| r.get("n"))
-        .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
-        .unwrap_or(0);
-    if n <= 0 {
-        return Ok(None);
-    }
 
     let query = AnalyticsQuery {
         building_id: building_id.map(str::to_string),
@@ -712,8 +700,7 @@ pub async fn runtime_from_history(
     };
     let max_gap = max_gap_seconds.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
-    let stamped_types =
-        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let stamped_types = rcx_type_stamps(building_id);
 
     if cols.contains("equipment_id") {
         // Fan for air handlers; chiller/boiler/pump status for plant motors.
@@ -781,12 +768,16 @@ ORDER BY i.equipment_id
 "#
             );
 
-            let timed = tokio::time::timeout(RUNTIME_QUERY_TIMEOUT, run_sql(&ctx, &sql)).await;
+            // Keep a small portion of the request budget for the optional
+            // weekly chart query. A second full historian scan must not turn a
+            // usable runtime response into an HTTP-200 fail-closed envelope.
+            let main_budget = remaining_budget(deadline, RUNTIME_MAIN_QUERY_TIMEOUT);
+            let timed = tokio::time::timeout(main_budget, run_sql(&ctx, &sql)).await;
             let sql_result = match timed {
                 Ok(inner) => inner,
                 Err(_) => {
                     tracing::warn!(
-                        timeout_secs = RUNTIME_QUERY_TIMEOUT.as_secs(),
+                        timeout_secs = RUNTIME_MAIN_QUERY_TIMEOUT.as_secs(),
                         "runtime historian LEAD query exceeded budget; fail-closed empty rows"
                     );
                     let query = AnalyticsQuery {
@@ -800,12 +791,11 @@ ORDER BY i.equipment_id
                         &query,
                         vec![format!(
                             "runtime historian query exceeded {}s budget; fail-closed empty rows — pass a tighter query.start/end or compact the hive",
-                            RUNTIME_QUERY_TIMEOUT.as_secs()
+                            RUNTIME_MAIN_QUERY_TIMEOUT.as_secs()
                         )],
                         DF_ENGINE,
                     );
                     env.coverage = Some(json!({
-                        "history_rows": n,
                         "max_gap_seconds": max_gap,
                         "source": "historian_parquet",
                         "building_id": safe_building_segment(building_id),
@@ -819,6 +809,9 @@ ORDER BY i.equipment_id
             };
             match sql_result {
                 Ok(result) => {
+                    if result.rows.is_empty() {
+                        return Ok(None);
+                    }
                     let mut warnings = vec![
                         "runtime hours from historian Parquet via DataFusion Δt integration".into(),
                     ];
@@ -855,23 +848,44 @@ ORDER BY i.equipment_id
                             "plant_group": plant_group_for_typed(&eq, stamp),
                         }));
                     }
-                    let weekly_rows = runtime_weekly_plant_rows(
-                        &ctx,
-                        RuntimeWeeklyParams {
-                            ts_col,
-                            on_sql: &on_sql,
-                            oat: weekly_oat_col(&cols),
-                            max_gap,
-                            eq_filter: &eq_filter,
-                            range_sql: &range_sql,
-                        },
-                        (plant_signal_label(&cols), &stamped_types),
-                    )
-                    .await
-                    .unwrap_or_else(|e| {
-                        warnings.push(format!("weekly plant bins skipped: {e}"));
+                    let weekly_budget = remaining_budget(deadline, RUNTIME_WEEKLY_QUERY_TIMEOUT);
+                    let weekly_rows = if weekly_budget.is_zero() {
+                        warnings.push(
+                            "weekly plant bins skipped because the shared runtime deadline was exhausted; runtime rows remain available".into(),
+                        );
                         Vec::new()
-                    });
+                    } else {
+                        match tokio::time::timeout(
+                            weekly_budget,
+                            runtime_weekly_plant_rows(
+                                &ctx,
+                                RuntimeWeeklyParams {
+                                    ts_col,
+                                    on_sql: &on_sql,
+                                    oat: weekly_oat_col(&cols),
+                                    max_gap,
+                                    eq_filter: &eq_filter,
+                                    range_sql: &range_sql,
+                                },
+                                (plant_signal_label(&cols), &stamped_types),
+                            ),
+                        )
+                        .await
+                        {
+                            Ok(Ok(rows)) => rows,
+                            Ok(Err(e)) => {
+                                warnings.push(format!("weekly plant bins skipped: {e}"));
+                                Vec::new()
+                            }
+                            Err(_) => {
+                                warnings.push(format!(
+                                "weekly plant bins skipped after {}s budget; runtime rows remain available",
+                                RUNTIME_WEEKLY_QUERY_TIMEOUT.as_secs()
+                            ));
+                                Vec::new()
+                            }
+                        }
+                    };
                     if !weekly_rows.is_empty() {
                         warnings.push(
                             "rows include weekly per-equipment plant bins (runtime-weekly-v2)"
@@ -888,7 +902,6 @@ ORDER BY i.equipment_id
                     env.coverage = Some(json!({
                         "equipment_count": env.equipment.len(),
                         "weekly_row_count": env.rows.len(),
-                        "history_rows": n,
                         "max_gap_seconds": max_gap,
                         "source": "historian_parquet",
                         "building_id": safe_building_segment(building_id),
@@ -899,7 +912,7 @@ ORDER BY i.equipment_id
                     return Ok(Some(env));
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "historian Δt runtime SQL failed; falling back to count probe");
+                    tracing::warn!(error = %e, "historian Δt runtime SQL failed; returning registered-history envelope");
                 }
             }
         }
@@ -913,7 +926,6 @@ ORDER BY i.equipment_id
     ];
     let mut env = envelope_with_engine(QV_RUNTIME, &query, warnings, DF_ENGINE);
     env.coverage = Some(json!({
-        "history_rows": n,
         "max_gap_seconds": max_gap,
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
@@ -1139,11 +1151,34 @@ const SENSOR_HEALTH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::fr
 /// ~15–40s; fail-closed HTTP 200 beats nginx 502.
 pub const RUNTIME_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(12);
 
+/// Reserve part of the request budget for the optional weekly chart query.
+const RUNTIME_MAIN_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Weekly plant bins are additive chart data; they must not make base runtime
+/// rows fail closed when a loaded historian needs more time.
+const RUNTIME_WEEKLY_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// Default lookback for `/api/analytics/mechanical-cooling` when start omitted.
 pub const MECH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
 
+/// Bounded expand when the default lookback is empty (synthetic fixtures can
+/// be outside wall-clock). Never use `start=None` for this LEAD query.
+pub const MECH_RETAIN_FALLBACK_DAYS: i64 = 365;
+
 /// Wall-clock budget for mechanical-cooling OAT bin LEAD Δt (large hives).
 pub const MECH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(12);
+
+/// Return the portion of a request budget that remains for a child operation.
+/// Every fallback/optional query must use the same request deadline rather than
+/// starting a fresh timeout window.
+pub(crate) fn remaining_budget(
+    deadline: tokio::time::Instant,
+    requested: std::time::Duration,
+) -> std::time::Duration {
+    deadline
+        .saturating_duration_since(tokio::time::Instant::now())
+        .min(requested)
+}
 
 /// Build single-pass sensor_health aggregate SQL (one scan, GROUP BY equipment_id).
 ///
@@ -2728,6 +2763,64 @@ LIMIT {limit}
     Ok(Some(env))
 }
 
+/// Build the RCx equipment predicate from the persisted canonical type map.
+///
+/// RCx chart membership is a model decision, so equipment ids are only used
+/// as the join key for the already validated `equipment_types.json` entries.
+/// An empty map intentionally selects no equipment rather than reviving the
+/// old name based `LIKE` heuristics (which admitted ghost ids and missed opaque
+/// vendor ids). Each caller also requires its chart role to be non-null.
+#[cfg(test)]
+fn rcx_eq_filter_for_column(
+    kinds: &[&str],
+    stamped_types: &BTreeMap<String, String>,
+    equipment_column: &str,
+) -> String {
+    if kinds.is_empty() {
+        return String::new();
+    }
+    let requested: HashSet<&'static str> = kinds
+        .iter()
+        .filter_map(|kind| match kind.to_ascii_uppercase().as_str() {
+            "AHU" | "RTU" | "MAU" | "DOAS" => Some("ahu"),
+            "VAV" => Some("vav"),
+            "CHW" | "CHW_PLANT" | "CHILLER" => Some("chiller"),
+            "BOILER" => Some("boiler"),
+            "TOWER" | "CT" | "COOLING_TOWER" => Some("cooling_tower"),
+            "HP" | "HEATPUMP" | "HEAT_PUMP" => Some("heatpump"),
+            "METER" => Some("meter"),
+            "WEATHER" => Some("weather"),
+            _ => None,
+        })
+        .collect();
+    let ids: Vec<String> = stamped_types
+        .iter()
+        .filter_map(|(equipment_id, raw_type)| {
+            let canonical = open_fdd_edge_prototype::equipment_types::canonical_kind(raw_type)?;
+            requested
+                .contains(canonical)
+                .then(|| format!("'{}'", equipment_id.replace('\'', "''")))
+        })
+        .collect();
+    if ids.is_empty() {
+        return " AND 1=0".into();
+    }
+    format!(" AND {equipment_column} IN ({})", ids.join(", "))
+}
+
+/// Load RCx type stamps from the same resolved hub/tenant root used by the
+/// scoped historian query. This prevents a tenant's history from being joined
+/// with a conflicting hub registry (or vice versa).
+fn rcx_type_stamps(building_id: Option<&str>) -> BTreeMap<String, String> {
+    let Some(bid) = safe_building_segment(building_id) else {
+        return BTreeMap::new();
+    };
+    let root = fdd_store::resolve_building_read_root(&parquet_root_base(), None, &bid)
+        .map(|resolved| resolved.root)
+        .unwrap_or_else(|_| parquet_root_base());
+    open_fdd_edge_prototype::equipment_types::load_type_map(&root, Some(&bid))
+}
+
 /// Family Zones presets select by stamp + role, not `equipment_id` text.
 fn kinds_use_zone_family(kinds: &[&str]) -> bool {
     if kinds.is_empty() {
@@ -3651,6 +3744,7 @@ fn round6(x: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analytics::AnalyticsRequest;
     use chrono::TimeZone;
     use std::io::Write;
     use tokio::sync::Mutex;
@@ -3672,6 +3766,111 @@ mod tests {
         assert!(sql.contains("ABS(zscore) > 3"));
         assert!(sql.contains("LAG(is_anom)"));
         assert!(sql.contains("anomaly_events"));
+    }
+
+    #[test]
+    fn rcx_eq_filter_uses_canonical_stamps_and_ignores_misleading_ids() {
+        let stamped = BTreeMap::from([
+            ("jci_vav_1".into(), "vav".into()),
+            ("bldg2-zone-loopback".into(), "ahu".into()),
+            ("AC_1".into(), "ahu".into()),
+            ("literal equipment_id 'quoted'".into(), "vav".into()),
+        ]);
+        let f = rcx_eq_filter_for_column(&["VAV"], &stamped, "equipment_id");
+        assert!(
+            f.contains("'jci_vav_1'"),
+            "stamped opaque/vendor VAV must match: {f}"
+        );
+        assert!(
+            !f.contains("bldg2-zone-loopback"),
+            "misleading unstamped name must not match VAV: {f}"
+        );
+        assert!(
+            !f.contains("LIKE"),
+            "RCx selection must not use id LIKE: {f}"
+        );
+        assert!(
+            f.contains("'literal equipment_id ''quoted'''")
+                && !f.contains("literal h.equipment_id"),
+            "equipment IDs must be escaped as literals, not qualified by text replacement: {f}"
+        );
+        let qualified = rcx_eq_filter_for_column(&["VAV"], &stamped, "h.equipment_id");
+        assert!(qualified.starts_with(" AND h.equipment_id IN ("));
+        assert!(qualified.contains("'literal equipment_id ''quoted'''"));
+    }
+
+    #[test]
+    fn child_query_budget_never_extends_shared_deadline() {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(50);
+        assert!(
+            remaining_budget(deadline, std::time::Duration::from_secs(2))
+                <= std::time::Duration::from_millis(50)
+        );
+        let expired = tokio::time::Instant::now() - std::time::Duration::from_secs(1);
+        assert!(remaining_budget(expired, std::time::Duration::from_secs(2)).is_zero());
+    }
+
+    #[tokio::test]
+    async fn rcx_type_stamps_follow_tenant_history_root() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let hub = tmp.path().join("hub");
+        let tenant = hub.join("tenants/tenant_a");
+        std::fs::create_dir_all(tenant.join("history/building_id=BLDG_A")).unwrap();
+        std::fs::write(
+            tenant.join("history/building_id=BLDG_A/part-20290101T000000Z-tenant.parquet"),
+            b"tenant history",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tenant.join("building=BLDG_A")).unwrap();
+        std::fs::write(
+            tenant.join("building=BLDG_A/equipment_types.json"),
+            r#"{"tenant-vav":"vav"}"#,
+        )
+        .unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &hub);
+        let stamps = rcx_type_stamps(Some("BLDG_A"));
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        assert_eq!(stamps.get("tenant-vav").map(String::as_str), Some("vav"));
+    }
+
+    #[tokio::test]
+    async fn rcx_type_stamps_follow_newer_conflicting_tenant_root() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let hub = tmp.path().join("hub");
+        std::fs::create_dir_all(hub.join("history/building_id=BLDG_A")).unwrap();
+        std::fs::write(
+            hub.join("history/building_id=BLDG_A/part-20280101T000000Z-hub.parquet"),
+            b"hub history",
+        )
+        .unwrap();
+        std::fs::create_dir_all(hub.join("building=BLDG_A")).unwrap();
+        std::fs::write(
+            hub.join("building=BLDG_A/equipment_types.json"),
+            r#"{"conflicting-id":"ahu"}"#,
+        )
+        .unwrap();
+        let tenant = hub.join("tenants/tenant_a");
+        std::fs::create_dir_all(tenant.join("history/building_id=BLDG_A")).unwrap();
+        std::fs::write(
+            tenant.join("history/building_id=BLDG_A/part-20290101T000000Z-tenant.parquet"),
+            b"tenant history",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tenant.join("building=BLDG_A")).unwrap();
+        std::fs::write(
+            tenant.join("building=BLDG_A/equipment_types.json"),
+            r#"{"conflicting-id":"vav"}"#,
+        )
+        .unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &hub);
+        let stamps = rcx_type_stamps(Some("BLDG_A"));
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        assert_eq!(
+            stamps.get("conflicting-id").map(String::as_str),
+            Some("vav")
+        );
     }
 
     #[test]
@@ -4574,6 +4773,56 @@ mod tests {
             let lo = r["bin_lo_f"].as_f64().unwrap_or(-1.0);
             (70.0..75.0).contains(&lo)
         }));
+    }
+
+    #[tokio::test]
+    async fn mechanical_cooling_default_uses_bounded_retain_floor_for_old_fixture() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_MECH_FALLBACK");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ch = building.join("CHILLER_OPAQUE");
+        std::fs::create_dir_all(&ch).unwrap();
+        std::fs::write(
+            ch.join("columns.csv"),
+            "col,point_role\nchiller_status,chiller_status\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ch.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,chiller_status,web_oa_t").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,1,82").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,1,83").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,0,84").unwrap();
+
+        let parquet = tmp.path().join("parquet_mech_fallback");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_MECH_FALLBACK", &parquet).unwrap();
+        write_stamps(
+            &parquet,
+            "BUILDING_MECH_FALLBACK",
+            r#"{"CHILLER_OPAQUE":"chiller"}"#,
+        );
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let req = AnalyticsRequest {
+            query: AnalyticsQuery {
+                building_id: Some("BUILDING_MECH_FALLBACK".into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let env = crate::analytics::mechanical_cooling::handle_async(&req).await;
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(
+            env.rows.iter().any(|row| row["kind"] == "oat_bin"),
+            "old synthetic fixture must use bounded retain-floor fallback: {:?}",
+            env.rows
+        );
+        assert!(env
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("retain floor")));
     }
 
     #[tokio::test]

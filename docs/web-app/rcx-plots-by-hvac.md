@@ -50,7 +50,8 @@ Operator exports from the product UI — illustrative only. Empty series still m
 
 ## Family → presets (equipment kinds)
 
-Kinds are the preset’s `eq_kinds` tokens (package `equipType` / `equipment_type`). `AHU` / `RTU` / `CHW` / `CT` name canonical kinds. They are not `equipment_id` prefixes. A missing or unrecognized stamp is unclassified and the plot matches nothing. Selection is exact `equipment_id` equality after the stamp, so `RTU_01` does not select `RTU_010`. Family Zones is the role exception: it also keeps unstamped equipment when the plot role (`zone-air-temp` or `zone-airflow`) is mapped. The package path for that family is Haystack multi-tag: `equip` plus `fanCoilUnit` or `zone` (or `vav`) plus the point roles. Empty series when the stamp or role is missing — not a silent invent.
+Kinds are the preset’s `eq_kinds` tokens (package `equipType` / `equipment_type`). `AHU` / `RTU` / `CHW` / `CT` name canonical kinds. They are not `equipment_id` prefixes. A missing or unrecognized stamp is unclassified and the plot matches nothing. Selection is exact `equipment_id` equality after the stamp, so `RTU_01` does not select `RTU_010`. Each chart also requires its mapped role column to be present for the selected equipment. Empty series when roles are missing — not a silent invent.
+Family Zones also keeps unstamped equipment when the plot role (`zone-air-temp` or `zone-airflow`) is mapped. The package path for that family is Haystack multi-tag: `equip` plus `fanCoilUnit` or `zone` (or `vav`) plus the point roles. Empty series when the stamp or role is missing — not a silent invent.
 
 ### Zones / VAV (zone terminals)
 
