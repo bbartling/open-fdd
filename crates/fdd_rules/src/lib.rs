@@ -1,5 +1,6 @@
 //! Rule registry and DataFusion SQL batch runner.
 
+pub mod occupancy_schedule;
 pub mod params;
 pub mod registry;
 pub mod runner;

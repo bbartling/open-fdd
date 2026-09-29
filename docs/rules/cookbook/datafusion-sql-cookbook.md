@@ -1258,7 +1258,7 @@ WHERE equipment_id = 'equip:your-ahu'
 
 ### VAV-1 — Zone comfort band
 **Family:** `vav` · **Equipment:** `vav`, `zone_other`, `heatpump`, `baseboard`  
-**Equation:** Zone temp outside `zone_lo`–`zone_hi` (default 70–75°F) during occupied hours when `occ_mode` is set (`require_occupied`, default on). NULL `occ_mode` means the Overview calendar / BAS occupancy is not set, so every sample is scored. Unoccupied setback stays on VAV-2.  
+**Equation:** Zone temp outside `zone_lo`–`zone_hi` (default 70–75°F) during occupied hours when `occ_mode` is set (`require_occupied`, default on). A saved Overview calendar fills a missing or blank `occ_mode` before the rule runs. NULL `occ_mode` means neither the calendar nor a BAS occupied point is set, so every sample is scored. Unoccupied setback stays on VAV-2.  
 **Default confirmation:** 900 s
 
 | Param | Label | Unit | Default | Range |

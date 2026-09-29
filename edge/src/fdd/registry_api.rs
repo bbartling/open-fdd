@@ -840,6 +840,7 @@ pub fn series_response_scoped(
             return json!({"ok": false, "error": e.to_string()});
         }
         let _ = register_weather_if_present(&ctx, &weather_root).await;
+        let _ = fdd_rules::occupancy_schedule::apply_session_occupancy_schedule(&ctx).await;
         // Prefer columns present on this equipment's history schema. Required
         // roles still hard-fail when missing; optional roles are skipped so
         // portable SV/PID rules can plot whatever is mapped.

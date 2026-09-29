@@ -1,7 +1,9 @@
 -- vav1_comfort_fault.sql — zone comfort band with confirm window (Open-FDD parity)
--- When occ_mode is present (BAS occupied point or Overview calendar equivalent),
--- require_occupied (default 1) scores the band only while occupied. Unoccupied
--- setback stays on VAV-2. NULL occ_mode means the schedule is not set.
+-- When occ_mode is present, require_occupied (default 1) scores the band only
+-- while occupied. The rule runner fills a missing or blank occ_mode from the
+-- saved Overview calendar (session occupancy_schedule). NULL occ_mode means
+-- neither a BAS occupied point nor that calendar is set. Unoccupied setback
+-- stays on VAV-2.
 -- OFDD-065: do not reference fan_cmd here. Zone-only parquet schemas
 -- often lack fan_cmd; DataFusion then schema-errors → SKIPPED_MISSING_ROLES.
 WITH h AS (

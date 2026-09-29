@@ -1047,6 +1047,8 @@ async fn open_history_scoped(
     if !ok {
         return Ok(None);
     }
+    // Same occupancy signal as VAV-1: saved Overview calendar fills occ_mode.
+    let _ = fdd_rules::occupancy_schedule::apply_session_occupancy_schedule(&ctx).await;
     let count = run_sql(&ctx, "SELECT COUNT(*) AS n FROM history").await?;
     let n = count
         .rows
