@@ -382,6 +382,11 @@ fn handle_telemetry(
                             );
                         }
                         if report.eligible_points > 0 {
+                            // Buffer key is the envelope site id (same parameter as historian identity).
+                            crate::building_sessions::note_mqtt_ingest(
+                                &env.site_id,
+                                historian.pending_rows(),
+                            );
                             debug!(
                                 message_id = %env.message_id,
                                 eligible_points = report.eligible_points,

@@ -110,6 +110,12 @@ required for health, FDD, or Overview analytics.
 
 ---
 
+## Analytics RAM and local disk budget
+
+Analytics/RCx/fault results are Parquet partitions, not AFDD JSON blobs. CSV buildings load for a query and unload when the job finishes, the SPA leaves the site, or the idle timer (30–120s) fires. Max interactive sessions default to 2. MQTTS keeps a small ingest buffer. Catalog size must not equal RSS.
+
+Local/edge data budget defaults to 100 GiB oldest-first across `history/` and `analytics_results/`. Before an on-box full backup or patch, run `scripts/openfdd_disk_preflight.py`. Do not plan 100 GiB live plus another 100 GiB backup on a ~200 GiB disk. Test deploys skip backups unless `OPENFDD_BACKUP_ON_UPDATE=1`. Railway eviction is a separate knob (`OPENFDD_DATA_BUDGET_ENABLED`). Docs: [`ANALYTICS_RESULT_CACHE.md`](../docs/operations/ANALYTICS_RESULT_CACHE.md), [`DATA_RETENTION_BUDGET.md`](../docs/operations/DATA_RETENTION_BUDGET.md).
+
 ## Ops patch cycle (Railway hub + qualification — 3.3.20+)
 
 Living log: [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).  

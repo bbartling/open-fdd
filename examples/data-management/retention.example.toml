@@ -13,6 +13,11 @@ keep_days = 180
 [import_projects]
 keep_all = true
 
+# Local/edge pool for historian + analytics result parquet.
+# Oldest part first. Railway volumes stay on their own policy unless
+# OPENFDD_DATA_BUDGET_ENABLED=1. See docs/operations/DATA_RETENTION_BUDGET.md.
 [storage_cap]
-enabled = false
-max_gb = 0
+enabled = true
+max_gib = 100
+oldest_first = true
+reserved_free_percent = 10
