@@ -128,7 +128,7 @@ def role_frame(device) -> pd.DataFrame:
         frame[role] = pd.to_numeric(device.frame[column], errors="coerce")
     label = equipment_label(device.column_map, Path("AHU"))
     frame.attrs["equipment_id"] = label
-    equip_type = device.column_map.get("equipType") or device.column_map.get("equipment_type") or "ahu"
+    equip_type = device.column_map.get("equipType") or device.column_map.get("equipment_type") or "UNKNOWN"
     frame.attrs["equipment_type"] = str(equip_type)
     return frame
 

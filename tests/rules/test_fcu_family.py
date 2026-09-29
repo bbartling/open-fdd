@@ -10,7 +10,7 @@ def frame(**columns):
     n = len(next(iter(columns.values())))
     df = pd.DataFrame(columns, index=pd.date_range("2026-01-01", periods=n, freq="5min", tz="UTC"))
     df.attrs["equipment_id"] = "FCU_1"
-    df.attrs["equipment_type"] = "UNKNOWN"
+    df.attrs["equipment_type"] = "FCU"
     return df
 
 

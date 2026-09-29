@@ -15,7 +15,7 @@ from typing import Any
 import pandas as pd
 
 from app.role_map import enrich_role_map_from_equipment, roles_from_columns_csv, suggest_roles
-from app.site_model import equipment_type_from_id
+from app.site_model import normalize_equipment_type
 from app.units import DEFAULT_ROLE_UNITS
 
 SCHEMA_VERSION = 1
@@ -293,15 +293,20 @@ def haystack_point_to_cookbook(point_name: str) -> str | None:
 
 
 def haystack_equip_type_to_cookbook(equip_type: str, equip_id: str = "") -> str:
+    """Map a Haystack equip stamp to a cookbook type. Id text is not a type."""
+    _ = equip_id
     raw = str(equip_type or "").strip()
     if not raw:
-        return equipment_type_from_id(equip_id) if equip_id else "UNKNOWN"
+        return "UNKNOWN"
     if raw.upper() in COOKBOOK_EQUIP_TO_HAYSTACK:
         return raw.upper()
     for candidate in (raw, raw.lower(), _slug_point_key(raw)):
         if candidate in HAYSTACK_EQUIP_TYPE_TO_COOKBOOK:
             return HAYSTACK_EQUIP_TYPE_TO_COOKBOOK[candidate]
-    return equipment_type_from_id(equip_id) if equip_id else "UNKNOWN"
+    normalized = normalize_equipment_type(raw)
+    if normalized and normalized != "UNKNOWN":
+        return normalized
+    return "UNKNOWN"
 
 
 def normalize_point_roles(points: dict[str, Any]) -> dict[str, str]:
@@ -340,7 +345,7 @@ def to_haystack_document(data: dict[str, Any]) -> dict[str, Any]:
     norm = normalize_column_map(data)
     equip_out: dict[str, Any] = {}
     for eq_id, block in (norm.get("equipment") or {}).items():
-        etype = str(block.get("equipment_type") or equipment_type_from_id(eq_id))
+        etype = str(block.get("equipment_type") or "UNKNOWN")
         roles = block.get("column_roles") or {}
         points = {POINT_DISPLAY.get(role, role): col for role, col in sorted(roles.items())}
         equip_out[eq_id] = {
@@ -441,7 +446,7 @@ def normalize_column_map(data: dict[str, Any]) -> dict[str, Any]:
             }
         elif block and all(isinstance(v, str) for v in block.values()):
             equipment[str(eq_id)] = {
-                "equipment_type": equipment_type_from_id(str(eq_id)),
+                "equipment_type": "UNKNOWN",
                 "device": str(eq_id),
                 "column_roles": normalize_point_roles(block),
             }
@@ -517,7 +522,7 @@ def build_column_map_from_equipment_frames(
             roles = {**roles_from_columns_csv(Path(cols_path)), **roles}
         present = set(df.columns)
         roles = {r: c for r, c in roles.items() if c in present}
-        etype = str(df.attrs.get("equipment_type") or equipment_type_from_id(eq_id))
+        etype = str(df.attrs.get("equipment_type") or "UNKNOWN")
         data["equipment"][eq_id] = {
             "equipment_type": etype,
             "device": eq_id,
@@ -639,7 +644,7 @@ def build_llm_prompt_for_frames(
     ]
     for eq_id in sorted(frames.keys(), key=lambda x: natural_key(str(x))):
         df = frames[eq_id]
-        etype = str(df.attrs.get("equipment_type") or equipment_type_from_id(eq_id))
+        etype = str(df.attrs.get("equipment_type") or "UNKNOWN")
         hs_type = COOKBOOK_EQUIP_TO_HAYSTACK.get(etype, etype.lower())
         cols = [str(c) for c in df.columns]
         if len(cols) > max_columns_per_equipment:

@@ -10,7 +10,20 @@ from typing import Any
 import pandas as pd
 
 # Stamped types that count as AHU IO for v1 screening.
-_AHU_EQUIP_TYPES = frozenset({"ahu", "rtu", "unitventilator", "uv", "cv"})
+_AHU_EQUIP_TYPES = frozenset(
+    {
+        "ahu",
+        "rtu",
+        "mau",
+        "doas",
+        "unitventilator",
+        "uv",
+        "cv",
+        "cv_ahu",
+        "cvahu",
+        "erv",
+    }
+)
 
 
 @dataclass
@@ -97,10 +110,9 @@ def iter_mapped_points(column_map: dict[str, Any]) -> list[tuple[str, str]]:
 def iter_ahu_io_points(column_map: dict[str, Any]) -> list[tuple[str, str]]:
     """Return ``(role, column)`` for AHU IO referenced by the column map.
 
-    Flat device maps contribute every ``points`` / ``column_roles`` entry when
-    the stamp is missing or AHU-like. Nested ``equipment`` or Haystack ``equip``
-    blocks contribute only AHU-typed blocks (or unstamped ids that start with
-    ``ahu`` / ``rtu``). Zone / VAV blocks are omitted. ``equipment`` wins when
+    Nested ``equipment`` / Haystack ``equip`` blocks and flat maps contribute
+    points only when the block is stamped as an AHU-family type. A missing
+    stamp is not AHU. Zone / VAV blocks are omitted. ``equipment`` wins when
     it is a non-empty object; otherwise a dict ``equip`` is used.
     """
     if not isinstance(column_map, dict):
@@ -108,22 +120,15 @@ def iter_ahu_io_points(column_map: dict[str, Any]) -> list[tuple[str, str]]:
     equipment = _equipment_blocks(column_map)
     if equipment is not None:
         pairs: list[tuple[str, str]] = []
-        for equip_id, block in equipment.items():
+        for _equip_id, block in equipment.items():
             if not isinstance(block, dict):
                 continue
-            equip_type = _equip_type(block)
-            if equip_type:
-                if not _is_ahu_type(equip_type):
-                    continue
-            else:
-                token = str(equip_id).strip().lower()
-                if not (token.startswith("ahu") or token.startswith("rtu")):
-                    continue
+            if not _is_ahu_type(_equip_type(block)):
+                continue
             pairs.extend(_pairs_from_block(block))
         return _dedupe(pairs)
 
-    equip_type = _equip_type(column_map)
-    if equip_type and not _is_ahu_type(equip_type):
+    if not _is_ahu_type(_equip_type(column_map)):
         return []
     return _dedupe(_pairs_from_block(column_map))
 

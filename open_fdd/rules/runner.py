@@ -19,7 +19,7 @@ from open_fdd.rules.base import (
     skipped,
 )
 from open_fdd.rules.operational_gate import RULE_GATES, resolve_operational_mask, should_skip_equipment_off
-from open_fdd.analytics.site_model import equipment_type_from_id, resolve_equipment_type
+from open_fdd.analytics.site_model import normalize_equipment_type, resolve_equipment_type
 
 
 def infer_equipment_kind(
@@ -29,7 +29,7 @@ def infer_equipment_kind(
     df: pd.DataFrame | None = None,
     role_map: dict | None = None,
 ) -> str:
-    """Map equipment to cookbook kind using resolved type (attrs / map / id)."""
+    """Map a recognized stamp to a cookbook kind. Equipment-id text is not a kind."""
     t = resolve_equipment_type(
         equipment_id or (str(df.attrs.get("equipment_id", "")) if df is not None else ""),
         df=df,
@@ -400,7 +400,8 @@ def run_cookbook_rule(
     skip_weather_merge: bool = False,
 ) -> RuleResult:
     params_by_rule = params_by_rule or {}
-    eq_type = equipment_type or equipment_type_from_id(equipment_id)
+    stamped = equipment_type or str(df.attrs.get("equipment_type") or df.attrs.get("equipType") or "")
+    eq_type = normalize_equipment_type(stamped) or "UNKNOWN"
     sid, bid, _ = _ctx_from_df(df, equipment_id, eq_type)
     sid = site_id or sid
     bid = building_id or bid

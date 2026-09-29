@@ -7,7 +7,7 @@ from typing import Any
 
 import yaml
 
-from open_fdd.analytics.site_model import Building, Equipment, Site, equipment_type_from_id, sites_to_yaml_dict
+from open_fdd.analytics.site_model import Building, Equipment, Site, sites_to_yaml_dict
 
 DEFAULT_SITE_ID = "default_site"
 DEFAULT_BUILDING_ID = "HVAC_BUILDING"
@@ -25,7 +25,7 @@ def wrap_flat_role_map(flat: dict[str, dict[str, str]], *, site_id: str = DEFAUL
         building.equipment[eq_id] = Equipment(
             equipment_id=eq_id,
             equipment_name=eq_id,
-            equipment_type=equipment_type_from_id(eq_id),
+            equipment_type=str(roles.get("equipment_type") or roles.get("equipType") or "UNKNOWN"),
             site_id=site_id,
             building_id=building_id,
             roles={str(k): str(v) for k, v in roles.items()},
@@ -55,7 +55,9 @@ def sites_from_yaml(data: dict[str, Any]) -> dict[str, Site]:
                 equipment[eid] = Equipment(
                     equipment_id=eid,
                     equipment_name=str(eraw.get("name", eid)),
-                    equipment_type=str(eraw.get("equipment_type", equipment_type_from_id(eid))),
+                    equipment_type=str(
+                        eraw.get("equipment_type") or eraw.get("equipType") or "UNKNOWN"
+                    ),
                     site_id=str(sid),
                     building_id=str(bid),
                     source_id=str(eraw.get("source_id", "")),
@@ -93,7 +95,7 @@ def equipment_context(sites: dict[str, Site], equipment_id: str) -> tuple[str, s
             if equipment_id in building.equipment:
                 eq = building.equipment[equipment_id]
                 return site.site_id, building.building_id, eq.equipment_type
-    return DEFAULT_SITE_ID, DEFAULT_BUILDING_ID, equipment_type_from_id(equipment_id)
+    return DEFAULT_SITE_ID, DEFAULT_BUILDING_ID, "UNKNOWN"
 
 
 def load_site_mapping(path: Path) -> dict[str, Site]:
