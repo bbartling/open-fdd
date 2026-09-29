@@ -25,6 +25,14 @@ def fail(msg: str) -> None:
     raise SystemExit(1)
 
 
+def _require_equipment_type(meta: dict, path: str) -> str:
+    """Seeds name a stamp. Equipment-id text is not a type."""
+    et = meta.get("equipment_type")
+    if not et:
+        fail(f"{path}: expected.json must set equipment_type")
+    return str(et)
+
+
 def load_inventory():
     try:
         import yaml
@@ -152,7 +160,7 @@ def run_seeds(run_rule, inventory) -> int:
                 )
                 df = apply_role_map(df, path / "columns.csv")
                 df.attrs["equipment_id"] = meta.get("equipment_id", "EQ_1")
-                df.attrs["equipment_type"] = meta.get("equipment_type", "VAV")
+                df.attrs["equipment_type"] = _require_equipment_type(meta, fx["path"])
                 result = run_rule(rule_id, df, poll_seconds=float(meta.get("poll_seconds", 300)))
                 status = getattr(result, "status", "")
                 missing = list(getattr(result, "missing_roles", None) or [])
@@ -168,11 +176,9 @@ def run_seeds(run_rule, inventory) -> int:
             df = load_history_csv(hist)
             df = apply_role_map(df, path / "columns.csv")
             df.attrs["equipment_id"] = meta.get("equipment_id", "AHU_1")
-            # Typed rules no longer treat unknown equipment as a wildcard (#1023).
-            # Seeds that name a type must run as that type; id inference stays for
-            # seeds that only set equipment_id (AHU_1, and similar).
-            if meta.get("equipment_type"):
-                df.attrs["equipment_type"] = meta["equipment_type"]
+            # Typed rules do not treat unknown equipment as a wildcard (#1023).
+            # A seed names its stamp. Equipment-id text is not a type (#1043).
+            df.attrs["equipment_type"] = _require_equipment_type(meta, fx["path"])
             params = meta.get("params") or {}
             result = run_rule(
                 rule_id,

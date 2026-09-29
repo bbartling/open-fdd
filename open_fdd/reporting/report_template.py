@@ -263,7 +263,7 @@ class DeviceFolderSource:
             device = load_device_folder(folder, ahu_only=False)
         frame = role_frame(device)
         stamp_display_units(frame, device.column_map if isinstance(device.column_map, dict) else {})
-        equip_type = str(frame.attrs.get("equipment_type") or "ahu")
+        equip_type = str(frame.attrs.get("equipment_type") or "UNKNOWN")
         return RoleHistory(
             frame=frame,
             equipment_id=equipment_label(device.column_map, folder),

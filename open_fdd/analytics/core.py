@@ -290,7 +290,7 @@ def _equipment_plant_group(
     df: pd.DataFrame | None = None,
     role_map: dict | None = None,
 ) -> str | None:
-    """Plant chart group: attrs/role_map plant_group → typed equip → id fallback."""
+    """Plant chart group: attrs/role_map plant_group, then a recognized stamp."""
     if df is not None:
         pg = _normalize_plant_group(df.attrs.get("plant_group"))
         if pg:
@@ -308,33 +308,9 @@ def _equipment_plant_group(
         return None
     if et in {"AHU", "HP"}:
         return PLANT_AIR
-    if et in {"CHW_PLANT", "CHILLER"}:
+    if et in {"CHW_PLANT", "CHILLER", "COOLING_TOWER"}:
         return PLANT_CHILLER
     if et == "BOILER":
-        return PLANT_BOILER
-    if et in {"WEATHER", "METER"}:
-        return None
-
-    # Id fallback only when type is unknown / untyped
-    eq = (equipment_id or "").upper().replace("\\", "/")
-    if "VAV" in eq or "ZONE" in eq:
-        return None
-    if eq.startswith("AHU") or "/AHU" in eq or "RTU" in eq:
-        return PLANT_AIR
-    if "TOWER" in eq or re.search(r"(^|/)CT\d", eq) or eq.startswith("CT_"):
-        return PLANT_CHILLER
-    if (
-        "CHILLER" in eq
-        or "CHLR" in eq
-        or eq.startswith("CHW")
-        or re.search(r"(^|/)CH[-_]?[0-9]", eq)
-    ):
-        return PLANT_CHILLER
-    if "BOILER" in eq:
-        return PLANT_BOILER
-    if "CWP" in eq or "CHW_PUMP" in eq or ("PUMP" in eq and ("CHW" in eq or "CW" in eq)):
-        return PLANT_CHILLER
-    if "PUMP" in eq and "HEAT" not in eq:
         return PLANT_BOILER
     return None
 
@@ -983,20 +959,9 @@ def _valve_open_mask(df: pd.DataFrame, role: str, thr_pct: float) -> pd.Series |
 
 
 def _mech_cooling_type(equipment_type: str, equipment_id: str = "") -> str:
-    """Canonical cooling-dispatch type — **data model only**, never ad-hoc names.
-
-    Normalizes aliases (``CHILLER``→``CHW_PLANT``, ``HEATPUMP``→``HP``,
-    ``RTU``→``AHU``). When no type is supplied at all, defers to the central
-    resolver's documented last resort (``equipment_type_from_id``) so headless
-    callers that only have an id keep working — that heuristic lives in one
-    place (`app/site_model.py`), not here.
-    """
-    et = normalize_equipment_type(equipment_type)
-    if (not et or et == "UNKNOWN") and equipment_id:
-        from open_fdd.analytics.site_model import equipment_type_from_id
-
-        et = equipment_type_from_id(equipment_id)
-    return et
+    """Canonical cooling-dispatch type from a stamp. Id text is not a type."""
+    _ = equipment_id
+    return normalize_equipment_type(equipment_type)
 
 
 def _cooling_technology(et: str, *, compressor_based: bool) -> str:
@@ -2264,11 +2229,8 @@ def economizer_free_cooling_diagnostics(
             continue
         et = resolve_equipment_type(eq_id, df=raw, role_map=role_map)
         et_n = normalize_equipment_type(et) if et else ""
-        if et_n not in ECON_DIAG_AIR_TYPES and not str(eq_id).upper().startswith(("AHU", "RTU", "MAU")):
-            # Allow name-based AHU/RTU when type resolver is generic
-            if not any(tok in str(eq_id).upper() for tok in ("AHU", "RTU", "MAU", "AIRHAND")):
-                continue
-            et_n = et_n or "AHU"
+        if et_n not in ECON_DIAG_AIR_TYPES:
+            continue
 
         mapped = apply_role_map(raw, eq_id, role_map)
         mapped = merge_weather(mapped, weather)

@@ -181,5 +181,11 @@ def vav_fleet_size(candidates: list[CandidateDetection], context: dict[str, Any]
     comfort_n = (context.get("comfort") or {}).get("n_vav")
     if isinstance(comfort_n, int) and comfort_n > 0:
         return comfort_n
-    ids = {c.equipment_id for c in candidates if "VAV" in (c.equipment_type or "").upper() or c.equipment_id.upper().startswith("VAV")}
+    from open_fdd.analytics.site_model import normalize_equipment_type
+
+    ids = {
+        c.equipment_id
+        for c in candidates
+        if normalize_equipment_type(c.equipment_type) == "VAV"
+    }
     return max(len(ids), 1)
