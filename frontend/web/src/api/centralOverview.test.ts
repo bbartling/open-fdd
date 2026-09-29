@@ -81,11 +81,21 @@ vi.mock("./analyticsApi", () => ({
         run_hours: 40,
         avg_oat_f: 45,
       },
+      {
+        kind: "weekly_equipment",
+        plant_group: "air",
+        equipment_id: "VAV_1",
+        equipment_type: "VAV",
+        label: "VAV_1 · damper",
+        week_label: "2026-03-23",
+        run_hours: 4,
+        avg_oat_f: 45,
+      },
     ],
     equipment: [
       { equipment_id: "AHU_1", run_hours: 170, coverage_pct: 40, plant_group: "air" },
       { equipment_id: "AHU_2", run_hours: 155, coverage_pct: 38, plant_group: "air" },
-      { equipment_id: "VAV_1", run_hours: 3, coverage_pct: 10 },
+      { equipment_id: "VAV_1", equipment_type: "VAV", run_hours: 3, coverage_pct: 10 },
       { equipment_id: "AHU_1_VAV_12", run_hours: 9, coverage_pct: 12, plant_group: "air" },
     ],
     points: [],
@@ -307,13 +317,18 @@ describe("fetchCentralOverview", () => {
     expect(air).toBeTruthy();
     const bars = (air!.figure?.data ?? []).filter((t) => t.type === "bar");
     expect(bars.length).toBeGreaterThanOrEqual(2);
+    // Stamp decides the cohort. AHU_1_VAV_12 stays on the air chart; VAV_1 does not.
     expect(bars.map((t) => t.name)).toEqual(
-      expect.arrayContaining(["AHU_1 · fan-status", "AHU_2 · fan-status"]),
+      expect.arrayContaining([
+        "AHU_1 · fan-status",
+        "AHU_1_VAV_12 · damper",
+        "AHU_2 · fan-status",
+      ]),
     );
-    expect(bars.map((t) => t.name).join(" ")).not.toMatch(/VAV/);
+    expect(bars.map((t) => t.name)).not.toContain("VAV_1 · damper");
     expect(
       out.motor_weekly.table.map((r) => String(r.equipment_id ?? "")),
-    ).toEqual(["AHU_1", "AHU_2"]);
+    ).toEqual(["AHU_1", "AHU_2", "AHU_1_VAV_12"]);
     expect(bars[0]?.marker?.color).toBe(RAINBOW_PALETTE[0]);
     const oat = (air!.figure?.data ?? []).find((t) =>
       String(t.name).includes("Avg OAT"),

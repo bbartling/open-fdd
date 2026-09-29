@@ -2,7 +2,8 @@
 //!
 //! Matrix specs are arbitrary-length flag slices. Missing evidence is unknown,
 //! never PASS. Scores are reported as `n/m`, each flag preserves its own
-//! `{key}_fault_h`, and typed equipment stamps win over id heuristics.
+//! `{key}_fault_h`. Family membership follows the equipment stamp. A missing
+//! stamp is not a member of a plant family.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -514,15 +515,7 @@ async fn handle_matrix(req: &AnalyticsRequest, spec: &MatrixSpec) -> AnalyticsEn
     }
 }
 
-/// Heat-pump ids stay out of the chiller matrix.
-pub fn is_heat_pump_id(equipment_id: &str) -> bool {
-    let u = equipment_id
-        .to_ascii_uppercase()
-        .replace('\\', "/")
-        .replace('-', "_");
-    u.starts_with("HP_") || u.contains("/HP_") || u.contains("HEAT_PUMP") || u.contains("HEATPUMP")
-}
-
+/// Family membership is the canonical stamp only. Id text cannot add or remove equipment.
 pub fn matches_family_typed(
     family: PlantFamily,
     equipment_id: &str,
@@ -531,10 +524,10 @@ pub fn matches_family_typed(
     let kind = open_fdd_edge_prototype::equipment_types::kind_for(equipment_id, stamped_type);
     match family {
         PlantFamily::Ahu => kind == "ahu",
-        PlantFamily::Chiller => kind == "chiller" && !is_heat_pump_id(equipment_id),
+        PlantFamily::Chiller => kind == "chiller",
         PlantFamily::CoolingTower => kind == "cooling_tower",
         PlantFamily::Boiler => kind == "boiler",
-        PlantFamily::HeatPump => kind == "heatpump" || is_heat_pump_id(equipment_id),
+        PlantFamily::HeatPump => kind == "heatpump",
         PlantFamily::ZoneOther => kind == "zone_other",
     }
 }
@@ -911,13 +904,32 @@ mod tests {
     }
 
     #[test]
-    fn heat_pump_ids_are_not_chillers_and_towers_are_separate() {
-        assert!(matches_family(PlantFamily::HeatPump, "HP_3"));
-        assert!(!matches_family(PlantFamily::Chiller, "HP_3"));
-        assert!(matches_family(PlantFamily::Chiller, "CHLR_1"));
-        assert!(matches_family(PlantFamily::CoolingTower, "TOWER_1"));
-        assert!(!matches_family(PlantFamily::Chiller, "TOWER_1"));
+    fn family_follows_stamp_not_id_text() {
+        assert!(!matches_family(PlantFamily::HeatPump, "HP_3"));
+        assert!(!matches_family(PlantFamily::Chiller, "CHLR_1"));
+        assert!(!matches_family(PlantFamily::CoolingTower, "TOWER_1"));
+        assert!(matches_family_typed(
+            PlantFamily::HeatPump,
+            "AC_1",
+            Some("heatPump")
+        ));
+        assert!(matches_family_typed(
+            PlantFamily::Chiller,
+            "HP_HEAT_PUMP_X",
+            Some("chiller")
+        ));
+        assert!(!matches_family_typed(
+            PlantFamily::HeatPump,
+            "HP_HEAT_PUMP_X",
+            Some("chiller")
+        ));
         assert!(matches_family_typed(PlantFamily::Ahu, "AC_1", Some("ahu")));
+        assert!(matches_family_typed(
+            PlantFamily::Ahu,
+            "jci_ahu_1",
+            Some("ahu")
+        ));
+        assert!(!matches_family_typed(PlantFamily::Ahu, "jci_ahu_1", None));
         assert!(matches_family_typed(
             PlantFamily::CoolingTower,
             "CT_opaque",

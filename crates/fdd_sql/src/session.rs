@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -25,10 +26,10 @@ pub async fn register_parquet_tree(ctx: &SessionContext, parquet_root: &Path) ->
 ///
 /// Preference order (OFDD-068):
 /// 1. `parquet_root/weather/**/*.parquet` sidecar, when present.
-/// 2. Fallback SQL view over `history` rows whose `equipment_id` looks like a
-///    weather station (`ILIKE '%weather%'`/`'%meteo%'`/`'%oat%'`) — Liberty CSV
-///    packages land weather as `equipment=weather` in history rather than a
-///    sidecar, so without this the rule 413/crashes instead of running.
+/// 2. Fallback SQL view over `history` rows whose canonical kind is `weather`
+///    (`equipment_types.json`, or an `equipment_type` column). Liberty CSV
+///    packages land weather in history rather than a sidecar. Id substrings
+///    (`weather`, `meteo`, `oat`) are not a kind.
 ///
 /// Returns `true` when a `weather` relation was registered by either path.
 /// Register utility CSV tables from `workspace/data/csv_buildings/<building_id>/utilities/`.
@@ -136,6 +137,15 @@ pub async fn register_weather_if_present(
     ctx: &SessionContext,
     parquet_root: &Path,
 ) -> Result<bool> {
+    register_weather_for_building(ctx, parquet_root, None).await
+}
+
+/// Same as [`register_weather_if_present`], limited to one building's type map.
+pub async fn register_weather_for_building(
+    ctx: &SessionContext,
+    parquet_root: &Path,
+    building_id: Option<&str>,
+) -> Result<bool> {
     let weather_dir = parquet_root.join("weather");
     if weather_dir.is_dir() {
         let glob = weather_dir.join("**/*.parquet");
@@ -148,36 +158,132 @@ pub async fn register_weather_if_present(
             return Ok(true);
         }
     }
-    register_weather_view_from_history(ctx).await
+    register_weather_view_from_history(ctx, parquet_root, building_id).await
 }
 
-/// Register a `weather` view from `history` weather-station rows. No-op (returns
-/// `false`) when `history` is unregistered or holds no weather-like equipment.
-async fn register_weather_view_from_history(ctx: &SessionContext) -> Result<bool> {
+/// Recognized weather stamp. Matches `equipment_types::canonical_kind` for `weather`.
+fn stamp_is_weather(raw: &str) -> bool {
+    let key: String = raw
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect();
+    key == "weather"
+}
+
+fn type_map_paths(parquet_root: &Path, building_id: Option<&str>) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    if let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) {
+        if !bid.contains("..") && !bid.contains('/') && !bid.contains('\\') {
+            paths.push(
+                parquet_root
+                    .join(format!("building={bid}"))
+                    .join("equipment_types.json"),
+            );
+            paths.push(parquet_root.join("equipment_types.json"));
+        }
+        return paths;
+    }
+    paths.push(parquet_root.join("equipment_types.json"));
+    if let Ok(rd) = std::fs::read_dir(parquet_root) {
+        for ent in rd.flatten() {
+            let path = ent.path();
+            if path.is_dir() {
+                paths.push(path.join("equipment_types.json"));
+            }
+        }
+    }
+    paths
+}
+
+fn weather_ids_from_type_files(parquet_root: &Path, building_id: Option<&str>) -> Vec<String> {
+    let mut ids = BTreeSet::new();
+    for path in type_map_paths(parquet_root, building_id) {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&text)
+        else {
+            continue;
+        };
+        for (id, value) in map {
+            let Some(stamp) = value.as_str() else {
+                continue;
+            };
+            if stamp_is_weather(stamp) {
+                ids.insert(id);
+            }
+        }
+    }
+    ids.into_iter().collect()
+}
+
+async fn weather_ids_from_history_column(ctx: &SessionContext) -> Vec<String> {
+    let Ok(table) = ctx.table("history").await else {
+        return Vec::new();
+    };
+    let Some(col) = table.schema().fields().iter().find_map(|f| {
+        let name = f.name();
+        if name.eq_ignore_ascii_case("equipment_type") || name.eq_ignore_ascii_case("equiptype") {
+            Some(name.clone())
+        } else {
+            None
+        }
+    }) else {
+        return Vec::new();
+    };
+    if !col.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return Vec::new();
+    }
+    let sql = format!(
+        "SELECT DISTINCT equipment_id, {col} AS equipment_type FROM history WHERE {col} IS NOT NULL"
+    );
+    let Ok(result) = run_sql(ctx, &sql).await else {
+        return Vec::new();
+    };
+    let mut ids = Vec::new();
+    for row in result.rows {
+        let eq = row
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let stamp = row
+            .get("equipment_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if !eq.is_empty() && stamp_is_weather(stamp) {
+            ids.push(eq.to_string());
+        }
+    }
+    ids
+}
+
+/// Register a `weather` view from history rows whose canonical kind is weather.
+/// Returns `false` when `history` is missing or no weather stamp is present.
+async fn register_weather_view_from_history(
+    ctx: &SessionContext,
+    parquet_root: &Path,
+    building_id: Option<&str>,
+) -> Result<bool> {
     if ctx.table("history").await.is_err() {
         return Ok(false);
     }
-    let probe = "SELECT 1 FROM history \
-        WHERE equipment_id ILIKE '%weather%' \
-           OR equipment_id ILIKE '%meteo%' \
-           OR equipment_id ILIKE '%oat%' \
-        LIMIT 1";
-    let has_weather = match ctx.sql(probe).await {
-        Ok(df) => match df.collect().await {
-            Ok(batches) => batches.iter().any(|b| b.num_rows() > 0),
-            Err(_) => false,
-        },
-        Err(_) => false,
-    };
-    if !has_weather {
+    let mut ids = weather_ids_from_type_files(parquet_root, building_id);
+    ids.extend(weather_ids_from_history_column(ctx).await);
+    ids.sort();
+    ids.dedup();
+    if ids.is_empty() {
         return Ok(false);
     }
-    let create = "CREATE OR REPLACE VIEW weather AS \
-        SELECT * FROM history \
-        WHERE equipment_id ILIKE '%weather%' \
-           OR equipment_id ILIKE '%meteo%' \
-           OR equipment_id ILIKE '%oat%'";
-    match ctx.sql(create).await {
+    let list = ids
+        .iter()
+        .map(|id| format!("'{}'", id.replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let create = format!(
+        "CREATE OR REPLACE VIEW weather AS SELECT * FROM history WHERE equipment_id IN ({list})"
+    );
+    match ctx.sql(&create).await {
         Ok(df) => {
             let _ = df.collect().await;
             Ok(ctx.table("weather").await.is_ok())
