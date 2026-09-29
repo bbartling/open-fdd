@@ -115,10 +115,15 @@ not null the pass-through columns before `FCU-DEADBAND` or `FCU-SENSOR-NULL`.
 
 The files live in `sql_rules/` and are registered in
 `sql_rules/registry.yaml`; no site registry fork or
-`OPENFDD_SQL_RULES_DIR` override is needed. They remain labeled
-`sql_screening`: focused predicate fixtures cover pandas behavior and
-DataFusion SQL is compiled and executed by Rust rule tests, but production
-site-soak evidence is still required before claiming duration or site parity.
-The `dashboard_wired` field remains false while these rules are outside the
-maintained Overview summaries; the Results and SQL FDD surfaces still expose
-their registry entries.
+`OPENFDD_SQL_RULES_DIR` override is needed. Registry `parity_status` is
+`sql_screening`. Focused predicate fixtures cover pandas behavior, and
+DataFusion SQL is compiled and executed by Rust rule tests. That is not mask
+or duration proof.
+
+Soft-OPEN for this family closes only after tip and field stress on
+issue-mapped gates (mask and duration versus the pandas oracle). Cookbook CI
+and a green docs build do not close it. There is no FCU gate in the stress
+scripts yet; adding that stub is a later change, not part of the cookbook
+pages. The `dashboard_wired` field remains false while these rules are outside
+the maintained Overview summaries; the Results and SQL FDD surfaces still
+expose their registry entries.

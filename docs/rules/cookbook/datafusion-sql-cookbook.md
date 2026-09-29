@@ -1471,26 +1471,26 @@ SELECT equipment_id, fault_hours FROM vav7_min_airflow_result
 
 ## Fan coil / zone_other
 
-Nine `FCU-*` screening rules (`family: fcu`, priority P1, `parity_status: sql_screening`, `dashboard_wired: false`). Registry equipment kinds are `zone_other`, `general`, and `ahu`. Stamp a sensor-owning fan coil or standalone zone controller so `canonical_kind` is `zone_other` (`equipType` `zone_other`, `zone`, `fcu`, `fanCoil`, or a standalone-DDC alias). A follower without its own zone sensor is registry kind `general`. A fan coil's stamp stays `zone_other`; `ahu` is on the list so a stamped air handler that carries these roles can run the same SQL. Stamp details are in [FCU and zone_other rules](fcu-zone-other.html).
+Nine `FCU-*` rules. This section sits in the same family order as the [Pandas cookbook](pandas-cookbook.html#fan-coil--zone_other): after VAV terminals, before central plant. Each rule below uses the same equation, parameter table, and confirmation seconds as that page. Family `fcu`, priority P1, `dashboard_wired: false`. Registry and pandas equipment kinds are `zone_other`, `general`, and `ahu`. Stamp a sensor-owning fan coil or standalone zone controller so `canonical_kind` is `zone_other` (`equipType` `zone_other`, `zone`, `fcu`, `fanCoil`, or a standalone-DDC alias). A follower without its own zone sensor is registry kind `general`. A fan coil's stamp stays `zone_other`. Kind `ahu` is on the list so a stamped air handler that carries these roles can run the family. Stamps and the °F / °C pass-through trap: [FCU and zone_other rules](fcu-zone-other.html).
 
-Shipped files: `sql_rules/fcu_*.sql`, registered in `sql_rules/registry.yaml`. Output column is `fault_hours`. The predicates below are copied from those files. Unit boundary, the °F / °C pass-through trap, and the fan-proof screening note are in [FCU and zone_other rules](fcu-zone-other.html). Pandas twins are in the [Pandas cookbook](pandas-cookbook.html#fan-coil--zone_other).
+**Parity:** `sql_screening`. These pages document the tip predicates. They do not promote the family. Soft-OPEN closes only after tip and field stress on issue-mapped gates (mask and duration versus the pandas oracle). Cookbook CI and unit fixtures are not that gate. This docs change does not add a stress-script stub.
 
-Commands accept 0–1 or 0–100: a value `> 1.0` is divided by 100. Fan proof prefers `fan_status`; `fan_cmd > 0.10` is the fallback when status is null. Valve-shut tests use a fixed `0.05` (not a slider). CO₂ below `300` ppm is invalid and does not fault.
+Commands accept 0–1 or 0–100 (`> 1.0` divides by 100). Valve-shut tests use a fixed `0.05`. CO₂ below `300` ppm does not fault. Fan proof prefers status, with normalized `fan_cmd > 0.10` when status is null. DataFusion treats non-null `fan_status` as on above `0.05`. Pandas `as_bool` treats non-null numeric `fan-status` as on above `0.5`. That cut is part of why the family stays `sql_screening`.
 
-Six duration rules (`FCU-HTG-COIL`, `FCU-CLG-COIL`, `FCU-VALVE-PASS-HTG`, `FCU-VALVE-PASS-CLG`, `FCU-DAMPER-POS`, `FCU-CO2-DAMPER`) share one file shape:
+Six duration rules (`FCU-HTG-COIL`, `FCU-CLG-COIL`, `FCU-VALVE-PASS-HTG`, `FCU-VALVE-PASS-CLG`, `FCU-DAMPER-POS`, `FCU-CO2-DAMPER`) confirm for **900 s**. `FCU-SENSOR-NULL`, `FCU-DEADBAND`, and `FCU-MODE-CYCLE` confirm for **0 s**.
 
-1. Normalize valve and damper columns (NULL stays NULL; `> 1.0` divides by 100).
-2. `fan_on`: when `fan_status` is not null, on if `fan_status > 0.05`; else when `fan_cmd` is not null, on if the normalized command is `> 0.10`; else off.
-3. The `base` CASE below is `raw_fault`.
-4. A consecutive streak (`LAG` / `streak_id` / `ROW_NUMBER` as `streak_len`) must reach `{{CONFIRM_ROWS}}` before those rows count. `{{CONFIRM_ROWS}}` is `ceil(confirm_seconds / poll_seconds)` with a floor of 1. Hours are confirmed rows times `{{POLL_SECONDS}} / 3600`.
+DataFusion files `sql_rules/fcu_*.sql` emit `fault_hours`. The six duration files share a normalized CTE and a consecutive streak: `{{CONFIRM_ROWS}}` = ceil(`confirm_seconds` / poll seconds), minimum 1, then hours = confirmed rows × `{{POLL_SECONDS}} / 3600`. The CASE blocks below are the `raw_fault` predicates from those files. Pandas twins return a raw mask; `confirm_fault` returns that mask unchanged when `confirm_seconds` is 0. The `confirm_min` slider default is `confirm_seconds / 60` after catalog load.
 
-`FCU-SENSOR-NULL`, `FCU-DEADBAND`, and `FCU-MODE-CYCLE` do not use that streak. Their registry `confirm_seconds` is 0.
+SQL registry `optional_roles` also name columns the shared CTE selects (the other valve, dampers, CO₂) when that rule's predicate does not test them. Pandas reads only the roles listed on each rule. A package that maps every **required** role plus fan proof can run both engines. Missing SQL-only optional columns are NULL in DataFusion. Role map for later tip stress: [zone terminals]({{ site.baseurl }}/modeling/zone-terminals/) and [SQL rules → Haystack]({{ site.baseurl }}/modeling/sql-rules-haystack-map.html).
 
 ### FCU-SENSOR-NULL — Missing FCU zone sensor
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
-**Equation:** Own zone setpoint is present, and `zone_t` is null on at least `null_fraction` (default 90%) of those rows. Fault hours are the null-row count times the poll interval.  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
+**Equation:** Own zone setpoint is present, and zone temperature is null for at least 90% of those rows (`null_fraction`).  
 **Default confirmation:** 0 s  
-**Roles:** required `zone_air_temp_sp`; optional `zone_t`
+**Required roles (both engines):** pandas `zone-air-temp-sp` → SQL `zone_air_temp_sp`  
+**Optional roles (both engines):** pandas `zone-air-temp` → SQL `zone_t`
+
+**Tunable params**
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
@@ -1514,10 +1514,14 @@ FROM coverage;
 ```
 
 ### FCU-HTG-COIL — FCU heating coil under-delivery
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
-**Equation:** Fan on, heating valve ≥ `valve_open` (default 80%), and `sat − zone_t` < `coil_delta_f` (default 5.4°F).  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
+**Equation:** Fan on, heating valve ≥ 80% (`valve_open`), and discharge air − zone temperature < 5.4°F (`coil_delta_f`).  
 **Default confirmation:** 900 s  
-**Roles:** required `sat`, `zone_t`, `htg_valve_pct`; fan proof `fan_status` or `fan_cmd`
+**Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `heating-valve` → SQL `sat`, `zone_t`, `htg_valve_pct`  
+**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
+**SQL registry also optional** (shared CTE; pandas predicate does not read them): `clg_valve_pct`, `damper_cmd`, `damper_pct`, `zone_co2`
+
+**Tunable params**
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
@@ -1535,10 +1539,14 @@ CAST(CASE
 ```
 
 ### FCU-CLG-COIL — FCU cooling coil under-delivery
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
-**Equation:** Fan on, cooling valve ≥ `valve_open` (default 80%), heating valve ≤ 0.05, and `sat − zone_t` ≥ 0 (discharge is not below the zone).  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
+**Equation:** Fan on, cooling valve ≥ 80% (`valve_open`), heating valve ≤ 0.05, and discharge air − zone temperature ≥ 0.  
 **Default confirmation:** 900 s  
-**Roles:** required `sat`, `zone_t`, `clg_valve_pct`, `htg_valve_pct`; fan proof `fan_status` or `fan_cmd`
+**Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `cooling-valve`, `heating-valve` → SQL `sat`, `zone_t`, `clg_valve_pct`, `htg_valve_pct`  
+**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
+**SQL registry also optional** (shared CTE; pandas predicate does not read them): `damper_cmd`, `damper_pct`, `zone_co2`
+
+**Tunable params**
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
@@ -1555,10 +1563,14 @@ CAST(CASE
 ```
 
 ### FCU-VALVE-PASS-HTG — FCU heating valve passing
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
-**Equation:** Fan on, both valves ≤ 0.05, and `sat − zone_t` > `pass_delta_f` (default 5.4°F).  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
+**Equation:** Fan on, both valves ≤ 0.05, and discharge air − zone temperature > 5.4°F (`pass_delta_f`).  
 **Default confirmation:** 900 s  
-**Roles:** required `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`; fan proof `fan_status` or `fan_cmd`
+**Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `heating-valve`, `cooling-valve` → SQL `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`  
+**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
+**SQL registry also optional** (shared CTE; pandas predicate does not read them): `damper_cmd`, `damper_pct`, `zone_co2`
+
+**Tunable params**
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
@@ -1575,10 +1587,14 @@ CAST(CASE
 ```
 
 ### FCU-VALVE-PASS-CLG — FCU cooling valve passing
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
-**Equation:** Fan on, both valves ≤ 0.05, and `zone_t − sat` > `pass_delta_f` (default 5.4°F).  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
+**Equation:** Fan on, both valves ≤ 0.05, and zone temperature − discharge air > 5.4°F (`pass_delta_f`).  
 **Default confirmation:** 900 s  
-**Roles:** required `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`; fan proof `fan_status` or `fan_cmd`
+**Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `heating-valve`, `cooling-valve` → SQL `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`  
+**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
+**SQL registry also optional** (shared CTE; pandas predicate does not read them): `damper_cmd`, `damper_pct`, `zone_co2`
+
+**Tunable params**
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
@@ -1595,14 +1611,18 @@ CAST(CASE
 ```
 
 ### FCU-DAMPER-POS — FCU damper command/position mismatch
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
-**Equation:** Fan on, normalized damper command ≥ `command_min` (default 15%), and command minus feedback > `position_error` (default 0.15). Feedback stuck low is the fault; feedback above command is not.  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
+**Equation:** Fan on, damper command ≥ 15% (`command_min`), and command − feedback > 0.15 (`position_error`). Feedback above command is not a fault.  
 **Default confirmation:** 900 s  
-**Roles:** required `damper_cmd`, `damper_pct`; fan proof `fan_status` or `fan_cmd`
+**Required roles (both engines):** pandas `damper-cmd`, `damper` → SQL `damper_cmd`, `damper_pct`  
+**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
+**SQL registry also optional** (shared CTE; pandas predicate does not read them): `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`, `zone_co2`
+
+**Tunable params**
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `command_min` | Minimum command | frac | 0.15 | 0.0–1.0 |
+| `command_min` | Minimum damper command | frac | 0.15 | 0.0–1.0 |
 | `position_error` | Position error | frac | 0.15 | 0.05–0.50 |
 
 Predicate from `sql_rules/fcu_damper_pos.sql`:
@@ -1616,10 +1636,14 @@ CAST(CASE
 ```
 
 ### FCU-CO2-DAMPER — FCU high CO₂ with low outdoor-air command
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
-**Equation:** Fan on, `zone_co2` > `co2_high_ppm` (default 1000) and `zone_co2` ≥ 300, and normalized damper command < `damper_low` (default 10%).  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
+**Equation:** Fan on, zone CO₂ > 1000 ppm (`co2_high_ppm`) and CO₂ ≥ 300 ppm, and damper command < 10% (`damper_low`).  
 **Default confirmation:** 900 s  
-**Roles:** required `zone_co2`, `damper_cmd`; fan proof `fan_status` or `fan_cmd`
+**Required roles (both engines):** pandas `zone-co2`, `damper-cmd` → SQL `zone_co2`, `damper_cmd`  
+**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
+**SQL registry also optional** (shared CTE; pandas predicate does not read them): `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`, `damper_pct`
+
+**Tunable params**
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
@@ -1637,10 +1661,13 @@ CAST(CASE
 ```
 
 ### FCU-DEADBAND — FCU heat/cool deadband collapse
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
-**Equation:** Both pass-through setpoints are present and `cooling_sp − heating_sp` < `deadband_c` (default 1°C).  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
+**Equation:** Cooling setpoint − heating setpoint < 1°C (`deadband_c`). Both roles stay site-native Celsius.  
 **Default confirmation:** 0 s  
-**Roles:** required `cooling_sp`, `heating_sp`
+**Required roles (both engines):** pandas `cooling-sp`, `heating-sp` → SQL `cooling_sp`, `heating_sp`  
+**Optional roles (both engines):** none
+
+**Tunable params**
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
@@ -1659,10 +1686,13 @@ GROUP BY equipment_id;
 ```
 
 ### FCU-MODE-CYCLE — FCU heating/cooling mode cycling
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu`  
-**Equation:** Among samples where a valve is active, count changes between heating and cooling. Cooling wins when both exceed `mode_valve_min` (default 10%). Fault hours start once the change count reaches `mode_changes` (default 4). Idle samples (both valves shut) are omitted from the sequence.  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
+**Equation:** At least four heating/cooling valve mode changes in the window (`mode_changes`). A valve is active above 10% (`mode_valve_min`). Cooling wins when both valves are active. Idle samples are omitted from the sequence and are not fault rows after the count crosses the threshold.  
 **Default confirmation:** 0 s  
-**Roles:** required `htg_valve_pct`, `clg_valve_pct`
+**Required roles (both engines):** pandas `heating-valve`, `cooling-valve` → SQL `htg_valve_pct`, `clg_valve_pct`  
+**Optional roles (both engines):** none
+
+**Tunable params**
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|

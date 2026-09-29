@@ -24,7 +24,7 @@ Regenerate with `python3 scripts/generate_parity_inventory.py`. Drift fails CI v
 
 Aliases are **not** extra rules: `SV-SLEW` → `SV-RATE`, `FC13` → `FC13-SAT-HIGH`, `excess_runtime` → `SCHED-1`.
 
-Building 100 `48 × 71` is the pandas diagnostic cartesian product. The nine FCU rules are inside the 71, labeled `sql_screening` until mask/duration soak evidence exists.
+Building 100 `48 × 71` is the pandas diagnostic cartesian product. The nine FCU rules are inside the 71, labeled `sql_screening`. Soft-OPEN for that family closes only after tip and field stress on issue-mapped gates (mask and duration versus the pandas oracle). Cookbook CI does not close it.
 
 Product UI is **React** (`frontend/web`). Do not delete pandas because SQL exists. Do not put pandas on the product request path.
 

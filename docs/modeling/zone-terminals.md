@@ -69,6 +69,26 @@ Preferred tags are the `haystack_point_to_role` arms in `crates/fdd_core/src/col
 
 Commands may be 0–1 or 0–100. Fan proof prefers `fan_status`. `fan_cmd` above 10% is the fallback. CO₂ below 300 ppm is invalid. Valve-shut tests use 0.05.
 
+### Per-rule roles both engines need
+
+Use this table to map a package before tip stress. The Haystack tag is the pandas column. The SQL role is the DataFusion column. Required roles are required on both engines. Fan proof is optional on both duration rules. The last column is registry `optional_roles` that the shared SQL CTE selects and the pandas predicate does not read; DataFusion injects NULL when they are absent.
+
+Parity stays `sql_screening` until tip and field stress on issue-mapped gates. A green CI run does not close Soft-OPEN for this family.
+
+| Rule | Confirm | Required Haystack tag (pandas) | SQL role | Optional both engines | SQL registry optional only |
+|------|--------:|--------------------------------|----------|-----------------------|----------------------------|
+| `FCU-SENSOR-NULL` | 0 s | `zone-air-temp-sp` | `zone_air_temp_sp` | `zone-air-temp` → `zone_t` | — |
+| `FCU-HTG-COIL` | 900 s | `discharge-air-temp`, `zone-air-temp`, `heating-valve` | `sat`, `zone_t`, `htg_valve_pct` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` | `clg_valve_pct`, `damper_cmd`, `damper_pct`, `zone_co2` |
+| `FCU-CLG-COIL` | 900 s | `discharge-air-temp`, `zone-air-temp`, `cooling-valve`, `heating-valve` | `sat`, `zone_t`, `clg_valve_pct`, `htg_valve_pct` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` | `damper_cmd`, `damper_pct`, `zone_co2` |
+| `FCU-VALVE-PASS-HTG` | 900 s | `discharge-air-temp`, `zone-air-temp`, `heating-valve`, `cooling-valve` | `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` | `damper_cmd`, `damper_pct`, `zone_co2` |
+| `FCU-VALVE-PASS-CLG` | 900 s | `discharge-air-temp`, `zone-air-temp`, `heating-valve`, `cooling-valve` | `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` | `damper_cmd`, `damper_pct`, `zone_co2` |
+| `FCU-DAMPER-POS` | 900 s | `damper-cmd`, `damper` | `damper_cmd`, `damper_pct` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` | `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`, `zone_co2` |
+| `FCU-CO2-DAMPER` | 900 s | `zone-co2`, `damper-cmd` | `zone_co2`, `damper_cmd` | `fan-status` → `fan_status`, `fan-cmd` → `fan_cmd` | `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`, `damper_pct` |
+| `FCU-DEADBAND` | 0 s | `cooling-sp`, `heating-sp` | `cooling_sp`, `heating_sp` | — | — |
+| `FCU-MODE-CYCLE` | 0 s | `heating-valve`, `cooling-valve` | `htg_valve_pct`, `clg_valve_pct` | — | — |
+
+`FCU-SENSOR-NULL` forces zero hours when the `zone_t` / `zone-air-temp` column is absent, so a setpoint-only follower is not a dead-sensor fault. A present column that is null still runs the 90% coverage test.
+
 ### °F canonical vs °C pass-through
 
 `sat` and `zone_t` are canonical temperature roles. Coil and passing-valve thresholds are °F (default 5.4°F, which is 3°C). On a metric session those two columns are converted to °F through `history_si`.

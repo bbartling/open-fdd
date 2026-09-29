@@ -13,6 +13,8 @@ Ingest maps Haystack tags → SQL roles via `haystack_point_to_role` in [`crates
 
 **Registry count:** **77** SQL rules (live, including the nine `FCU-*` rows). Re-generate this page when the registry changes.
 
+The `FCU-*` rows are the roles **both** engines need before a later tip stress. The Haystack tag is the pandas oracle column. The arrow target is the DataFusion SQL role. Required cells are required on both engines. Optional cells are registry `optional_roles`: pandas duration rules read `fan-status` / `fan-cmd` from that set; the other optional columns are selected by the shared SQL CTE and may be absent (DataFusion injects NULL). Family parity stays `sql_screening` until tip and field stress, not until CI is green. Per-rule equations live in both cookbooks under Fan coil / zone_other.
+
 | Rule id | Required Haystack → SQL role | Optional Haystack → SQL role |
 |---------|------------------------------|------------------------------|
 | `FAN-RUNTIME-HOURS` | `fan-cmd` → `fan_cmd` | — |
