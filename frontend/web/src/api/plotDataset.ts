@@ -151,34 +151,6 @@ export function fingerprintJson(value: unknown): string {
   return h.toString(36);
 }
 
-/** Filter runtime rows into plant families (vibe19 Air / Heating / Cooling). */
-export function plantFamily(equipmentId: string): "air" | "heating" | "cooling" | "other" {
-  const id = equipmentId.toUpperCase();
-  if (
-    id.includes("CHILLER") ||
-    id.includes("_DX") ||
-    id.startsWith("DX") ||
-    id.includes("VRF") ||
-    id.includes("RTU")
-  ) {
-    return "cooling";
-  }
-  if (id.includes("BOILER") || id.includes("HEATING") || id.includes("HW_PUMP")) {
-    return "heating";
-  }
-  if (
-    id.includes("AHU") ||
-    id.includes("FAN") ||
-    id.startsWith("SF_") ||
-    id.startsWith("EF_") ||
-    id.includes("SUPPLY_FAN") ||
-    id.includes("EXHAUST_FAN")
-  ) {
-    return "air";
-  }
-  return "other";
-}
-
 /** Detect missing segments (null/NaN runs) for parity notes. */
 export function missingSegmentCount(trace: PlotlyTrace): number {
   let segments = 0;
