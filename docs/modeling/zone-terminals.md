@@ -187,4 +187,4 @@ Authoritative product map: `edge/src/equipment_types.rs`. Agent contract: `openf
 
 ## Opaque ids (DM-04)
 
-The stamp plus the mapped point roles select the equipment. Example: `AC_1` with `equipType: fanCoil` is a fan coil (`equipment_type_source: package`, kind `zone_other`) even though the id does not say FCU. The same id with `equipType: ahu` exports as **AHU**. Inferred VAV→AHU parents are **proposals** (`parent_ahu_source: inferred`) and are omitted from Turtle `ofdd:parentAhu` facts until confirmed in package metadata.
+The stamp plus the mapped point roles select the equipment. `AC_1` with `equipType: fanCoil` is a fan coil (`equipment_type_source: package`, kind `zone_other`) even though the id does not say FCU. The same id with `equipType: ahu` exports as **AHU**. A missing or unrecognized stamp is unclassified (`equipment_type_source: unclassified`) and matches nothing; equipment-id text is not a kind. VAV→AHU parent links proposed from sibling ids stay proposals (`parent_ahu_source: inferred`) and are omitted from Turtle `ofdd:parentAhu` until the package map confirms them. Those proposals are not cohort membership and are not a plot filter.

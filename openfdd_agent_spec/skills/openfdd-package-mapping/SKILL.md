@@ -63,7 +63,7 @@ Large package uploads need web nginx `client_max_body_size 128m` (matches centra
 
 ## Stamped equipment types
 
-Prefer stamping `equipType` (or `equipment_type`) in each equipment map. Open-FDD persists and prefers the stamp over folder-id inference. If an Overview family is empty for an opaque id such as `AC_1`, stamp the correct generic type instead of adding a vendor/site heuristic to Rust. Do not select that equipment by a fixture id or by a substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id` (`RTU_01` must not hit `RTU_010`). See [`openfdd-site-identity`](../openfdd-site-identity/SKILL.md).
+Stamp `equipType` (or `equipment_type`) in each equipment map. Open-FDD classifies from that stamp (rule 64). A missing or unrecognized stamp is unclassified and matches nothing. Never prefer a fixture id over the stamp. Never substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id` (`RTU_01` must not select `RTU_010`). Do not hard-code a building id. Do not invent an MQTT delta payload. If an Overview family is empty for an opaque id such as `AC_1`, stamp the correct generic type instead of adding a vendor/site heuristic to Rust. See [`openfdd-site-identity`](../openfdd-site-identity/SKILL.md).
 
 ## Skill home
 
