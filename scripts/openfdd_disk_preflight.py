@@ -170,10 +170,15 @@ def order_key(path: Path, mtime: int) -> int:
     return mtime
 
 
+def legacy_building_hive_segment(seg: str) -> bool:
+    key, sep, value = seg.partition("=")
+    return bool(sep) and key == "building" and value != "" and "=" not in value
+
+
 def _budget_tree(parts: list[str]) -> bool:
     if not parts:
         return False
-    if parts[0] in {"history", RESULTS_DIR} or parts[0].startswith("building="):
+    if parts[0] in {"history", RESULTS_DIR} or legacy_building_hive_segment(parts[0]):
         return True
     if parts[0] == "tenants":
         return any(p in {"history", RESULTS_DIR} for p in parts) or len(parts) <= 2
@@ -359,6 +364,20 @@ def run_self_test() -> int:
         assert not analytics.exists()
         assert new.exists()
         assert archive.exists()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        decoy = root / "equipment_id=AHU_1/part-20240101T000000Z.parquet"
+        nested = root / "notes/equipment_id=building=site-a/part-20240101T000000Z.parquet"
+        hive = root / "building=site-a/part-20260601T000000Z.parquet"
+        for path in (decoy, nested, hive):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"x" * 8)
+        found = {item["path"] for item in collect_objects(root)}
+        assert found == {hive}
+        assert not legacy_building_hive_segment("equipment_id=AHU_1")
+        assert not legacy_building_hive_segment("building_id=site-a")
+        assert legacy_building_hive_segment("building=site-a")
     print("openfdd_disk_preflight self-test ok")
     return 0
 

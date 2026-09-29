@@ -49,7 +49,7 @@ python3 scripts/openfdd_disk_preflight.py --self-test
 
 `scripts/openfdd_railway_release.sh` still backs up before a real release. **`OPENFDD_TEST_DEPLOY=1` skips that backup** for any site unless `OPENFDD_BACKUP_ON_UPDATE=1`. The flag is not a site-name branch. Do not treat a test deploy as a production backup drill.
 
-Eviction walks hive trees (`history/`, `analytics_results/`, `building=`, tenant history). It does not select files by `equipment_id` text. `building_id` stays a path parameter.
+Eviction walks hive trees (`history/`, `analytics_results/`, exact key `building={id}`, tenant history). It does not substring-match `equipment_id`. `building_id` stays a path parameter.
 
 ## Soft-OPEN
 

@@ -438,6 +438,14 @@ fn component_is_budget_root(rel: &Path) -> bool {
     budget_tree(&parts)
 }
 
+/// Legacy hive directory `building={id}`. Exact key, not a substring of `equipment_id`.
+fn legacy_building_hive_segment(seg: &str) -> bool {
+    let Some((key, value)) = seg.split_once('=') else {
+        return false;
+    };
+    key == "building" && !value.is_empty() && !value.contains('=')
+}
+
 fn budget_tree(parts: &[String]) -> bool {
     if parts.is_empty() {
         return false;
@@ -445,7 +453,7 @@ fn budget_tree(parts: &[String]) -> bool {
     if parts[0] == "history" || parts[0] == RESULTS_DIR {
         return true;
     }
-    if parts[0].starts_with("building=") {
+    if legacy_building_hive_segment(&parts[0]) {
         return true;
     }
     if parts[0] == "tenants" {
@@ -645,6 +653,32 @@ mod tests {
             ..base
         }));
         assert_eq!(ok, PreflightDecision::ProceedWithBackup);
+    }
+
+    #[test]
+    fn equipment_id_text_is_not_a_budget_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let decoy = tmp
+            .path()
+            .join("equipment_id=AHU_1/part-20240101T000000Z.parquet");
+        let nested = tmp
+            .path()
+            .join("notes/equipment_id=building=site-a/part-20240101T000000Z.parquet");
+        let hive = tmp
+            .path()
+            .join("building=site-a/part-20260601T000000Z.parquet");
+        for path in [&decoy, &nested, &hive] {
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, vec![1u8; 8]).unwrap();
+        }
+        let paths: Vec<_> = collect_budget_objects(tmp.path())
+            .into_iter()
+            .map(|o| o.path)
+            .collect();
+        assert_eq!(paths, vec![hive]);
+        assert!(!legacy_building_hive_segment("equipment_id=AHU_1"));
+        assert!(!legacy_building_hive_segment("building_id=site-a"));
+        assert!(legacy_building_hive_segment("building=site-a"));
     }
 
     #[test]

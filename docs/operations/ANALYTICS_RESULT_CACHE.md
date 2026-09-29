@@ -69,8 +69,8 @@ Listing datasets (`note_catalog_list`) does not open a session. A hub with hundr
 
 | Rule | This change |
 | --- | --- |
-| No `equipment_id` text filters in product paths | Hive match is `building_id=` / `building=` only. Equipment ids enter the config hash from the request. No `LIKE`, prefix, or contains classifier. `equipType` stays the package stamp. |
-| No hardcoded building or site ids in product DataFusion | Cache, session book, and retention take the caller id. Tests use `site-a`. |
+| No `equipment_id` substring filters | Hive keys are exact: path segment `building_id={caller}` or `building={caller}`, or directory key `building` after one `=`. `equipment_id` text is never searched with `contains`, `starts_with`, or `LIKE`. Request `equipment_ids` are a config-hash input only. |
+| No building hardcodes; `building_id` is always a parameter | Product cache, session, ingest buffer, and retention take the caller id. Missing id skips the cache. No default site. Tests use `site-a`. |
 | No MQTT CELL/DELTA | Ingest records a row-count buffer under the envelope site id. No new topic mode. |
 | Building-agnostic session, cache, and retention | Same limits and layout for every building. `OPENFDD_TEST_DEPLOY` is an env flag, not a site-name branch. |
 | No VERSION bump / not FQ | Workspace `VERSION` is unchanged. Edge disk proof is still open. |
