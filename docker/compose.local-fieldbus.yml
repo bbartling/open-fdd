@@ -35,6 +35,8 @@ services:
     environment:
       OPENFDD_INGEST_MODE: local_fieldbus
       OPENFDD_MQTT_ENABLED: "0"
+      OPENFDD_FIELDBUS_HTTP_HOST: 0.0.0.0
+      OPENFDD_FIELDBUS_HTTP_PORT: "8081"
       OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:-local}
       OPENFDD_BUILDING_ID: ${OPENFDD_BUILDING_ID:-local}
       OPENFDD_EDGE_ID: ${OPENFDD_EDGE_ID:-fieldbus-1}
@@ -46,6 +48,8 @@ services:
     volumes:
       - ../config/fieldbus:/app/config:ro
       - local-fieldbus-spool:/local-spool
+    ports:
+      - "8081:8081"
     depends_on:
       - central
     restart: unless-stopped
