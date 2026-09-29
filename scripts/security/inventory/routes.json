@@ -3,10 +3,10 @@
   "source_commit_hint": "4a5c11e50b921df83f2ca3a59c52d4e99908157f",
   "source_file": "services/central/src/routes.rs",
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission.",
-  "route_count": 145,
+  "route_count": 146,
   "disposition_counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 86,
+    "PLANNED": 87,
     "BLOCKED_POLICY": 29,
     "EXCLUDED": 0
   },
@@ -1717,6 +1717,45 @@
       "side_effects": "none",
       "fixture_needs": [],
       "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "POST",
+      "path": "/api/ingest/local",
+      "section": "protected",
+      "auth": "deployment_token",
+      "policy": "trusted_local_edge_ingest",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        401,
+        403,
+        413
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_ingest_local"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_ingest_local"
+      ],
+      "request_schema": {
+        "type": "TelemetryEnvelope",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "object",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "historian_write",
+      "fixture_needs": [
+        "deployment_token",
+        "isolated_storage"
+      ],
+      "notes": "Broker-free local edge path; BACnet writes are not exposed."
     },
     {
       "method": "POST",

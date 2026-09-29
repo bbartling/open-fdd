@@ -74,6 +74,7 @@ done
 jq -e '.ok == true and .duplicate == false and .pending == false and (.eligible_points > 0) and (.persisted_rows > 0)' "$response_file" >/dev/null || {
   echo "FAIL: zero eligible or persisted rows: $(cat "$response_file")" >&2; exit 1;
 }
+persisted_rows="$(jq -r '.persisted_rows' "$response_file")"
 
 storage_root="${OPENFDD_ACCEPTANCE_STORAGE_ROOT:-${OPENFDD_STORAGE_ROOT:-workspace/openfdd}}"
 row_files="$(find "$storage_root" -type f -name '*.parquet' -size +0c 2>/dev/null | wc -l | tr -d ' ')"
@@ -90,6 +91,10 @@ replay_status="$(curl -sS -o "$replay_file" -w '%{http_code}' "${CENTRAL_BASE%/}
 [[ "$replay_status" == "200" ]] || { echo "FAIL: replay returned HTTP $replay_status" >&2; exit 1; }
 jq -e '.ok == true and .duplicate == true and .pending == false' "$replay_file" >/dev/null || {
   echo "FAIL: replay was not a committed duplicate: $(cat "$replay_file")" >&2; exit 1;
+}
+jq -e --argjson rows "$persisted_rows" '.ok == true and .persisted_rows == $rows and .persisted_rows > 0' "$replay_file" >/dev/null || {
+  echo "FAIL: replay receipt did not report the exact persisted row count ($persisted_rows): $(cat "$replay_file")" >&2
+  exit 1
 }
 
 foreign_file="$(mktemp)"

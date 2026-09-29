@@ -1537,7 +1537,7 @@ pub async fn local_fieldbus_ingest(
         });
     if allowed_buildings
         .as_ref()
-        .is_some_and(|allowed| !allowed.iter().any(|value| *value == trusted_building))
+        .is_some_and(|allowed| !allowed.contains(&trusted_building))
     {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
@@ -1634,19 +1634,17 @@ pub async fn local_fieldbus_ingest(
     {
         *state.ingest_dup.lock().unwrap() += 1;
         if status == crate::state::IngestReceiptStatus::Pending {
-            if let Ok(report) = state.ingest_live(&envelope).await {
-                if report.persisted_rows > 0 {
-                    let _ = state
-                        .commit_receipt(&receipt_scope, &envelope.edge_id, envelope.message_id)
-                        .await;
-                }
-            }
+            let _ = state.ingest_live(&envelope).await;
             let _ = state.flush_live(false).await;
         }
         let committed = state
             .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
             .await
             == Some(crate::state::IngestReceiptStatus::Committed);
+        let persisted_rows = state
+            .receipt_persisted_rows(&receipt_scope, &envelope.edge_id, envelope.message_id)
+            .await
+            .unwrap_or_default();
         return Ok((
             if committed {
                 StatusCode::OK
@@ -1654,7 +1652,7 @@ pub async fn local_fieldbus_ingest(
                 StatusCode::ACCEPTED
             },
             Json(
-                json!({"ok": true, "duplicate": true, "pending": !committed, "persisted_rows": 0, "eligible_points": 0}),
+                json!({"ok": true, "duplicate": true, "pending": !committed, "persisted_rows": persisted_rows, "eligible_points": 0}),
             ),
         ));
     }
@@ -1712,22 +1710,16 @@ pub async fn local_fieldbus_ingest(
             ));
         }
     };
-    if report.persisted_rows > 0
-        && !state
-            .commit_receipt(&receipt_scope, &envelope.edge_id, envelope.message_id)
-            .await
-    {
-        return Ok((
-            StatusCode::ACCEPTED,
-            Json(
-                json!({"ok": true, "duplicate": false, "pending": true, "eligible_points": report.eligible_points, "persisted_rows": report.persisted_rows}),
-            ),
-        ));
-    }
     let committed = state
         .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
         .await
         == Some(crate::state::IngestReceiptStatus::Committed);
+    let receipt_edge_id = envelope.edge_id.clone();
+    let receipt_message_id = envelope.message_id;
+    let persisted_rows = state
+        .receipt_persisted_rows(&receipt_scope, &receipt_edge_id, receipt_message_id)
+        .await
+        .unwrap_or(report.persisted_rows + flush.persisted_rows);
     let entry = state.edges.entry(envelope.edge_id.clone()).or_default();
     let mut shadow = entry.lock().unwrap();
     shadow
@@ -1746,7 +1738,7 @@ pub async fn local_fieldbus_ingest(
             "ok": true,
             "duplicate": false,
             "pending": !committed,
-            "persisted_rows": report.persisted_rows + flush.persisted_rows,
+            "persisted_rows": persisted_rows,
             "eligible_points": report.eligible_points,
             "skipped_points": report.skipped_points,
         })),
@@ -4858,6 +4850,10 @@ mod version_tests {
     }
 
     #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize process environment while exercising the async ingest handler"
+    )]
     async fn local_ingest_own_identity_is_accepted_and_foreign_point_is_denied() {
         let _env_lock = crate::test_env_lock::lock_env();
         let temp = tempfile::tempdir().unwrap();

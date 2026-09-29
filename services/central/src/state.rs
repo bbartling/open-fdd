@@ -11,7 +11,7 @@ use openfdd_contracts::{CommandAck, CommandEnvelope, TelemetryEnvelope};
 use openfdd_mqtt::AsyncClient;
 use serde::Deserialize;
 use serde::Serialize;
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 use uuid::Uuid;
 
 use crate::auth::AuthConfig;
@@ -22,6 +22,14 @@ const MQTT_MONITOR_CAPACITY: usize = 100;
 const MQTT_PREVIEW_BYTES: usize = 4096;
 const LOCAL_RECEIPTS_FILE: &str = "state/local-fieldbus-receipts.jsonl";
 const RECEIPT_CAPACITY: usize = 50_000;
+static LIVE_WRITER_PERMITS: std::sync::OnceLock<std::sync::Arc<Semaphore>> =
+    std::sync::OnceLock::new();
+
+fn live_writer_permits() -> std::sync::Arc<Semaphore> {
+    LIVE_WRITER_PERMITS
+        .get_or_init(|| std::sync::Arc::new(Semaphore::new(1)))
+        .clone()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IngestReceiptStatus {
@@ -36,6 +44,8 @@ pub struct IngestReceipt {
     pub message_id: Uuid,
     pub status: IngestReceiptStatus,
     pub envelope: TelemetryEnvelope,
+    #[serde(default)]
+    pub persisted_rows: usize,
     #[serde(default = "default_receipt_observed_at")]
     pub observed_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -153,7 +163,7 @@ pub struct AppState {
     /// Wave L L5 — per-tenant sliding-window budgets (noop when disabled).
     pub tenant_budgets: TenantBudgetTracker,
     /// One canonical writer shared by MQTT and local HTTP delivery.
-    pub live_historian: AsyncMutex<Option<LiveHistorian>>,
+    pub live_historian: std::sync::Arc<Mutex<Option<LiveHistorian>>>,
     /// Durable pending/committed receipt ledger for replay-safe local ingest.
     pub ingest_receipts: AsyncMutex<HashMap<(String, String, Uuid), IngestReceipt>>,
     pub ingest_receipts_path: PathBuf,
@@ -178,7 +188,7 @@ impl AppState {
             mqtt_monitor: Mutex::new(MqttMonitorState::default()),
             login_failures: Mutex::new(HashMap::new()),
             tenant_budgets: TenantBudgetTracker::new(),
-            live_historian: AsyncMutex::new(None),
+            live_historian: std::sync::Arc::new(Mutex::new(None)),
             ingest_receipts: AsyncMutex::new(load_receipts()),
             ingest_receipts_path: receipts_path(),
         }
@@ -202,6 +212,7 @@ impl AppState {
                 status: IngestReceiptStatus::Pending,
                 observed_at,
                 envelope,
+                persisted_rows: 0,
                 updated_at: Utc::now(),
             },
         );
@@ -218,6 +229,7 @@ impl AppState {
             )
             .await
         {
+            maybe_compact_receipt_journal(&self.ingest_receipts_path, &receipts).await;
             true
         } else {
             receipts.remove(&(scope.to_string(), edge_id, message_id));
@@ -228,11 +240,25 @@ impl AppState {
     pub async fn release_receipt(&self, scope: &str, edge_id: &str, message_id: Uuid) {
         let mut receipts = self.ingest_receipts.lock().await;
         receipts.remove(&(scope.to_string(), edge_id.to_string(), message_id));
-        let _ = append_receipt_event(&self.ingest_receipts_path, scope, edge_id, message_id, None)
-            .await;
+        if append_receipt_event(&self.ingest_receipts_path, scope, edge_id, message_id, None).await
+        {
+            maybe_compact_receipt_journal(&self.ingest_receipts_path, &receipts).await;
+        }
     }
 
+    #[cfg(test)]
     pub async fn commit_receipt(&self, scope: &str, edge_id: &str, message_id: Uuid) -> bool {
+        self.commit_receipt_rows(scope, edge_id, message_id, None)
+            .await
+    }
+
+    async fn commit_receipt_rows(
+        &self,
+        scope: &str,
+        edge_id: &str,
+        message_id: Uuid,
+        persisted_rows: Option<usize>,
+    ) -> bool {
         let mut receipts = self.ingest_receipts.lock().await;
         let key = (scope.to_string(), edge_id.to_string(), message_id);
         let Some(previous) = receipts.get(&key).cloned() else {
@@ -240,6 +266,9 @@ impl AppState {
         };
         let mut updated = previous.clone();
         updated.status = IngestReceiptStatus::Committed;
+        if let Some(rows) = persisted_rows {
+            updated.persisted_rows = rows;
+        }
         updated.updated_at = Utc::now();
         receipts.insert(key.clone(), updated.clone());
         let snapshot = Some(updated);
@@ -252,6 +281,7 @@ impl AppState {
         )
         .await
         {
+            maybe_compact_receipt_journal(&self.ingest_receipts_path, &receipts).await;
             true
         } else {
             receipts.insert(key, previous);
@@ -259,34 +289,99 @@ impl AppState {
         }
     }
 
+    /// Mark every receipt whose message contributed to a published Parquet
+    /// part as committed. The writer reports provenance for row, timer, and
+    /// shutdown flushes, so a 202 receipt cannot become 200 early.
+    pub async fn commit_persisted_receipts(&self, message_ids: &[Uuid]) -> usize {
+        if message_ids.is_empty() {
+            return 0;
+        }
+        let mut counts = std::collections::HashMap::<Uuid, usize>::new();
+        for message_id in message_ids {
+            *counts.entry(*message_id).or_default() += 1;
+        }
+        let keys: Vec<(String, String, Uuid)> = self
+            .ingest_receipts
+            .lock()
+            .await
+            .iter()
+            .filter(|(_, receipt)| {
+                counts.contains_key(&receipt.message_id)
+                    && receipt.status == IngestReceiptStatus::Pending
+            })
+            .map(|(key, _)| key.clone())
+            .collect();
+        let mut committed = 0;
+        for (scope, edge_id, message_id) in keys {
+            if self
+                .commit_receipt_rows(
+                    &scope,
+                    &edge_id,
+                    message_id,
+                    counts.get(&message_id).copied(),
+                )
+                .await
+            {
+                committed += 1;
+            }
+        }
+        committed
+    }
+
     pub async fn ingest_live(
         &self,
         env: &TelemetryEnvelope,
     ) -> anyhow::Result<LiveHistorianIngest> {
-        let mut historian = self.live_historian.lock().await;
-        if historian.is_none() {
-            *historian = Some(LiveHistorian::from_env_scoped()?);
-        }
-        historian
-            .as_mut()
-            .expect("live historian initialized")
-            .ingest_envelope(env)
-            .map_err(Into::into)
+        let permit = live_writer_permits()
+            .acquire_owned()
+            .await
+            .map_err(|_| anyhow::anyhow!("live historian writer stopped"))?;
+        let historian = std::sync::Arc::clone(&self.live_historian);
+        let envelope = env.clone();
+        let report = tokio::task::spawn_blocking(move || {
+            let mut historian = historian
+                .lock()
+                .map_err(|_| anyhow::anyhow!("live historian writer lock poisoned"))?;
+            if historian.is_none() {
+                *historian = Some(LiveHistorian::from_env_scoped()?);
+            }
+            historian
+                .as_mut()
+                .expect("live historian initialized")
+                .ingest_envelope(&envelope)
+        })
+        .await
+        .map_err(|error| anyhow::anyhow!("live historian writer task failed: {error}"))??;
+        drop(permit);
+        self.commit_persisted_receipts(&report.persisted_message_ids)
+            .await;
+        Ok(report)
     }
 
     pub async fn flush_live(&self, graceful: bool) -> anyhow::Result<LiveHistorianIngest> {
-        let report = {
-            let mut historian = self.live_historian.lock().await;
+        let permit = live_writer_permits()
+            .acquire_owned()
+            .await
+            .map_err(|_| anyhow::anyhow!("live historian writer stopped"))?;
+        let historian = std::sync::Arc::clone(&self.live_historian);
+        let report = tokio::task::spawn_blocking(move || {
+            let mut historian = historian
+                .lock()
+                .map_err(|_| anyhow::anyhow!("live historian writer lock poisoned"))?;
             let Some(historian) = historian.as_mut() else {
                 return Ok(LiveHistorianIngest::default());
             };
-            let report = if graceful {
-                historian.shutdown_flush()?
+            if graceful {
+                historian.shutdown_flush()
             } else {
-                historian.flush_due()?
-            };
-            report
-        };
+                historian.flush_due()
+            }
+        })
+        .await
+        .map_err(|error| anyhow::anyhow!("live historian writer task failed: {error}"))??;
+        drop(permit);
+        self.commit_persisted_receipts(&report.persisted_message_ids)
+            .await;
         Ok(report)
     }
 
@@ -301,6 +396,19 @@ impl AppState {
             .await
             .get(&(scope.to_string(), edge_id.to_string(), message_id))
             .map(|receipt| receipt.status)
+    }
+
+    pub async fn receipt_persisted_rows(
+        &self,
+        scope: &str,
+        edge_id: &str,
+        message_id: Uuid,
+    ) -> Option<usize> {
+        self.ingest_receipts
+            .lock()
+            .await
+            .get(&(scope.to_string(), edge_id.to_string(), message_id))
+            .map(|receipt| receipt.persisted_rows)
     }
 
     /// Record a successful ingest accept (bumps counter + last_ingest_at).
@@ -511,14 +619,67 @@ fn enforce_receipt_capacity(receipts: &mut HashMap<(String, String, Uuid), Inges
     while receipts.len() > RECEIPT_CAPACITY {
         let Some(key) = receipts
             .iter()
+            .filter(|(_, receipt)| receipt.status == IngestReceiptStatus::Committed)
             .min_by_key(|(_, receipt)| receipt.updated_at)
             .map(|(key, _)| key.clone())
         else {
-            return false;
+            // Pending work is never evicted. A temporary oversize is safer
+            // than losing the replay key needed after a crash.
+            break;
         };
         receipts.remove(&key);
     }
     true
+}
+
+const RECEIPT_COMPACTION_BYTES: u64 = 8 * 1024 * 1024;
+
+/// Rewrite the receipt journal from the live map once it grows beyond a fixed
+/// bound. The temporary file is fsynced before rename, so a crash leaves either
+/// the old complete journal or the new complete snapshot.
+async fn maybe_compact_receipt_journal(
+    path: &std::path::Path,
+    receipts: &HashMap<(String, String, Uuid), IngestReceipt>,
+) {
+    let oversized = tokio::fs::metadata(path)
+        .await
+        .map(|metadata| metadata.len() >= RECEIPT_COMPACTION_BYTES)
+        .unwrap_or(false);
+    if !oversized {
+        return;
+    }
+    let entries: Vec<ReceiptJournalEntry> = receipts
+        .values()
+        .map(|receipt| ReceiptJournalEntry {
+            scope: receipt.scope.clone(),
+            edge_id: receipt.edge_id.clone(),
+            message_id: receipt.message_id,
+            receipt: Some(receipt.clone()),
+        })
+        .collect();
+    let path = path.to_path_buf();
+    let _ = tokio::task::spawn_blocking(move || {
+        use std::io::Write;
+        let temp = path.with_extension("jsonl.compact.tmp");
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&temp)
+            .ok()?;
+        for entry in entries {
+            let mut line = serde_json::to_vec(&entry).ok()?;
+            line.push(b'\n');
+            file.write_all(&line).ok()?;
+        }
+        file.sync_all().ok()?;
+        std::fs::rename(&temp, &path).ok()?;
+        if let Some(parent) = path.parent() {
+            std::fs::File::open(parent).ok()?.sync_all().ok()?;
+        }
+        Some(())
+    })
+    .await;
 }
 
 #[cfg(test)]
@@ -610,6 +771,33 @@ mod tests {
                     copy
                 })
                 .await
+        );
+
+        let persisted_id = Uuid::new_v4();
+        let mut persisted = TelemetryEnvelope::new(
+            "building-local",
+            "edge-local",
+            openfdd_contracts::Protocol::Bacnet,
+            2,
+            Vec::new(),
+        );
+        persisted.message_id = persisted_id;
+        assert!(
+            state
+                .reserve_receipt_at("tenant-a/building-local", persisted)
+                .await
+        );
+        assert_eq!(
+            state
+                .commit_persisted_receipts(&[persisted_id, persisted_id])
+                .await,
+            1
+        );
+        assert_eq!(
+            state
+                .receipt_persisted_rows("tenant-a/building-local", "edge-local", persisted_id)
+                .await,
+            Some(2)
         );
     }
 }

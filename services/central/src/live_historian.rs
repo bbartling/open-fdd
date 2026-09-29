@@ -36,6 +36,7 @@ use openfdd_contracts::{Quality, TelemetryEnvelope, TelemetryPoint, ValueKind};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use url::Url;
+use uuid::Uuid;
 
 const TAG_BUILDING_ID: &str = "building_id";
 const TAG_EQUIPMENT_ID: &str = "equipment_id";
@@ -70,6 +71,10 @@ pub struct LiveHistorianIngest {
     /// Later points with a canonical role already present in the same equipment
     /// envelope. The first point wins deterministically; unique points remain valid.
     pub duplicate_roles: Vec<DuplicateRole>,
+    /// Message ids whose rows were included in an atomically published part.
+    /// A receipt stays pending until its id appears here, including time and
+    /// shutdown flushes.
+    pub persisted_message_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -328,6 +333,7 @@ pub struct LiveHistorian {
     latest_persisted_timestamp_utc: Option<DateTime<Utc>>,
     parquet_root: Option<PathBuf>,
     pending_type_stamps: BTreeMap<EquipmentKey, String>,
+    pending_message_ids: BTreeMap<EquipmentKey, Vec<Uuid>>,
 }
 
 impl LiveHistorian {
@@ -398,6 +404,7 @@ impl LiveHistorian {
             latest_persisted_timestamp_utc,
             parquet_root,
             pending_type_stamps: BTreeMap::new(),
+            pending_message_ids: BTreeMap::new(),
         })
     }
 
@@ -411,10 +418,27 @@ impl LiveHistorian {
             ..LiveHistorianIngest::default()
         };
         for ((building_id, equipment_id), batch) in groups {
+            let key = (building_id.clone(), equipment_id.clone());
+            self.pending_message_ids
+                .entry(key.clone())
+                .or_default()
+                .push(env.message_id);
             let flushes = self
                 .batches
                 .push(building_id, equipment_id, batch)
-                .context("buffer canonical live historian batch")?;
+                .context("buffer canonical live historian batch");
+            let flushes = match flushes {
+                Ok(flushes) => flushes,
+                Err(error) => {
+                    if let Some(ids) = self.pending_message_ids.get_mut(&key) {
+                        ids.pop();
+                        if ids.is_empty() {
+                            self.pending_message_ids.remove(&key);
+                        }
+                    }
+                    return Err(error);
+                }
+            };
             self.apply_flushes(&flushes, &mut report)?;
         }
         Ok(report)
@@ -439,6 +463,7 @@ impl LiveHistorian {
         Ok(report)
     }
 
+    #[cfg(test)]
     pub fn latest_persisted_timestamp_utc(&self) -> Option<DateTime<Utc>> {
         self.latest_persisted_timestamp_utc
     }
@@ -451,6 +476,17 @@ impl LiveHistorian {
         report.flushes += flushes.len();
         for flush in flushes {
             report.persisted_rows += flush.rows;
+            if let Some(ids) = self
+                .pending_message_ids
+                .get_mut(&(flush.building_id.clone(), flush.equipment_id.clone()))
+            {
+                let count = flush.rows.min(ids.len());
+                report.persisted_message_ids.extend(ids.drain(..count));
+                if ids.is_empty() {
+                    self.pending_message_ids
+                        .remove(&(flush.building_id.clone(), flush.equipment_id.clone()));
+                }
+            }
             for part in &flush.parts {
                 let timestamp = DateTime::parse_from_rfc3339(&part.last_timestamp_utc)
                     .with_context(|| {
@@ -933,9 +969,12 @@ mod tests {
         point
             .tags
             .insert("equipment_type".into(), json!("zone_other"));
-        let report = live.ingest_envelope(&envelope(vec![point])).unwrap();
+        let env = envelope(vec![point]);
+        let message_id = env.message_id;
+        let report = live.ingest_envelope(&env).unwrap();
         assert_eq!(report.persisted_rows, 1);
         assert_eq!(report.flushes, 1);
+        assert_eq!(report.persisted_message_ids, vec![message_id]);
         let types_path = tmp
             .path()
             .join("building=BUILDING_100/equipment_types.json");

@@ -345,14 +345,6 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
 
             match state.ingest_live(&env).await {
                 Ok(report) => {
-                    if report.persisted_rows > 0
-                        && !state
-                            .commit_receipt(&scope, &env.edge_id, env.message_id)
-                            .await
-                    {
-                        state.mqtt_record_error("durable ingest receipt commit failed");
-                        return;
-                    }
                     for duplicate in &report.duplicate_roles {
                         warn!(
                             building_id = %duplicate.building_id,

@@ -583,6 +583,59 @@ async fn connect_mqtt_session(
     })
 }
 
+async fn drain_local_spool(client: &LocalIngestClient, spool: &mut TelemetrySpool) {
+    match spool.list_pending().await {
+        Ok(pending) => {
+            for rec in pending {
+                match client.send(&rec.envelope).await {
+                    Ok(()) => {
+                        if let Err(err) = spool.ack(rec.seq).await {
+                            warn!(%err, "local spool ack failed");
+                        }
+                    }
+                    Err(err) => {
+                        warn!(%err, "local central delivery failed; local spool will retry");
+                        break;
+                    }
+                }
+            }
+        }
+        Err(err) => warn!(%err, "list local spool failed"),
+    }
+}
+
+async fn drain_mqtt_spool(
+    session: &mut MqttSession,
+    spool: &mut TelemetrySpool,
+    publish_ledger: &MqttPublishLedger,
+) -> bool {
+    let Ok(pending) = spool.list_pending().await else {
+        warn!("list spool failed");
+        return false;
+    };
+    for rec in pending {
+        match publish_json(&session.client, &rec.topic, &rec.envelope, false).await {
+            Ok(()) => {
+                publish_ledger.record_ack(
+                    rec.envelope.sequence,
+                    u32::try_from(rec.envelope.points.len()).unwrap_or(u32::MAX),
+                    &equipment_ids_in(&rec.envelope),
+                );
+                if let Err(err) = spool.ack(rec.seq).await {
+                    warn!(%err, "mqtt spool ack failed");
+                }
+            }
+            Err(err) => {
+                publish_ledger.record_fail();
+                warn!(%err, "publish failed; will retry");
+                session.command_task.abort();
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Map REST poll rows into telemetry points (`rest:<device>:<point>` ids).
 fn rest_telemetry_points(
     rows: &[serde_json::Value],
@@ -836,30 +889,8 @@ pub async fn spawn_if_configured(
                 }
             }
 
-            if let (Some(client), Some(spool)) = (local_client.as_ref(), local_spool.as_mut()) {
-                match spool.list_pending().await {
-                    Ok(pending) => {
-                        for rec in pending {
-                            match client.send(&rec.envelope).await {
-                                Ok(()) => {
-                                    if let Err(err) = spool.ack(rec.seq).await {
-                                        warn!(%err, "local spool ack failed");
-                                    }
-                                }
-                                Err(err) => {
-                                    warn!(%err, "local central delivery failed; will retry without blocking MQTT");
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    Err(err) => warn!(%err, "list local spool failed"),
-                }
-            }
-
-            // Local delivery is drained before any broker connection attempt.
-            // A remote outage therefore cannot prevent the authoritative local
-            // snapshot from being queued and sent.
+            // Each sink owns its spool and drains concurrently. A slow local
+            // central or broker cannot hold the other sink's delivery loop.
             if mqtt_allowed && mqtt_spool.is_some() && mqtt.is_none() {
                 mqtt = connect_mqtt_session(
                     mqtt_config(&site_id, &edge_id, port),
@@ -868,37 +899,22 @@ pub async fn spawn_if_configured(
                 )
                 .await;
             }
-
-            if let (Some(session), Some(spool)) = (mqtt.as_ref(), mqtt_spool.as_mut()) {
-                match spool.list_pending().await {
-                    Ok(pending) => {
-                        for rec in pending {
-                            match publish_json(&session.client, &rec.topic, &rec.envelope, false)
-                                .await
-                            {
-                                Ok(()) => {
-                                    // QoS 1 ack: the broker accepted this packet.
-                                    publish_ledger.record_ack(
-                                        rec.envelope.sequence,
-                                        u32::try_from(rec.envelope.points.len())
-                                            .unwrap_or(u32::MAX),
-                                        &equipment_ids_in(&rec.envelope),
-                                    );
-                                    let _ = spool.ack(rec.seq).await;
-                                }
-                                Err(err) => {
-                                    publish_ledger.record_fail();
-                                    warn!(%err, "publish failed; will retry");
-                                    session.command_task.abort();
-                                    mqtt = None;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    Err(err) => warn!(%err, "list spool failed"),
+            let local_future = async {
+                if let (Some(client), Some(spool)) = (local_client.as_ref(), local_spool.as_mut()) {
+                    drain_local_spool(client, spool).await;
                 }
-            } else {
+            };
+            let mqtt_future = async {
+                if let (Some(session), Some(spool)) = (mqtt.as_mut(), mqtt_spool.as_mut()) {
+                    Some(drain_mqtt_spool(session, spool, &publish_ledger).await)
+                } else {
+                    None
+                }
+            };
+            let (_, mqtt_failed) = tokio::join!(local_future, mqtt_future);
+            if mqtt_failed == Some(true) {
+                mqtt = None;
+            } else if mqtt.is_none() {
                 // Points were snapshotted (empty snapshots already `continue`)
                 // but the MQTT session is down, so nothing left the edge.
                 // The spool still holds them for retry.

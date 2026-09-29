@@ -2768,6 +2768,7 @@ LIMIT {limit}
 /// An empty map intentionally selects no equipment rather than reviving the
 /// old name based `LIKE` heuristics (which admitted ghost ids and missed opaque
 /// vendor ids). Each caller also requires its chart role to be non-null.
+#[cfg(test)]
 fn rcx_eq_filter_for_column(
     kinds: &[&str],
     stamped_types: &BTreeMap<String, String>,
