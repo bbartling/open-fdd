@@ -1,3 +1,7 @@
+## 2026-09-29 — Absolute site-identity law (type-first, exact id)
+
+- Rule 62 and `openfdd-site-identity` are no longer a narrow "no ACME string in two trees" ban. Product paths (SPA, central / DataFusion / historian / analytics, PyPI report / fault / oracle, RCx / FDD plot selection) never hardcode one building, campus, vendor, or fixture equipment id. Equipment selection is `equipType` / `equipment_type` / roles / registry. A fixture id is an exact match only after the type filter (`RTU_01` must not hit `RTU_010`). Stress and ops may still name a lab site as an env default. Same class as #1043. Docs only; product id-text residuals stay on #1043.
+
 ## 2026-09-27 — Tip 3.5.53 closeout stress (not FQ)
 
 - Tip `dc32615` / VERSION 3.5.53 on Railway (`sha-dc32615`); backup `20260927T193409Z`; edge `vim-1` MQTTS fresh.

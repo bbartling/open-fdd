@@ -88,7 +88,7 @@ Ask for the affected component/version, complete reproduction steps, proof of im
 
 ## Package authoring (any BAS job)
 
-Open-FDD is a **generic** DataFusion consumer. Charts / FDD / RCx / motors / mixing / OAT-METEO read **SQL roles** after `POST /api/csv/import/package`. They do **not** know a vendor or campus. Empty Overview tables, RCx plots, Inspect traces, or `?/3` health scores mean the **package map is incomplete** — map in the zip. Gold shape: `AHU_1`, `VAV_1`, `CHW_1`, `weather/`. Never hard-code a site, vendor suffix table, or city as a product default. That ban is PyPI report/fault/oracle tooling (`open_fdd` reporting, rules, Typst, anomaly CLI) and the Rust DataFusion / historian / analytics runtime: `building_id` is a parameter. Tests, stress, ops, migrate helpers, and lab fixtures may name ACME, BUILDING_100, or LAKESIDE. See [`openfdd_agent_spec/AGENTS.md`](openfdd_agent_spec/AGENTS.md) rule 62 and [`openfdd-site-identity`](openfdd_agent_spec/skills/openfdd-site-identity/SKILL.md).
+Open-FDD is a **generic** data-model-driven framework. Charts / FDD / RCx / motors / mixing / OAT-METEO read **SQL roles** after `POST /api/csv/import/package`. They do **not** know a vendor or campus. Empty Overview tables, RCx plots, Inspect traces, or `?/3` health scores mean the **package map is incomplete** — map in the zip. Gold shape (`AHU_1`, `VAV_1`, `CHW_1`, `weather/`) is a layout example, not a selector. Product paths — SPA, central / DataFusion / historian / analytics, PyPI report / fault / oracle (`open_fdd` reporting, rules, Typst, anomaly CLI), and RCx / FDD plot selection — never hard-code one building, campus, vendor suffix table, or fixture equipment id. `building_id` is always a caller, request, JWT, or env parameter. Equipment selection uses `equipType` / `equipment_type`, roles, and the registry: never prefer `RTU_01` or `VAV_1` over type, and never substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id` (`RTU_01` must not hit `RTU_010`). An exact id is allowed only after the type filter. Tests, stress, ops, migrate helpers, and lab fixtures may **name** ACME, BUILDING_100, or LAKESIDE as env defaults; their selectors stay type-first and exact-id-only. See [`openfdd_agent_spec/AGENTS.md`](openfdd_agent_spec/AGENTS.md) rule 62 and [`openfdd-site-identity`](openfdd_agent_spec/skills/openfdd-site-identity/SKILL.md).
 
 | Need | Haystack → SQL | If the BAS has no binary point |
 | --- | --- | --- |
@@ -169,6 +169,7 @@ SPA shows `GET /api/health` → `{semver}+shortsha`. On each turnkey platform pa
 - embed vendor chat relays or model API keys in the stack
 - add Python to the product central/web request path
 - local stack image builds on low-RAM hosts (use GHCR)
+- hardcode a building, campus, vendor, or fixture equipment id into product code, or select equipment by a substring or prefix match on `equipment_id` (type, roles, and registry only; exact id only after the type filter)
 
 See [docs/agent/index.md](docs/agent/index.md) for external-agent architecture.
 
@@ -176,6 +177,6 @@ For library/migration/PR missions (Milestone A), start at [openfdd_agent_spec/AG
 
 ### Stamped equipment type precedence
 
-Package ingest persists `equipType` / `equipment_type`; recognized stamps win over folder/id heuristics in inventory and plant-health grouping. Opaque BAS ids are supported (`AC_1` + `equipType: ahu` → AHU). Vendor/campus aliases remain preprocess concerns and must not be hard-coded into product Rust.
+Package ingest persists `equipType` / `equipment_type`; recognized stamps win over folder/id heuristics in inventory and plant-health grouping. Opaque BAS ids are supported (`AC_1` + `equipType: ahu` → AHU). Vendor/campus aliases remain preprocess concerns and must not be hard-coded into product Rust. Plots, FDD, analytics, and type-first stress selectors use that stamp, roles, and the registry. Do not prefer a fixture id, and do not substring-match `equipment_id`.
 
 ZONE = FCU (valve PID) or standalone DDC monitor (`fcu` / `zone_other`); UV = CV AHU (`unitVentilator`). Detail: [`docs/modeling/zone-terminals.md`](docs/modeling/zone-terminals.md).

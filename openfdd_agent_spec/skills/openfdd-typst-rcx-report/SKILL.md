@@ -178,7 +178,7 @@ Haystack exports store devices under `equip` (object). Flat sidecars use string 
 
 ### BUILDING_100 legacy kit
 
-The names in this section are the external lab kit only. Do not copy `BUILDING_100`, `LAKESIDE_ES`, or a Detroit ACME address into a PyPI report default or a DataFusion historian branch. Tests and ops may keep those names.
+The names in this section are the external lab kit only. Do not copy `BUILDING_100`, `LAKESIDE_ES`, or a Detroit ACME address into a PyPI report default or a DataFusion historian branch. Tests and ops may keep those names. Report and plot equipment still comes from `equipType` / `equipment_type`, roles, and the registry — do not prefer a fixture id, and do not substring-match `equipment_id` (`RTU_01` must not hit `RTU_010`). See [`openfdd-site-identity`](../openfdd-site-identity/SKILL.md).
 
 The single-AHU reporter above is not this site's Overview PDF, and it is not a Railway-only command.
 
