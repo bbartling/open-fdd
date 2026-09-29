@@ -1454,6 +1454,8 @@ pub async fn local_fieldbus_ingest(
 ) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
     const MAX_LOCAL_PAYLOAD_BYTES: usize = 1024 * 1024;
 
+    state.recover_pending_receipts_once().await;
+
     if body.len() > MAX_LOCAL_PAYLOAD_BYTES {
         return Err((
             StatusCode::PAYLOAD_TOO_LARGE,

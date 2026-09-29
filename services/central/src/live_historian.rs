@@ -84,6 +84,7 @@ pub struct LiveHistorianIngest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersistedMessageGroup {
     pub message_id: Uuid,
+    pub scope: String,
     pub edge_id: String,
     pub building_id: String,
     pub equipment_id: String,
@@ -341,6 +342,7 @@ fn parse_bool(name: &str, raw: &str) -> Result<bool> {
 
 #[derive(Debug)]
 pub struct LiveHistorian {
+    scope: String,
     batches: MicroBatchHistorian,
     watermark_store: WatermarkStore,
     latest_persisted_timestamp_utc: Option<DateTime<Utc>>,
@@ -357,7 +359,7 @@ impl LiveHistorian {
     /// never falls back to ephemeral container disk as canonical history.
     /// Build from deployment configuration while applying the trusted tenant
     /// partition used by local HTTP and MQTT delivery alike.
-    pub fn from_env_scoped() -> Result<Self> {
+    pub fn from_env_scoped_for(scope: &str) -> Result<Self> {
         let mut config = HistorianConfig::from_env()?;
         if crate::tenant::multi_tenant_enabled() {
             let tenant_id = std::env::var("OPENFDD_TENANT_ID")
@@ -381,10 +383,15 @@ impl LiveHistorian {
                 }
             };
         }
-        Self::from_config(&config)
+        Self::from_config_with_scope(&config, scope)
     }
 
+    #[cfg(test)]
     pub fn from_config(config: &HistorianConfig) -> Result<Self> {
+        Self::from_config_with_scope(config, "")
+    }
+
+    fn from_config_with_scope(config: &HistorianConfig, scope: &str) -> Result<Self> {
         let (writer, watermark_store) = match &config.storage_url {
             StorageUrl::File { root } => {
                 let storage = LocalStorage::new(root);
@@ -412,6 +419,7 @@ impl LiveHistorian {
             StorageUrl::S3 { .. } => None,
         };
         Ok(Self {
+            scope: scope.to_string(),
             batches,
             watermark_store,
             latest_persisted_timestamp_utc,
@@ -502,6 +510,7 @@ impl LiveHistorian {
                         .extend(std::iter::repeat_n(*message_id, rows));
                     report.persisted_message_groups.push(PersistedMessageGroup {
                         message_id: *message_id,
+                        scope: self.scope.clone(),
                         edge_id: edge_id.clone(),
                         building_id: flush.building_id.clone(),
                         equipment_id: flush.equipment_id.clone(),

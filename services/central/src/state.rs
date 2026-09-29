@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -44,8 +45,23 @@ fn eligible_equipment_keys(envelope: &TelemetryEnvelope) -> BTreeSet<String> {
             let building = point.tags.get("building_id")?.as_str()?;
             let equipment = point.tags.get("equipment_id")?.as_str()?;
             let role = point.tags.get("role")?.as_str()?;
-            (!building.is_empty() && !equipment.is_empty() && !role.is_empty())
-                .then(|| equipment_key(building, equipment))
+            let scalar =
+                point.value.is_number() || point.value.is_boolean() || point.value.is_string();
+            let quality_ok = matches!(
+                point.quality,
+                openfdd_contracts::Quality::Good | openfdd_contracts::Quality::Uncertain
+            ) || (point
+                .tags
+                .get("non_finite_quality")
+                .and_then(|v| v.as_bool())
+                == Some(true)
+                && point.value.is_number());
+            (scalar
+                && quality_ok
+                && !building.is_empty()
+                && !equipment.is_empty()
+                && !role.is_empty())
+            .then(|| equipment_key(building, equipment))
         })
         .collect()
 }
@@ -186,10 +202,11 @@ pub struct AppState {
     /// Wave L L5 — per-tenant sliding-window budgets (noop when disabled).
     pub tenant_budgets: TenantBudgetTracker,
     /// One canonical writer shared by MQTT and local HTTP delivery.
-    pub live_historian: std::sync::Arc<Mutex<Option<LiveHistorian>>>,
+    pub live_historian: std::sync::Arc<Mutex<HashMap<String, LiveHistorian>>>,
     /// Durable pending/committed receipt ledger for replay-safe local ingest.
     pub ingest_receipts: AsyncMutex<HashMap<(String, String, Uuid), IngestReceipt>>,
     pub ingest_receipts_path: PathBuf,
+    recovery_started: AtomicBool,
 }
 
 impl AppState {
@@ -211,9 +228,10 @@ impl AppState {
             mqtt_monitor: Mutex::new(MqttMonitorState::default()),
             login_failures: Mutex::new(HashMap::new()),
             tenant_budgets: TenantBudgetTracker::new(),
-            live_historian: std::sync::Arc::new(Mutex::new(None)),
+            live_historian: std::sync::Arc::new(Mutex::new(HashMap::new())),
             ingest_receipts: AsyncMutex::new(load_receipts()),
             ingest_receipts_path: receipts_path(),
+            recovery_started: AtomicBool::new(false),
         }
     }
 
@@ -269,6 +287,28 @@ impl AppState {
         } else {
             receipts.remove(&(scope.to_string(), edge_id, message_id));
             false
+        }
+    }
+
+    /// Recover durable pending envelopes once after process start. Normal
+    /// duplicate requests only query the receipt; this path owns the sole
+    /// replay attempt after a crash.
+    pub async fn recover_pending_receipts_once(&self) {
+        if self.recovery_started.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let pending: Vec<_> = self
+            .ingest_receipts
+            .lock()
+            .await
+            .values()
+            .filter(|receipt| receipt.status == IngestReceiptStatus::Pending)
+            .map(|receipt| (receipt.scope.clone(), receipt.envelope.clone()))
+            .collect();
+        for (scope, envelope) in pending {
+            if self.ingest_live(&scope, &envelope).await.is_ok() {
+                let _ = self.flush_live(false).await;
+            }
         }
     }
 
@@ -410,18 +450,20 @@ impl AppState {
             .await
             .map_err(|_| anyhow::anyhow!("live historian writer stopped"))?;
         let historian = std::sync::Arc::clone(&self.live_historian);
+        let writer_scope = scope.to_string();
         let envelope = env.clone();
-        let report = tokio::task::spawn_blocking(move || {
+        let report = tokio::task::spawn_blocking(move || -> anyhow::Result<LiveHistorianIngest> {
             let mut historian = historian
                 .lock()
                 .map_err(|_| anyhow::anyhow!("live historian writer lock poisoned"))?;
-            if historian.is_none() {
-                *historian = Some(LiveHistorian::from_env_scoped()?);
+            if !historian.contains_key(&writer_scope) {
+                let writer = LiveHistorian::from_env_scoped_for(&writer_scope)?;
+                historian.insert(writer_scope.clone(), writer);
             }
-            historian
-                .as_mut()
-                .expect("live historian initialized")
-                .ingest_envelope(&envelope)
+            let writer = historian
+                .get_mut(&writer_scope)
+                .expect("live historian inserted above");
+            writer.ingest_envelope(&envelope)
         })
         .await
         .map_err(|error| anyhow::anyhow!("live historian writer task failed: {error}"))??;
@@ -437,30 +479,41 @@ impl AppState {
             .await
             .map_err(|_| anyhow::anyhow!("live historian writer stopped"))?;
         let historian = std::sync::Arc::clone(&self.live_historian);
-        let report = tokio::task::spawn_blocking(move || {
+        let report = tokio::task::spawn_blocking(move || -> anyhow::Result<LiveHistorianIngest> {
             let mut historian = historian
                 .lock()
                 .map_err(|_| anyhow::anyhow!("live historian writer lock poisoned"))?;
-            let Some(historian) = historian.as_mut() else {
-                return Ok(LiveHistorianIngest::default());
-            };
-            if graceful {
-                historian.shutdown_flush()
-            } else {
-                historian.flush_due()
+            let mut combined = LiveHistorianIngest::default();
+            for historian in historian.values_mut() {
+                let report = if graceful {
+                    historian.shutdown_flush()?
+                } else {
+                    historian.flush_due()?
+                };
+                combined.flushes += report.flushes;
+                combined.persisted_rows += report.persisted_rows;
+                combined
+                    .persisted_message_ids
+                    .extend(report.persisted_message_ids);
+                combined
+                    .persisted_message_groups
+                    .extend(report.persisted_message_groups);
+                combined.latest_persisted_timestamp_utc = combined
+                    .latest_persisted_timestamp_utc
+                    .max(report.latest_persisted_timestamp_utc);
             }
+            Ok(combined)
         })
         .await
         .map_err(|error| anyhow::anyhow!("live historian writer task failed: {error}"))??;
         drop(permit);
         for group in &report.persisted_message_groups {
-            let scope = format!(
-                "tenant={};building={}",
-                std::env::var("OPENFDD_TENANT_ID").unwrap_or_else(|_| "-".into()),
-                group.building_id
-            );
-            self.commit_persisted_receipts_for(&scope, &group.edge_id, std::slice::from_ref(group))
-                .await;
+            self.commit_persisted_receipts_for(
+                &group.scope,
+                &group.edge_id,
+                std::slice::from_ref(group),
+            )
+            .await;
         }
         Ok(report)
     }
@@ -910,6 +963,7 @@ mod tests {
         );
         let first = PersistedMessageGroup {
             message_id,
+            scope: "tenant-a/building-local".into(),
             edge_id: "edge-local".into(),
             building_id: "building-local".into(),
             equipment_id: "equipment-a".into(),

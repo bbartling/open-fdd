@@ -292,6 +292,7 @@ fn store_shadow_payload(
 }
 
 async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8]) {
+    state.recover_pending_receipts_once().await;
     match serde_json::from_slice::<TelemetryEnvelope>(payload) {
         Ok(env) => {
             if let Err(err) = env.validate() {
