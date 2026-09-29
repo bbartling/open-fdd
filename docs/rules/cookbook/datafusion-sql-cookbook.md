@@ -1258,28 +1258,22 @@ WHERE equipment_id = 'equip:your-ahu'
 ## VAV terminals
 
 ### VAV-1 — Zone comfort band
-**Family:** `vav` · **Equipment:** `vav`, `zone`  
-**Equation:** Zone temp < 70°F or > 75°F.  
+**Family:** `vav` · **Equipment:** `vav`, `zone_other`, `heatpump`, `baseboard`  
+**Equation:** Zone temp outside `zone_lo`–`zone_hi` (default 70–75°F) during occupied hours when `occ_mode` is set (`require_occupied`, default on). A saved Overview calendar fills a missing or blank `occ_mode` before the rule runs. NULL `occ_mode` means neither the calendar nor a BAS occupied point is set, so every sample is scored. Unoccupied setback stays on VAV-2.  
 **Default confirmation:** 900 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `zone_lo` | Zone low | °F | 70.0 | 55.0–72.0 |
-| `zone_hi` | Zone high | °F | 75.0 | 72.0–85.0 |
+| `zone_lo` / `ZONE_T_LO` | Zone low | °F | 70.0 | 55.0–72.0 |
+| `zone_hi` / `ZONE_T_HI` | Zone high | °F | 75.0 | 72.0–85.0 |
+| `require_occupied` / `REQUIRE_OCCUPIED` | Require occupied | bool | 1 | 0–1 |
 
 ```sql
 -- confirmation_seconds: 900
--- param: comfort_low_f = 70 ; comfort_high_f = 75
-SELECT
-  timestamp, equipment_id, zone_t, occ_mode,
-  CASE
-    WHEN zone_t IS NULL THEN false
-    WHEN lower(COALESCE(occ_mode, 'occupied')) = 'occupied'
-     AND (zone_t < 70.0 OR zone_t > 75.0) THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-vav'
+-- See sql_rules/vav1_comfort_fault.sql
+-- REQUIRE_OCCUPIED defaults to 1. Unoccupied tokens and numeric occ_mode <= 0.05
+-- do not fault. NULL occ_mode does not suppress the band.
+SELECT equipment_id, fault_hours, fault_pct FROM vav1_comfort_fault_result
 ```
 
 ### VAV-2 — Night setback miss

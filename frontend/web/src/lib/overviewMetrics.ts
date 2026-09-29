@@ -57,6 +57,9 @@ export function canonicalEquipmentKind(
     case "heatpump":
     case "hp":
       return "heatpump";
+    case "baseboard":
+    case "baseboardheat":
+      return "baseboard";
     case "weather":
       return "weather";
     case "meter":
@@ -85,6 +88,23 @@ export function equipmentKind(e: {
   );
 }
 
+function hasZoneAirTempRole(e: {
+  has_zone_role?: unknown;
+  roles?: unknown;
+  mapped_roles?: unknown;
+}): boolean {
+  if (e.has_zone_role === true) return true;
+  const bags = [e.roles, e.mapped_roles];
+  for (const bag of bags) {
+    if (!Array.isArray(bag)) continue;
+    for (const role of bag) {
+      const u = String(role).trim().toLowerCase().replace(/[\s_]+/g, "-");
+      if (u === "zone-air-temp" || u === "zone-t" || u === "zonet") return true;
+    }
+  }
+  return false;
+}
+
 /** Zone terminals and zone-other controls stay out of plant motor groups. */
 export function isZoneTerminalEquipment(e: {
   equipment_id?: unknown;
@@ -92,9 +112,14 @@ export function isZoneTerminalEquipment(e: {
   equipment_type_raw?: unknown;
   equipType?: unknown;
   label?: unknown;
+  has_zone_role?: unknown;
+  roles?: unknown;
+  mapped_roles?: unknown;
 }): boolean {
   const kind = equipmentKind(e);
-  return kind === "vav" || kind === "zone_other";
+  if (kind === "vav" || kind === "zone_other" || kind === "baseboard") return true;
+  if (kind === "heatpump" || kind == null) return hasZoneAirTempRole(e);
+  return false;
 }
 
 export function isWeatherEquipment(e: {

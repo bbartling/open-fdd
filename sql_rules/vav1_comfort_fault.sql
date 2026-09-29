@@ -1,6 +1,10 @@
 -- vav1_comfort_fault.sql — zone comfort band with confirm window (Open-FDD parity)
--- Occupied-only when occ_mode is present; do not require fan_cmd (VAV-1 lesson).
--- OFDD-065: do not reference fan_cmd here. Zone-only VAV parquet schemas
+-- When occ_mode is present, require_occupied (default 1) scores the band only
+-- while occupied. The rule runner fills a missing or blank occ_mode from the
+-- saved Overview calendar (session occupancy_schedule). NULL occ_mode means
+-- neither a BAS occupied point nor that calendar is set. Unoccupied setback
+-- stays on VAV-2.
+-- OFDD-065: do not reference fan_cmd here. Zone-only parquet schemas
 -- often lack fan_cmd; DataFusion then schema-errors → SKIPPED_MISSING_ROLES.
 WITH h AS (
   SELECT
@@ -17,9 +21,16 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN occ_mode IS NOT NULL
-       AND LOWER(trim(CAST(occ_mode AS VARCHAR))) IN
-         ('unoccupied','unocc','off','false','night','standby','setback','0','0.0','no')
+      WHEN {{REQUIRE_OCCUPIED}} >= 0.5
+       AND occ_mode IS NOT NULL
+       AND (
+         LOWER(trim(CAST(occ_mode AS VARCHAR))) IN
+           ('unoccupied','unocc','off','false','night','standby','setback','no')
+         OR (
+           try_cast(trim(CAST(occ_mode AS VARCHAR)) AS DOUBLE) IS NOT NULL
+           AND try_cast(trim(CAST(occ_mode AS VARCHAR)) AS DOUBLE) <= 0.05
+         )
+       )
       THEN 0
       ELSE band_fault
     END AS INT) AS raw_fault

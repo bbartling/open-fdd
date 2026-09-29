@@ -45,6 +45,8 @@ pub fn canonical_kind(raw: &str) -> Option<&'static str> {
         "coolingtower" | "tower" => Some("cooling_tower"),
         "boiler" | "hwplant" | "hotwaterplant" => Some("boiler"),
         "heatpump" | "hp" => Some("heatpump"),
+        // Zone heat at the terminal (stamp), not an id-prefix guess.
+        "baseboard" | "baseboardheat" => Some("baseboard"),
         "weather" => Some("weather"),
         // Electricity / utility meters (UTIL-* / SV-* / RCx metering).
         "meter" | "electricmeter" | "utilitymeter" | "powermeter" => Some("meter"),
@@ -58,6 +60,36 @@ pub fn canonical_kind(raw: &str) -> Option<&'static str> {
 /// and do not enter an AHU, VAV, plant, or weather cohort.
 pub fn kind_for(_equipment_id: &str, stamped_type: Option<&str>) -> &'static str {
     stamped_type.and_then(canonical_kind).unwrap_or("unknown")
+}
+
+/// Zone-terminal kinds. Heat pumps are not in this set: plant and zone heat
+/// pumps share `heatpump`, so a zone role is required (see `zone_comfort_member`).
+pub fn is_zone_terminal_kind(kind: &str) -> bool {
+    matches!(kind, "vav" | "zone_other" | "baseboard")
+}
+
+/// Zone-comfort membership from a package stamp plus a modeled zone role.
+///
+/// A recognized non-zone stamp excludes the equipment even when its id
+/// contains `ZONE` or `VAV`. No recognized stamp includes the equipment only
+/// when the caller has a modeled zone role (`has_zone_role`). A `heatpump`
+/// stamp joins only with that role, so a plant heat pump is not a zone.
+pub fn zone_comfort_member(stamped_type: Option<&str>, has_zone_role: bool) -> bool {
+    match stamped_type.and_then(canonical_kind) {
+        Some("heatpump") => has_zone_role,
+        Some(kind) => is_zone_terminal_kind(kind),
+        None => has_zone_role,
+    }
+}
+
+/// Label for a Family Zones row. Uses the stamp. Role-only members are `Zone`
+/// so equipment id text is not a type.
+pub fn zone_comfort_type_label(stamped_type: Option<&str>) -> &'static str {
+    if stamped_type.and_then(canonical_kind).is_some() {
+        api_equipment_type_for("", stamped_type)
+    } else {
+        "Zone"
+    }
 }
 
 /// `package` when the stamp is a recognized kind, otherwise `unclassified`.
@@ -88,6 +120,7 @@ pub fn api_equipment_type_for(equipment_id: &str, stamped_type: Option<&str>) ->
         "ahu" => "AHU",
         "chiller" | "boiler" | "cooling_tower" => "PLANT",
         "heatpump" => "HEAT_PUMP",
+        "baseboard" => "Baseboard",
         "weather" => "WEATHER",
         "zone_other" => "Zone Other",
         "vrf" => "VRF",
@@ -190,6 +223,30 @@ mod tests {
         );
         assert_eq!(api_equipment_type_for("AC_1", Some("cv_ahu")), "CV AHU");
         assert_eq!(api_equipment_type_for("AC_2", Some("vrf")), "VRF");
+    }
+
+    #[test]
+    fn zone_comfort_member_uses_stamp_or_role_not_id_text() {
+        assert!(zone_comfort_member(Some("vav"), true));
+        assert!(zone_comfort_member(Some("fcu"), true));
+        assert!(zone_comfort_member(Some("fanCoil"), true));
+        assert!(zone_comfort_member(Some("heatPump"), true));
+        assert!(!zone_comfort_member(Some("heatPump"), false));
+        assert!(zone_comfort_member(Some("baseboard"), true));
+        assert!(zone_comfort_member(Some("zone_other"), true));
+        assert!(zone_comfort_member(Some("standalone_ddc"), false));
+        assert!(!zone_comfort_member(Some("ahu"), true));
+        assert!(!zone_comfort_member(Some("ahu"), false));
+        assert!(zone_comfort_member(None, true));
+        assert!(!zone_comfort_member(None, false));
+        assert_eq!(zone_comfort_type_label(Some("fcu")), "FCU");
+        assert_eq!(zone_comfort_type_label(Some("heatPump")), "HEAT_PUMP");
+        assert_eq!(zone_comfort_type_label(None), "Zone");
+        assert_eq!(canonical_kind("baseboard"), Some("baseboard"));
+        assert_eq!(
+            api_equipment_type_for("BB_1", Some("baseboard")),
+            "Baseboard"
+        );
     }
 
     #[test]

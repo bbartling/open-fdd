@@ -31,8 +31,8 @@ fn sql_rules_dir() -> PathBuf {
 /// Map cookbook slider keys onto SQL registry parameter keys.
 fn alias_ui_param_key<'a>(rule_id: &str, key: &'a str) -> &'a str {
     match (rule_id, key) {
-        ("VAV-1", "zone_lo") => "zone_t_lo",
-        ("VAV-1", "zone_hi") => "zone_t_hi",
+        ("VAV-1", "zone_lo") | ("VAV-1", "zone_low") => "zone_t_lo",
+        ("VAV-1", "zone_hi") | ("VAV-1", "zone_high") => "zone_t_hi",
         ("FC1", "duct_static_err") => "eps_dsp",
         ("FC1", "fan_hi") => "eps_vfd_spd",
         // Vibe19 / package aliases -> registry parameter keys
@@ -808,6 +808,7 @@ pub fn series_response_scoped(
             return json!({"ok": false, "error": e.to_string()});
         }
         let _ = register_weather_for_building(&ctx, &weather_root, scoped_bid.as_deref()).await;
+        let _ = fdd_rules::occupancy_schedule::apply_session_occupancy_schedule(&ctx).await;
         // Prefer columns present on this equipment's history schema. Required
         // roles still hard-fail when missing; optional roles are skipped so
         // portable SV/PID rules can plot whatever is mapped.

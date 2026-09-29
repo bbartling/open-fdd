@@ -6,7 +6,7 @@ Proven on BUILDING_100 @ 0.5h tolerance (see `docs/benchmarks/RUST_DATAFUSION_PA
 
 | Cookbook / rule ID | SQL rule_id | SQL file | Required roles | Confirm (s) | Parity | Notes |
 | --- | --- | --- | --- | ---: | --- | --- |
-| VAV-1 / zone comfort | VAV-1 | vav1_comfort_fault.sql | zone_t | 900 | proven | Tunable ZONE_T_LO/HI |
+| VAV-1 / zone comfort | VAV-1 | vav1_comfort_fault.sql | zone_t | 900 | proven | Tunable ZONE_T_LO/HI and REQUIRE_OCCUPIED (default 1). Unoccupied setback stays VAV-2. |
 | OAT-METEO | OAT-METEO | oat_meteo_fault.sql | oa_t | 900 | proven | Weather-staged wx join |
 | FC13 SAT high | FC13-SAT-HIGH | sat_high_fault.sql | sat, sat_sp, clg_valve_pct, oa_damper_pct | 600 | proven | |
 | ECON-2 unfavorable OA | ECON-2 | economizer_fault.sql | oa_t, oa_damper_pct | 300 | proven | Registry confirm aligned to cookbook |

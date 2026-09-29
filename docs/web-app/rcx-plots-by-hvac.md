@@ -50,18 +50,22 @@ Operator exports from the product UI — illustrative only. Empty series still m
 
 ## Family → presets (equipment kinds)
 
-Kinds are the preset’s `eq_kinds` tokens (package `equipType` / `equipment_type`). `AHU` / `RTU` / `CHW` / `CT` name canonical kinds. They are not `equipment_id` prefixes. A missing or unrecognized stamp is unclassified and the plot matches nothing. Selection is exact `equipment_id` equality after the stamp, so `RTU_01` does not select `RTU_010`. Empty series when roles are missing — not a silent invent.
+Kinds are the preset’s `eq_kinds` tokens (package `equipType` / `equipment_type`). `AHU` / `RTU` / `CHW` / `CT` name canonical kinds. They are not `equipment_id` prefixes. A missing or unrecognized stamp is unclassified and the plot matches nothing. Selection is exact `equipment_id` equality after the stamp, so `RTU_01` does not select `RTU_010`. Family Zones is the role exception: it also keeps unstamped equipment when the plot role (`zone-air-temp` or `zone-airflow`) is mapped. The package path for that family is Haystack multi-tag: `equip` plus `fanCoilUnit` or `zone` (or `vav`) plus the point roles. Empty series when the stamp or role is missing — not a silent invent.
 
-### Zones / VAV (`VAV`, zone equipment)
+### Zones / VAV (zone terminals)
+
+Same family and the same plot cards for any equipment stamped `vav`, `fcu` / `zone_other`, heat pump, or baseboard, and for unstamped equipment whose mapped point role is `zone-air-temp` (FCU, heat pump, `zone_other`, and VAV). A non-zone stamp such as `ahu` stays out. Membership is the stamp plus those roles, never an equipment-id `LIKE`.
 
 | Preset id | Chart | What you see |
 |-----------|-------|----------------|
-| `zone_comfort_rank` | ranking | Occupied comfort-fail ranking |
+| `zone_comfort_rank` | ranking | % of schedule-gated samples inside the comfort band |
 | `zone_temps` | timeseries | Space temps |
-| `vav_flows` | timeseries | VAV airflow |
+| `vav_flows` | timeseries | Zone airflow |
 | `vav_health_matrix` | vav_health | Broken / comfort / rogue donut + worst bars |
 
 ### AHU / air (`AHU`, `RTU`, `MAU`)
+
+Stamp `ahu` / `rtu` / `mau` (canonical kind `ahu`). Opaque ids such as `AC_1` are included when that stamp is set. A name that merely starts with `RTU` is not.
 
 | Preset id | Chart | What you see |
 |-----------|-------|----------------|

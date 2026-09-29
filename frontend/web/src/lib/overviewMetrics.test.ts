@@ -33,7 +33,7 @@ describe("overviewMetrics", () => {
     ).toBe(true);
   });
 
-  it("treats zone membership as a stamp, not an id substring", () => {
+  it("treats zone membership as a stamp or zone-air-temp, not an id", () => {
     expect(isZoneTerminalEquipment({ equipment_id: "AHU-1-VAV-03" })).toBe(
       false,
     );
@@ -44,6 +44,8 @@ describe("overviewMetrics", () => {
       }),
     ).toBe(false);
     expect(isZoneTerminalEquipment({ equipment_type: "VAV" })).toBe(true);
+    expect(isZoneTerminalEquipment({ equipment_type: "fcu" })).toBe(true);
+    expect(isZoneTerminalEquipment({ equipment_type: "baseboard" })).toBe(true);
     expect(
       isZoneTerminalEquipment({
         equipment_id: "jci_vav_1",
@@ -53,7 +55,24 @@ describe("overviewMetrics", () => {
     expect(
       isZoneTerminalEquipment({ equipment_id: "bldg2-zone-loopback" }),
     ).toBe(false);
-    expect(isZoneTerminalEquipment({ equipment_type: "FCU" })).toBe(true);
+    expect(isZoneTerminalEquipment({ equipment_id: "VAV_1" })).toBe(false);
+    expect(isZoneTerminalEquipment({ equipment_id: "RTU_01" })).toBe(false);
+    expect(isZoneTerminalEquipment({ equipment_id: "RTU_010" })).toBe(false);
+    expect(
+      isZoneTerminalEquipment({
+        equipment_type: "HEAT_PUMP",
+        has_zone_role: true,
+      }),
+    ).toBe(true);
+    expect(isZoneTerminalEquipment({ equipment_type: "HEAT_PUMP" })).toBe(
+      false,
+    );
+    expect(
+      isZoneTerminalEquipment({
+        equipment_id: "GENERIC_1",
+        roles: ["zone-air-temp"],
+      }),
+    ).toBe(true);
   });
 
   it("picks the OAT-METEO row by weather kind", () => {
