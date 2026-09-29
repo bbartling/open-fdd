@@ -214,58 +214,35 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
             }
         };
         let mut used_retain_fallback = false;
-        let hist = match hist {
-            Ok(Some(env)) if defaulted && env_is_fail_closed(&env) => {
-                used_retain_fallback = true;
-                let budget = historian::remaining_budget(deadline, historian::MECH_QUERY_TIMEOUT);
-                if budget.is_zero() {
-                    return mechanical_timeout_envelope(req, building_id);
-                }
-                match tokio::time::timeout(
-                    budget,
-                    historian::mech_oat_bins_from_history(
-                        req.query.equipment_ids.as_deref(),
-                        max_gap,
-                        building_id,
-                        Some(retain_start),
-                        end,
-                    ),
-                )
-                .await
-                {
-                    Ok(inner) => inner,
-                    Err(_) => return mechanical_timeout_envelope(req, building_id),
-                }
+        let hist = if should_expand_retain_floor(defaulted, &hist) {
+            used_retain_fallback = true;
+            let budget = historian::remaining_budget(deadline, historian::MECH_QUERY_TIMEOUT);
+            if budget.is_zero() {
+                return mechanical_timeout_envelope(req, building_id);
             }
-            Ok(None) if defaulted => {
-                used_retain_fallback = true;
-                let budget = historian::remaining_budget(deadline, historian::MECH_QUERY_TIMEOUT);
-                if budget.is_zero() {
-                    return mechanical_timeout_envelope(req, building_id);
-                }
-                match tokio::time::timeout(
-                    budget,
-                    historian::mech_oat_bins_from_history(
-                        req.query.equipment_ids.as_deref(),
-                        max_gap,
-                        building_id,
-                        Some(retain_start),
-                        end,
-                    ),
-                )
-                .await
-                {
-                    Ok(inner) => inner,
-                    Err(_) => return mechanical_timeout_envelope(req, building_id),
-                }
+            match tokio::time::timeout(
+                budget,
+                historian::mech_oat_bins_from_history(
+                    req.query.equipment_ids.as_deref(),
+                    max_gap,
+                    building_id,
+                    Some(retain_start),
+                    end,
+                ),
+            )
+            .await
+            {
+                Ok(inner) => inner,
+                Err(_) => return mechanical_timeout_envelope(req, building_id),
             }
-            other => other,
+        } else {
+            hist
         };
         match hist {
             Ok(Some(mut env)) => {
                 if used_retain_fallback {
                     diag_warnings.push(format!(
-                        "mechanical_cooling {}-day default window was empty or timed out; expanded to bounded {}-day historian retain floor",
+                        "mechanical_cooling {}-day default window was empty; expanded to bounded {}-day historian retain floor",
                         historian::MECH_DEFAULT_LOOKBACK_DAYS,
                         historian::MECH_RETAIN_FALLBACK_DAYS
                     ));
@@ -317,12 +294,11 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     env
 }
 
-fn env_is_fail_closed(env: &AnalyticsEnvelope) -> bool {
-    env.coverage
-        .as_ref()
-        .and_then(|coverage| coverage.get("fail_closed"))
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false)
+fn should_expand_retain_floor(
+    defaulted: bool,
+    historian_result: &anyhow::Result<Option<AnalyticsEnvelope>>,
+) -> bool {
+    defaulted && matches!(historian_result, Ok(None))
 }
 
 fn mechanical_timeout_envelope(
@@ -418,6 +394,21 @@ mod tests {
         assert!(out[0].eligible);
         assert!(out[0].confidence == "medium" || out[0].confidence == "high");
         assert_eq!(out[0].reason, "primary_compressor_or_chiller_status");
+    }
+
+    #[test]
+    fn fail_closed_historians_do_not_expand_retain_floor() {
+        let env = mechanical_timeout_envelope(&AnalyticsRequest::default(), None);
+        assert_eq!(
+            env.coverage
+                .as_ref()
+                .and_then(|coverage| coverage["fail_closed"].as_bool()),
+            Some(true)
+        );
+        let result = Ok(Some(env));
+        assert!(!should_expand_retain_floor(true, &result));
+        assert!(should_expand_retain_floor(true, &Ok(None)));
+        assert!(!should_expand_retain_floor(false, &Ok(None)));
     }
 
     #[test]

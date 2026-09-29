@@ -180,27 +180,37 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
             .or_else(|| Some(Utc::now() - chrono::Duration::days(default_lookback)));
         let end = req.query.end;
         let building = req.query.building_id.as_deref();
+        let deadline = tokio::time::Instant::now() + historian::RUNTIME_QUERY_TIMEOUT;
         let mut used_retain_fallback = false;
-        let hist = match runtime_from_history_budgeted(filter, max_gap, building, start, end).await
-        {
-            Ok(Some(env)) if env_has_runtime_rows(&env) => Ok(Some(env)),
-            Ok(None) if defaulted_start => {
-                // Only an explicit empty historian result is retryable. A
-                // timeout or bridge envelope is authoritative for this request
-                // and must not trigger a second, larger scan.
-                used_retain_fallback = true;
-                let retain_start =
-                    Utc::now() - chrono::Duration::days(historian::RUNTIME_RETAIN_FALLBACK_DAYS);
-                runtime_from_history_budgeted(filter, max_gap, building, Some(retain_start), end)
+        let hist =
+            match runtime_from_history_budgeted(filter, max_gap, building, start, end, deadline)
+                .await
+            {
+                Ok(Some(env)) if env_has_runtime_rows(&env) => Ok(Some(env)),
+                Ok(None) if defaulted_start => {
+                    // Only an explicit empty historian result is retryable. A
+                    // timeout or bridge envelope is authoritative for this request
+                    // and must not trigger a second, larger scan.
+                    used_retain_fallback = true;
+                    let retain_start = Utc::now()
+                        - chrono::Duration::days(historian::RUNTIME_RETAIN_FALLBACK_DAYS);
+                    runtime_from_history_budgeted(
+                        filter,
+                        max_gap,
+                        building,
+                        Some(retain_start),
+                        end,
+                        deadline,
+                    )
                     .await
-            }
-            Ok(Some(env)) if defaulted_start && env_is_fail_closed(&env) => {
-                // Keep timeout/fail-closed envelopes intact; they are not
-                // evidence that the bounded window was empty.
-                Ok(Some(env))
-            }
-            other => other,
-        };
+                }
+                Ok(Some(env)) if defaulted_start && env_is_fail_closed(&env) => {
+                    // Keep timeout/fail-closed envelopes intact; they are not
+                    // evidence that the bounded window was empty.
+                    Ok(Some(env))
+                }
+                other => other,
+            };
         match hist {
             Ok(Some(mut env)) => {
                 let (qv, mut warnings) = resolve_query_version(req, QV_RUNTIME);
@@ -244,9 +254,10 @@ async fn runtime_from_history_budgeted(
     building: Option<&str>,
     start: Option<DateTime<Utc>>,
     end: Option<DateTime<Utc>>,
+    deadline: tokio::time::Instant,
 ) -> anyhow::Result<Option<AnalyticsEnvelope>> {
     match tokio::time::timeout(
-        historian::RUNTIME_QUERY_TIMEOUT,
+        historian::remaining_budget(deadline, historian::RUNTIME_QUERY_TIMEOUT),
         historian::runtime_from_history(filter, max_gap, building, start, end),
     )
     .await
@@ -341,6 +352,19 @@ mod tests {
         env.coverage = Some(json!({"fail_closed": true}));
         assert!(env_is_fail_closed(&env));
         assert!(!env_has_runtime_rows(&env));
+    }
+
+    #[test]
+    fn retain_fallback_budget_uses_one_absolute_deadline() {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(80);
+        let first = historian::remaining_budget(deadline, historian::RUNTIME_QUERY_TIMEOUT);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let fallback = historian::remaining_budget(deadline, historian::RUNTIME_QUERY_TIMEOUT);
+        assert!(
+            fallback < first,
+            "fallback must inherit elapsed first-attempt time"
+        );
+        assert!(fallback < historian::RUNTIME_QUERY_TIMEOUT);
     }
 
     #[test]
