@@ -50,11 +50,11 @@ Operator exports from the product UI — illustrative only. Empty series still m
 
 ## Family → presets (equipment kinds)
 
-Kinds are the preset’s `eq_kinds` tokens. Every preset resolves those tokens to canonical equipment kinds and keeps the equipment whose package stamp matches, then filters with an exact `equipment_id` list. A kind token is not an id prefix: `RTU` does not mean `equipment_id LIKE 'RTU%'`, so `RTU_01` does not pull `RTU_010`. Unstamped names are not members. Family Zones is the exception that also keeps unstamped equipment when the plot role (`zone-air-temp` or `zone-airflow`) is modeled. Empty series when the stamp or role is missing — not a silent invent.
+Kinds are the preset’s `eq_kinds` tokens. Every preset resolves those tokens to canonical equipment kinds and keeps the equipment whose package stamp matches, then filters with an exact `equipment_id` list. A kind token is not an id prefix: `RTU` does not mean `equipment_id LIKE 'RTU%'`, so `RTU_01` does not pull `RTU_010`. Unstamped names are not members. Family Zones also keeps unstamped equipment when the plot role (`zone-air-temp` or `zone-airflow`) is mapped. The package path for that family is Haystack multi-tag: `equip` plus `fanCoilUnit` or `zone` (or `vav`) plus the point roles. Empty series when the stamp or role is missing — not a silent invent.
 
 ### Zones / VAV (zone terminals)
 
-Same family and the same plot cards for any equipment stamped `vav`, `fcu` / `zone_other`, heat pump, or baseboard, and for unstamped equipment that models the plot’s zone role. A non-zone stamp (for example `ahu` on an id that contains `ZONE`) is excluded.
+Same family and the same plot cards for any equipment stamped `vav`, `fcu` / `zone_other`, heat pump, or baseboard, and for unstamped equipment whose mapped point role is `zone-air-temp` (FCU, heat pump, `zone_other`, and VAV). A non-zone stamp such as `ahu` stays out. Membership is the stamp plus those roles, never an equipment-id `LIKE`.
 
 | Preset id | Chart | What you see |
 |-----------|-------|----------------|
