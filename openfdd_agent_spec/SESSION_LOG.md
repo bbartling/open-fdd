@@ -4,6 +4,10 @@
 - Equipment pick uses `equipment_type` only. A fixture equipment id does not outrank a typed row, and ledger/monitor correlation uses id equality (a longer id is a different device). ACME and vim-1 stay building and edge fixtures.
 - Publish ledger records QoS 1 acks, fails, and no-session. It does not filter or coalesce MQTT publishes.
 
+## 2026-09-29 — FDD/RCx series preview is the newest N rows
+
+- SPA series preview on FDD Plots and each RCx timeseries card shows the most recent samples of the figure already loaded (newest first). Per-plot dropdown default 10; options 10/20/50/100/500. No historian refetch and no VERSION bump (#1050).
+
 ## 2026-09-27 — Tip 3.5.53 closeout stress (not FQ)
 
 - Tip `dc32615` / VERSION 3.5.53 on Railway (`sha-dc32615`); backup `20260927T193409Z`; edge `vim-1` MQTTS fresh.
