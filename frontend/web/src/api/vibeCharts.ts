@@ -505,20 +505,21 @@ export function vavHealthWorstBars(
 
 export function rankingBars(
   points: Array<Record<string, unknown>>,
-  opts: { title: string; yTitle?: string },
+  opts: { title: string; yTitle?: string; sort?: "asc" | "desc" },
 ): PlotlyFigure | null {
   if (!points.length) return null;
+  const inBand = points.some((p) => p.series === "in_band_pct" || opts.sort === "asc");
   const sorted = [...points].sort((a, b) => {
-    const av = Number(a.value_f ?? a.fail_pct ?? 0);
-    const bv = Number(b.value_f ?? b.fail_pct ?? 0);
-    return bv - av;
+    const av = Number(a.in_band_pct ?? a.value_f ?? a.fail_pct ?? 0);
+    const bv = Number(b.in_band_pct ?? b.value_f ?? b.fail_pct ?? 0);
+    return inBand ? av - bv : bv - av;
   });
   const outliers = outlierEquipmentIds(sorted, { primaryOnly: false });
   return {
     data: [
       {
         type: "bar",
-        name: "fail %",
+        name: inBand ? "in band %" : "fail %",
         x: sorted.map((r) => String(r.equipment_id ?? "")),
         y: sorted.map((r) => {
           const v = r.value_f ?? r.fail_pct;
@@ -536,7 +537,7 @@ export function rankingBars(
     ],
     layout: overviewChartLayout({
       xTitle: "equipment",
-      yTitle: opts.yTitle ?? "comfort fail %",
+      yTitle: opts.yTitle ?? (inBand ? "% time in comfort band" : "comfort fail %"),
       height: Math.max(360, 28 * Math.min(sorted.length, 24)),
       tickangle: -35,
       uirevision: `rcx-rank:${fingerprintJson(sorted.slice(0, 20))}`,

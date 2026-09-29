@@ -45,6 +45,8 @@ pub fn canonical_kind(raw: &str) -> Option<&'static str> {
         "coolingtower" | "tower" => Some("cooling_tower"),
         "boiler" | "hwplant" | "hotwaterplant" => Some("boiler"),
         "heatpump" | "hp" => Some("heatpump"),
+        // Zone heat at the terminal (stamp), not an id-prefix guess.
+        "baseboard" | "baseboardheat" => Some("baseboard"),
         "weather" => Some("weather"),
         // Electricity / utility meters (UTIL-* / SV-* / RCx metering).
         "meter" | "electricmeter" | "utilitymeter" | "powermeter" => Some("meter"),
@@ -77,6 +79,23 @@ pub fn infer_kind_from_id(equipment_id: &str) -> &'static str {
 }
 
 /// Prefer stamped package type; fall back to generic id inference.
+/// Kinds that share Family Zones comfort plots and VAV-1.
+pub fn is_zone_terminal_kind(kind: &str) -> bool {
+    matches!(kind, "vav" | "zone_other" | "heatpump" | "baseboard")
+}
+
+/// Zone-comfort membership from a package stamp plus a modeled zone role.
+///
+/// A recognized non-zone stamp excludes the equipment even when its id
+/// contains `ZONE` or `VAV`. No recognized stamp includes the equipment only
+/// when the caller has a modeled zone role (`has_zone_role`).
+pub fn zone_comfort_member(stamped_type: Option<&str>, has_zone_role: bool) -> bool {
+    match stamped_type.and_then(canonical_kind) {
+        Some(kind) => is_zone_terminal_kind(kind),
+        None => has_zone_role,
+    }
+}
+
 pub fn kind_for(equipment_id: &str, stamped_type: Option<&str>) -> &'static str {
     stamped_type
         .and_then(canonical_kind)
@@ -102,6 +121,7 @@ pub fn api_equipment_type_for(equipment_id: &str, stamped_type: Option<&str>) ->
         "ahu" => "AHU",
         "chiller" | "boiler" | "cooling_tower" => "PLANT",
         "heatpump" => "HEAT_PUMP",
+        "baseboard" => "Baseboard",
         "weather" => "WEATHER",
         "zone_other" => "Zone Other",
         "vrf" => "VRF",
@@ -196,6 +216,26 @@ mod tests {
         );
         assert_eq!(api_equipment_type_for("AC_1", Some("cv_ahu")), "CV AHU");
         assert_eq!(api_equipment_type_for("AC_2", Some("vrf")), "VRF");
+    }
+
+    #[test]
+    fn zone_comfort_member_uses_stamp_or_role_not_id_text() {
+        assert!(zone_comfort_member(Some("vav"), true));
+        assert!(zone_comfort_member(Some("fcu"), true));
+        assert!(zone_comfort_member(Some("fanCoil"), true));
+        assert!(zone_comfort_member(Some("heatPump"), true));
+        assert!(zone_comfort_member(Some("baseboard"), true));
+        assert!(zone_comfort_member(Some("zone_other"), true));
+        assert!(zone_comfort_member(Some("standalone_ddc"), false));
+        assert!(!zone_comfort_member(Some("ahu"), true));
+        assert!(!zone_comfort_member(Some("ahu"), false));
+        assert!(zone_comfort_member(None, true));
+        assert!(!zone_comfort_member(None, false));
+        assert_eq!(canonical_kind("baseboard"), Some("baseboard"));
+        assert_eq!(
+            api_equipment_type_for("BB_1", Some("baseboard")),
+            "Baseboard"
+        );
     }
 
     #[test]

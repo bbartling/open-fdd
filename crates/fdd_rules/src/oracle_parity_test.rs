@@ -2503,4 +2503,128 @@ timestamp_utc,duct_static,duct_static_sp,fan_cmd,fan_status
         assert_hours_close(expected, 0.25, "pandas reference");
         assert_hours_close(got, expected, "FC1 fan_status-preferred SQL");
     }
+
+    #[tokio::test]
+    async fn vav1_occupied_band_skips_unoccupied_and_fractional_occ() {
+        // require_occupied default 1. Unoccupied labels and numeric ≤0.05 do not
+        // fault. Occupied samples outside 70–75°F do. Confirm window is 1 row.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_VAV1_OCC");
+        std::fs::create_dir_all(&building).unwrap();
+        let rows = "\
+timestamp_utc,zone_col,occ_col
+2026-01-01T00:00:00Z,80,occupied
+2026-01-01T00:05:00Z,80,unoccupied
+2026-01-01T00:10:00Z,80,0.03
+2026-01-01T00:15:00Z,72,occupied
+2026-01-01T00:20:00Z,60,unoccupied
+2026-01-01T00:25:00Z,60,1
+";
+        write_equipment_fixture(
+            &building,
+            "jci_vav_12",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "zone_col",
+                    role: "zone_t",
+                },
+                RoleCol {
+                    csv_col: "occ_col",
+                    role: "occ_mode",
+                },
+            ],
+            rows,
+        );
+        let got = run_rule_fault_hours(
+            &building,
+            "vav1_comfort_fault.sql",
+            300.0,
+            300,
+            &[
+                ("ZONE_T_LO", "70"),
+                ("ZONE_T_HI", "75"),
+                ("REQUIRE_OCCUPIED", "1"),
+            ],
+        )
+        .await;
+        let raw = [true, false, false, false, false, true];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 1);
+        assert_hours_close(expected, 2.0 * 300.0 / 3600.0, "pandas reference");
+        assert_hours_close(got, expected, "VAV-1 occupied gate");
+    }
+
+    #[tokio::test]
+    async fn vav1_require_occupied_off_counts_unoccupied_band() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_VAV1_ANY");
+        std::fs::create_dir_all(&building).unwrap();
+        let rows = "\
+timestamp_utc,zone_col,occ_col
+2026-01-01T00:00:00Z,80,unoccupied
+2026-01-01T00:05:00Z,72,unoccupied
+";
+        write_equipment_fixture(
+            &building,
+            "FCU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "zone_col",
+                    role: "zone_t",
+                },
+                RoleCol {
+                    csv_col: "occ_col",
+                    role: "occ_mode",
+                },
+            ],
+            rows,
+        );
+        let got = run_rule_fault_hours(
+            &building,
+            "vav1_comfort_fault.sql",
+            300.0,
+            300,
+            &[
+                ("ZONE_T_LO", "70"),
+                ("ZONE_T_HI", "75"),
+                ("REQUIRE_OCCUPIED", "0"),
+            ],
+        )
+        .await;
+        let expected = pandas_confirm_fault_hours(&[true, false], 300.0, 1);
+        assert_hours_close(got, expected, "VAV-1 require_occupied off");
+    }
+
+    #[tokio::test]
+    async fn vav1_without_occ_mode_evaluates_the_band() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_VAV1_NOOCC");
+        std::fs::create_dir_all(&building).unwrap();
+        let rows = "\
+timestamp_utc,zone_col
+2026-01-01T00:00:00Z,80
+2026-01-01T00:05:00Z,72
+";
+        write_equipment_fixture(
+            &building,
+            "BB_1",
+            5,
+            &[RoleCol {
+                csv_col: "zone_col",
+                role: "zone_t",
+            }],
+            rows,
+        );
+        let got = run_rule_fault_hours(
+            &building,
+            "vav1_comfort_fault.sql",
+            300.0,
+            300,
+            &[("ZONE_T_LO", "70"), ("ZONE_T_HI", "75")],
+        )
+        .await;
+        let expected = pandas_confirm_fault_hours(&[true, false], 300.0, 1);
+        assert_hours_close(got, expected, "VAV-1 no schedule");
+    }
 }

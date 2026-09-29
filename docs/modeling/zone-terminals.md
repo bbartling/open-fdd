@@ -32,6 +32,10 @@ Do **not** stamp FCU or standalone zone DDC as `ahu`.
 
 VAV boxes remain `equipType: vav` (zone terminals with airflow/damper). They share the **same comfort gate** for zone-temp performance rules.
 
+Family Zones RCx (comfort ranking, space-temp series, airflow series, zone health) uses that same set: VAV, FCU, `zone_other` / standalone DDC, heat-pump zones, and baseboard. Membership is the package stamp or a modeled `zone-air-temp` role. An id that merely contains `ZONE` or `VAV` is not enough, and a non-zone stamp excludes the equipment.
+
+`VAV-1` scores the comfort band only while occupied when `occ_mode` or the Overview calendar is set (`require_occupied`, default on). Unoccupied setback stays on `VAV-2`.
+
 ## Unit ventilator = CV AHU
 
 A **unit ventilator (UV)** is an **air-handling unit, constant volume** -- same family as CV AHU.

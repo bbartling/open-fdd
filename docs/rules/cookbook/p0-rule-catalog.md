@@ -51,7 +51,7 @@ All **thresholds are defaults** — site-adjustable. **confirmation_seconds** de
 | `ECON-7` | `ahu` | ahu | outside-air-damper | 600 | Economizer-OK web weather: dew point < 60°F AND dry-bulb < 72°F (above a 35°F freeze-guard floor; dewpoint from web s… |
 | `MECH-OAT-1` | `ahu` | ahu, chiller, heatpump |  | 600 | Proven DX/chiller mechanical cooling while web dry-bulb < 60°F. Uses compressor/chiller/pump/amps/power proof — not A… |
 | `CHW-NOLOAD-1` | `plant` | chiller |  | 1800 | Chiller/plant proven running while building load is satisfied: all mapped zones inside comfort band OR all mapped AHU… |
-| `VAV-1` | `vav` | vav, zone | zone-air-temp | 900 | Zone temp < 70°F or > 75°F. |
+| `VAV-1` | `vav` | vav, zone_other, heatpump, baseboard | zone-air-temp | 900 | Zone temp outside 70–75°F during occupied hours when occupancy is set (`require_occupied`, default on). Unoccupied setback is VAV-2. |
 | `VAV-2` | `vav` | vav, zone | zone-air-temp, occupied | 900 | Unoccupied AND zone temp > setback_hi (default 68°F). |
 | `VAV-3` | `vav` | vav | outside-air-temp, reheat-valve | 300 | Air flowing AND OAT > 78°F AND reheat valve > 52%. |
 | `VAV-4` | `vav` | vav | damper | 900 | Air flowing AND damper > 97.5% sustained across the window. |

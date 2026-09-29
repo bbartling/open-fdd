@@ -345,7 +345,8 @@ export function RcxPage() {
       } else if (kind === "ranking") {
         fig = rankingBars(points, {
           title,
-          yTitle: "comfort fail %",
+          yTitle: "% time in comfort band",
+          sort: "asc",
         });
         const rankRows = res.rows?.length ? res.rows : points;
         setDonutFigure(

@@ -147,6 +147,8 @@ _TYPE_ALIASES: dict[str, str] = {
     "FCU": "FCU",
     "FANCOIL": "FCU",
     "FAN-COIL": "FCU",
+    "BASEBOARD": "BASEBOARD",
+    "BASEBOARDHEAT": "BASEBOARD",
     "ZONE": "ZONE_OTHER",
     "ZONE_OTHER": "ZONE_OTHER",
     "GENERAL": "GENERAL",
@@ -199,7 +201,7 @@ def equipment_type_from_id(equipment_id: str) -> str:
     return "UNKNOWN"
 
 
-def resolve_equipment_type(
+def _stamp_candidates(
     equipment_id: str,
     *,
     df: Any | None = None,
@@ -207,12 +209,8 @@ def resolve_equipment_type(
     column_map: dict[str, Any] | None = None,
     sites: dict[str, Site] | None = None,
     explicit: str | None = None,
-) -> str:
-    """Canonical typed equipment resolver.
-
-    Order: ``df.attrs['equipment_type']`` → ``explicit`` → role_map / site /
-    column_map ``equipment_type`` / ``equipType`` → ``equipment_type_from_id`` only.
-    """
+) -> list[str]:
+    """Type stamps from metadata. Does not read equipment id text."""
     candidates: list[str] = []
     if df is not None:
         attrs = getattr(df, "attrs", None) or {}
@@ -244,13 +242,57 @@ def resolve_equipment_type(
                 eq = building.equipment.get(equipment_id)
                 if eq and eq.equipment_type:
                     candidates.append(str(eq.equipment_type))
-    for raw in candidates:
+    return candidates
+
+
+def stamped_equipment_type(
+    equipment_id: str,
+    *,
+    df: Any | None = None,
+    role_map: dict[str, Any] | None = None,
+    column_map: dict[str, Any] | None = None,
+    sites: dict[str, Site] | None = None,
+    explicit: str | None = None,
+) -> str:
+    """Package or registry stamp only. Empty when the id text is the only signal."""
+    for raw in _stamp_candidates(
+        equipment_id,
+        df=df,
+        role_map=role_map,
+        column_map=column_map,
+        sites=sites,
+        explicit=explicit,
+    ):
         norm = normalize_equipment_type(raw)
         if norm and norm != "UNKNOWN":
             return norm
-        if norm == "UNKNOWN":
-            # keep looking for a stronger source; fall through
-            continue
+    return ""
+
+
+def resolve_equipment_type(
+    equipment_id: str,
+    *,
+    df: Any | None = None,
+    role_map: dict[str, Any] | None = None,
+    column_map: dict[str, Any] | None = None,
+    sites: dict[str, Site] | None = None,
+    explicit: str | None = None,
+) -> str:
+    """Canonical typed equipment resolver.
+
+    Order: ``df.attrs['equipment_type']`` → ``explicit`` → role_map / site /
+    column_map ``equipment_type`` / ``equipType`` → ``equipment_type_from_id`` only.
+    """
+    stamped = stamped_equipment_type(
+        equipment_id,
+        df=df,
+        role_map=role_map,
+        column_map=column_map,
+        sites=sites,
+        explicit=explicit,
+    )
+    if stamped:
+        return stamped
     # UNKNOWN is a weak stamp: let the id heuristic recover a stronger kind
     # (for example a fixture stamped UNKNOWN but named FCU_1).
     return equipment_type_from_id(equipment_id)

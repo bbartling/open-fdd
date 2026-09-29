@@ -15,10 +15,10 @@ rules:
     confirm_seconds: 0
 
   - rule_id: VAV-1
-    equipment_kinds: [vav, zone_other]
+    equipment_kinds: [vav, zone_other, heatpump, baseboard]
     sql_file: vav1_comfort_fault.sql
     pandas_function: vav1
-    description: Zone comfort band violation hours with confirm window
+    description: Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2
     required_roles: [zone_t]
     optional_roles: [occ_mode]
     output_columns: [equipment_id, fault_hours, fault_pct]
@@ -73,6 +73,15 @@ rules:
         unit: degF
         frontend_control: slider
         sql_placeholder: ZONE_T_HI
+      require_occupied:
+        label: Require occupied
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OCCUPIED
       confirm_seconds:
         label: Confirm time
         default: 900
@@ -84,7 +93,7 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: VAV-2
-    equipment_kinds: [vav, zone_other]
+    equipment_kinds: [vav, zone_other, heatpump, baseboard]
     sql_file: vav2_night_setback.sql
     pandas_function: vav2
     description: Night setback miss — unoccupied zone above heating setback

@@ -2681,6 +2681,80 @@ LIMIT {limit}
     Ok(Some(env))
 }
 
+/// Family Zones presets select by stamp + role, not `equipment_id` text.
+fn kinds_use_zone_family(kinds: &[&str]) -> bool {
+    if kinds.is_empty() {
+        return false;
+    }
+    const ZONE: &[&str] = &[
+        "ZONE_FAMILY",
+        "VAV",
+        "FCU",
+        "ZONE",
+        "ZONE_OTHER",
+        "HP",
+        "HEATPUMP",
+        "BASEBOARD",
+    ];
+    kinds
+        .iter()
+        .all(|k| ZONE.iter().any(|z| k.eq_ignore_ascii_case(z)))
+}
+
+fn safe_ident(name: &str) -> bool {
+    !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Equipment ids that belong on Family Zones plots for this role.
+async fn zone_family_eq_filter(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    role_col: &str,
+) -> Result<String> {
+    if !safe_ident(role_col) {
+        return Err(anyhow!("refusing unsafe role column"));
+    }
+    let sql = format!(
+        "SELECT DISTINCT equipment_id FROM history \
+         WHERE equipment_id IS NOT NULL AND {role_col} IS NOT NULL"
+    );
+    let result = run_sql(ctx, &sql).await?;
+    let stamps =
+        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let mut ids = Vec::new();
+    for row in &result.rows {
+        let Some(eq) = row.get("equipment_id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        if eq.is_empty() {
+            continue;
+        }
+        let stamped = stamps.get(eq).map(String::as_str);
+        if open_fdd_edge_prototype::equipment_types::zone_comfort_member(stamped, true) {
+            ids.push(eq.to_string());
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    if ids.is_empty() {
+        return Ok(" AND 1 = 0".to_string());
+    }
+    Ok(equipment_filter_sql(Some(&ids)))
+}
+
+async fn equipment_eq_filter(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    role_col: &str,
+    eq_kinds: &[&str],
+) -> Result<String> {
+    if kinds_use_zone_family(eq_kinds) {
+        zone_family_eq_filter(ctx, building_id, role_col).await
+    } else {
+        Ok(rcx_eq_filter(eq_kinds))
+    }
+}
+
 fn rcx_eq_filter(kinds: &[&str]) -> String {
     if kinds.is_empty() {
         return String::new();
@@ -2688,16 +2762,15 @@ fn rcx_eq_filter(kinds: &[&str]) -> String {
     let mut parts = Vec::new();
     for k in kinds {
         let ku = k.to_ascii_uppercase();
-        if ku == "VAV" {
-            // Name heuristics for package VAVs PLUS MQTT / Zone Other sites whose
-            // equipment_id does not contain "VAV" (e.g. bldg2-zone-loopback).
-            // Keep id-only predicates so history tables without equipment_type still work.
-            parts.push(
-                "(UPPER(equipment_id) LIKE 'VAV%' OR UPPER(equipment_id) LIKE '%/VAV%' \
-                 OR UPPER(equipment_id) LIKE '%VAVH%' OR UPPER(equipment_id) LIKE '%VAVFC%' \
-                 OR UPPER(equipment_id) LIKE '%ZONE%' OR UPPER(equipment_id) LIKE '%LOOPBACK%')"
-                    .to_string(),
-            );
+        if ku == "VAV"
+            || ku == "ZONE_FAMILY"
+            || ku == "FCU"
+            || ku == "ZONE_OTHER"
+            || ku == "BASEBOARD"
+        {
+            // Zone family is resolved in `zone_family_eq_filter` (stamp + role).
+            // Do not admit equipment by id text.
+            parts.push("1 = 0".to_string());
         } else if ku == "CHW" || ku == "CHW_PLANT" {
             parts.push(
                 "(UPPER(equipment_id) LIKE '%CHILLER%' OR UPPER(equipment_id) LIKE 'CHW%' \
@@ -2750,7 +2823,7 @@ pub async fn rcx_timeseries_from_history(
     if !cols.contains(role_col) {
         return Ok(None);
     }
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = equipment_eq_filter(&ctx, building_id, role_col, eq_kinds).await?;
     let fan_filter = if filter_fan_on {
         match on_expr(&cols) {
             Some(expr) => format!(" AND ({expr})"),
@@ -2901,7 +2974,7 @@ pub async fn rcx_oat_scatter_from_history(
     } else {
         None
     };
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = equipment_eq_filter(&ctx, building_id, y_col, eq_kinds).await?;
     // Prefixed for JOIN aliases (history AS h).
     let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
     let limit = max_points.clamp(200, 20000);
@@ -2998,7 +3071,7 @@ pub async fn rcx_box_from_history(
     if !cols.contains(role_col) {
         return Ok(None);
     }
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = equipment_eq_filter(&ctx, building_id, role_col, eq_kinds).await?;
     let fan_filter = if filter_fan_on {
         match on_expr(&cols) {
             Some(expr) => format!(" AND ({expr})"),
@@ -3043,8 +3116,10 @@ LIMIT {limit}
     Ok(Some(env))
 }
 
-/// Zone comfort fail ranking (vibe19 zone_comfort_fail_ranking) — % of samples
-/// outside [low, high] band per VAV. Uses occ_mode when present on the row.
+/// Zone comfort ranking — % of schedule-gated samples inside [low, high].
+///
+/// Membership is every zone-terminal stamp or any equipment that models
+/// `zone_t`. Uses `occ_mode` when present (same occupied gate as VAV-1).
 pub async fn rcx_zone_comfort_rank_from_history(
     building_id: Option<&str>,
     eq_kinds: &[&str],
@@ -3057,7 +3132,7 @@ pub async fn rcx_zone_comfort_rank_from_history(
     if !cols.contains("zone_t") {
         return Ok(None);
     }
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = equipment_eq_filter(&ctx, building_id, "zone_t", eq_kinds).await?;
     // Match schedule `occupied_expr`: Utf8 "1.0" / "0.0" from packages, not only "1".
     let occ_filter = if cols.contains("occ_mode") {
         " AND (occ_mode IS NULL OR \
@@ -3098,24 +3173,51 @@ ORDER BY (CAST(SUM(CASE WHEN zone_t < {comfort_low_f} OR zone_t > {comfort_high_
         } else {
             0.0
         };
+        let in_band_pct = if n_samples > 0.0 {
+            round2(100.0 * (n_samples - n_fail) / n_samples)
+        } else {
+            0.0
+        };
         let eq = r.get("equipment_id").cloned().unwrap_or(json!(""));
         let row = json!({
             "equipment_id": eq.clone(),
             "n_samples": n_samples as u64,
             "n_fail": n_fail as u64,
+            "n_in_band": (n_samples - n_fail) as u64,
             "fail_pct": fail_pct,
+            "in_band_pct": in_band_pct,
             "comfort_low_f": comfort_low_f,
             "comfort_high_f": comfort_high_f,
         });
         rows.push(row.clone());
         points.push(json!({
             "equipment_id": eq,
-            "value_f": fail_pct,
-            "series": "fail_pct",
+            "value_f": in_band_pct,
+            "in_band_pct": in_band_pct,
+            "fail_pct": fail_pct,
+            "series": "in_band_pct",
         }));
     }
-    let warnings =
-        vec!["RCx zone comfort ranking from historian DataFusion (default band 70–75°F)".into()];
+    rows.sort_by(|a, b| {
+        let av = a.get("in_band_pct").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let bv = b.get("in_band_pct").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        av.partial_cmp(&bv)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                a.get("equipment_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .cmp(b.get("equipment_id").and_then(|v| v.as_str()).unwrap_or(""))
+            })
+    });
+    points.sort_by(|a, b| {
+        let av = a.get("in_band_pct").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let bv = b.get("in_band_pct").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        av.partial_cmp(&bv).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let warnings = vec![
+        "RCx zone comfort ranking (% time in band, schedule-gated when occ_mode is present)".into(),
+    ];
     let query = AnalyticsQuery::default();
     let mut env = envelope_with_engine("rcx-ranking-v1", &query, warnings, DF_ENGINE);
     env.points = points;
@@ -3152,7 +3254,7 @@ pub async fn rcx_metering_from_history(
     let Some(oat) = mech_oat_col(&cols) else {
         return Ok(None);
     };
-    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter = equipment_eq_filter(&ctx, building_id, role_col, eq_kinds).await?;
     let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
     let cooling = kind != "gas";
     let sql = format!(
@@ -3562,16 +3664,22 @@ mod tests {
     }
 
     #[test]
-    fn rcx_eq_filter_vav_includes_mqtt_zone_loopback() {
-        let f = rcx_eq_filter(&["VAV"]);
+    fn zone_family_filter_uses_ids_not_name_like() {
+        assert!(kinds_use_zone_family(&["VAV"]));
+        assert!(kinds_use_zone_family(&["ZONE_FAMILY"]));
+        assert!(kinds_use_zone_family(&["FCU", "HP", "BASEBOARD"]));
+        assert!(!kinds_use_zone_family(&["AHU", "RTU", "MAU"]));
+        assert!(!kinds_use_zone_family(&["CHILLER", "AHU", "HP"]));
+        let sql =
+            equipment_filter_sql(Some(&["jci_vav_12".into(), "AC_FCU".into(), "BB_1".into()]));
+        let upper = sql.to_ascii_uppercase();
         assert!(
-            f.contains("%LOOPBACK%"),
-            "MQTT zone loopback must match VAV zone presets: {f}"
+            !upper.contains("LIKE"),
+            "zone family filter must not use id LIKE: {sql}"
         );
-        assert!(
-            f.contains("%ZONE%"),
-            "zone_* equipment ids must match VAV zone presets: {f}"
-        );
+        assert!(sql.contains("jci_vav_12"));
+        assert!(sql.contains("AC_FCU"));
+        assert!(!open_fdd_edge_prototype::equipment_types::zone_comfort_member(Some("ahu"), true));
     }
 
     #[tokio::test]

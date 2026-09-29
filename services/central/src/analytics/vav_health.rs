@@ -138,9 +138,9 @@ pub async fn vav_health_from_history(
         env.coverage = Some(json!({"schema_version": SCHEMA_VAV_HEALTH, "building_id": bid}));
         return Ok(Some(env));
     }
-    // No id-prefix SQL filter: opaque package ids (e.g. B100 terminals) are
-    // stamped `equipType: vav` in equipment_types.json. Prefer stamp via
-    // kind_for; fall back to id heuristics that resolve to "vav".
+    // No id-prefix SQL filter. Family Zones membership is a zone-terminal
+    // stamp (VAV, FCU, zone_other, heat pump, baseboard) or a modeled zone
+    // temperature. A non-zone stamp is excluded even when the id looks like a zone.
     let sql = r#"
 SELECT
   equipment_id,
@@ -202,11 +202,11 @@ ORDER BY equipment_id
             continue;
         }
         let stamped = stamped_types.get(eq).map(String::as_str);
-        if open_fdd_edge_prototype::equipment_types::kind_for(eq, stamped) != "vav" {
+        let zone_cov = row.get("zone_cov").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        if !open_fdd_edge_prototype::equipment_types::zone_comfort_member(stamped, zone_cov > 0.0) {
             continue;
         }
         let dmp_cov = row.get("dmp_cov").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let zone_cov = row.get("zone_cov").and_then(|v| v.as_f64()).unwrap_or(0.0);
         let fail_h = row
             .get("comfort_fail_h")
             .and_then(|v| v.as_f64())
@@ -261,7 +261,9 @@ ORDER BY equipment_id
             "building_id": bid,
             "equipment_id": eq,
             "parent_ahu": "",
-            "equipment_type": "VAV",
+            "equipment_type": open_fdd_edge_prototype::equipment_types::api_equipment_type_for(
+                eq, stamped
+            ),
             "broken_box": broken,
             "poor_zone_performance": poor,
             "rogue_damper": rogue,

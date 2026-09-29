@@ -50,15 +50,17 @@ Operator exports from the product UI — illustrative only. Empty series still m
 
 ## Family → presets (equipment kinds)
 
-Kinds are the preset’s `eq_kinds` filter (package stamp / id heuristics). Empty series when roles are missing — not a silent invent.
+Kinds are the preset’s `eq_kinds` filter. Family Zones uses package `equipment_type` / canonical kind plus a modeled zone role (`zone-air-temp` or `zone-airflow`). It does not match `equipment_id` text. Empty series when roles are missing — not a silent invent.
 
-### Zones / VAV (`VAV`, zone equipment)
+### Zones / VAV (zone terminals)
+
+Same family and the same plot cards for any equipment stamped `vav`, `fcu` / `zone_other`, heat pump, or baseboard, and for unstamped equipment that models the plot’s zone role. A non-zone stamp (for example `ahu` on an id that contains `ZONE`) is excluded.
 
 | Preset id | Chart | What you see |
 |-----------|-------|----------------|
-| `zone_comfort_rank` | ranking | Occupied comfort-fail ranking |
+| `zone_comfort_rank` | ranking | % of schedule-gated samples inside the comfort band |
 | `zone_temps` | timeseries | Space temps |
-| `vav_flows` | timeseries | VAV airflow |
+| `vav_flows` | timeseries | Zone airflow |
 | `vav_health_matrix` | vav_health | Broken / comfort / rogue donut + worst bars |
 
 ### AHU / air (`AHU`, `RTU`, `MAU`)

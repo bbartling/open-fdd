@@ -212,17 +212,10 @@ def resolve_conditional(
     """Point/context-aware gates for CONDITIONAL rules."""
     params = params or {}
     if rule_id == "VAV-1":
-        # Occupied band when schedule exists; also require air moving when fan/flow proof exists.
-        if "occupied" in df.columns and df["occupied"].notna().any():
-            occ = df["occupied"].astype(str).str.lower().isin({"occupied", "1", "true", "on"})
-            fan, src = resolve_fan_running(df)
-            if src.startswith("ungated"):
-                return occ.fillna(False), "occupied"
-            return (occ & fan).fillna(False), f"occ_and_{src}"
-        fan, src = resolve_fan_running(df)
-        if src.startswith("ungated"):
-            return pd.Series(True, index=df.index), "ungated_no_occ"
-        return fan, src
+        # Comfort band only. Unoccupied setback is VAV-2; do not also require fan/flow.
+        from open_fdd.rules.cookbook_catalog import vav1_occupied_mask
+
+        return vav1_occupied_mask(df, params)
     if rule_id == "DMP-1":
         fan, src = resolve_fan_running(df)
         if "outside-air-damper" in df.columns:
