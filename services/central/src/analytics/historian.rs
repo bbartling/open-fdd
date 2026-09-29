@@ -3682,6 +3682,12 @@ mod tests {
         assert!(sql.contains("jci_vav_12"));
         assert!(sql.contains("AC_FCU"));
         assert!(!open_fdd_edge_prototype::equipment_types::zone_comfort_member(Some("ahu"), true));
+        assert!(
+            !open_fdd_edge_prototype::equipment_types::zone_comfort_member(Some("heatpump"), false)
+        );
+        assert!(
+            open_fdd_edge_prototype::equipment_types::zone_comfort_member(Some("heatpump"), true)
+        );
     }
 
     #[tokio::test]

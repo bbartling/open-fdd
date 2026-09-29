@@ -79,20 +79,33 @@ pub fn infer_kind_from_id(equipment_id: &str) -> &'static str {
 }
 
 /// Prefer stamped package type; fall back to generic id inference.
-/// Kinds that share Family Zones comfort plots and VAV-1.
+/// Zone-terminal kinds. Heat pumps are not in this set: plant and zone heat
+/// pumps share `heatpump`, so a zone role is required (see `zone_comfort_member`).
 pub fn is_zone_terminal_kind(kind: &str) -> bool {
-    matches!(kind, "vav" | "zone_other" | "heatpump" | "baseboard")
+    matches!(kind, "vav" | "zone_other" | "baseboard")
 }
 
 /// Zone-comfort membership from a package stamp plus a modeled zone role.
 ///
 /// A recognized non-zone stamp excludes the equipment even when its id
 /// contains `ZONE` or `VAV`. No recognized stamp includes the equipment only
-/// when the caller has a modeled zone role (`has_zone_role`).
+/// when the caller has a modeled zone role (`has_zone_role`). A `heatpump`
+/// stamp joins only with that role, so a plant heat pump is not a zone.
 pub fn zone_comfort_member(stamped_type: Option<&str>, has_zone_role: bool) -> bool {
     match stamped_type.and_then(canonical_kind) {
+        Some("heatpump") => has_zone_role,
         Some(kind) => is_zone_terminal_kind(kind),
         None => has_zone_role,
+    }
+}
+
+/// Label for a Family Zones row. Uses the stamp. Role-only members are `Zone`
+/// so equipment id text is not a type.
+pub fn zone_comfort_type_label(stamped_type: Option<&str>) -> &'static str {
+    if stamped_type.and_then(canonical_kind).is_some() {
+        api_equipment_type_for("", stamped_type)
+    } else {
+        "Zone"
     }
 }
 
@@ -224,6 +237,7 @@ mod tests {
         assert!(zone_comfort_member(Some("fcu"), true));
         assert!(zone_comfort_member(Some("fanCoil"), true));
         assert!(zone_comfort_member(Some("heatPump"), true));
+        assert!(!zone_comfort_member(Some("heatPump"), false));
         assert!(zone_comfort_member(Some("baseboard"), true));
         assert!(zone_comfort_member(Some("zone_other"), true));
         assert!(zone_comfort_member(Some("standalone_ddc"), false));
@@ -231,6 +245,9 @@ mod tests {
         assert!(!zone_comfort_member(Some("ahu"), false));
         assert!(zone_comfort_member(None, true));
         assert!(!zone_comfort_member(None, false));
+        assert_eq!(zone_comfort_type_label(Some("fcu")), "FCU");
+        assert_eq!(zone_comfort_type_label(Some("heatPump")), "HEAT_PUMP");
+        assert_eq!(zone_comfort_type_label(None), "Zone");
         assert_eq!(canonical_kind("baseboard"), Some("baseboard"));
         assert_eq!(
             api_equipment_type_for("BB_1", Some("baseboard")),

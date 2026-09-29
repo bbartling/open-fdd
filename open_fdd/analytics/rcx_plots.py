@@ -305,6 +305,9 @@ def _passes_equipment_types(
     if _zone_terminal_request(equipment_types):
         stamped = stamped_equipment_type(eq_id, df=raw, role_map=role_map)
         if stamped:
+            # Plant and zone heat pumps share HP. Only a mapped zone temp joins.
+            if stamped == "HP" and not has_zone_role:
+                return False
             return stamped in allowed
         return has_zone_role
     return _etype(eq_id, raw, role_map) in allowed

@@ -22,6 +22,8 @@ def test_ranking_includes_stamped_zone_terminals_and_drops_wrong_stamp():
         "jci_vav_12": _zone(80.0),
         "AC_FCU": _zone(60.0),
         "HP_ZONE": _zone(72.0),
+        "HP_PLANT": _zone(50.0),
+        "VAV_NAME_ONLY": _zone(50.0),
         "BB_1": _zone(90.0),
         "MON_1": _zone(71.0),
         "GENERIC_1": _zone(61.0),
@@ -32,6 +34,8 @@ def test_ranking_includes_stamped_zone_terminals_and_drops_wrong_stamp():
         "jci_vav_12": {"equipment_type": "vav", "zone-air-temp": "zt"},
         "AC_FCU": {"equipment_type": "fcu", "zone-air-temp": "zt"},
         "HP_ZONE": {"equipment_type": "heatPump", "zone-air-temp": "zt"},
+        "HP_PLANT": {"equipment_type": "heatPump"},
+        "VAV_NAME_ONLY": {},
         "BB_1": {"equipment_type": "baseboard", "zone-air-temp": "zt"},
         "MON_1": {"equipment_type": "zone_other", "zone-air-temp": "zt"},
         "GENERIC_1": {"zone-air-temp": "zt"},
@@ -48,6 +52,8 @@ def test_ranking_includes_stamped_zone_terminals_and_drops_wrong_stamp():
     )
     ids = set(ranked["equipment_id"])
     assert ids == {"jci_vav_12", "AC_FCU", "HP_ZONE", "BB_1", "MON_1", "GENERIC_1"}
+    assert "HP_PLANT" not in ids
+    assert "VAV_NAME_ONLY" not in ids
     assert "pct_in_comfort" in ranked.columns
     by_id = ranked.set_index("equipment_id")
     assert float(by_id.loc["HP_ZONE", "pct_in_comfort"]) == 100.0

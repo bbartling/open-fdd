@@ -261,8 +261,8 @@ ORDER BY equipment_id
             "building_id": bid,
             "equipment_id": eq,
             "parent_ahu": "",
-            "equipment_type": open_fdd_edge_prototype::equipment_types::api_equipment_type_for(
-                eq, stamped
+            "equipment_type": open_fdd_edge_prototype::equipment_types::zone_comfort_type_label(
+                stamped
             ),
             "broken_box": broken,
             "poor_zone_performance": poor,
