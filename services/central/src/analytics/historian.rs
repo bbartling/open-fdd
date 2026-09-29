@@ -3561,6 +3561,12 @@ mod tests {
     /// Async-aware so the guard may be held across `.await` (clippy-clean).
     static ENV_LOCK: Mutex<()> = Mutex::const_new(());
 
+    fn write_stamps(parquet: &std::path::Path, building_id: &str, body: &str) {
+        let dir = parquet.join(format!("building={building_id}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("equipment_types.json"), body).unwrap();
+    }
+
     #[test]
     fn zscore_role_sql_rolling_window_and_lag_transition() {
         let sql = zscore_anomaly_role_sql("sat", "timestamp_utc", 24, 3.0, "", true);
@@ -4194,6 +4200,7 @@ mod tests {
 
         let parquet = tmp.path().join("parquet_pwr");
         fdd_store::ingest_building(tmp.path(), "BUILDING_PWR", &parquet).unwrap();
+        write_stamps(&parquet, "BUILDING_PWR", r#"{"CHILLER_PWR":"chiller"}"#);
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_PWR"), None, None)
@@ -4357,6 +4364,7 @@ mod tests {
 
         let parquet = tmp.path().join("parquet_ch");
         fdd_store::ingest_building(tmp.path(), "BUILDING_CH", &parquet).unwrap();
+        write_stamps(&parquet, "BUILDING_CH", r#"{"CHILLER_1":"chiller"}"#);
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_CH"), None, None)
@@ -4423,6 +4431,7 @@ mod tests {
 
         let parquet = tmp.path().join("parquet_split");
         fdd_store::ingest_building(tmp.path(), "BUILDING_SPLIT", &parquet).unwrap();
+        write_stamps(&parquet, "BUILDING_SPLIT", r#"{"CHILLER_2":"chiller"}"#);
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_SPLIT"), None, None)
@@ -4469,6 +4478,7 @@ mod tests {
 
         let parquet = tmp.path().join("parquet_air");
         fdd_store::ingest_building(tmp.path(), "BUILDING_AIR", &parquet).unwrap();
+        write_stamps(&parquet, "BUILDING_AIR", r#"{"AHU_1":"ahu","AHU_2":"ahu"}"#);
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = runtime_from_history(None, 900.0, Some("BUILDING_AIR"), None, None)
@@ -4615,6 +4625,11 @@ mod tests {
 
         let parquet = tmp.path().join("parquet_mqtt_oat");
         fdd_store::ingest_building(tmp.path(), "bldg2_mqtt_oat", &parquet).unwrap();
+        write_stamps(
+            &parquet,
+            "bldg2_mqtt_oat",
+            r#"{"hosted-weather":"weather"}"#,
+        );
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = bas_vs_web_from_history(None, 500, Some("bldg2_mqtt_oat"))
