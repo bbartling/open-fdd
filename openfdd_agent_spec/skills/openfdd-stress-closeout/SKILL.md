@@ -40,6 +40,7 @@ Railway CLI: [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md)
 - **Kali owns ActiveScan / exploratory PEN**; Mint runs gate 34 headers/`security.txt` + `preauth_disclosure` / gate 31 ACL. Skill: [`openfdd-mt-security`](../openfdd-mt-security/SKILL.md).
 - **After ZAP:** `docker rm -f` leftover zap containers (low-RAM). One agent only — no duplicate Task workers on the same train.
 - **`SKIP_ZAP=1` ⇒ not fully_qualified** (required gate SKIPPED). Never claim ZAP PASS when skipped.
+- **Gate 39** (`39_mqtts_gap_blame`) classifies MQTTS holes as EDGE / TRANSIT / RAILWAY / SPARSE_OK / INCONCLUSIVE. It does not bump `VERSION` and a green scorecard is not an FQ claim. Equipment comes from `equipment_type` only (no fixture-id preference, no id substring). ACME and vim-1 stay building and edge fixtures, not equipment filters. The fieldbus publish ledger does not filter MQTT publishes.
 - Railway MCP: exact image pin; `RAILWAY_ONLY=1` refuses local-central fallback in gate 13.
 - Keep [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) **Current ops pin** + railway-cli skill synced on tip-in-flight and OPS PINNED.
 - Do not rewrite historical PASS rows as if they used this enhanced suite.

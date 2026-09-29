@@ -76,7 +76,11 @@ class ManifestVerdictsTest(unittest.TestCase):
         self.assertIsNone(m["dimensions"]["security"])
 
     def test_continuity_and_pause_resume_are_transport_evidence(self):
-        for gate in ("21_wave_n_mqtts_continuity", "35_mqtt_telemetry_pause_resume"):
+        for gate in (
+            "21_wave_n_mqtts_continuity",
+            "35_mqtt_telemetry_pause_resume",
+            "39_mqtts_gap_blame",
+        ):
             with self.subTest(gate=gate):
                 m = self.make_manifest(["06_zap_baseline", gate])
                 self.record(m, "06_zap_baseline", "PASS")

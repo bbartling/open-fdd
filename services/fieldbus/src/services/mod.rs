@@ -2,6 +2,7 @@ pub mod bacnet_client;
 pub mod bacnet_server;
 pub mod haystack;
 pub mod modbus;
+pub mod mqtt_publish_ledger;
 pub mod poll;
 pub mod rest;
 pub mod telemetry_control;

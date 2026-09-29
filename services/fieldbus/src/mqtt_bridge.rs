@@ -21,6 +21,7 @@ use tracing::{info, warn};
 
 use crate::config::Settings;
 use crate::services::bacnet_client::BacnetClientService;
+use crate::services::mqtt_publish_ledger::MqttPublishLedger;
 use crate::services::poll::PollEngine;
 use crate::services::rest::RestClientService;
 use crate::services::telemetry_control::{parse_telemetry_command, TelemetryControl};
@@ -533,6 +534,7 @@ pub async fn spawn_if_configured(
     bacnet_client: Arc<BacnetClientService>,
     rest: Arc<RestClientService>,
     telemetry: Arc<TelemetryControl>,
+    publish_ledger: Arc<MqttPublishLedger>,
 ) {
     if !mqtt_enabled() {
         info!("MQTT bridge disabled (set OPENFDD_MQTT_ENABLED=1 to enable)");
@@ -713,9 +715,17 @@ pub async fn spawn_if_configured(
                                 .await
                             {
                                 Ok(()) => {
+                                    // QoS 1 ack: the broker accepted this packet.
+                                    publish_ledger.record_ack(
+                                        rec.envelope.sequence,
+                                        u32::try_from(rec.envelope.points.len())
+                                            .unwrap_or(u32::MAX),
+                                        &equipment_ids_in(&rec.envelope),
+                                    );
                                     let _ = spool.ack(rec.seq).await;
                                 }
                                 Err(err) => {
+                                    publish_ledger.record_fail();
                                     warn!(%err, "publish failed; will retry");
                                     session.command_task.abort();
                                     mqtt = None;
@@ -726,9 +736,33 @@ pub async fn spawn_if_configured(
                     }
                     Err(err) => warn!(%err, "list spool failed"),
                 }
+            } else {
+                // Points were snapshotted (empty snapshots already `continue`)
+                // but the MQTT session is down, so nothing left the edge.
+                // The spool still holds them for retry.
+                publish_ledger.record_no_session();
             }
         }
     });
+}
+
+fn equipment_ids_in(env: &TelemetryEnvelope) -> Vec<String> {
+    let mut ids = Vec::new();
+    for point in &env.points {
+        let Some(id) = point
+            .tags
+            .get("equipment_id")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+        else {
+            continue;
+        };
+        if !ids.iter().any(|seen| seen == id) {
+            ids.push(id.to_string());
+        }
+    }
+    ids
 }
 
 #[cfg(test)]
