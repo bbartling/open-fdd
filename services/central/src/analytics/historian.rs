@@ -4636,6 +4636,13 @@ mod tests {
 
         let parquet = tmp.path().join("parquet_oatsc");
         fdd_store::ingest_building(tmp.path(), "BUILDING_OATSC", &parquet).unwrap();
+        let stamp_dir = parquet.join("building=BUILDING_OATSC");
+        std::fs::create_dir_all(&stamp_dir).unwrap();
+        std::fs::write(
+            stamp_dir.join("equipment_types.json"),
+            r#"{"AHU_1":"ahu","weather":"weather"}"#,
+        )
+        .unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
         let env = rcx_oat_scatter_from_history(Some("BUILDING_OATSC"), "sat", &["AHU"], false, 500)
