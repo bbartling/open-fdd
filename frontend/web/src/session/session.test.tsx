@@ -5,6 +5,7 @@ import {
   buildSessionSearch,
   hrefWithSession,
   parseSessionSearch,
+  siteIdLeftBehind,
   clearFormDraft,
   saveFormDraft,
   loadFormDraft,
@@ -28,6 +29,13 @@ describe("sessionQuery", () => {
     expect(q.jobId).toBeUndefined();
     expect(q.equipment).toBe("VAV-2");
     expect(next).toContain("foo=bar");
+  });
+
+  it("names the site a patch leaves behind", () => {
+    expect(siteIdLeftBehind({ siteId: "site-a" }, { siteId: "site-b" })).toBe("site-a");
+    expect(siteIdLeftBehind({ siteId: "site-a" }, { equipment: "AHU_1" })).toBeNull();
+    expect(siteIdLeftBehind({ siteId: "site-a" }, { siteId: "site-a" })).toBeNull();
+    expect(siteIdLeftBehind({ siteId: "site-a" }, { siteId: "" })).toBe("site-a");
   });
 
   it("hrefWithSession keeps site and equipment", () => {

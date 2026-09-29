@@ -60,6 +60,21 @@ export function buildSessionSearch(
 }
 
 /**
+ * Building id a session patch navigates away from.
+ * Omitted `siteId` does not leave. Clearing or switching site does.
+ */
+export function siteIdLeftBehind(
+  current: SessionQuery,
+  patch: Partial<SessionQuery>,
+): string | null {
+  if (!Object.prototype.hasOwnProperty.call(patch, "siteId")) return null;
+  const prev = current.siteId?.trim() ?? "";
+  const next = patch.siteId?.trim() ?? "";
+  if (!prev || prev === next) return null;
+  return prev;
+}
+
+/**
  * Navigate to a section path while keeping the locked site/equipment
  * (and job / wattlab page). Destination query wins for `section`.
  */
