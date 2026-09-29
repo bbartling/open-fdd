@@ -63,7 +63,7 @@ Large package uploads need web nginx `client_max_body_size 128m` (matches centra
 
 ## Stamped equipment types
 
-Stamp `equipType` (or `equipment_type`) in each equipment map. Open-FDD classifies from that stamp. A missing or unrecognized stamp is unclassified; do not infer kind from the folder or equipment id. If an Overview family is empty for an opaque id such as `AC_1`, stamp the correct generic type instead of adding a vendor/site heuristic to Rust. Do not select that equipment by a fixture id or by a substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id` (`RTU_01` must not hit `RTU_010`). See [`openfdd-site-identity`](../openfdd-site-identity/SKILL.md).
+Stamp `equipType` (or `equipment_type`) in each equipment map. Open-FDD classifies from that stamp (rule 63). A missing or unrecognized stamp is unclassified; do not infer kind from the folder or equipment id. Do not select that equipment by a fixture id or by a substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id` (`RTU_01` must not hit `RTU_010`). Do not hard-code a building id or invent an MQTT delta payload. If an Overview family is empty for an opaque id such as `AC_1`, stamp the correct generic type instead of adding a vendor/site heuristic to Rust. See [`openfdd-site-identity`](../openfdd-site-identity/SKILL.md).
 
 ## Skill home
 

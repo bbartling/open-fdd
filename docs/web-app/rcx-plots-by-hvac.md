@@ -50,7 +50,7 @@ Operator exports from the product UI — illustrative only. Empty series still m
 
 ## Family → presets (equipment kinds)
 
-Kinds are the preset’s `eq_kinds` filter (package `equipType` / `equipment_type`). A missing or unrecognized stamp is unclassified; equipment-id text is not a kind. Empty series when roles are missing — not a silent invent. DataFusion `rcx_eq_filter` id matching is a separate open item ([#1037](https://github.com/bbartling/open-fdd/issues/1037)).
+Kinds are the preset’s `eq_kinds` filter (package `equipType` / `equipment_type`). A missing or unrecognized stamp is unclassified; equipment-id text is not a kind. Empty series when roles are missing — not a silent invent. DataFusion `rcx_eq_filter` still matches `equipment_id` text ([#1037](https://github.com/bbartling/open-fdd/issues/1037)). That predicate is not the kind classifier and must not grow tokens.
 
 ### Zones / VAV (`VAV`, zone equipment)
 

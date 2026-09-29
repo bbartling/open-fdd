@@ -143,4 +143,4 @@ All entries also live in [`tool-catalog.v1.json`](tool-catalog.v1.json).
 
 ## Equipment type hygiene
 
-Stamp a generic `equipType` / `equipment_type` on every equipment block. The stamp is persisted by package ingest and is the classifier (`AC_1` + `equipType: ahu` → AHU). A missing or unrecognized stamp stays unclassified. Do not infer kind from the folder or equipment id. Keep vendor/campus remaps in the preprocess repository.
+Stamp a generic `equipType` / `equipment_type` on every equipment block. The stamp is persisted by package ingest and is the classifier (`AC_1` + `equipType: ahu` → AHU). A missing or unrecognized stamp stays unclassified. Do not infer kind from the folder or equipment id. Do not add `LIKE`, prefix, or name filters, a hardcoded building id, or an MQTT delta payload. Keep vendor/campus remaps in the preprocess repository.

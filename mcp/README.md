@@ -175,4 +175,4 @@ Obtain token: `scripts/openfdd_auth_lib.sh` → `openfdd_auth_login_token`.
 
 ### Package equipment types
 
-For portable package mapping, stamp `equipType` (or `equipment_type`) on equipment blocks. Open-FDD persists the stamp and classifies from it, so opaque BAS ids such as `AC_1` are an AHU only when stamped `ahu`. A missing or unrecognized stamp stays unclassified.
+For portable package mapping, stamp `equipType` (or `equipment_type`) on equipment blocks. Open-FDD persists the stamp and classifies from it, so opaque BAS ids such as `AC_1` are an AHU only when stamped `ahu`. A missing or unrecognized stamp stays unclassified. Do not infer kind from the id, and do not add `LIKE`, prefix, or name filters, a hardcoded building id, or an MQTT delta payload.

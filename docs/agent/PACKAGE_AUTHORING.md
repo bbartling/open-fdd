@@ -38,7 +38,7 @@ Empty Overview tables, RCx figures, Inspect overlays, or `?/3` health scores mea
 
 ### D2. Stamp types — do not rely on folder names
 
-Canonical `equipType`: `ahu` `vav` `chwPlant` `boiler` `heatPump` `weather` `meter`. Folder `JRH-RM717-VMA-…` is unclassified when the stamp is absent or unrecognized. Overview families, motor groups, VAV health, weather selection, and rule applicability follow that stamp. Do not infer kind from the equipment id. Do not add a substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id` ([#1043](https://github.com/bbartling/open-fdd/issues/1043)).
+Canonical `equipType`: `ahu` `vav` `chwPlant` `boiler` `heatPump` `weather` `meter`. Folder `JRH-RM717-VMA-…` is unclassified when the stamp is absent or unrecognized. Overview families, motor groups, VAV health, weather selection, and rule applicability follow that stamp. Do not infer kind from the equipment id. Do not add a substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id`. Do not hard-code a building id. Do not invent an MQTT delta payload ([#1043](https://github.com/bbartling/open-fdd/issues/1043), agent rule 63).
 
 ### D3. Web weather — package sidecar, not product config
 
@@ -74,7 +74,7 @@ Fan on + OA + RA + MA + enough `|OAT−RAT|`. Missing role → skip.
 
 ### D9. What product must never grow
 
-No `if building == …`, no vendor suffix table, no default weather city, no glycol special case. Vendor dictionaries stay in preprocess zips.
+No `if building == …`, no vendor suffix table, no default weather city, no glycol special case, no equipment-id `LIKE` / prefix / name filter, no MQTT delta payload. Vendor dictionaries stay in preprocess zips.
 
 ## Example sibling map
 
