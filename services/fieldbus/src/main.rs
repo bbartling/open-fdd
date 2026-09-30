@@ -393,6 +393,45 @@ mod tests {
                 "omitted/false approval must not send a BACnet datagram"
             );
         }
+
+        for body in [
+            serde_json::json!({
+                "device_instance": 5010,
+                "object_type": "analog-value",
+                "object_instance": 7,
+                "property_id": "present-value",
+                "value": i64::MAX,
+                "value_type": "signed",
+                "approved": true,
+            }),
+            serde_json::json!({
+                "device_instance": 5010,
+                "object_type": "analog-value",
+                "object_instance": 7,
+                "property_id": "present-value",
+                "value": null,
+                "approved": true,
+            }),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::post("/bacnet/write")
+                        .header("content-type", "application/json")
+                        .body(Body::from(body.to_string()))
+                        .expect("build invalid write request"),
+                )
+                .await
+                .expect("invalid-write response");
+            assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+            let mut datagram = [0u8; 2048];
+            assert!(
+                timeout(Duration::from_millis(30), receiver.recv_from(&mut datagram))
+                    .await
+                    .is_err(),
+                "invalid numeric/NULL writes must fail before any BACnet datagram"
+            );
+        }
         let _ = std::fs::remove_file(path);
     }
 

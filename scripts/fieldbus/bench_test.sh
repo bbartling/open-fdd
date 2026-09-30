@@ -176,12 +176,12 @@ run_bacnet_cycle() {
   write="$(bench_api -X POST "$BENCH_BASE/bacnet/write" \
     -d "{\"device_instance\":$DEV,\"object_type\":\"$OVR_TYPE\",\"object_instance\":$OVR_INST,\"value\":42.0,\"priority\":$WRITE_PRIORITY,\"approved\":true}")"
   save_json "write_c${cycle}" "$write"
-  jq_ok "write @ P${WRITE_PRIORITY}" "$write" '.ok==true and .status=="success" and .outcome=="acknowledged" and .verified==true'
+  jq_ok "write @ P${WRITE_PRIORITY}" "$write" '.ok==true and .status=="success" and .outcome=="acknowledged" and .verified==true and .verification=="readback" and .readback.selected_priority_tag=="real" and .readback.property_tag=="real"'
 
   rel="$(bench_api -X POST "$BENCH_BASE/bacnet/write" \
     -d "{\"device_instance\":$DEV,\"object_type\":\"$OVR_TYPE\",\"object_instance\":$OVR_INST,\"value\":null,\"priority\":$WRITE_PRIORITY,\"approved\":true}")"
   save_json "release_c${cycle}" "$rel"
-  jq_ok "release null @ P${WRITE_PRIORITY}" "$rel" '.ok==true and .status=="success" and .outcome=="acknowledged" and .released==true and .verified==true'
+  jq_ok "release null @ P${WRITE_PRIORITY}" "$rel" '.ok==true and .status=="success" and .outcome=="acknowledged" and .released==true and .verified==true and .verification=="readback" and .readback.selected_priority_tag=="null"'
 
   dr="$(bench_api -X POST "$BENCH_BASE/bacnet/write-dry-run" \
     -d "{\"device_instance\":$DEV,\"object_type\":\"$OVR_TYPE\",\"object_instance\":$OVR_INST,\"value\":null,\"priority\":$WRITE_PRIORITY}")"

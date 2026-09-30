@@ -119,10 +119,10 @@ while :; do
     && echo "  supervisory ok ($(jq -r '.points_with_overrides|length' <<<"$SUP" 2>/dev/null) overridden pts)" || echo "  ${RED}supervisory FAIL${RST}"
 
   check write       "$(api -X POST "$BASE/bacnet/write" -d "{\"device_instance\":$DEV,\"object_type\":\"$OVR_TYPE\",\"object_instance\":$OVR_INST,\"value\":42.0,\"priority\":$WRITE_PRIORITY,\"approved\":true}")" \
-                    '.ok==true and .status=="success" and .outcome=="acknowledged" and .verified==true' \
+                    '.ok==true and .status=="success" and .outcome=="acknowledged" and .verified==true and .verification=="readback" and .readback.selected_priority_tag=="real" and .readback.property_tag=="real"' \
     && echo "  write ok" || echo "  ${RED}write FAIL${RST}"
   check release     "$(api -X POST "$BASE/bacnet/write" -d "{\"device_instance\":$DEV,\"object_type\":\"$OVR_TYPE\",\"object_instance\":$OVR_INST,\"value\":null,\"priority\":$WRITE_PRIORITY,\"approved\":true}")" \
-                    '.ok==true and .status=="success" and .outcome=="acknowledged" and .released==true and .verified==true' \
+                    '.ok==true and .status=="success" and .outcome=="acknowledged" and .released==true and .verified==true and .verification=="readback" and .readback.selected_priority_tag=="null"' \
     && echo "  release ok" || echo "  ${RED}release FAIL${RST}"
 
   check poll_once   "$(apis -X POST "$BASE/bacnet/poll/once")" '.points_polled>0' \
