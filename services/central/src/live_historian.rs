@@ -1422,7 +1422,7 @@ mod tests {
     /// scope (`tenant={tid};building={bid}`) is the partition.
     #[test]
     fn multi_tenant_scope_partitions_without_process_tenant_env() {
-        with_isolated_storage(
+        with_scoped_storage(
             &[
                 ("OPENFDD_MULTI_TENANT", Some("1")),
                 ("OPENFDD_TENANT_ID", None),
@@ -1450,7 +1450,7 @@ mod tests {
 
     #[test]
     fn multi_tenant_scope_tenant_wins_over_process_env() {
-        with_isolated_storage(
+        with_scoped_storage(
             &[
                 ("OPENFDD_MULTI_TENANT", Some("1")),
                 ("OPENFDD_TENANT_ID", Some("other-tenant")),
@@ -1467,7 +1467,7 @@ mod tests {
 
     #[test]
     fn multi_tenant_legacy_dash_scope_uses_process_tenant() {
-        with_isolated_storage(
+        with_scoped_storage(
             &[
                 ("OPENFDD_MULTI_TENANT", Some("1")),
                 ("OPENFDD_TENANT_ID", Some("site-tenant")),
@@ -1489,7 +1489,7 @@ mod tests {
 
     #[test]
     fn multi_tenant_rejects_empty_or_dash_scope_without_tenant() {
-        with_isolated_storage(
+        with_scoped_storage(
             &[
                 ("OPENFDD_MULTI_TENANT", Some("1")),
                 ("OPENFDD_TENANT_ID", None),
@@ -1513,7 +1513,7 @@ mod tests {
 
     #[test]
     fn single_tenant_dash_scope_stays_on_hub_root() {
-        with_isolated_storage(
+        with_scoped_storage(
             &[
                 ("OPENFDD_MULTI_TENANT", Some("0")),
                 ("OPENFDD_TENANT_ID", None),
@@ -1560,49 +1560,54 @@ mod tests {
         env
     }
 
-    /// Run `body` in a child of this test binary so `OPENFDD_*` changes cannot
-    /// race other tests in the parent process.
-    fn with_isolated_storage(extra: &[(&str, Option<&str>)], body: impl FnOnce(&Path)) {
-        const CHILD: &str = "OPENFDD_HISTORIAN_SCOPE_CHILD";
-        const ROOT: &str = "OPENFDD_SCOPE_TEST_ROOT";
-        let name = std::thread::current()
-            .name()
-            .expect("rust test thread is named")
-            .to_string();
-        if std::env::var(CHILD).ok().as_deref() == Some(name.as_str()) {
-            let root = std::env::var(ROOT).expect("isolated storage root");
-            body(Path::new(&root));
-            return;
-        }
-
+    /// Apply `OPENFDD_*` for one test, then put the previous values back.
+    ///
+    /// The shared env lock serializes this with other modules that mutate the
+    /// same process variables. Restore runs on drop, including panic.
+    fn with_scoped_storage(extra: &[(&'static str, Option<&str>)], body: impl FnOnce(&Path)) {
         let tmp = TempDir::new().unwrap();
-        let root = tmp.path().to_string_lossy().to_string();
-        let storage = format!("file://{root}");
-        let mut cmd = std::process::Command::new(std::env::current_exe().expect("test executable"));
-        cmd.arg("--exact")
-            .arg(&name)
-            .arg("--test-threads=1")
-            .env(CHILD, &name)
-            .env(ROOT, &root)
-            .env("OPENFDD_STORAGE_URL", &storage)
-            .env("OPENFDD_PARQUET_FLUSH_ROWS", "1")
-            .env("OPENFDD_PARQUET_FLUSH_SECONDS", "3600")
-            .env_remove("OPENFDD_PARQUET_ROOT");
-        for (key, value) in extra {
-            match value {
-                Some(value) => {
-                    cmd.env(key, value);
-                }
-                None => {
-                    cmd.env_remove(key);
+        let storage = format!("file://{}", tmp.path().display());
+        let mut pairs: Vec<(&'static str, Option<&str>)> = vec![
+            ("OPENFDD_STORAGE_URL", Some(storage.as_str())),
+            ("OPENFDD_PARQUET_FLUSH_ROWS", Some("1")),
+            ("OPENFDD_PARQUET_FLUSH_SECONDS", Some("3600")),
+            ("OPENFDD_PARQUET_ROOT", None),
+        ];
+        pairs.extend_from_slice(extra);
+        let _env = ScopedEnv::apply(&pairs);
+        body(tmp.path());
+    }
+
+    struct ScopedEnv {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        saved: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl ScopedEnv {
+        fn apply(pairs: &[(&'static str, Option<&str>)]) -> Self {
+            let lock = crate::test_env_lock::lock_env();
+            let saved = pairs
+                .iter()
+                .map(|(key, _)| (*key, std::env::var(key).ok()))
+                .collect();
+            for (key, value) in pairs {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
                 }
             }
+            Self { _lock: lock, saved }
         }
-        let output = cmd.output().expect("spawn isolated historian test");
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        if !output.status.success() || !stdout.contains("1 passed") {
-            panic!("isolated {name} failed\nstdout:\n{stdout}\nstderr:\n{stderr}");
+    }
+
+    impl Drop for ScopedEnv {
+        fn drop(&mut self) {
+            for (key, value) in self.saved.drain(..) {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
         }
     }
 }
