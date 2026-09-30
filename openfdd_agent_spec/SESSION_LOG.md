@@ -1155,3 +1155,13 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 ## 2026-09-30 — tip 3.5.59
 
 - VERSION **3.5.59** after docs #1076 + wave I/K ACME retarget #1079. Soft-OPEN #1069/#1070. Parked: #1067, #1075, #1080. No FQ claim.
+
+## 2026-09-30 — BACnet correctness tranche for commissioning restoration (#1067/#781)
+
+- Preserved the Rust fieldbus correctness work referenced by the #1067 restoration plan: explicit write approval, one-shot writes with truthful acknowledged/unknown outcomes, routed addressing, validated priority/object-list reads, typed P1–P16 states, bounded repair, commandability states, and bounded discovery arbitration.
+- Added synthetic no-hardware fault-injection coverage for dropped write acknowledgement, selected-slot readback, routed targets, partial/empty priority responses, malformed correlation, scheduler fairness, discovery-port ownership, and zero-wire rejection of invalid or unprioritized writes. No live BACnet writes, deployment, UI work, merge-to-master, or issue closure was performed.
+
+## 2026-09-30 — Connector capability phase 2 (#1067/#781)
+
+- Added versioned Rust connector hello/capability and scoped read-only proxy contracts for central and fieldbus. Central probes only trusted, tenant/building/edge-bound upstreams with bounded redirects/body/timeouts, cache/backoff, redacted diagnostics, and typed response correlation.
+- Capability responses now distinguish configuration, readiness, source freshness, MQTT transport, and receipt-backed durable delivery. Tenant filtering, public DTO sanitization, recipe reconciliation, and invalid upstream diagnostics fail closed. No UI, write/release proxy, discovery scheduler, deployment, or live OT operation was added.
