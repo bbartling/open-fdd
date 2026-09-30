@@ -1,7 +1,8 @@
 ---
 title: Parity matrix
-parent: Rule Cookbook
-nav_order: 6
+parent: Cookbook reference
+grand_parent: Rule Cookbook
+nav_order: 4
 ---
 
 # SQL ↔ Pandas parity matrix

@@ -1,7 +1,8 @@
 ---
 title: Gap matrix
-parent: Rule Cookbook
-nav_order: 5
+parent: Cookbook reference
+grand_parent: Rule Cookbook
+nav_order: 3
 ---
 
 # Gap matrix — cookbook vs public literature

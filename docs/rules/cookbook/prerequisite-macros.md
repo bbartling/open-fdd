@@ -1,7 +1,8 @@
 ---
 title: Prerequisite macros
-parent: Rule Cookbook
-nav_order: 8
+parent: Cookbook reference
+grand_parent: Rule Cookbook
+nav_order: 7
 ---
 
 # Reusable prerequisite macros
