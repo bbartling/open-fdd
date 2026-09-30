@@ -19,14 +19,14 @@ Open-source, **standards-first** HVAC fault detection. Production rules are **Da
 
 ## Start here
 
+Screen sensors first, then the two rule catalogs. Everything else in this section is under Cookbook reference.
+
 | Guide | Content |
 |-------|---------|
-| [**Cookbook hub**](cookbook/) | SQL + Pandas dual expression |
-| [**SQL anomaly detection**](sql-anomaly-detection.html) | Overview rolling Z-score screen + Lab tuners for `SV-*` / `PID-HUNT-1` / `WX-1` |
-| [DataFusion SQL cookbook](cookbook/datafusion-sql-cookbook.html) | Copy-paste production rules |
-| [Pandas cookbook](cookbook/pandas-cookbook.html) | Same recipes for analyst workflows outside Open-FDD |
-| [Taxonomy](cookbook/taxonomy.html) | Families and naming |
-| [FCU / zone_other](cookbook/fcu-zone-other.html) | Fan-coil stamps, roles, and the °F / °C boundary; catalog sections are in the SQL and Pandas cookbooks |
+| [**SQL anomaly detection**](sql-anomaly-detection.html) | First pass: Overview rolling Z-score screen + Lab tuners for `SV-*` / `PID-HUNT-1` / `WX-1` |
+| [DataFusion SQL cookbook](cookbook/datafusion-sql-cookbook.html) | Full production SQL catalog |
+| [Pandas cookbook](cookbook/pandas-cookbook.html) | Full pandas catalog, including FCU / `zone_other` |
+| [Cookbook reference](cookbook/) | Taxonomy, schema, matrices, roadmap, macros, benchmarks, doc template, P0 catalog, and [FCU / zone_other](cookbook/fcu-zone-other.html) |
 
 ## Anomaly & sensor quality (quick map)
 

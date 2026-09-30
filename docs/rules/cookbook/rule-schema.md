@@ -1,7 +1,8 @@
 ---
 title: Rule schema (source of truth)
-parent: Rule Cookbook
-nav_order: 4
+parent: Cookbook reference
+grand_parent: Rule Cookbook
+nav_order: 2
 ---
 
 # Declarative rule schema

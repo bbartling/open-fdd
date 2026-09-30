@@ -1,7 +1,8 @@
 ---
 title: Generated parity report
-parent: Rule Cookbook
-nav_order: 7
+parent: Cookbook reference
+grand_parent: Rule Cookbook
+nav_order: 5
 ---
 
 # Generated parity report

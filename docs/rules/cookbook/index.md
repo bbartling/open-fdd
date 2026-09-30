@@ -1,7 +1,7 @@
 ---
-title: Rule Cookbook
-parent: DataFusion SQL Rules
-nav_order: 0
+title: Cookbook reference
+parent: Rule Cookbook
+nav_order: 3
 has_children: true
 permalink: /rules/cookbook/
 ---
@@ -38,18 +38,21 @@ Product UI is the React SPA. Pandas stays on PyPI for third-party tooling.
 
 ## Framework
 
+These pages are the sidebar children of **Cookbook reference**. The DataFusion SQL and Pandas cookbooks keep the full rule catalogs, including the nine `FCU-*` / `zone_other` rules.
+
 | Doc | Description |
 |-----|-------------|
-| [**P0 rule catalog**](p0-rule-catalog.html) | Full metadata for every validated rule, including the nine `FCU-*` rows |
-| [FCU / zone_other](fcu-zone-other.html) | Fan-coil unit boundary, stamps, and role map (catalog sections live in the two cookbooks) |
 | [Public taxonomy](taxonomy.html) | Equipment classes, rule families, severity |
 | [Rule schema](rule-schema.html) | Declarative metadata — compiles to SQL + Pandas |
 | [Gap matrix](gap-matrix.html) | Coverage vs ASHRAE GL36, Berkeley, PNNL, NIST |
 | [Parity matrix](parity-matrix.html) | SQL ↔ Pandas audit |
+| [Generated parity report](generated-parity-report.html) | Inventory rendered from `sql_rules/generated/parity_inventory.yaml` |
 | [Roadmap](roadmap.html) | Priority-ranked expansion |
 | [Prerequisite macros](prerequisite-macros.html) | Occupancy, fan proven, override / operational gates |
 | [Benchmark strategy](benchmark-strategy.html) | Fixtures + regression (`scripts/cookbook_parity_check.py`) |
 | [Doc template](doc-template.html) | Standard per-rule documentation |
+| [**P0 rule catalog**](p0-rule-catalog.html) | Full metadata for every validated rule, including the nine `FCU-*` rows |
+| [FCU / zone_other](fcu-zone-other.html) | Fan-coil unit boundary, stamps, and role map (catalog sections live in the two cookbooks) |
 
 ## Rule inventory (validated)
 
