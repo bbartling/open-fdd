@@ -3747,15 +3747,19 @@ fn round6(x: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::await_holding_lock,
+        reason = "historian tests hold the process env lock across await so other modules cannot swap OPENFDD_PARQUET_ROOT"
+    )]
     use super::*;
     use crate::analytics::AnalyticsRequest;
     use chrono::TimeZone;
     use std::io::Write;
-    use tokio::sync::Mutex;
-
-    /// Serializes tests that mutate the process-global `OPENFDD_PARQUET_ROOT`.
-    /// Async-aware so the guard may be held across `.await` (clippy-clean).
-    static ENV_LOCK: Mutex<()> = Mutex::const_new(());
+    /// Process-wide env lock. A private mutex does not stop `durable_storage`
+    /// and other modules from swapping `OPENFDD_PARQUET_ROOT` mid-query.
+    fn lock_shared_env() -> std::sync::MutexGuard<'static, ()> {
+        crate::test_env_lock::lock_env()
+    }
 
     fn write_stamps(parquet: &std::path::Path, building_id: &str, body: &str) {
         let dir = parquet.join(format!("building={building_id}"));
@@ -3816,7 +3820,7 @@ mod tests {
 
     #[tokio::test]
     async fn rcx_type_stamps_follow_tenant_history_root() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let hub = tmp.path().join("hub");
         let tenant = hub.join("tenants/tenant_a");
@@ -3840,7 +3844,7 @@ mod tests {
 
     #[tokio::test]
     async fn rcx_type_stamps_follow_newer_conflicting_tenant_root() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let hub = tmp.path().join("hub");
         std::fs::create_dir_all(hub.join("history/building_id=BLDG_A")).unwrap();
@@ -3904,7 +3908,7 @@ mod tests {
 
     #[tokio::test]
     async fn plot_cohort_uses_exact_stamp_not_id_prefix() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let dir = tmp.path().join("building=site_plot");
         std::fs::create_dir_all(&dir).unwrap();
@@ -3944,7 +3948,7 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_from_history_none_when_no_parquet() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let missing = tmp.path().join("no_such_parquet");
         std::env::set_var("OPENFDD_PARQUET_ROOT", &missing);
@@ -3957,7 +3961,7 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_from_history_sets_datafusion_engine() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_TEST");
         std::fs::create_dir_all(&building).unwrap();
@@ -4007,7 +4011,7 @@ mod tests {
     /// Older label lists treated `"0.0"` as occupied → unoccupied_hours always 0.
     #[tokio::test]
     async fn schedule_from_history_treats_float_string_zero_as_unoccupied() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_OCC");
         std::fs::create_dir_all(&building).unwrap();
@@ -4054,7 +4058,7 @@ mod tests {
 
     #[tokio::test]
     async fn sensor_health_from_history_none_when_no_parquet() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let missing = tmp.path().join("no_such_parquet_sh");
         std::env::set_var("OPENFDD_PARQUET_ROOT", &missing);
@@ -4095,7 +4099,7 @@ mod tests {
 
     #[tokio::test]
     async fn sensor_health_from_history_sets_datafusion_engine() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_SH");
         std::fs::create_dir_all(&building).unwrap();
@@ -4159,7 +4163,7 @@ mod tests {
 
     #[tokio::test]
     async fn sensor_health_from_history_multi_file_completes_with_bound() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_SH_MF");
         std::fs::create_dir_all(&building).unwrap();
@@ -4211,7 +4215,7 @@ mod tests {
 
     #[tokio::test]
     async fn descriptive_counts_from_history_sets_datafusion_engine() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_DC");
         std::fs::create_dir_all(&building).unwrap();
@@ -4253,7 +4257,7 @@ mod tests {
 
     #[tokio::test]
     async fn economizer_from_history_is_building_scoped() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let parquet = tmp.path().join("parquet_econ");
 
@@ -4309,7 +4313,7 @@ mod tests {
     #[tokio::test]
     async fn economizer_from_history_with_damper_column_ok() {
         // OFDD-070b: oa_damper_pct present on history must not schema-error.
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let parquet = tmp.path().join("parquet_econ_damp");
         let building = tmp.path().join("BUILDING_50");
@@ -4346,7 +4350,7 @@ mod tests {
 
     #[tokio::test]
     async fn economizer_from_history_none_for_unknown_building() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let parquet = tmp.path().join("parquet_econ_missing");
         let building = tmp.path().join("BUILDING_50");
@@ -4534,7 +4538,7 @@ mod tests {
 
     #[tokio::test]
     async fn mech_oat_bins_from_chiller_power_only_fixture() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_PWR");
         std::fs::create_dir_all(&building).unwrap();
@@ -4569,7 +4573,7 @@ mod tests {
 
     #[tokio::test]
     async fn mech_cooling_evidence_warnings_fan_only() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_FAN2");
         std::fs::create_dir_all(&building).unwrap();
@@ -4602,7 +4606,7 @@ mod tests {
 
     #[tokio::test]
     async fn descriptive_counts_filtered_excludes_vav() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_MIX");
         std::fs::create_dir_all(&building).unwrap();
@@ -4664,7 +4668,7 @@ mod tests {
 
     #[tokio::test]
     async fn mech_oat_bins_none_for_fan_only_fixture() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_FAN");
         std::fs::create_dir_all(&building).unwrap();
@@ -4698,7 +4702,7 @@ mod tests {
 
     #[tokio::test]
     async fn mech_oat_bins_from_chiller_status_fixture() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_CH");
         std::fs::create_dir_all(&building).unwrap();
@@ -4751,7 +4755,7 @@ mod tests {
 
     #[tokio::test]
     async fn mech_oat_bins_joins_site_oat_from_weather_equipment() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_SPLIT");
         std::fs::create_dir_all(&building).unwrap();
@@ -4809,7 +4813,7 @@ mod tests {
 
     #[tokio::test]
     async fn mechanical_cooling_default_uses_bounded_retain_floor_for_old_fixture() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_MECH_FALLBACK");
         std::fs::create_dir_all(&building).unwrap();
@@ -4859,7 +4863,7 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_weekly_emits_per_equipment_not_plant_sum() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_AIR");
         std::fs::create_dir_all(&building).unwrap();
@@ -4913,7 +4917,7 @@ mod tests {
 
     #[tokio::test]
     async fn rcx_oat_scatter_aliases_timestamp_without_schema_clash() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_OATSC");
         std::fs::create_dir_all(&building).unwrap();
@@ -4995,7 +4999,7 @@ mod tests {
 
     #[tokio::test]
     async fn bas_vs_web_mqtt_outside_air_weather_split() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("bldg2_mqtt_oat");
         std::fs::create_dir_all(&building).unwrap();
@@ -5048,7 +5052,7 @@ mod tests {
 
     #[tokio::test]
     async fn bas_vs_web_joins_site_oat_across_equipment() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_BAS");
         std::fs::create_dir_all(&building).unwrap();
@@ -5096,7 +5100,7 @@ mod tests {
 
     #[tokio::test]
     async fn inspect_from_history_returns_raw_columns() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_INSP");
         std::fs::create_dir_all(&building).unwrap();
@@ -5134,7 +5138,7 @@ mod tests {
 
     #[test]
     fn parquet_root_respects_env() {
-        let _guard = ENV_LOCK.blocking_lock();
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let prev_storage = std::env::var("OPENFDD_STORAGE_URL").ok();
         let prev_parquet = std::env::var("OPENFDD_PARQUET_ROOT").ok();
