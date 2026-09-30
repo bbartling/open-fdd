@@ -345,6 +345,42 @@ fn nonempty_env(name: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+/// `tenant=` value from a trusted scope (`tenant={tid};building={bid}`).
+///
+/// `-` is the legacy placeholder used when a topic or local binding has no
+/// tenant. It is not a tenant id.
+fn scope_tenant_segment(scope: &str) -> Option<String> {
+    scope.split(';').find_map(|part| {
+        let value = part.trim().strip_prefix("tenant=")?;
+        Some(value.trim().to_string())
+    })
+}
+
+fn concrete_tenant(value: Option<&str>) -> Option<String> {
+    let value = value?.trim();
+    if value.is_empty() || value == "-" {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+/// Multi-tenant storage partition for one trusted scope.
+///
+/// The scope tenant wins. A legacy `tenant=-` (or missing) scope may still
+/// use `OPENFDD_TENANT_ID`, which is how local fieldbus binds a deployment.
+/// Empty and `-` are rejected so a hub without a process-global tenant does
+/// not collapse every site into one partition.
+fn tenant_id_for_multi_tenant_scope(scope: &str) -> Result<String> {
+    if let Some(tenant_id) = concrete_tenant(scope_tenant_segment(scope).as_deref()) {
+        return Ok(tenant_id);
+    }
+    if let Some(tenant_id) = concrete_tenant(nonempty_env("OPENFDD_TENANT_ID").as_deref()) {
+        return Ok(tenant_id);
+    }
+    bail!("trusted scope tenant required in multi-tenant mode")
+}
+
 fn parse_bool(name: &str, raw: &str) -> Result<bool> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "1" | "true" | "yes" | "on" => Ok(true),
@@ -375,13 +411,15 @@ impl LiveHistorian {
     /// never falls back to ephemeral container disk as canonical history.
     /// Build from deployment configuration while applying the trusted tenant
     /// partition used by local HTTP and MQTT delivery alike.
+    ///
+    /// When multi-tenant mode is on, the tenant id comes from the scope
+    /// (`tenant={tid};building={bid}`), not from a process-global
+    /// `OPENFDD_TENANT_ID`. A legacy `tenant=-` scope may still fall back to
+    /// that env var for local fieldbus.
     pub fn from_env_scoped_for(scope: &str) -> Result<Self> {
         let mut config = HistorianConfig::from_env()?;
         if crate::tenant::multi_tenant_enabled() {
-            let tenant_id = std::env::var("OPENFDD_TENANT_ID")
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| anyhow!("OPENFDD_TENANT_ID required in multi-tenant mode"))?;
+            let tenant_id = tenant_id_for_multi_tenant_scope(scope)?;
             config.storage_url = match config.storage_url {
                 StorageUrl::File { root } => StorageUrl::File {
                     root: tenant_storage_root(&root, Some(&tenant_id))?,
@@ -1378,5 +1416,193 @@ mod tests {
     async fn dedicated_writer_publishes_outside_the_tokio_runtime() {
         let writer = LiveWriter::start();
         assert!(writer.runs_without_tokio_context().await.unwrap());
+    }
+
+    /// #1064: a multi-tenant hub has no process-global tenant. The trusted
+    /// scope (`tenant={tid};building={bid}`) is the partition.
+    #[test]
+    fn multi_tenant_scope_partitions_without_process_tenant_env() {
+        with_isolated_storage(
+            &[
+                ("OPENFDD_MULTI_TENANT", Some("1")),
+                ("OPENFDD_TENANT_ID", None),
+            ],
+            |root| {
+                let mut live =
+                    LiveHistorian::from_env_scoped_for("tenant=acme;building=ACME").unwrap();
+                let report = live
+                    .ingest_envelope(&scoped_envelope("ACME", "unit-1"))
+                    .unwrap();
+                assert!(report.persisted_rows >= 1);
+                assert_eq!(report.flushes, 1);
+                assert_eq!(
+                    live.parquet_root.as_deref(),
+                    Some(root.join("tenants/acme").as_path())
+                );
+                let partition = root.join(
+                    "tenants/acme/history/building_id=ACME/equipment_id=unit-1/year=2026/month=08",
+                );
+                assert_eq!(std::fs::read_dir(&partition).unwrap().count(), 1);
+                assert!(!root.join("history").exists());
+            },
+        );
+    }
+
+    #[test]
+    fn multi_tenant_scope_tenant_wins_over_process_env() {
+        with_isolated_storage(
+            &[
+                ("OPENFDD_MULTI_TENANT", Some("1")),
+                ("OPENFDD_TENANT_ID", Some("other-tenant")),
+            ],
+            |root| {
+                let live = LiveHistorian::from_env_scoped_for("tenant=acme;building=ACME").unwrap();
+                assert_eq!(
+                    live.parquet_root.as_deref(),
+                    Some(root.join("tenants/acme").as_path())
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn multi_tenant_legacy_dash_scope_uses_process_tenant() {
+        with_isolated_storage(
+            &[
+                ("OPENFDD_MULTI_TENANT", Some("1")),
+                ("OPENFDD_TENANT_ID", Some("site-tenant")),
+            ],
+            |root| {
+                let mut live =
+                    LiveHistorian::from_env_scoped_for("tenant=-;building=building-local").unwrap();
+                let report = live
+                    .ingest_envelope(&scoped_envelope("building-local", "unit-1"))
+                    .unwrap();
+                assert!(report.persisted_rows >= 1);
+                assert_eq!(
+                    live.parquet_root.as_deref(),
+                    Some(root.join("tenants/site-tenant").as_path())
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn multi_tenant_rejects_empty_or_dash_scope_without_tenant() {
+        with_isolated_storage(
+            &[
+                ("OPENFDD_MULTI_TENANT", Some("1")),
+                ("OPENFDD_TENANT_ID", None),
+            ],
+            |_root| {
+                for scope in [
+                    "tenant=-;building=ACME",
+                    "tenant=;building=ACME",
+                    "building=ACME",
+                ] {
+                    let error = LiveHistorian::from_env_scoped_for(scope).unwrap_err();
+                    let message = format!("{error:#}");
+                    assert!(
+                        message.contains("trusted scope tenant"),
+                        "scope {scope} produced {message}"
+                    );
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn single_tenant_dash_scope_stays_on_hub_root() {
+        with_isolated_storage(
+            &[
+                ("OPENFDD_MULTI_TENANT", Some("0")),
+                ("OPENFDD_TENANT_ID", None),
+            ],
+            |root| {
+                let mut live =
+                    LiveHistorian::from_env_scoped_for("tenant=-;building=building-local").unwrap();
+                let report = live
+                    .ingest_envelope(&scoped_envelope("building-local", "unit-1"))
+                    .unwrap();
+                assert!(report.persisted_rows >= 1);
+                assert_eq!(live.parquet_root.as_deref(), Some(root));
+                assert!(!root.join("tenants").exists());
+            },
+        );
+    }
+
+    fn scoped_envelope(building_id: &str, equipment_id: &str) -> TelemetryEnvelope {
+        let mut env = TelemetryEnvelope::new(
+            "site-scope",
+            "edge-1",
+            Protocol::Bacnet,
+            1,
+            vec![TelemetryPoint {
+                id: "point-1".into(),
+                display_name: Some("sat".into()),
+                kind: Some(ValueKind::Number),
+                value: json!(55.0),
+                unit: None,
+                quality: Quality::Good,
+                tags: json!({
+                    "building_id": building_id,
+                    "equipment_id": equipment_id,
+                    "role": "sat",
+                })
+                .as_object()
+                .cloned()
+                .unwrap(),
+            }],
+        );
+        env.observed_at = DateTime::parse_from_rfc3339("2026-08-21T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        env
+    }
+
+    /// Run `body` in a child of this test binary so `OPENFDD_*` changes cannot
+    /// race other tests in the parent process.
+    fn with_isolated_storage(extra: &[(&str, Option<&str>)], body: impl FnOnce(&Path)) {
+        const CHILD: &str = "OPENFDD_HISTORIAN_SCOPE_CHILD";
+        const ROOT: &str = "OPENFDD_SCOPE_TEST_ROOT";
+        let name = std::thread::current()
+            .name()
+            .expect("rust test thread is named")
+            .to_string();
+        if std::env::var(CHILD).ok().as_deref() == Some(name.as_str()) {
+            let root = std::env::var(ROOT).expect("isolated storage root");
+            body(Path::new(&root));
+            return;
+        }
+
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().to_string_lossy().to_string();
+        let storage = format!("file://{root}");
+        let mut cmd = std::process::Command::new(std::env::current_exe().expect("test executable"));
+        cmd.arg("--exact")
+            .arg(&name)
+            .arg("--test-threads=1")
+            .env(CHILD, &name)
+            .env(ROOT, &root)
+            .env("OPENFDD_STORAGE_URL", &storage)
+            .env("OPENFDD_PARQUET_FLUSH_ROWS", "1")
+            .env("OPENFDD_PARQUET_FLUSH_SECONDS", "3600")
+            .env_remove("OPENFDD_PARQUET_ROOT");
+        for (key, value) in extra {
+            match value {
+                Some(value) => {
+                    cmd.env(key, value);
+                }
+                None => {
+                    cmd.env_remove(key);
+                }
+            }
+        }
+        let output = cmd.output().expect("spawn isolated historian test");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !output.status.success() || !stdout.contains("1 passed") {
+            panic!("isolated {name} failed\nstdout:\n{stdout}\nstderr:\n{stderr}");
+        }
     }
 }
