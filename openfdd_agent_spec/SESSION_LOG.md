@@ -1152,21 +1152,6 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 - Release gates: `cargo fmt --all -- --check`; `cargo test -p openfdd-fieldbus poll_rpm_path_uses_configured_chunk_for_206_byte_profile`; and the local API sequence above all passed. The no-hardware poll planner covers request sizes `(10, 10, 5)` for the 206-byte/no-segmentation profile.
 - The existing local API at `127.0.0.1:8081` independently returned device 5007 in Who-Is, AI:1173 as a finite real, a two-property read-only RPM, and poll status with zero cycle errors. Response addresses and live values are omitted here; no write route was called.
 
-## 2026-09-30 — BACnet correctness tranche for commissioning restoration (#1067/#781)
+## 2026-09-30 — tip 3.5.59
 
-- On a branch from `origin/master` `c72955bd`, hardened the Rust fieldbus path referenced by the #1067 restoration plan: live writes require an explicit `approved` field, never fall back to a second addressing path after a potentially transmitted WriteProperty, and return typed acknowledged/rejected/failed/unknown outcomes.
-- Priority-array and object-list RPM responses are validated without positional indexing. Priority reads materialize exactly P1–P16 with distinct typed value, NULL, error and unknown states; bounded per-index ReadProperty repair handles only missing, malformed, duplicate or errored RPM slots. Discovery exposes supported/unsupported/unknown commandability and partial object-list diagnostics.
-- Added no-hardware fault/unit coverage for dropped write acknowledgement, routed target preservation, partial/empty priority responses and zero/false/NULL typing. No live BACnet writes, deployment, merge, UI work, hourly scanner or issue closure were performed.
-
-## 2026-09-30 — BACnet correctness verification and scan arbitration follow-up
-
-- Added bounded post-WriteProperty verification: successful ACKs are reported as verified only after correlated selected-priority-slot and Present_Value readback; mismatch, timeout, malformed bytes, wrong object/property/index and rejected release outcomes remain truthful and never retransmit the write.
-- Added a one-active/one-waiting background scan scheduler. Discovery and supervisory BACnet calls acquire the bus per network chunk, permitting interactive reads between slow/offline scan operations while bounding concurrent scan/socket admission and supporting cancellation.
-- Added loopback fault-injection coverage for real production write/read paths, priority-array RP repair correlation, RPM-failure to valid RP commandability fallback, scheduler admission/cancellation/fairness, and route-level zero-wire rejection of invalid numeric and unprioritized NULL writes. Updated fieldbus smoke/bench/soak checks to require readback evidence.
-- All evidence is synthetic/read-only at the network boundary; no live BACnet WriteProperty/release, deployment, merge, UI work or issue closure was performed.
-
-## 2026-09-30 — BACnet discovery-port ownership correction
-
-- Merged current `origin/master` (`32a6d447`) while preserving the fieldbus correctness work. Fixed the discovery implementation contract so unconfigured point discovery and supervisory discovery hold a real discovery-port guard across the scan and the supervisory priority-read client; cancellation and client shutdown release it by scope drop.
-- Added a synthetic unconfigured-device integration test with a loopback I-Am/object-list responder. It proves an interactive Who-Is queues behind an active scan, receives the correct device after scan cancellation, and allows a queued scan to make eventual progress with no competing discovery receiver.
-- The test uses only ephemeral localhost sockets and read-only BACnet frames. No live device writes, deployment, merge-to-master, UI work or issue closure was performed.
+- VERSION **3.5.59** after docs #1076 + wave I/K ACME retarget #1079. Soft-OPEN #1069/#1070. Parked: #1067, #1075, #1080. No FQ claim.
