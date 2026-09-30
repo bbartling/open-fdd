@@ -1,3 +1,9 @@
+## 2026-09-29 — MQTT protocol tree restoration plan (documentation only)
+
+- Added `docs/operations/MQTT_PROTOCOL_TREE_RESTORATION_PLAN.md`: legacy BACnet tree/context actions in current React Operations → MQTT, nested Haystack/Modbus adapters, runtime recipe capabilities, optional local/MQTTS/dual delivery and #781 protocol isolation.
+- Pinned BACnet source audit at `02ad4c3f559a2b6486d47dc1a4ba922142db0a63`; documented existing operations and remaining hourly-scheduler, slot-integrity, discovery and write/readback work.
+- Includes coding-agent prompt and deterministic/container/bench/Railway acceptance gates. Markdown structure checked; no product code/version, capability ledger, deployment or hardware changes. Live tests NOT RUN.
+
 ## 2026-09-29 — #1064 multi-tenant MQTT historian scope (not FQ)
 
 - `LiveHistorian::from_env_scoped_for` partitions from the trusted scope `tenant=` segment. A multi-tenant hub no longer requires process-global `OPENFDD_TENANT_ID`.
