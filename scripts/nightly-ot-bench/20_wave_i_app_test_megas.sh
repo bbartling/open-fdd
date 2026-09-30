@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Gate 20 — Wave I app-test MEGAs (basic app + dual OAT + plot span).
+# Live MQTT building is ACME (edges vim-1 / pi-1). `bldg2` is not a building id.
+# Loopback / hosted-weather equipment ids are unchanged. Missing AV columns stay Soft-OPEN.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -44,6 +46,14 @@ record_soft() {
   SOFT=$((SOFT + 1))
 }
 
+# Override with OPENFDD_WAVE_MQTT_BUILDING when the hub site id is not ACME.
+MQTT_BUILDING="${OPENFDD_WAVE_MQTT_BUILDING:-ACME}"
+LOOPBACK_EQ="${OPENFDD_WAVE_MQTT_LOOPBACK_EQ:-bldg2-zone-loopback}"
+WEATHER_EQ="${OPENFDD_WAVE_MQTT_WEATHER_EQ:-hosted-weather}"
+urlencode() {
+  python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+}
+
 # 1) Lakeside FC1 — must not hit read_csv planning error
 body="$(cpost /api/fdd/run '{"building_id":"LAKESIDE_ES","rule_ids":["FC1"]}')"
 echo "$body" >"$ART/wave_i_lakeside_fc1.json"
@@ -55,20 +65,24 @@ else
   record lakeside_fc1 1 "no read_csv planning error"
 fi
 
-# 2) Data model mapping for MQTT bldg2
-body="$(cget "/api/csv/import/package/mapping?building_id=bldg2")"
-echo "$body" >"$ART/wave_i_mapping_bldg2.json"
+# 2) Data model mapping for the live MQTT building (ACME).
+body="$(cget "/api/csv/import/package/mapping?building_id=$(urlencode "$MQTT_BUILDING")")"
+echo "$body" >"$ART/wave_i_mapping_acme.json"
 eq_n="$(echo "$body" | jq -r '(.equipment // []) | length' 2>/dev/null || echo 0)"
 ok_map="$(echo "$body" | jq -r '.ok // false' 2>/dev/null || echo false)"
-if [[ "$ok_map" == "true" && "$eq_n" =~ ^[0-9]+$ && "$eq_n" -gt 0 ]]; then
-  record mapping_bldg2 1 "equipment=$eq_n"
+has_loop="$(echo "$body" | jq -r --arg e "$LOOPBACK_EQ" '([.equipment_ids[]?, .equipment[]?.equipment_id] | index($e) != null)')"
+has_wx="$(echo "$body" | jq -r --arg e "$WEATHER_EQ" '([.equipment_ids[]?, .equipment[]?.equipment_id] | index($e) != null)')"
+if [[ "$ok_map" == "true" && "$eq_n" =~ ^[0-9]+$ && "$eq_n" -gt 0 && "$has_loop" == "true" && "$has_wx" == "true" ]]; then
+  record mapping_acme 1 "building=$MQTT_BUILDING equipment=$eq_n"
 else
-  record mapping_bldg2 0 "ok=$ok_map equipment=$eq_n"
+  record mapping_acme 0 "building=$MQTT_BUILDING ok=$ok_map equipment=$eq_n loopback=$has_loop weather=$has_wx"
 fi
 
-# 3) Inspect bldg2 zone_t
-body="$(cpost /api/analytics/inspect '{"building_id":"bldg2","equipment_ids":["bldg2-zone-loopback"],"max_points":800,"series":{"columns":["zone_t"]}}')"
-echo "$body" >"$ART/wave_i_inspect_bldg2.json"
+# 3) Inspect ACME loopback zone_t. Absent column is field-catalog Soft-OPEN.
+payload="$(jq -nc --arg b "$MQTT_BUILDING" --arg e "$LOOPBACK_EQ" \
+  '{building_id:$b, equipment_ids:[$e], max_points:800, series:{columns:["zone_t"]}}')"
+body="$(cpost /api/analytics/inspect "$payload")"
+echo "$body" >"$ART/wave_i_inspect_zone_t.json"
 eval "$(echo "$body" | python3 -c '
 import json,sys
 a=(json.load(sys.stdin).get("analytics") or {})
@@ -87,9 +101,10 @@ else
   record_soft inspect_zone_t "zone_t column absent non_null=${zt:-0}"
 fi
 
-# 4) bas-vs-web bldg2 (requires dual-OAT catalog + soak)
-body="$(cpost /api/analytics/bas-vs-web-oat '{"building_id":"bldg2","max_points":2000}')"
-echo "$body" >"$ART/wave_i_bas_vs_web_bldg2.json"
+# 4) bas-vs-web on the live MQTT building (requires dual-OAT catalog + soak)
+payload="$(jq -nc --arg b "$MQTT_BUILDING" '{building_id:$b, max_points:2000}')"
+body="$(cpost /api/analytics/bas-vs-web-oat "$payload")"
+echo "$body" >"$ART/wave_i_bas_vs_web_acme.json"
 eval "$(echo "$body" | python3 -c '
 import json,sys
 body=json.load(sys.stdin)
@@ -101,11 +116,11 @@ print("pts=%d" % pts)
 print("missing_roles=%d" % missing)
 ')"
 if [[ "${pts:-0}" -gt 0 ]]; then
-  record bas_vs_web_bldg2 1 "points=$pts"
+  record bas_vs_web_acme 1 "building=$MQTT_BUILDING points=$pts"
 elif [[ "${missing_roles:-0}" == "1" ]]; then
-  record_soft bas_vs_web_bldg2 "oa_t/web_oa_t columns absent points=0"
+  record_soft bas_vs_web_acme "building=$MQTT_BUILDING oa_t/web_oa_t columns absent points=0"
 else
-  record bas_vs_web_bldg2 0 "points=0 roles_present"
+  record bas_vs_web_acme 0 "building=$MQTT_BUILDING points=0 roles_present"
 fi
 
 # 5) B100 inspect — span-preserving downsample (equipment_id required; AHU_1).
