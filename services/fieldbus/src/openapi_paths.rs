@@ -45,7 +45,8 @@ pub(crate) fn doc_api_health() {}
 )]
 pub(crate) fn doc_bacnet_read() {}
 
-/// WriteProperty with optional dry-run when `approved` is false.
+/// WriteProperty; explicit `approved:true` is required for a live write and
+/// omitted/false approval selects the dry-run response.
 #[utoipa::path(
     post,
     path = "/bacnet/write",

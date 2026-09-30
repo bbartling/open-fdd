@@ -1,6 +1,7 @@
 //! BACnet field-bus client (mirrors `app/bacnet_client.py`).
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -11,6 +12,7 @@ use bacnet_services::common::PropertyReference;
 use bacnet_services::rpm::ReadAccessSpecification;
 use bacnet_transport::bvll::encode_bip_mac;
 use bacnet_types::enums::{ObjectType, PropertyIdentifier, Segmentation};
+use bacnet_types::error::Error as BacnetError;
 use bacnet_types::primitives::{ObjectIdentifier, PropertyValue};
 use bytes::BytesMut;
 use fdd_core::columns::{haystack_point_to_role, is_known_cookbook_role};
@@ -57,6 +59,75 @@ static COMMANDABLE_TYPES: &[&str] = &[
     "positive-integer-value",
 ];
 
+static NON_COMMANDABLE_TYPES: &[&str] = &[
+    "analog-input",
+    "binary-input",
+    "device",
+    "multi-state-input",
+    "schedule",
+    "calendar",
+    "trend-log",
+    "loop",
+];
+
+const PRIORITY_LEVELS: std::ops::RangeInclusive<u32> = 1..=16;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Commandability {
+    Supported,
+    Unsupported,
+    Unknown,
+}
+
+impl Commandability {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Supported => "supported",
+            Self::Unsupported => "unsupported",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    fn is_supported(self) -> bool {
+        self == Self::Supported
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WriteOutcome {
+    Acknowledged,
+    Rejected,
+    Failed,
+    Unknown,
+}
+
+impl WriteOutcome {
+    fn status(self) -> &'static str {
+        match self {
+            Self::Acknowledged => "success",
+            Self::Rejected => "rejected",
+            Self::Failed => "failed",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    fn outcome(self) -> &'static str {
+        match self {
+            Self::Acknowledged => "acknowledged",
+            Self::Rejected => "rejected",
+            Self::Failed => "failed",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct ObjectListRead {
+    objects: Vec<ObjectIdentifier>,
+    missing_indexes: Vec<u32>,
+    errors: Vec<String>,
+}
+
 pub struct BacnetClientService {
     settings: Settings,
     field_devices: Vec<FieldDevice>,
@@ -102,6 +173,27 @@ impl BacnetClientService {
         &self,
         device: Option<&FieldDevice>,
     ) -> Result<BACnetClient<bacnet_transport::bip::BipTransport>, String> {
+        self.new_client_with_retries(device, None).await
+    }
+
+    /// Build a BACnet client for a live WriteProperty operation.
+    ///
+    /// The BACnet client library retransmits confirmed requests when its APDU
+    /// retry count is nonzero. A lost write acknowledgement is ambiguous: the
+    /// device may already have applied the value, so a write client must send
+    /// exactly one APDU and surface the outcome as unknown on timeout.
+    async fn new_write_client(
+        &self,
+        device: Option<&FieldDevice>,
+    ) -> Result<BACnetClient<bacnet_transport::bip::BipTransport>, String> {
+        self.new_client_with_retries(device, Some(0)).await
+    }
+
+    async fn new_client_with_retries(
+        &self,
+        device: Option<&FieldDevice>,
+        apdu_retries: Option<u8>,
+    ) -> Result<BACnetClient<bacnet_transport::bip::BipTransport>, String> {
         let cfg = &self.settings.bacnet_client;
         // Who-Is must bind INADDR_ANY to receive BACnet/IP directed-broadcast I-Am.
         // A unicast interface from OPENFDD_FIELDBUS_BIND (e.g. 192.168.204.55) misses
@@ -111,14 +203,16 @@ impl BacnetClientService {
         } else {
             cfg.interface
         };
-        BACnetClient::bip_builder()
+        let builder = BACnetClient::bip_builder()
             .interface(interface)
             .port(self.bind_port(device))
             .broadcast_address(cfg.broadcast)
-            .apdu_timeout_ms(u64::from(cfg.apdu_timeout_ms))
-            .build()
-            .await
-            .map_err(|e| e.to_string())
+            .apdu_timeout_ms(u64::from(cfg.apdu_timeout_ms));
+        let builder = match apdu_retries {
+            Some(retries) => builder.apdu_retries(retries),
+            None => builder,
+        };
+        builder.build().await.map_err(|e| e.to_string())
     }
 
     /// Always `stop()` the client; preserve the primary operation result and log stop failures.
@@ -239,7 +333,9 @@ impl BacnetClientService {
             {
                 Ok(a) => a,
                 Err(_) if device.is_some() => {
-                    let d = device.unwrap();
+                    let Some(d) = device else {
+                        return Err("device disappeared during read preparation".into());
+                    };
                     let ip: Ipv4Addr = d.host.parse().map_err(|e| format!("bad host: {e}"))?;
                     let mac = encode_bip_mac(ip.octets(), d.port);
                     client
@@ -268,7 +364,10 @@ impl BacnetClientService {
         Self::finish_client(client, result).await
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "public request shape mirrors the BACnet WriteProperty route"
+    )]
     pub async fn write_property(
         &self,
         device_instance: u32,
@@ -292,7 +391,10 @@ impl BacnetClientService {
         .await
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "private implementation keeps the route's typed BACnet fields explicit"
+    )]
     async fn write_property_impl(
         &self,
         device_instance: u32,
@@ -322,7 +424,12 @@ impl BacnetClientService {
             (PropertyValue::Null, Some(p))
         } else {
             (
-                make_property_value(value.as_ref().unwrap(), value_type)?,
+                make_property_value(
+                    value.as_ref().ok_or_else(|| {
+                        "write value is required unless releasing a priority".to_string()
+                    })?,
+                    value_type,
+                )?,
                 priority,
             )
         };
@@ -330,48 +437,65 @@ impl BacnetClientService {
         let mut buf = BytesMut::new();
         encode_property_value(&mut buf, &pv).map_err(|e| e.to_string())?;
 
-        let client = self.new_client(device).await?;
+        let client = self.new_write_client(device).await?;
         let result = async {
             self.prepare(&client, device, device_instance).await?;
 
-            if let Err(_e) = client
-                .write_property_to_device(
-                    device_instance,
-                    oid,
-                    pid,
-                    None,
-                    buf.to_vec(),
-                    write_priority,
-                )
-                .await
-            {
-                if let Some(d) = device {
-                    let ip: Ipv4Addr = d.host.parse().map_err(|e| format!("bad host: {e}"))?;
-                    let mac = encode_bip_mac(ip.octets(), d.port);
-                    client
-                        .write_property(&mac, oid, pid, None, buf.to_vec(), write_priority)
-                        .await
-                        .map_err(|e| e.to_string())?;
-                } else {
-                    return Err("write failed".into());
-                }
+            // A confirmed WriteProperty may have reached the device even when
+            // its acknowledgement is lost.  This is deliberately one-shot:
+            // never resend through a second addressing path after an error.
+            let mut write_attempts = 0;
+            let write_result = write_once(&mut write_attempts, || async {
+                client
+                    .write_property_to_device(
+                        device_instance,
+                        oid,
+                        pid,
+                        None,
+                        buf.to_vec(),
+                        write_priority,
+                    )
+                    .await
+            })
+            .await;
+            let outcome = classify_write_error_result(&write_result);
+            let routed = device.is_some_and(FieldDevice::is_routed);
+            match write_result {
+                Ok(()) => Ok(json!({
+                    "status": outcome.status(),
+                    "outcome": outcome.outcome(),
+                    "write_attempts": write_attempts,
+                    "device_instance": device_instance,
+                    "object_type": object_type,
+                    "object_instance": object_instance,
+                    "property_id": property_id,
+                    "released": is_release,
+                    "priority": write_priority,
+                    "routed": routed,
+                })),
+                Err(error) => Ok(json!({
+                    "status": outcome.status(),
+                    "outcome": outcome.outcome(),
+                    "write_attempts": write_attempts,
+                    "device_instance": device_instance,
+                    "object_type": object_type,
+                    "object_instance": object_instance,
+                    "property_id": property_id,
+                    "released": is_release,
+                    "priority": write_priority,
+                    "routed": routed,
+                    "error": error.to_string(),
+                })),
             }
-
-            Ok(json!({
-                "status": "success",
-                "device_instance": device_instance,
-                "object_type": object_type,
-                "object_instance": object_instance,
-                "property_id": property_id,
-                "released": is_release,
-                "priority": write_priority,
-            }))
         }
         .await;
         Self::finish_client(client, result).await
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "dry-run API mirrors the live WriteProperty request"
+    )]
     pub fn write_dry_run(
         &self,
         device_instance: u32,
@@ -399,7 +523,12 @@ impl BacnetClientService {
             (PropertyValue::Null, Some(p))
         } else {
             (
-                make_property_value(value.as_ref().unwrap(), value_type)?,
+                make_property_value(
+                    value.as_ref().ok_or_else(|| {
+                        "write value is required unless releasing a priority".to_string()
+                    })?,
+                    value_type,
+                )?,
                 priority,
             )
         };
@@ -493,7 +622,9 @@ impl BacnetClientService {
                         let Ok(ot) = parse_object_type(&p.object_type) else {
                             continue;
                         };
-                        let oid = ObjectIdentifier::new(ot, p.object_instance).unwrap();
+                        let Ok(oid) = ObjectIdentifier::new(ot, p.object_instance) else {
+                            continue;
+                        };
                         let oid_str = normalize_oid(&oid);
                         let entry = map.get(&oid_str);
                         out.push(json!({
@@ -701,11 +832,13 @@ impl BacnetClientService {
             let addr = self.resolve_address(&client, device, device_instance).await;
 
             let rpm_chunk = device.map_or(25, |d| d.rpm_chunk.max(1));
-            let raw_oids = self
+            let object_list = self
                 .read_object_list(&client, device_instance, rpm_chunk)
                 .await?;
-            let oids: Vec<_> = raw_oids
-                .into_iter()
+            let oids: Vec<_> = object_list
+                .objects
+                .iter()
+                .copied()
                 .filter(|o| object_type_name(o.object_type()) != "device")
                 .collect();
 
@@ -713,35 +846,18 @@ impl BacnetClientService {
                 .read_object_names(&client, device_instance, &oids)
                 .await?;
 
-            let mut commandable = HashSet::new();
+            let mut commandability = HashMap::new();
             let candidates: Vec<_> = oids
                 .iter()
                 .filter(|o| COMMANDABLE_TYPES.contains(&object_type_name(o.object_type()).as_str()))
                 .copied()
                 .collect();
             for chunk in candidates.chunks(rpm_chunk) {
-                let specs: Vec<_> = chunk
-                    .iter()
-                    .map(|o| ReadAccessSpecification {
-                        object_identifier: *o,
-                        list_of_property_references: vec![PropertyReference {
-                            property_identifier: PropertyIdentifier::PRIORITY_ARRAY,
-                            property_array_index: Some(0),
-                        }],
-                    })
-                    .collect();
-                if let Ok(res) = client
-                    .read_property_multiple_from_device(device_instance, specs)
-                    .await
-                {
-                    for obj in res.list_of_read_access_results {
-                        let oid_str = normalize_oid(&obj.object_identifier);
-                        for r in obj.list_of_results {
-                            if r.error.is_none() && r.property_value.is_some() {
-                                commandable.insert(oid_str.clone());
-                            }
-                        }
-                    }
+                for oid in chunk {
+                    let state = self
+                        .probe_commandability(&client, device_instance, *oid)
+                        .await;
+                    commandability.insert(normalize_oid(oid), state);
                 }
             }
 
@@ -749,10 +865,15 @@ impl BacnetClientService {
                 .iter()
                 .map(|o| {
                     let oid_str = normalize_oid(o);
+                    let state = commandability
+                        .get(&oid_str)
+                        .copied()
+                        .unwrap_or_else(|| default_commandability(o.object_type()));
                     json!({
                         "object_identifier": oid_str,
                         "name": name_map.get(&oid_str).cloned().unwrap_or_else(|| json!("?")),
-                        "commandable": commandable.contains(&oid_str),
+                        "commandable": state.is_supported(),
+                        "commandability": state.as_str(),
                     })
                 })
                 .collect();
@@ -761,10 +882,78 @@ impl BacnetClientService {
                 "device_address": addr,
                 "device_instance": device_instance,
                 "objects": objects,
+                "object_list_complete": object_list.missing_indexes.is_empty()
+                    && object_list.errors.is_empty(),
+                "object_list_missing_indexes": object_list.missing_indexes,
+                "object_list_errors": object_list.errors,
             }))
         }
         .await;
         Self::finish_client(client, result).await
+    }
+
+    async fn probe_commandability(
+        &self,
+        client: &BACnetClient<bacnet_transport::bip::BipTransport>,
+        device_instance: u32,
+        oid: ObjectIdentifier,
+    ) -> Commandability {
+        let spec = ReadAccessSpecification {
+            object_identifier: oid,
+            list_of_property_references: vec![PropertyReference {
+                property_identifier: PropertyIdentifier::PRIORITY_ARRAY,
+                property_array_index: Some(0),
+            }],
+        };
+        let rpm_state = match client
+            .read_property_multiple_from_device(device_instance, vec![spec])
+            .await
+        {
+            Ok(response) => response
+                .list_of_read_access_results
+                .iter()
+                .filter(|object| object.object_identifier == oid)
+                .flat_map(|object| object.list_of_results.iter())
+                .find(|result| {
+                    result.property_identifier == PropertyIdentifier::PRIORITY_ARRAY
+                        && result.property_array_index == Some(0)
+                })
+                .and_then(|result| {
+                    if let Some((class, code)) = result.error {
+                        Some(commandability_from_error_codes(class, code))
+                    } else {
+                        result
+                            .property_value
+                            .as_deref()
+                            .and_then(|bytes| decode_application_value(bytes, 0).ok())
+                            .map(|_| Commandability::Supported)
+                    }
+                }),
+            Err(_) => None,
+        };
+        if rpm_state == Some(Commandability::Supported) {
+            return Commandability::Supported;
+        }
+
+        // RPM can be unsupported or malformed while ordinary ReadProperty
+        // still works. Probe the same object/index once before declaring the
+        // commandability unknown; this is bounded to one repair read.
+        match client
+            .read_property_from_device(
+                device_instance,
+                oid,
+                PropertyIdentifier::PRIORITY_ARRAY,
+                Some(0),
+            )
+            .await
+        {
+            Ok(ack) => match decode_application_value(&ack.property_value, 0) {
+                Ok(_) => Commandability::Supported,
+                Err(_) => Commandability::Unknown,
+            },
+            Err(error) if is_unsupported_bacnet_error(&error) => Commandability::Unsupported,
+            Err(_) => rpm_state.unwrap_or(Commandability::Unknown),
+        }
     }
 
     async fn read_object_list(
@@ -772,7 +961,7 @@ impl BacnetClientService {
         client: &BACnetClient<bacnet_transport::bip::BipTransport>,
         device_instance: u32,
         rpm_chunk: usize,
-    ) -> Result<Vec<ObjectIdentifier>, String> {
+    ) -> Result<ObjectListRead, String> {
         let dev_oid = ObjectIdentifier::new(ObjectType::DEVICE, device_instance)
             .map_err(|e| e.to_string())?;
         let length_ack = client
@@ -787,53 +976,167 @@ impl BacnetClientService {
         let (length_pv, _) =
             decode_application_value(&length_ack.property_value, 0).map_err(|e| e.to_string())?;
         let length = match length_pv {
-            PropertyValue::Unsigned(v) => v as usize,
-            PropertyValue::Signed(v) => v as usize,
+            PropertyValue::Unsigned(v) => usize::try_from(v)
+                .map_err(|_| "object-list length exceeds platform limits".to_string())?,
+            PropertyValue::Signed(v) if v >= 0 => v as usize,
             _ => return Err("unexpected object-list length type".into()),
         };
+        const MAX_OBJECT_LIST_LENGTH: usize = 100_000;
+        if length > MAX_OBJECT_LIST_LENGTH {
+            return Err(format!(
+                "object-list length {length} exceeds safety limit {MAX_OBJECT_LIST_LENGTH}"
+            ));
+        }
 
-        let mut oids = Vec::new();
+        let mut objects_by_index = HashMap::new();
+        let mut missing_indexes = HashSet::new();
+        let mut errors = Vec::new();
         for (start, end) in rpm_chunk_ranges(length, rpm_chunk) {
             let idxs: Vec<u32> = (start..=end).map(|i| i as u32).collect();
+            missing_indexes.extend(idxs.iter().copied());
+            let expected: HashSet<u32> = idxs.iter().copied().collect();
             let specs = vec![object_list_index_spec(dev_oid, &idxs)];
             match client
                 .read_property_multiple_from_device(device_instance, specs)
                 .await
             {
                 Ok(res) => {
-                    for r in &res.list_of_read_access_results[0].list_of_results {
-                        if let Some(bytes) = &r.property_value {
-                            if let Ok((PropertyValue::ObjectIdentifier(oid), _)) =
-                                decode_application_value(bytes, 0)
+                    for obj in &res.list_of_read_access_results {
+                        if obj.object_identifier != dev_oid {
+                            push_bounded_error(
+                                &mut errors,
+                                format!(
+                                    "object-list RPM returned unexpected object {}",
+                                    normalize_oid(&obj.object_identifier)
+                                ),
+                            );
+                            continue;
+                        }
+                        for r in &obj.list_of_results {
+                            let Some(index) = r.property_array_index else {
+                                push_bounded_error(
+                                    &mut errors,
+                                    "object-list RPM result omitted array index".into(),
+                                );
+                                continue;
+                            };
+                            if !expected.contains(&index)
+                                || r.property_identifier != PropertyIdentifier::OBJECT_LIST
                             {
-                                oids.push(oid);
+                                push_bounded_error(
+                                    &mut errors,
+                                    format!(
+                                        "object-list RPM returned invalid index/property {index}"
+                                    ),
+                                );
+                                continue;
                             }
+                            if let Some((class, code)) = r.error {
+                                push_bounded_error(
+                                    &mut errors,
+                                    format!(
+                                        "object-list index {index} error: class={class:?} code={code:?}"
+                                    ),
+                                );
+                                continue;
+                            }
+                            let Some(bytes) = &r.property_value else {
+                                push_bounded_error(
+                                    &mut errors,
+                                    format!("object-list index {index} omitted value"),
+                                );
+                                continue;
+                            };
+                            let Ok((PropertyValue::ObjectIdentifier(oid), _)) =
+                                decode_application_value(bytes, 0)
+                            else {
+                                push_bounded_error(
+                                    &mut errors,
+                                    format!("object-list index {index} had malformed value"),
+                                );
+                                continue;
+                            };
+                            if objects_by_index.insert(index, oid).is_some() {
+                                objects_by_index.remove(&index);
+                                // Keep this index pending so bounded
+                                // ReadProperty repair can establish one
+                                // authoritative value. A duplicate response
+                                // must never make discovery look complete.
+                                missing_indexes.insert(index);
+                                push_bounded_error(
+                                    &mut errors,
+                                    format!("object-list index {index} was duplicated"),
+                                );
+                                continue;
+                            }
+                            missing_indexes.remove(&index);
                         }
                     }
                 }
                 Err(e) => {
-                    warn!("object-list RPM chunk failed ({e}); per-index fallback");
-                    for i in start..=end {
-                        if let Ok(ack) = client
-                            .read_property_from_device(
-                                device_instance,
-                                dev_oid,
-                                PropertyIdentifier::OBJECT_LIST,
-                                Some(i as u32),
-                            )
-                            .await
-                        {
-                            if let Ok((PropertyValue::ObjectIdentifier(oid), _)) =
-                                decode_application_value(&ack.property_value, 0)
-                            {
-                                oids.push(oid);
-                            }
+                    push_bounded_error(
+                        &mut errors,
+                        format!("object-list RPM chunk {start}-{end} failed: {e}"),
+                    );
+                }
+            }
+
+            // Repair only indexes the RPM response proved missing or invalid.
+            // The bound is the configured chunk, so a malformed response cannot
+            // turn into an unbounded per-index request storm.
+            let pending: Vec<u32> = missing_indexes
+                .iter()
+                .filter(|index| expected.contains(index))
+                .copied()
+                .collect();
+            for index in pending {
+                match client
+                    .read_property_from_device(
+                        device_instance,
+                        dev_oid,
+                        PropertyIdentifier::OBJECT_LIST,
+                        Some(index),
+                    )
+                    .await
+                {
+                    Ok(ack) => match decode_application_value(&ack.property_value, 0) {
+                        Ok((PropertyValue::ObjectIdentifier(oid), _)) => {
+                            objects_by_index.insert(index, oid);
+                            missing_indexes.remove(&index);
                         }
-                    }
+                        Ok((other, _)) => push_bounded_error(
+                            &mut errors,
+                            format!(
+                                "object-list index {index} repair returned {}",
+                                property_value_tag(&other)
+                            ),
+                        ),
+                        Err(e) => push_bounded_error(
+                            &mut errors,
+                            format!("object-list index {index} repair decode failed: {e}"),
+                        ),
+                    },
+                    Err(e) => push_bounded_error(
+                        &mut errors,
+                        format!("object-list index {index} repair failed: {e}"),
+                    ),
                 }
             }
         }
-        Ok(oids)
+        let mut indexed: Vec<_> = objects_by_index.into_iter().collect();
+        indexed.sort_by_key(|(index, _)| *index);
+        let mut seen_objects = HashSet::new();
+        let objects = indexed
+            .into_iter()
+            .filter_map(|(_, oid)| seen_objects.insert(oid).then_some(oid))
+            .collect();
+        let mut missing_indexes: Vec<_> = missing_indexes.into_iter().collect();
+        missing_indexes.sort_unstable();
+        Ok(ObjectListRead {
+            objects,
+            missing_indexes,
+            errors,
+        })
     }
 
     pub async fn read_priority_array(
@@ -856,6 +1159,7 @@ impl BacnetClientService {
                 "device_instance": device_instance,
                 "object_identifier": normalize_oid(&oid),
                 "priority_array": slots,
+                "priority_array_state": priority_array_state(&slots),
             }))
         }
         .await;
@@ -877,63 +1181,53 @@ impl BacnetClientService {
                 })
                 .collect(),
         }];
-        let mut slots = Vec::new();
+        let mut slots: Vec<Value> = (1..=16)
+            .map(|level| priority_slot_unknown(level, "missing from RPM response"))
+            .collect();
+        let mut repair: HashSet<u32> = PRIORITY_LEVELS.collect();
+        let mut seen = HashSet::new();
         match client
             .read_property_multiple_from_device(device_instance, specs)
             .await
         {
             Ok(res) => {
-                for r in &res.list_of_read_access_results[0].list_of_results {
-                    let idx = r.property_array_index.unwrap_or(0);
-                    if let Some((class, code)) = r.error {
-                        slots.push(json!({
-                            "priority_level": idx,
-                            "type": "error",
-                            "value": format!("Error: class={class:?} code={code:?}"),
-                        }));
-                    } else if let Some(bytes) = &r.property_value {
-                        let (pv, _) =
-                            decode_application_value(bytes, 0).map_err(|e| e.to_string())?;
-                        let tag = property_value_tag(&pv);
-                        slots.push(json!({
-                            "priority_level": idx,
-                            "type": tag,
-                            "value": if tag == "null" { Value::Null } else { property_value_to_json(&pv) },
-                        }));
-                    }
-                }
+                apply_priority_rpm_results(&mut slots, &mut repair, &mut seen, &res, oid);
             }
-            Err(_) => {
-                for i in 1..=16u32 {
-                    match client
-                        .read_property_from_device(
-                            device_instance,
-                            oid,
-                            PropertyIdentifier::PRIORITY_ARRAY,
-                            Some(i),
-                        )
-                        .await
-                    {
-                        Ok(ack) => {
-                            let (pv, _) = decode_application_value(&ack.property_value, 0)
-                                .map_err(|e| e.to_string())?;
-                            let tag = property_value_tag(&pv);
-                            slots.push(json!({
-                                "priority_level": i,
-                                "type": tag,
-                                "value": if tag == "null" { Value::Null } else { property_value_to_json(&pv) },
-                            }));
-                        }
-                        Err(e) => slots.push(json!({
-                            "priority_level": i,
-                            "type": "error",
-                            "value": e.to_string(),
-                        })),
-                    }
+            Err(error) => {
+                for slot in &mut slots {
+                    slot["error"] = json!(format!("priority-array RPM failed: {error}"));
                 }
             }
         }
-        slots.sort_by_key(|s| s["priority_level"].as_u64().unwrap_or(0));
+
+        // Repair only the indexes that were absent, malformed, duplicated or
+        // explicitly errored in the RPM response.  Every request is a single
+        // ReadProperty, bounded to the fixed sixteen priority levels.
+        for level in repair {
+            match client
+                .read_property_from_device(
+                    device_instance,
+                    oid,
+                    PropertyIdentifier::PRIORITY_ARRAY,
+                    Some(level),
+                )
+                .await
+            {
+                Ok(ack) => match decode_application_value(&ack.property_value, 0) {
+                    Ok((pv, _)) => slots[(level - 1) as usize] = priority_slot_value(level, &pv),
+                    Err(error) => {
+                        let slot = &mut slots[(level - 1) as usize];
+                        slot["repair_error"] = json!(format!(
+                            "priority-array repair value decode failed: {error}"
+                        ));
+                    }
+                },
+                Err(error) => {
+                    let slot = &mut slots[(level - 1) as usize];
+                    slot["repair_error"] = json!(error.to_string());
+                }
+            }
+        }
         Ok(slots)
     }
 
@@ -961,14 +1255,21 @@ impl BacnetClientService {
                 .collect();
 
             let mut batch_names: HashMap<ObjectIdentifier, String> = HashMap::new();
+            let expected: HashSet<ObjectIdentifier> = chunk.iter().copied().collect();
             match client
                 .read_property_multiple_from_device(device_instance, specs)
                 .await
             {
                 Ok(res) => {
                     for obj in res.list_of_read_access_results {
+                        if !expected.contains(&obj.object_identifier) {
+                            continue;
+                        }
                         for r in obj.list_of_results {
-                            if r.property_identifier != PropertyIdentifier::OBJECT_NAME {
+                            if r.property_identifier != PropertyIdentifier::OBJECT_NAME
+                                || r.property_array_index.is_some()
+                                || r.error.is_some()
+                            {
                                 continue;
                             }
                             if let Some(bytes) = r.property_value {
@@ -1046,7 +1347,7 @@ impl BacnetClientService {
 
         let commandable: Vec<_> = objects
             .iter()
-            .filter(|o| o["commandable"].as_bool().unwrap_or(false))
+            .filter(|o| o["commandability"].as_str() == Some("supported"))
             .cloned()
             .collect();
         let name_by_oid: HashMap<_, _> = objects
@@ -1069,10 +1370,19 @@ impl BacnetClientService {
             let mut with_pa = 0usize;
 
             for o in &commandable {
-                let oid_str = o["object_identifier"].as_str().unwrap_or("");
+                let Some(oid_str) = o["object_identifier"].as_str() else {
+                    continue;
+                };
                 let mut parts = oid_str.split(',');
-                let type_name = parts.next().unwrap_or("");
-                let inst: u32 = parts.next().unwrap_or("0").parse().unwrap_or(0);
+                let Some(type_name) = parts.next() else {
+                    continue;
+                };
+                let Some(inst_text) = parts.next() else {
+                    continue;
+                };
+                let Ok(inst) = inst_text.parse::<u32>() else {
+                    continue;
+                };
                 let ot = parse_object_type(type_name)?;
                 let oid = ObjectIdentifier::new(ot, inst).map_err(|e| e.to_string())?;
                 let slots = self
@@ -1080,15 +1390,10 @@ impl BacnetClientService {
                     .await?;
                 let active: Vec<_> = slots
                     .iter()
-                    .filter(|s| {
-                        s["type"]
-                            .as_str()
-                            .map(|t| t != "null" && t != "error")
-                            .unwrap_or(false)
-                    })
+                    .filter(|s| s["state"].as_str() == Some("value"))
                     .cloned()
                     .collect();
-                if !slots.is_empty() {
+                if priority_array_state(&slots) == "supported" {
                     with_pa += 1;
                 }
                 for s in active {
@@ -1096,6 +1401,7 @@ impl BacnetClientService {
                         "priority_level": s["priority_level"],
                         "object_identifier": oid_str,
                         "object_name": o["name"],
+                        "state": s["state"],
                         "type": s["type"],
                         "value": s["value"],
                     });
@@ -1105,6 +1411,7 @@ impl BacnetClientService {
                         .or_default()
                         .push(json!({
                             "priority_level": s["priority_level"],
+                            "state": s["state"],
                             "type": s["type"],
                             "value": s["value"],
                         }));
@@ -1284,12 +1591,193 @@ fn object_type_name(ot: ObjectType) -> String {
     format!("{ot}").to_ascii_lowercase().replace('_', "-")
 }
 
+fn default_commandability(ot: ObjectType) -> Commandability {
+    let name = object_type_name(ot);
+    if NON_COMMANDABLE_TYPES.contains(&name.as_str()) {
+        Commandability::Unsupported
+    } else {
+        // Candidate types are probed above. Proprietary or newly added types
+        // have no safe inference from their object-type label alone.
+        Commandability::Unknown
+    }
+}
+
 fn normalize_oid(oid: &ObjectIdentifier) -> String {
     format!(
         "{},{}",
         object_type_name(oid.object_type()),
         oid.instance_number()
     )
+}
+
+fn classify_write_error(error: &BacnetError) -> WriteOutcome {
+    match error {
+        BacnetError::Protocol { .. } | BacnetError::Reject { .. } | BacnetError::Abort { .. } => {
+            WriteOutcome::Rejected
+        }
+        BacnetError::Encoding(_)
+        | BacnetError::OutOfRange(_)
+        | BacnetError::RoutedPathTooLong { .. }
+        | BacnetError::RoutedPathCapacityExceeded { .. } => WriteOutcome::Failed,
+        // Transport, timeout, segmentation and response-decoding failures are
+        // ambiguous after dispatch.  They are never retried automatically.
+        _ => WriteOutcome::Unknown,
+    }
+}
+
+fn classify_write_error_result<T>(result: &Result<T, BacnetError>) -> WriteOutcome {
+    match result {
+        Ok(_) => WriteOutcome::Acknowledged,
+        Err(error) => classify_write_error(error),
+    }
+}
+
+async fn write_once<F, Fut>(attempts: &mut usize, send: F) -> Result<(), BacnetError>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<(), BacnetError>>,
+{
+    *attempts += 1;
+    send().await
+}
+
+fn is_unsupported_error_text(text: &str) -> bool {
+    let normalized = text.to_ascii_lowercase().replace('_', "-");
+    normalized.contains("unknown-property")
+        || normalized.contains("property-is-not-supported")
+        || normalized.contains("property-not-supported")
+        || normalized.contains("property-is-not-an-array")
+}
+
+fn is_unsupported_bacnet_error(error: &BacnetError) -> bool {
+    is_unsupported_error_text(&error.to_string())
+}
+
+fn commandability_from_error_codes(
+    class: impl std::fmt::Debug,
+    code: impl std::fmt::Debug,
+) -> Commandability {
+    if is_unsupported_error_text(&format!("{class:?} {code:?}")) {
+        Commandability::Unsupported
+    } else {
+        Commandability::Unknown
+    }
+}
+
+fn priority_slot_value(level: u32, value: &PropertyValue) -> Value {
+    let tag = property_value_tag(value);
+    json!({
+        "priority_level": level,
+        "state": if tag == "null" { "null" } else { "value" },
+        "type": tag,
+        "value": property_value_to_json(value),
+    })
+}
+
+fn priority_slot_unknown(level: u32, reason: &str) -> Value {
+    json!({
+        "priority_level": level,
+        "state": "unknown",
+        "type": "unknown",
+        "value": Value::Null,
+        "error": reason,
+    })
+}
+
+fn priority_slot_error(level: u32, reason: &str, kind: &str) -> Value {
+    json!({
+        "priority_level": level,
+        "state": "error",
+        "type": "error",
+        "value": Value::Null,
+        "error": reason,
+        "error_kind": kind,
+    })
+}
+
+fn apply_priority_rpm_results(
+    slots: &mut [Value],
+    repair: &mut HashSet<u32>,
+    seen: &mut HashSet<u32>,
+    response: &bacnet_services::rpm::ReadPropertyMultipleACK,
+    oid: ObjectIdentifier,
+) {
+    for object in &response.list_of_read_access_results {
+        if object.object_identifier != oid {
+            continue;
+        }
+        for result in &object.list_of_results {
+            if result.property_identifier != PropertyIdentifier::PRIORITY_ARRAY {
+                continue;
+            }
+            let Some(level) = result.property_array_index else {
+                continue;
+            };
+            if !PRIORITY_LEVELS.contains(&level) {
+                continue;
+            }
+            let slot = &mut slots[(level - 1) as usize];
+            if !seen.insert(level) {
+                *slot = priority_slot_error(level, "duplicate priority-array result", "unknown");
+                repair.insert(level);
+                continue;
+            }
+            if let Some((class, code)) = result.error {
+                let kind = commandability_from_error_codes(class, code);
+                *slot = priority_slot_error(
+                    level,
+                    &format!("Error: class={class:?} code={code:?}"),
+                    if kind == Commandability::Unsupported {
+                        "unsupported"
+                    } else {
+                        "unknown"
+                    },
+                );
+                repair.insert(level);
+            } else if let Some(bytes) = &result.property_value {
+                match decode_application_value(bytes, 0) {
+                    Ok((pv, _)) => {
+                        *slot = priority_slot_value(level, &pv);
+                        repair.remove(&level);
+                    }
+                    Err(error) => {
+                        *slot = priority_slot_error(
+                            level,
+                            &format!("priority-array value decode failed: {error}"),
+                            "unknown",
+                        );
+                        repair.insert(level);
+                    }
+                }
+            } else {
+                *slot = priority_slot_unknown(level, "RPM result omitted value");
+                repair.insert(level);
+            }
+        }
+    }
+}
+
+fn priority_array_state(slots: &[Value]) -> &'static str {
+    if slots
+        .iter()
+        .any(|slot| matches!(slot["state"].as_str(), Some("value" | "null")))
+    {
+        return "supported";
+    }
+    if slots
+        .iter()
+        .any(|slot| slot["error_kind"].as_str() == Some("unsupported"))
+    {
+        return "unsupported";
+    }
+    "unknown"
+}
+
+fn push_bounded_error(errors: &mut Vec<String>, message: String) {
+    const MAX_DIAGNOSTIC_ERRORS: usize = 64;
+    if errors.len() < MAX_DIAGNOSTIC_ERRORS {
+        errors.push(message);
+    }
 }
 
 fn make_property_value(value: &Value, value_type: Option<&str>) -> Result<PropertyValue, String> {
@@ -1299,14 +1787,42 @@ fn make_property_value(value: &Value, value_type: Option<&str>) -> Result<Proper
     }
     if !vt.is_empty() {
         return match vt.as_str() {
-            "real" => Ok(PropertyValue::Real(value.as_f64().unwrap_or(0.0) as f32)),
-            "double" => Ok(PropertyValue::Double(value.as_f64().unwrap_or(0.0))),
-            "unsigned" => Ok(PropertyValue::Unsigned(value.as_u64().unwrap_or(0))),
-            "signed" => Ok(PropertyValue::Signed(value.as_i64().unwrap_or(0) as i32)),
-            "enumerated" => Ok(PropertyValue::Enumerated(value.as_u64().unwrap_or(0) as u32)),
-            "boolean" => Ok(PropertyValue::Boolean(value.as_bool().unwrap_or(false))),
+            "real" => Ok(PropertyValue::Real(
+                value
+                    .as_f64()
+                    .ok_or_else(|| "real value must be numeric".to_string())?
+                    as f32,
+            )),
+            "double" => {
+                Ok(PropertyValue::Double(value.as_f64().ok_or_else(|| {
+                    "double value must be numeric".to_string()
+                })?))
+            }
+            "unsigned" => Ok(PropertyValue::Unsigned(value.as_u64().ok_or_else(
+                || "unsigned value must be non-negative integer".to_string(),
+            )?)),
+            "signed" => Ok(PropertyValue::Signed(
+                value
+                    .as_i64()
+                    .ok_or_else(|| "signed value must be integer".to_string())?
+                    as i32,
+            )),
+            "enumerated" => Ok(PropertyValue::Enumerated(
+                value
+                    .as_u64()
+                    .ok_or_else(|| "enumerated value must be non-negative integer".to_string())?
+                    as u32,
+            )),
+            "boolean" => {
+                Ok(PropertyValue::Boolean(value.as_bool().ok_or_else(
+                    || "boolean value must be true or false".to_string(),
+                )?))
+            }
             "character_string" | "character-string" => Ok(PropertyValue::CharacterString(
-                value.as_str().unwrap_or("").to_string(),
+                value
+                    .as_str()
+                    .ok_or_else(|| "character_string value must be a string".to_string())?
+                    .to_string(),
             )),
             _ => Err(format!("unknown value_type {vt}")),
         };
@@ -1597,5 +2113,140 @@ mod oid_tests {
     fn normalize_oid_matches_python_contract() {
         let oid = ObjectIdentifier::new(ObjectType::ANALOG_OUTPUT, 2466).unwrap();
         assert_eq!(normalize_oid(&oid), "analog-output,2466");
+    }
+}
+
+#[cfg(test)]
+mod bacnet_correctness_tests {
+    use super::*;
+    use bacnet_types::enums::{ErrorClass, ErrorCode};
+    use std::time::Duration;
+
+    fn encoded(value: &PropertyValue) -> Vec<u8> {
+        let mut bytes = BytesMut::new();
+        encode_property_value(&mut bytes, value).expect("test value encodes");
+        bytes.to_vec()
+    }
+
+    fn result(
+        level: Option<u32>,
+        value: Option<&PropertyValue>,
+        error: Option<(ErrorClass, ErrorCode)>,
+    ) -> bacnet_services::rpm::ReadResultElement {
+        bacnet_services::rpm::ReadResultElement {
+            property_identifier: PropertyIdentifier::PRIORITY_ARRAY,
+            property_array_index: level,
+            property_value: value.map(encoded),
+            error,
+        }
+    }
+
+    fn empty_slots() -> (Vec<Value>, HashSet<u32>, HashSet<u32>) {
+        (
+            (1..=16)
+                .map(|level| priority_slot_unknown(level, "missing from RPM response"))
+                .collect(),
+            PRIORITY_LEVELS.collect(),
+            HashSet::new(),
+        )
+    }
+
+    #[test]
+    fn partial_priority_rpm_is_sixteen_typed_slots_and_not_all_null() {
+        let oid = ObjectIdentifier::new(ObjectType::ANALOG_VALUE, 7).unwrap();
+        let zero = PropertyValue::Real(0.0);
+        let false_value = PropertyValue::Boolean(false);
+        let null = PropertyValue::Null;
+        let response = bacnet_services::rpm::ReadPropertyMultipleACK {
+            list_of_read_access_results: vec![bacnet_services::rpm::ReadAccessResult {
+                object_identifier: oid,
+                list_of_results: vec![
+                    result(Some(1), Some(&zero), None),
+                    result(Some(2), Some(&false_value), None),
+                    result(Some(3), Some(&null), None),
+                    result(
+                        Some(4),
+                        None,
+                        Some((ErrorClass::PROPERTY, ErrorCode::UNKNOWN_PROPERTY)),
+                    ),
+                    result(Some(5), Some(&zero), None),
+                    // A malformed result must not create P0 or panic.
+                    result(Some(17), Some(&PropertyValue::Real(99.0)), None),
+                    // A duplicate makes P1 unknown until its bounded RP repair.
+                    result(Some(1), Some(&zero), None),
+                    result(None, Some(&zero), None),
+                ],
+            }],
+        };
+        let (mut slots, mut repair, mut seen) = empty_slots();
+        apply_priority_rpm_results(&mut slots, &mut repair, &mut seen, &response, oid);
+
+        assert_eq!(slots.len(), 16);
+        assert_eq!(
+            slots
+                .iter()
+                .map(|slot| slot["priority_level"].as_u64())
+                .collect::<Vec<_>>(),
+            (1..=16).map(Some).collect::<Vec<_>>()
+        );
+        assert_eq!(slots[1]["state"], "value");
+        assert_eq!(slots[1]["type"], "boolean");
+        assert_eq!(slots[1]["value"], false);
+        assert_eq!(slots[2]["state"], "null");
+        assert!(slots[2]["value"].is_null());
+        assert_eq!(slots[3]["state"], "error");
+        assert_eq!(slots[3]["error_kind"], "unsupported");
+        assert_eq!(slots[5]["state"], "unknown");
+        assert_eq!(slots[0]["state"], "error");
+        assert_eq!(priority_array_state(&slots), "supported");
+        assert!(slots.iter().any(|slot| slot["state"] == "unknown"));
+        assert!(slots.iter().any(|slot| slot["value"].as_f64() == Some(0.0)));
+    }
+
+    #[test]
+    fn empty_priority_rpm_is_unknown_for_every_slot() {
+        let oid = ObjectIdentifier::new(ObjectType::ANALOG_VALUE, 7).unwrap();
+        let response = bacnet_services::rpm::ReadPropertyMultipleACK {
+            list_of_read_access_results: Vec::new(),
+        };
+        let (mut slots, mut repair, mut seen) = empty_slots();
+        apply_priority_rpm_results(&mut slots, &mut repair, &mut seen, &response, oid);
+        assert_eq!(slots.len(), 16);
+        assert!(slots.iter().all(|slot| slot["state"] == "unknown"));
+        assert!(slots.iter().all(|slot| slot["type"] == "unknown"));
+        assert_eq!(priority_array_state(&slots), "unknown");
+    }
+
+    #[tokio::test]
+    async fn dropped_write_ack_is_unknown_after_one_attempt() {
+        let mut attempts = 0;
+        let result = write_once(&mut attempts, || async {
+            Err::<(), BacnetError>(BacnetError::Timeout(Duration::from_secs(1)))
+        })
+        .await;
+        let outcome = classify_write_error_result(&result);
+        assert_eq!(outcome, WriteOutcome::Unknown);
+        assert_eq!(attempts, 1, "an ambiguous write must never be resent");
+    }
+
+    #[test]
+    fn routed_write_target_keeps_router_and_remote_mac_distinct() {
+        let device = FieldDevice {
+            name: "routed-device".into(),
+            enabled: true,
+            device_instance: 7,
+            host: "192.0.2.10".into(),
+            port: 47808,
+            mstp_network: Some(2001),
+            mstp_mac: vec![42],
+            rpm_chunk: 10,
+            max_apdu: 206,
+            points: Vec::new(),
+        };
+        let target = routed_device_config(&device).expect("routed target");
+        assert_eq!(target.router_mac, encode_bip_mac([192, 0, 2, 10], 47808));
+        assert_eq!(target.remote_network, 2001);
+        assert_eq!(target.remote_mac, vec![42]);
+        assert_ne!(target.router_mac, target.remote_mac);
     }
 }

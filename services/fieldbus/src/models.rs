@@ -76,12 +76,12 @@ pub struct BacnetWriteRequest {
     #[validate(range(min = 1, max = 16))]
     pub priority: Option<u8>,
     pub value_type: Option<ValueTypeLiteral>,
-    #[serde(default = "default_true")]
+    /// Explicit operator approval is required for a live WriteProperty.
+    ///
+    /// An omitted approval is fail-closed as `false`, so it can only select
+    /// the dry-run path and can never become a live write.
+    #[serde(default)]
     pub approved: bool,
-}
-
-fn default_true() -> bool {
-    true
 }
 
 fn validate_bacnet_write(req: &BacnetWriteRequest) -> Result<(), ValidationError> {
@@ -295,5 +295,18 @@ mod tests {
             ..req
         };
         assert!(!unapproved.approved);
+    }
+
+    #[test]
+    fn write_approval_is_fail_closed_when_omitted() {
+        let body = serde_json::json!({
+            "device_instance": 5007,
+            "object_type": "analog-output",
+            "object_instance": 2466,
+            "value": 42.0,
+            "priority": 10
+        });
+        let request = serde_json::from_value::<BacnetWriteRequest>(body).expect("request parses");
+        assert!(!request.approved);
     }
 }

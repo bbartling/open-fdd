@@ -118,10 +118,10 @@ while :; do
                     'any(.points_with_overrides[]; .object_identifier==$oi and (.override_priority_levels|index($p)))' \
     && echo "  supervisory ok ($(jq -r '.points_with_overrides|length' <<<"$SUP" 2>/dev/null) overridden pts)" || echo "  ${RED}supervisory FAIL${RST}"
 
-  check write       "$(api -X POST "$BASE/bacnet/write" -d "{\"device_instance\":$DEV,\"object_type\":\"$OVR_TYPE\",\"object_instance\":$OVR_INST,\"value\":42.0,\"priority\":$WRITE_PRIORITY}")" \
+  check write       "$(api -X POST "$BASE/bacnet/write" -d "{\"device_instance\":$DEV,\"object_type\":\"$OVR_TYPE\",\"object_instance\":$OVR_INST,\"value\":42.0,\"priority\":$WRITE_PRIORITY,\"approved\":true}")" \
                     '.status=="success"' \
     && echo "  write ok" || echo "  ${RED}write FAIL${RST}"
-  check release     "$(api -X POST "$BASE/bacnet/write" -d "{\"device_instance\":$DEV,\"object_type\":\"$OVR_TYPE\",\"object_instance\":$OVR_INST,\"value\":null,\"priority\":$WRITE_PRIORITY}")" \
+  check release     "$(api -X POST "$BASE/bacnet/write" -d "{\"device_instance\":$DEV,\"object_type\":\"$OVR_TYPE\",\"object_instance\":$OVR_INST,\"value\":null,\"priority\":$WRITE_PRIORITY,\"approved\":true}")" \
                     '.released==true' \
     && echo "  release ok" || echo "  ${RED}release FAIL${RST}"
 
