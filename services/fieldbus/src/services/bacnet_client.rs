@@ -111,6 +111,9 @@ enum WriteVerificationFailure {
 struct WriteReadback {
     selected_priority: Option<PropertyValue>,
     property_value: PropertyValue,
+    effective_present_value: Option<PropertyValue>,
+    masked: Option<bool>,
+    winning_priority: Option<u8>,
 }
 
 impl WriteOutcome {
@@ -495,18 +498,15 @@ impl BacnetClientService {
                     None,
                 )
                 .await?;
-                if !released && present_value != *expected {
-                    return Err(WriteVerificationFailure::Mismatch(format!(
-                        "present-value readback mismatch: expected {} {}, got {} {}",
-                        property_value_tag(expected),
-                        property_value_to_json(expected),
-                        property_value_tag(&present_value),
-                        property_value_to_json(&present_value)
-                    )));
-                }
+                let (masked, winning_priority) = self
+                    .read_priority_masking(client, device_instance, oid, priority, released)
+                    .await;
                 return Ok(WriteReadback {
                     selected_priority: Some(selected),
-                    property_value: present_value,
+                    property_value: present_value.clone(),
+                    effective_present_value: Some(present_value),
+                    masked,
+                    winning_priority,
                 });
             }
         }
@@ -526,7 +526,43 @@ impl BacnetClientService {
         Ok(WriteReadback {
             selected_priority: None,
             property_value,
+            effective_present_value: None,
+            masked: None,
+            winning_priority: None,
         })
+    }
+
+    async fn read_priority_masking(
+        &self,
+        client: &BACnetClient<bacnet_transport::bip::BipTransport>,
+        device_instance: u32,
+        oid: ObjectIdentifier,
+        selected_priority: u8,
+        released: bool,
+    ) -> (Option<bool>, Option<u8>) {
+        let mut active_higher = None;
+        for level in 1..selected_priority {
+            let Ok(value) = Self::read_write_readback(
+                client,
+                device_instance,
+                oid,
+                PropertyIdentifier::PRIORITY_ARRAY,
+                Some(u32::from(level)),
+            )
+            .await
+            else {
+                return (None, None);
+            };
+            if value != PropertyValue::Null {
+                active_higher = Some(level);
+                break;
+            }
+        }
+        match active_higher {
+            Some(level) => (Some(true), Some(level)),
+            None if released => (Some(false), None),
+            None => (Some(false), Some(selected_priority)),
+        }
     }
 
     async fn read_write_readback(
@@ -2034,6 +2070,16 @@ fn write_readback_json(readback: &WriteReadback) -> Value {
     let mut value = json!({
         "property_value": property_value_to_json(&readback.property_value),
         "property_tag": property_value_tag(&readback.property_value),
+        "effective_present_value": readback
+            .effective_present_value
+            .as_ref()
+            .map(property_value_to_json),
+        "effective_present_value_tag": readback
+            .effective_present_value
+            .as_ref()
+            .map(property_value_tag),
+        "masked": readback.masked,
+        "winning_priority": readback.winning_priority,
     });
     if let Some(selected) = &readback.selected_priority {
         value["selected_priority"] = property_value_to_json(selected);

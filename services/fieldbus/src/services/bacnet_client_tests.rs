@@ -391,6 +391,7 @@ enum WriteVerificationMode {
     WrongIndex,
     TrailingBytes,
     Reject,
+    MaskedWrite,
 }
 
 fn response_frame(apdu: Apdu) -> Vec<u8> {
@@ -524,17 +525,39 @@ async fn spawn_write_verifier(
                     let mut ack_oid = expected_oid;
                     let mut ack_pid = read.property_identifier;
                     let mut ack_index = read.property_array_index;
-                    let is_selected = read.property_identifier
-                        == PropertyIdentifier::PRIORITY_ARRAY
-                        && read.property_array_index == Some(8);
-                    let mut value = if is_selected {
-                        if matches!(mode, WriteVerificationMode::CorrectRelease) {
-                            PropertyValue::Null
+                    let selected_level = if matches!(mode, WriteVerificationMode::MaskedWrite) {
+                        10
+                    } else {
+                        8
+                    };
+                    let is_priority =
+                        read.property_identifier == PropertyIdentifier::PRIORITY_ARRAY;
+                    let is_selected =
+                        is_priority && read.property_array_index == Some(selected_level);
+                    let mut value = if is_priority {
+                        if matches!(mode, WriteVerificationMode::MaskedWrite) {
+                            if read.property_array_index == Some(8) {
+                                PropertyValue::Real(55.0)
+                            } else if is_selected {
+                                PropertyValue::Real(42.0)
+                            } else {
+                                PropertyValue::Null
+                            }
+                        } else if is_selected {
+                            if matches!(mode, WriteVerificationMode::CorrectRelease) {
+                                PropertyValue::Null
+                            } else {
+                                PropertyValue::Real(42.0)
+                            }
                         } else {
-                            PropertyValue::Real(42.0)
+                            PropertyValue::Null
                         }
                     } else {
-                        PropertyValue::Real(42.0)
+                        PropertyValue::Real(if matches!(mode, WriteVerificationMode::MaskedWrite) {
+                            55.0
+                        } else {
+                            42.0
+                        })
                     };
                     match mode {
                         WriteVerificationMode::Mismatch if is_selected => {
@@ -564,7 +587,11 @@ async fn spawn_write_verifier(
     (write_count, read_count, task)
 }
 
-async fn run_verified_write(mode: WriteVerificationMode, release: bool) -> (Value, usize, usize) {
+async fn run_verified_write(
+    mode: WriteVerificationMode,
+    release: bool,
+    priority: u8,
+) -> (Value, usize, usize) {
     let socket = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
         .await
         .expect("bind verification receiver");
@@ -583,7 +610,7 @@ async fn run_verified_write(mode: WriteVerificationMode, release: bool) -> (Valu
             7,
             if release { None } else { Some(json!(42.0)) },
             "present-value",
-            Some(8),
+            Some(priority),
             Some("real"),
         )
         .await
@@ -813,12 +840,15 @@ async fn production_write_timeout_sends_one_routed_request_with_retries_disabled
 #[tokio::test]
 async fn acknowledged_write_requires_selected_slot_and_present_value_readback() {
     let (result, write_count, read_count) =
-        run_verified_write(WriteVerificationMode::CorrectWrite, false).await;
+        run_verified_write(WriteVerificationMode::CorrectWrite, false, 8).await;
     assert_eq!(
         write_count, 1,
         "verification must never retransmit WriteProperty"
     );
-    assert_eq!(read_count, 2, "verification reads the selected slot and PV");
+    assert_eq!(
+        read_count, 9,
+        "verification reads higher slots, selected slot and PV"
+    );
     assert_eq!(result["ok"], true, "unexpected write result: {result}");
     assert_eq!(result["status"], "success");
     assert_eq!(result["outcome"], "acknowledged");
@@ -831,9 +861,9 @@ async fn acknowledged_write_requires_selected_slot_and_present_value_readback() 
 #[tokio::test]
 async fn acknowledged_release_requires_null_selected_slot_readback() {
     let (result, write_count, read_count) =
-        run_verified_write(WriteVerificationMode::CorrectRelease, true).await;
+        run_verified_write(WriteVerificationMode::CorrectRelease, true, 8).await;
     assert_eq!(write_count, 1);
-    assert_eq!(read_count, 2);
+    assert_eq!(read_count, 9);
     assert_eq!(result["ok"], true, "unexpected release result: {result}");
     assert_eq!(result["released"], true);
     assert_eq!(result["verified"], true);
@@ -842,9 +872,28 @@ async fn acknowledged_release_requires_null_selected_slot_readback() {
 }
 
 #[tokio::test]
+async fn lower_priority_write_is_verified_when_higher_slot_masks_effective_pv() {
+    let (result, write_count, read_count) =
+        run_verified_write(WriteVerificationMode::MaskedWrite, false, 10).await;
+    assert_eq!(write_count, 1);
+    assert_eq!(read_count, 10);
+    assert_eq!(
+        result["ok"], true,
+        "unexpected masked write result: {result}"
+    );
+    assert_eq!(result["verified"], true);
+    assert_eq!(result["readback"]["selected_priority"], 42.0);
+    assert_eq!(result["readback"]["selected_priority_tag"], "real");
+    assert_eq!(result["readback"]["effective_present_value"], 55.0);
+    assert_eq!(result["readback"]["effective_present_value_tag"], "real");
+    assert_eq!(result["readback"]["masked"], true);
+    assert_eq!(result["readback"]["winning_priority"], 8);
+}
+
+#[tokio::test]
 async fn acknowledged_write_mismatch_is_failed_without_resend() {
     let (result, write_count, read_count) =
-        run_verified_write(WriteVerificationMode::Mismatch, false).await;
+        run_verified_write(WriteVerificationMode::Mismatch, false, 8).await;
     assert_eq!(write_count, 1);
     assert_eq!(
         read_count, 1,
@@ -861,7 +910,7 @@ async fn acknowledged_write_mismatch_is_failed_without_resend() {
 #[tokio::test]
 async fn acknowledged_write_readback_timeout_is_unknown_without_resend() {
     let (result, write_count, read_count) =
-        run_verified_write(WriteVerificationMode::ReadbackTimeout, false).await;
+        run_verified_write(WriteVerificationMode::ReadbackTimeout, false, 8).await;
     assert_eq!(write_count, 1);
     assert_eq!(read_count, 1);
     assert_eq!(result["ok"], false, "unexpected timeout result: {result}");
@@ -875,7 +924,7 @@ async fn acknowledged_write_readback_timeout_is_unknown_without_resend() {
 #[tokio::test]
 async fn rejected_release_is_not_reported_as_released_or_verified() {
     let (result, write_count, read_count) =
-        run_verified_write(WriteVerificationMode::Reject, true).await;
+        run_verified_write(WriteVerificationMode::Reject, true, 8).await;
     assert_eq!(write_count, 1);
     assert_eq!(
         read_count, 0,
@@ -897,7 +946,7 @@ async fn readback_rejects_wrong_correlation_and_trailing_bytes() {
         WriteVerificationMode::WrongIndex,
         WriteVerificationMode::TrailingBytes,
     ] {
-        let (result, write_count, read_count) = run_verified_write(mode, false).await;
+        let (result, write_count, read_count) = run_verified_write(mode, false, 8).await;
         assert_eq!(
             write_count, 1,
             "unexpected write count for malformed readback"
