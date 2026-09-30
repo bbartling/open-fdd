@@ -1,8 +1,10 @@
 -- oat_meteo_fault.sql — BAS OAT vs meteo reference (|Δ| > threshold) + confirm
 -- Prefer equipment web_oa_t (pandas); fall back to a weather join only when the
 -- equipment has no web reference. `weather` may resolve to a view spanning
--- several weather-ish equipment, so collapse it to one row per timestamp first —
+-- several weather equipment rows, so collapse it to one row per timestamp first —
 -- otherwise the join fans out and multiplies fault_hours.
+-- Targeting is registry equipment_kinds (ahu) plus the package stamp applied
+-- after this query. This file does not filter equipment_id by prefix or LIKE.
 WITH wx AS (
   SELECT timestamp_utc, MAX(oa_t) AS wx_oa_t
   FROM weather
@@ -19,7 +21,6 @@ joined AS (
   LEFT JOIN wx
     ON h.timestamp_utc = wx.timestamp_utc
    AND h.web_oa_t IS NULL
-  WHERE h.equipment_id LIKE 'AHU%' OR h.equipment_id LIKE 'AHU_%'
 ),
 base AS (
   SELECT

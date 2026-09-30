@@ -1,3 +1,9 @@
+## 2026-09-30 — Equipment selection by stamp (#1037–#1043, not FQ)
+
+- OAT-METEO no longer filters `equipment_id LIKE 'AHU%'`. The rule targets registry kind `ahu` after the query, so a stamped opaque AHU stays in scope and an `AHU*` id stamped `vav` does not.
+- Parent AHU links come from package `parentAhu` / `parent_ahu` (exact sibling id). Id tokens and a single AHU in the building are not a parent. Analytics topology omits the link unless `equipment_parents.json` names it. A package that declares no parents removes that file so an older link does not remain.
+- RCx, mechanical-cooling, weather, and overview cohorts on this tip already select by stamp, registry kind, and mapped roles. No VERSION bump. Tip+field proof is still open.
+
 ## 2026-09-30 — Pandas / WattLab stamp-only cohorts (#1045, #1046, #1047) (not FQ)
 
 - VAV health reads the role-map stamp. AHU report admission uses the canonical stamp, including nested `equipType`, and does not invent `AHU` when the stamp is missing.
