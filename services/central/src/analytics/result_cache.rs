@@ -141,6 +141,8 @@ pub async fn serve_with(
     };
     if let Err(err) = write_result(root, &key, &table, &provenance) {
         tracing::warn!(error = %err, query_id, "analytics result parquet write failed");
+    } else if let Err(err) = fdd_store::enforce_budget_throttled(root, 60) {
+        tracing::warn!(error = %err, "local data budget enforcement failed");
     }
     let cache = cache_status(false, false, started, &key, &provenance, historian_order);
     Ok(ServedAnalytics { envelope, cache })
@@ -220,8 +222,9 @@ fn config_material(req: &AnalyticsRequest) -> String {
     let mut equipment = req.query.equipment_ids.clone().unwrap_or_default();
     equipment.sort();
     format!(
-        "req_qv={}\ndt_min={}\ngap={}\nmax_points={}\nequipment={}\nseries={}",
+        "req_qv={}\nread_tenant={}\ndt_min={}\ngap={}\nmax_points={}\nequipment={}\nseries={}",
         req.query.query_version.as_deref().unwrap_or(""),
+        req.read_tenant_id.as_deref().unwrap_or(""),
         req.dt_min_f.map(|v| v.to_string()).unwrap_or_default(),
         req.max_gap_seconds
             .map(|v| v.to_string())

@@ -1,3 +1,15 @@
+## 2026-09-30 — Equipment selection by stamp (#1037–#1043, not FQ)
+
+- OAT-METEO no longer filters `equipment_id LIKE 'AHU%'`. The rule targets registry kind `ahu` after the query, so a stamped opaque AHU stays in scope and an `AHU*` id stamped `vav` does not.
+- Parent AHU links come from package `parentAhu` / `parent_ahu` (exact sibling id). Id tokens and a single AHU in the building are not a parent. Analytics topology omits the link unless `equipment_parents.json` names it. A package that declares no parents removes that file so an older link does not remain.
+- RCx, mechanical-cooling, weather, and overview cohorts on this tip already select by stamp, registry kind, and mapped roles. No VERSION bump. Tip+field proof is still open.
+
+## 2026-09-30 — Tip 3.5.58 and PyPI 4.4.9 (not FQ)
+
+- Product VERSION **3.5.58**. PyPI `open-fdd` **4.4.9** publishes the FCU / `zone_other` pandas catalog already on master (#1071–#1074).
+- `.github/workflows/publish-open-fdd.yml` publishes on tag `open-fdd-v4.4.9`. This change does not create that tag.
+- Soft-OPEN. No Railway re-pin and no FQ claim.
+
 ## 2026-09-30 — Pandas / WattLab stamp-only cohorts (#1045, #1046, #1047) (not FQ)
 
 - VAV health reads the role-map stamp. AHU report admission uses the canonical stamp, including nested `equipType`, and does not invent `AHU` when the stamp is missing.
@@ -1152,3 +1164,9 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 - Added a one-active/one-waiting background scan scheduler. Discovery and supervisory BACnet calls acquire the bus per network chunk, permitting interactive reads between slow/offline scan operations while bounding concurrent scan/socket admission and supporting cancellation.
 - Added loopback fault-injection coverage for real production write/read paths, priority-array RP repair correlation, RPM-failure to valid RP commandability fallback, scheduler admission/cancellation/fairness, and route-level zero-wire rejection of invalid numeric and unprioritized NULL writes. Updated fieldbus smoke/bench/soak checks to require readback evidence.
 - All evidence is synthetic/read-only at the network boundary; no live BACnet WriteProperty/release, deployment, merge, UI work or issue closure was performed.
+
+## 2026-09-30 — BACnet discovery-port ownership correction
+
+- Merged current `origin/master` (`32a6d447`) while preserving the fieldbus correctness work. Fixed the discovery implementation contract so unconfigured point discovery and supervisory discovery hold a real discovery-port guard across the scan and the supervisory priority-read client; cancellation and client shutdown release it by scope drop.
+- Added a synthetic unconfigured-device integration test with a loopback I-Am/object-list responder. It proves an interactive Who-Is queues behind an active scan, receives the correct device after scan cancellation, and allows a queued scan to make eventual progress with no competing discovery receiver.
+- The test uses only ephemeral localhost sockets and read-only BACnet frames. No live device writes, deployment, merge-to-master, UI work or issue closure was performed.

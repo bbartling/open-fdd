@@ -308,9 +308,9 @@ mod tests {
 
     #[test]
     fn fetch_with_injected_opener_writes_cache() {
-        let _lock = crate::jobs::WORKSPACE_ENV_TEST_LOCK.lock().unwrap();
+        let _lock = crate::jobs::lock_workspace_env();
         let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("OPENFDD_WORKSPACE", dir.path());
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(dir.path());
         let campus = Campus {
             campus_id: "test_campus".into(),
             label: "Test".into(),
@@ -337,6 +337,5 @@ mod tests {
         assert!(weather_cache_path("test_campus").is_file());
         let jan = cache.months.get("2023-01").unwrap();
         assert!((jan.hdd - 35.0).abs() < 1e-6);
-        std::env::remove_var("OPENFDD_WORKSPACE");
     }
 }

@@ -1097,20 +1097,19 @@ impl BacnetClientService {
             .acquire()
             .await
             .map_err(|_| "BACnet scan scheduler closed".to_string())?;
-        self.point_discovery_impl(device_instance, false).await
+        let mut discovery_port_guard = self
+            .acquire_discovery_port(self.find_device(device_instance))
+            .await;
+        self.point_discovery_impl(device_instance, &mut discovery_port_guard)
+            .await
     }
 
     async fn point_discovery_impl(
         &self,
         device_instance: u32,
-        discovery_port_held: bool,
+        _discovery_port_guard: &mut Option<MutexGuard<'_, ()>>,
     ) -> Result<Value, String> {
         let device = self.find_device(device_instance);
-        let _discovery_port_guard = if discovery_port_held {
-            None
-        } else {
-            self.acquire_discovery_port(device).await
-        };
         let client = self.new_client(device).await?;
         let result = async {
             self.prepare_scan(&client, device, device_instance).await?;
@@ -1714,7 +1713,12 @@ impl BacnetClientService {
             .acquire()
             .await
             .map_err(|_| "BACnet scan scheduler closed".to_string())?;
-        let disc = self.point_discovery_impl(device_instance).await?;
+        let mut discovery_port_guard = self
+            .acquire_discovery_port(self.find_device(device_instance))
+            .await;
+        let disc = self
+            .point_discovery_impl(device_instance, &mut discovery_port_guard)
+            .await?;
         let device_address = disc["device_address"].clone();
         let objects = disc["objects"].as_array().cloned().unwrap_or_default();
 

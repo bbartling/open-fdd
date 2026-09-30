@@ -1,11 +1,17 @@
 use super::*;
-use bacnet_encoding::apdu::{decode_apdu, encode_apdu, Apdu, ComplexAck, ErrorPdu, SimpleAck};
+use bacnet_encoding::apdu::{
+    decode_apdu, encode_apdu, Apdu, ComplexAck, ErrorPdu, SimpleAck, UnconfirmedRequest,
+};
 use bacnet_encoding::npdu::{decode_npdu, encode_npdu, Npdu, NpduAddress};
 use bacnet_encoding::primitives::encode_property_value;
 use bacnet_services::read_property::{ReadPropertyACK, ReadPropertyRequest};
 use bacnet_services::rpm::{ReadAccessResult, ReadPropertyMultipleACK, ReadResultElement};
+use bacnet_services::who_is::IAmRequest;
 use bacnet_transport::bvll::{decode_bvll, encode_bvll};
-use bacnet_types::enums::{BvlcFunction, ConfirmedServiceChoice, ErrorClass, ErrorCode};
+use bacnet_types::enums::{
+    BvlcFunction, ConfirmedServiceChoice, ErrorClass, ErrorCode, Segmentation,
+    UnconfirmedServiceChoice,
+};
 use bytes::{Bytes, BytesMut};
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
@@ -395,6 +401,10 @@ enum WriteVerificationMode {
 }
 
 fn response_frame(apdu: Apdu) -> Vec<u8> {
+    response_frame_with_function(apdu, BvlcFunction::ORIGINAL_UNICAST_NPDU)
+}
+
+fn response_frame_with_function(apdu: Apdu, function: BvlcFunction) -> Vec<u8> {
     let mut apdu_bytes = BytesMut::new();
     encode_apdu(&mut apdu_bytes, &apdu).expect("encode fake APDU");
     let npdu = Npdu {
@@ -405,9 +415,141 @@ fn response_frame(apdu: Apdu) -> Vec<u8> {
     let mut npdu_bytes = BytesMut::new();
     encode_npdu(&mut npdu_bytes, &npdu).expect("encode fake NPDU");
     let mut frame = BytesMut::new();
-    encode_bvll(&mut frame, BvlcFunction::ORIGINAL_UNICAST_NPDU, &npdu_bytes)
-        .expect("encode fake BVLL");
+    encode_bvll(&mut frame, function, &npdu_bytes).expect("encode fake BVLL");
     frame.to_vec()
+}
+
+fn i_am_frame(device_instance: u32) -> Vec<u8> {
+    let mut service = BytesMut::new();
+    IAmRequest {
+        object_identifier: ObjectIdentifier::new(ObjectType::DEVICE, device_instance)
+            .expect("test I-Am device identifier"),
+        max_apdu_length: 480,
+        segmentation_supported: Segmentation::NONE,
+        vendor_id: 999,
+    }
+    .encode(&mut service);
+    response_frame_with_function(
+        Apdu::UnconfirmedRequest(UnconfirmedRequest {
+            service_choice: UnconfirmedServiceChoice::I_AM,
+            service_request: service.freeze(),
+        }),
+        // The synthetic settings use 127.0.0.1 as the directed broadcast
+        // address. A wildcard discovery client accepts this BVLL function
+        // even though loopback is not listed as a host unicast interface.
+        BvlcFunction::ORIGINAL_BROADCAST_NPDU,
+    )
+}
+
+fn object_list_length_frame(
+    request: &bacnet_encoding::apdu::ConfirmedRequest,
+    device_instance: u32,
+) -> Vec<u8> {
+    let device_oid = ObjectIdentifier::new(ObjectType::DEVICE, device_instance)
+        .expect("test object-list device identifier");
+    read_property_ack_frame_with_function(
+        request,
+        device_oid,
+        PropertyIdentifier::OBJECT_LIST,
+        Some(0),
+        encoded(&PropertyValue::Unsigned(1)),
+        BvlcFunction::ORIGINAL_BROADCAST_NPDU,
+    )
+}
+
+fn object_list_index_frame(
+    request: &bacnet_encoding::apdu::ConfirmedRequest,
+    device_instance: u32,
+) -> Vec<u8> {
+    let device_oid = ObjectIdentifier::new(ObjectType::DEVICE, device_instance)
+        .expect("test object-list device identifier");
+    let mut service = BytesMut::new();
+    ReadPropertyMultipleACK {
+        list_of_read_access_results: vec![ReadAccessResult {
+            object_identifier: device_oid,
+            list_of_results: vec![ReadResultElement {
+                property_identifier: PropertyIdentifier::OBJECT_LIST,
+                property_array_index: Some(1),
+                property_value: Some(encoded(&PropertyValue::ObjectIdentifier(device_oid))),
+                error: None,
+            }],
+        }],
+    }
+    .encode(&mut service);
+    response_frame_with_function(
+        Apdu::ComplexAck(ComplexAck {
+            segmented: false,
+            more_follows: false,
+            invoke_id: request.invoke_id,
+            sequence_number: None,
+            proposed_window_size: None,
+            service_choice: ConfirmedServiceChoice::READ_PROPERTY_MULTIPLE,
+            service_ack: Bytes::from(service.to_vec()),
+        }),
+        BvlcFunction::ORIGINAL_BROADCAST_NPDU,
+    )
+}
+
+async fn spawn_unconfigured_device(
+    socket: Arc<UdpSocket>,
+    discovery_port: u16,
+    device_instance: u32,
+    response_delay: Duration,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        // Repeated I-Am datagrams model a device answering each Who-Is. They
+        // are sent through a separate ephemeral socket, so the discovery
+        // client is the only receiver of the hosted discovery port.
+        let iam = i_am_frame(device_instance);
+        let iam_sender = Arc::clone(&socket);
+        let iam_task = tokio::spawn(async move {
+            for _ in 0..120 {
+                let _ = iam_sender
+                    .send_to(&iam, (Ipv4Addr::LOCALHOST, discovery_port))
+                    .await;
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        });
+
+        let mut buffer = [0u8; 4096];
+        loop {
+            let Ok(Ok((len, peer))) =
+                timeout(Duration::from_secs(3), socket.recv_from(&mut buffer)).await
+            else {
+                break;
+            };
+            let Some(bvll) = decode_bvll(&buffer[..len]).ok() else {
+                continue;
+            };
+            let Some(npdu) = decode_npdu(bvll.payload).ok() else {
+                continue;
+            };
+            let Ok(Apdu::ConfirmedRequest(request)) = decode_apdu(npdu.payload) else {
+                continue;
+            };
+            let response = match request.service_choice {
+                ConfirmedServiceChoice::READ_PROPERTY => {
+                    let Ok(read) = ReadPropertyRequest::decode(&request.service_request) else {
+                        continue;
+                    };
+                    if read.property_identifier != PropertyIdentifier::OBJECT_LIST
+                        || read.property_array_index != Some(0)
+                    {
+                        continue;
+                    }
+                    object_list_length_frame(&request, device_instance)
+                }
+                ConfirmedServiceChoice::READ_PROPERTY_MULTIPLE => {
+                    object_list_index_frame(&request, device_instance)
+                }
+                _ => continue,
+            };
+            tokio::time::sleep(response_delay).await;
+            let _ = socket.send_to(&response, peer).await;
+        }
+        iam_task.abort();
+        let _ = iam_task.await;
+    })
 }
 
 fn simple_ack_frame(request: &bacnet_encoding::apdu::ConfirmedRequest) -> Vec<u8> {
@@ -434,6 +576,24 @@ fn read_property_ack_frame(
     property_array_index: Option<u32>,
     property_value: Vec<u8>,
 ) -> Vec<u8> {
+    read_property_ack_frame_with_function(
+        request,
+        object_identifier,
+        property_identifier,
+        property_array_index,
+        property_value,
+        BvlcFunction::ORIGINAL_UNICAST_NPDU,
+    )
+}
+
+fn read_property_ack_frame_with_function(
+    request: &bacnet_encoding::apdu::ConfirmedRequest,
+    object_identifier: ObjectIdentifier,
+    property_identifier: PropertyIdentifier,
+    property_array_index: Option<u32>,
+    property_value: Vec<u8>,
+    function: BvlcFunction,
+) -> Vec<u8> {
     let mut service = BytesMut::new();
     ReadPropertyACK {
         object_identifier,
@@ -442,15 +602,18 @@ fn read_property_ack_frame(
         property_value,
     }
     .encode(&mut service);
-    response_frame(Apdu::ComplexAck(ComplexAck {
-        segmented: false,
-        more_follows: false,
-        invoke_id: request.invoke_id,
-        sequence_number: None,
-        proposed_window_size: None,
-        service_choice: ConfirmedServiceChoice::READ_PROPERTY,
-        service_ack: Bytes::from(service.to_vec()),
-    }))
+    response_frame_with_function(
+        Apdu::ComplexAck(ComplexAck {
+            segmented: false,
+            more_follows: false,
+            invoke_id: request.invoke_id,
+            sequence_number: None,
+            proposed_window_size: None,
+            service_choice: ConfirmedServiceChoice::READ_PROPERTY,
+            service_ack: Bytes::from(service.to_vec()),
+        }),
+        function,
+    )
 }
 
 fn verification_test_config(port: u16) -> PathBuf {
@@ -1214,5 +1377,101 @@ async fn scan_scheduler_bounds_admission_and_releases_permit_on_cancellation() {
         .await
         .expect("offline discovery must complete within its bounded retries")
         .expect("discovery task should not panic");
+    let _ = std::fs::remove_file(config);
+}
+
+#[tokio::test]
+async fn unconfigured_scan_owns_discovery_port_across_interactive_who_is_and_recovers() {
+    let discovery_port_socket = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
+        .await
+        .expect("reserve synthetic discovery port");
+    let discovery_port = discovery_port_socket
+        .local_addr()
+        .expect("synthetic discovery port address")
+        .port();
+    drop(discovery_port_socket);
+
+    let device_socket = Arc::new(
+        UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
+            .await
+            .expect("bind synthetic unconfigured device"),
+    );
+    let config = std::env::temp_dir().join(format!(
+        "openfdd-bacnet-unconfigured-ownership-{}-{}.toml",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock after epoch")
+            .as_nanos()
+    ));
+    std::fs::write(&config, "devices = []\n").expect("write empty field-device catalog");
+    let mut settings = write_test_settings(config.clone());
+    settings.bacnet_server.port = discovery_port;
+    settings.bacnet_client.whois_timeout_secs = 0.20;
+    settings.bacnet_client.apdu_timeout_ms = 500;
+    let service = Arc::new(
+        BacnetClientService::new(settings).expect("construct unconfigured BACnet service"),
+    );
+    let fake_device = spawn_unconfigured_device(
+        Arc::clone(&device_socket),
+        discovery_port,
+        5016,
+        Duration::from_millis(80),
+    )
+    .await;
+
+    // The scan owns the hosted Who-Is receive port during its whole session,
+    // including the response window. An interactive Who-Is must wait rather
+    // than create a second SO_REUSEADDR receiver that could steal I-Am data.
+    let first_scan = tokio::spawn({
+        let service = Arc::clone(&service);
+        async move { service.point_discovery(5016).await }
+    });
+    tokio::time::sleep(Duration::from_millis(60)).await;
+    let mut interactive = tokio::spawn({
+        let service = Arc::clone(&service);
+        async move { service.who_is(Some(5016), Some(5016)).await }
+    });
+    assert!(
+        timeout(Duration::from_millis(100), &mut interactive)
+            .await
+            .is_err(),
+        "interactive discovery must queue behind the unconfigured scan port owner"
+    );
+
+    // Queue another scan, then cancel the active one. Both the discovery-port
+    // mutex and scan admission must release so the interactive request gets a
+    // valid I-Am and the queued scan eventually gets its own session.
+    let queued_scan = tokio::spawn({
+        let service = Arc::clone(&service);
+        async move { service.point_discovery(5016).await }
+    });
+    first_scan.abort();
+    let _ = first_scan.await;
+
+    let who_is = timeout(Duration::from_secs(2), &mut interactive)
+        .await
+        .expect("interactive Who-Is should progress after cancellation")
+        .expect("interactive Who-Is task should not panic")
+        .expect("interactive Who-Is should receive the synthetic I-Am");
+    assert_eq!(
+        who_is.len(),
+        1,
+        "unexpected filtered Who-Is response: {who_is:?}"
+    );
+    assert_eq!(who_is[0]["device_instance"], 5016);
+
+    let scan = timeout(Duration::from_secs(3), queued_scan)
+        .await
+        .expect("queued unconfigured scan should eventually progress")
+        .expect("queued scan task should not panic")
+        .expect("queued scan should receive object-list responses");
+    assert_eq!(scan["device_instance"], 5016);
+    assert!(scan["objects"].as_array().is_some_and(Vec::is_empty));
+    assert_eq!(scan["object_list_complete"], true);
+
+    fake_device.abort();
+    let _ = fake_device.await;
+    drop(device_socket);
     let _ = std::fs::remove_file(config);
 }

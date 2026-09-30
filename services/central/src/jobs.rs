@@ -49,9 +49,15 @@ pub fn workspace_root() -> PathBuf {
     PathBuf::from("workspace")
 }
 
-/// Serializes unit tests that mutate ``OPENFDD_WORKSPACE`` (jobs + eplus_runner).
+/// Serializes unit tests that mutate `OPENFDD_WORKSPACE`.
+///
+/// Same process lock as `crate::test_env_lock::lock_env`. A separate mutex let
+/// ingest and storage tests clear the variable while a fuel test still expected
+/// its temp workspace, so campus lookup fell back to `workspace/data/fuel/...`.
 #[cfg(test)]
-pub(crate) static WORKSPACE_ENV_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+pub(crate) fn lock_workspace_env() -> std::sync::MutexGuard<'static, ()> {
+    crate::test_env_lock::lock_env()
+}
 
 pub fn jobs_root() -> PathBuf {
     let root = workspace_root().join("jobs");
@@ -854,17 +860,12 @@ mod tests {
     use super::*;
 
     fn with_tmp_ws<F: FnOnce(PathBuf)>(f: F) {
-        let _g = WORKSPACE_ENV_TEST_LOCK.lock().unwrap();
+        let _g = lock_workspace_env();
         let dir = std::env::temp_dir().join(format!("openfdd-jobs-{}", Uuid::new_v4()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        let prev = std::env::var("OPENFDD_WORKSPACE").ok();
-        std::env::set_var("OPENFDD_WORKSPACE", &dir);
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(&dir);
         f(dir.clone());
-        match prev {
-            Some(v) => std::env::set_var("OPENFDD_WORKSPACE", v),
-            None => std::env::remove_var("OPENFDD_WORKSPACE"),
-        }
         let _ = fs::remove_dir_all(&dir);
     }
 

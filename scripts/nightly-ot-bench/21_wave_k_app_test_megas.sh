@@ -25,10 +25,23 @@ cget() {
 }
 
 FAIL=0
+PRODUCT=0
+SOFT=0
 record() {
   local id="$1" ok="$2" detail="$3"
   echo "$id ok=$ok $detail" | tee -a "$LOG"
-  [[ "$ok" == "1" ]] || FAIL=1
+  if [[ "$ok" != "1" ]]; then
+    FAIL=1
+    PRODUCT=1
+  fi
+}
+# Missing historian roles (AV9101/9102 not published) stay field-catalog Soft-OPEN.
+# A present column with no values is a product fail. Soft-OPEN is not a PASS.
+record_soft() {
+  local id="$1" detail="$2"
+  echo "$id ok=0 soft_open=1 field_catalog $detail" | tee -a "$LOG"
+  FAIL=1
+  SOFT=$((SOFT + 1))
 }
 
 # 1) Lakeside sensor-faults matrix discovers historian equipment
@@ -49,31 +62,51 @@ echo "$body" >"$ART/wave_k_inspect_loopback.json"
 eval "$(echo "$body" | python3 -c '
 import json,sys
 a=(json.load(sys.stdin).get("analytics") or {})
+cov=a.get("coverage") or {}
+plot=set(cov.get("plottable_columns") or [])
 pts=a.get("points") or []
 def n(k): return sum(1 for p in pts if p.get(k) is not None)
+def has(k): return 1 if k in plot else 0
 print("zt=%d" % n("zone_t"))
 print("oa=%d" % n("oa_t"))
 print("rh=%d" % n("zone_rh"))
 print("n=%d" % len(pts))
+print("zone_col=%d" % has("zone_t"))
+print("oa_col=%d" % has("oa_t"))
+print("rh_col=%d" % has("zone_rh"))
 ')"
 if [[ "${zt:-0}" -gt 0 && "${oa:-0}" -gt 0 ]]; then
   record mqtt_zone_and_oa 1 "zone_t=$zt oa_t=$oa n=$n"
+elif [[ "${zone_col:-0}" == "1" && "${oa_col:-0}" == "1" ]]; then
+  record mqtt_zone_and_oa 0 "columns present zone_t=$zt oa_t=$oa n=$n"
 else
-  record mqtt_zone_and_oa 0 "zone_t=$zt oa_t=$oa n=$n"
+  record_soft mqtt_zone_and_oa "zone_t/oa_t column absent zone_t=${zt:-0} oa_t=${oa:-0} n=${n:-0}"
 fi
 if [[ "${rh:-0}" -gt 0 ]]; then
   record mqtt_zone_rh 1 "zone_rh=$rh"
+elif [[ "${rh_col:-0}" == "1" ]]; then
+  record mqtt_zone_rh 0 "zone_rh column present value=0"
 else
-  record mqtt_zone_rh 0 "zone_rh=$rh (need fieldbus tip + AV9102 soak)"
+  record_soft mqtt_zone_rh "zone_rh column absent (fieldbus tip + AV9102)"
 fi
 
 body="$(cpost /api/analytics/inspect '{"building_id":"bldg2","equipment_ids":["hosted-weather"],"max_points":50}')"
 echo "$body" >"$ART/wave_k_inspect_hosted_weather.json"
-web="$(echo "$body" | python3 -c 'import json,sys; a=(json.load(sys.stdin).get("analytics") or {}); pts=a.get("points") or []; print(sum(1 for p in pts if p.get("web_oa_t") is not None))')"
+eval "$(echo "$body" | python3 -c '
+import json,sys
+a=(json.load(sys.stdin).get("analytics") or {})
+cov=a.get("coverage") or {}
+plot=set(cov.get("plottable_columns") or [])
+pts=a.get("points") or []
+print("web=%d" % sum(1 for p in pts if p.get("web_oa_t") is not None))
+print("web_col=%d" % (1 if "web_oa_t" in plot else 0))
+')"
 if [[ "${web:-0}" -gt 0 ]]; then
   record mqtt_web_oa_t 1 "web_oa_t=$web"
+elif [[ "${web_col:-0}" == "1" ]]; then
+  record mqtt_web_oa_t 0 "web_oa_t column present value=0"
 else
-  record mqtt_web_oa_t 0 "web_oa_t=$web"
+  record_soft mqtt_web_oa_t "web_oa_t column absent"
 fi
 
 # 3) Data model — bldg2 historian roles non-empty; wrong-site eq fails closed
@@ -105,12 +138,17 @@ else
   record mapping_cross_site 0 "ok=$ok_cross error=${err_cross:-none}"
 fi
 
-jq -n --argjson fail "$FAIL" '{gate:"21_wave_k_app_test_megas", fail:$fail}' \
+jq -n --argjson fail "$FAIL" --argjson product "$PRODUCT" --argjson soft "$SOFT" \
+  '{gate:"21_wave_k_app_test_megas", fail:$fail, product_fail:$product, field_catalog_soft_open:$soft}' \
   >"$ART/wave_k_app_test_megas.json"
 
 if [[ "$FAIL" -eq 0 ]]; then
   ok "Wave K app-test MEGAs PASS"
   exit 0
 fi
-bad "Wave K app-test MEGAs FAIL — see $LOG"
+if [[ "$PRODUCT" -eq 0 && "$SOFT" -gt 0 ]]; then
+  bad "Wave K product checks passed; field-catalog Soft-OPEN (not a product PASS, not FQ) — see $LOG"
+else
+  bad "Wave K app-test MEGAs FAIL — see $LOG"
+fi
 exit 1

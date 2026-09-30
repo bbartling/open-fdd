@@ -384,7 +384,7 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
     let last_ingest_at = state
         .last_ingest_at
         .lock()
-        .unwrap()
+        .unwrap_or_else(|poison| poison.into_inner())
         .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
     let historian_present = crate::durable_storage::historian_root_present();
     Json(OkHealthResponse {
@@ -392,9 +392,18 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
         service: "openfdd-central".into(),
         version: resolve_build_version(),
         edges: state.edges.len(),
-        ingest_ok: *state.ingest_ok.lock().unwrap(),
-        ingest_dup: *state.ingest_dup.lock().unwrap(),
-        ingest_reject: *state.ingest_reject.lock().unwrap(),
+        ingest_ok: *state
+            .ingest_ok
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner()),
+        ingest_dup: *state
+            .ingest_dup
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner()),
+        ingest_reject: *state
+            .ingest_reject
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner()),
         multi_tenant: crate::tenant::multi_tenant_enabled(),
         started_at: state
             .started_at
@@ -610,10 +619,18 @@ fn preferred_tenant_for_building_read(
         return ctx.tenant_id.clone();
     };
     let hub = crate::analytics::historian::parquet_root_base();
-    match ctx.historian_read_root_for_building(&hub, bid) {
+    let from_parquet = match ctx.historian_read_root_for_building(&hub, bid) {
         Ok(resolved) => resolved.tenant_id.or_else(|| ctx.tenant_id.clone()),
         Err(_) => ctx.tenant_id.clone(),
+    };
+    if from_parquet.is_some() || !ctx.multi_tenant {
+        return from_parquet;
     }
+    // Unscoped hub admin and an ambiguous or empty resolver. The control plane
+    // names the owner only when exactly one tenant lists the building.
+    let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+    let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
+    plane.sole_tenant_for_building(bid)
 }
 
 fn require_hub_admin(
@@ -2835,10 +2852,13 @@ pub async fn csv_import_package_mapping(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string);
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, Some(&building_id));
     let result = tokio::task::spawn_blocking(move || {
-        open_fdd_edge_prototype::csv_ingest::package::get_package_mapping_handler(
+        open_fdd_edge_prototype::csv_ingest::package::get_package_mapping_handler_scoped(
             &building_id,
             equipment_id.as_deref(),
+            preferred.as_deref(),
         )
     })
     .await
@@ -2878,10 +2898,13 @@ pub async fn csv_import_package_mapping_ttl(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string);
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, Some(&building_id));
     let inventory = tokio::task::spawn_blocking(move || {
-        open_fdd_edge_prototype::csv_ingest::package::get_package_mapping_handler(
+        open_fdd_edge_prototype::csv_ingest::package::get_package_mapping_handler_scoped(
             &building_id,
             equipment_id.as_deref(),
+            preferred.as_deref(),
         )
     })
     .await
@@ -4196,6 +4219,8 @@ async fn analytics_bas_vs_web_oat(
     headers: HeaderMap,
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let ctx = resolve_tenant_context(&state, &headers);
+    req.read_tenant_id = preferred_tenant_for_building_read(&ctx, req.query.building_id.as_deref());
     cached_analytics!(
         "bas-vs-web-oat",
         "bas-vs-web-oat-v2",
@@ -4208,6 +4233,7 @@ async fn analytics_bas_vs_web_oat(
                 req.query.equipment_ids.as_deref(),
                 max_points,
                 req.query.building_id.as_deref(),
+                req.read_tenant_id.as_deref(),
             )
             .await
             {
@@ -4240,6 +4266,8 @@ async fn analytics_inspect(
     headers: HeaderMap,
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let ctx = resolve_tenant_context(&state, &headers);
+    req.read_tenant_id = preferred_tenant_for_building_read(&ctx, req.query.building_id.as_deref());
     cached_analytics!(
         "equipment-inspect",
         "equipment-inspect-v1",
@@ -4267,6 +4295,7 @@ async fn analytics_inspect(
                 eq,
                 columns.as_deref(),
                 max_points,
+                req.read_tenant_id.as_deref(),
             )
             .await
             {

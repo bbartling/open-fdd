@@ -506,7 +506,8 @@ fn decode_base64_std(input: &str) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::jobs::WORKSPACE_ENV_TEST_LOCK;
+    use crate::jobs::lock_workspace_env;
+    use crate::test_env_lock::WorkspaceEnv;
 
     const FIXTURE_ELEC: &str = "Liberty_50_100_Electric_Summary.csv";
     const FIXTURE_GAS_A: &str = "Liberty_50_Gas_Summary.csv";
@@ -521,9 +522,9 @@ mod tests {
 
     #[test]
     fn import_fixture_zip_uses_campus_json_id() {
-        let _g = WORKSPACE_ENV_TEST_LOCK.lock().unwrap();
+        let _g = lock_workspace_env();
         let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("OPENFDD_WORKSPACE", dir.path());
+        let _ws = WorkspaceEnv::set(dir.path());
 
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fuel");
         if !fixture.join("campus.json").is_file() {
@@ -555,9 +556,9 @@ mod tests {
 
     #[test]
     fn named_excel_zip_does_not_infer_campus() {
-        let _g = WORKSPACE_ENV_TEST_LOCK.lock().unwrap();
+        let _g = lock_workspace_env();
         let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("OPENFDD_WORKSPACE", dir.path());
+        let _ws = WorkspaceEnv::set(dir.path());
 
         let zip_path = dir.path().join("xlsx.zip");
         {
@@ -578,9 +579,9 @@ mod tests {
 
     #[test]
     fn unknown_excel_zip_errors_honestly() {
-        let _g = WORKSPACE_ENV_TEST_LOCK.lock().unwrap();
+        let _g = lock_workspace_env();
         let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("OPENFDD_WORKSPACE", dir.path());
+        let _ws = WorkspaceEnv::set(dir.path());
 
         let zip_path = dir.path().join("xlsx.zip");
         {
@@ -600,9 +601,9 @@ mod tests {
 
     #[test]
     fn csv_without_campus_json_does_not_invent_id() {
-        let _g = WORKSPACE_ENV_TEST_LOCK.lock().unwrap();
+        let _g = lock_workspace_env();
         let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("OPENFDD_WORKSPACE", dir.path());
+        let _ws = WorkspaceEnv::set(dir.path());
 
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fuel");
         if !fixture.join(FIXTURE_ELEC).is_file() {

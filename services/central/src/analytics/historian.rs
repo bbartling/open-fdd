@@ -1101,8 +1101,15 @@ ORDER BY week_start, equipment_id
 async fn open_history_scoped(
     building_id: Option<&str>,
 ) -> Result<Option<(SessionContext, HashSet<String>, i64, fdd_store::ScanPermit)>> {
+    open_history_scoped_for_tenant(building_id, None).await
+}
+
+async fn open_history_scoped_for_tenant(
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+) -> Result<Option<(SessionContext, HashSet<String>, i64, fdd_store::ScanPermit)>> {
     let ctx = new_bounded_session()?;
-    let (ok, scan) = open_history_scan(&ctx, building_id).await?;
+    let (ok, scan) = open_history_scan_for_tenant(&ctx, building_id, preferred_tenant).await?;
     if !ok {
         return Ok(None);
     }
@@ -1399,6 +1406,7 @@ fn stamped_display_type(types: &BTreeMap<String, String>, equipment_id: &str) ->
     open_fdd_edge_prototype::equipment_types::api_equipment_type_for(equipment_id, stamp)
 }
 
+#[cfg(test)]
 fn stamped_kind(types: &BTreeMap<String, String>, equipment_id: &str) -> &'static str {
     let stamp = types.get(equipment_id).map(String::as_str);
     open_fdd_edge_prototype::equipment_types::kind_for(equipment_id, stamp)
@@ -1671,7 +1679,11 @@ pub async fn diurnal_from_history(
     Ok(Some(env))
 }
 
-/// Equipment topology (feeds / fedBy). Membership is the package stamp.
+/// Equipment topology (feeds / fedBy).
+///
+/// Equipment labels come from the package stamp. A parent link is emitted only
+/// when `equipment_parents.json` names that parent and the parent id is present.
+/// A single AHU, or an AHU token inside another id, is not a parent.
 pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<AnalyticsEnvelope>> {
     let Some((ctx, _cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
@@ -1691,16 +1703,11 @@ pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<A
         })
         .collect();
     let stamps = equipment_stamp_map(building_id);
-    let ahus: Vec<&str> = ids
-        .iter()
-        .filter(|id| stamped_kind(&stamps, id) == "ahu")
-        .map(|s| s.as_str())
-        .collect();
-    let parent = infer_parent_ahu(&ahus);
+    let parents =
+        open_fdd_edge_prototype::equipment_types::load_parent_map(&parquet_root(), building_id);
     let mut rows = Vec::new();
     let mut data_model = Vec::new();
     for id in &ids {
-        let kind = stamped_kind(&stamps, id);
         data_model.push(json!({
             "equipment_id": id,
             "equipment_type": stamped_display_type(&stamps, id),
@@ -1709,25 +1716,23 @@ pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<A
             "present_in_history": true,
             "required_by_rules": "",
         }));
-        if kind == "vav" {
-            if let Some(ahu) = parent.clone() {
-                rows.push(json!({
-                    "equipment_id": id,
-                    "relation": "fedBy",
-                    "related_ids": ahu,
-                    "related_count": 1,
-                    "parent_ahu": ahu,
-                    "vav_id": id,
-                }));
-                rows.push(json!({
-                    "equipment_id": ahu,
-                    "relation": "feeds",
-                    "related_ids": id,
-                    "related_count": 1,
-                    "parent_ahu": ahu,
-                    "vav_id": id,
-                }));
-            }
+        if let Some(ahu) = package_parent_link(&parents, id, &ids) {
+            rows.push(json!({
+                "equipment_id": id,
+                "relation": "fedBy",
+                "related_ids": ahu,
+                "related_count": 1,
+                "parent_ahu": ahu,
+                "vav_id": id,
+            }));
+            rows.push(json!({
+                "equipment_id": ahu,
+                "relation": "feeds",
+                "related_ids": id,
+                "related_count": 1,
+                "parent_ahu": ahu,
+                "vav_id": id,
+            }));
         }
     }
     let mut env = envelope_with_engine(
@@ -1742,13 +1747,19 @@ pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<A
     Ok(Some(env))
 }
 
-/// One stamped AHU in the building can be the parent. Id text does not pick it.
-fn infer_parent_ahu(ahus: &[&str]) -> Option<String> {
-    if ahus.len() == 1 {
-        Some(ahus[0].to_string())
-    } else {
-        None
+/// Parent link from the package parent registry. A lone AHU is not a parent.
+///
+/// The parent id must equal a known equipment id. `AHU_1` does not select `AHU_10`.
+fn package_parent_link(
+    parents: &BTreeMap<String, String>,
+    equipment_id: &str,
+    known_ids: &[String],
+) -> Option<String> {
+    let parent = parents.get(equipment_id)?.as_str();
+    if parent == equipment_id {
+        return None;
     }
+    known_ids.iter().find(|id| id.as_str() == parent).cloned()
 }
 
 /// Boolean occupied-expression from `occ_mode` (Utf8).
@@ -2416,8 +2427,11 @@ pub async fn bas_vs_web_from_history(
     equipment_filter: Option<&[String]>,
     max_points: usize,
     building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) =
+        open_history_scoped_for_tenant(building_id, preferred_tenant).await?
+    else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2585,12 +2599,15 @@ pub async fn inspect_from_history(
     equipment_id: &str,
     columns: Option<&[String]>,
     max_points: usize,
+    preferred_tenant: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let eq = equipment_id.trim();
     if eq.is_empty() {
         return Ok(None);
     }
-    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) =
+        open_history_scoped_for_tenant(building_id, preferred_tenant).await?
+    else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2742,10 +2759,10 @@ LIMIT {limit}
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
     });
-    // Same unscoped dual-read as [`open_history_scan`] (preferred tenant is None).
+    // Record the same dual-read root the inspect query used.
     if let Some(bid) = safe_building_segment(building_id) {
         if let Ok(resolved) =
-            fdd_store::resolve_building_read_root(&parquet_root_base(), None, &bid)
+            fdd_store::resolve_building_read_root(&parquet_root_base(), preferred_tenant, &bid)
         {
             if let Some(obj) = coverage.as_object_mut() {
                 obj.insert(
@@ -3743,15 +3760,19 @@ fn round6(x: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::await_holding_lock,
+        reason = "historian tests hold the process env lock across await so other modules cannot swap OPENFDD_PARQUET_ROOT"
+    )]
     use super::*;
     use crate::analytics::AnalyticsRequest;
     use chrono::TimeZone;
     use std::io::Write;
-    use tokio::sync::Mutex;
-
-    /// Serializes tests that mutate the process-global `OPENFDD_PARQUET_ROOT`.
-    /// Async-aware so the guard may be held across `.await` (clippy-clean).
-    static ENV_LOCK: Mutex<()> = Mutex::const_new(());
+    /// Process-wide env lock. A private mutex does not stop `durable_storage`
+    /// and other modules from swapping `OPENFDD_PARQUET_ROOT` mid-query.
+    fn lock_shared_env() -> std::sync::MutexGuard<'static, ()> {
+        crate::test_env_lock::lock_env()
+    }
 
     fn write_stamps(parquet: &std::path::Path, building_id: &str, body: &str) {
         let dir = parquet.join(format!("building={building_id}"));
@@ -3812,7 +3833,7 @@ mod tests {
 
     #[tokio::test]
     async fn rcx_type_stamps_follow_tenant_history_root() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let hub = tmp.path().join("hub");
         let tenant = hub.join("tenants/tenant_a");
@@ -3836,7 +3857,7 @@ mod tests {
 
     #[tokio::test]
     async fn rcx_type_stamps_follow_newer_conflicting_tenant_root() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let hub = tmp.path().join("hub");
         std::fs::create_dir_all(hub.join("history/building_id=BLDG_A")).unwrap();
@@ -3900,7 +3921,7 @@ mod tests {
 
     #[tokio::test]
     async fn plot_cohort_uses_exact_stamp_not_id_prefix() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let dir = tmp.path().join("building=site_plot");
         std::fs::create_dir_all(&dir).unwrap();
@@ -3940,7 +3961,7 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_from_history_none_when_no_parquet() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let missing = tmp.path().join("no_such_parquet");
         std::env::set_var("OPENFDD_PARQUET_ROOT", &missing);
@@ -3953,7 +3974,7 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_from_history_sets_datafusion_engine() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_TEST");
         std::fs::create_dir_all(&building).unwrap();
@@ -4003,7 +4024,7 @@ mod tests {
     /// Older label lists treated `"0.0"` as occupied → unoccupied_hours always 0.
     #[tokio::test]
     async fn schedule_from_history_treats_float_string_zero_as_unoccupied() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_OCC");
         std::fs::create_dir_all(&building).unwrap();
@@ -4050,7 +4071,7 @@ mod tests {
 
     #[tokio::test]
     async fn sensor_health_from_history_none_when_no_parquet() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let missing = tmp.path().join("no_such_parquet_sh");
         std::env::set_var("OPENFDD_PARQUET_ROOT", &missing);
@@ -4091,7 +4112,7 @@ mod tests {
 
     #[tokio::test]
     async fn sensor_health_from_history_sets_datafusion_engine() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_SH");
         std::fs::create_dir_all(&building).unwrap();
@@ -4155,7 +4176,7 @@ mod tests {
 
     #[tokio::test]
     async fn sensor_health_from_history_multi_file_completes_with_bound() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_SH_MF");
         std::fs::create_dir_all(&building).unwrap();
@@ -4207,7 +4228,7 @@ mod tests {
 
     #[tokio::test]
     async fn descriptive_counts_from_history_sets_datafusion_engine() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_DC");
         std::fs::create_dir_all(&building).unwrap();
@@ -4249,7 +4270,7 @@ mod tests {
 
     #[tokio::test]
     async fn economizer_from_history_is_building_scoped() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let parquet = tmp.path().join("parquet_econ");
 
@@ -4305,7 +4326,7 @@ mod tests {
     #[tokio::test]
     async fn economizer_from_history_with_damper_column_ok() {
         // OFDD-070b: oa_damper_pct present on history must not schema-error.
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let parquet = tmp.path().join("parquet_econ_damp");
         let building = tmp.path().join("BUILDING_50");
@@ -4342,7 +4363,7 @@ mod tests {
 
     #[tokio::test]
     async fn economizer_from_history_none_for_unknown_building() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let parquet = tmp.path().join("parquet_econ_missing");
         let building = tmp.path().join("BUILDING_50");
@@ -4383,8 +4404,36 @@ mod tests {
         assert_eq!(stamped_display_type(&types, "AHU_1"), "GENERAL");
         assert_eq!(stamped_kind(&types, "AHU_1"), "unknown");
         assert_eq!(stamped_kind(&types, "bldg2-zone-loopback"), "unknown");
-        assert_eq!(infer_parent_ahu(&["AHU_1"]), Some("AHU_1".into()));
-        assert_eq!(infer_parent_ahu(&["AHU_1", "AHU_2"]), None);
+        let known = vec![
+            "AHU_1".into(),
+            "VAV_9".into(),
+            "AHU_10".into(),
+            "box_12".into(),
+        ];
+        assert_eq!(
+            package_parent_link(&BTreeMap::new(), "VAV_9", &known),
+            None,
+            "one stamped AHU is not a parent"
+        );
+        let mut parents = BTreeMap::new();
+        parents.insert("box_12".into(), "AC_1".into());
+        assert_eq!(
+            package_parent_link(&parents, "box_12", &known),
+            None,
+            "declared parent must be an exact known id"
+        );
+        parents.insert("box_12".into(), "AHU_1".into());
+        assert_eq!(
+            package_parent_link(&parents, "box_12", &known).as_deref(),
+            Some("AHU_1")
+        );
+        parents.insert("VAV_9".into(), "AHU_1".into());
+        let prefix_ids = vec!["AHU_10".into(), "VAV_9".into()];
+        assert_eq!(
+            package_parent_link(&parents, "VAV_9", &prefix_ids),
+            None,
+            "AHU_1 must not select AHU_10"
+        );
     }
 
     #[test]
@@ -4502,7 +4551,7 @@ mod tests {
 
     #[tokio::test]
     async fn mech_oat_bins_from_chiller_power_only_fixture() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_PWR");
         std::fs::create_dir_all(&building).unwrap();
@@ -4537,7 +4586,7 @@ mod tests {
 
     #[tokio::test]
     async fn mech_cooling_evidence_warnings_fan_only() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_FAN2");
         std::fs::create_dir_all(&building).unwrap();
@@ -4570,7 +4619,7 @@ mod tests {
 
     #[tokio::test]
     async fn descriptive_counts_filtered_excludes_vav() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_MIX");
         std::fs::create_dir_all(&building).unwrap();
@@ -4632,7 +4681,7 @@ mod tests {
 
     #[tokio::test]
     async fn mech_oat_bins_none_for_fan_only_fixture() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_FAN");
         std::fs::create_dir_all(&building).unwrap();
@@ -4666,7 +4715,7 @@ mod tests {
 
     #[tokio::test]
     async fn mech_oat_bins_from_chiller_status_fixture() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_CH");
         std::fs::create_dir_all(&building).unwrap();
@@ -4719,7 +4768,7 @@ mod tests {
 
     #[tokio::test]
     async fn mech_oat_bins_joins_site_oat_from_weather_equipment() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_SPLIT");
         std::fs::create_dir_all(&building).unwrap();
@@ -4777,7 +4826,7 @@ mod tests {
 
     #[tokio::test]
     async fn mechanical_cooling_default_uses_bounded_retain_floor_for_old_fixture() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_MECH_FALLBACK");
         std::fs::create_dir_all(&building).unwrap();
@@ -4827,7 +4876,7 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_weekly_emits_per_equipment_not_plant_sum() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_AIR");
         std::fs::create_dir_all(&building).unwrap();
@@ -4881,7 +4930,7 @@ mod tests {
 
     #[tokio::test]
     async fn rcx_oat_scatter_aliases_timestamp_without_schema_clash() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_OATSC");
         std::fs::create_dir_all(&building).unwrap();
@@ -4963,7 +5012,7 @@ mod tests {
 
     #[tokio::test]
     async fn bas_vs_web_mqtt_outside_air_weather_split() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("bldg2_mqtt_oat");
         std::fs::create_dir_all(&building).unwrap();
@@ -5004,7 +5053,7 @@ mod tests {
         );
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = bas_vs_web_from_history(None, 500, Some("bldg2_mqtt_oat"))
+        let env = bas_vs_web_from_history(None, 500, Some("bldg2_mqtt_oat"), None)
             .await
             .unwrap()
             .expect("MQTT outside_air_temperature weather-split should yield points");
@@ -5016,7 +5065,7 @@ mod tests {
 
     #[tokio::test]
     async fn bas_vs_web_joins_site_oat_across_equipment() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_BAS");
         std::fs::create_dir_all(&building).unwrap();
@@ -5048,7 +5097,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_BAS", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = bas_vs_web_from_history(None, 500, Some("BUILDING_BAS"))
+        let env = bas_vs_web_from_history(None, 500, Some("BUILDING_BAS"), None)
             .await
             .unwrap()
             .expect("site BAS×web join should produce overlay points");
@@ -5064,7 +5113,7 @@ mod tests {
 
     #[tokio::test]
     async fn inspect_from_history_returns_raw_columns() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_INSP");
         std::fs::create_dir_all(&building).unwrap();
@@ -5085,7 +5134,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_INSP", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = inspect_from_history(Some("BUILDING_INSP"), "AHU_1", None, 500)
+        let env = inspect_from_history(Some("BUILDING_INSP"), "AHU_1", None, 500, None)
             .await
             .unwrap()
             .expect("inspect envelope");
@@ -5102,7 +5151,7 @@ mod tests {
 
     #[test]
     fn parquet_root_respects_env() {
-        let _guard = ENV_LOCK.blocking_lock();
+        let _guard = lock_shared_env();
         let tmp = tempfile::TempDir::new().unwrap();
         let prev_storage = std::env::var("OPENFDD_STORAGE_URL").ok();
         let prev_parquet = std::env::var("OPENFDD_PARQUET_ROOT").ok();
