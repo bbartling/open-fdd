@@ -51,6 +51,8 @@ RUN apk update \
   && grep -q 'openfdd-central.railway.internal:8080' /etc/nginx/conf.d/default.conf \
   && grep -q 'set \$openfdd_central' /etc/nginx/conf.d/default.conf \
   && grep -q 'resolver 127.0.0.11' /etc/nginx/conf.d/default.conf \
+  && grep -q 'proxy_connect_timeout 3s' /etc/nginx/conf.d/default.conf \
+  && grep -q 'central_unavailable' /etc/nginx/conf.d/default.conf \
   && rm -f /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 RUN chown -R 101:0 /usr/share/nginx/html \

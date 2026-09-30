@@ -1381,6 +1381,22 @@ fn list_equipment_ids(building_root: &Path) -> Vec<String> {
 /// Query via JSON body or caller-supplied ids: `building_id` required; `equipment_id` optional.
 /// Does not invent mappings for blank roles (gap stays visible).
 pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>) -> Value {
+    let preferred = std::env::var("OPENFDD_TENANT_ID")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    get_package_mapping_handler_scoped(building_id, equipment_id, preferred.as_deref())
+}
+
+/// Same inventory as [`get_package_mapping_handler`] with the caller's read tenant.
+///
+/// HTTP mapping passes the session tenant (or the control-plane owner). The
+/// process `OPENFDD_TENANT_ID` is not the multi-tenant write partition.
+pub fn get_package_mapping_handler_scoped(
+    building_id: &str,
+    equipment_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+) -> Value {
     let building_id = match validate_id(building_id) {
         Ok(id) => id,
         Err(e) => return json!({"ok": false, "error": format!("building_id: {e}")}),
@@ -1388,8 +1404,8 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
     let data_root = workspace_dir().join("data").join("csv_buildings");
     let building_root = data_root.join(&building_id);
     if !building_root.is_dir() {
-        // MQTT / historian-only sites (e.g. bldg2) have no csv_buildings tree.
-        return mapping_from_historian_equipment(&building_id, equipment_id);
+        // MQTT / historian-only sites have no csv_buildings tree.
+        return mapping_from_historian_equipment(&building_id, equipment_id, preferred_tenant);
     }
 
     let all_ids = list_equipment_ids(&building_root);
@@ -1399,7 +1415,11 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
             Ok(id) => {
                 if !all_ids.iter().any(|x| x == &id) {
                     // Partial CSV package trees omit historian-only equips (e.g. CS_ELEC_METER).
-                    return mapping_from_historian_equipment(&building_id, Some(&id));
+                    return mapping_from_historian_equipment(
+                        &building_id,
+                        Some(&id),
+                        preferred_tenant,
+                    );
                 }
                 vec![id]
             }
@@ -1537,7 +1557,7 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
     // Package trees can be a partial CSV rematerialization (e.g. AHU-only fixture)
     // while MQTT/historian still holds the full site (meters, heat pumps, …).
     // Merge historian-only equipment so Data Model / Metering maps stay complete.
-    let hist = mapping_from_historian_equipment(&building_id, equipment_id);
+    let hist = mapping_from_historian_equipment(&building_id, equipment_id, preferred_tenant);
     if hist.get("ok").and_then(|v| v.as_bool()) == Some(true) {
         let hist_equips = hist
             .get("equipment")
@@ -1603,8 +1623,13 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
 }
 
 /// Historian-only / MQTT data model for Data Model export when no csv_buildings tree.
-fn mapping_from_historian_equipment(building_id: &str, equipment_id: Option<&str>) -> Value {
-    let inv = crate::fdd::registry_api::equipment_response(Some(building_id));
+fn mapping_from_historian_equipment(
+    building_id: &str,
+    equipment_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+) -> Value {
+    let inv =
+        crate::fdd::registry_api::equipment_response_scoped(Some(building_id), preferred_tenant);
     let mut all: Vec<Value> = inv
         .get("equipment")
         .and_then(Value::as_array)
@@ -1661,7 +1686,10 @@ fn mapping_from_historian_equipment(building_id: &str, equipment_id: Option<&str
                 .cloned()
                 .unwrap_or(json!("GENERAL"));
             let pq = crate::fdd::registry_api::parquet_root();
-            let cols = fdd_store::peek_equipment_history_columns(&pq, building_id, &eq_id);
+            let root = fdd_store::resolve_building_read_root(&pq, preferred_tenant, building_id)
+                .map(|resolved| resolved.root)
+                .unwrap_or(pq);
+            let cols = fdd_store::peek_equipment_history_columns(&root, building_id, &eq_id);
             let mut roles = serde_json::Map::new();
             let column_rows: Vec<Value> = cols
                 .iter()
@@ -2313,5 +2341,60 @@ mod tests {
         assert_eq!(replay["merges"][0]["rows_duped"], json!(1), "{replay}");
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn historian_mapping_follows_preferred_tenant_not_process_env() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd_map_tenant_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let equip = tmp.join(
+            "tenants/acme/history/building_id=bldg2/equipment_id=bldg2-zone-loopback/year=2026/month=09",
+        );
+        std::fs::create_dir_all(&equip).unwrap();
+        std::fs::write(equip.join("part-20260901T000000Z.parquet"), b"PAR1").unwrap();
+        let prev_root = std::env::var("OPENFDD_PARQUET_ROOT").ok();
+        let prev_storage = std::env::var("OPENFDD_STORAGE_URL").ok();
+        let prev_tenant = std::env::var("OPENFDD_TENANT_ID").ok();
+        let prev_ws = std::env::var("OPENFDD_WORKSPACE").ok();
+        std::env::remove_var("OPENFDD_STORAGE_URL");
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &tmp);
+        std::env::set_var("OPENFDD_WORKSPACE", &tmp);
+        std::env::set_var("OPENFDD_TENANT_ID", "other-tenant");
+
+        let scoped = get_package_mapping_handler_scoped("bldg2", None, Some("acme"));
+        let via_env = get_package_mapping_handler("bldg2", None);
+
+        match prev_root {
+            Some(v) => std::env::set_var("OPENFDD_PARQUET_ROOT", v),
+            None => std::env::remove_var("OPENFDD_PARQUET_ROOT"),
+        }
+        match prev_storage {
+            Some(v) => std::env::set_var("OPENFDD_STORAGE_URL", v),
+            None => std::env::remove_var("OPENFDD_STORAGE_URL"),
+        }
+        match prev_tenant {
+            Some(v) => std::env::set_var("OPENFDD_TENANT_ID", v),
+            None => std::env::remove_var("OPENFDD_TENANT_ID"),
+        }
+        match prev_ws {
+            Some(v) => std::env::set_var("OPENFDD_WORKSPACE", v),
+            None => std::env::remove_var("OPENFDD_WORKSPACE"),
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        assert_eq!(scoped["ok"], json!(true), "{scoped}");
+        assert_eq!(
+            scoped["equipment"][0]["equipment_id"],
+            json!("bldg2-zone-loopback")
+        );
+        assert_eq!(via_env["ok"], json!(false), "{via_env}");
     }
 }

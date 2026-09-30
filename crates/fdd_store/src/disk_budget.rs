@@ -11,6 +11,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::UNIX_EPOCH;
 
 use anyhow::{Context, Result};
@@ -231,6 +232,40 @@ pub fn apply_eviction(storage_root: &Path, plan: &EvictionPlan) -> Result<u64> {
         }
     }
     Ok(deleted)
+}
+
+static LAST_BUDGET_ENFORCE_UNIX: AtomicU64 = AtomicU64::new(0);
+
+/// Apply the local budget at most once per `min_interval_secs`.
+///
+/// Historian flushes and analytics cache writes call this so a live edge does
+/// not wait for an admin POST before oldest parquet is removed. Disabled
+/// budgets (Railway unless `OPENFDD_DATA_BUDGET_ENABLED=1`) return `Ok(None)`
+/// without scanning. A failed compare means another caller already started
+/// this interval.
+pub fn enforce_budget_throttled(
+    storage_root: &Path,
+    min_interval_secs: u64,
+) -> Result<Option<EvictionReport>> {
+    let budget = DataBudget::from_env();
+    if !budget.enabled {
+        return Ok(None);
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let prev = LAST_BUDGET_ENFORCE_UNIX.load(Ordering::Relaxed);
+    if min_interval_secs > 0 && now.saturating_sub(prev) < min_interval_secs {
+        return Ok(None);
+    }
+    if LAST_BUDGET_ENFORCE_UNIX
+        .compare_exchange(prev, now, Ordering::AcqRel, Ordering::Relaxed)
+        .is_err()
+    {
+        return Ok(None);
+    }
+    apply_data_budget(storage_root, &budget).map(Some)
 }
 
 pub fn apply_data_budget(storage_root: &Path, budget: &DataBudget) -> Result<EvictionReport> {
@@ -694,5 +729,19 @@ mod tests {
         assert!(old < newer);
         assert_eq!(old, 20240115120000);
         assert_eq!(newer, 20260601000000);
+    }
+
+    #[test]
+    fn throttled_enforce_scans_once_per_interval_when_enabled() {
+        if !DataBudget::from_env().enabled {
+            return;
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let first = enforce_budget_throttled(tmp.path(), 3600).unwrap();
+        assert!(first.is_some());
+        assert!(!first.unwrap().applied);
+        assert!(enforce_budget_throttled(tmp.path(), 3600)
+            .unwrap()
+            .is_none());
     }
 }

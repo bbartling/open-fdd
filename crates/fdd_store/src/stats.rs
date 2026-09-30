@@ -338,4 +338,23 @@ mod tests {
         assert_eq!(stats.invalid_layout_files, 1);
         assert_eq!(stats.rows, 0);
     }
+
+    #[test]
+    fn peek_columns_reads_the_given_root_not_a_sibling_hub() {
+        let tmp = TempDir::new().unwrap();
+        let tenant = tmp.path().join("tenants").join("acme");
+        let storage = LocalStorage::new(&tenant);
+        let writer = ParquetPartWriter::new(storage);
+        writer
+            .write_history_batch(
+                "bldg2",
+                "bldg2-zone-loopback",
+                &batch(&["2026-09-01T00:00:00Z"]),
+            )
+            .unwrap();
+        let cols = peek_equipment_history_columns(&tenant, "bldg2", "bldg2-zone-loopback");
+        assert!(cols.iter().any(|c| c == "sat"), "{cols:?}");
+        let hub_miss = peek_equipment_history_columns(tmp.path(), "bldg2", "bldg2-zone-loopback");
+        assert!(hub_miss.is_empty(), "{hub_miss:?}");
+    }
 }
