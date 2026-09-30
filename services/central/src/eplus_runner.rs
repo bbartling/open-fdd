@@ -206,7 +206,7 @@ pub fn attach_artifact_meta(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::jobs::WORKSPACE_ENV_TEST_LOCK;
+    use crate::jobs::lock_workspace_env;
 
     fn valid_policy() -> RunnerPolicy {
         RunnerPolicy {
@@ -261,12 +261,11 @@ mod tests {
 
     #[test]
     fn queue_writes_queued_json() {
-        let _g = WORKSPACE_ENV_TEST_LOCK.lock().unwrap();
+        let _g = lock_workspace_env();
         let dir = std::env::temp_dir().join(format!("openfdd-eplus-{}", Uuid::new_v4()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let prev = std::env::var("OPENFDD_WORKSPACE").ok();
-        std::env::set_var("OPENFDD_WORKSPACE", &dir);
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(&dir);
 
         let meta = jobs::create_job("Eplus", None, None, None, None, vec![], None).unwrap();
         let out = queue_external_run(
@@ -303,10 +302,6 @@ mod tests {
         .unwrap();
         assert_eq!(attached["artifacts"].as_array().unwrap().len(), 1);
 
-        match prev {
-            Some(v) => std::env::set_var("OPENFDD_WORKSPACE", v),
-            None => std::env::remove_var("OPENFDD_WORKSPACE"),
-        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

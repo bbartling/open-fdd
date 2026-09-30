@@ -702,7 +702,8 @@ fn fuel_weather(campus: &Campus, warnings: &mut Vec<String>) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::jobs::WORKSPACE_ENV_TEST_LOCK;
+    use crate::jobs::lock_workspace_env;
+    use crate::test_env_lock::WorkspaceEnv;
     use std::path::PathBuf;
 
     fn fixture_campus() -> Campus {
@@ -712,21 +713,17 @@ mod tests {
 
     #[test]
     fn summary_and_weather_on_fixture() {
-        let _g = WORKSPACE_ENV_TEST_LOCK.lock().unwrap();
+        let _g = lock_workspace_env();
         let dir = tempfile::tempdir().unwrap();
-        let prev = std::env::var("OPENFDD_WORKSPACE").ok();
-        std::env::set_var("OPENFDD_WORKSPACE", dir.path());
+        let _ws = WorkspaceEnv::set(dir.path());
 
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fuel");
-        if !fixture.join("campus.json").is_file() {
-            if let Some(v) = prev {
-                std::env::set_var("OPENFDD_WORKSPACE", v);
-            } else {
-                std::env::remove_var("OPENFDD_WORKSPACE");
-            }
-            return;
-        }
-        // Import via copy
+        let campus_json = fixture.join("campus.json");
+        assert!(
+            campus_json.is_file(),
+            "fuel fixture missing at {} (CARGO_MANIFEST_DIR)",
+            campus_json.display()
+        );
         let dest = fuel_root().join("demo_site");
         std::fs::create_dir_all(&dest).unwrap();
         for name in [
@@ -737,6 +734,11 @@ mod tests {
         ] {
             std::fs::copy(fixture.join(name), dest.join(name)).unwrap();
         }
+        assert!(
+            dest.join("campus.json").is_file(),
+            "copied campus.json missing under {}",
+            dest.display()
+        );
 
         let req = FuelRequest {
             query_version: Some(QV_SUMMARY.into()),
@@ -759,12 +761,6 @@ mod tests {
         assert_eq!(w["ok"], true, "weather failed: {w}");
         assert!(!w["points"].as_array().unwrap().is_empty());
         assert!(!w["fits"].as_array().unwrap().is_empty());
-
-        if let Some(v) = prev {
-            std::env::set_var("OPENFDD_WORKSPACE", v);
-        } else {
-            std::env::remove_var("OPENFDD_WORKSPACE");
-        }
     }
 
     #[test]
