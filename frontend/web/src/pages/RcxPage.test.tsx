@@ -112,6 +112,28 @@ describe("RcxPage vibe19 catalog", () => {
     );
   });
 
+  it("opening a preset uses the cache and Refresh RCx preset recomputes", async () => {
+    render(
+      <MemoryRouter initialEntries={["/rcx?site=BUILDING_100"]}>
+        <RcxPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(postRcxPreset).toHaveBeenCalled();
+    });
+    const opened = vi.mocked(postRcxPreset).mock.calls[0]?.[0] as { refresh?: boolean };
+    expect(opened.refresh).toBeUndefined();
+    const calls = vi.mocked(postRcxPreset).mock.calls.length;
+    fireEvent.click(screen.getByTestId("rcx-run").querySelector("button")!);
+    await waitFor(() => {
+      expect(vi.mocked(postRcxPreset).mock.calls.length).toBe(calls + 1);
+    });
+    const forced = vi.mocked(postRcxPreset).mock.calls.at(-1)?.[0] as {
+      refresh?: boolean;
+    };
+    expect(forced.refresh).toBe(true);
+  });
+
   it("renders vav_health_matrix from rows when points are empty", async () => {
     const zonesFirst = [
       {

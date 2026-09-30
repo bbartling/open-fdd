@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DataTable, InlineAlert } from "./widgets";
 import { postSqlAnomaly } from "../api/analyticsApi";
 import { naturalCompare } from "../lib/naturalSort";
+import { useExplicitAnalyticsRefresh } from "../session/useExplicitAnalyticsRefresh";
 
 function fmtNum(v: unknown, digits = 2): string {
   if (v == null || v === "") return "—";
@@ -28,6 +29,7 @@ export function SqlAnomalySection({
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const refresh = useExplicitAnalyticsRefresh(buildingId, refreshToken);
 
   useEffect(() => {
     if (!buildingId) {
@@ -49,6 +51,7 @@ export function SqlAnomalySection({
             method: "zscore",
             transition_events: true,
           },
+          ...(refresh ? { refresh: true } : {}),
         });
         if (cancelled) return;
         const warnings = env.warnings ?? [];
@@ -91,7 +94,7 @@ export function SqlAnomalySection({
     return () => {
       cancelled = true;
     };
-  }, [buildingId, refreshToken]);
+  }, [buildingId, refreshToken, refresh]);
 
   const tableRows = useMemo(
     () =>

@@ -695,6 +695,8 @@ export async function fetchCentralOverview(opts: {
   oat_err?: number;
   dt_min_f?: number;
   signal?: AbortSignal;
+  /** Recompute the parquet result cache. Routine opens omit this. */
+  refresh?: boolean;
 }): Promise<OverviewVibe19Response> {
   const t0 = performance.now();
   const building_id = opts.building_id;
@@ -715,6 +717,7 @@ export async function fetchCentralOverview(opts: {
     max_points: 4000,
     dt_min_f: dtMin,
     ...window,
+    ...(opts.refresh ? { refresh: true } : {}),
   };
 
   // Heavy DataFusion POSTs stay sequential on large historians:

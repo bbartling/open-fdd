@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { HealthMatrixSection } from "./HealthMatrixSection";
 import { postChillerHealth, postHpHealth } from "../api/analyticsApi";
+import type { AnalyticsRequest } from "../api/analyticsApi";
 import {
   postAhuEconomizerHealth,
   postAhuPressureHealth,
@@ -10,6 +11,15 @@ import {
   postSensorFaults,
   postZoneOtherHealth,
 } from "../api/overviewHealthApi";
+
+function healthRequest(
+  buildingId: string,
+  opts?: { refresh?: boolean },
+): AnalyticsRequest {
+  return opts?.refresh
+    ? { building_id: buildingId, refresh: true }
+    : { building_id: buildingId };
+}
 
 /** MQTT and CSV sites share the same Overview health-matrix chrome (empty shells when no equip). */
 export function PlantHealthSections({
@@ -22,39 +32,46 @@ export function PlantHealthSections({
   pendingFlags?: boolean;
 }) {
   const fetchAhuTemperature = useCallback(
-    (id: string) => postAhuTemperatureHealth({ building_id: id }),
+    (id: string, opts?: { refresh?: boolean }) =>
+      postAhuTemperatureHealth(healthRequest(id, opts)),
     [],
   );
   const fetchAhuPressure = useCallback(
-    (id: string) => postAhuPressureHealth({ building_id: id }),
+    (id: string, opts?: { refresh?: boolean }) =>
+      postAhuPressureHealth(healthRequest(id, opts)),
     [],
   );
   const fetchAhuEconomizer = useCallback(
-    (id: string) => postAhuEconomizerHealth({ building_id: id }),
+    (id: string, opts?: { refresh?: boolean }) =>
+      postAhuEconomizerHealth(healthRequest(id, opts)),
     [],
   );
   const fetchChiller = useCallback(
-    (id: string) => postChillerHealth({ building_id: id }),
+    (id: string, opts?: { refresh?: boolean }) =>
+      postChillerHealth(healthRequest(id, opts)),
     [],
   );
   const fetchCoolingTower = useCallback(
-    (id: string) => postCoolingTowerHealth({ building_id: id }),
+    (id: string, opts?: { refresh?: boolean }) =>
+      postCoolingTowerHealth(healthRequest(id, opts)),
     [],
   );
   const fetchHp = useCallback(
-    (id: string) => postHpHealth({ building_id: id }),
+    (id: string, opts?: { refresh?: boolean }) => postHpHealth(healthRequest(id, opts)),
     [],
   );
   const fetchPid = useCallback(
-    (id: string) => postPidHunting({ building_id: id }),
+    (id: string, opts?: { refresh?: boolean }) => postPidHunting(healthRequest(id, opts)),
     [],
   );
   const fetchSensors = useCallback(
-    (id: string) => postSensorFaults({ building_id: id }),
+    (id: string, opts?: { refresh?: boolean }) =>
+      postSensorFaults(healthRequest(id, opts)),
     [],
   );
   const fetchZoneOther = useCallback(
-    (id: string) => postZoneOtherHealth({ building_id: id }),
+    (id: string, opts?: { refresh?: boolean }) =>
+      postZoneOtherHealth(healthRequest(id, opts)),
     [],
   );
 

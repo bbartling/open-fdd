@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import { DataTable } from "./widgets/DataTable";
 import {
   HealthMatrixSection,
@@ -113,5 +113,33 @@ describe("health matrix tint", () => {
     expect(screen.getByText("SV-FLATLINE h")).toBeTruthy();
     const header = screen.getByText("SV-FLATLINE h").closest("th");
     expect(header?.getAttribute("title")).toBe("SV-FLATLINE fault_h");
+  });
+
+  it("recomputes only after the refresh token changes for the same building", async () => {
+    const fetchHealth = vi.fn(async () => emptyEnvelope());
+    const props = {
+      family: "sensor",
+      title: "Sensor faults",
+      flagColumns: [{ key: "flatline", ruleId: "SV-FLATLINE" }],
+      fetchHealth,
+    };
+    const view = render(
+      <HealthMatrixSection {...props} buildingId="site-a" refreshToken={0} />,
+    );
+    await waitFor(() => {
+      expect(fetchHealth).toHaveBeenCalledWith("site-a", undefined);
+    });
+    view.rerender(
+      <HealthMatrixSection {...props} buildingId="site-a" refreshToken={1} />,
+    );
+    await waitFor(() => {
+      expect(fetchHealth).toHaveBeenLastCalledWith("site-a", { refresh: true });
+    });
+    view.rerender(
+      <HealthMatrixSection {...props} buildingId="site-b" refreshToken={1} />,
+    );
+    await waitFor(() => {
+      expect(fetchHealth).toHaveBeenLastCalledWith("site-b", undefined);
+    });
   });
 });
