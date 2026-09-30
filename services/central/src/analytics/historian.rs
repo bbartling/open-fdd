@@ -1399,6 +1399,7 @@ fn stamped_display_type(types: &BTreeMap<String, String>, equipment_id: &str) ->
     open_fdd_edge_prototype::equipment_types::api_equipment_type_for(equipment_id, stamp)
 }
 
+#[cfg(test)]
 fn stamped_kind(types: &BTreeMap<String, String>, equipment_id: &str) -> &'static str {
     let stamp = types.get(equipment_id).map(String::as_str);
     open_fdd_edge_prototype::equipment_types::kind_for(equipment_id, stamp)
@@ -1671,7 +1672,11 @@ pub async fn diurnal_from_history(
     Ok(Some(env))
 }
 
-/// Equipment topology (feeds / fedBy). Membership is the package stamp.
+/// Equipment topology (feeds / fedBy).
+///
+/// Equipment labels come from the package stamp. A parent link is emitted only
+/// when `equipment_parents.json` names that parent and the parent id is present.
+/// A single AHU, or an AHU token inside another id, is not a parent.
 pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<AnalyticsEnvelope>> {
     let Some((ctx, _cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
@@ -1691,16 +1696,11 @@ pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<A
         })
         .collect();
     let stamps = equipment_stamp_map(building_id);
-    let ahus: Vec<&str> = ids
-        .iter()
-        .filter(|id| stamped_kind(&stamps, id) == "ahu")
-        .map(|s| s.as_str())
-        .collect();
-    let parent = infer_parent_ahu(&ahus);
+    let parents =
+        open_fdd_edge_prototype::equipment_types::load_parent_map(&parquet_root(), building_id);
     let mut rows = Vec::new();
     let mut data_model = Vec::new();
     for id in &ids {
-        let kind = stamped_kind(&stamps, id);
         data_model.push(json!({
             "equipment_id": id,
             "equipment_type": stamped_display_type(&stamps, id),
@@ -1709,25 +1709,23 @@ pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<A
             "present_in_history": true,
             "required_by_rules": "",
         }));
-        if kind == "vav" {
-            if let Some(ahu) = parent.clone() {
-                rows.push(json!({
-                    "equipment_id": id,
-                    "relation": "fedBy",
-                    "related_ids": ahu,
-                    "related_count": 1,
-                    "parent_ahu": ahu,
-                    "vav_id": id,
-                }));
-                rows.push(json!({
-                    "equipment_id": ahu,
-                    "relation": "feeds",
-                    "related_ids": id,
-                    "related_count": 1,
-                    "parent_ahu": ahu,
-                    "vav_id": id,
-                }));
-            }
+        if let Some(ahu) = package_parent_link(&parents, id, &ids) {
+            rows.push(json!({
+                "equipment_id": id,
+                "relation": "fedBy",
+                "related_ids": ahu,
+                "related_count": 1,
+                "parent_ahu": ahu,
+                "vav_id": id,
+            }));
+            rows.push(json!({
+                "equipment_id": ahu,
+                "relation": "feeds",
+                "related_ids": id,
+                "related_count": 1,
+                "parent_ahu": ahu,
+                "vav_id": id,
+            }));
         }
     }
     let mut env = envelope_with_engine(
@@ -1742,13 +1740,19 @@ pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<A
     Ok(Some(env))
 }
 
-/// One stamped AHU in the building can be the parent. Id text does not pick it.
-fn infer_parent_ahu(ahus: &[&str]) -> Option<String> {
-    if ahus.len() == 1 {
-        Some(ahus[0].to_string())
-    } else {
-        None
+/// Parent link from the package parent registry. A lone AHU is not a parent.
+///
+/// The parent id must equal a known equipment id. `AHU_1` does not select `AHU_10`.
+fn package_parent_link(
+    parents: &BTreeMap<String, String>,
+    equipment_id: &str,
+    known_ids: &[String],
+) -> Option<String> {
+    let parent = parents.get(equipment_id)?.as_str();
+    if parent == equipment_id {
+        return None;
     }
+    known_ids.iter().find(|id| id.as_str() == parent).cloned()
 }
 
 /// Boolean occupied-expression from `occ_mode` (Utf8).
@@ -4383,8 +4387,36 @@ mod tests {
         assert_eq!(stamped_display_type(&types, "AHU_1"), "GENERAL");
         assert_eq!(stamped_kind(&types, "AHU_1"), "unknown");
         assert_eq!(stamped_kind(&types, "bldg2-zone-loopback"), "unknown");
-        assert_eq!(infer_parent_ahu(&["AHU_1"]), Some("AHU_1".into()));
-        assert_eq!(infer_parent_ahu(&["AHU_1", "AHU_2"]), None);
+        let known = vec![
+            "AHU_1".into(),
+            "VAV_9".into(),
+            "AHU_10".into(),
+            "box_12".into(),
+        ];
+        assert_eq!(
+            package_parent_link(&BTreeMap::new(), "VAV_9", &known),
+            None,
+            "one stamped AHU is not a parent"
+        );
+        let mut parents = BTreeMap::new();
+        parents.insert("box_12".into(), "AC_1".into());
+        assert_eq!(
+            package_parent_link(&parents, "box_12", &known),
+            None,
+            "declared parent must be an exact known id"
+        );
+        parents.insert("box_12".into(), "AHU_1".into());
+        assert_eq!(
+            package_parent_link(&parents, "box_12", &known).as_deref(),
+            Some("AHU_1")
+        );
+        parents.insert("VAV_9".into(), "AHU_1".into());
+        let prefix_ids = vec!["AHU_10".into(), "VAV_9".into()];
+        assert_eq!(
+            package_parent_link(&parents, "VAV_9", &prefix_ids),
+            None,
+            "AHU_1 must not select AHU_10"
+        );
     }
 
     #[test]

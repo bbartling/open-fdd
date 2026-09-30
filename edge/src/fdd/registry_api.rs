@@ -1646,6 +1646,45 @@ mod tests {
     use super::*;
 
     #[test]
+    fn oat_meteo_targets_stamped_ahu_not_id_prefix() {
+        let reg = load_reg().expect("registry");
+        let rule = reg
+            .rules
+            .iter()
+            .find(|r| r.rule_id == "OAT-METEO")
+            .expect("OAT-METEO");
+        assert_eq!(rule.equipment_kinds, vec!["ahu".to_string()]);
+        let sql_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../sql_rules/oat_meteo_fault.sql");
+        let sql = std::fs::read_to_string(&sql_path).unwrap_or_else(|e| panic!("{e}"));
+        let upper = sql.to_ascii_uppercase();
+        assert!(
+            !upper.contains("EQUIPMENT_ID LIKE") && !upper.contains("ILIKE"),
+            "OAT-METEO must not filter equipment_id by text: {sql}"
+        );
+        assert!(rule_applies_to_kind(
+            &rule.equipment_kinds,
+            crate::equipment_types::kind_for("AC_1", Some("ahu"))
+        ));
+        assert!(rule_applies_to_kind(
+            &rule.equipment_kinds,
+            crate::equipment_types::kind_for("jci_ahu_1", Some("rtu"))
+        ));
+        assert!(!rule_applies_to_kind(
+            &rule.equipment_kinds,
+            crate::equipment_types::kind_for("AHU_BOX", Some("vav"))
+        ));
+        assert!(!rule_applies_to_kind(
+            &rule.equipment_kinds,
+            crate::equipment_types::kind_for("AHU_1", None)
+        ));
+        assert!(!rule_applies_to_kind(
+            &rule.equipment_kinds,
+            crate::equipment_types::kind_for("bldg2-zone-loopback", None)
+        ));
+    }
+
+    #[test]
     fn typed_rules_do_not_run_against_unknown_equipment() {
         let kinds = vec!["ahu".to_string(), "zone_other".to_string()];
         assert!(rule_applies_to_kind(&kinds, "zone_other"));

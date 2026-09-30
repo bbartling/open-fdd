@@ -894,6 +894,7 @@ WHERE equipment_id = 'equip:your-id'
 ### OAT-METEO — BAS outdoor-air sensor vs Open-Meteo
 **Family:** `ahu` · **Equipment:** `ahu`  
 **Equation:** BAS OAT sensor differs from Open-Meteo dry bulb by more than 5°F.  
+The shipped rule (`sql_rules/oat_meteo_fault.sql`) does not filter `equipment_id`. Applicability is registry `equipment_kinds: [ahu]` plus the package stamp, so `AC_1` stamped `ahu` is in scope and an id that starts with `AHU` but is stamped `vav` is not.  
 **Default confirmation:** 900 s
 
 | Param | Label | Unit | Default | Range |

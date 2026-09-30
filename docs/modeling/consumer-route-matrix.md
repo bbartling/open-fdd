@@ -12,7 +12,7 @@ SPARQL. Update when routes land. Tip authority: Wave S2 ADR
 
 | Consumer | Surface | Auth | Product status (Wave S2) | Notes |
 | --- | --- | --- | --- | --- |
-| SPA Mapping | `GET /api/csv/import/package/mapping?building_id=` | JWT + building scope | **Shipped** | Inventory JSON; stamped types preferred (DM-04); inferred `parent_ahu` is proposal-only |
+| SPA Mapping | `GET /api/csv/import/package/mapping?building_id=` | JWT + building scope | **Shipped** | Inventory JSON; stamped types (DM-04); `parent_ahu` only when the package map names `parentAhu` |
 | SPA Mapping TTL | `GET /api/csv/import/package/mapping/ttl?building_id=` | JWT + building scope | **Shipped** | Prefix `urn:openfdd:ns#`; dual TS/Rust exporters; skips `parent_ahu_source=inferred` |
 | SPA Mapping export | browser download of same JSON/TTL | JWT | **Shipped** | Building membership checked; hub-root storage (see [tenant storage honesty](tenant-storage-honesty.md)) |
 | Central SPARQL | `POST /api/model/sparql` | — | **Unavailable on central** | Not registered on product central router |

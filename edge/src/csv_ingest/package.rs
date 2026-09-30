@@ -432,6 +432,7 @@ struct EquipmentPlan {
     roles: BTreeMap<String, String>,
     map_source: String,
     equipment_type: Option<String>,
+    parent_ahu: Option<String>,
 }
 
 fn csv_headers(bytes: &[u8]) -> Result<Vec<String>, String> {
@@ -637,6 +638,7 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         let mut map_source = String::new();
         let mut points: Option<BTreeMap<String, String>> = None;
         let mut equipment_type: Option<String> = None;
+        let mut parent_ahu: Option<String> = None;
         for name in [
             "history_wide.json",
             "history_wide.column_map.json",
@@ -648,6 +650,11 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
                         if equipment_type.is_none() {
                             equipment_type =
                                 crate::equipment_types::stamped_type_from_map_json(&v, &equip_id);
+                        }
+                        if parent_ahu.is_none() {
+                            parent_ahu = crate::equipment_types::declared_parent_from_map_json(
+                                &v, &equip_id,
+                            );
                         }
                         points = points_from_map_json(&v, &equip_id);
                         if points.is_some() {
@@ -664,6 +671,11 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
             if let Some(root) = &root_map {
                 equipment_type =
                     crate::equipment_types::stamped_type_from_map_json(root, &equip_id);
+            }
+        }
+        if parent_ahu.is_none() {
+            if let Some(root) = &root_map {
+                parent_ahu = crate::equipment_types::declared_parent_from_map_json(root, &equip_id);
             }
         }
         if points.is_none() {
@@ -690,6 +702,7 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
             roles,
             map_source,
             equipment_type,
+            parent_ahu,
         });
     }
 
@@ -787,6 +800,9 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         }
     }
 
+    let known_ids: std::collections::BTreeSet<&str> =
+        plans.iter().map(|p| p.equipment_id.as_str()).collect();
+    let mut parents_out: BTreeMap<String, String> = BTreeMap::new();
     let mut equipment_report = Vec::new();
     for plan in &plans {
         let eq_dir = building_root.join(plan.dir.file_name().unwrap_or_default());
@@ -802,15 +818,29 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         if let Err(e) = write_columns_csv(&eq_dir.join("columns.csv"), &plan.headers, &plan.roles) {
             return json!({"ok": false, "error": e});
         }
-        if let Some(raw_type) = plan.equipment_type.as_deref() {
-            let meta = json!({
-                "equipment_id": plan.equipment_id,
-                "equipType": raw_type,
-                "canonical_kind": crate::equipment_types::canonical_kind(raw_type),
-            });
+        let parent = plan
+            .parent_ahu
+            .as_deref()
+            .filter(|parent| known_ids.contains(*parent) && *parent != plan.equipment_id.as_str());
+        if let Some(parent) = parent {
+            parents_out.insert(plan.equipment_id.clone(), parent.to_string());
+        }
+        if plan.equipment_type.is_some() || parent.is_some() {
+            let mut meta = serde_json::Map::new();
+            meta.insert("equipment_id".into(), json!(plan.equipment_id));
+            if let Some(raw_type) = plan.equipment_type.as_deref() {
+                meta.insert("equipType".into(), json!(raw_type));
+                meta.insert(
+                    "canonical_kind".into(),
+                    json!(crate::equipment_types::canonical_kind(raw_type)),
+                );
+            }
+            if let Some(parent) = parent {
+                meta.insert("parentAhu".into(), json!(parent));
+            }
             let _ = std::fs::write(
                 eq_dir.join("equipment.json"),
-                serde_json::to_string_pretty(&meta).unwrap_or_default(),
+                serde_json::to_string_pretty(&Value::Object(meta)).unwrap_or_default(),
             );
         }
         let unmapped: Vec<&String> = plan
@@ -828,10 +858,29 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         }));
     }
 
+    if !parents_out.is_empty() {
+        match serde_json::to_string_pretty(&parents_out) {
+            Ok(body) => {
+                if let Err(e) = std::fs::write(
+                    building_root.join(crate::equipment_types::EQUIPMENT_PARENTS_FILE),
+                    body,
+                ) {
+                    warnings.push(format!("equipment parent registry not materialized: {e}"));
+                }
+            }
+            Err(e) => warnings.push(format!("equipment parent registry serialize: {e}")),
+        }
+    }
+
     let out_dir = parquet_out_dir();
     match fdd_store::ingest_building(&data_root, &building_id, &out_dir) {
         Ok(report) => {
             if let Err(e) = sync_equipment_types_cache(&building_root, &out_dir, &building_id) {
+                warnings.push(e);
+            }
+            if let Err(e) =
+                crate::equipment_types::write_parent_map(&out_dir, &building_id, &parents_out)
+            {
                 warnings.push(e);
             }
             if let Err(e) = crate::csv_ingest::dataset::register_package_dataset(
@@ -1173,53 +1222,46 @@ fn resolve_mapping_equipment_type(
     (display, raw, source)
 }
 
-/// Infer VAV→AHU parent from equipment id tokens (e.g. `VAV_1_AHU_2` → `AHU_2`).
-fn infer_parent_ahu(equipment_id: &str, siblings: &[String]) -> Option<String> {
-    let upper = equipment_id.to_ascii_uppercase();
-    if !upper.contains("VAV") && !upper.contains("ZONE") {
-        return None;
-    }
-    // Explicit AHU token in the VAV id.
-    for part in upper.split(['_', '-', '/']) {
-        if part.starts_with("AHU") && part.len() > 3 {
-            let candidate = part.to_string();
-            if siblings.iter().any(|s| s.eq_ignore_ascii_case(&candidate)) {
-                return siblings
-                    .iter()
-                    .find(|s| s.eq_ignore_ascii_case(&candidate))
-                    .cloned();
-            }
-            return Some(candidate);
-        }
-    }
-    // Embedded `…AHU…N…` substring match against known AHU siblings.
-    // Parent proposals still notice an AHU token in a sibling id (#1041).
-    // Plot, matrix, and rule cohorts do not use this.
-    let ahus: Vec<&String> = siblings
-        .iter()
-        .filter(|s| sibling_id_has_air_handler_token(s))
-        .collect();
-    for ahu in &ahus {
-        let ahu_u = ahu.to_ascii_uppercase();
-        if upper.contains(&ahu_u) {
-            return Some((*ahu).clone());
-        }
-    }
-    if ahus.len() == 1 {
-        return Some(ahus[0].clone());
-    }
-    None
-}
-
-/// Parent-link proposal only (#1041). Not a kind, plot, matrix, or rule filter.
+/// Parent AHU from package metadata. Id tokens are not a parent.
 ///
-/// A VAV/ZONE id stays a terminal even when it embeds `AHU` (`VAV_2_AHU_1`).
-fn sibling_id_has_air_handler_token(equipment_id: &str) -> bool {
-    let id = equipment_id.to_ascii_uppercase();
-    if id.contains("WEATHER") || id.contains("METER") || id.contains("VAV") || id.contains("ZONE") {
-        return false;
+/// The declared id must equal a sibling exactly (`AHU_1` does not select `AHU_10`).
+fn package_parent_ahu(eq_dir: &Path, equipment_id: &str, siblings: &[String]) -> Option<String> {
+    let mut declared = None;
+    for name in [
+        "equipment.json",
+        "history_wide.json",
+        "history_wide.column_map.json",
+        "column_map.json",
+    ] {
+        let path = eq_dir.join(name);
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(map) = serde_json::from_str::<Value>(&text) else {
+            continue;
+        };
+        if let Some(parent) =
+            crate::equipment_types::declared_parent_from_map_json(&map, equipment_id)
+        {
+            declared = Some(parent);
+            break;
+        }
     }
-    id.contains("AHU") || id.contains("RTU") || id.contains("MAU") || id.contains("DOAS")
+    if declared.is_none() {
+        if let Some(root) = eq_dir.parent() {
+            let path = root.join(crate::equipment_types::EQUIPMENT_PARENTS_FILE);
+            if let Ok(text) = std::fs::read_to_string(path) {
+                if let Ok(map) = serde_json::from_str::<BTreeMap<String, String>>(&text) {
+                    declared = map.get(equipment_id).cloned();
+                }
+            }
+        }
+    }
+    let declared = declared?;
+    siblings
+        .iter()
+        .find(|s| s.as_str() == declared.as_str() && s.as_str() != equipment_id)
+        .cloned()
 }
 
 /// Raw columns.csv parse — empty roles stay empty (no silent inference for the editor).
@@ -1388,13 +1430,8 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
         };
         let (eq_type, eq_type_raw, eq_type_source) =
             resolve_mapping_equipment_type(eq_id, &stamped_types);
-        let parent_proposal = infer_parent_ahu(eq_id, &all_ids);
-        // Guessed parent is a reviewable proposal only — never a confirmed feeds edge (DM-04).
-        let (parent_ahu, parent_ahu_source): (Option<String>, Option<&'static str>) =
-            match &parent_proposal {
-                Some(p) => (Some(p.clone()), Some("inferred")),
-                None => (None, None),
-            };
+        let parent_ahu = package_parent_ahu(&eq_dir, eq_id, &all_ids);
+        let parent_ahu_source: Option<&'static str> = parent_ahu.as_ref().map(|_| "package");
         let cols_path = eq_dir.join("columns.csv");
         let history_path = eq_dir.join("history_wide.csv");
         let (columns_order, roles) = match read_columns_csv_raw(&cols_path) {
@@ -1452,13 +1489,7 @@ pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>
         let kind = crate::equipment_types::kind_for(eq_id, eq_type_raw.as_deref());
         if kind == "vav" && parent_ahu.is_none() {
             warnings.push(
-                "VAV has no inferred parent AHU — set relationship in session role_map when known"
-                    .into(),
-            );
-        }
-        if parent_ahu_source == Some("inferred") {
-            warnings.push(
-                "parent_ahu is an id-heuristic proposal (parent_ahu_source=inferred) — not confirmed topology"
+                "VAV has no package parent AHU — set parentAhu on the equipment map when the relationship is known"
                     .into(),
             );
         }
@@ -2129,18 +2160,50 @@ mod tests {
     }
 
     #[test]
-    fn parent_ahu_inference_from_vav_id() {
-        let siblings = vec!["AHU_1".into(), "VAV_2_AHU_1".into(), "VAV_9".into()];
+    fn parent_ahu_uses_package_metadata_not_id_text() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let siblings = vec![
+            "AC_1".into(),
+            "box_12".into(),
+            "AHU_10".into(),
+            "VAV_2_AHU_1".into(),
+        ];
+        let vav = tmp.path().join("VAV_2_AHU_1");
+        std::fs::create_dir_all(&vav).unwrap();
+        std::fs::write(vav.join("history_wide.json"), r#"{"equipType":"vav"}"#).unwrap();
         assert_eq!(
-            infer_parent_ahu("VAV_2_AHU_1", &siblings).as_deref(),
-            Some("AHU_1")
+            package_parent_ahu(&vav, "VAV_2_AHU_1", &siblings),
+            None,
+            "an AHU token in the id is not a parent"
         );
+        let lone = tmp.path().join("VAV_9");
+        std::fs::create_dir_all(&lone).unwrap();
         assert_eq!(
-            infer_parent_ahu("VAV_9", &siblings).as_deref(),
-            Some("AHU_1"),
-            "single AHU sibling fallback"
+            package_parent_ahu(&lone, "VAV_9", &siblings),
+            None,
+            "a single air handler sibling is not a parent"
         );
-        assert_eq!(infer_parent_ahu("AHU_1", &siblings), None);
+        let box_dir = tmp.path().join("box_12");
+        std::fs::create_dir_all(&box_dir).unwrap();
+        std::fs::write(
+            box_dir.join("history_wide.json"),
+            r#"{"equipType":"vav","parentAhu":"AC_1"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            package_parent_ahu(&box_dir, "box_12", &siblings).as_deref(),
+            Some("AC_1")
+        );
+        std::fs::write(
+            box_dir.join("history_wide.json"),
+            r#"{"equipType":"vav","parentAhu":"AHU_1"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            package_parent_ahu(&box_dir, "box_12", &siblings),
+            None,
+            "AHU_1 must not select the sibling AHU_10"
+        );
     }
 
     #[test]

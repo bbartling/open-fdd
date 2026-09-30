@@ -19,6 +19,8 @@ mod econ4_confirm_test;
 #[cfg(test)]
 mod fcu_parity_test;
 #[cfg(test)]
+mod oat_meteo_target_test;
+#[cfg(test)]
 mod oracle_harness;
 #[cfg(test)]
 mod oracle_parity_test;

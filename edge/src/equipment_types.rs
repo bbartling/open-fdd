@@ -9,6 +9,7 @@ use std::path::Path;
 use serde_json::{json, Value};
 
 pub const EQUIPMENT_TYPES_FILE: &str = "equipment_types.json";
+pub const EQUIPMENT_PARENTS_FILE: &str = "equipment_parents.json";
 
 fn normalized_token(raw: &str) -> String {
     raw.chars()
@@ -186,6 +187,97 @@ pub fn write_type_map(
         .map_err(|e| format!("write equipment type registry: {e}"))
 }
 
+fn clean_equipment_id(raw: &str) -> Option<String> {
+    let id = raw.trim();
+    if id.is_empty()
+        || id == "."
+        || id == ".."
+        || id.contains('/')
+        || id.contains('\\')
+        || id.contains(':')
+    {
+        return None;
+    }
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return None;
+    }
+    Some(id.to_string())
+}
+
+/// Parent AHU declared on a package map (`parentAhu` / `parent_ahu`).
+///
+/// Equipment-id text is not a parent. `VAV_2_AHU_1` has no parent unless the
+/// map names one. A missing key returns `None`.
+pub fn declared_parent_from_map_json(map: &Value, equip_id: &str) -> Option<String> {
+    fn from_block(block: &Value) -> Option<String> {
+        for key in ["parentAhu", "parent_ahu", "parentAHU"] {
+            if let Some(s) = block.get(key).and_then(Value::as_str) {
+                if let Some(id) = clean_equipment_id(s) {
+                    return Some(id);
+                }
+            }
+        }
+        None
+    }
+
+    let obj = map.as_object()?;
+    for key in ["equip", "equipment", "devices", "role_map"] {
+        if let Some(blocks) = obj.get(key).and_then(Value::as_object) {
+            if let Some(block) = blocks.get(equip_id) {
+                if let Some(parent) = from_block(block) {
+                    return Some(parent);
+                }
+            }
+        }
+    }
+    from_block(map)
+}
+
+pub fn load_parent_map(parquet_root: &Path, building_id: Option<&str>) -> BTreeMap<String, String> {
+    let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return BTreeMap::new();
+    };
+    if bid.contains('/') || bid.contains('\\') || bid.contains("..") {
+        return BTreeMap::new();
+    }
+    let path = parquet_root
+        .join(format!("building={bid}"))
+        .join(EQUIPMENT_PARENTS_FILE);
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return BTreeMap::new();
+    };
+    serde_json::from_str::<BTreeMap<String, String>>(&text)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(child, parent)| {
+            let child = clean_equipment_id(&child)?;
+            let parent = clean_equipment_id(&parent)?;
+            if child == parent {
+                return None;
+            }
+            Some((child, parent))
+        })
+        .collect()
+}
+
+pub fn write_parent_map(
+    parquet_root: &Path,
+    building_id: &str,
+    parents: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    if parents.is_empty() {
+        return Ok(());
+    }
+    let dir = parquet_root.join(format!("building={building_id}"));
+    std::fs::create_dir_all(&dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
+    let body = serde_json::to_string_pretty(parents).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join(EQUIPMENT_PARENTS_FILE), body)
+        .map_err(|e| format!("write equipment parent registry: {e}"))
+}
+
 pub fn type_report(equipment_id: &str, stamped_type: Option<&str>) -> Value {
     json!({
         "equipment_id": equipment_id,
@@ -283,6 +375,34 @@ mod tests {
         assert_eq!(
             stamped_type_from_map_json(&snake, "AC_2").as_deref(),
             Some("heatPump")
+        );
+    }
+
+    #[test]
+    fn declared_parent_is_map_metadata_not_id_text() {
+        let bare = json!({"equipType": "vav", "points": {}});
+        assert_eq!(declared_parent_from_map_json(&bare, "VAV_2_AHU_1"), None);
+        assert_eq!(declared_parent_from_map_json(&bare, "VAV_9"), None);
+        assert_eq!(
+            declared_parent_from_map_json(&bare, "bldg2-zone-loopback"),
+            None
+        );
+        let declared = json!({"equipType": "vav", "parentAhu": "AC_1", "points": {}});
+        assert_eq!(
+            declared_parent_from_map_json(&declared, "box_12").as_deref(),
+            Some("AC_1")
+        );
+        let nested = json!({"equip": {"box_12": {"equipType": "vav", "parent_ahu": "AC_1"}}});
+        assert_eq!(
+            declared_parent_from_map_json(&nested, "box_12").as_deref(),
+            Some("AC_1")
+        );
+        let junk = json!({"parentAhu": "AHU_1/../other"});
+        assert_eq!(declared_parent_from_map_json(&junk, "box_12"), None);
+        let prefix = json!({"parentAhu": "AHU_1"});
+        assert_eq!(
+            declared_parent_from_map_json(&prefix, "RTU_010").as_deref(),
+            Some("AHU_1")
         );
     }
 
