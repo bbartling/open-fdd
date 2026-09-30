@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::{DefaultBodyLimit, Path, Query, State};
+use axum::extract::{DefaultBodyLimit, Extension, Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware;
 use axum::routing::{delete, get, post};
@@ -11,6 +11,7 @@ use axum::{Json, Router};
 use bytes::Bytes;
 use chrono::Utc;
 use openfdd_contracts::{CommandEnvelope, Protocol, TelemetryEnvelope, TopicBuilder, TopicKind};
+use openfdd_contracts::{ConnectorReadRequest, ConnectorReadResponse, ConnectorScope};
 use openfdd_mqtt::publish_json;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -103,6 +104,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     let protected = Router::new()
         // Kali O2c / Wave P2c: was public; leaks plane + topology when unauthenticated.
         .route("/api/capabilities", get(capabilities))
+        .route("/api/connectors/{edge_id}/read", post(connector_read))
         .route("/api/health/stack", get(health_stack))
         .route("/api/building/snapshot", get(building_snapshot))
         .route("/api/dashboard/summary", get(dashboard_summary))
@@ -1002,10 +1004,21 @@ pub async fn list_tenant_budgets(
 }
 
 /// Feature advertisement for UI capability gates and MCP accuracy checks.
-pub async fn capabilities() -> Json<Value> {
+pub async fn capabilities(State(state): State<Arc<AppState>>) -> Json<Value> {
+    let aggregate = state
+        .capabilities
+        .snapshot(crate::capabilities::central_hello(&state))
+        .await;
+    let aggregate = serde_json::to_value(aggregate).unwrap_or_else(|_| {
+        json!({
+            "schema": openfdd_contracts::CAPABILITIES_AGGREGATE_CONTRACT_V1,
+            "error": "capability serialization failed"
+        })
+    });
     Json(json!({
         "ok": true,
         "contract": crate::contract::contract_capabilities_extra(),
+        "connector_capabilities": aggregate,
         "capabilities": {
             "lab": true,
             "fdd_registry": true,
@@ -1031,6 +1044,81 @@ pub async fn capabilities() -> Json<Value> {
             "tenant_budgets": crate::tenant_budget::tenant_budgets_enabled()
         }
     }))
+}
+
+/// Forward an explicitly requested, scoped read to a configured fieldbus
+/// edge. Advertised capabilities never substitute for JWT and tenant checks.
+pub async fn connector_read(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<auth::AuthUser>,
+    headers: HeaderMap,
+    Path(edge_id): Path<String>,
+    Json(request): Json<ConnectorReadRequest>,
+) -> Result<Json<ConnectorReadResponse>, (StatusCode, Json<Value>)> {
+    request.validate().map_err(|error| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": error})),
+        )
+    })?;
+    if request.scope.edge_id != edge_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "path edge_id and scoped edge_id differ"})),
+        ));
+    }
+    let ctx = resolve_tenant_context(&state, &headers);
+    if !request_scope_allowed(&ctx, &request.scope) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(
+                json!({"ok": false, "error": "building is outside the authenticated tenant scope"}),
+            ),
+        ));
+    }
+    let edge = state.edges.get(&edge_id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"ok": false, "error": "edge is not registered"})),
+        )
+    })?;
+    let known_site = edge
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .known_site_id();
+    if known_site.as_deref() != Some(request.scope.building_id.as_str()) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(
+                json!({"ok": false, "error": "edge is not registered for the requested building"}),
+            ),
+        ));
+    }
+    drop(edge);
+    // Keep the authenticated user in the handler signature so the route's
+    // JWT middleware cannot be accidentally removed without a compile-time
+    // use-site change. Authorization is represented by the tenant check and
+    // the middleware; no advertised capability grants access.
+    let _subject = user.sub;
+    let response = state
+        .capabilities
+        .proxy_read(&edge_id, &request)
+        .await
+        .map_err(|error| {
+            (
+                error.status(),
+                Json(json!({"ok": false, "error": error.message()})),
+            )
+        })?;
+    Ok(Json(response))
+}
+
+fn request_scope_allowed(ctx: &crate::tenant::TenantContext, scope: &ConnectorScope) -> bool {
+    ctx.allow_building(&scope.building_id)
+        && scope
+            .tenant_id
+            .as_deref()
+            .is_none_or(|tenant_id| ctx.hub_admin || ctx.tenant_id.as_deref() == Some(tenant_id))
 }
 
 #[utoipa::path(
@@ -4849,7 +4937,7 @@ pub async fn fuel_campus_weather_fetch(Json(body): Json<FuelWeatherFetchBody>) -
 
 #[cfg(test)]
 mod version_tests {
-    use super::{local_fieldbus_ingest, resolve_build_version};
+    use super::{local_fieldbus_ingest, request_scope_allowed, resolve_build_version};
     use crate::state::AppState;
     use axum::http::{HeaderMap, HeaderValue, StatusCode};
     use axum::Json;
@@ -4857,6 +4945,22 @@ mod version_tests {
     use openfdd_contracts::{Protocol, Quality, TelemetryEnvelope, TelemetryPoint, ValueKind};
     use serde_json::Value;
     use std::sync::Arc;
+
+    #[test]
+    fn connector_proxy_denies_cross_tenant_scope_even_when_building_is_allowed() {
+        let ctx = crate::tenant::TenantContext {
+            tenant_id: Some("tenant-a".into()),
+            building_ids: vec!["building-a".into()],
+            hub_admin: false,
+            multi_tenant: true,
+        };
+        let scope = openfdd_contracts::ConnectorScope {
+            tenant_id: Some("tenant-b".into()),
+            building_id: "building-a".into(),
+            edge_id: "edge-a".into(),
+        };
+        assert!(!request_scope_allowed(&ctx, &scope));
+    }
 
     // Single test so the shared `OPENFDD_GIT_SHA` env var is never raced by a
     // parallel sibling test.

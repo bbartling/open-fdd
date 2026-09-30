@@ -1,0 +1,225 @@
+//! Versioned connector hello and capability contracts.
+//!
+//! These types deliberately describe observed runtime state separately from
+//! authentication and from the read-only proxy contract.  A connector saying
+//! that it supports an action never grants a caller permission to use it.
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+/// Stable schema identifier for connector hello/capability responses.
+pub const CAPABILITIES_CONTRACT_V1: &str = "openfdd.connector.capabilities.v1";
+pub const CAPABILITIES_AGGREGATE_CONTRACT_V1: &str = "openfdd.capabilities.aggregate.v1";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectorProtocol {
+    Bacnet,
+    Modbus,
+    Haystack,
+    Rest,
+    Mqtt,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum CapabilityState {
+    Disabled,
+    NotConfigured,
+    Ready,
+    Unreachable,
+    AuthFailure,
+    Incompatible,
+    Stale,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectorAction {
+    MetadataRead,
+    PointRead,
+    PriorityArrayRead,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum DeliveryStatus {
+    Disabled,
+    NotConfigured,
+    Ready,
+    Unreachable,
+    AuthFailure,
+    Incompatible,
+    Stale,
+}
+
+impl From<CapabilityState> for DeliveryStatus {
+    fn from(value: CapabilityState) -> Self {
+        match value {
+            CapabilityState::Disabled => Self::Disabled,
+            CapabilityState::NotConfigured => Self::NotConfigured,
+            CapabilityState::Ready => Self::Ready,
+            CapabilityState::Unreachable => Self::Unreachable,
+            CapabilityState::AuthFailure => Self::AuthFailure,
+            CapabilityState::Incompatible => Self::Incompatible,
+            CapabilityState::Stale => Self::Stale,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ServiceVersion {
+    pub service: String,
+    pub build: String,
+    pub contract: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ConnectorCapability {
+    pub protocol: ConnectorProtocol,
+    pub compiled: bool,
+    pub configured: bool,
+    pub enabled: bool,
+    pub readiness: CapabilityState,
+    pub source_health: CapabilityState,
+    pub mqtt_connection: DeliveryStatus,
+    pub durable_delivery: DeliveryStatus,
+    #[serde(default)]
+    pub supported_actions: Vec<ConnectorAction>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct RecipeObservation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared: Option<String>,
+    #[serde(default)]
+    pub observed_services: Vec<String>,
+    /// `matched`, `declared_missing`, `observed_extra`, or `not_declared`.
+    pub reconciliation: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ConnectorHelloResponse {
+    pub schema: String,
+    pub version: ServiceVersion,
+    #[serde(default)]
+    pub compiled_protocols: Vec<ConnectorProtocol>,
+    #[serde(default)]
+    pub connectors: Vec<ConnectorCapability>,
+    pub recipe: RecipeObservation,
+    pub observed_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct UpstreamCapability {
+    pub edge_id: String,
+    /// Scheme and authority only. Paths, credentials, and query strings are
+    /// intentionally never returned.
+    pub address: String,
+    pub state: CapabilityState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hello: Option<ConnectorHelloResponse>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_success_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct CapabilitiesAggregateResponse {
+    pub schema: String,
+    pub version: ServiceVersion,
+    pub central: ConnectorHelloResponse,
+    #[serde(default)]
+    pub upstreams: Vec<UpstreamCapability>,
+    pub recipe: RecipeObservation,
+    pub observed_at: DateTime<Utc>,
+}
+
+impl ConnectorHelloResponse {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema != CAPABILITIES_CONTRACT_V1 {
+            return Err(format!("unsupported capability schema {}", self.schema));
+        }
+        if self.version.contract != CAPABILITIES_CONTRACT_V1 {
+            return Err("capability contract version mismatch".into());
+        }
+        if self.version.service.trim().is_empty() || self.version.build.trim().is_empty() {
+            return Err("service and build versions are required".into());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capability_contract_round_trips_and_keeps_explicit_states() {
+        let response = ConnectorHelloResponse {
+            schema: CAPABILITIES_CONTRACT_V1.into(),
+            version: ServiceVersion {
+                service: "fieldbus".into(),
+                build: "3.5.58+abc".into(),
+                contract: CAPABILITIES_CONTRACT_V1.into(),
+            },
+            compiled_protocols: vec![ConnectorProtocol::Bacnet],
+            connectors: vec![ConnectorCapability {
+                protocol: ConnectorProtocol::Bacnet,
+                compiled: true,
+                configured: false,
+                enabled: false,
+                readiness: CapabilityState::NotConfigured,
+                source_health: CapabilityState::NotConfigured,
+                mqtt_connection: DeliveryStatus::Disabled,
+                durable_delivery: DeliveryStatus::Disabled,
+                supported_actions: vec![ConnectorAction::MetadataRead],
+                detail: None,
+            }],
+            recipe: RecipeObservation {
+                declared: None,
+                observed_services: vec!["fieldbus".into()],
+                reconciliation: "not_declared".into(),
+            },
+            observed_at: Utc::now(),
+        };
+        response.validate().unwrap();
+        let value = serde_json::to_value(&response).unwrap();
+        assert_eq!(value["schema"], CAPABILITIES_CONTRACT_V1);
+        assert_eq!(value["connectors"][0]["readiness"], "not_configured");
+        let decoded: ConnectorHelloResponse = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            decoded.connectors[0].readiness,
+            CapabilityState::NotConfigured
+        );
+    }
+
+    #[test]
+    fn every_wire_state_is_explicit() {
+        for state in [
+            CapabilityState::Disabled,
+            CapabilityState::NotConfigured,
+            CapabilityState::Ready,
+            CapabilityState::Unreachable,
+            CapabilityState::AuthFailure,
+            CapabilityState::Incompatible,
+            CapabilityState::Stale,
+        ] {
+            let encoded = serde_json::to_string(&state).unwrap();
+            assert!(!encoded.is_empty());
+        }
+    }
+}

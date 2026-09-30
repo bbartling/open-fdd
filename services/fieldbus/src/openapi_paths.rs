@@ -3,6 +3,7 @@
 #![expect(dead_code)]
 
 use crate::models::*;
+use openfdd_contracts::{ConnectorReadRequest, ConnectorReadResponse};
 
 /// Service index and quick links.
 #[utoipa::path(
@@ -30,6 +31,30 @@ pub(crate) fn doc_health() {}
     responses((status = 200, description = "Sidecar health"))
 )]
 pub(crate) fn doc_api_health() {}
+
+/// Authenticated, side-effect-free connector hello and capability snapshot.
+#[utoipa::path(
+    get,
+    path = "/api/connector/hello",
+    tag = "Open-FDD compat",
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Versioned connector capability snapshot", body = openfdd_contracts::ConnectorHelloResponse))
+)]
+pub(crate) fn doc_connector_hello() {}
+
+/// Authenticated scoped read-only connector proxy.
+#[utoipa::path(
+    post,
+    path = "/api/connector/read",
+    tag = "Open-FDD compat",
+    request_body = ConnectorReadRequest,
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Read-only connector response", body = ConnectorReadResponse),
+        (status = 403, description = "Scope or inventory denial")
+    )
+)]
+pub(crate) fn doc_connector_read() {}
 
 /// ReadProperty on a field device (bench/low-level).
 #[utoipa::path(

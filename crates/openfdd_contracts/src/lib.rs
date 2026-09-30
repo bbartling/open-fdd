@@ -1,12 +1,23 @@
 //! Shared Open-FDD MQTT / Haystack-style contracts.
 
+pub mod capabilities;
 pub mod command;
 pub mod envelope;
+pub mod proxy;
 pub mod topics;
 
+pub use capabilities::{
+    CapabilitiesAggregateResponse, CapabilityState, ConnectorAction, ConnectorCapability,
+    ConnectorHelloResponse, ConnectorProtocol, DeliveryStatus, RecipeObservation, ServiceVersion,
+    UpstreamCapability, CAPABILITIES_AGGREGATE_CONTRACT_V1, CAPABILITIES_CONTRACT_V1,
+};
 pub use command::{CommandAck, CommandEnvelope, CommandStatus};
 pub use envelope::{
     Protocol, Quality, SchemaVersion, TelemetryEnvelope, TelemetryPoint, ValueKind,
+};
+pub use proxy::{
+    ConnectorReadRequest, ConnectorReadResponse, ConnectorScope, ReadError, ReadTarget,
+    READ_PROXY_CONTRACT_V1,
 };
 pub use topics::{parse_topic, payload_matches_topic, TopicBuilder, TopicIdentity, TopicKind};
 

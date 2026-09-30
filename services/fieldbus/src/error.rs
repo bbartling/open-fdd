@@ -34,7 +34,6 @@ pub enum ApiError {
     Upstream(String),
 
     #[error("internal error: {0}")]
-    #[expect(dead_code)] // reserved HTTP mapping
     Internal(String),
 }
 

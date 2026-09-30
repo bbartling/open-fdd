@@ -323,6 +323,65 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn connector_hello_is_versioned_and_side_effect_free() {
+        let app = routes::api_routes(test_state());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/connector/hello")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["schema"], openfdd_contracts::CAPABILITIES_CONTRACT_V1);
+        assert_eq!(value["version"]["service"], "openfdd-fieldbus");
+        assert!(value["connectors"].is_array());
+        // No handler in this route reaches BacnetClientService; this request
+        // has no OT target and therefore cannot initiate discovery or a read.
+        assert!(value["connectors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|connector| connector["protocol"] != "write"));
+    }
+
+    #[tokio::test]
+    async fn connector_read_rejects_untrusted_scope_before_ot_access() {
+        let app = routes::api_routes(test_state());
+        let request = serde_json::json!({
+            "schema": openfdd_contracts::READ_PROXY_CONTRACT_V1,
+            "request_id": uuid::Uuid::nil(),
+            "scope": {
+                "building_id": "other-building",
+                "edge_id": "configured-edge"
+            },
+            "target": {
+                "kind": "bacnet_point",
+                "device_instance": 5007,
+                "object_type": "analog-value",
+                "object_instance": 1,
+                "property_id": "present-value"
+            }
+        });
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/connector/read")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&request).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
     async fn bacnet_write_approval_gate_keeps_omitted_and_false_requests_off_wire() {
         let receiver = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
             .await

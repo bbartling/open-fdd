@@ -18,6 +18,7 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::auth::AuthConfig;
+use crate::capabilities::CapabilitiesAggregator;
 use crate::live_historian::{LiveHistorianIngest, LiveWriter, PersistedMessageGroup};
 use crate::tenant_budget::TenantBudgetTracker;
 
@@ -178,6 +179,8 @@ pub struct MqttMonitorSnapshot {
 
 pub struct AppState {
     pub auth: AuthConfig,
+    /// Explicit capability probes and scoped read proxy. Health never probes.
+    pub capabilities: std::sync::Arc<CapabilitiesAggregator>,
     /// (edge_id, message_id) → observed
     pub seen_messages: DashMap<(String, Uuid), ()>,
     pub edges: DashMap<String, Mutex<EdgeShadow>>,
@@ -212,6 +215,7 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             auth: AuthConfig::load(),
+            capabilities: CapabilitiesAggregator::from_env(),
             seen_messages: DashMap::new(),
             edges: DashMap::new(),
             command_acks: DashMap::new(),

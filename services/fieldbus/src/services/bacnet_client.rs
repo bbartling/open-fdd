@@ -177,6 +177,43 @@ impl BacnetClientService {
             .find(|d| d.device_instance == device_instance)
     }
 
+    /// Return whether a read target belongs to the trusted field-device
+    /// inventory.  Connector proxy routes use this before touching the OT
+    /// network; callers cannot turn the proxy into an arbitrary BACnet reader.
+    pub fn is_configured_point(
+        &self,
+        device_instance: u32,
+        object_type: &str,
+        object_instance: u32,
+    ) -> bool {
+        self.find_device(device_instance).is_some_and(|device| {
+            device.enabled
+                && device.points.iter().any(|point| {
+                    point.object_type.eq_ignore_ascii_case(object_type)
+                        && point.object_instance == object_instance
+                })
+        })
+    }
+
+    pub fn configured_device_count(&self) -> usize {
+        self.field_devices.len()
+    }
+
+    pub fn enabled_device_count(&self) -> usize {
+        self.field_devices
+            .iter()
+            .filter(|device| device.enabled)
+            .count()
+    }
+
+    pub fn configured_point_count(&self) -> usize {
+        self.field_devices
+            .iter()
+            .filter(|device| device.enabled)
+            .map(|device| device.points.len())
+            .sum()
+    }
+
     async fn acquire_discovery_port(
         &self,
         device: Option<&FieldDevice>,
