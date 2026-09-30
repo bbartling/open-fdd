@@ -1101,8 +1101,15 @@ ORDER BY week_start, equipment_id
 async fn open_history_scoped(
     building_id: Option<&str>,
 ) -> Result<Option<(SessionContext, HashSet<String>, i64, fdd_store::ScanPermit)>> {
+    open_history_scoped_for_tenant(building_id, None).await
+}
+
+async fn open_history_scoped_for_tenant(
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+) -> Result<Option<(SessionContext, HashSet<String>, i64, fdd_store::ScanPermit)>> {
     let ctx = new_bounded_session()?;
-    let (ok, scan) = open_history_scan(&ctx, building_id).await?;
+    let (ok, scan) = open_history_scan_for_tenant(&ctx, building_id, preferred_tenant).await?;
     if !ok {
         return Ok(None);
     }
@@ -2420,8 +2427,11 @@ pub async fn bas_vs_web_from_history(
     equipment_filter: Option<&[String]>,
     max_points: usize,
     building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) =
+        open_history_scoped_for_tenant(building_id, preferred_tenant).await?
+    else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2589,12 +2599,15 @@ pub async fn inspect_from_history(
     equipment_id: &str,
     columns: Option<&[String]>,
     max_points: usize,
+    preferred_tenant: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let eq = equipment_id.trim();
     if eq.is_empty() {
         return Ok(None);
     }
-    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+    let Some((ctx, cols, n, _scan)) =
+        open_history_scoped_for_tenant(building_id, preferred_tenant).await?
+    else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -2746,10 +2759,10 @@ LIMIT {limit}
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
     });
-    // Same unscoped dual-read as [`open_history_scan`] (preferred tenant is None).
+    // Record the same dual-read root the inspect query used.
     if let Some(bid) = safe_building_segment(building_id) {
         if let Ok(resolved) =
-            fdd_store::resolve_building_read_root(&parquet_root_base(), None, &bid)
+            fdd_store::resolve_building_read_root(&parquet_root_base(), preferred_tenant, &bid)
         {
             if let Some(obj) = coverage.as_object_mut() {
                 obj.insert(
@@ -5040,7 +5053,7 @@ mod tests {
         );
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = bas_vs_web_from_history(None, 500, Some("bldg2_mqtt_oat"))
+        let env = bas_vs_web_from_history(None, 500, Some("bldg2_mqtt_oat"), None)
             .await
             .unwrap()
             .expect("MQTT outside_air_temperature weather-split should yield points");
@@ -5084,7 +5097,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_BAS", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = bas_vs_web_from_history(None, 500, Some("BUILDING_BAS"))
+        let env = bas_vs_web_from_history(None, 500, Some("BUILDING_BAS"), None)
             .await
             .unwrap()
             .expect("site BAS×web join should produce overlay points");
@@ -5121,7 +5134,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_INSP", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = inspect_from_history(Some("BUILDING_INSP"), "AHU_1", None, 500)
+        let env = inspect_from_history(Some("BUILDING_INSP"), "AHU_1", None, 500, None)
             .await
             .unwrap()
             .expect("inspect envelope");

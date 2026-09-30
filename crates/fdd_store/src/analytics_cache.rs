@@ -11,16 +11,21 @@
 //! {storage}/analytics_results/building_id={id}/query_id={query}/query_version={ver}/window={start}__{end}/config={hash16}/results.parquet
 //! ```
 //!
-//! Schema `analytics-result-parquet-v1`:
+//! Schema `analytics-result-parquet-v2`:
 //! - `section` (utf8): `rows` | `equipment` | `points` | `skipped` | `warning` | `coverage`
 //! - `row_index` (uint32)
 //! - one nullable column per scalar field (float64, bool, or utf8)
+//!
+//! Explicit JSON nulls (for example an unknown `{flag}_fault_h`) stay on the
+//! object that set them. `openfdd.section_keys` records those keys per section
+//! so a null cell is not dropped on read and is not copied onto other sections.
+//! Files stamped `analytics-result-parquet-v1` are cache misses.
 //!
 //! Nested objects and arrays are utf8 JSON cells because Arrow has no single
 //! dynamic struct for mixed analytics families. The file is still a columnar
 //! table, not one JSON blob column.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -33,12 +38,12 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ArrowWriter;
 use parquet::file::metadata::KeyValue;
 use parquet::file::properties::WriterProperties;
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::historian::safe_partition_value;
 
-pub const SCHEMA_NAME: &str = "analytics-result-parquet-v1";
+pub const SCHEMA_NAME: &str = "analytics-result-parquet-v2";
 pub const RESULTS_DIR: &str = "analytics_results";
 
 const COL_SECTION: &str = "section";
@@ -251,7 +256,11 @@ pub fn write_result(
     let dir = partition_dir(storage_root, key)?;
     fs::create_dir_all(&dir).with_context(|| format!("mkdir {}", dir.display()))?;
     let batch = table_to_batch(table)?;
-    let kvs = provenance_kvs(provenance);
+    let mut kvs = provenance_kvs(provenance);
+    kvs.push(KeyValue::new(
+        "openfdd.section_keys".to_string(),
+        Some(section_keys_json(table)),
+    ));
     let props = WriterProperties::builder()
         .set_key_value_metadata(Some(kvs))
         .build();
@@ -613,17 +622,28 @@ fn batch_to_table(
         .downcast_ref::<UInt32Array>()
         .ok_or_else(|| anyhow!("row_index is not uint32"))?;
 
+    let section_keys = section_keys_from_meta(meta);
     let schema = batch.schema();
     for row in 0..batch.num_rows() {
         let section = section_col.value(row).to_string();
         let idx = index_col.value(row);
-        let entry = grouped.entry((section, idx)).or_default();
+        let entry = grouped.entry((section.clone(), idx)).or_default();
         for col_idx in 0..batch.num_columns() {
             let name = schema.field(col_idx).name();
             if name == COL_SECTION || name == COL_ROW_INDEX {
                 continue;
             }
-            if let Some(value) = cell_to_json(batch.column(col_idx).as_ref(), row) {
+            let array = batch.column(col_idx).as_ref();
+            if array.is_null(row) {
+                if section_keys
+                    .get(&section)
+                    .is_some_and(|keys| keys.contains(name))
+                {
+                    entry.insert(name.clone(), Value::Null);
+                }
+                continue;
+            }
+            if let Some(value) = cell_to_json(array, row) {
                 entry.insert(name.clone(), value);
             }
         }
@@ -669,6 +689,62 @@ fn string_col<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a StringArray>
         .as_any()
         .downcast_ref::<StringArray>()
         .ok_or_else(|| anyhow!("{name} is not utf8"))
+}
+
+fn object_keys(rows: &[Value]) -> Vec<String> {
+    let mut keys = BTreeSet::new();
+    for row in rows {
+        if let Some(map) = row.as_object() {
+            keys.extend(map.keys().cloned());
+        }
+    }
+    keys.into_iter().collect()
+}
+
+fn section_keys_json(table: &AnalyticsResultTable) -> String {
+    let coverage_keys = table
+        .coverage
+        .as_ref()
+        .map(|value| object_keys(std::slice::from_ref(value)))
+        .unwrap_or_default();
+    let warning_keys: Vec<&str> = if table.warnings.is_empty() {
+        Vec::new()
+    } else {
+        vec!["message"]
+    };
+    json!({
+        "rows": object_keys(&table.rows),
+        "equipment": object_keys(&table.equipment),
+        "points": object_keys(&table.points),
+        "skipped": object_keys(&table.skipped),
+        "warning": warning_keys,
+        "coverage": coverage_keys,
+    })
+    .to_string()
+}
+
+fn section_keys_from_meta(meta: &HashMap<String, String>) -> HashMap<String, HashSet<String>> {
+    let Some(raw) = meta.get("openfdd.section_keys") else {
+        return HashMap::new();
+    };
+    let Ok(value) = serde_json::from_str::<Value>(raw) else {
+        return HashMap::new();
+    };
+    let Some(obj) = value.as_object() else {
+        return HashMap::new();
+    };
+    let mut out = HashMap::new();
+    for (section, keys) in obj {
+        let Some(arr) = keys.as_array() else {
+            continue;
+        };
+        let set = arr
+            .iter()
+            .filter_map(|item| item.as_str().map(str::to_string))
+            .collect();
+        out.insert(section.clone(), set);
+    }
+    out
 }
 
 fn cell_to_json(array: &dyn Array, row: usize) -> Option<Value> {
@@ -828,6 +904,47 @@ mod tests {
         assert_eq!(got.watermark_order, 20260108000000);
         assert_eq!(got.config_hash, hash);
         assert_eq!(table.engine, "datafusion");
+    }
+
+    #[test]
+    fn explicit_null_fault_hours_roundtrip_on_the_row_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let hash = config_hash("chiller");
+        let key = key(&hash);
+        let mut table = sample_table();
+        table.rows = vec![json!({
+            "equipment_id": "CHW_1",
+            "low_delta_t_fault_h": 1.5,
+            "no_load": null,
+            "no_load_fault_h": null
+        })];
+        table.warnings = vec!["flags unknown until rules run".into()];
+        let provenance = CacheProvenance {
+            building_id: key.building_id.clone(),
+            query_id: key.query_id.clone(),
+            query_version: key.query_version.clone(),
+            window_start: key.window_start.clone(),
+            window_end: key.window_end.clone(),
+            config_hash: hash,
+            watermark_order: 1,
+            watermark_utc: String::new(),
+            generated_at: "t".into(),
+            engine: "datafusion".into(),
+            result_query_version: "chiller-health-v2".into(),
+        };
+        write_result(tmp.path(), &key, &table, &provenance).unwrap();
+        let (got, _) = read_result(tmp.path(), &key).unwrap().unwrap();
+        let row = got.rows[0].as_object().unwrap();
+        assert!(row.contains_key("no_load_fault_h"));
+        assert!(row["no_load_fault_h"].is_null());
+        assert!(row.contains_key("no_load"));
+        assert!(row["no_load"].is_null());
+        assert_eq!(row["low_delta_t_fault_h"], 1.5);
+        assert_eq!(
+            got.warnings,
+            vec!["flags unknown until rules run".to_string()]
+        );
+        assert!(!got.warnings.iter().any(|w| w.contains("no_load")));
     }
 
     #[test]

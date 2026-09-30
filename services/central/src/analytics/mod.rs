@@ -91,6 +91,10 @@ pub struct AnalyticsRequest {
     /// Recompute even when the parquet result cache is fresh.
     #[serde(default)]
     pub refresh: bool,
+    /// Session read tenant. Not a client field: routes set it from the JWT
+    /// or the control-plane owner so the cache key matches the historian root.
+    #[serde(default, skip)]
+    pub read_tenant_id: Option<String>,
 }
 
 /// Typed analytics response envelope (no Plotly JSON).

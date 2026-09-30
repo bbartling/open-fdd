@@ -25,10 +25,23 @@ cget() {
 }
 
 FAIL=0
+PRODUCT=0
+SOFT=0
 record() {
   local id="$1" ok="$2" detail="$3"
   echo "$id ok=$ok $detail" | tee -a "$LOG"
-  [[ "$ok" == "1" ]] || FAIL=1
+  if [[ "$ok" != "1" ]]; then
+    FAIL=1
+    PRODUCT=1
+  fi
+}
+# Field catalog (AV not in the historian) stays Soft-OPEN. It is not a product
+# PASS and it still fails this required gate so fully_qualified stays false.
+record_soft() {
+  local id="$1" detail="$2"
+  echo "$id ok=0 soft_open=1 field_catalog $detail" | tee -a "$LOG"
+  FAIL=1
+  SOFT=$((SOFT + 1))
 }
 
 # 1) Lakeside FC1 — must not hit read_csv planning error
@@ -56,24 +69,43 @@ fi
 # 3) Inspect bldg2 zone_t
 body="$(cpost /api/analytics/inspect '{"building_id":"bldg2","equipment_ids":["bldg2-zone-loopback"],"max_points":800,"series":{"columns":["zone_t"]}}')"
 echo "$body" >"$ART/wave_i_inspect_bldg2.json"
-zt="$(echo "$body" | python3 -c 'import json,sys
+eval "$(echo "$body" | python3 -c '
+import json,sys
 a=(json.load(sys.stdin).get("analytics") or {})
+cov=a.get("coverage") or {}
+plot=set(cov.get("plottable_columns") or [])
 pts=a.get("points") or []
-print(sum(1 for p in pts if p.get("zone_t") is not None))')"
+zt=sum(1 for p in pts if p.get("zone_t") is not None)
+print("zt=%d" % zt)
+print("zone_col=%d" % (1 if "zone_t" in plot else 0))
+')"
 if [[ "${zt:-0}" -gt 0 ]]; then
   record inspect_zone_t 1 "non_null=$zt"
+elif [[ "${zone_col:-0}" == "1" ]]; then
+  record inspect_zone_t 0 "zone_t column present non_null=${zt:-0}"
 else
-  record inspect_zone_t 0 "non_null=$zt"
+  record_soft inspect_zone_t "zone_t column absent non_null=${zt:-0}"
 fi
 
 # 4) bas-vs-web bldg2 (requires dual-OAT catalog + soak)
 body="$(cpost /api/analytics/bas-vs-web-oat '{"building_id":"bldg2","max_points":2000}')"
 echo "$body" >"$ART/wave_i_bas_vs_web_bldg2.json"
-pts="$(echo "$body" | jq -r '(.analytics.points // []) | length' 2>/dev/null || echo 0)"
+eval "$(echo "$body" | python3 -c '
+import json,sys
+body=json.load(sys.stdin)
+a=body.get("analytics") or {}
+pts=len(a.get("points") or [])
+warns=" ".join(str(w) for w in (a.get("warnings") or [])).lower()
+missing=1 if ("unavailable" in warns or "need distinct" in warns) else 0
+print("pts=%d" % pts)
+print("missing_roles=%d" % missing)
+')"
 if [[ "${pts:-0}" -gt 0 ]]; then
   record bas_vs_web_bldg2 1 "points=$pts"
+elif [[ "${missing_roles:-0}" == "1" ]]; then
+  record_soft bas_vs_web_bldg2 "oa_t/web_oa_t columns absent points=0"
 else
-  record bas_vs_web_bldg2 0 "points=0"
+  record bas_vs_web_bldg2 0 "points=0 roles_present"
 fi
 
 # 5) B100 inspect — span-preserving downsample (equipment_id required; AHU_1).
@@ -108,12 +140,17 @@ else
   record b100_plot_span 0 "${plot_detail:-plot span too short}"
 fi
 
-jq -n --argjson fail "$FAIL" '{gate:"20_wave_i_app_test_megas", fail:$fail}' \
+jq -n --argjson fail "$FAIL" --argjson product "$PRODUCT" --argjson soft "$SOFT" \
+  '{gate:"20_wave_i_app_test_megas", fail:$fail, product_fail:$product, field_catalog_soft_open:$soft}' \
   >"$ART/wave_i_app_test_megas.json"
 
 if [[ "$FAIL" -eq 0 ]]; then
   ok "Wave I app-test MEGAs PASS"
   exit 0
 fi
-bad "Wave I app-test MEGAs FAIL — see $LOG"
+if [[ "$PRODUCT" -eq 0 && "$SOFT" -gt 0 ]]; then
+  bad "Wave I product checks passed; field-catalog Soft-OPEN (not a product PASS, not FQ) — see $LOG"
+else
+  bad "Wave I app-test MEGAs FAIL — see $LOG"
+fi
 exit 1

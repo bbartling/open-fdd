@@ -204,6 +204,24 @@ impl ControlPlane {
             .unwrap_or_default()
     }
 
+    /// The only tenant that lists `building_id`. Two owners is not a guess.
+    pub fn sole_tenant_for_building(&self, building_id: &str) -> Option<String> {
+        let bid = building_id.trim();
+        if bid.is_empty() {
+            return None;
+        }
+        let mut hits = self
+            .tenants
+            .iter()
+            .filter(|t| t.building_ids.iter().any(|b| b == bid));
+        let first = hits.next()?;
+        if hits.next().is_some() {
+            None
+        } else {
+            Some(first.id.clone())
+        }
+    }
+
     /// First tenant that lists `building_id` (case-sensitive). Used for MT command topics.
     pub fn tenant_for_building(&self, building_id: &str) -> Option<String> {
         let bid = building_id.trim();
@@ -519,5 +537,29 @@ mod tests {
             .expect("bldg b");
         assert_eq!(bldg_b.source, fdd_store::BuildingReadSource::HubRoot);
         std::env::remove_var("OPENFDD_MULTI_TENANT");
+    }
+
+    #[test]
+    fn sole_tenant_for_building_refuses_two_owners() {
+        let plane = ControlPlane {
+            tenants: vec![
+                TenantRecord {
+                    id: "acme".into(),
+                    name: "Acme".into(),
+                    building_ids: vec!["bldg2".into()],
+                },
+                TenantRecord {
+                    id: "other".into(),
+                    name: "Other".into(),
+                    building_ids: vec!["bldg2".into(), "only-other".into()],
+                },
+            ],
+        };
+        assert_eq!(plane.sole_tenant_for_building("bldg2"), None);
+        assert_eq!(
+            plane.sole_tenant_for_building("only-other").as_deref(),
+            Some("other")
+        );
+        assert_eq!(plane.sole_tenant_for_building("missing"), None);
     }
 }

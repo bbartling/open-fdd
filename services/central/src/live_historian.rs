@@ -626,6 +626,11 @@ impl LiveHistorian {
             }
         }
         if !flushes.is_empty() {
+            if let Some(root) = self.budget_root().map(std::path::Path::to_path_buf) {
+                if let Err(error) = fdd_store::enforce_budget_throttled(&root, 60) {
+                    warn!(%error, "local data budget enforcement failed");
+                }
+            }
             self.persist_type_stamps();
             if let Some(timestamp) = self.latest_persisted_timestamp_utc {
                 // The immutable Parquet objects are canonical. A watermark write
@@ -639,6 +644,22 @@ impl LiveHistorian {
         }
         report.latest_persisted_timestamp_utc = self.latest_persisted_timestamp_utc;
         Ok(())
+    }
+
+    /// Hub pool for the 100 GiB budget. A multi-tenant writer root is
+    /// `{hub}/tenants/{id}`; eviction has to see the whole pool.
+    fn budget_root(&self) -> Option<&std::path::Path> {
+        let root = self.parquet_root.as_deref()?;
+        let name = root.file_name().and_then(|s| s.to_str())?;
+        let parent = root.parent()?;
+        if parent.file_name().and_then(|s| s.to_str()) == Some("tenants")
+            && !name.is_empty()
+            && name != "."
+            && name != ".."
+        {
+            return parent.parent();
+        }
+        Some(root)
     }
 
     fn persist_type_stamps(&mut self) {
@@ -1443,6 +1464,7 @@ mod tests {
                     "tenants/acme/history/building_id=ACME/equipment_id=unit-1/year=2026/month=08",
                 );
                 assert_eq!(std::fs::read_dir(&partition).unwrap().count(), 1);
+                assert_eq!(live.budget_root(), Some(root));
                 assert!(!root.join("history").exists());
             },
         );

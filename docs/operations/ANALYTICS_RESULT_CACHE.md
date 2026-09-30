@@ -10,7 +10,7 @@ Parquet result tables for `/api/analytics/*` (including RCx presets and sensor-f
 
 `{storage}` is `OPENFDD_ANALYTICS_CACHE_ROOT`, otherwise the local file root (`OPENFDD_STORAGE_URL` / `OPENFDD_PARQUET_ROOT`), otherwise the hub parquet root.
 
-Schema name: `analytics-result-parquet-v1`.
+Schema name: `analytics-result-parquet-v2`. Explicit JSON nulls stay on the section that set them (`openfdd.section_keys`), so an unknown health flag still returns `{flag}_fault_h: null`. `analytics-result-parquet-v1` files are cache misses.
 
 | Column | Type | Meaning |
 | --- | --- | --- |

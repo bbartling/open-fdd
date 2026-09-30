@@ -52,9 +52,9 @@ pub use compaction_coord::{
     CompactPermit, CompactionCoordinator, CompactionCoordinatorStatus, HistorianIoBusy, ScanPermit,
 };
 pub use disk_budget::{
-    apply_data_budget, bytes_over_budget, collect_budget_objects, order_key_from_path,
-    plan_oldest_first, preflight_update, BudgetObject, DataBudget, EvictionPlan, EvictionReport,
-    PreflightDecision, PreflightInput, DEFAULT_LOCAL_DATA_BUDGET_GIB,
+    apply_data_budget, bytes_over_budget, collect_budget_objects, enforce_budget_throttled,
+    order_key_from_path, plan_oldest_first, preflight_update, BudgetObject, DataBudget,
+    EvictionPlan, EvictionReport, PreflightDecision, PreflightInput, DEFAULT_LOCAL_DATA_BUDGET_GIB,
     DEFAULT_RESERVED_FREE_PERCENT, GIB,
 };
 pub use historian::{
