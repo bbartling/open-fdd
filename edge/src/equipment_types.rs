@@ -268,10 +268,18 @@ pub fn write_parent_map(
     building_id: &str,
     parents: &BTreeMap<String, String>,
 ) -> Result<(), String> {
-    if parents.is_empty() {
-        return Ok(());
-    }
     let dir = parquet_root.join(format!("building={building_id}"));
+    if parents.is_empty() {
+        // A later package with no declared parents must not keep the previous
+        // registry. `import_package_zip` rebuilds the package root and leaves
+        // the parquet cache in place, and topology reads this file.
+        return match std::fs::remove_file(dir.join(EQUIPMENT_PARENTS_FILE)) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                Err(format!("remove stale equipment parent registry: {e}"))
+            }
+            _ => Ok(()),
+        };
+    }
     std::fs::create_dir_all(&dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
     let body = serde_json::to_string_pretty(parents).map_err(|e| e.to_string())?;
     std::fs::write(dir.join(EQUIPMENT_PARENTS_FILE), body)
@@ -404,6 +412,28 @@ mod tests {
             declared_parent_from_map_json(&prefix, "RTU_010").as_deref(),
             Some("AHU_1")
         );
+    }
+
+    #[test]
+    fn write_parent_map_removes_stale_file_when_empty() {
+        let root = std::env::temp_dir().join(format!("openfdd-parents-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mut parents = BTreeMap::new();
+        parents.insert("box_12".to_string(), "AC_1".to_string());
+        write_parent_map(&root, "site_a", &parents).expect("write parents");
+        let path = root.join("building=site_a").join(EQUIPMENT_PARENTS_FILE);
+        assert!(path.is_file());
+        assert_eq!(
+            load_parent_map(&root, Some("site_a"))
+                .get("box_12")
+                .map(String::as_str),
+            Some("AC_1")
+        );
+        write_parent_map(&root, "site_a", &BTreeMap::new()).expect("clear parents");
+        assert!(!path.exists());
+        assert!(load_parent_map(&root, Some("site_a")).is_empty());
+        write_parent_map(&root, "site_a", &BTreeMap::new()).expect("missing file is success");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
