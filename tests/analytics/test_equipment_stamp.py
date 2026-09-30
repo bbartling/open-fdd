@@ -24,7 +24,11 @@ _WATT = Path(__file__).resolve().parents[2] / "tools" / "wattlab_export"
 if str(_WATT) not in sys.path:
     sys.path.insert(0, str(_WATT))
 
-from app.column_map_json import haystack_equip_type_to_cookbook  # noqa: E402
+from app.column_map_json import (  # noqa: E402
+    build_column_map_from_equipment_frames,
+    column_map_to_role_map,
+    haystack_equip_type_to_cookbook,
+)
 from app.equipment_kind import infer_parent_ahu_from_path, is_vav_equipment  # noqa: E402
 from app.model_seed import build_model_seed_dict  # noqa: E402
 
@@ -112,3 +116,18 @@ def test_wattlab_stamp_only():
         schedule_payload={"equipment": {"AHU_1": {"weekday_start_hour": 6}}},
     )
     assert unstamped["schedule_hints"] == {}
+    frame = pd.DataFrame({"SAT": [55.0]})
+    frame.attrs["equipType"] = "vav"
+    built = build_column_map_from_equipment_frames({"jci_vav_1": frame}, building_id="B1")
+    assert built["equipment"]["jci_vav_1"]["equipment_type"] == "vav"
+    roles = column_map_to_role_map(
+        {
+            "equip": {
+                "AC_1": {"equipType": "ahu", "points": {"discharge-air-temp": "SAT"}},
+                "VAV_1": {"points": {"zone-air-temp": "ZT"}},
+            }
+        }
+    )
+    assert roles["AC_1"]["equipment_type"] == "AHU"
+    assert roles["AC_1"]["discharge-air-temp"] == "SAT"
+    assert "equipment_type" not in roles["VAV_1"]

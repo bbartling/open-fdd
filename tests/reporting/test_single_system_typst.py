@@ -183,6 +183,38 @@ def test_report_chrome_uses_title_location_and_coverage():
     assert "#1e3a8a" in typ
 
 
+def test_role_frame_keeps_nested_stamp_and_does_not_invent_ahu():
+    from types import SimpleNamespace
+
+    index = pd.date_range("2026-06-01", periods=1, freq="h", tz="UTC")
+    frame = pd.DataFrame({"SAT": [55.0]}, index=index)
+    nested = SimpleNamespace(
+        frame=frame,
+        points=[("discharge-air-temp", "SAT")],
+        column_map={
+            "equipment": {
+                "jci_ahu_1": {
+                    "equipType": "vav_ahu",
+                    "points": {"discharge-air-temp": "SAT"},
+                },
+                "jci_vav_1": {"equipType": "vav", "points": {"zone-air-temp": "ZT"}},
+            }
+        },
+    )
+    stamped = role_frame(nested)
+    assert stamped.attrs["equipment_type"] == "vav_ahu"
+    blank = SimpleNamespace(
+        frame=frame,
+        points=[("discharge-air-temp", "SAT")],
+        column_map={"equip": "jci_ahu_1", "points": {"discharge-air-temp": "SAT"}},
+    )
+    assert role_frame(blank).attrs["equipment_type"] == "UNKNOWN"
+    from open_fdd.reporting.single_system_typst import _identity_pack
+
+    packed, _roles = _identity_pack(frame.copy(), "jci_ahu_1")
+    assert packed["jci_ahu_1"].attrs["equipment_type"] == "UNKNOWN"
+
+
 def test_month_filter_drops_other_months():
     device = load_device_folder(FIXTURE)
     frame = role_frame(device)

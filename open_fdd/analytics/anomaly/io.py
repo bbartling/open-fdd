@@ -9,21 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-# Stamped types that count as AHU IO for v1 screening.
-_AHU_EQUIP_TYPES = frozenset(
-    {
-        "ahu",
-        "rtu",
-        "mau",
-        "doas",
-        "unitventilator",
-        "uv",
-        "cv",
-        "cv_ahu",
-        "cvahu",
-        "erv",
-    }
-)
+from open_fdd.analytics.site_model import normalize_equipment_type
 
 
 @dataclass
@@ -38,11 +24,54 @@ class DeviceSeries:
 
 def _equip_type(block: dict[str, Any]) -> str:
     raw = block.get("equipType") or block.get("equipment_type") or ""
-    return str(raw).strip().lower()
+    return str(raw).strip()
 
 
 def _is_ahu_type(equip_type: str) -> bool:
-    return equip_type in _AHU_EQUIP_TYPES
+    """AHU admission is the canonical stamp. Id text is not a type."""
+    return normalize_equipment_type(equip_type) == "AHU"
+
+
+def _recognized_stamp(raw: str) -> bool:
+    norm = normalize_equipment_type(raw)
+    return bool(norm) and norm != "UNKNOWN"
+
+
+def admitted_equipment_stamp(
+    column_map: dict[str, Any],
+    *,
+    point_pairs: list[tuple[str, str]] | None = None,
+) -> str:
+    """Raw ``equipType`` / ``equipment_type`` from the map.
+
+    A top-level stamp wins when it is recognized. Otherwise the stamp comes
+    from nested blocks whose points were loaded. Disagreeing nested stamps
+    stay blank. Equipment-id text is not consulted.
+    """
+    if not isinstance(column_map, dict):
+        return ""
+    top = _equip_type(column_map)
+    if _recognized_stamp(top):
+        return top
+    blocks = _equipment_blocks(column_map)
+    if not blocks:
+        return ""
+    wanted = set(point_pairs) if point_pairs is not None else None
+    stamps: list[str] = []
+    for block in blocks.values():
+        if not isinstance(block, dict):
+            continue
+        pairs = _pairs_from_block(block)
+        if wanted is not None and not (set(pairs) & wanted):
+            continue
+        raw = _equip_type(block)
+        if _recognized_stamp(raw):
+            stamps.append(raw)
+    if not stamps:
+        return ""
+    if len({normalize_equipment_type(stamp) for stamp in stamps}) != 1:
+        return ""
+    return stamps[0]
 
 
 def _pairs_from_block(block: dict[str, Any]) -> list[tuple[str, str]]:

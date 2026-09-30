@@ -104,7 +104,7 @@ Haystack puts more than one marker on the same asset. The package path keeps tho
 
 ## FCU / zone_other rule roles
 
-Nine registry rules (`FCU-SENSOR-NULL`, `FCU-HTG-COIL`, `FCU-CLG-COIL`, `FCU-VALVE-PASS-HTG`, `FCU-VALVE-PASS-CLG`, `FCU-DAMPER-POS`, `FCU-CO2-DAMPER`, `FCU-DEADBAND`, `FCU-MODE-CYCLE`) select equipment from the stamp and from registry `equipment_kinds`: `zone_other`, `general`, and `ahu`. Recognized stamps win over folder or id heuristics.
+Nine registry rules (`FCU-SENSOR-NULL`, `FCU-HTG-COIL`, `FCU-CLG-COIL`, `FCU-VALVE-PASS-HTG`, `FCU-VALVE-PASS-CLG`, `FCU-DAMPER-POS`, `FCU-CO2-DAMPER`, `FCU-DEADBAND`, `FCU-MODE-CYCLE`) select equipment from the stamp and from registry `equipment_kinds`: `zone_other`, `general`, and `ahu`. A missing or unrecognized stamp is unclassified. Do not infer kind from the folder name or `equipment_id` ([#1043](https://github.com/bbartling/open-fdd/issues/1043), [#1045](https://github.com/bbartling/open-fdd/issues/1045), [#1046](https://github.com/bbartling/open-fdd/issues/1046), [#1047](https://github.com/bbartling/open-fdd/issues/1047)).
 
 | Role | How it is selected | Why |
 |------|--------------------|-----|

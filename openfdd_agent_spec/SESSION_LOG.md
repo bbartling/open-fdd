@@ -1,3 +1,9 @@
+## 2026-09-30 — Pandas / WattLab stamp-only cohorts (#1045, #1046, #1047) (not FQ)
+
+- VAV health reads the role-map stamp. AHU report admission uses the canonical stamp, including nested `equipType`, and does not invent `AHU` when the stamp is missing.
+- WattLab column maps keep `equipType` on the role map and on frame attrs. Agent spec pages say a missing stamp is unclassified. Id text is not a fallback.
+- No VERSION bump. No Railway, GHCR, or field claim. Epic #1043 stays open.
+
 ## 2026-09-29 — #1064 multi-tenant MQTT historian scope (not FQ)
 
 - `LiveHistorian::from_env_scoped_for` partitions from the trusted scope `tenant=` segment. A multi-tenant hub no longer requires process-global `OPENFDD_TENANT_ID`.
