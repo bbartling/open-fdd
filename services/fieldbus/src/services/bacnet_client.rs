@@ -16,7 +16,7 @@ use bacnet_types::error::Error as BacnetError;
 use bacnet_types::primitives::{ObjectIdentifier, PropertyValue};
 use fdd_core::columns::{haystack_point_to_role, is_known_cookbook_role};
 use serde_json::{json, Value};
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::{Mutex, MutexGuard, Semaphore};
 use tracing::{info, warn};
 
 use crate::config::{load_field_devices, FieldDevice, FieldPoint, Settings};
@@ -147,6 +147,10 @@ pub struct BacnetClientService {
     settings: Settings,
     field_devices: Vec<FieldDevice>,
     bus_lock: Mutex<()>,
+    /// A BACnet/IP discovery client bound to the hosted Who-Is port must own
+    /// that receive socket for its whole session. SO_REUSEADDR lets multiple
+    /// sockets bind, but then replies can be delivered to the wrong client.
+    discovery_port_lock: Mutex<()>,
     /// Interactive operations own the bus for their individual BACnet service
     /// call.  Scans use these permits to keep one active scan and one bounded
     /// waiter; an offline device therefore cannot create an unbounded socket
@@ -161,6 +165,7 @@ impl BacnetClientService {
             field_devices: load_field_devices(Some(&settings.field_devices_toml))?,
             settings,
             bus_lock: Mutex::new(()),
+            discovery_port_lock: Mutex::new(()),
             scan_gate: Semaphore::const_new(1),
             scan_admission: Semaphore::const_new(2),
         })
@@ -170,6 +175,17 @@ impl BacnetClientService {
         self.field_devices
             .iter()
             .find(|d| d.device_instance == device_instance)
+    }
+
+    async fn acquire_discovery_port(
+        &self,
+        device: Option<&FieldDevice>,
+    ) -> Option<MutexGuard<'_, ()>> {
+        if device.is_none() {
+            Some(self.discovery_port_lock.lock().await)
+        } else {
+            None
+        }
     }
 
     /// UDP bind for a client session.
@@ -394,7 +410,11 @@ impl BacnetClientService {
         object_instance: u32,
         property_id: &str,
     ) -> Result<Value, String> {
+        let discovery_port_guard = self
+            .acquire_discovery_port(self.find_device(device_instance))
+            .await;
         let _guard = self.bus_lock.lock().await;
+        let _discovery_port_guard = discovery_port_guard;
         self.read_property_impl(device_instance, object_type, object_instance, property_id)
             .await
     }
@@ -599,7 +619,11 @@ impl BacnetClientService {
         priority: Option<u8>,
         value_type: Option<&str>,
     ) -> Result<Value, String> {
+        let discovery_port_guard = self
+            .acquire_discovery_port(self.find_device(device_instance))
+            .await;
         let _guard = self.bus_lock.lock().await;
+        let _discovery_port_guard = discovery_port_guard;
         self.write_property_impl(
             device_instance,
             object_type,
@@ -790,6 +814,9 @@ impl BacnetClientService {
         device_instance: u32,
         objects: &[Value],
     ) -> Result<Value, String> {
+        let _discovery_port_guard = self
+            .acquire_discovery_port(self.find_device(device_instance))
+            .await;
         let _guard = self.bus_lock.lock().await;
         let device = self.find_device(device_instance);
         let mut specs = Vec::new();
@@ -939,6 +966,7 @@ impl BacnetClientService {
     }
 
     pub async fn who_is(&self, low: Option<u32>, high: Option<u32>) -> Result<Vec<Value>, String> {
+        let _discovery_port_guard = self.acquire_discovery_port(None).await;
         let _guard = self.bus_lock.lock().await;
         let cfg = &self.settings.bacnet_client;
         let client = self.new_client(None).await?;
@@ -1069,11 +1097,20 @@ impl BacnetClientService {
             .acquire()
             .await
             .map_err(|_| "BACnet scan scheduler closed".to_string())?;
-        self.point_discovery_impl(device_instance).await
+        self.point_discovery_impl(device_instance, false).await
     }
 
-    async fn point_discovery_impl(&self, device_instance: u32) -> Result<Value, String> {
+    async fn point_discovery_impl(
+        &self,
+        device_instance: u32,
+        discovery_port_held: bool,
+    ) -> Result<Value, String> {
         let device = self.find_device(device_instance);
+        let _discovery_port_guard = if discovery_port_held {
+            None
+        } else {
+            self.acquire_discovery_port(device).await
+        };
         let client = self.new_client(device).await?;
         let result = async {
             self.prepare_scan(&client, device, device_instance).await?;
@@ -1424,6 +1461,9 @@ impl BacnetClientService {
         object_type: &str,
         object_instance: u32,
     ) -> Result<Value, String> {
+        let _discovery_port_guard = self
+            .acquire_discovery_port(self.find_device(device_instance))
+            .await;
         let _guard = self.bus_lock.lock().await;
         let device = self.find_device(device_instance);
         let ot = parse_object_type(object_type)?;
