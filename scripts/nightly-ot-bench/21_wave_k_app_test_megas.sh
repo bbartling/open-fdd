@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Gate 21 — Wave K app-test MEGAs (sensor-faults + MQTT quad + data-model).
+# Live MQTT building is ACME (edges vim-1 / pi-1). `bldg2` is not a building id.
+# Loopback / hosted-weather equipment ids are unchanged. Missing AV columns stay Soft-OPEN.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -44,6 +46,14 @@ record_soft() {
   SOFT=$((SOFT + 1))
 }
 
+# Override with OPENFDD_WAVE_MQTT_BUILDING when the hub site id is not ACME.
+MQTT_BUILDING="${OPENFDD_WAVE_MQTT_BUILDING:-ACME}"
+LOOPBACK_EQ="${OPENFDD_WAVE_MQTT_LOOPBACK_EQ:-bldg2-zone-loopback}"
+WEATHER_EQ="${OPENFDD_WAVE_MQTT_WEATHER_EQ:-hosted-weather}"
+urlencode() {
+  python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+}
+
 # 1) Lakeside sensor-faults matrix discovers historian equipment
 body="$(cpost /api/analytics/sensor-faults '{"building_id":"LAKESIDE_ES"}')"
 echo "$body" >"$ART/wave_k_sensor_faults_lakeside.json"
@@ -55,8 +65,11 @@ else
   record sensor_faults_lakeside 0 "matched=$matched rows=$rows"
 fi
 
-# 2) MQTT quad — recent loopback has zone_t + oa_t + zone_rh; hosted-weather web_oa_t
-body="$(cpost /api/analytics/inspect '{"building_id":"bldg2","equipment_ids":["bldg2-zone-loopback"],"max_points":200}')"
+# 2) MQTT quad — recent loopback has zone_t + oa_t + zone_rh; hosted-weather web_oa_t.
+# Absent columns stay field-catalog Soft-OPEN. A present column with no values is a product fail.
+payload="$(jq -nc --arg b "$MQTT_BUILDING" --arg e "$LOOPBACK_EQ" \
+  '{building_id:$b, equipment_ids:[$e], max_points:200}')"
+body="$(cpost /api/analytics/inspect "$payload")"
 echo "$body" >"$ART/wave_k_inspect_loopback.json"
 # Single-quoted python -c: use "…" for JSON keys (\" breaks under bash $'…' / eval).
 eval "$(echo "$body" | python3 -c '
@@ -90,7 +103,9 @@ else
   record_soft mqtt_zone_rh "zone_rh column absent (fieldbus tip + AV9102)"
 fi
 
-body="$(cpost /api/analytics/inspect '{"building_id":"bldg2","equipment_ids":["hosted-weather"],"max_points":50}')"
+payload="$(jq -nc --arg b "$MQTT_BUILDING" --arg e "$WEATHER_EQ" \
+  '{building_id:$b, equipment_ids:[$e], max_points:50}')"
+body="$(cpost /api/analytics/inspect "$payload")"
 echo "$body" >"$ART/wave_k_inspect_hosted_weather.json"
 eval "$(echo "$body" | python3 -c '
 import json,sys
@@ -109,9 +124,9 @@ else
   record_soft mqtt_web_oa_t "web_oa_t column absent"
 fi
 
-# 3) Data model — bldg2 historian roles non-empty; wrong-site eq fails closed
-body="$(cget "/api/csv/import/package/mapping?building_id=bldg2")"
-echo "$body" >"$ART/wave_k_mapping_bldg2.json"
+# 3) Data model — ACME historian roles non-empty; wrong-site eq fails closed
+body="$(cget "/api/csv/import/package/mapping?building_id=$(urlencode "$MQTT_BUILDING")")"
+echo "$body" >"$ART/wave_k_mapping_acme.json"
 cols="$(echo "$body" | python3 -c '
 import json,sys
 d=json.load(sys.stdin)
@@ -122,12 +137,12 @@ for e in eqs:
 print(n)
 ')"
 if [[ "${cols:-0}" -gt 0 ]]; then
-  record mapping_bldg2_roles 1 "max_columns=$cols"
+  record mapping_acme_roles 1 "building=$MQTT_BUILDING max_columns=$cols"
 else
-  record mapping_bldg2_roles 0 "max_columns=$cols"
+  record mapping_acme_roles 0 "building=$MQTT_BUILDING max_columns=$cols"
 fi
 
-body="$(cget "/api/csv/import/package/mapping?building_id=BUILDING_100&equipment_id=bldg2-zone-loopback")"
+body="$(cget "/api/csv/import/package/mapping?building_id=BUILDING_100&equipment_id=$(urlencode "$LOOPBACK_EQ")")"
 echo "$body" >"$ART/wave_k_mapping_cross_site.json"
 # jq `false // true` yields true — do not use // for boolean .ok
 ok_cross="$(echo "$body" | jq -r '.ok')"
