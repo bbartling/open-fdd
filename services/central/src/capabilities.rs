@@ -15,8 +15,8 @@ use futures_util::StreamExt;
 use openfdd_contracts::{
     CapabilitiesAggregateResponse, CapabilityState, ConnectorAction, ConnectorCapability,
     ConnectorHelloResponse, ConnectorProtocol, ConnectorReadRequest, ConnectorReadResponse,
-    ConnectorReadResult, DeliveryStatus, RecipeObservation, ServiceVersion, UpstreamCapability,
-    CAPABILITIES_AGGREGATE_CONTRACT_V1, CAPABILITIES_CONTRACT_V1,
+    ConnectorReadResult, DeliveryStatus, ReadValueState, RecipeObservation, ServiceVersion,
+    UpstreamCapability, CAPABILITIES_AGGREGATE_CONTRACT_V1, CAPABILITIES_CONTRACT_V1,
 };
 use reqwest::redirect::Policy;
 use reqwest::Client;
@@ -358,18 +358,60 @@ impl CapabilitiesAggregator {
             .map_err(|_| ProxyError::Incompatible)?;
         let result: ConnectorReadResponse =
             serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
-        result
-            .validate_for(request)
-            .map_err(|_| ProxyError::Incompatible)?;
+        let result =
+            sanitize_public_read_response(result, request).map_err(|_| ProxyError::Incompatible)?;
         if !result.ok {
             return Err(ProxyError::Rejected);
         }
-        let mut result = result;
-        if let Some(ConnectorReadResult::Metadata { hello }) = result.result.as_mut() {
-            *hello = sanitize_hello(hello.clone()).map_err(|_| ProxyError::Incompatible)?;
-        }
         Ok(result)
     }
+}
+
+/// Validate and reduce every connector read to the public DTO surface.  The
+/// connector is allowed to keep detailed BACnet diagnostics internally, but
+/// those details must not cross the central API boundary in a priority slot or
+/// failed response.
+fn sanitize_public_read_response(
+    mut response: ConnectorReadResponse,
+    request: &ConnectorReadRequest,
+) -> Result<ConnectorReadResponse, ()> {
+    if response.ok {
+        match response.result.as_mut() {
+            Some(ConnectorReadResult::Metadata { hello }) => {
+                *hello = sanitize_hello(hello.clone())?;
+            }
+            Some(ConnectorReadResult::PriorityArray(array)) => {
+                for slot in &mut array.slots {
+                    match slot.state {
+                        ReadValueState::Null => {
+                            slot.value = None;
+                            slot.error = None;
+                        }
+                        ReadValueState::Value => {
+                            slot.error = None;
+                        }
+                        ReadValueState::Error | ReadValueState::Unknown => {
+                            slot.value = None;
+                            slot.error = Some("priority slot unavailable".into());
+                        }
+                    }
+                }
+            }
+            Some(ConnectorReadResult::Point(_)) | None => {}
+        }
+    } else {
+        // Do not forward connector free text, addresses, or BACnet exception
+        // names.  The typed status remains useful while the public message is
+        // stable and intentionally generic.
+        response.result = None;
+        response.capability_contract = None;
+        response.error = Some(openfdd_contracts::ReadError {
+            code: "upstream_rejected".into(),
+            message: "connector read rejected".into(),
+        });
+    }
+    response.validate_for(request).map_err(|_| ())?;
+    Ok(response)
 }
 
 async fn bounded_body(response: reqwest::Response) -> Result<Vec<u8>, ()> {
@@ -474,6 +516,7 @@ fn replace_central(
     central: ConnectorHelloResponse,
 ) -> CapabilitiesAggregateResponse {
     report.central = central;
+    reconcile_aggregate_recipe(&mut report);
     report.generated_at = Utc::now();
     report
 }
@@ -483,6 +526,7 @@ fn with_central(
     central: ConnectorHelloResponse,
 ) -> CapabilitiesAggregateResponse {
     report.central = central;
+    reconcile_aggregate_recipe(&mut report);
     report.generated_at = Utc::now();
     report
 }
@@ -491,21 +535,8 @@ fn aggregate_report(
     central: ConnectorHelloResponse,
     upstreams: Vec<UpstreamCapability>,
 ) -> CapabilitiesAggregateResponse {
-    let mut observed_services = vec!["central".to_string()];
-    if upstreams
-        .iter()
-        .any(|upstream| upstream.state == CapabilityState::Ready)
-    {
-        observed_services.push("fieldbus".into());
-    }
     let declared = central.recipe.declared.clone();
-    let reconciliation = recipe_reconciliation(declared.as_deref(), &observed_services);
-    let recipe = RecipeObservation {
-        declared,
-        observed_services,
-        reconciliation: reconciliation.into(),
-    };
-    CapabilitiesAggregateResponse {
+    let mut report = CapabilitiesAggregateResponse {
         schema: CAPABILITIES_AGGREGATE_CONTRACT_V1.into(),
         version: ServiceVersion {
             service: "openfdd-central".into(),
@@ -514,22 +545,58 @@ fn aggregate_report(
         },
         central,
         upstreams,
-        recipe,
+        recipe: RecipeObservation {
+            declared,
+            configured_services: Vec::new(),
+            observed_services: Vec::new(),
+            reconciliation: "declared_missing".into(),
+        },
         diagnostic: None,
         generated_at: Utc::now(),
         observed_at: Utc::now(),
-    }
+    };
+    reconcile_aggregate_recipe(&mut report);
+    report
 }
 
-fn recipe_reconciliation(declared: Option<&str>, observed_services: &[String]) -> &'static str {
-    match declared {
-        None => "not_declared",
-        Some("csv" | "central") if !observed_services.iter().any(|s| s == "fieldbus") => "matched",
-        Some("edge" | "standalone") if observed_services.iter().any(|s| s == "fieldbus") => {
-            "matched"
-        }
-        Some(_) => "declared_missing",
+fn reconcile_aggregate_recipe(report: &mut CapabilitiesAggregateResponse) {
+    let mut configured_services = report.central.recipe.configured_services.clone();
+    if !report.upstreams.is_empty() {
+        // Presence in this server-side allowlisted upstream list is
+        // configuration evidence. It is intentionally not copied into
+        // observed_services below unless a validated ready hello arrived.
+        configured_services.push("fieldbus".into());
     }
+    configured_services.sort();
+    configured_services.dedup();
+
+    let mut observed_services = report.central.recipe.observed_services.clone();
+    if report.upstreams.iter().any(|upstream| {
+        upstream.state == CapabilityState::Ready
+            && upstream.hello.as_ref().is_some_and(|hello| {
+                hello
+                    .recipe
+                    .observed_services
+                    .iter()
+                    .any(|service| service == "fieldbus")
+            })
+    }) {
+        observed_services.push("fieldbus".into());
+    }
+    observed_services.sort();
+    observed_services.dedup();
+    let declared = report.central.recipe.declared.clone();
+    let reconciliation = RecipeObservation::reconcile(
+        declared.as_deref(),
+        &configured_services,
+        &observed_services,
+    );
+    report.recipe = RecipeObservation {
+        declared,
+        configured_services,
+        observed_services,
+        reconciliation: reconciliation.into(),
+    };
 }
 
 /// Restrict an aggregate to the edge ids authorized by the authenticated
@@ -542,26 +609,16 @@ pub fn restrict_to_edges(
     report
         .upstreams
         .retain(|upstream| allowed_edges.contains(&upstream.edge_id));
-    report.recipe.observed_services = vec!["central".into()];
-    if report
-        .upstreams
-        .iter()
-        .any(|upstream| upstream.state == CapabilityState::Ready)
-    {
-        report.recipe.observed_services.push("fieldbus".into());
-    }
-    report.recipe.reconciliation = recipe_reconciliation(
-        report.recipe.declared.as_deref(),
-        &report.recipe.observed_services,
-    )
-    .into();
+    reconcile_aggregate_recipe(&mut report);
     report.generated_at = Utc::now();
     report
 }
 
 fn sanitize_hello(mut hello: ConnectorHelloResponse) -> Result<ConnectorHelloResponse, ()> {
-    hello.validate().map_err(|_| ())?;
-    if hello.version.service != "openfdd-fieldbus" {
+    if hello.schema != CAPABILITIES_CONTRACT_V1
+        || hello.version.contract != CAPABILITIES_CONTRACT_V1
+        || hello.version.service != "openfdd-fieldbus"
+    {
         return Err(());
     }
     // Free text from a connector is not a public diagnostic channel. Keep
@@ -575,10 +632,15 @@ fn sanitize_hello(mut hello: ConnectorHelloResponse) -> Result<ConnectorHelloRes
         .filter(|value| matches!(value.as_str(), "edge" | "standalone" | "central" | "csv"));
     hello
         .recipe
+        .configured_services
+        .retain(|service| matches!(service.as_str(), "fieldbus" | "mqtt" | "central"));
+    hello
+        .recipe
         .observed_services
         .retain(|service| matches!(service.as_str(), "fieldbus" | "mqtt" | "central"));
-    hello.recipe.reconciliation = recipe_reconciliation(
+    hello.recipe.reconciliation = RecipeObservation::reconcile(
         hello.recipe.declared.as_deref(),
+        &hello.recipe.configured_services,
         &hello.recipe.observed_services,
     )
     .into();
@@ -598,6 +660,7 @@ fn empty_report(error: Option<String>) -> CapabilitiesAggregateResponse {
         connectors: Vec::new(),
         recipe: RecipeObservation {
             declared: None,
+            configured_services: vec!["central".into()],
             observed_services: vec!["central".into()],
             reconciliation: "not_declared".into(),
         },
@@ -616,6 +679,17 @@ fn central_bool(name: &str) -> bool {
             "1" | "true" | "yes" | "on"
         )
     })
+}
+
+fn declared_recipe() -> Option<String> {
+    ["OPENFDD_BUILD_RECIPE", "OPENFDD_RECIPE"]
+        .into_iter()
+        .find_map(|name| {
+            std::env::var(name)
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| matches!(value.as_str(), "edge" | "standalone" | "central" | "csv"))
+        })
 }
 
 pub fn central_hello(state: &AppState) -> ConnectorHelloResponse {
@@ -681,13 +755,26 @@ pub fn central_hello(state: &AppState) -> ConnectorHelloResponse {
     } else {
         CapabilityState::Checking
     };
-    let declared = ["OPENFDD_BUILD_RECIPE", "OPENFDD_RECIPE"]
-        .into_iter()
-        .find_map(|name| {
-            std::env::var(name)
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-        });
+    let declared = declared_recipe();
+    let configured_services = {
+        let mut services = vec!["central".to_string()];
+        if mqtt_configured {
+            services.push("mqtt".into());
+        }
+        services
+    };
+    let observed_services = {
+        let mut services = vec!["central".to_string()];
+        if mqtt_state == DeliveryStatus::Ready {
+            services.push("mqtt".into());
+        }
+        services
+    };
+    let reconciliation = RecipeObservation::reconcile(
+        declared.as_deref(),
+        &configured_services,
+        &observed_services,
+    );
     ConnectorHelloResponse {
         schema: CAPABILITIES_CONTRACT_V1.into(),
         version: ServiceVersion {
@@ -712,8 +799,9 @@ pub fn central_hello(state: &AppState) -> ConnectorHelloResponse {
         }],
         recipe: RecipeObservation {
             declared,
-            observed_services: vec!["central".into()],
-            reconciliation: "not_declared".into(),
+            configured_services,
+            observed_services,
+            reconciliation: reconciliation.into(),
         },
         observed_at: Utc::now(),
     }
@@ -867,7 +955,11 @@ fn redacted_address(url: &Url) -> String {
 mod tests {
     use super::*;
     use axum::{response::Redirect, routing::get, Json, Router};
-    use openfdd_contracts::{ConnectorScope, ReadTarget, READ_PROXY_CONTRACT_V1};
+    use openfdd_contracts::{
+        ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult, ConnectorScope,
+        ReadPriorityArrayResult, ReadPrioritySlot, ReadTarget, ReadValueState,
+        READ_PROXY_CONTRACT_V1,
+    };
     use std::net::SocketAddr;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc as StdArc;
@@ -885,6 +977,7 @@ mod tests {
             connectors: Vec::new(),
             recipe: RecipeObservation {
                 declared: None,
+                configured_services: vec!["central".into()],
                 observed_services: vec!["central".into()],
                 reconciliation: "not_declared".into(),
             },
@@ -910,6 +1003,67 @@ mod tests {
         );
         assert!(configured_scope("tenant-a|building-a").is_err());
         assert!(configured_scope("tenant-a|building-a|../edge").is_err());
+    }
+
+    #[test]
+    fn recipe_matching_requires_configured_and_observed_full_stack() {
+        let central = |observed: &[&str]| {
+            RecipeObservation::reconcile(
+                Some("central"),
+                &["central".into(), "mqtt".into()],
+                &observed
+                    .iter()
+                    .map(|value| (*value).to_string())
+                    .collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(central(&["central"]), "declared_missing");
+        assert_eq!(central(&["central", "mqtt"]), "matched");
+
+        let standalone_configured = vec!["central".into(), "fieldbus".into(), "mqtt".into()];
+        let only_fieldbus = vec!["fieldbus".into()];
+        assert_eq!(
+            RecipeObservation::reconcile(
+                Some("standalone"),
+                &standalone_configured,
+                &only_fieldbus,
+            ),
+            "declared_missing"
+        );
+        assert_eq!(
+            RecipeObservation::reconcile(
+                Some("standalone"),
+                &standalone_configured,
+                &["central".into(), "fieldbus".into(), "mqtt".into()],
+            ),
+            "matched"
+        );
+    }
+
+    #[test]
+    fn failed_configured_upstream_is_not_recipe_observation() {
+        let mut central = central_fixture();
+        central.recipe.declared = Some("standalone".into());
+        central.recipe.configured_services =
+            vec!["central".into(), "mqtt".into(), "fieldbus".into()];
+        central.recipe.observed_services = vec!["central".into(), "mqtt".into()];
+        let report = aggregate_report(
+            central,
+            vec![UpstreamCapability {
+                edge_id: "edge-a".into(),
+                address: "redacted-configured-upstream".into(),
+                state: CapabilityState::Unreachable,
+                hello: None,
+                error: Some("upstream unavailable".into()),
+                last_success_at: None,
+            }],
+        );
+        assert_eq!(
+            report.recipe.configured_services,
+            ["central", "fieldbus", "mqtt"]
+        );
+        assert_eq!(report.recipe.observed_services, ["central", "mqtt"]);
+        assert_eq!(report.recipe.reconciliation, "declared_missing");
     }
 
     #[tokio::test]
@@ -951,7 +1105,9 @@ mod tests {
     fn public_hello_sanitizer_removes_free_text_and_recomputes_recipe() {
         let mut hello = central_fixture();
         hello.recipe.declared = Some("edge".into());
-        hello.recipe.observed_services = vec!["fieldbus".into(), "https://internal".into()];
+        hello.recipe.configured_services = vec!["fieldbus".into(), "mqtt".into()];
+        hello.recipe.observed_services =
+            vec!["fieldbus".into(), "mqtt".into(), "https://internal".into()];
         hello.recipe.reconciliation = "https://internal/secret".into();
         hello.connectors.push(ConnectorCapability {
             protocol: ConnectorProtocol::Bacnet,
@@ -971,6 +1127,61 @@ mod tests {
         assert!(!serde_json::to_string(&sanitized)
             .unwrap()
             .contains("internal"));
+    }
+
+    #[test]
+    fn public_read_sanitizer_reduces_priority_errors_to_stable_codes() {
+        let request = ConnectorReadRequest {
+            schema: READ_PROXY_CONTRACT_V1.into(),
+            request_id: uuid::Uuid::nil(),
+            scope: ConnectorScope {
+                tenant_id: "tenant-a".into(),
+                building_id: "building-a".into(),
+                edge_id: "edge-a".into(),
+            },
+            target: ReadTarget::BacnetPriorityArray {
+                device_instance: 7,
+                object_type: "analog-output".into(),
+                object_instance: 4,
+            },
+        };
+        let slots = (1..=16)
+            .map(|priority_level| ReadPrioritySlot {
+                priority_level,
+                state: if priority_level == 3 {
+                    ReadValueState::Error
+                } else {
+                    ReadValueState::Null
+                },
+                value_type: if priority_level == 3 {
+                    "error".into()
+                } else {
+                    "null".into()
+                },
+                value: None,
+                error: (priority_level == 3).then_some("tcp://10.0.0.7:47808 secret".into()),
+            })
+            .collect();
+        let response = ConnectorReadResponse::success(
+            &request,
+            ConnectorReadResult::PriorityArray(ReadPriorityArrayResult {
+                device_instance: 7,
+                object_type: "analog-output".into(),
+                object_instance: 4,
+                slots,
+                state: "supported".into(),
+            }),
+        );
+        let sanitized = sanitize_public_read_response(response, &request).unwrap();
+        let encoded = serde_json::to_string(&sanitized).unwrap();
+        assert!(!encoded.contains("10.0.0.7"));
+        assert_eq!(
+            sanitized.result.as_ref().and_then(|result| match result {
+                ConnectorReadResult::PriorityArray(array) => array.slots[2].error.as_deref(),
+                _ => None,
+            }),
+            Some("priority slot unavailable")
+        );
     }
 
     #[tokio::test]

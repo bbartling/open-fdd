@@ -5,6 +5,11 @@ use std::future::Future;
 use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(test)]
+use std::sync::Arc;
+
 use bacnet_client::client::BACnetClient;
 use bacnet_client::discovery::RoutedDeviceConfig;
 use bacnet_encoding::primitives::decode_application_value;
@@ -157,6 +162,8 @@ pub struct BacnetClientService {
     /// or request flood.
     scan_gate: Semaphore,
     scan_admission: Semaphore,
+    #[cfg(test)]
+    ot_call_count: Arc<AtomicUsize>,
 }
 
 impl BacnetClientService {
@@ -168,7 +175,22 @@ impl BacnetClientService {
             discovery_port_lock: Mutex::new(()),
             scan_gate: Semaphore::const_new(1),
             scan_admission: Semaphore::const_new(2),
+            #[cfg(test)]
+            ot_call_count: Arc::new(AtomicUsize::new(0)),
         })
+    }
+
+    /// Count read operations entering the live BACnet client.  Tests use this
+    /// to prove route authorization and hello generation happen before any OT
+    /// operation; production builds do not carry the counter.
+    #[cfg(test)]
+    pub fn test_ot_call_count(&self) -> usize {
+        self.ot_call_count.load(Ordering::Relaxed)
+    }
+
+    #[cfg(test)]
+    fn note_test_ot_call(&self) {
+        self.ot_call_count.fetch_add(1, Ordering::Relaxed);
     }
 
     fn find_device(&self, device_instance: u32) -> Option<&FieldDevice> {
@@ -447,6 +469,8 @@ impl BacnetClientService {
         object_instance: u32,
         property_id: &str,
     ) -> Result<Value, String> {
+        #[cfg(test)]
+        self.note_test_ot_call();
         let discovery_port_guard = self
             .acquire_discovery_port(self.find_device(device_instance))
             .await;
@@ -1497,6 +1521,8 @@ impl BacnetClientService {
         object_type: &str,
         object_instance: u32,
     ) -> Result<Value, String> {
+        #[cfg(test)]
+        self.note_test_ot_call();
         let _discovery_port_guard = self
             .acquire_discovery_port(self.find_device(device_instance))
             .await;

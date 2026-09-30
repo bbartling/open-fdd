@@ -110,10 +110,64 @@ pub struct ConnectorCapability {
 pub struct RecipeObservation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared: Option<String>,
+    /// Services selected by the deployment/configuration.  This is kept
+    /// separate from `observed_services`: configuration alone is never
+    /// evidence that a connector or broker is alive.
+    #[serde(default)]
+    pub configured_services: Vec<String>,
+    /// Services for which this response has runtime evidence.  A service may
+    /// be configured while this list is empty or incomplete.
     #[serde(default)]
     pub observed_services: Vec<String>,
     /// `matched`, `declared_missing`, `observed_extra`, or `not_declared`.
     pub reconciliation: String,
+}
+
+impl RecipeObservation {
+    /// Return the service set required by the documented compose recipes.
+    /// These requirements are deliberately centralized in the wire contract
+    /// so fieldbus and central cannot silently disagree about completeness.
+    pub fn required_services(declared: &str) -> &'static [&'static str] {
+        match declared {
+            "csv" => &["central"],
+            "central" => &["central", "mqtt"],
+            "edge" => &["fieldbus", "mqtt"],
+            "standalone" => &["central", "fieldbus", "mqtt"],
+            _ => &[],
+        }
+    }
+
+    /// Reconcile a declared recipe against both its configured services and
+    /// runtime evidence.  A configured service is never treated as observed.
+    pub fn reconcile(
+        declared: Option<&str>,
+        configured_services: &[String],
+        observed_services: &[String],
+    ) -> &'static str {
+        let Some(declared) = declared else {
+            return "not_declared";
+        };
+        let required = Self::required_services(declared);
+        if required.is_empty() {
+            return "declared_missing";
+        }
+        if !required
+            .iter()
+            .all(|service| configured_services.iter().any(|item| item == service))
+            || !required
+                .iter()
+                .all(|service| observed_services.iter().any(|item| item == service))
+        {
+            return "declared_missing";
+        }
+        if observed_services
+            .iter()
+            .any(|service| !required.contains(&service.as_str()))
+        {
+            return "observed_extra";
+        }
+        "matched"
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -198,6 +252,27 @@ impl ConnectorHelloResponse {
         }) {
             return Err("connector detail is too long".into());
         }
+        let valid_service = |service: &str| matches!(service, "central" | "fieldbus" | "mqtt");
+        if self
+            .recipe
+            .declared
+            .as_deref()
+            .is_some_and(|declared| !matches!(declared, "edge" | "standalone" | "central" | "csv"))
+            || self.recipe.configured_services.len() > 8
+            || self.recipe.observed_services.len() > 8
+            || self
+                .recipe
+                .configured_services
+                .iter()
+                .chain(self.recipe.observed_services.iter())
+                .any(|service| service.len() > 32 || !valid_service(service))
+            || !matches!(
+                self.recipe.reconciliation.as_str(),
+                "matched" | "declared_missing" | "observed_extra" | "not_declared"
+            )
+        {
+            return Err("recipe observation contains invalid public fields".into());
+        }
         Ok(())
     }
 }
@@ -230,6 +305,7 @@ mod tests {
             }],
             recipe: RecipeObservation {
                 declared: None,
+                configured_services: vec!["fieldbus".into()],
                 observed_services: vec!["fieldbus".into()],
                 reconciliation: "not_declared".into(),
             },

@@ -387,28 +387,174 @@ mod tests {
 
     #[test]
     fn successful_response_requires_typed_result_and_exact_correlation() {
-        let req = request(ReadTarget::ConnectorMetadata);
-        let response = ConnectorReadResponse::success(
-            &req,
-            ConnectorReadResult::Metadata {
-                hello: ConnectorHelloResponse {
-                    schema: CAPABILITIES_CONTRACT_V1.into(),
-                    version: crate::capabilities::ServiceVersion {
-                        service: "fieldbus".into(),
-                        build: "test".into(),
-                        contract: CAPABILITIES_CONTRACT_V1.into(),
-                    },
-                    compiled_protocols: vec![],
-                    connectors: vec![],
-                    recipe: crate::capabilities::RecipeObservation {
-                        declared: None,
-                        observed_services: vec![],
-                        reconciliation: "not_declared".into(),
-                    },
-                    observed_at: chrono::Utc::now(),
+        fn hello() -> ConnectorHelloResponse {
+            ConnectorHelloResponse {
+                schema: CAPABILITIES_CONTRACT_V1.into(),
+                version: crate::capabilities::ServiceVersion {
+                    service: "fieldbus".into(),
+                    build: "test".into(),
+                    contract: CAPABILITIES_CONTRACT_V1.into(),
                 },
-            },
+                compiled_protocols: vec![],
+                connectors: vec![],
+                recipe: crate::capabilities::RecipeObservation {
+                    declared: None,
+                    configured_services: vec!["fieldbus".into()],
+                    observed_services: vec![],
+                    reconciliation: "not_declared".into(),
+                },
+                observed_at: chrono::Utc::now(),
+            }
+        }
+
+        fn point() -> ReadPointResult {
+            ReadPointResult {
+                device_instance: 7,
+                object_type: "analog-input".into(),
+                object_instance: 3,
+                property_id: "present-value".into(),
+                value_type: "real".into(),
+                value: serde_json::json!(42.0),
+                quality: "good".into(),
+            }
+        }
+
+        fn priority_array() -> ReadPriorityArrayResult {
+            ReadPriorityArrayResult {
+                device_instance: 7,
+                object_type: "analog-output".into(),
+                object_instance: 4,
+                slots: (1..=16)
+                    .map(|priority_level| ReadPrioritySlot {
+                        priority_level,
+                        state: ReadValueState::Null,
+                        value_type: "null".into(),
+                        value: None,
+                        error: None,
+                    })
+                    .collect(),
+                state: "supported".into(),
+            }
+        }
+
+        let metadata_req = request(ReadTarget::ConnectorMetadata);
+        ConnectorReadResponse::success(
+            &metadata_req,
+            ConnectorReadResult::Metadata { hello: hello() },
+        )
+        .validate_for(&metadata_req)
+        .unwrap();
+
+        // A valid payload of the wrong result variant cannot satisfy a
+        // metadata request.
+        assert!(
+            ConnectorReadResponse::success(&metadata_req, ConnectorReadResult::Point(point()),)
+                .validate_for(&metadata_req)
+                .is_err()
         );
-        response.validate_for(&req).unwrap();
+
+        let point_target = ReadTarget::BacnetPoint {
+            device_instance: 7,
+            object_type: "analog-input".into(),
+            object_instance: 3,
+            property_id: "present-value".into(),
+        };
+        let point_req = request(point_target.clone());
+        ConnectorReadResponse::success(&point_req, ConnectorReadResult::Point(point()))
+            .validate_for(&point_req)
+            .unwrap();
+        for wrong in [
+            ReadTarget::BacnetPoint {
+                device_instance: 8,
+                object_type: "analog-input".into(),
+                object_instance: 3,
+                property_id: "present-value".into(),
+            },
+            ReadTarget::BacnetPoint {
+                device_instance: 7,
+                object_type: "analog-output".into(),
+                object_instance: 3,
+                property_id: "present-value".into(),
+            },
+            ReadTarget::BacnetPoint {
+                device_instance: 7,
+                object_type: "analog-input".into(),
+                object_instance: 9,
+                property_id: "present-value".into(),
+            },
+            ReadTarget::BacnetPoint {
+                device_instance: 7,
+                object_type: "analog-input".into(),
+                object_instance: 3,
+                property_id: "relinquish-default".into(),
+            },
+        ] {
+            let wrong_req = request(wrong);
+            assert!(ConnectorReadResponse::success(
+                &wrong_req,
+                ConnectorReadResult::Point(point()),
+            )
+            .validate_for(&wrong_req)
+            .is_err());
+        }
+
+        let priority_target = ReadTarget::BacnetPriorityArray {
+            device_instance: 7,
+            object_type: "analog-output".into(),
+            object_instance: 4,
+        };
+        let priority_req = request(priority_target.clone());
+        ConnectorReadResponse::success(
+            &priority_req,
+            ConnectorReadResult::PriorityArray(priority_array()),
+        )
+        .validate_for(&priority_req)
+        .unwrap();
+        for wrong in [
+            ReadTarget::BacnetPriorityArray {
+                device_instance: 8,
+                object_type: "analog-output".into(),
+                object_instance: 4,
+            },
+            ReadTarget::BacnetPriorityArray {
+                device_instance: 7,
+                object_type: "binary-output".into(),
+                object_instance: 4,
+            },
+            ReadTarget::BacnetPriorityArray {
+                device_instance: 7,
+                object_type: "analog-output".into(),
+                object_instance: 9,
+            },
+        ] {
+            let wrong_req = request(wrong);
+            assert!(ConnectorReadResponse::success(
+                &wrong_req,
+                ConnectorReadResult::PriorityArray(priority_array()),
+            )
+            .validate_for(&wrong_req)
+            .is_err());
+        }
+
+        // Duplicate and out-of-range array indexes are rejected instead of
+        // being silently normalized into a complete all-null array.
+        for invalid_level in [0, 17] {
+            let mut invalid = priority_array();
+            invalid.slots[0].priority_level = invalid_level;
+            assert!(ConnectorReadResponse::success(
+                &priority_req,
+                ConnectorReadResult::PriorityArray(invalid),
+            )
+            .validate_for(&priority_req)
+            .is_err());
+        }
+        let mut duplicate = priority_array();
+        duplicate.slots[1].priority_level = 1;
+        assert!(ConnectorReadResponse::success(
+            &priority_req,
+            ConnectorReadResult::PriorityArray(duplicate),
+        )
+        .validate_for(&priority_req)
+        .is_err());
     }
 }

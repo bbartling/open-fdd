@@ -47,30 +47,40 @@ fn declared_recipe() -> Option<String> {
             std::env::var(name)
                 .ok()
                 .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty())
+                .filter(|value| matches!(value.as_str(), "edge" | "standalone" | "central" | "csv"))
         })
 }
 
-fn recipe_observation(configured_protocols: &[ConnectorProtocol]) -> RecipeObservation {
+fn recipe_observation(
+    configured_protocols: &[ConnectorProtocol],
+    mqtt_connection: DeliveryStatus,
+) -> RecipeObservation {
     let declared = declared_recipe();
-    let mut observed_services = vec!["fieldbus".to_string()];
+    let mut configured_services = vec!["fieldbus".to_string()];
     if configured_protocols
         .iter()
         .any(|protocol| matches!(protocol, ConnectorProtocol::Mqtt))
     {
+        configured_services.push("mqtt".into());
+    }
+    configured_services.sort();
+    // Returning this hello is runtime evidence that the fieldbus service is
+    // alive.  MQTT is observed only when a connector reports a live
+    // connection; merely setting OPENFDD_MQTT_HOST or enabling the protocol
+    // is configuration, not evidence.
+    let mut observed_services = vec!["fieldbus".to_string()];
+    if mqtt_connection == DeliveryStatus::Ready {
         observed_services.push("mqtt".into());
     }
     observed_services.sort();
-    let reconciliation = match declared.as_deref() {
-        None => "not_declared",
-        Some("edge") | Some("standalone") if observed_services.contains(&"fieldbus".into()) => {
-            "matched"
-        }
-        Some("central") | Some("csv") => "declared_missing",
-        Some(_) => "observed_extra",
-    };
+    let reconciliation = RecipeObservation::reconcile(
+        declared.as_deref(),
+        &configured_services,
+        &observed_services,
+    );
     RecipeObservation {
         declared,
+        configured_services,
         observed_services,
         reconciliation: reconciliation.into(),
     }
@@ -272,6 +282,7 @@ pub fn hello_response(state: &AppState) -> ConnectorHelloResponse {
                 .filter(|connector| connector.configured)
                 .map(|connector| connector.protocol)
                 .collect::<Vec<_>>(),
+            mqtt,
         ),
         connectors,
         observed_at: Utc::now(),

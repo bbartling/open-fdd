@@ -364,7 +364,7 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
                 return;
             }
 
-            let persisted_rows = match state.ingest_live(&scope, &env).await {
+            let _persisted_rows = match state.ingest_live(&scope, &env).await {
                 Ok(report) => {
                     for duplicate in &report.duplicate_roles {
                         warn!(
@@ -414,9 +414,6 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
                 }
             };
 
-            let durable = persisted_rows > 0
-                && state.receipt_status(&scope, &key.0, key.1).await
-                    == Some(crate::state::IngestReceiptStatus::Committed);
             let entry = state.edges.entry(env.edge_id.clone()).or_default();
             let mut shadow = entry.lock().unwrap();
             shadow
@@ -428,9 +425,6 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
             shadow.registered_tenant_id = topic.tenant_id.clone();
             shadow.last_telemetry = Some(env);
             state.note_ingest_ok();
-            if durable {
-                state.note_durable_ingest();
-            }
         }
         Err(_) => handle_untyped_payload(state, payload),
     }
