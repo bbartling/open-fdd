@@ -1,3 +1,9 @@
+## 2026-09-29 — #1064 multi-tenant MQTT historian scope (not FQ)
+
+- `LiveHistorian::from_env_scoped_for` partitions from the trusted scope `tenant=` segment. A multi-tenant hub no longer requires process-global `OPENFDD_TENANT_ID`.
+- Legacy `tenant=-` scopes still accept that env var for local fieldbus. Empty and `-` fail closed when neither source has a tenant. Single-tenant mode stays on the hub root.
+- Product VERSION **3.5.57**. No Railway re-pin or ACME deploy in this change.
+
 ## 2026-09-29 — #1061 local ingest correctness (not FQ)
 
 - Local HTTP publishes the request's rows before ACK. HTTP 200 requires a committed receipt with `persisted_rows > 0`. HTTP 202 stays pending, and fieldbus does not treat 202 as delivery success.
