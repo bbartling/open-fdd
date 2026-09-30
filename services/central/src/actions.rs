@@ -307,10 +307,11 @@ mod tests {
 
     #[test]
     fn start_finish_list_roundtrip() {
-        let _t = TEST_LOCK.lock().unwrap();
+        let _env = crate::test_env_lock::lock_env();
+        let _t = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("openfdd-actions-{}", Uuid::new_v4()));
         let _ = fs::create_dir_all(&dir);
-        std::env::set_var("OPENFDD_WORKSPACE", &dir);
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(&dir);
 
         let id =
             start_action("fdd_run_all", "Run all", Some(json!({"building": "B1"}))).expect("start");
@@ -345,15 +346,15 @@ mod tests {
         assert!(all.len() <= JSONL_CAP, "jsonl cap {}", all.len());
 
         let _ = fs::remove_dir_all(&dir);
-        std::env::remove_var("OPENFDD_WORKSPACE");
     }
 
     #[test]
     fn heavy_fdd_is_single_flight() {
-        let _t = TEST_LOCK.lock().unwrap();
+        let _env = crate::test_env_lock::lock_env();
+        let _t = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("openfdd-actions-sf-{}", Uuid::new_v4()));
         let _ = fs::create_dir_all(&dir);
-        std::env::set_var("OPENFDD_WORKSPACE", &dir);
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(&dir);
 
         let id = start_action("fdd_run_all", "Run all", None).expect("first");
         let err = start_action("fdd_run_all", "Run all again", None).expect_err("busy");
@@ -364,15 +365,15 @@ mod tests {
         start_action("fdd_run_rule", "One rule after", None).expect("after finish");
 
         let _ = fs::remove_dir_all(&dir);
-        std::env::remove_var("OPENFDD_WORKSPACE");
     }
 
     #[test]
     fn stale_running_heavy_fdd_is_reclaimed() {
-        let _t = TEST_LOCK.lock().unwrap();
+        let _env = crate::test_env_lock::lock_env();
+        let _t = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("openfdd-actions-stale-{}", Uuid::new_v4()));
         let _ = fs::create_dir_all(&dir);
-        std::env::set_var("OPENFDD_WORKSPACE", &dir);
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(&dir);
 
         let id = start_action("fdd_run_all", "Orphan", None).expect("start");
         // Backdate the running row beyond STALE_RUNNING_SECS.
@@ -399,6 +400,5 @@ mod tests {
         assert_eq!(orphan["detail"]["reclaimed"], true);
 
         let _ = fs::remove_dir_all(&dir);
-        std::env::remove_var("OPENFDD_WORKSPACE");
     }
 }
