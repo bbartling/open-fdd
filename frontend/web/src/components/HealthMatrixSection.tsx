@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useExplicitAnalyticsRefresh } from "../session/useExplicitAnalyticsRefresh";
 import { DataTable, InlineAlert } from "./widgets";
 import type { DataTableColumn } from "./widgets/DataTable";
 import type { AnalyticsEnvelope } from "../api/analyticsApi";
@@ -60,7 +61,10 @@ export interface HealthMatrixSectionProps {
   caption?: string;
   buildingId: string;
   refreshToken: number;
-  fetchHealth: (buildingId: string) => Promise<AnalyticsEnvelope>;
+  fetchHealth: (
+    buildingId: string,
+    opts?: { refresh?: boolean },
+  ) => Promise<AnalyticsEnvelope>;
   flagColumns: HealthFlagColumn[];
   /** Custom clean/empty state copy. */
   emptyMessage?: string;
@@ -90,13 +94,14 @@ export function HealthMatrixSection({
 
   const test = (suffix: string) => `${family}-health-${suffix}`;
   const sectionId = `overview-${family}-health`;
+  const refresh = useExplicitAnalyticsRefresh(buildingId, refreshToken);
 
   useEffect(() => {
     if (!buildingId) return;
     let cancelled = false;
     setLoading(true);
     setErr(null);
-    void fetchHealth(buildingId)
+    void fetchHealth(buildingId, refresh ? { refresh: true } : undefined)
       .then((e) => {
         if (!cancelled) setEnv(e);
       })
@@ -112,7 +117,7 @@ export function HealthMatrixSection({
     return () => {
       cancelled = true;
     };
-  }, [buildingId, refreshToken, fetchHealth]);
+  }, [buildingId, refreshToken, fetchHealth, refresh]);
 
   const rows = useMemo(
     () =>

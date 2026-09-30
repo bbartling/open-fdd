@@ -12,7 +12,10 @@ export function VavHealthSection({
   pendingFlags?: boolean;
 }) {
   const fetchHealth = useCallback(
-    (id: string) => postVavHealth({ building_id: id }),
+    (id: string, opts?: { refresh?: boolean }) =>
+      postVavHealth(
+        opts?.refresh ? { building_id: id, refresh: true } : { building_id: id },
+      ),
     [],
   );
 

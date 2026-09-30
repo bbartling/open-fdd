@@ -5,6 +5,7 @@ import { postBasVsWebOat } from "../api/analyticsApi";
 import { plantEquipmentFamilies } from "../lib/plantEquipment";
 import { isWeatherEquipment, pickWeatherFaultRow } from "../lib/overviewMetrics";
 import type { FddEquipmentItem } from "../api/analyticsApi";
+import { useExplicitAnalyticsRefresh } from "../session/useExplicitAnalyticsRefresh";
 
 function fmtHours(v: unknown): string {
   if (v == null || v === "") return "—";
@@ -36,6 +37,7 @@ export function WeatherHealthSection({
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const refresh = useExplicitAnalyticsRefresh(buildingId, refreshToken);
 
   useEffect(() => {
     if (!buildingId) {
@@ -57,7 +59,12 @@ export function WeatherHealthSection({
         }
         const [fddRows, bas] = await Promise.all([
           getFddResults(buildingId).catch(() => [] as Array<Record<string, unknown>>),
-          postBasVsWebOat({ building_id: buildingId, max_points: 4000, dt_min_f: 10 }),
+          postBasVsWebOat({
+            building_id: buildingId,
+            max_points: 4000,
+            dt_min_f: 10,
+            ...(refresh ? { refresh: true } : {}),
+          }),
         ]);
         if (cancelled) return;
 
@@ -149,7 +156,7 @@ export function WeatherHealthSection({
     return () => {
       cancelled = true;
     };
-  }, [buildingId, refreshToken, families.hasWeather]);
+  }, [buildingId, refreshToken, families.hasWeather, refresh]);
 
   return (
     <section className="overview-section" data-testid="overview-weather-health">

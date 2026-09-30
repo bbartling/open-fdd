@@ -399,4 +399,18 @@ describe("mechFigure history_rows honesty", () => {
     expect(out.mech_cooling.coverage.length).toBeGreaterThan(0);
     expect(out.mech_cooling.caption).toMatch(/No compressor×OAT|descriptive/i);
   });
+
+  it("sends refresh only when the caller asks the parquet cache to recompute", async () => {
+    const { postRuntime, postEconomizer } = await import("./analyticsApi");
+    await fetchCentralOverview({ building_id: "BUILDING_100" });
+    const cached = vi.mocked(postRuntime).mock.calls.at(-1)?.[0] as { refresh?: boolean };
+    expect(cached.refresh).toBeUndefined();
+    await fetchCentralOverview({ building_id: "BUILDING_100", refresh: true });
+    expect(vi.mocked(postRuntime).mock.calls.at(-1)?.[0]).toMatchObject({
+      refresh: true,
+    });
+    expect(vi.mocked(postEconomizer).mock.calls.at(-1)?.[0]).toMatchObject({
+      refresh: true,
+    });
+  });
 });

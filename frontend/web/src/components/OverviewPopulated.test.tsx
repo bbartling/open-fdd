@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import {
   OverviewPopulated,
@@ -408,6 +408,36 @@ describe("OverviewPopulated metric isolation", () => {
         /Needs Run all rules/,
       );
     });
+  });
+
+  it("force refresh asks central to recompute the parquet cache", async () => {
+    const { getFddReadiness, getFddResults } = await import("../api/fddApi");
+    vi.mocked(getFddReadiness).mockResolvedValue({
+      ok: true,
+      has_results: false,
+      clean: false,
+      dirty_reasons: ["never_run"],
+      result_count: 0,
+      completed_at: null,
+    });
+    vi.mocked(getFddResults).mockResolvedValue([]);
+    renderOverview();
+    await waitFor(() => {
+      expect(fetchCentralOverview).toHaveBeenCalled();
+    });
+    const opened = fetchCentralOverview.mock.calls[0]?.[0] as { refresh?: boolean };
+    expect(opened.refresh).toBe(false);
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("overview-force-analytics").querySelector("button"),
+      ).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId("overview-force-analytics").querySelector("button")!);
+    await waitFor(() => {
+      expect(fetchCentralOverview.mock.calls.length).toBeGreaterThan(1);
+    });
+    const forced = fetchCentralOverview.mock.calls.at(-1)?.[0] as { refresh?: boolean };
+    expect(forced.refresh).toBe(true);
   });
 
   it("reuses cached overview on remount without a second DataFusion fan-out", async () => {
