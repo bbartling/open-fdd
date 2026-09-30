@@ -356,7 +356,13 @@ pub struct Settings {
     pub bacnet_client: BacnetClientSettings,
     pub weather: WeatherSettings,
     pub modbus: ModbusSettings,
+    /// True only when the Modbus section or supported MODBUS_* settings were
+    /// explicitly supplied; defaults do not advertise an upstream.
+    pub modbus_configured: bool,
     pub haystack: HaystackSettings,
+    /// True only when the Haystack section or supported HAYSTACK_* settings
+    /// were explicitly supplied. Defaults must not create a connector.
+    pub haystack_configured: bool,
     pub rest: RestSettings,
     pub poll: PollSettings,
     pub http_host: String,
@@ -375,7 +381,9 @@ impl Default for Settings {
             bacnet_client: BacnetClientSettings::default(),
             weather: WeatherSettings::default(),
             modbus: ModbusSettings::default(),
+            modbus_configured: false,
             haystack: HaystackSettings::default(),
+            haystack_configured: false,
             rest: RestSettings::default(),
             poll: PollSettings::default(),
             http_host: "127.0.0.1".into(),
@@ -596,7 +604,26 @@ fn load_gateway_toml() -> GatewayToml {
 
 pub fn load_settings() -> Settings {
     let raw = load_gateway_toml();
-    let mut s = Settings::default();
+    let haystack_configured = raw.haystack.is_some()
+        || [
+            "HAYSTACK_BASE_URL",
+            "OPENFDD_HAYSTACK_BASE_URL",
+            "HAYSTACK_USER",
+            "OPENFDD_HAYSTACK_USER",
+            "HAYSTACK_PASS",
+            "OPENFDD_HAYSTACK_PASS",
+            "HAYSTACK_AUTH_MODE",
+            "OPENFDD_HAYSTACK_AUTH_MODE",
+        ]
+        .iter()
+        .any(|name| std::env::var(name).is_ok_and(|value| !value.trim().is_empty()));
+    let modbus_configured = raw.modbus.is_some()
+        || std::env::var("MODBUS_DEFAULT_HOST").is_ok_and(|value| !value.trim().is_empty());
+    let mut s = Settings {
+        haystack_configured,
+        modbus_configured,
+        ..Settings::default()
+    };
 
     if let Some(bs) = raw.bacnet_server {
         if let Some(v) = bs.device_instance {

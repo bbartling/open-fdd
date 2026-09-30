@@ -28,11 +28,14 @@ pub enum ConnectorProtocol {
 pub enum CapabilityState {
     Disabled,
     NotConfigured,
+    Checking,
     Ready,
+    Degraded,
     Unreachable,
     AuthFailure,
     Incompatible,
     Stale,
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,11 +53,14 @@ pub enum ConnectorAction {
 pub enum DeliveryStatus {
     Disabled,
     NotConfigured,
+    Checking,
     Ready,
+    Degraded,
     Unreachable,
     AuthFailure,
     Incompatible,
     Stale,
+    Unknown,
 }
 
 impl From<CapabilityState> for DeliveryStatus {
@@ -62,11 +68,14 @@ impl From<CapabilityState> for DeliveryStatus {
         match value {
             CapabilityState::Disabled => Self::Disabled,
             CapabilityState::NotConfigured => Self::NotConfigured,
+            CapabilityState::Checking => Self::Checking,
             CapabilityState::Ready => Self::Ready,
+            CapabilityState::Degraded => Self::Degraded,
             CapabilityState::Unreachable => Self::Unreachable,
             CapabilityState::AuthFailure => Self::AuthFailure,
             CapabilityState::Incompatible => Self::Incompatible,
             CapabilityState::Stale => Self::Stale,
+            CapabilityState::Unknown => Self::Unknown,
         }
     }
 }
@@ -145,6 +154,12 @@ pub struct CapabilitiesAggregateResponse {
     #[serde(default)]
     pub upstreams: Vec<UpstreamCapability>,
     pub recipe: RecipeObservation,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostic: Option<String>,
+    /// Time at which this aggregate was generated. Connector hello timestamps
+    /// remain the evidence time for each probe and are not rewritten on cache
+    /// hits.
+    pub generated_at: DateTime<Utc>,
     pub observed_at: DateTime<Utc>,
 }
 
@@ -158,6 +173,30 @@ impl ConnectorHelloResponse {
         }
         if self.version.service.trim().is_empty() || self.version.build.trim().is_empty() {
             return Err("service and build versions are required".into());
+        }
+        if self.version.service.len() > 128 || self.version.build.len() > 128 {
+            return Err("service and build versions are too long".into());
+        }
+        if !self
+            .version
+            .service
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | '+'))
+            || !self
+                .version
+                .build
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | '+'))
+        {
+            return Err("service and build versions contain unsafe characters".into());
+        }
+        if self.connectors.iter().any(|connector| {
+            connector
+                .detail
+                .as_deref()
+                .is_some_and(|detail| detail.len() > 512)
+        }) {
+            return Err("connector detail is too long".into());
         }
         Ok(())
     }
@@ -212,11 +251,14 @@ mod tests {
         for state in [
             CapabilityState::Disabled,
             CapabilityState::NotConfigured,
+            CapabilityState::Checking,
             CapabilityState::Ready,
+            CapabilityState::Degraded,
             CapabilityState::Unreachable,
             CapabilityState::AuthFailure,
             CapabilityState::Incompatible,
             CapabilityState::Stale,
+            CapabilityState::Unknown,
         ] {
             let encoded = serde_json::to_string(&state).unwrap();
             assert!(!encoded.is_empty());

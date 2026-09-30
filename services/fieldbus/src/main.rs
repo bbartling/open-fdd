@@ -356,6 +356,7 @@ mod tests {
             "schema": openfdd_contracts::READ_PROXY_CONTRACT_V1,
             "request_id": uuid::Uuid::nil(),
             "scope": {
+                "tenant_id": "configured-tenant",
                 "building_id": "other-building",
                 "edge_id": "configured-edge"
             },

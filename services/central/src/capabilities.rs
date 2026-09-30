@@ -5,6 +5,7 @@
 //! reject redirects, and are bounded by timeout, body size, concurrency,
 //! caching, and retry backoff.  User supplied URLs are never accepted.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -14,7 +15,7 @@ use futures_util::StreamExt;
 use openfdd_contracts::{
     CapabilitiesAggregateResponse, CapabilityState, ConnectorAction, ConnectorCapability,
     ConnectorHelloResponse, ConnectorProtocol, ConnectorReadRequest, ConnectorReadResponse,
-    DeliveryStatus, RecipeObservation, ServiceVersion, UpstreamCapability,
+    ConnectorReadResult, DeliveryStatus, RecipeObservation, ServiceVersion, UpstreamCapability,
     CAPABILITIES_AGGREGATE_CONTRACT_V1, CAPABILITIES_CONTRACT_V1,
 };
 use reqwest::redirect::Policy;
@@ -34,6 +35,10 @@ const MAX_CONCURRENT_PROBES: usize = 4;
 
 #[derive(Clone)]
 struct ConfiguredUpstream {
+    /// Scope is part of the server-side configuration. It is never accepted
+    /// from the browser or copied from an untrusted upstream response.
+    tenant_id: String,
+    building_id: String,
     edge_id: String,
     base_url: Url,
     token: Option<String>,
@@ -74,6 +79,7 @@ impl ProbeFailure {
 pub struct CapabilitiesAggregator {
     client: Option<Client>,
     upstreams: Vec<ConfiguredUpstream>,
+    config_error: Option<String>,
     cache: Mutex<CacheState>,
     refresh_gate: Semaphore,
     probe_gate: Arc<Semaphore>,
@@ -90,16 +96,14 @@ impl CapabilitiesAggregator {
             .timeout(REQUEST_TIMEOUT)
             .build()
             .ok();
-        let initial_error = if config_errors.is_empty() {
-            None
-        } else {
-            Some(config_errors.join("; "))
-        };
+        let config_error = (!config_errors.is_empty())
+            .then_some("one or more configured fieldbus upstreams are invalid".to_string());
         Arc::new(Self {
             client,
             upstreams,
+            config_error: config_error.clone(),
             cache: Mutex::new(CacheState {
-                report: initial_error.map(|error| empty_report(Some(error))),
+                report: config_error.map(|error| empty_report(Some(error))),
                 fetched_at: None,
                 next_retry_at: None,
                 failures: 0,
@@ -121,6 +125,7 @@ impl CapabilitiesAggregator {
                 .build()
                 .ok(),
             upstreams,
+            config_error: None,
             cache: Mutex::new(CacheState {
                 report: None,
                 fetched_at: None,
@@ -132,6 +137,28 @@ impl CapabilitiesAggregator {
             ttl: Duration::from_millis(20),
             max_stale: Duration::from_millis(100),
         })
+    }
+
+    /// Return only upstreams whose trusted configured scope belongs to the
+    /// authenticated tenant/building context. The caller still applies its
+    /// edge-shadow consistency check before returning a public report.
+    pub fn authorized_edge_ids(&self, ctx: &crate::tenant::TenantContext) -> HashSet<String> {
+        self.upstreams
+            .iter()
+            .filter(|upstream| {
+                ctx.allow_building(&upstream.building_id)
+                    && (ctx.hub_admin
+                        || ctx.tenant_id.as_deref() == Some(upstream.tenant_id.as_str()))
+            })
+            .map(|upstream| upstream.edge_id.clone())
+            .collect()
+    }
+
+    pub fn configured_scope(&self, edge_id: &str) -> Option<(&str, &str)> {
+        self.upstreams
+            .iter()
+            .find(|upstream| upstream.edge_id == edge_id)
+            .map(|upstream| (upstream.tenant_id.as_str(), upstream.building_id.as_str()))
     }
 
     /// Refresh configured upstream hello responses, or return a bounded cached
@@ -193,7 +220,8 @@ impl CapabilitiesAggregator {
             )
         });
         let mut cache = self.cache.lock().await;
-        let report = aggregate_report(central, upstreams);
+        let mut report = aggregate_report(central, upstreams);
+        report.diagnostic = self.config_error.clone();
         cache.report = Some(report.clone());
         cache.fetched_at = Some(Instant::now());
         if failed {
@@ -264,7 +292,10 @@ impl CapabilitiesAggregator {
             Err(()) => return failed_upstream(upstream, previous, ProbeFailure::Incompatible),
         };
         let hello = match serde_json::from_slice::<ConnectorHelloResponse>(&body) {
-            Ok(hello) if hello.validate().is_ok() => hello,
+            Ok(hello) => match sanitize_hello(hello) {
+                Ok(hello) => hello,
+                Err(()) => return failed_upstream(upstream, previous, ProbeFailure::Incompatible),
+            },
             _ => return failed_upstream(upstream, previous, ProbeFailure::Incompatible),
         };
         UpstreamCapability {
@@ -291,6 +322,11 @@ impl CapabilitiesAggregator {
             .iter()
             .find(|upstream| upstream.edge_id == edge_id)
             .ok_or(ProxyError::NotConfigured)?;
+        if upstream.tenant_id != request.scope.tenant_id
+            || upstream.building_id != request.scope.building_id
+        {
+            return Err(ProxyError::BadRequest);
+        }
         if upstream.token.is_none() && !central_bool("OPENFDD_FIELDBUS_UPSTREAM_ALLOW_ANONYMOUS") {
             return Err(ProxyError::AuthFailure);
         }
@@ -322,8 +358,15 @@ impl CapabilitiesAggregator {
             .map_err(|_| ProxyError::Incompatible)?;
         let result: ConnectorReadResponse =
             serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
-        if result.request_id != request.request_id || result.scope != request.scope {
-            return Err(ProxyError::Incompatible);
+        result
+            .validate_for(request)
+            .map_err(|_| ProxyError::Incompatible)?;
+        if !result.ok {
+            return Err(ProxyError::Rejected);
+        }
+        let mut result = result;
+        if let Some(ConnectorReadResult::Metadata { hello }) = result.result.as_mut() {
+            *hello = sanitize_hello(hello.clone()).map_err(|_| ProxyError::Incompatible)?;
         }
         Ok(result)
     }
@@ -358,6 +401,7 @@ pub enum ProxyError {
     Unreachable,
     AuthFailure,
     Incompatible,
+    Rejected,
 }
 
 impl ProxyError {
@@ -368,6 +412,7 @@ impl ProxyError {
             Self::Unreachable => StatusCode::BAD_GATEWAY,
             Self::AuthFailure => StatusCode::BAD_GATEWAY,
             Self::Incompatible => StatusCode::BAD_GATEWAY,
+            Self::Rejected => StatusCode::BAD_GATEWAY,
         }
     }
 
@@ -378,6 +423,7 @@ impl ProxyError {
             Self::Unreachable => "edge connector is unreachable",
             Self::AuthFailure => "edge connector authentication failed",
             Self::Incompatible => "edge connector read contract is incompatible",
+            Self::Rejected => "edge connector rejected the read",
         }
     }
 }
@@ -428,7 +474,7 @@ fn replace_central(
     central: ConnectorHelloResponse,
 ) -> CapabilitiesAggregateResponse {
     report.central = central;
-    report.observed_at = Utc::now();
+    report.generated_at = Utc::now();
     report
 }
 
@@ -437,7 +483,7 @@ fn with_central(
     central: ConnectorHelloResponse,
 ) -> CapabilitiesAggregateResponse {
     report.central = central;
-    report.observed_at = Utc::now();
+    report.generated_at = Utc::now();
     report
 }
 
@@ -446,17 +492,14 @@ fn aggregate_report(
     upstreams: Vec<UpstreamCapability>,
 ) -> CapabilitiesAggregateResponse {
     let mut observed_services = vec!["central".to_string()];
-    if !upstreams.is_empty() {
+    if upstreams
+        .iter()
+        .any(|upstream| upstream.state == CapabilityState::Ready)
+    {
         observed_services.push("fieldbus".into());
     }
     let declared = central.recipe.declared.clone();
-    let reconciliation = match declared.as_deref() {
-        None => "not_declared",
-        Some("csv") if upstreams.is_empty() => "matched",
-        Some("central") if upstreams.is_empty() => "matched",
-        Some("edge") | Some("standalone") if !upstreams.is_empty() => "matched",
-        Some(_) => "observed_extra",
-    };
+    let reconciliation = recipe_reconciliation(declared.as_deref(), &observed_services);
     let recipe = RecipeObservation {
         declared,
         observed_services,
@@ -472,8 +515,75 @@ fn aggregate_report(
         central,
         upstreams,
         recipe,
+        diagnostic: None,
+        generated_at: Utc::now(),
         observed_at: Utc::now(),
     }
+}
+
+fn recipe_reconciliation(declared: Option<&str>, observed_services: &[String]) -> &'static str {
+    match declared {
+        None => "not_declared",
+        Some("csv" | "central") if !observed_services.iter().any(|s| s == "fieldbus") => "matched",
+        Some("edge" | "standalone") if observed_services.iter().any(|s| s == "fieldbus") => {
+            "matched"
+        }
+        Some(_) => "declared_missing",
+    }
+}
+
+/// Restrict an aggregate to the edge ids authorized by the authenticated
+/// request. The cache may contain a wider server-side snapshot, but it is
+/// never serialized across this boundary.
+pub fn restrict_to_edges(
+    mut report: CapabilitiesAggregateResponse,
+    allowed_edges: &HashSet<String>,
+) -> CapabilitiesAggregateResponse {
+    report
+        .upstreams
+        .retain(|upstream| allowed_edges.contains(&upstream.edge_id));
+    report.recipe.observed_services = vec!["central".into()];
+    if report
+        .upstreams
+        .iter()
+        .any(|upstream| upstream.state == CapabilityState::Ready)
+    {
+        report.recipe.observed_services.push("fieldbus".into());
+    }
+    report.recipe.reconciliation = recipe_reconciliation(
+        report.recipe.declared.as_deref(),
+        &report.recipe.observed_services,
+    )
+    .into();
+    report.generated_at = Utc::now();
+    report
+}
+
+fn sanitize_hello(mut hello: ConnectorHelloResponse) -> Result<ConnectorHelloResponse, ()> {
+    hello.validate().map_err(|_| ())?;
+    if hello.version.service != "openfdd-fieldbus" {
+        return Err(());
+    }
+    // Free text from a connector is not a public diagnostic channel. Keep
+    // only the typed protocol/action/state fields at this boundary.
+    for connector in &mut hello.connectors {
+        connector.detail = None;
+    }
+    hello.recipe.declared = hello
+        .recipe
+        .declared
+        .filter(|value| matches!(value.as_str(), "edge" | "standalone" | "central" | "csv"));
+    hello
+        .recipe
+        .observed_services
+        .retain(|service| matches!(service.as_str(), "fieldbus" | "mqtt" | "central"));
+    hello.recipe.reconciliation = recipe_reconciliation(
+        hello.recipe.declared.as_deref(),
+        &hello.recipe.observed_services,
+    )
+    .into();
+    hello.validate().map_err(|_| ())?;
+    Ok(hello)
 }
 
 fn empty_report(error: Option<String>) -> CapabilitiesAggregateResponse {
@@ -493,10 +603,9 @@ fn empty_report(error: Option<String>) -> CapabilitiesAggregateResponse {
         },
         observed_at: Utc::now(),
     };
-    let mut report = aggregate_report(central.clone(), Vec::new());
-    if let Some(error) = error {
-        report.recipe.reconciliation = error;
-    }
+    let report = aggregate_report(central.clone(), Vec::new());
+    let mut report = report;
+    report.diagnostic = error;
     report
 }
 
@@ -510,37 +619,67 @@ fn central_bool(name: &str) -> bool {
 }
 
 pub fn central_hello(state: &AppState) -> ConnectorHelloResponse {
-    let mqtt = central_bool("OPENFDD_MQTT_ENABLED");
+    const DURABLE_FRESHNESS: Duration = Duration::from_secs(5 * 60);
+    const SOURCE_FRESHNESS: Duration = Duration::from_secs(5 * 60);
+    let mqtt_enabled = central_bool("OPENFDD_MQTT_ENABLED");
+    let mqtt_configured = std::env::var("OPENFDD_MQTT_HOST")
+        .ok()
+        .is_some_and(|host| !host.trim().is_empty());
     let monitor = state.mqtt_monitor_snapshot();
     let historian = crate::durable_storage::historian_root_present();
-    let mqtt_state = if !mqtt {
+    let last_durable_at = *state
+        .last_durable_at
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    let last_ingest_at = *state
+        .last_ingest_at
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    let mqtt_state = if !mqtt_enabled {
         DeliveryStatus::Disabled
+    } else if !mqtt_configured {
+        DeliveryStatus::NotConfigured
     } else if monitor.connected {
         DeliveryStatus::Ready
     } else if monitor.errors > 0 {
         DeliveryStatus::Unreachable
     } else {
-        DeliveryStatus::Stale
+        DeliveryStatus::Checking
     };
-    let durable_state = if historian {
-        DeliveryStatus::Ready
-    } else {
+    let durable_state = if !historian {
         DeliveryStatus::Incompatible
-    };
-    let readiness = if mqtt {
-        CapabilityState::Ready
+    } else if last_durable_at.as_ref().is_some_and(|observed| {
+        Utc::now()
+            .signed_duration_since(observed)
+            .to_std()
+            .is_ok_and(|age| age <= DURABLE_FRESHNESS)
+    }) {
+        DeliveryStatus::Ready
+    } else if last_durable_at.is_some() {
+        DeliveryStatus::Stale
     } else {
+        DeliveryStatus::Unknown
+    };
+    let readiness = if !mqtt_enabled {
         CapabilityState::Disabled
-    };
-    let source_health = if state
-        .last_ingest_at
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner())
-        .is_some()
-    {
+    } else if !mqtt_configured {
+        CapabilityState::NotConfigured
+    } else if monitor.connected {
         CapabilityState::Ready
     } else {
+        CapabilityState::Checking
+    };
+    let source_health = if last_ingest_at.as_ref().is_some_and(|observed| {
+        Utc::now()
+            .signed_duration_since(observed)
+            .to_std()
+            .is_ok_and(|age| age <= SOURCE_FRESHNESS)
+    }) {
+        CapabilityState::Ready
+    } else if last_ingest_at.is_some() {
         CapabilityState::Stale
+    } else {
+        CapabilityState::Checking
     };
     let declared = ["OPENFDD_BUILD_RECIPE", "OPENFDD_RECIPE"]
         .into_iter()
@@ -560,8 +699,8 @@ pub fn central_hello(state: &AppState) -> ConnectorHelloResponse {
         connectors: vec![ConnectorCapability {
             protocol: ConnectorProtocol::Mqtt,
             compiled: true,
-            configured: mqtt,
-            enabled: mqtt,
+            configured: mqtt_configured,
+            enabled: mqtt_enabled,
             readiness,
             source_health,
             mqtt_connection: mqtt_state,
@@ -606,7 +745,7 @@ fn configured_upstreams_from_env() -> (Vec<ConfiguredUpstream>, Vec<String>) {
         .or_else(|_| std::env::var("OPENFDD_FIELDBUS_API_KEY"))
         .ok()
         .filter(|token| !token.trim().is_empty());
-    let mut upstreams = Vec::new();
+    let mut upstreams: Vec<ConfiguredUpstream> = Vec::new();
     let mut errors = Vec::new();
     for (index, item) in raw
         .unwrap_or_default()
@@ -615,18 +754,25 @@ fn configured_upstreams_from_env() -> (Vec<ConfiguredUpstream>, Vec<String>) {
         .filter(|item| !item.is_empty())
         .enumerate()
     {
-        let Some((edge_id, raw_url)) = item.split_once('=') else {
+        let Some((scope_key, raw_url)) = item.split_once('=') else {
             errors.push(format!("upstream {index} is malformed"));
             continue;
         };
-        let edge_id = edge_id.trim();
-        if edge_id.is_empty() || edge_id.contains('/') || edge_id.contains("..") {
-            errors.push(format!("upstream {index} has an invalid edge id"));
+        let Ok((tenant_id, building_id, edge_id)) = configured_scope(scope_key.trim()) else {
+            errors.push(format!(
+                "upstream {index} has an invalid tenant/building/edge scope"
+            ));
+            continue;
+        };
+        if upstreams.iter().any(|upstream| upstream.edge_id == edge_id) {
+            errors.push(format!("upstream {edge_id} is configured more than once"));
             continue;
         }
         match parse_base_url(raw_url.trim()) {
             Ok(base_url) => upstreams.push(ConfiguredUpstream {
-                edge_id: edge_id.into(),
+                tenant_id,
+                building_id,
+                edge_id,
                 base_url,
                 token: token.clone(),
             }),
@@ -637,6 +783,37 @@ fn configured_upstreams_from_env() -> (Vec<ConfiguredUpstream>, Vec<String>) {
         }
     }
     (upstreams, errors)
+}
+
+/// Parse the trusted scope prefix used by `OPENFDD_FIELDBUS_UPSTREAMS`.
+/// Entries use `tenant|building|edge=https://...`. A one-part legacy entry is
+/// accepted only when the process has explicit `OPENFDD_TENANT_ID` and
+/// `OPENFDD_BUILDING_ID` bindings; otherwise it is rejected fail-closed.
+fn configured_scope(raw: &str) -> Result<(String, String, String), ()> {
+    let parts: Vec<_> = raw.split('|').map(str::trim).collect();
+    let (tenant_id, building_id, edge_id) = match parts.as_slice() {
+        [tenant_id, building_id, edge_id] => (
+            (*tenant_id).to_string(),
+            (*building_id).to_string(),
+            (*edge_id).to_string(),
+        ),
+        [edge_id] => (
+            std::env::var("OPENFDD_TENANT_ID").map_err(|_| ())?,
+            std::env::var("OPENFDD_BUILDING_ID").map_err(|_| ())?,
+            (*edge_id).to_string(),
+        ),
+        _ => return Err(()),
+    };
+    for value in [&tenant_id, &building_id, &edge_id] {
+        if value.trim().is_empty()
+            || value.contains('/')
+            || value.contains('\\')
+            || value.contains("..")
+        {
+            return Err(());
+        }
+    }
+    Ok((tenant_id, building_id, edge_id))
 }
 
 fn parse_base_url(raw: &str) -> Result<Url, ()> {
@@ -689,16 +866,18 @@ fn redacted_address(url: &Url) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{routing::get, Json, Router};
+    use axum::{response::Redirect, routing::get, Json, Router};
     use openfdd_contracts::{ConnectorScope, ReadTarget, READ_PROXY_CONTRACT_V1};
     use std::net::SocketAddr;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc as StdArc;
     use tokio::net::TcpListener;
 
     fn central_fixture() -> ConnectorHelloResponse {
         ConnectorHelloResponse {
             schema: CAPABILITIES_CONTRACT_V1.into(),
             version: ServiceVersion {
-                service: "central".into(),
+                service: "openfdd-fieldbus".into(),
                 build: "test".into(),
                 contract: CAPABILITIES_CONTRACT_V1.into(),
             },
@@ -723,11 +902,26 @@ mod tests {
         assert_eq!(redacted_address(&parsed), "redacted-configured-upstream");
     }
 
+    #[test]
+    fn configured_upstream_scope_requires_tenant_building_and_edge_binding() {
+        assert_eq!(
+            configured_scope("tenant-a|building-a|edge-a").unwrap(),
+            ("tenant-a".into(), "building-a".into(), "edge-a".into())
+        );
+        assert!(configured_scope("tenant-a|building-a").is_err());
+        assert!(configured_scope("tenant-a|building-a|../edge").is_err());
+    }
+
     #[tokio::test]
     async fn cached_hello_is_reused_without_second_probe() {
+        let calls = StdArc::new(AtomicUsize::new(0));
+        let calls_for_handler = StdArc::clone(&calls);
         let app = Router::new().route(
             "/api/connector/hello",
-            get(|| async { Json(central_fixture()) }),
+            get(move || {
+                calls_for_handler.fetch_add(1, Ordering::Relaxed);
+                async { Json(central_fixture()) }
+            }),
         );
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr: SocketAddr = listener.local_addr().unwrap();
@@ -735,6 +929,8 @@ mod tests {
             axum::serve(listener, app).await.unwrap();
         });
         let aggregator = CapabilitiesAggregator::for_tests(vec![ConfiguredUpstream {
+            tenant_id: "tenant-a".into(),
+            building_id: "building-a".into(),
             edge_id: "edge-a".into(),
             base_url: Url::parse(&format!("http://{addr}")).unwrap(),
             token: Some("test-token".into()),
@@ -744,6 +940,37 @@ mod tests {
         assert_eq!(first.upstreams[0].state, CapabilityState::Ready);
         assert_eq!(second.upstreams[0].state, CapabilityState::Ready);
         assert_eq!(second.upstreams[0].address, "redacted-configured-upstream");
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        assert_eq!(
+            first.upstreams[0].hello.as_ref().unwrap().observed_at,
+            second.upstreams[0].hello.as_ref().unwrap().observed_at
+        );
+    }
+
+    #[test]
+    fn public_hello_sanitizer_removes_free_text_and_recomputes_recipe() {
+        let mut hello = central_fixture();
+        hello.recipe.declared = Some("edge".into());
+        hello.recipe.observed_services = vec!["fieldbus".into(), "https://internal".into()];
+        hello.recipe.reconciliation = "https://internal/secret".into();
+        hello.connectors.push(ConnectorCapability {
+            protocol: ConnectorProtocol::Bacnet,
+            compiled: true,
+            configured: true,
+            enabled: true,
+            readiness: CapabilityState::Ready,
+            source_health: CapabilityState::Unknown,
+            mqtt_connection: DeliveryStatus::Unknown,
+            durable_delivery: DeliveryStatus::Unknown,
+            supported_actions: vec![ConnectorAction::MetadataRead],
+            detail: Some("https://user:secret@internal".into()),
+        });
+        let sanitized = sanitize_hello(hello).unwrap();
+        assert!(sanitized.connectors[0].detail.is_none());
+        assert_eq!(sanitized.recipe.reconciliation, "matched");
+        assert!(!serde_json::to_string(&sanitized)
+            .unwrap()
+            .contains("internal"));
     }
 
     #[tokio::test]
@@ -755,6 +982,8 @@ mod tests {
             axum::serve(listener, app).await.unwrap();
         });
         let aggregator = CapabilitiesAggregator::for_tests(vec![ConfiguredUpstream {
+            tenant_id: "tenant-a".into(),
+            building_id: "building-a".into(),
             edge_id: "edge-a".into(),
             base_url: Url::parse(&format!("http://{addr}/fieldbus/")).unwrap(),
             token: Some("do-not-return".into()),
@@ -767,13 +996,106 @@ mod tests {
         assert_eq!(report.upstreams[0].address, "redacted-configured-upstream");
     }
 
+    #[tokio::test]
+    async fn redirect_is_not_followed_and_is_incompatible() {
+        let redirected_calls = StdArc::new(AtomicUsize::new(0));
+        let redirected_calls_for_handler = StdArc::clone(&redirected_calls);
+        let app = Router::new()
+            .route(
+                "/api/connector/hello",
+                get(|| async { Redirect::temporary("/redirected") }),
+            )
+            .route(
+                "/redirected",
+                get(move || {
+                    redirected_calls_for_handler.fetch_add(1, Ordering::Relaxed);
+                    async { Json(central_fixture()) }
+                }),
+            );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let aggregator = CapabilitiesAggregator::for_tests(vec![ConfiguredUpstream {
+            tenant_id: "tenant-a".into(),
+            building_id: "building-a".into(),
+            edge_id: "edge-a".into(),
+            base_url: Url::parse(&format!("http://{addr}")).unwrap(),
+            token: Some("test-token".into()),
+        }]);
+        let report = aggregator.snapshot(central_fixture()).await;
+        assert_eq!(report.upstreams[0].state, CapabilityState::Incompatible);
+        assert_eq!(redirected_calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn oversized_hello_body_is_rejected_before_publication() {
+        let body = "x".repeat(MAX_BODY_BYTES + 1);
+        let app = Router::new().route(
+            "/api/connector/hello",
+            get(move || {
+                let body = body.clone();
+                async move { body }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let aggregator = CapabilitiesAggregator::for_tests(vec![ConfiguredUpstream {
+            tenant_id: "tenant-a".into(),
+            building_id: "building-a".into(),
+            edge_id: "edge-a".into(),
+            base_url: Url::parse(&format!("http://{addr}")).unwrap(),
+            token: Some("test-token".into()),
+        }]);
+        let report = aggregator.snapshot(central_fixture()).await;
+        assert_eq!(report.upstreams[0].state, CapabilityState::Incompatible);
+    }
+
+    #[tokio::test]
+    async fn stalled_hello_is_bounded_and_enters_failure_backoff() {
+        let calls = StdArc::new(AtomicUsize::new(0));
+        let calls_for_handler = StdArc::clone(&calls);
+        let app = Router::new().route(
+            "/api/connector/hello",
+            get(move || {
+                calls_for_handler.fetch_add(1, Ordering::Relaxed);
+                async {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    Json(central_fixture())
+                }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let aggregator = CapabilitiesAggregator::for_tests(vec![ConfiguredUpstream {
+            tenant_id: "tenant-a".into(),
+            building_id: "building-a".into(),
+            edge_id: "edge-a".into(),
+            base_url: Url::parse(&format!("http://{addr}")).unwrap(),
+            token: Some("test-token".into()),
+        }]);
+        let first = aggregator.snapshot(central_fixture()).await;
+        assert_eq!(first.upstreams[0].state, CapabilityState::Unreachable);
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        let second = aggregator.snapshot(central_fixture()).await;
+        assert_eq!(second.upstreams[0].state, CapabilityState::Unreachable);
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+    }
+
     #[test]
     fn proxy_request_shape_is_read_only_and_scoped() {
         let request = ConnectorReadRequest {
             schema: READ_PROXY_CONTRACT_V1.into(),
             request_id: uuid::Uuid::nil(),
             scope: ConnectorScope {
-                tenant_id: Some("tenant".into()),
+                tenant_id: "tenant".into(),
                 building_id: "building".into(),
                 edge_id: "edge".into(),
             },

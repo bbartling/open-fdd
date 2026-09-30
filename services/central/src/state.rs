@@ -104,6 +104,10 @@ pub struct EdgeShadow {
     /// Site/building from MQTT topic path (status/metadata/discovery/telemetry).
     /// Retained when `last_telemetry` is absent so `/api/edges` still attributes site.
     pub registered_site_id: Option<String>,
+    /// Tenant from the tenant-scoped topic or trusted local ingest binding.
+    /// Kept with the edge shadow so overlapping building ids cannot authorize
+    /// an edge from another tenant.
+    pub registered_tenant_id: Option<String>,
     /// protocol slug → last metadata payload
     pub last_metadata: HashMap<String, serde_json::Value>,
     /// protocol slug → last discovery payload
@@ -119,6 +123,12 @@ impl EdgeShadow {
             .map(|t| t.site_id.clone())
             .filter(|s| !s.is_empty())
             .or_else(|| self.registered_site_id.clone().filter(|s| !s.is_empty()))
+    }
+
+    pub fn known_tenant_id(&self) -> Option<String> {
+        self.registered_tenant_id
+            .clone()
+            .filter(|tenant| !tenant.is_empty())
     }
 }
 
@@ -196,6 +206,10 @@ pub struct AppState {
     pub started_at: DateTime<Utc>,
     /// Last successful ingest accept this process (MQTT/CSV paths that bump `ingest_ok`).
     pub last_ingest_at: Mutex<Option<DateTime<Utc>>>,
+    /// Last receipt-backed, persisted row observed by this process. This is
+    /// the only signal used for durable delivery capability; accepts alone do
+    /// not establish persistence.
+    pub last_durable_at: Mutex<Option<DateTime<Utc>>>,
     pub mqtt_publisher: Mutex<Option<AsyncClient>>,
     mqtt_monitor: Mutex<MqttMonitorState>,
     /// Login failures keyed by ip+username (generic throttle; no secrets).
@@ -227,6 +241,7 @@ impl AppState {
             ingest_reject_buckets: Mutex::new(std::collections::BTreeMap::new()),
             started_at: Utc::now(),
             last_ingest_at: Mutex::new(None),
+            last_durable_at: Mutex::new(None),
             mqtt_publisher: Mutex::new(None),
             mqtt_monitor: Mutex::new(MqttMonitorState::default()),
             login_failures: Mutex::new(HashMap::new()),
@@ -529,6 +544,10 @@ impl AppState {
     pub fn note_ingest_ok(&self) {
         *self.ingest_ok.lock().unwrap() += 1;
         *self.last_ingest_at.lock().unwrap() = Some(Utc::now());
+    }
+
+    pub fn note_durable_ingest(&self) {
+        *self.last_durable_at.lock().unwrap() = Some(Utc::now());
     }
 
     pub fn set_mqtt_publisher(&self, client: AsyncClient) {

@@ -1,5 +1,6 @@
 //! Central REST + OpenAPI routes.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -601,14 +602,48 @@ pub async fn select_tenant(
     }))
 }
 
-fn resolve_tenant_context(state: &AppState, headers: &HeaderMap) -> crate::tenant::TenantContext {
+fn resolve_tenant_context_for_user(user: &auth::AuthUser) -> crate::tenant::TenantContext {
     let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
     let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
+    crate::tenant::TenantContext::resolve_fail_closed(user, &plane)
+}
+
+fn resolve_tenant_context(state: &AppState, headers: &HeaderMap) -> crate::tenant::TenantContext {
     let user = state
         .auth
         .user_from_headers(headers)
         .unwrap_or_else(|_| auth::AuthUser::dev_anonymous());
-    crate::tenant::TenantContext::resolve_fail_closed(&user, &plane)
+    resolve_tenant_context_for_user(&user)
+}
+
+fn authorized_edge_ids(state: &AppState, ctx: &crate::tenant::TenantContext) -> HashSet<String> {
+    let configured_ids = state.capabilities.authorized_edge_ids(ctx);
+    state
+        .edges
+        .iter()
+        .filter_map(|entry| {
+            let configured_scope = state.capabilities.configured_scope(entry.key());
+            if configured_scope.is_some() && !configured_ids.contains(entry.key()) {
+                return None;
+            }
+            let shadow = entry
+                .value()
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            let known_site = shadow.known_site_id()?;
+            let known_tenant = shadow.known_tenant_id().unwrap_or_else(|| "legacy".into());
+            let scope_matches = configured_scope.is_none_or(|(tenant_id, building_id)| {
+                building_id == known_site
+                    && ctx.allow_building(building_id)
+                    && (ctx.hub_admin || ctx.tenant_id.as_deref() == Some(tenant_id))
+                    && (known_tenant == "legacy" || known_tenant == tenant_id)
+            });
+            (scope_matches
+                && ctx.allow_building(&known_site)
+                && (ctx.hub_admin || ctx.tenant_id.as_deref() == Some(known_tenant.as_str())))
+            .then(|| entry.key().clone())
+        })
+        .collect()
 }
 
 /// Tenant id for dual-read. The active session tenant is used when the newer
@@ -1004,11 +1039,17 @@ pub async fn list_tenant_budgets(
 }
 
 /// Feature advertisement for UI capability gates and MCP accuracy checks.
-pub async fn capabilities(State(state): State<Arc<AppState>>) -> Json<Value> {
+pub async fn capabilities(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<auth::AuthUser>,
+) -> Json<Value> {
+    let ctx = resolve_tenant_context_for_user(&user);
+    let allowed_edges = authorized_edge_ids(&state, &ctx);
     let aggregate = state
         .capabilities
         .snapshot(crate::capabilities::central_hello(&state))
         .await;
+    let aggregate = crate::capabilities::restrict_to_edges(aggregate, &allowed_edges);
     let aggregate = serde_json::to_value(aggregate).unwrap_or_else(|_| {
         json!({
             "schema": openfdd_contracts::CAPABILITIES_AGGREGATE_CONTRACT_V1,
@@ -1051,7 +1092,6 @@ pub async fn capabilities(State(state): State<Arc<AppState>>) -> Json<Value> {
 pub async fn connector_read(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<auth::AuthUser>,
-    headers: HeaderMap,
     Path(edge_id): Path<String>,
     Json(request): Json<ConnectorReadRequest>,
 ) -> Result<Json<ConnectorReadResponse>, (StatusCode, Json<Value>)> {
@@ -1067,7 +1107,7 @@ pub async fn connector_read(
             Json(json!({"ok": false, "error": "path edge_id and scoped edge_id differ"})),
         ));
     }
-    let ctx = resolve_tenant_context(&state, &headers);
+    let ctx = resolve_tenant_context_for_user(&user);
     if !request_scope_allowed(&ctx, &request.scope) {
         return Err((
             StatusCode::FORBIDDEN,
@@ -1094,6 +1134,35 @@ pub async fn connector_read(
             ),
         ));
     }
+    let known_tenant = edge
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .known_tenant_id()
+        .unwrap_or_else(|| "legacy".into());
+    if !ctx.hub_admin && known_tenant != request.scope.tenant_id {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "edge is not registered for the authenticated tenant"
+            })),
+        ));
+    }
+    if let Some((configured_tenant, configured_building)) =
+        state.capabilities.configured_scope(&edge_id)
+    {
+        if configured_building != request.scope.building_id
+            || (!ctx.hub_admin && configured_tenant != request.scope.tenant_id)
+        {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "ok": false,
+                    "error": "edge is outside the trusted connector scope"
+                })),
+            ));
+        }
+    }
     drop(edge);
     // Keep the authenticated user in the handler signature so the route's
     // JWT middleware cannot be accidentally removed without a compile-time
@@ -1115,10 +1184,7 @@ pub async fn connector_read(
 
 fn request_scope_allowed(ctx: &crate::tenant::TenantContext, scope: &ConnectorScope) -> bool {
     ctx.allow_building(&scope.building_id)
-        && scope
-            .tenant_id
-            .as_deref()
-            .is_none_or(|tenant_id| ctx.hub_admin || ctx.tenant_id.as_deref() == Some(tenant_id))
+        && (ctx.hub_admin || ctx.tenant_id.as_deref() == Some(scope.tenant_id.as_str()))
 }
 
 #[utoipa::path(
@@ -1830,9 +1896,14 @@ pub async fn local_fieldbus_ingest(
         .sequences
         .insert(format!("{:?}", envelope.protocol), envelope.sequence);
     shadow.registered_site_id = Some(envelope.site_id.clone());
+    shadow.registered_tenant_id = std::env::var("OPENFDD_TENANT_ID")
+        .ok()
+        .filter(|tenant| !tenant.trim().is_empty())
+        .or_else(|| Some("legacy".into()));
     shadow.last_telemetry = Some(envelope);
     if durable {
         state.note_ingest_ok();
+        state.note_durable_ingest();
     }
     Ok((
         if durable {
@@ -4937,7 +5008,9 @@ pub async fn fuel_campus_weather_fetch(Json(body): Json<FuelWeatherFetchBody>) -
 
 #[cfg(test)]
 mod version_tests {
-    use super::{local_fieldbus_ingest, request_scope_allowed, resolve_build_version};
+    use super::{
+        authorized_edge_ids, local_fieldbus_ingest, request_scope_allowed, resolve_build_version,
+    };
     use crate::state::AppState;
     use axum::http::{HeaderMap, HeaderValue, StatusCode};
     use axum::Json;
@@ -4955,11 +5028,31 @@ mod version_tests {
             multi_tenant: true,
         };
         let scope = openfdd_contracts::ConnectorScope {
-            tenant_id: Some("tenant-b".into()),
+            tenant_id: "tenant-b".into(),
             building_id: "building-a".into(),
             edge_id: "edge-a".into(),
         };
         assert!(!request_scope_allowed(&ctx, &scope));
+    }
+
+    #[test]
+    fn capabilities_filter_overlapping_buildings_by_authoritative_edge_tenant() {
+        let state = AppState::new();
+        for (edge_id, tenant_id) in [("edge-a", "tenant-a"), ("edge-b", "tenant-b")] {
+            let entry = state.edges.entry(edge_id.into()).or_default();
+            let mut shadow = entry.lock().unwrap();
+            shadow.registered_site_id = Some("shared-building".into());
+            shadow.registered_tenant_id = Some(tenant_id.into());
+        }
+        let ctx = crate::tenant::TenantContext {
+            tenant_id: Some("tenant-a".into()),
+            building_ids: vec!["shared-building".into()],
+            hub_admin: false,
+            multi_tenant: true,
+        };
+        let allowed = authorized_edge_ids(&state, &ctx);
+        assert!(allowed.contains("edge-a"));
+        assert!(!allowed.contains("edge-b"));
     }
 
     // Single test so the shared `OPENFDD_GIT_SHA` env var is never raced by a
