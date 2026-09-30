@@ -375,6 +375,11 @@ fn sanitize_public_read_response(
     mut response: ConnectorReadResponse,
     request: &ConnectorReadRequest,
 ) -> Result<ConnectorReadResponse, ()> {
+    // Validate target correlation and slot semantics before reducing any
+    // diagnostics.  In particular, a contradictory NULL/value/error payload
+    // is malformed and must not be laundered into a plausible slot by the
+    // sanitizer below.
+    response.validate_for(request).map_err(|_| ())?;
     if response.ok {
         match response.result.as_mut() {
             Some(ConnectorReadResult::Metadata { hello }) => {
@@ -382,16 +387,11 @@ fn sanitize_public_read_response(
             }
             Some(ConnectorReadResult::PriorityArray(array)) => {
                 for slot in &mut array.slots {
-                    match slot.state {
-                        ReadValueState::Null => {
-                            slot.value = None;
-                            slot.error = None;
-                        }
-                        ReadValueState::Value => {
-                            slot.error = None;
-                        }
-                        ReadValueState::Error | ReadValueState::Unknown => {
-                            slot.value = None;
+                    if matches!(slot.state, ReadValueState::Error | ReadValueState::Unknown) {
+                        // The structure was validated above. Replace only a
+                        // valid diagnostic string; preserve the typed state
+                        // and its already validated value/null semantics.
+                        if slot.error.is_some() {
                             slot.error = Some("priority slot unavailable".into());
                         }
                     }
@@ -549,6 +549,7 @@ fn aggregate_report(
             declared,
             configured_services: Vec::new(),
             observed_services: Vec::new(),
+            unobserved_services: Vec::new(),
             reconciliation: "declared_missing".into(),
         },
         diagnostic: None,
@@ -591,10 +592,13 @@ fn reconcile_aggregate_recipe(report: &mut CapabilitiesAggregateResponse) {
         &configured_services,
         &observed_services,
     );
+    let unobserved_services =
+        RecipeObservation::missing_services(declared.as_deref(), &observed_services);
     report.recipe = RecipeObservation {
         declared,
         configured_services,
         observed_services,
+        unobserved_services,
         reconciliation: reconciliation.into(),
     };
 }
@@ -638,12 +642,20 @@ fn sanitize_hello(mut hello: ConnectorHelloResponse) -> Result<ConnectorHelloRes
         .recipe
         .observed_services
         .retain(|service| matches!(service.as_str(), "fieldbus" | "mqtt" | "central"));
+    hello
+        .recipe
+        .unobserved_services
+        .retain(|service| matches!(service.as_str(), "fieldbus" | "mqtt" | "central" | "web"));
     hello.recipe.reconciliation = RecipeObservation::reconcile(
         hello.recipe.declared.as_deref(),
         &hello.recipe.configured_services,
         &hello.recipe.observed_services,
     )
     .into();
+    hello.recipe.unobserved_services = RecipeObservation::missing_services(
+        hello.recipe.declared.as_deref(),
+        &hello.recipe.observed_services,
+    );
     hello.validate().map_err(|_| ())?;
     Ok(hello)
 }
@@ -662,6 +674,7 @@ fn empty_report(error: Option<String>) -> CapabilitiesAggregateResponse {
             declared: None,
             configured_services: vec!["central".into()],
             observed_services: vec!["central".into()],
+            unobserved_services: vec![],
             reconciliation: "not_declared".into(),
         },
         observed_at: Utc::now(),
@@ -775,6 +788,8 @@ pub fn central_hello(state: &AppState) -> ConnectorHelloResponse {
         &configured_services,
         &observed_services,
     );
+    let unobserved_services =
+        RecipeObservation::missing_services(declared.as_deref(), &observed_services);
     ConnectorHelloResponse {
         schema: CAPABILITIES_CONTRACT_V1.into(),
         version: ServiceVersion {
@@ -801,6 +816,7 @@ pub fn central_hello(state: &AppState) -> ConnectorHelloResponse {
             declared,
             configured_services,
             observed_services,
+            unobserved_services,
             reconciliation: reconciliation.into(),
         },
         observed_at: Utc::now(),
@@ -954,12 +970,19 @@ fn redacted_address(url: &Url) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{response::Redirect, routing::get, Json, Router};
+    use axum::{
+        body::Body,
+        response::{Redirect, Response},
+        routing::get,
+        Json, Router,
+    };
+    use bytes::Bytes;
     use openfdd_contracts::{
         ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult, ConnectorScope,
         ReadPriorityArrayResult, ReadPrioritySlot, ReadTarget, ReadValueState,
         READ_PROXY_CONTRACT_V1,
     };
+    use std::convert::Infallible;
     use std::net::SocketAddr;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc as StdArc;
@@ -979,6 +1002,7 @@ mod tests {
                 declared: None,
                 configured_services: vec!["central".into()],
                 observed_services: vec!["central".into()],
+                unobserved_services: vec![],
                 reconciliation: "not_declared".into(),
             },
             observed_at: Utc::now(),
@@ -1006,11 +1030,11 @@ mod tests {
     }
 
     #[test]
-    fn recipe_matching_requires_configured_and_observed_full_stack() {
+    fn recipe_matching_uses_the_documented_compose_matrix() {
         let central = |observed: &[&str]| {
             RecipeObservation::reconcile(
                 Some("central"),
-                &["central".into(), "mqtt".into()],
+                &["central".into(), "mqtt".into(), "web".into()],
                 &observed
                     .iter()
                     .map(|value| (*value).to_string())
@@ -1018,9 +1042,15 @@ mod tests {
             )
         };
         assert_eq!(central(&["central"]), "declared_missing");
-        assert_eq!(central(&["central", "mqtt"]), "matched");
+        assert_eq!(central(&["central", "mqtt"]), "declared_missing");
+        assert_eq!(central(&["central", "mqtt", "web"]), "matched");
 
-        let standalone_configured = vec!["central".into(), "fieldbus".into(), "mqtt".into()];
+        let standalone_configured = vec![
+            "central".into(),
+            "fieldbus".into(),
+            "mqtt".into(),
+            "web".into(),
+        ];
         let only_fieldbus = vec!["fieldbus".into()];
         assert_eq!(
             RecipeObservation::reconcile(
@@ -1034,7 +1064,35 @@ mod tests {
             RecipeObservation::reconcile(
                 Some("standalone"),
                 &standalone_configured,
-                &["central".into(), "fieldbus".into(), "mqtt".into()],
+                &[
+                    "central".into(),
+                    "fieldbus".into(),
+                    "mqtt".into(),
+                    "web".into(),
+                ],
+            ),
+            "matched"
+        );
+
+        assert_eq!(
+            RecipeObservation::reconcile(
+                Some("csv"),
+                &["central".into(), "web".into()],
+                &["central".into(), "web".into()],
+            ),
+            "matched"
+        );
+        assert_eq!(
+            RecipeObservation::reconcile(Some("edge"), &["fieldbus".into()], &["fieldbus".into()],),
+            "matched"
+        );
+        // Edge compose uses an external broker; an optional local MQTT
+        // connector must not make the documented fieldbus recipe incomplete.
+        assert_eq!(
+            RecipeObservation::reconcile(
+                Some("edge"),
+                &["fieldbus".into(), "mqtt".into()],
+                &["fieldbus".into()],
             ),
             "matched"
         );
@@ -1044,8 +1102,12 @@ mod tests {
     fn failed_configured_upstream_is_not_recipe_observation() {
         let mut central = central_fixture();
         central.recipe.declared = Some("standalone".into());
-        central.recipe.configured_services =
-            vec!["central".into(), "mqtt".into(), "fieldbus".into()];
+        central.recipe.configured_services = vec![
+            "central".into(),
+            "mqtt".into(),
+            "fieldbus".into(),
+            "web".into(),
+        ];
         central.recipe.observed_services = vec!["central".into(), "mqtt".into()];
         let report = aggregate_report(
             central,
@@ -1060,9 +1122,10 @@ mod tests {
         );
         assert_eq!(
             report.recipe.configured_services,
-            ["central", "fieldbus", "mqtt"]
+            ["central", "fieldbus", "mqtt", "web"]
         );
         assert_eq!(report.recipe.observed_services, ["central", "mqtt"]);
+        assert_eq!(report.recipe.unobserved_services, ["fieldbus", "web"]);
         assert_eq!(report.recipe.reconciliation, "declared_missing");
     }
 
@@ -1106,8 +1169,7 @@ mod tests {
         let mut hello = central_fixture();
         hello.recipe.declared = Some("edge".into());
         hello.recipe.configured_services = vec!["fieldbus".into(), "mqtt".into()];
-        hello.recipe.observed_services =
-            vec!["fieldbus".into(), "mqtt".into(), "https://internal".into()];
+        hello.recipe.observed_services = vec!["fieldbus".into(), "https://internal".into()];
         hello.recipe.reconciliation = "https://internal/secret".into();
         hello.connectors.push(ConnectorCapability {
             protocol: ConnectorProtocol::Bacnet,
@@ -1145,7 +1207,7 @@ mod tests {
                 object_instance: 4,
             },
         };
-        let slots = (1..=16)
+        let slots: Vec<ReadPrioritySlot> = (1..=16)
             .map(|priority_level| ReadPrioritySlot {
                 priority_level,
                 state: if priority_level == 3 {
@@ -1162,16 +1224,19 @@ mod tests {
                 error: (priority_level == 3).then_some("tcp://10.0.0.7:47808 secret".into()),
             })
             .collect();
-        let response = ConnectorReadResponse::success(
-            &request,
-            ConnectorReadResult::PriorityArray(ReadPriorityArrayResult {
-                device_instance: 7,
-                object_type: "analog-output".into(),
-                object_instance: 4,
-                slots,
-                state: "supported".into(),
-            }),
-        );
+        let response_for = |slots| {
+            ConnectorReadResponse::success(
+                &request,
+                ConnectorReadResult::PriorityArray(ReadPriorityArrayResult {
+                    device_instance: 7,
+                    object_type: "analog-output".into(),
+                    object_instance: 4,
+                    slots,
+                    state: "supported".into(),
+                }),
+            )
+        };
+        let response = response_for(slots.clone());
         let sanitized = sanitize_public_read_response(response, &request).unwrap();
         let encoded = serde_json::to_string(&sanitized).unwrap();
         assert!(!encoded.contains("10.0.0.7"));
@@ -1182,6 +1247,27 @@ mod tests {
             }),
             Some("priority slot unavailable")
         );
+
+        for (state, value, error) in [
+            (ReadValueState::Null, Some(serde_json::json!(1.0)), None),
+            (ReadValueState::Value, None, Some("internal detail".into())),
+            (
+                ReadValueState::Error,
+                Some(serde_json::json!(1.0)),
+                Some("internal detail".into()),
+            ),
+            (
+                ReadValueState::Unknown,
+                Some(serde_json::json!(1.0)),
+                Some("internal detail".into()),
+            ),
+        ] {
+            let mut contradictory = slots.clone();
+            contradictory[0].state = state;
+            contradictory[0].value = value;
+            contradictory[0].error = error;
+            assert!(sanitize_public_read_response(response_for(contradictory), &request).is_err());
+        }
     }
 
     #[tokio::test]
@@ -1298,6 +1384,38 @@ mod tests {
         let second = aggregator.snapshot(central_fixture()).await;
         assert_eq!(second.upstreams[0].state, CapabilityState::Unreachable);
         assert_eq!(calls.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn stalled_hello_body_after_headers_is_bounded() {
+        let app = Router::new().route(
+            "/api/connector/hello",
+            get(|| async {
+                let stream = futures_util::stream::once(async {
+                    Ok::<Bytes, Infallible>(Bytes::from_static(b"{\"schema\":\""))
+                })
+                .chain(futures_util::stream::pending::<Result<Bytes, Infallible>>());
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header("content-type", "application/json")
+                    .body(Body::from_stream(stream))
+                    .unwrap()
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let aggregator = CapabilitiesAggregator::for_tests(vec![ConfiguredUpstream {
+            tenant_id: "tenant-a".into(),
+            building_id: "building-a".into(),
+            edge_id: "edge-a".into(),
+            base_url: Url::parse(&format!("http://{addr}")).unwrap(),
+            token: Some("test-token".into()),
+        }]);
+        let report = aggregator.snapshot(central_fixture()).await;
+        assert_eq!(report.upstreams[0].state, CapabilityState::Incompatible);
     }
 
     #[test]

@@ -78,10 +78,13 @@ fn recipe_observation(
         &configured_services,
         &observed_services,
     );
+    let unobserved_services =
+        RecipeObservation::missing_services(declared.as_deref(), &observed_services);
     RecipeObservation {
         declared,
         configured_services,
         observed_services,
+        unobserved_services,
         reconciliation: reconciliation.into(),
     }
 }

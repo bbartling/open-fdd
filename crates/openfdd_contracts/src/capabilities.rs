@@ -119,6 +119,11 @@ pub struct RecipeObservation {
     /// be configured while this list is empty or incomplete.
     #[serde(default)]
     pub observed_services: Vec<String>,
+    /// Required services outside the connector probe boundary, or otherwise
+    /// not observed by this response. This prevents a connector projection
+    /// from claiming that a complete compose recipe is healthy.
+    #[serde(default)]
+    pub unobserved_services: Vec<String>,
     /// `matched`, `declared_missing`, `observed_extra`, or `not_declared`.
     pub reconciliation: String,
 }
@@ -129,12 +134,25 @@ impl RecipeObservation {
     /// so fieldbus and central cannot silently disagree about completeness.
     pub fn required_services(declared: &str) -> &'static [&'static str] {
         match declared {
-            "csv" => &["central"],
-            "central" => &["central", "mqtt"],
-            "edge" => &["fieldbus", "mqtt"],
-            "standalone" => &["central", "fieldbus", "mqtt"],
+            "csv" => &["central", "web"],
+            "central" => &["central", "mqtt", "web"],
+            // The edge compose recipe contains fieldbus only. Its broker is
+            // an external dependency reported separately by delivery state.
+            "edge" => &["fieldbus"],
+            "standalone" => &["central", "fieldbus", "mqtt", "web"],
             _ => &[],
         }
+    }
+
+    pub fn missing_services(declared: Option<&str>, observed_services: &[String]) -> Vec<String> {
+        let Some(declared) = declared else {
+            return Vec::new();
+        };
+        Self::required_services(declared)
+            .iter()
+            .filter(|service| !observed_services.iter().any(|item| item == **service))
+            .map(|service| (*service).to_string())
+            .collect()
     }
 
     /// Reconcile a declared recipe against both its configured services and
@@ -252,7 +270,8 @@ impl ConnectorHelloResponse {
         }) {
             return Err("connector detail is too long".into());
         }
-        let valid_service = |service: &str| matches!(service, "central" | "fieldbus" | "mqtt");
+        let valid_service =
+            |service: &str| matches!(service, "central" | "fieldbus" | "mqtt" | "web");
         if self
             .recipe
             .declared
@@ -260,11 +279,13 @@ impl ConnectorHelloResponse {
             .is_some_and(|declared| !matches!(declared, "edge" | "standalone" | "central" | "csv"))
             || self.recipe.configured_services.len() > 8
             || self.recipe.observed_services.len() > 8
+            || self.recipe.unobserved_services.len() > 8
             || self
                 .recipe
                 .configured_services
                 .iter()
                 .chain(self.recipe.observed_services.iter())
+                .chain(self.recipe.unobserved_services.iter())
                 .any(|service| service.len() > 32 || !valid_service(service))
             || !matches!(
                 self.recipe.reconciliation.as_str(),
@@ -307,6 +328,7 @@ mod tests {
                 declared: None,
                 configured_services: vec!["fieldbus".into()],
                 observed_services: vec!["fieldbus".into()],
+                unobserved_services: vec![],
                 reconciliation: "not_declared".into(),
             },
             observed_at: Utc::now(),

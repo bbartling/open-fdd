@@ -401,6 +401,7 @@ mod tests {
                     declared: None,
                     configured_services: vec!["fieldbus".into()],
                     observed_services: vec![],
+                    unobserved_services: vec![],
                     reconciliation: "not_declared".into(),
                 },
                 observed_at: chrono::Utc::now(),
