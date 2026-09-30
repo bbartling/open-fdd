@@ -1,7 +1,8 @@
 ---
 title: FCU and zone_other rules
-parent: Rule Cookbook
-nav_order: 12
+parent: Cookbook reference
+grand_parent: Rule Cookbook
+nav_order: 11
 ---
 
 # Fan-coil and standalone zone-controller rules

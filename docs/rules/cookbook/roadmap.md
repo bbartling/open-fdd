@@ -1,7 +1,8 @@
 ---
 title: Rule roadmap
-parent: Rule Cookbook
-nav_order: 7
+parent: Cookbook reference
+grand_parent: Rule Cookbook
+nav_order: 6
 ---
 
 # Priority-ranked rule roadmap
