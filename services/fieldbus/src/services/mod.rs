@@ -1,5 +1,6 @@
 pub mod bacnet_client;
 pub mod bacnet_server;
+pub(crate) mod bacnet_write;
 pub mod haystack;
 pub mod modbus;
 pub mod mqtt_publish_ledger;

@@ -5,6 +5,8 @@ use serde_json::Value;
 use utoipa::ToSchema;
 use validator::{Validate, ValidationError};
 
+use crate::services::bacnet_write::normalize_bacnet_write;
+
 pub type DecodeLiteral = String;
 pub type FunctionLiteral = String;
 pub type ValueTypeLiteral = String;
@@ -85,18 +87,9 @@ pub struct BacnetWriteRequest {
 }
 
 fn validate_bacnet_write(req: &BacnetWriteRequest) -> Result<(), ValidationError> {
-    let is_release = match &req.value {
-        None => true,
-        Some(Value::Null) => true,
-        Some(Value::String(s)) => s.trim().eq_ignore_ascii_case("null"),
-        _ => false,
-    };
-    if is_release && req.priority.is_none() {
-        return Err(ValidationError::new(
-            "Releasing (null) requires a priority (1-16)",
-        ));
-    }
-    Ok(())
+    normalize_bacnet_write(req.value.as_ref(), req.priority, req.value_type.as_deref())
+        .map(|_| ())
+        .map_err(|error| ValidationError::new("invalid_bacnet_write").with_message(error.into()))
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema, Validate)]

@@ -7,14 +7,13 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bacnet_client::client::BACnetClient;
 use bacnet_client::discovery::RoutedDeviceConfig;
-use bacnet_encoding::primitives::{decode_application_value, encode_property_value};
+use bacnet_encoding::primitives::decode_application_value;
 use bacnet_services::common::PropertyReference;
 use bacnet_services::rpm::ReadAccessSpecification;
 use bacnet_transport::bvll::encode_bip_mac;
-use bacnet_types::enums::{ObjectType, PropertyIdentifier, Segmentation};
+use bacnet_types::enums::{AbortReason, ObjectType, PropertyIdentifier, Segmentation};
 use bacnet_types::error::Error as BacnetError;
 use bacnet_types::primitives::{ObjectIdentifier, PropertyValue};
-use bytes::BytesMut;
 use fdd_core::columns::{haystack_point_to_role, is_known_cookbook_role};
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
@@ -24,6 +23,7 @@ use crate::config::{load_field_devices, FieldDevice, FieldPoint, Settings};
 use crate::services::bacnet_server::{
     property_value_quality_error, property_value_tag, property_value_to_json,
 };
+use crate::services::bacnet_write::normalize_bacnet_write;
 
 static OBJECT_TYPE_MAP: &[(&str, ObjectType)] = &[
     ("analog-input", ObjectType::ANALOG_INPUT),
@@ -346,8 +346,8 @@ impl BacnetClientService {
                 Err(e) => return Err(e.to_string()),
             };
 
-            let (pv, _) =
-                decode_application_value(&ack.property_value, 0).map_err(|e| e.to_string())?;
+            let bytes = correlated_property_value(&ack, oid, pid, None)?;
+            let pv = decode_complete_application_value(bytes)?;
             Ok(json!({
                 "device_instance": device_instance,
                 "object_type": object_type,
@@ -410,32 +410,10 @@ impl BacnetClientService {
         let oid = ObjectIdentifier::new(ot, object_instance).map_err(|e| e.to_string())?;
         let pid = parse_property_id(property_id);
 
-        let is_release = match &value {
-            None | Some(Value::Null) => true,
-            Some(Value::String(s)) => s.trim().eq_ignore_ascii_case("null"),
-            _ => false,
-        };
-        let (pv, write_priority) = if is_release {
-            let p = priority
-                .ok_or_else(|| "Null requires a priority (1-16) to release override".to_string())?;
-            if !(1..=16).contains(&p) {
-                return Err("Null requires a priority (1-16) to release override".into());
-            }
-            (PropertyValue::Null, Some(p))
-        } else {
-            (
-                make_property_value(
-                    value.as_ref().ok_or_else(|| {
-                        "write value is required unless releasing a priority".to_string()
-                    })?,
-                    value_type,
-                )?,
-                priority,
-            )
-        };
-
-        let mut buf = BytesMut::new();
-        encode_property_value(&mut buf, &pv).map_err(|e| e.to_string())?;
+        let normalized = normalize_bacnet_write(value.as_ref(), priority, value_type)?;
+        let is_release = normalized.released;
+        let write_priority = normalized.priority;
+        let encoded_value = normalized.encoded_value;
 
         let client = self.new_write_client(device).await?;
         let result = async {
@@ -452,7 +430,7 @@ impl BacnetClientService {
                         oid,
                         pid,
                         None,
-                        buf.to_vec(),
+                        encoded_value,
                         write_priority,
                     )
                     .await
@@ -462,6 +440,7 @@ impl BacnetClientService {
             let routed = device.is_some_and(FieldDevice::is_routed);
             match write_result {
                 Ok(()) => Ok(json!({
+                    "ok": true,
                     "status": outcome.status(),
                     "outcome": outcome.outcome(),
                     "write_attempts": write_attempts,
@@ -470,10 +449,12 @@ impl BacnetClientService {
                     "object_instance": object_instance,
                     "property_id": property_id,
                     "released": is_release,
+                    "verified": true,
                     "priority": write_priority,
                     "routed": routed,
                 })),
                 Err(error) => Ok(json!({
+                    "ok": false,
                     "status": outcome.status(),
                     "outcome": outcome.outcome(),
                     "write_attempts": write_attempts,
@@ -481,7 +462,8 @@ impl BacnetClientService {
                     "object_type": object_type,
                     "object_instance": object_instance,
                     "property_id": property_id,
-                    "released": is_release,
+                    "released": false,
+                    "verified": false,
                     "priority": write_priority,
                     "routed": routed,
                     "error": error.to_string(),
@@ -509,29 +491,10 @@ impl BacnetClientService {
         let device = self.find_device(device_instance);
         let _ot = parse_object_type(object_type)?;
 
-        let is_release = match &value {
-            None | Some(Value::Null) => true,
-            Some(Value::String(s)) => s.trim().eq_ignore_ascii_case("null"),
-            _ => false,
-        };
-        let (pv, write_priority) = if is_release {
-            let p = priority
-                .ok_or_else(|| "Null requires a priority (1-16) to release override".to_string())?;
-            if !(1..=16).contains(&p) {
-                return Err("Null requires a priority (1-16) to release override".into());
-            }
-            (PropertyValue::Null, Some(p))
-        } else {
-            (
-                make_property_value(
-                    value.as_ref().ok_or_else(|| {
-                        "write value is required unless releasing a priority".to_string()
-                    })?,
-                    value_type,
-                )?,
-                priority,
-            )
-        };
+        let normalized = normalize_bacnet_write(value.as_ref(), priority, value_type)?;
+        let is_release = normalized.released;
+        let write_priority = normalized.priority;
+        let pv = normalized.property_value;
 
         Ok(json!({
             "dry_run": true,
@@ -820,7 +783,9 @@ impl BacnetClientService {
     }
 
     pub async fn point_discovery(&self, device_instance: u32) -> Result<Value, String> {
-        let _guard = self.bus_lock.lock().await;
+        // Discovery can span a full object-list scan plus per-index repairs and
+        // commandability probes. Do not hold the shared bus mutex across that
+        // slow interactive operation; reads/writes must remain responsive.
         self.point_discovery_impl(device_instance).await
     }
 
@@ -853,11 +818,11 @@ impl BacnetClientService {
                 .copied()
                 .collect();
             for chunk in candidates.chunks(rpm_chunk) {
-                for oid in chunk {
-                    let state = self
-                        .probe_commandability(&client, device_instance, *oid)
-                        .await;
-                    commandability.insert(normalize_oid(oid), state);
+                for (oid, state) in self
+                    .probe_commandability_batch(&client, device_instance, chunk)
+                    .await
+                {
+                    commandability.insert(normalize_oid(&oid), state);
                 }
             }
 
@@ -892,68 +857,65 @@ impl BacnetClientService {
         Self::finish_client(client, result).await
     }
 
-    async fn probe_commandability(
+    async fn probe_commandability_batch(
         &self,
         client: &BACnetClient<bacnet_transport::bip::BipTransport>,
         device_instance: u32,
-        oid: ObjectIdentifier,
-    ) -> Commandability {
-        let spec = ReadAccessSpecification {
-            object_identifier: oid,
-            list_of_property_references: vec![PropertyReference {
-                property_identifier: PropertyIdentifier::PRIORITY_ARRAY,
-                property_array_index: Some(0),
-            }],
-        };
-        let rpm_state = match client
-            .read_property_multiple_from_device(device_instance, vec![spec])
+        oids: &[ObjectIdentifier],
+    ) -> HashMap<ObjectIdentifier, Commandability> {
+        let specs: Vec<_> = oids
+            .iter()
+            .map(|oid| ReadAccessSpecification {
+                object_identifier: *oid,
+                list_of_property_references: vec![PropertyReference {
+                    property_identifier: PropertyIdentifier::PRIORITY_ARRAY,
+                    property_array_index: Some(0),
+                }],
+            })
+            .collect();
+        let rpm_states: HashMap<ObjectIdentifier, Commandability> = match client
+            .read_property_multiple_from_device(device_instance, specs)
             .await
         {
-            Ok(response) => response
-                .list_of_read_access_results
+            Ok(response) => oids
                 .iter()
-                .filter(|object| object.object_identifier == oid)
-                .flat_map(|object| object.list_of_results.iter())
-                .find(|result| {
-                    result.property_identifier == PropertyIdentifier::PRIORITY_ARRAY
-                        && result.property_array_index == Some(0)
-                })
-                .and_then(|result| {
-                    if let Some((class, code)) = result.error {
-                        Some(commandability_from_error_codes(class, code))
-                    } else {
-                        result
-                            .property_value
-                            .as_deref()
-                            .and_then(|bytes| decode_application_value(bytes, 0).ok())
-                            .map(|_| Commandability::Supported)
-                    }
-                }),
-            Err(_) => None,
+                .map(|oid| (*oid, commandability_from_rpm_response(&response, *oid)))
+                .collect(),
+            Err(_) => oids
+                .iter()
+                .map(|oid| (*oid, Commandability::Unknown))
+                .collect(),
         };
-        if rpm_state == Some(Commandability::Supported) {
-            return Commandability::Supported;
-        }
 
-        // RPM can be unsupported or malformed while ordinary ReadProperty
-        // still works. Probe the same object/index once before declaring the
-        // commandability unknown; this is bounded to one repair read.
-        match client
-            .read_property_from_device(
-                device_instance,
-                oid,
-                PropertyIdentifier::PRIORITY_ARRAY,
-                Some(0),
-            )
-            .await
-        {
-            Ok(ack) => match decode_application_value(&ack.property_value, 0) {
-                Ok(_) => Commandability::Supported,
-                Err(_) => Commandability::Unknown,
-            },
-            Err(error) if is_unsupported_bacnet_error(&error) => Commandability::Unsupported,
-            Err(_) => rpm_state.unwrap_or(Commandability::Unknown),
+        let mut states = HashMap::new();
+        for oid in oids {
+            let rpm_state = rpm_states
+                .get(oid)
+                .copied()
+                .unwrap_or(Commandability::Unknown);
+            if rpm_state == Commandability::Supported {
+                states.insert(*oid, rpm_state);
+                continue;
+            }
+
+            // RPM can be unsupported or malformed while ordinary ReadProperty
+            // still works. Probe the same object/index once before declaring
+            // the commandability unknown; this is bounded to one repair read.
+            let state = commandability_from_priority_read_result(
+                client
+                    .read_property_from_device(
+                        device_instance,
+                        *oid,
+                        PropertyIdentifier::PRIORITY_ARRAY,
+                        Some(0),
+                    )
+                    .await,
+                *oid,
+                rpm_state,
+            );
+            states.insert(*oid, state);
         }
+        states
     }
 
     async fn read_object_list(
@@ -973,8 +935,13 @@ impl BacnetClientService {
             )
             .await
             .map_err(|e| e.to_string())?;
-        let (length_pv, _) =
-            decode_application_value(&length_ack.property_value, 0).map_err(|e| e.to_string())?;
+        let length_bytes = correlated_property_value(
+            &length_ack,
+            dev_oid,
+            PropertyIdentifier::OBJECT_LIST,
+            Some(0),
+        )?;
+        let length_pv = decode_complete_application_value(length_bytes)?;
         let length = match length_pv {
             PropertyValue::Unsigned(v) => usize::try_from(v)
                 .map_err(|_| "object-list length exceeds platform limits".to_string())?,
@@ -990,6 +957,8 @@ impl BacnetClientService {
 
         let mut objects_by_index = HashMap::new();
         let mut missing_indexes = HashSet::new();
+        let mut invalid_indexes = HashSet::new();
+        let mut observed_indexes = HashSet::new();
         let mut errors = Vec::new();
         for (start, end) in rpm_chunk_ranges(length, rpm_chunk) {
             let idxs: Vec<u32> = (start..=end).map(|i| i as u32).collect();
@@ -1031,6 +1000,19 @@ impl BacnetClientService {
                                 );
                                 continue;
                             }
+                            if invalid_indexes.contains(&index) {
+                                continue;
+                            }
+                            if !observed_indexes.insert(index) {
+                                invalidate_object_list_index(
+                                    &mut objects_by_index,
+                                    &mut missing_indexes,
+                                    &mut invalid_indexes,
+                                    &mut errors,
+                                    index,
+                                );
+                                continue;
+                            }
                             if let Some((class, code)) = r.error {
                                 push_bounded_error(
                                     &mut errors,
@@ -1047,8 +1029,8 @@ impl BacnetClientService {
                                 );
                                 continue;
                             };
-                            let Ok((PropertyValue::ObjectIdentifier(oid), _)) =
-                                decode_application_value(bytes, 0)
+                            let Ok(PropertyValue::ObjectIdentifier(oid)) =
+                                decode_complete_application_value(bytes)
                             else {
                                 push_bounded_error(
                                     &mut errors,
@@ -1056,20 +1038,14 @@ impl BacnetClientService {
                                 );
                                 continue;
                             };
-                            if objects_by_index.insert(index, oid).is_some() {
-                                objects_by_index.remove(&index);
-                                // Keep this index pending so bounded
-                                // ReadProperty repair can establish one
-                                // authoritative value. A duplicate response
-                                // must never make discovery look complete.
-                                missing_indexes.insert(index);
-                                push_bounded_error(
-                                    &mut errors,
-                                    format!("object-list index {index} was duplicated"),
-                                );
-                                continue;
-                            }
-                            missing_indexes.remove(&index);
+                            record_object_list_value(
+                                &mut objects_by_index,
+                                &mut missing_indexes,
+                                &mut invalid_indexes,
+                                &mut errors,
+                                index,
+                                oid,
+                            );
                         }
                     }
                 }
@@ -1099,12 +1075,20 @@ impl BacnetClientService {
                     )
                     .await
                 {
-                    Ok(ack) => match decode_application_value(&ack.property_value, 0) {
-                        Ok((PropertyValue::ObjectIdentifier(oid), _)) => {
+                    Ok(ack) => match correlated_property_value(
+                        &ack,
+                        dev_oid,
+                        PropertyIdentifier::OBJECT_LIST,
+                        Some(index),
+                    )
+                    .and_then(decode_complete_application_value)
+                    {
+                        Ok(PropertyValue::ObjectIdentifier(oid)) => {
                             objects_by_index.insert(index, oid);
                             missing_indexes.remove(&index);
+                            invalid_indexes.remove(&index);
                         }
-                        Ok((other, _)) => push_bounded_error(
+                        Ok(other) => push_bounded_error(
                             &mut errors,
                             format!(
                                 "object-list index {index} repair returned {}",
@@ -1213,8 +1197,15 @@ impl BacnetClientService {
                 )
                 .await
             {
-                Ok(ack) => match decode_application_value(&ack.property_value, 0) {
-                    Ok((pv, _)) => slots[(level - 1) as usize] = priority_slot_value(level, &pv),
+                Ok(ack) => match correlated_property_value(
+                    &ack,
+                    oid,
+                    PropertyIdentifier::PRIORITY_ARRAY,
+                    Some(level),
+                )
+                .and_then(decode_complete_application_value)
+                {
+                    Ok(pv) => slots[(level - 1) as usize] = priority_slot_value(level, &pv),
                     Err(error) => {
                         let slot = &mut slots[(level - 1) as usize];
                         slot["repair_error"] = json!(format!(
@@ -1273,8 +1264,8 @@ impl BacnetClientService {
                                 continue;
                             }
                             if let Some(bytes) = r.property_value {
-                                if let Ok((PropertyValue::CharacterString(name), _)) =
-                                    decode_application_value(&bytes, 0)
+                                if let Ok(PropertyValue::CharacterString(name)) =
+                                    decode_complete_application_value(&bytes)
                                 {
                                     batch_names.insert(obj.object_identifier, name);
                                 }
@@ -1313,9 +1304,10 @@ impl BacnetClientService {
             .read_property_from_device(device_instance, oid, PropertyIdentifier::OBJECT_NAME, None)
             .await
         {
-            Ok(ack) => decode_application_value(&ack.property_value, 0)
+            Ok(ack) => correlated_property_value(&ack, oid, PropertyIdentifier::OBJECT_NAME, None)
+                .and_then(decode_complete_application_value)
                 .ok()
-                .and_then(|(pv, _)| match pv {
+                .and_then(|pv| match pv {
                     PropertyValue::CharacterString(s) => Some(s),
                     _ => None,
                 }),
@@ -1324,7 +1316,9 @@ impl BacnetClientService {
     }
 
     pub async fn supervisory_logic_check(&self, device_instance: u32) -> Result<Value, String> {
-        let _guard = self.bus_lock.lock().await;
+        // Supervisory audit calls point discovery and then reads P1-P16 for
+        // each supported point. It must not monopolize the bus mutex while
+        // those bounded network operations run.
         let disc = self.point_discovery_impl(device_instance).await?;
         let device_address = disc["device_address"].clone();
         let objects = disc["objects"].as_array().cloned().unwrap_or_default();
@@ -1610,8 +1604,51 @@ fn normalize_oid(oid: &ObjectIdentifier) -> String {
     )
 }
 
+fn correlated_property_value(
+    ack: &bacnet_services::read_property::ReadPropertyACK,
+    object_identifier: ObjectIdentifier,
+    property_identifier: PropertyIdentifier,
+    property_array_index: Option<u32>,
+) -> Result<&[u8], String> {
+    if ack.object_identifier != object_identifier {
+        return Err(format!(
+            "ReadPropertyACK object mismatch: expected {}, got {}",
+            normalize_oid(&object_identifier),
+            normalize_oid(&ack.object_identifier)
+        ));
+    }
+    if ack.property_identifier != property_identifier {
+        return Err(format!(
+            "ReadPropertyACK property mismatch: expected {property_identifier:?}, got {:?}",
+            ack.property_identifier
+        ));
+    }
+    if ack.property_array_index != property_array_index {
+        return Err(format!(
+            "ReadPropertyACK array-index mismatch: expected {property_array_index:?}, got {:?}",
+            ack.property_array_index
+        ));
+    }
+    Ok(&ack.property_value)
+}
+
+fn decode_complete_application_value(bytes: &[u8]) -> Result<PropertyValue, String> {
+    let (value, consumed) =
+        decode_application_value(bytes, 0).map_err(|error| error.to_string())?;
+    if consumed != bytes.len() {
+        return Err(format!(
+            "application value has trailing bytes: consumed {consumed} of {}",
+            bytes.len()
+        ));
+    }
+    Ok(value)
+}
+
 fn classify_write_error(error: &BacnetError) -> WriteOutcome {
     match error {
+        BacnetError::Abort { reason } if *reason == AbortReason::TSM_TIMEOUT.to_raw() => {
+            WriteOutcome::Unknown
+        }
         BacnetError::Protocol { .. } | BacnetError::Reject { .. } | BacnetError::Abort { .. } => {
             WriteOutcome::Rejected
         }
@@ -1659,6 +1696,105 @@ fn commandability_from_error_codes(
 ) -> Commandability {
     if is_unsupported_error_text(&format!("{class:?} {code:?}")) {
         Commandability::Unsupported
+    } else {
+        Commandability::Unknown
+    }
+}
+
+fn commandability_from_priority_value(value: &PropertyValue) -> Commandability {
+    match value {
+        // BACnet priority-array index 0 is the array length. A commandable
+        // point must expose all sixteen priority slots; a decoded NULL,
+        // Boolean, or arbitrary value is not evidence of commandability.
+        PropertyValue::Unsigned(16) => Commandability::Supported,
+        _ => Commandability::Unknown,
+    }
+}
+
+fn commandability_from_priority_ack(
+    ack: &bacnet_services::read_property::ReadPropertyACK,
+    oid: ObjectIdentifier,
+) -> Commandability {
+    let Ok(bytes) =
+        correlated_property_value(ack, oid, PropertyIdentifier::PRIORITY_ARRAY, Some(0))
+    else {
+        return Commandability::Unknown;
+    };
+    let Ok(value) = decode_complete_application_value(bytes) else {
+        return Commandability::Unknown;
+    };
+    commandability_from_priority_value(&value)
+}
+
+fn commandability_from_priority_read_result(
+    result: Result<bacnet_services::read_property::ReadPropertyACK, BacnetError>,
+    oid: ObjectIdentifier,
+    fallback: Commandability,
+) -> Commandability {
+    match result {
+        Ok(ack) => commandability_from_priority_ack(&ack, oid),
+        Err(error) if is_unsupported_bacnet_error(&error) => Commandability::Unsupported,
+        Err(_) => fallback,
+    }
+}
+
+fn commandability_from_rpm_response(
+    response: &bacnet_services::rpm::ReadPropertyMultipleACK,
+    oid: ObjectIdentifier,
+) -> Commandability {
+    let mut observed_value: Option<PropertyValue> = None;
+    let mut observed_error: Option<Commandability> = None;
+    let mut found = false;
+
+    for object in &response.list_of_read_access_results {
+        if object.object_identifier != oid {
+            return Commandability::Unknown;
+        }
+        for result in &object.list_of_results {
+            found = true;
+            if result.property_identifier != PropertyIdentifier::PRIORITY_ARRAY
+                || result.property_array_index != Some(0)
+            {
+                return Commandability::Unknown;
+            }
+            if let Some((class, code)) = result.error {
+                if observed_value.is_some() {
+                    return Commandability::Unknown;
+                }
+                let state = commandability_from_error_codes(class, code);
+                if observed_error.is_some_and(|previous| previous != state) {
+                    return Commandability::Unknown;
+                }
+                observed_error = Some(state);
+                continue;
+            }
+
+            let Some(bytes) = result.property_value.as_deref() else {
+                return Commandability::Unknown;
+            };
+            let Ok(value) = decode_complete_application_value(bytes) else {
+                return Commandability::Unknown;
+            };
+            if commandability_from_priority_value(&value) != Commandability::Supported {
+                return Commandability::Unknown;
+            }
+            if observed_error.is_some() {
+                return Commandability::Unknown;
+            }
+            if observed_value
+                .as_ref()
+                .is_some_and(|previous| previous != &value)
+            {
+                return Commandability::Unknown;
+            }
+            observed_value = Some(value);
+        }
+    }
+
+    if observed_value.is_some() {
+        Commandability::Supported
+    } else if found {
+        observed_error.unwrap_or(Commandability::Unknown)
     } else {
         Commandability::Unknown
     }
@@ -1735,8 +1871,8 @@ fn apply_priority_rpm_results(
                 );
                 repair.insert(level);
             } else if let Some(bytes) = &result.property_value {
-                match decode_application_value(bytes, 0) {
-                    Ok((pv, _)) => {
+                match decode_complete_application_value(bytes) {
+                    Ok(pv) => {
                         *slot = priority_slot_value(level, &pv);
                         repair.remove(&level);
                     }
@@ -1780,66 +1916,45 @@ fn push_bounded_error(errors: &mut Vec<String>, message: String) {
     }
 }
 
-fn make_property_value(value: &Value, value_type: Option<&str>) -> Result<PropertyValue, String> {
-    let vt = value_type.unwrap_or("").trim().to_ascii_lowercase();
-    if vt == "null" {
-        return Ok(PropertyValue::Null);
+fn record_object_list_value(
+    objects_by_index: &mut HashMap<u32, ObjectIdentifier>,
+    missing_indexes: &mut HashSet<u32>,
+    invalid_indexes: &mut HashSet<u32>,
+    errors: &mut Vec<String>,
+    index: u32,
+    oid: ObjectIdentifier,
+) {
+    // Once an index has produced a duplicate, every later RPM value for that
+    // index remains untrusted. Only the correlated ReadProperty repair may
+    // clear the pending/invalid state.
+    if invalid_indexes.contains(&index) {
+        return;
     }
-    if !vt.is_empty() {
-        return match vt.as_str() {
-            "real" => Ok(PropertyValue::Real(
-                value
-                    .as_f64()
-                    .ok_or_else(|| "real value must be numeric".to_string())?
-                    as f32,
-            )),
-            "double" => {
-                Ok(PropertyValue::Double(value.as_f64().ok_or_else(|| {
-                    "double value must be numeric".to_string()
-                })?))
-            }
-            "unsigned" => Ok(PropertyValue::Unsigned(value.as_u64().ok_or_else(
-                || "unsigned value must be non-negative integer".to_string(),
-            )?)),
-            "signed" => Ok(PropertyValue::Signed(
-                value
-                    .as_i64()
-                    .ok_or_else(|| "signed value must be integer".to_string())?
-                    as i32,
-            )),
-            "enumerated" => Ok(PropertyValue::Enumerated(
-                value
-                    .as_u64()
-                    .ok_or_else(|| "enumerated value must be non-negative integer".to_string())?
-                    as u32,
-            )),
-            "boolean" => {
-                Ok(PropertyValue::Boolean(value.as_bool().ok_or_else(
-                    || "boolean value must be true or false".to_string(),
-                )?))
-            }
-            "character_string" | "character-string" => Ok(PropertyValue::CharacterString(
-                value
-                    .as_str()
-                    .ok_or_else(|| "character_string value must be a string".to_string())?
-                    .to_string(),
-            )),
-            _ => Err(format!("unknown value_type {vt}")),
-        };
+    if objects_by_index.insert(index, oid).is_some() {
+        invalidate_object_list_index(
+            objects_by_index,
+            missing_indexes,
+            invalid_indexes,
+            errors,
+            index,
+        );
+        return;
     }
-    if let Some(b) = value.as_bool() {
-        return Ok(PropertyValue::Enumerated(if b { 1 } else { 0 }));
+    missing_indexes.remove(&index);
+}
+
+fn invalidate_object_list_index(
+    objects_by_index: &mut HashMap<u32, ObjectIdentifier>,
+    missing_indexes: &mut HashSet<u32>,
+    invalid_indexes: &mut HashSet<u32>,
+    errors: &mut Vec<String>,
+    index: u32,
+) {
+    objects_by_index.remove(&index);
+    missing_indexes.insert(index);
+    if invalid_indexes.insert(index) {
+        push_bounded_error(errors, format!("object-list index {index} was duplicated"));
     }
-    if let Some(f) = value.as_f64() {
-        return Ok(PropertyValue::Real(f as f32));
-    }
-    if let Some(i) = value.as_i64() {
-        return Ok(PropertyValue::Real(i as f32));
-    }
-    if let Some(s) = value.as_str() {
-        return Ok(PropertyValue::CharacterString(s.to_string()));
-    }
-    Err("unsupported value type".into())
 }
 
 fn property_name(pid: PropertyIdentifier) -> String {
@@ -1935,6 +2050,8 @@ fn device_summary(d: &bacnet_client::discovery::DiscoveredDevice) -> Value {
 mod poll_select_tests {
     use super::*;
     use crate::config::FieldPoint;
+    use bacnet_encoding::primitives::encode_property_value;
+    use bytes::BytesMut;
 
     fn dev(name: &str, inst: u32, points: Vec<FieldPoint>) -> FieldDevice {
         FieldDevice {
@@ -2119,8 +2236,18 @@ mod oid_tests {
 #[cfg(test)]
 mod bacnet_correctness_tests {
     use super::*;
+    use bacnet_encoding::apdu::{decode_apdu, Apdu};
+    use bacnet_encoding::npdu::{decode_npdu, NpduAddress};
+    use bacnet_encoding::primitives::encode_property_value;
+    use bacnet_transport::bvll::decode_bvll;
     use bacnet_types::enums::{ErrorClass, ErrorCode};
-    use std::time::Duration;
+    use bytes::BytesMut;
+    use std::net::Ipv4Addr;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    use tokio::net::UdpSocket;
+    use tokio::time::{timeout, Instant};
 
     fn encoded(value: &PropertyValue) -> Vec<u8> {
         let mut bytes = BytesMut::new();
@@ -2248,5 +2375,353 @@ mod bacnet_correctness_tests {
         assert_eq!(target.remote_network, 2001);
         assert_eq!(target.remote_mac, vec![42]);
         assert_ne!(target.router_mac, target.remote_mac);
+    }
+
+    #[test]
+    fn object_list_duplicate_remains_pending_until_correlated_repair() {
+        let first = ObjectIdentifier::new(ObjectType::ANALOG_VALUE, 1).unwrap();
+        let second = ObjectIdentifier::new(ObjectType::ANALOG_VALUE, 2).unwrap();
+        let mut objects_by_index = HashMap::new();
+        let mut missing_indexes = HashSet::from([1]);
+        let mut invalid_indexes = HashSet::new();
+        let mut errors = Vec::new();
+
+        record_object_list_value(
+            &mut objects_by_index,
+            &mut missing_indexes,
+            &mut invalid_indexes,
+            &mut errors,
+            1,
+            first,
+        );
+        assert_eq!(objects_by_index.get(&1), Some(&first));
+        assert!(!missing_indexes.contains(&1));
+
+        record_object_list_value(
+            &mut objects_by_index,
+            &mut missing_indexes,
+            &mut invalid_indexes,
+            &mut errors,
+            1,
+            second,
+        );
+        assert!(!objects_by_index.contains_key(&1));
+        assert!(missing_indexes.contains(&1));
+        assert!(invalid_indexes.contains(&1));
+
+        // A third duplicate is still untrusted. It cannot make discovery look
+        // complete; only the exact RP repair below may clear the index.
+        record_object_list_value(
+            &mut objects_by_index,
+            &mut missing_indexes,
+            &mut invalid_indexes,
+            &mut errors,
+            1,
+            first,
+        );
+        assert!(!objects_by_index.contains_key(&1));
+        assert!(missing_indexes.contains(&1));
+        assert_eq!(errors.len(), 1);
+
+        objects_by_index.insert(1, second);
+        missing_indexes.remove(&1);
+        invalid_indexes.remove(&1);
+        assert_eq!(objects_by_index.get(&1), Some(&second));
+        assert!(!missing_indexes.contains(&1));
+        assert!(!invalid_indexes.contains(&1));
+    }
+
+    #[test]
+    fn commandability_requires_correlated_complete_unsigned_sixteen() {
+        let oid = ObjectIdentifier::new(ObjectType::ANALOG_VALUE, 7).unwrap();
+        let supported = bacnet_services::rpm::ReadPropertyMultipleACK {
+            list_of_read_access_results: vec![bacnet_services::rpm::ReadAccessResult {
+                object_identifier: oid,
+                list_of_results: vec![result(Some(0), Some(&PropertyValue::Unsigned(16)), None)],
+            }],
+        };
+        assert_eq!(
+            commandability_from_rpm_response(&supported, oid),
+            Commandability::Supported
+        );
+
+        for value in [
+            PropertyValue::Null,
+            PropertyValue::Boolean(false),
+            PropertyValue::Unsigned(15),
+        ] {
+            let response = bacnet_services::rpm::ReadPropertyMultipleACK {
+                list_of_read_access_results: vec![bacnet_services::rpm::ReadAccessResult {
+                    object_identifier: oid,
+                    list_of_results: vec![result(Some(0), Some(&value), None)],
+                }],
+            };
+            assert_eq!(
+                commandability_from_rpm_response(&response, oid),
+                Commandability::Unknown
+            );
+        }
+
+        let wrong_object = ObjectIdentifier::new(ObjectType::ANALOG_VALUE, 8).unwrap();
+        let wrong_object_response = bacnet_services::rpm::ReadPropertyMultipleACK {
+            list_of_read_access_results: vec![bacnet_services::rpm::ReadAccessResult {
+                object_identifier: wrong_object,
+                list_of_results: vec![result(Some(0), Some(&PropertyValue::Unsigned(16)), None)],
+            }],
+        };
+        assert_eq!(
+            commandability_from_rpm_response(&wrong_object_response, oid),
+            Commandability::Unknown
+        );
+
+        let conflicting = bacnet_services::rpm::ReadPropertyMultipleACK {
+            list_of_read_access_results: vec![bacnet_services::rpm::ReadAccessResult {
+                object_identifier: oid,
+                list_of_results: vec![
+                    result(Some(0), Some(&PropertyValue::Unsigned(16)), None),
+                    result(Some(0), Some(&PropertyValue::Unsigned(15)), None),
+                ],
+            }],
+        };
+        assert_eq!(
+            commandability_from_rpm_response(&conflicting, oid),
+            Commandability::Unknown
+        );
+
+        let malformed = bacnet_services::rpm::ReadPropertyMultipleACK {
+            list_of_read_access_results: vec![bacnet_services::rpm::ReadAccessResult {
+                object_identifier: oid,
+                list_of_results: vec![bacnet_services::rpm::ReadResultElement {
+                    property_identifier: PropertyIdentifier::PRIORITY_ARRAY,
+                    property_array_index: Some(0),
+                    property_value: Some(vec![0x00]),
+                    error: None,
+                }],
+            }],
+        };
+        assert_eq!(
+            commandability_from_rpm_response(&malformed, oid),
+            Commandability::Unknown
+        );
+    }
+
+    #[test]
+    fn commandability_rp_errors_distinguish_unsupported_from_timeout() {
+        assert_eq!(
+            commandability_from_error_codes(ErrorClass::PROPERTY, ErrorCode::UNKNOWN_PROPERTY),
+            Commandability::Unsupported
+        );
+        assert_eq!(
+            commandability_from_error_codes(ErrorClass::DEVICE, ErrorCode::OTHER),
+            Commandability::Unknown
+        );
+        let timeout_error = BacnetError::Timeout(Duration::from_millis(1));
+        assert!(!is_unsupported_bacnet_error(&timeout_error));
+        assert_eq!(classify_write_error(&timeout_error), WriteOutcome::Unknown);
+
+        let oid = ObjectIdentifier::new(ObjectType::ANALOG_VALUE, 7).unwrap();
+        let malformed_ack = bacnet_services::read_property::ReadPropertyACK {
+            object_identifier: oid,
+            property_identifier: PropertyIdentifier::PRIORITY_ARRAY,
+            property_array_index: Some(0),
+            property_value: vec![0x00],
+        };
+        assert_eq!(
+            commandability_from_priority_read_result(
+                Ok(malformed_ack),
+                oid,
+                Commandability::Unknown
+            ),
+            Commandability::Unknown
+        );
+        assert_eq!(
+            commandability_from_priority_read_result(
+                Err(BacnetError::Protocol {
+                    class: ErrorClass::PROPERTY.to_raw() as u32,
+                    code: ErrorCode::UNKNOWN_PROPERTY.to_raw() as u32,
+                }),
+                oid,
+                Commandability::Unknown,
+            ),
+            Commandability::Unsupported
+        );
+        assert_eq!(
+            commandability_from_priority_read_result(
+                Err(timeout_error),
+                oid,
+                Commandability::Unknown,
+            ),
+            Commandability::Unknown
+        );
+    }
+
+    fn write_test_config(port: u16) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "openfdd-bacnet-write-test-{}-{}.toml",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock after epoch")
+                .as_nanos()
+        ));
+        let config = format!(
+            "[[devices]]\nname = \"routed-write-test\"\nenabled = true\ndevice_instance = 5007\nhost = \"127.0.0.1\"\nport = {port}\nmstp_network = 2001\nmstp_mac = [42]\nrpm_chunk = 10\nmax_apdu = 480\npoints = []\n"
+        );
+        std::fs::write(&path, config).expect("write synthetic BACnet test catalog");
+        path
+    }
+
+    fn offline_test_config(port: u16) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "openfdd-bacnet-offline-test-{}-{}.toml",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock after epoch")
+                .as_nanos()
+        ));
+        let config = format!(
+            "[[devices]]\nname = \"offline-discovery-test\"\nenabled = true\ndevice_instance = 5008\nhost = \"127.0.0.1\"\nport = {port}\nrpm_chunk = 10\nmax_apdu = 480\npoints = []\n"
+        );
+        std::fs::write(&path, config).expect("write synthetic offline BACnet catalog");
+        path
+    }
+
+    fn write_test_settings(path: PathBuf) -> Settings {
+        let mut settings = Settings {
+            field_devices_toml: path,
+            ..Settings::default()
+        };
+        settings.bacnet_client.interface = Ipv4Addr::LOCALHOST;
+        settings.bacnet_client.broadcast = Ipv4Addr::LOCALHOST;
+        settings.bacnet_client.read_bind_port = 0;
+        settings.bacnet_client.whois_bind_port = 0;
+        settings.bacnet_client.apdu_timeout_ms = 25;
+        settings.bacnet_client.whois_timeout_secs = 0.01;
+        settings.bacnet_server.interface = Ipv4Addr::LOCALHOST;
+        settings
+    }
+
+    fn write_service_frame(data: &[u8]) -> Option<bool> {
+        let bvll = decode_bvll(data).ok()?;
+        let npdu = decode_npdu(bvll.payload).ok()?;
+        if npdu.is_network_message {
+            return None;
+        }
+        let Apdu::ConfirmedRequest(request) = decode_apdu(npdu.payload).ok()? else {
+            return None;
+        };
+        if request.service_choice != bacnet_types::enums::ConfirmedServiceChoice::WRITE_PROPERTY {
+            return None;
+        }
+        Some(
+            npdu.destination
+                == Some(NpduAddress {
+                    network: 2001,
+                    mac_address: vec![42].into(),
+                }),
+        )
+    }
+
+    #[tokio::test]
+    async fn production_write_timeout_sends_one_routed_request_with_retries_disabled() {
+        let socket = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
+            .await
+            .expect("bind dropped-ACK loopback receiver");
+        let port = socket.local_addr().expect("receiver address").port();
+        let config = write_test_config(port);
+        let service = BacnetClientService::new(write_test_settings(config.clone()))
+            .expect("construct BACnet service");
+
+        let mut write_task = Box::pin(service.write_property(
+            5007,
+            "analog-value",
+            7,
+            None,
+            "present-value",
+            Some(8),
+            None,
+        ));
+        let mut buffer = [0u8; 2048];
+        let mut write_frames = 0;
+        let mut routed_frames = 0;
+        let result = loop {
+            tokio::select! {
+                result = &mut write_task => break result.expect("write task should resolve"),
+                datagram = timeout(Duration::from_secs(1), socket.recv_from(&mut buffer)) => {
+                    let (len, _) = datagram.expect("loopback receive should not time out").expect("receive frame");
+                    if let Some(routed) = write_service_frame(&buffer[..len]) {
+                        write_frames += 1;
+                        routed_frames += usize::from(routed);
+                    }
+                }
+            }
+        };
+
+        // Drain the socket briefly to catch a late retransmission. A retries=0
+        // production client must leave exactly one WriteProperty invocation.
+        let drain_deadline = Instant::now() + Duration::from_millis(120);
+        while Instant::now() < drain_deadline {
+            let remaining = drain_deadline.saturating_duration_since(Instant::now());
+            let Ok(Ok((len, _))) = timeout(remaining, socket.recv_from(&mut buffer)).await else {
+                break;
+            };
+            if let Some(routed) = write_service_frame(&buffer[..len]) {
+                write_frames += 1;
+                routed_frames += usize::from(routed);
+            }
+        }
+        let _ = std::fs::remove_file(config);
+
+        assert_eq!(write_frames, 1, "dropped ACK must not trigger a resend");
+        assert_eq!(
+            routed_frames, 1,
+            "the one write must preserve the routed target"
+        );
+        assert_eq!(result["ok"], false, "unexpected write result: {result}");
+        assert_eq!(
+            result["status"], "unknown",
+            "unexpected write result: {result}"
+        );
+        assert_eq!(
+            result["outcome"], "unknown",
+            "unexpected write result: {result}"
+        );
+        assert_eq!(result["write_attempts"], 1);
+        assert_eq!(result["released"], false);
+        assert_eq!(result["verified"], false);
+    }
+
+    #[tokio::test]
+    async fn offline_point_discovery_does_not_hold_bus_lock_while_waiting() {
+        let socket = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
+            .await
+            .expect("bind offline discovery receiver");
+        let port = socket.local_addr().expect("receiver address").port();
+        let config = offline_test_config(port);
+        let service = Arc::new(
+            BacnetClientService::new(write_test_settings(config.clone()))
+                .expect("construct BACnet service"),
+        );
+
+        // Simulate a slow operation already in progress. Point discovery must
+        // still issue its first read while this guard is held, so interactive
+        // reads and writes are not blocked behind a full offline scan.
+        let _guard = service.bus_lock.lock().await;
+        let discovery = tokio::spawn({
+            let service = Arc::clone(&service);
+            async move { service.point_discovery(5008).await }
+        });
+        let mut buffer = [0u8; 2048];
+        let (len, _) = timeout(Duration::from_millis(200), socket.recv_from(&mut buffer))
+            .await
+            .expect("offline discovery must send while bus guard is held")
+            .expect("receive discovery datagram");
+        assert!(len > 0);
+        let _ = timeout(Duration::from_millis(500), discovery)
+            .await
+            .expect("offline discovery must complete within its bounded retries")
+            .expect("discovery task should not panic");
+        let _ = std::fs::remove_file(config);
     }
 }

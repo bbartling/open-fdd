@@ -219,17 +219,17 @@ mod tests {
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use http_body_util::BodyExt;
+    use std::net::Ipv4Addr;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use tokio::net::UdpSocket;
+    use tokio::time::{timeout, Duration};
     use tower::ServiceExt;
 
     use super::*;
     use crate::routes;
 
-    fn test_state() -> AppState {
-        std::env::set_var(
-            "OPENFDD_FIELDBUS_CONFIG_DIR",
-            format!("{}/../../config/fieldbus", env!("CARGO_MANIFEST_DIR")),
-        );
-        let settings = Arc::new(load_settings());
+    fn state_for_settings(raw_settings: config::Settings) -> AppState {
+        let settings = Arc::new(raw_settings);
         let bacnet_server = Arc::new(BacnetServerManager::new((*settings).clone()));
         let bacnet_client = Arc::new(BacnetClientService::new((*settings).clone()).unwrap());
         let poll_engine = Arc::new(PollEngine::new(
@@ -261,6 +261,14 @@ mod tests {
             telemetry,
             publish_ledger: Arc::new(MqttPublishLedger::default()),
         }
+    }
+
+    fn test_state() -> AppState {
+        std::env::set_var(
+            "OPENFDD_FIELDBUS_CONFIG_DIR",
+            format!("{}/../../config/fieldbus", env!("CARGO_MANIFEST_DIR")),
+        );
+        state_for_settings(load_settings())
     }
 
     #[tokio::test]
@@ -312,6 +320,80 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn bacnet_write_approval_gate_keeps_omitted_and_false_requests_off_wire() {
+        let receiver = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
+            .await
+            .expect("bind approval-gate receiver");
+        let port = receiver.local_addr().expect("receiver address").port();
+        let path = std::env::temp_dir().join(format!(
+            "openfdd-bacnet-approval-test-{}-{}.toml",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock after epoch")
+                .as_nanos()
+        ));
+        std::fs::write(
+            &path,
+            format!(
+                "[[devices]]\nname = \"approval-gate-test\"\nenabled = true\ndevice_instance = 5010\nhost = \"127.0.0.1\"\nport = {port}\npoints = []\n"
+            ),
+        )
+        .expect("write approval-gate catalog");
+
+        let mut settings = config::Settings {
+            field_devices_toml: path.clone(),
+            ..config::Settings::default()
+        };
+        settings.bacnet_client.interface = Ipv4Addr::LOCALHOST;
+        settings.bacnet_client.broadcast = Ipv4Addr::LOCALHOST;
+        settings.bacnet_client.read_bind_port = 0;
+        settings.bacnet_client.whois_bind_port = 0;
+        let app = routes::api_routes(state_for_settings(settings));
+
+        let base = serde_json::json!({
+            "device_instance": 5010,
+            "object_type": "analog-value",
+            "object_instance": 7,
+            "property_id": "present-value",
+            "value": 0.0,
+            "priority": 8,
+            "value_type": "real"
+        });
+        for approved in [None, Some(false)] {
+            let mut body = base.clone();
+            if let Some(approved) = approved {
+                body["approved"] = serde_json::json!(approved);
+            }
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::post("/bacnet/write")
+                        .header("content-type", "application/json")
+                        .body(Body::from(body.to_string()))
+                        .expect("build write request"),
+                )
+                .await
+                .expect("approval-gate response");
+            assert_eq!(response.status(), StatusCode::OK);
+            let result: serde_json::Value =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .expect("decode dry-run response");
+            assert_eq!(result["ok"], true);
+            assert_eq!(result["outcome"], "dry_run");
+            assert_eq!(result["skipped"], "not approved");
+            let mut datagram = [0u8; 2048];
+            assert!(
+                timeout(Duration::from_millis(30), receiver.recv_from(&mut datagram))
+                    .await
+                    .is_err(),
+                "omitted/false approval must not send a BACnet datagram"
+            );
+        }
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
