@@ -463,13 +463,28 @@ def save_column_map_json(path: Path, data: dict[str, Any], *, haystack: bool = T
     path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
 
 
+def _attrs_equipment_type(df: Any) -> str:
+    """Stamp from frame attrs. ``equipType`` and ``equipment_type`` are the same field."""
+    attrs = getattr(df, "attrs", None) or {}
+    if not isinstance(attrs, dict):
+        return "UNKNOWN"
+    raw = attrs.get("equipment_type") or attrs.get("equipType") or ""
+    text = str(raw).strip()
+    return text or "UNKNOWN"
+
+
 def column_map_to_role_map(data: dict[str, Any]) -> dict[str, dict[str, str]]:
     data = normalize_column_map(data)
-    return {
-        eq_id: dict(block.get("column_roles") or {})
-        for eq_id, block in data.get("equipment", {}).items()
-        if isinstance(block, dict)
-    }
+    out: dict[str, dict[str, str]] = {}
+    for eq_id, block in data.get("equipment", {}).items():
+        if not isinstance(block, dict):
+            continue
+        roles = dict(block.get("column_roles") or {})
+        etype = str(block.get("equipment_type") or "").strip()
+        if etype and etype != "UNKNOWN":
+            roles["equipment_type"] = etype
+        out[str(eq_id)] = roles
+    return out
 
 
 def merge_column_map_into_role_map(
@@ -522,7 +537,7 @@ def build_column_map_from_equipment_frames(
             roles = {**roles_from_columns_csv(Path(cols_path)), **roles}
         present = set(df.columns)
         roles = {r: c for r, c in roles.items() if c in present}
-        etype = str(df.attrs.get("equipment_type") or "UNKNOWN")
+        etype = _attrs_equipment_type(df)
         data["equipment"][eq_id] = {
             "equipment_type": etype,
             "device": eq_id,
@@ -644,7 +659,7 @@ def build_llm_prompt_for_frames(
     ]
     for eq_id in sorted(frames.keys(), key=lambda x: natural_key(str(x))):
         df = frames[eq_id]
-        etype = str(df.attrs.get("equipment_type") or "UNKNOWN")
+        etype = _attrs_equipment_type(df)
         hs_type = COOKBOOK_EQUIP_TO_HAYSTACK.get(etype, etype.lower())
         cols = [str(c) for c in df.columns]
         if len(cols) > max_columns_per_equipment:

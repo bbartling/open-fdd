@@ -249,7 +249,7 @@ export function RcxPage() {
     ];
   }, [env, presets, presetId]);
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (opts?: { refresh?: boolean }) => {
     if (!buildingId || !presetId) return;
     setLoading(true);
     setError(null);
@@ -259,7 +259,12 @@ export function RcxPage() {
     setPresetTables([]);
     try {
       if (isOverviewRcxPreset(presetId)) {
-        const loaded = await loadOverviewRcxPreset(buildingId, presetId);
+        const loaded = await loadOverviewRcxPreset(
+          buildingId,
+          presetId,
+          undefined,
+          opts?.refresh,
+        );
         setEnv(loaded.env);
         setFigure(loaded.figure);
         setCompanionFigure(loaded.companion);
@@ -271,6 +276,7 @@ export function RcxPage() {
         building_id: buildingId,
         max_points: 8000,
         series: { preset_id: presetId },
+        ...(opts?.refresh ? { refresh: true } : {}),
       });
       setEnv(res);
       const title =
@@ -461,7 +467,7 @@ export function RcxPage() {
         <Button
           id="rcx-run"
           label={loading ? "Running…" : "Refresh RCx preset"}
-          onClick={() => void run()}
+          onClick={() => void run({ refresh: true })}
           disabled={!buildingId || !presetId || loading || emptyFamily}
           testId="rcx-run"
         />

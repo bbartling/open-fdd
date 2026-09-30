@@ -40,6 +40,22 @@ def test_membership_follows_stamp_not_id():
     assert list(out["equipment_id"]) == ["jci_vav_1"]
 
 
+def test_role_map_stamp_admits_opaque_vav_id():
+    stamped = _week("jci_vav_1", 0.5, 72.0, 200, n=4)
+    stamped.attrs.pop("equipment_type", None)
+    ghost = _week("VAV_GHOST", 0.5, 72.0, 200, n=4)
+    ghost.attrs.pop("equipment_type", None)
+    out = vav_health_matrix(
+        {"jci_vav_1": stamped, "VAV_GHOST": ghost, "bldg2-zone-loopback": ghost.copy()},
+        building_id="B1",
+        role_map={
+            "jci_vav_1": {"equipType": "vav"},
+            "VAV_GHOST": {"equipment_type": "ahu"},
+        },
+    )
+    assert list(out["equipment_id"]) == ["jci_vav_1"]
+
+
 def test_missing_occ_is_unknown_not_pass():
     df = _week("VAV_1", 0.5, 72.0, 200, n=2)
     out = vav_health_matrix({"VAV_1": df}, building_id="B1")

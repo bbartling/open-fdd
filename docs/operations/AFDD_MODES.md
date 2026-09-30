@@ -38,7 +38,7 @@ OPENFDD_AFDD_LOOKBACK_UNIT=hours
 
 The timezone is an operator IANA name. `America/Chicago` is the lab recipe so the cycle can finish before a 06:00 digest. It is not a product default and it is not a building id. The analysis window still ends at the latest persisted telemetry watermark (`start = end − lookback`). A missed day while the process is down is one lookback-sized cycle (`catch_up`), not one full-history pass per missed day.
 
-Lookback bounds are passed as `start_utc` / `end_utc` on the registry run and applied as DataFusion predicates on `history` (and `weather` when present) so Apache partition/stats pruning stays effective. The result write upserts only that window. Slices outside the window stay unchanged. There is no scheduler "update all".
+Lookback bounds are passed as `start_utc` / `end_utc` on the registry run and applied as DataFusion predicates on `history` (and `weather` when present) so Apache partition/stats pruning stays effective. The result write upserts only that window. Slices outside the window stay unchanged. There is no scheduler "update all". If the existing result file is missing, the window is the first slice. If it cannot be read or parsed, the publish fails and the file is left unchanged.
 
 Operator UI / `POST /api/afdd/scheduler/config` allowlist: schedule `interval` or `wall_clock`; interval **1 / 3 / 6 / 12 / 24 hours** (`60…1440` minutes); lookback **1 / 2 / 3 days**; wall clock requires `HH:MM` plus an IANA timezone. `update_all` / `lookback=all` is rejected. Mode stays env-owned. A persisted `state/afdd/scheduler-runtime-config.json` overlay overwrites interval/lookback/schedule on boot — clear it when pinning env lookback in **hours**.
 

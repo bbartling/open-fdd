@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from open_fdd.analytics.anomaly.io import iter_ahu_io_points, load_device_folder
+from open_fdd.analytics.anomaly.io import (
+    admitted_equipment_stamp,
+    iter_ahu_io_points,
+    load_device_folder,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "mini_ahu"
 
@@ -70,6 +74,24 @@ def test_iter_ahu_io_points_nested_equipment_keeps_ahu_only():
         ("discharge-air-temp", "SAT"),
         ("fan-status", "SF_S"),
     ]
+
+
+def test_iter_ahu_io_points_uses_canonical_stamp():
+    points = {"discharge-air-temp": "SAT"}
+    for stamp in ("vav_ahu", "airHandlingUnit", "cv", "rooftop", "erv", "mau"):
+        assert iter_ahu_io_points({"equipType": stamp, "points": points}) == [
+            ("discharge-air-temp", "SAT")
+        ]
+    assert iter_ahu_io_points({"equip": "jci_ahu_1", "points": points}) == []
+    nested = {
+        "equipment": {
+            "jci_ahu_1": {"equipType": "vav_ahu", "points": points},
+            "jci_vav_1": {"equipType": "vav", "points": {"zone-air-temp": "ZT"}},
+        }
+    }
+    assert iter_ahu_io_points(nested) == [("discharge-air-temp", "SAT")]
+    assert admitted_equipment_stamp(nested, point_pairs=[("discharge-air-temp", "SAT")]) == "vav_ahu"
+    assert admitted_equipment_stamp({"equip": "AHU_1", "points": points}) == ""
 
 
 def test_iter_ahu_io_points_requires_stamp():

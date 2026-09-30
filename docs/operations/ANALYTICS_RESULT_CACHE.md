@@ -36,6 +36,8 @@ The watermark is the newest historian part order key for that building (`part-YY
 
 Stale is a structured flag. It is not copied into envelope `warnings`, so Overview does not grow a cache caption.
 
+Routine opens omit `refresh` and use the cache. Explicit operator actions send `refresh: true`: Overview **Update analytics** / **Force refresh analytics** (including the health, weather, and SQL-anomaly sections whose token advanced), a rules-updated refetch of those sections, and **Refresh RCx preset**. Opening a building or an RCx preset does not.
+
 `elapsed_ms` on `cache` is the server time for that read or recompute (hit vs miss).
 
 Fuel bill math (`/api/analytics/fuel`) is not this cache. The global faults summary is not stored under a building id. Sensor-fault analytics (`sensor-faults-v1`) is the fault result table.

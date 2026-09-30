@@ -292,7 +292,7 @@ def apply_role_map(df: pd.DataFrame, equipment_id: str, role_map: dict[str, dict
     eq_map = role_map.get(equipment_id, {})
     out = df.copy()
     # Meta keys are equipment links / notes — not timeseries columns
-    skip = {"chw_pump_equipment", "notes", "equipment_type", "plant_group"}
+    skip = {"chw_pump_equipment", "notes", "equipment_type", "equipType", "plant_group"}
     for role, col in eq_map.items():
         if role in skip or not col or not isinstance(col, str):
             continue

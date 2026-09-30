@@ -54,15 +54,24 @@ fn is_missing_schema_error(msg: &str) -> bool {
 
 /// Publish a rule body. Windowed AFDD upserts only `[start, end)` and leaves
 /// every other stored slice unchanged. Bulk runs (no window) replace the file.
+///
+/// A missing file is an empty history. Any other read error, or JSON that
+/// does not parse, fails before `write_json_atomic` so a corrupt result cannot
+/// be treated as empty and drop slices outside the window.
 fn publish_rule_body(
     out_path: &Path,
     body: &serde_json::Value,
     time_window: Option<(&str, &str)>,
 ) -> std::io::Result<()> {
     if let Some((start, end)) = time_window {
-        let existing = std::fs::read_to_string(out_path)
-            .ok()
-            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
+        let existing = match std::fs::read_to_string(out_path) {
+            Ok(text) => Some(
+                serde_json::from_str::<serde_json::Value>(&text)
+                    .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?,
+            ),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+            Err(err) => return Err(err),
+        };
         let merged =
             merge_windowed_rule_result(existing.as_ref(), start, end, body).map_err(|err| {
                 std::io::Error::new(std::io::ErrorKind::InvalidInput, err.to_string())
@@ -336,13 +345,17 @@ pub async fn run_all_rules_with_overrides(
                 .collect();
             if !missing.is_empty() {
                 let note = format!("missing roles/columns in history: {}", missing.join(", "));
-                let _ = write_skip_marker(&out_path, &missing, &note, options.time_window);
+                let mut error = format!("SKIPPED_MISSING_ROLES: {note}");
+                if let Err(err) = write_skip_marker(&out_path, &missing, &note, options.time_window)
+                {
+                    error = format!("{error}; result file unchanged: {err}");
+                }
                 timings.push(RuleTiming {
                     rule_id: rule.rule_id.clone(),
                     row_count: 0,
                     elapsed_ms: t0.elapsed().as_millis(),
                     output_path: out_path.display().to_string(),
-                    error: Some(format!("SKIPPED_MISSING_ROLES: {note}")),
+                    error: Some(error),
                 });
                 rules_skipped += 1;
                 continue;
@@ -442,29 +455,35 @@ pub async fn run_all_rules_with_overrides(
                     // Schema/weather miss classified at runtime -> skip, not fail
                     // (OFDD-066/068). Keeps Liberty runs at rules_failed == 0.
                     let note = format!("schema miss: {msg}");
-                    let _ = write_skip_marker(
+                    let mut error = format!("SKIPPED_MISSING_ROLES: {note}");
+                    if let Err(err) = write_skip_marker(
                         &out_path,
                         &rule.required_roles,
                         &note,
                         options.time_window,
-                    );
+                    ) {
+                        error = format!("{error}; result file unchanged: {err}");
+                    }
                     timings.push(RuleTiming {
                         rule_id: rule.rule_id.clone(),
                         row_count: 0,
                         elapsed_ms: t0.elapsed().as_millis(),
                         output_path: out_path.display().to_string(),
-                        error: Some(format!("SKIPPED_MISSING_ROLES: {note}")),
+                        error: Some(error),
                     });
                     rules_skipped += 1;
                 } else {
-                    let err_body = serde_json::json!({"rows": [], "error": msg});
-                    let _ = publish_rule_body(&out_path, &err_body, options.time_window);
+                    let err_body = serde_json::json!({"rows": [], "error": msg.clone()});
+                    let mut error = msg;
+                    if let Err(err) = publish_rule_body(&out_path, &err_body, options.time_window) {
+                        error = format!("{error}; result file unchanged: {err}");
+                    }
                     timings.push(RuleTiming {
                         rule_id: rule.rule_id.clone(),
                         row_count: 0,
                         elapsed_ms: t0.elapsed().as_millis(),
                         output_path: out_path.display().to_string(),
-                        error: Some(msg),
+                        error: Some(error),
                     });
                     rules_failed += 1;
                 }
@@ -602,5 +621,79 @@ mod sensor_null_applicability_tests {
             "history",
         );
         assert_eq!(sql, raw);
+    }
+}
+
+#[cfg(test)]
+mod publish_window_tests {
+    use super::publish_rule_body;
+    use serde_json::{json, Value};
+
+    const START: &str = "2026-09-28T10:00:00Z";
+    const END: &str = "2026-09-29T10:00:00Z";
+
+    #[test]
+    fn corrupt_result_file_is_left_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("AHU-SATDEV.json");
+        let original = b"{not-json";
+        std::fs::write(&path, original).unwrap();
+        let err = publish_rule_body(
+            &path,
+            &json!({"rows": [{"fault_hours": 1.0}]}),
+            Some((START, END)),
+        )
+        .unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+    }
+
+    #[test]
+    fn unreadable_result_path_does_not_publish() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = publish_rule_body(
+            dir.path(),
+            &json!({"rows": [{"fault_hours": 1.0}]}),
+            Some((START, END)),
+        )
+        .unwrap_err();
+        assert_ne!(err.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn missing_file_starts_a_window_and_keeps_an_outside_slice() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("AHU-SATDEV.json");
+        publish_rule_body(
+            &path,
+            &json!({"rows": [{"fault_hours": 1.0, "marker": "new"}]}),
+            Some((START, END)),
+        )
+        .unwrap();
+        let outside = json!({
+            "start_utc": "2026-09-01T05:00:00Z",
+            "end_utc": "2026-09-02T05:00:00Z",
+            "rows": [{"fault_hours": 3.5, "marker": "keep-me"}]
+        });
+        let existing: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let mut windows = existing["windows"].as_array().unwrap().clone();
+        windows.insert(0, outside.clone());
+        let stored = json!({
+            "rows": existing["rows"],
+            "windows": windows,
+            "result_scope": "lookback_window",
+        });
+        std::fs::write(&path, serde_json::to_vec_pretty(&stored).unwrap()).unwrap();
+        publish_rule_body(
+            &path,
+            &json!({"rows": [{"fault_hours": 2.0, "marker": "today"}]}),
+            Some((START, END)),
+        )
+        .unwrap();
+        let updated: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(updated["windows"][0], outside);
+        assert_eq!(updated["windows"][1]["rows"][0]["marker"], "today");
     }
 }

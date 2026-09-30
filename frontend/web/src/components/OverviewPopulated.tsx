@@ -339,6 +339,7 @@ export function OverviewPopulated({
           building_id: buildingId,
           equipment: equipmentRef.current,
           signal: ac.signal,
+          refresh: force,
         });
         if (ac.signal.aborted) return;
         if (!body.ok) {
@@ -693,6 +694,7 @@ export function OverviewPopulated({
             disabled={updateAnalyticsGrey}
             onClick={() => {
               setAnalyticsClean(false);
+              setVavHealthToken((t) => t + 1);
               void refreshMeta();
               void refreshOverview({ force: true });
             }}
@@ -706,6 +708,7 @@ export function OverviewPopulated({
               disabled={busy}
               onClick={() => {
                 setAnalyticsClean(false);
+                setVavHealthToken((t) => t + 1);
                 void refreshMeta();
                 void refreshOverview({ force: true });
               }}

@@ -148,6 +148,13 @@ PROFILES: dict[str, SystemProfile] = {
 _EQUIP_PROFILE = {
     "ahu": "vav_ahu",
     "rtu": "vav_ahu",
+    "mau": "vav_ahu",
+    "doas": "vav_ahu",
+    "erv": "vav_ahu",
+    "rooftop": "vav_ahu",
+    "rooftopunit": "vav_ahu",
+    "airhandlingunit": "vav_ahu",
+    "vavahu": "vav_ahu",
     "unitventilator": "cv_ahu",
     "uv": "cv_ahu",
     "cv": "cv_ahu",
@@ -169,19 +176,28 @@ _EQUIP_PROFILE = {
 
 
 def profile_for_equip_type(equip_type: str | None) -> str:
-    """Map a stamped equipment type to a registered profile id."""
+    """Map a stamped equipment type to a registered profile id.
+
+    A missing or unrecognized stamp does not become an air-handler profile.
+    """
     key = str(equip_type or "").strip().lower().replace("-", "").replace(" ", "")
     key = key.replace("_", "")
+    if not key or key == "unknown":
+        return ""
     # keys above use underscores removed except we stored both forms
     compact = {
         name.replace("_", ""): profile_id for name, profile_id in _EQUIP_PROFILE.items()
     }
-    return compact.get(key, "vav_ahu")
+    return compact.get(key, "")
 
 
 def resolve_profile(profile_id: str | None, equip_type: str | None = None) -> SystemProfile:
     """Return a registered profile. Unknown ids are an error."""
     chosen = (profile_id or "").strip() or profile_for_equip_type(equip_type)
+    if not chosen:
+        raise ValueError(
+            "missing or unrecognized equipment stamp; stamp equipType or pass an explicit profile"
+        )
     profile = PROFILES.get(chosen)
     if profile is None:
         known = ", ".join(sorted(PROFILES))
@@ -284,8 +300,8 @@ class OpenFddApiSource:
 
     base_url: str
     reader: Callable[[], pd.DataFrame] | None = None
-    equipment_id: str = "AHU"
-    equipment_type: str = "ahu"
+    equipment_id: str = ""
+    equipment_type: str = "UNKNOWN"
     source_id: str = field(default="openfdd_api", init=False)
 
     def load(self) -> RoleHistory:
@@ -315,8 +331,8 @@ class VendorApiSource:
 
     vendor: str
     reader: Callable[[], pd.DataFrame] | None = None
-    equipment_id: str = "AHU"
-    equipment_type: str = "ahu"
+    equipment_id: str = ""
+    equipment_type: str = "UNKNOWN"
     source_id: str = field(default="vendor_api", init=False)
 
     def load(self) -> RoleHistory:

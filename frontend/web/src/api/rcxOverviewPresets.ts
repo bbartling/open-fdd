@@ -61,6 +61,7 @@ export async function loadOverviewRcxPreset(
   buildingId: string,
   presetId: string,
   overlayEq?: string | null,
+  refresh?: boolean,
 ): Promise<{
   figure: PlotlyFigure | null;
   companion: PlotlyFigure | null;
@@ -75,6 +76,7 @@ export async function loadOverviewRcxPreset(
     max_points: 4000,
     dt_min_f: 10,
     ...window,
+    ...(refresh ? { refresh: true } : {}),
   };
   if (presetId in PLANT_FOR) {
     const env = await postRuntime(body);
