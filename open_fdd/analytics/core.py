@@ -2278,7 +2278,7 @@ def economizer_free_cooling_diagnostics(
         sub = pd.DataFrame(
             {
                 "equipment_id": eq_id,
-                "equipment_type": et_n or et or "AHU",
+                "equipment_type": et_n,
                 "oat_f": oat,
                 "rat_f": rat,
                 "mat_f": mat,
@@ -2350,7 +2350,7 @@ def economizer_free_cooling_diagnostics(
         metrics_rows.append(
             {
                 "equipment_id": eq_id,
-                "equipment_type": et_n or et or "AHU",
+                "equipment_type": et_n,
                 "fan_on_hours": round(fan_hours, 2),
                 "n_fan_on_samples": int(fan_on.sum()),
                 "n_identifiable": int(ident.sum()),

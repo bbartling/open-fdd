@@ -29,7 +29,12 @@ from typing import Any
 import pandas as pd
 
 from open_fdd.analytics.anomaly.detectors import median_sample_delta
-from open_fdd.analytics.anomaly.io import iter_ahu_io_points, iter_mapped_points, load_device_folder
+from open_fdd.analytics.anomaly.io import (
+    admitted_equipment_stamp,
+    iter_ahu_io_points,
+    iter_mapped_points,
+    load_device_folder,
+)
 from open_fdd.analytics.anomaly.plots import point_slug
 from open_fdd.rules.cookbook_catalog import SENSOR_LIMITS
 
@@ -126,10 +131,10 @@ def role_frame(device) -> pd.DataFrame:
         if column not in device.frame.columns:
             continue
         frame[role] = pd.to_numeric(device.frame[column], errors="coerce")
-    label = equipment_label(device.column_map, Path("AHU"))
+    label = equipment_label(device.column_map, Path("equipment"))
     frame.attrs["equipment_id"] = label
-    equip_type = device.column_map.get("equipType") or device.column_map.get("equipment_type") or "UNKNOWN"
-    frame.attrs["equipment_type"] = str(equip_type)
+    stamp = admitted_equipment_stamp(device.column_map, point_pairs=list(device.points))
+    frame.attrs["equipment_type"] = stamp or "UNKNOWN"
     return frame
 
 
@@ -348,11 +353,19 @@ def _confirmed_fault(result) -> bool:
 
 
 def _identity_pack(frame: pd.DataFrame, equipment_id: str) -> tuple[dict[str, pd.DataFrame], dict]:
+    """Keep a recognized stamp. A missing stamp stays UNKNOWN."""
+    from open_fdd.analytics.site_model import normalize_equipment_type
+
     raw = frame.copy()
-    raw.attrs["equipment_type"] = raw.attrs.get("equipment_type") or "AHU"
+    stamp = str(raw.attrs.get("equipment_type") or raw.attrs.get("equipType") or "").strip()
+    norm = normalize_equipment_type(stamp)
+    typed = stamp if norm and norm != "UNKNOWN" else "UNKNOWN"
+    raw.attrs["equipment_type"] = typed
     raw.attrs["equipment_id"] = equipment_id
-    role_map = {equipment_id: {column: column for column in frame.columns}}
-    return {equipment_id: raw}, role_map
+    roles = {column: column for column in frame.columns}
+    if typed != "UNKNOWN":
+        roles["equipment_type"] = typed
+    return {equipment_id: raw}, {equipment_id: roles}
 
 
 def _write_plotly_png(figure, path: Path) -> bool:
@@ -531,7 +544,7 @@ def write_econ_scatter(role_df: pd.DataFrame, path: Path, *, temp_unit: str = "Â
     from open_fdd.analytics.charts import economizer_delta_scatter
     from open_fdd.analytics.core import ECON_DIAG_DT_MIN_F, build_economizer_delta_points
 
-    equipment_id = str(role_df.attrs.get("equipment_id") or "AHU")
+    equipment_id = str(role_df.attrs.get("equipment_id") or "equipment")
     points = build_economizer_delta_points(
         role_df,
         equipment_id=equipment_id,

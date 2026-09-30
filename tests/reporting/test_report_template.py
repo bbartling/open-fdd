@@ -47,6 +47,15 @@ def test_equip_type_picks_vav_ahu_and_stubs():
     assert profile_for_equip_type("uv") == "cv_ahu"
     assert profile_for_equip_type("fcu") == "fan_coil"
     assert profile_for_equip_type("chiller") == "chiller"
+    assert profile_for_equip_type("mau") == "vav_ahu"
+    assert profile_for_equip_type("vav_ahu") == "vav_ahu"
+    assert profile_for_equip_type("") == ""
+    assert profile_for_equip_type("UNKNOWN") == ""
+    assert profile_for_equip_type("not-a-kind") == ""
+    with pytest.raises(ValueError, match="unrecognized equipment stamp"):
+        from open_fdd.reporting.report_template import resolve_profile
+
+        resolve_profile(None, "UNKNOWN")
 
 
 def test_vav_ahu_skips_rainbow_duplicate_timeseries():

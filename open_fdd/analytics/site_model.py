@@ -124,6 +124,7 @@ _TYPE_ALIASES: dict[str, str] = {
     "ROOFTOPUNIT": "AHU",
     "MAU": "AHU",
     "DOAS": "AHU",
+    "CV": "AHU",
     "CV_AHU": "AHU",
     "CVAHU": "AHU",
     "VAV_AHU": "AHU",

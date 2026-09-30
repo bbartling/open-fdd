@@ -95,12 +95,15 @@ def vav_health_matrix(
     occ = occupancy or OccupancySchedule()
     fp = cfg.fingerprint()
     rows: list[dict[str, Any]] = []
-    _ = role_map
 
     rr = rule_results if rule_results is not None else pd.DataFrame()
 
     for eq_id, raw in frames.items():
-        et = resolve_equipment_type(eq_id, df=raw)
+        et = resolve_equipment_type(
+            eq_id,
+            df=raw,
+            role_map=dict(role_map) if role_map else None,
+        )
         if str(et).upper() != "VAV":
             continue
         df = raw.copy()
