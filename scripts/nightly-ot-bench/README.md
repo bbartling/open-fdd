@@ -100,7 +100,7 @@ GHCR_WAIT_SECS=900 GHCR_POLL_SECS=30 ./scripts/nightly-ot-bench/00_pull_ghcr_up.
 4. Device **5007** read/poll of AI:1173 succeeds
 5. Central ingest/Parquet shows **new** telemetry when MQTT path is live
 6. React SPA routes + honesty/MCP gates pass
-7. Gates **14–15** PASS (capability ledger validator + product-truth honesty)
+7. Gates **14–15** and **40** PASS (capability ledger, product-truth honesty, and the offline equipment-id heuristic scan). Gate 40 is source-only. It is not tip+field proof and not `fully_qualified`.
 8. Optional dual-MQTT (`RUN_CLOUD_SIM=1`): gate **10** — bosspi fieldbus OCI rev matches bench; both sites telemetry + ingest
 9. **Patch-cycle restore:** gate **18** — `18_volume_restore_smoke.sh` after central re-pin (CSV + MQTT-stream Parquet on same volume)
 
@@ -116,6 +116,12 @@ BUG_REPORT `fieldbus-poll-stale`).
 
 Default write policy is **read/poll/discover**. Active REST write clamps require
 `BENCH_ALLOW_WRITES=1`.
+
+## Equipment selection (#1037–#1047)
+
+Gate **40** (`40_no_id_heuristics.sh`) scans product source for `equipment_id` `LIKE` / id-text selectors and checks the agent-spec pages do not authorize that fallback. It runs with no stack. The same check is `python3 -B -m unittest tests.qualification.test_no_equipment_id_heuristics`.
+
+Gate **37** sends `building_id` on `GET /api/analytics/rcx/presets` and checks `ahu_dats` / `zone_temps` membership against package stamps. Empty preset points are a warning, not inclusion proof. Stamped opaque ids on a live ACME historian still need a tip pack before those issues close.
 
 ## Railway field closeout
 

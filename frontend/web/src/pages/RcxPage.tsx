@@ -119,7 +119,11 @@ export function RcxPage() {
   const [showCoverage, setShowCoverage] = useState(false);
 
   useEffect(() => {
-    void listRcxPresets()
+    if (!buildingId) {
+      setPresets([]);
+      return;
+    }
+    void listRcxPresets(buildingId)
       .then((p) => {
         const ok = p.filter((x) => x.id);
         setPresets(ok);
@@ -136,7 +140,7 @@ export function RcxPage() {
         });
       })
       .catch(() => setPresets([]));
-  }, []);
+  }, [buildingId]);
 
   useEffect(() => {
     if (!buildingId) {

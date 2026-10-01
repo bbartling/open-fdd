@@ -267,7 +267,7 @@ export async function postRcxPreset(
   return postAnalytics("/api/analytics/rcx/preset", body);
 }
 
-export async function listRcxPresets(): Promise<
+export async function listRcxPresets(buildingId?: string): Promise<
   Array<{
     id: string;
     title: string;
@@ -277,10 +277,13 @@ export async function listRcxPresets(): Promise<
     frozen?: boolean;
   }>
 > {
+  const q = buildingId
+    ? `?building_id=${encodeURIComponent(buildingId)}`
+    : "";
   const body = await apiFetch<{
     ok?: boolean;
     presets?: Array<Record<string, unknown>>;
-  }>("/api/analytics/rcx/presets");
+  }>(`/api/analytics/rcx/presets${q}`);
   const raw = Array.isArray(body.presets) ? body.presets : [];
   return raw.map((p) => ({
     id: String(p.id ?? ""),
