@@ -21,13 +21,25 @@
 # require 05:00 until OPENFDD_ACME_AFDD_EXPECT_SCHEDULE=wall_clock.
 # Outside-window slices come from GET /api/afdd/scheduler/result-slices
 # (rows_sha256). Slices that are not fully inside the cycle window must keep
-# that hash. update_all on the scheduler config must be rejected and must
+# that hash. Rows-only (legacy_unscoped), preserved_unscoped, and any other
+# null-bound slice are one identity: rule id, null bounds, rows hash. A
+# lookback upsert may relabel legacy rows as preserved_unscoped; that is not
+# a rewrite. update_all on the scheduler config must be rejected and must
 # not change the saved config. Central stay-up is started_at + uptime across
 # the cycle (STRESS NOTE #1). Host RSS is recorded; it is not the replica cap.
 #
 # Live lab env (Railway, not a product default): OPENFDD_AFDD_MODE=continuous,
 # INTERVAL_MINUTES=1440, LOOKBACK_VALUE=24, LOOKBACK_UNIT=hours,
 # BUILDING_ID=ACME. RAM watch: STRESS NOTE #1 (Pro central 24 GB/replica).
+#
+# Re-run this gate alone (no image publish; scripts apply to the pinned hub):
+#   RAILWAY_ONLY=1 OPENFDD_API_BASE='https://<hub>' \
+#     OPENFDD_ADMIN_PASSWORD='…' \
+#     bash scripts/nightly-ot-bench/38_acme_afdd_qualification.sh
+# Artifact: $ARTIFACT_DIR/38_acme_afdd_qualification.json — check
+# checks.outside_window. The store unit
+# legacy_and_null_bound_unscoped_fingerprints_match_after_upsert is the
+# offline proof; it does not replace the live ACME cycle.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -55,6 +67,9 @@ EXPECT_SCHEDULE="${OPENFDD_ACME_AFDD_EXPECT_SCHEDULE:-}"
 python3 - <<'PY' "$CENTRAL_BASE" "$OUT" "$SUMMARY" "$BUILDING" "$MAX_WALL" "$EXPECT_INTERVAL" "$EXPECT_LOOKBACK_HOURS" "$EXPECT_SCHEDULE"
 import json, os, sys, time, urllib.error, urllib.parse, urllib.request
 from datetime import datetime, timezone
+
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts", "nightly-ot-bench"))
+from afdd_slice_identity import slice_key
 
 base, out, summary, building, max_wall, expect_interval, expect_lb_h, expect_schedule = sys.argv[1:9]
 expect_schedule = expect_schedule.strip().lower()
@@ -387,15 +402,8 @@ def fully_inside(window, win_start, win_end):
         return False
     return ws >= win_start and we <= win_end
 
-def slice_key(rid, window):
-    return (
-        rid,
-        window.get("start_utc"),
-        window.get("end_utc"),
-        bool(window.get("preserved_unscoped")),
-        bool(window.get("legacy_unscoped")),
-        window.get("rows_sha256"),
-    )
+# slice_key: scripts/nightly-ot-bench/afdd_slice_identity.py
+# Unscoped legacy / preserved / null-bound slices compare equal.
 
 # F. Outside-window slices stay hash-identical. No prior outside slice is a
 # recorded observation; the fdd_store fixture is the non-vacuous proof.
@@ -420,7 +428,7 @@ report["checks"]["outside_window"] = {
     "ok": outside_ok,
     "prior_outside_slices": len(outside_before),
     "missing": [
-        {"rule_id": key[0], "start_utc": key[1], "end_utc": key[2], "rows_sha256": key[5]}
+        {"rule_id": key[0], "start_utc": key[1], "end_utc": key[2], "rows_sha256": key[3]}
         for key in missing[:20]
     ],
     "bad_result_scope": bad_scope[:20],
