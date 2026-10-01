@@ -107,3 +107,20 @@ This closes the **resource / crash-recovery acceptance** for the compact-hive en
 ## 2026-09-23 — Issue #996 — candidate verification (historical)
 
 Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT/web after verified backup and green publish checks. Daily AFDD remained **bulk/off** during early smoke. Selected analytics + concurrent manual AFDD smoke passed. **Superseded 2026-09-24** by maintainer closeout: compact hive + bounded queries accepted; see AFDD-996 CLOSED above.
+
+
+## 2026-09-30 — tip 3.5.59 / sha-97ca09d field stress (not FQ)
+
+| Item | Evidence |
+| --- | --- |
+| Tip | VERSION **3.5.59** · commit `97ca09d0c1ca` · GHCR `sha-97ca09d` |
+| Merged this cycle | #1076 docs cookbook sidebar · #1079 wave I/K ACME retarget (#1069 product) · #1081 tip bump |
+| Parked (do not merge) | Codex drafts **#1075** · **#1067** · draft **#1080** |
+| Railway hub | health `3.5.59+97ca09d0c1ca` · edges=2 · ingest_reject=0 · no Railway backup this cycle |
+| Field | fieldbus `pi-1` ACME `has_telemetry=true`; `vim-1` `has_telemetry=false` |
+| ART | `reports/nightly-ot-bench_20260930T221540Z/` · **FAIL** · `fully_qualified=false` |
+| Soft-OPEN leave open | **#1069** Wave I `bas_vs_web_acme` oa_t/web_oa_t absent (`product_fail=0`, `field_catalog_soft_open=1`); Wave K `mqtt_zone_and_oa` oa_t absent |
+| Gate39 leave open | **#1070** `39_mqtts_gap_blame` **BLOCKED** `instrumentation_complete=false` rows=[] snapshot-only |
+| GH tidy | squash-merged #1076/#1079/#1081; head branches deleted; only parked drafts remain open |
+
+Do **not** claim FQ or OPS pin from this run. Close Soft-OPEN only after tip+field unique prove clears Soft-OPEN + full stress notes.
