@@ -316,8 +316,12 @@ impl ConnectorInventoryResponse {
         }
         if let Some(cursor) = self.next_cursor.as_deref() {
             let next_offset = decode_cursor(request, cursor, &self.revision)?;
-            if next_offset <= offset {
-                return Err("inventory continuation cursor must advance".into());
+            if self.records.is_empty() {
+                return Err("empty inventory pages cannot continue".into());
+            }
+            let expected_offset = offset.saturating_add(self.records.len());
+            if next_offset != expected_offset {
+                return Err("inventory continuation cursor skipped records".into());
             }
         }
         let protocols: HashSet<_> = self.protocols.iter().copied().collect();
@@ -423,7 +427,19 @@ fn protocol_key(protocol: ConnectorProtocol) -> &'static str {
 }
 
 fn validate_id(value: &str, field: &str) -> Result<(), String> {
-    validate_token(value, 256, field)
+    validate_token(value, 256, field)?;
+    let lower = value.to_ascii_lowercase();
+    if looks_like_network_address(value)
+        || lower.contains("password")
+        || lower.contains("authorization")
+        || lower.contains("credential")
+        || lower.contains("bearer ")
+        || lower.contains("api_key")
+        || lower.contains("token=")
+    {
+        return Err(format!("{field} contains private connection data"));
+    }
+    Ok(())
 }
 
 fn validate_display_name(value: &str) -> Result<(), String> {
@@ -461,13 +477,33 @@ fn validate_token(value: &str, max: usize, field: &str) -> Result<(), String> {
 }
 
 fn looks_like_network_address(value: &str) -> bool {
-    let trimmed = value.trim().trim_matches(['[', ']']);
-    if trimmed.parse::<IpAddr>().is_ok() {
-        return true;
+    for token in value.split(|ch: char| {
+        ch.is_whitespace()
+            || matches!(
+                ch,
+                '=' | ',' | ';' | '|' | '(' | ')' | '{' | '}' | '<' | '>'
+            )
+    }) {
+        let trimmed = token.trim().trim_matches(['[', ']', '"', '\'']);
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.parse::<IpAddr>().is_ok() {
+            return true;
+        }
+        if let Some((host, port)) = trimmed.rsplit_once(':') {
+            let host = host.trim().trim_matches(['[', ']']);
+            let numeric_port = !port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit());
+            let hostname_or_address = host.eq_ignore_ascii_case("localhost")
+                || host.contains('.')
+                || host.parse::<IpAddr>().is_ok()
+                || (port.parse::<u16>().is_ok_and(|port| port >= 1024) && !host.contains(':'));
+            if numeric_port && hostname_or_address {
+                return true;
+            }
+        }
     }
-    trimmed
-        .rsplit_once(':')
-        .is_some_and(|(_, port)| !port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit()))
+    false
 }
 
 fn validate_actions(actions: &[ConnectorAction]) -> Result<(), String> {
@@ -744,6 +780,15 @@ mod tests {
         assert!(make_response(Some(same_page_cursor))
             .validate_for(&continued)
             .is_err());
+        let empty_page = ConnectorInventoryResponse {
+            records: Vec::new(),
+            next_cursor: Some(request.cursor_for_revision("config-0123", 1).unwrap()),
+            ..make_response(None)
+        };
+        assert!(empty_page.validate_for(&request).is_err());
+        let skipped_page =
+            make_response(Some(request.cursor_for_revision("config-0123", 3).unwrap()));
+        assert!(skipped_page.validate_for(&request).is_err());
     }
 
     #[test]
@@ -854,6 +899,24 @@ mod tests {
             sanitize_inventory_label("token=secret", "safe fallback"),
             "safe fallback"
         );
+        assert_eq!(
+            sanitize_inventory_label("Gateway at 192.168.204.11:47808", "safe fallback"),
+            "safe fallback"
+        );
+        assert_eq!(
+            sanitize_inventory_label("BACnet gateway [fe80::1]:47808", "safe fallback"),
+            "safe fallback"
+        );
+    }
+
+    #[test]
+    fn inventory_rejects_address_derived_public_ids() {
+        let request = request();
+        let mut response = make_response_for_record(request.clone(), point());
+        if let InventoryRecord::Point { point_id, .. } = &mut response.records[0] {
+            *point_id = "127.0.0.1:47808".into();
+        }
+        assert!(response.validate_for(&request).is_err());
     }
 
     trait RequestCursorExt {

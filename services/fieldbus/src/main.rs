@@ -468,6 +468,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn connector_inventory_projects_network_labels_to_safe_fallbacks() {
+        let path = std::env::temp_dir().join(format!(
+            "openfdd-connector-label-{}-{}.toml",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(
+            &path,
+            "[[devices]]\nname=\"Gateway at 192.0.2.10:47808\"\nenabled=true\ndevice_instance=6010\nhost=\"192.0.2.10\"\nport=47808\npoints=[]\n",
+        )
+        .unwrap();
+        let mut settings = config::Settings {
+            field_devices_toml: path.clone(),
+            connector_tenant_id: Some("tenant-a".into()),
+            connector_building_id: Some("building-a".into()),
+            connector_edge_id: Some("edge-a".into()),
+            ..config::Settings::default()
+        };
+        settings.bacnet_client.interface = Ipv4Addr::LOCALHOST;
+        let state = state_for_settings(settings);
+        let client = state.bacnet_client.clone();
+        let response = routes::api_routes(state)
+            .oneshot(
+                Request::post("/api/connector/inventory")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "schema": openfdd_contracts::CONNECTOR_INVENTORY_CONTRACT_V1,
+                            "request_id": uuid::Uuid::nil(),
+                            "scope": {"tenant_id":"tenant-a","building_id":"building-a","edge_id":"edge-a"},
+                            "protocols": ["bacnet"],
+                            "page_size": 10
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["records"][0]["display_name"], "BACnet device 6010");
+        assert!(!value.to_string().contains("192.0.2.10"));
+        assert_eq!(client.test_ot_call_count(), 0);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
     async fn connector_read_rejects_untrusted_scope_before_ot_access() {
         let state = test_state();
         let app = routes::api_routes(state.clone());

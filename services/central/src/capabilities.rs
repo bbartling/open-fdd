@@ -1514,6 +1514,41 @@ mod tests {
                     } else {
                         uuid::Uuid::new_v4()
                     };
+                    if call == 2 {
+                        return Json(ConnectorInventoryResponse {
+                            schema: CONNECTOR_INVENTORY_CONTRACT_V1.into(),
+                            request_id: request.request_id,
+                            scope: request.scope.clone(),
+                            protocols: Vec::new(),
+                            revision: "config-test".into(),
+                            captured_at: Utc::now(),
+                            provenance: InventoryProvenance::TrustedConfiguration,
+                            records: Vec::new(),
+                            next_cursor: Some(
+                                request.cursor_for_revision("config-test", 1).unwrap(),
+                            ),
+                        });
+                    }
+                    if call == 3 {
+                        return Json(ConnectorInventoryResponse {
+                            schema: CONNECTOR_INVENTORY_CONTRACT_V1.into(),
+                            request_id: request.request_id,
+                            scope: request.scope,
+                            protocols: vec![ConnectorProtocol::Bacnet],
+                            revision: "config-test".into(),
+                            captured_at: Utc::now(),
+                            provenance: InventoryProvenance::TrustedConfiguration,
+                            records: vec![InventoryRecord::Device {
+                                device_id: "192.0.2.10:47808".into(),
+                                protocol: ConnectorProtocol::Bacnet,
+                                display_name: "Configured BACnet device".into(),
+                                availability: InventoryAvailability::Configured,
+                                commandability: InventoryCommandability::Unknown,
+                                actions: vec![ConnectorAction::MetadataRead],
+                            }],
+                            next_cursor: None,
+                        });
+                    }
                     Json(ConnectorInventoryResponse {
                         schema: CONNECTOR_INVENTORY_CONTRACT_V1.into(),
                         request_id,
@@ -1569,12 +1604,22 @@ mod tests {
 
         let mismatch = aggregator.proxy_inventory("edge-a", &request).await;
         assert_eq!(mismatch, Err(ProxyError::Incompatible));
-        let mut foreign = request;
+        let mut foreign = request.clone();
         foreign.scope.tenant_id = "tenant-b".into();
         assert_eq!(
             aggregator.proxy_inventory("edge-a", &foreign).await,
             Err(ProxyError::BadRequest)
         );
         assert_eq!(calls.load(Ordering::Relaxed), 2);
+        assert_eq!(
+            aggregator.proxy_inventory("edge-a", &request).await,
+            Err(ProxyError::Incompatible)
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 3);
+        assert_eq!(
+            aggregator.proxy_inventory("edge-a", &request).await,
+            Err(ProxyError::Incompatible)
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 4);
     }
 }
