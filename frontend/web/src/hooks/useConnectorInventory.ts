@@ -114,6 +114,9 @@ async function loadPages(
       if (revision && page.revision !== revision) {
         throw new Error("connector inventory revision changed during pagination");
       }
+      if (provenance && page.provenance !== provenance) {
+        throw new Error("connector inventory provenance changed during pagination");
+      }
       revision ??= page.revision;
       provenance ??= page.provenance;
       capturedAt = page.captured_at;

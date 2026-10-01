@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../api/client";
 import type { CapabilitiesAggregate, CapabilitiesResponse } from "../api/contract";
 import { Button } from "./widgets";
+import { ProtocolInventory } from "./ProtocolInventory";
 import {
   capabilityResponseAggregate,
   PROTOCOL_WORKSPACE_TABS,
@@ -211,6 +212,7 @@ export function ProtocolWorkspace({ protocol, onProtocolChange }: ProtocolWorksp
         error={error}
         status={activeStatus}
       />
+      {!loading && !error ? <ProtocolInventory protocol={protocol} /> : null}
     </section>
   );
 }
