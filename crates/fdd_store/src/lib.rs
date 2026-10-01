@@ -25,14 +25,14 @@ pub use afdd::{
     DEFAULT_AFDD_LOOKBACK_VALUE, OPERATOR_INTERVAL_MINUTES, OPERATOR_LOOKBACK_DAYS,
 };
 pub use afdd_scheduler::{
-    next_due_at, plan_backfill_chunks, plan_bounded_backfill, plan_continuous_cycle,
-    AfddBackfillChunk, AfddCycleWindow, AfddSchedulerCheckpoint, AFDD_SCHEDULER_CHECKPOINT_PATH,
-    AFDD_SCHEDULER_RUNTIME_CONFIG_PATH,
+    cadence_seconds, lookback_matches_cadence, next_due_at, plan_backfill_chunks,
+    plan_bounded_backfill, plan_continuous_cycle, AfddBackfillChunk, AfddCycleWindow,
+    AfddSchedulerCheckpoint, AFDD_SCHEDULER_CHECKPOINT_PATH, AFDD_SCHEDULER_RUNTIME_CONFIG_PATH,
 };
 pub use afdd_window::{
     apply_scheduler_config_update, enforce_routine_result_scope, merge_windowed_rule_result,
-    parse_backfill_request, ParsedBackfill, SchedulerConfigUpdate, MAX_AFDD_BACKFILL_CHUNKS,
-    MAX_AFDD_BACKFILL_DAYS,
+    parse_backfill_request, rule_result_window_fingerprints, ParsedBackfill, SchedulerConfigUpdate,
+    MAX_AFDD_BACKFILL_CHUNKS, MAX_AFDD_BACKFILL_DAYS,
 };
 pub use analytics_cache::{
     config_hash, freshness_for_watermark, historian_watermark_order, order_key_to_rfc3339,

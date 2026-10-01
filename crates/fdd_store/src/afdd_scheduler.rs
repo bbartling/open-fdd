@@ -126,12 +126,12 @@ pub fn plan_continuous_cycle(
 
     let lookback_seconds = i64::try_from(config.lookback_seconds()?)?;
     let start_utc = end_utc - Duration::seconds(lookback_seconds);
-    // Daily wall-clock cadence is one local day. Downtime still yields one
-    // lookback-sized window (`catch_up`), not one cycle per missed day.
-    let cadence = match config.schedule_kind {
-        AfddScheduleKind::WallClock => Duration::hours(24),
-        AfddScheduleKind::Interval => Duration::minutes(i64::try_from(config.interval_minutes)?),
-    };
+    // Cadence picks the next due instant. Lookback picks the analysis window.
+    // A daily run (wall clock, or interval 1440) uses a 24h lookback when the
+    // operator sets that pair (`lookback_matches_cadence`). Downtime still
+    // yields one lookback-sized window (`catch_up`), not one cycle per missed
+    // day and not a full-historian replay.
+    let cadence = Duration::seconds(i64::try_from(cadence_seconds(config)?)?);
     let catch_up = checkpoint.is_some_and(|cp| now >= cp.last_completed_at_utc + cadence * 2);
 
     Ok(Some(AfddCycleWindow {
@@ -170,6 +170,36 @@ pub fn plan_backfill_chunks(
         cursor = next;
     }
     Ok(chunks)
+}
+
+/// Seconds between scheduled due instants.
+///
+/// Wall-clock cadence is one local day. Interval cadence is
+/// `interval_minutes`. This is not the analysis window; that is the lookback.
+pub fn cadence_seconds(config: &AfddConfig) -> Result<u64> {
+    match config.schedule_kind {
+        AfddScheduleKind::WallClock => Ok(24 * 60 * 60),
+        AfddScheduleKind::Interval => config
+            .interval_minutes
+            .checked_mul(60)
+            .context("AFDD interval duration is too large"),
+    }
+}
+
+/// True when the rolling lookback equals the schedule cadence.
+///
+/// Daily wall-clock or a 1440-minute interval matches a 24h / 1 day lookback.
+/// A shorter interval may still use a longer allowlisted lookback (1–3 days);
+/// that overlap is intentional and this returns false. Unbounded lookback is
+/// not representable here.
+pub fn lookback_matches_cadence(config: &AfddConfig) -> bool {
+    let Ok(lookback) = config.lookback_seconds() else {
+        return false;
+    };
+    let Ok(cadence) = cadence_seconds(config) else {
+        return false;
+    };
+    lookback == cadence
 }
 
 /// Explicit backfill plan with a chunk fan-out cap.
@@ -425,5 +455,44 @@ mod tests {
                 .unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn daily_lookback_matches_cadence_and_overlap_does_not() {
+        assert!(lookback_matches_cadence(&wall_config()));
+        let daily_interval = AfddConfig {
+            mode: AfddMode::Continuous,
+            interval_minutes: 1440,
+            lookback_value: 24,
+            lookback_unit: AfddLookbackUnit::Hours,
+            ..AfddConfig::default()
+        };
+        assert!(lookback_matches_cadence(&daily_interval));
+        assert_eq!(cadence_seconds(&daily_interval).unwrap(), 86_400);
+        let overlap = AfddConfig {
+            mode: AfddMode::Continuous,
+            interval_minutes: 180,
+            lookback_value: 3,
+            lookback_unit: AfddLookbackUnit::Days,
+            ..AfddConfig::default()
+        };
+        assert!(!lookback_matches_cadence(&overlap));
+        assert_eq!(cadence_seconds(&wall_config()).unwrap(), 86_400);
+    }
+
+    #[test]
+    fn downtime_window_stays_one_lookback_not_the_outage() {
+        let checkpoint = AfddSchedulerCheckpoint {
+            last_completed_at_utc: utc(2026, 9, 20, 10, 0),
+            analyzed_through_utc: utc(2026, 9, 20, 10, 0),
+        };
+        let now = utc(2026, 9, 29, 16, 0);
+        let watermark = utc(2026, 9, 29, 15, 0);
+        let cycle = plan_continuous_cycle(Some(&checkpoint), now, Some(watermark), &wall_config())
+            .unwrap()
+            .unwrap();
+        assert!(cycle.catch_up);
+        assert_eq!(cycle.end_utc - cycle.start_utc, Duration::hours(24));
+        assert!(now - checkpoint.last_completed_at_utc > Duration::hours(24));
     }
 }
