@@ -4,6 +4,7 @@ import type {
   CapabilityState,
   ConnectorCapability,
   ConnectorProtocol,
+  UpstreamCapability,
 } from "../api/contract";
 
 export const PROTOCOL_WORKSPACE_TABS = [
@@ -56,6 +57,14 @@ export interface ProtocolCapabilityStatus {
   durableStates: CapabilityState[];
 }
 
+export interface AggregateUpstreamStatus {
+  state: CapabilityState;
+  stateLabel: string;
+  count: number;
+  errorCount: number;
+  reason: string;
+}
+
 function normalizeState(value: unknown): CapabilityState {
   if (typeof value === "string" && value in STATE_LABELS) {
     return value as CapabilityState;
@@ -73,6 +82,14 @@ function protocolMatches(
 interface ConnectorEvidence {
   connector: ConnectorCapability;
   upstreamState?: CapabilityState;
+}
+
+function unresolvedUpstreamState(upstream: UpstreamCapability): CapabilityState {
+  const state = normalizeState(upstream.state);
+  // A configured upstream without a hello response has not established a
+  // protocol-specific capability contract yet. Keep this as checking even if
+  // a malformed or partial response says ready; never infer a protocol here.
+  return state === "ready" ? "checking" : state;
 }
 
 function connectorEvidence(
@@ -122,8 +139,12 @@ function reasonFor(
   evidenceCount: number,
   configuredCount: number,
   readyCount: number,
+  aggregateUpstream?: AggregateUpstreamStatus,
 ): string {
   if (evidenceCount === 0) {
+    if (aggregateUpstream) {
+      return `No protocol-specific connector was observed. ${aggregateUpstream.reason}`;
+    }
     return "No connector capability is configured for this protocol.";
   }
   if (state === "degraded" && readyCount > 0) {
@@ -141,9 +162,35 @@ function reasonFor(
   return `The configured connector reports ${STATE_LABELS[state].toLowerCase()}.`;
 }
 
+/**
+ * Preserve configured upstream failures even when no hello payload identifies
+ * the upstream's protocol. This aggregate is intentionally separate from
+ * protocol cards so an unreachable edge cannot be mislabeled as BACnet,
+ * Modbus, or Haystack.
+ */
+export function summarizeAggregateUpstream(
+  aggregate: CapabilitiesAggregate | null | undefined,
+): AggregateUpstreamStatus | null {
+  const unresolved = (aggregate?.upstreams ?? []).filter((upstream) => !upstream.hello);
+  if (unresolved.length === 0) return null;
+  const states = unresolved.map(unresolvedUpstreamState);
+  const state = chooseState(states);
+  const errorCount = unresolved.filter((upstream) => Boolean(upstream.error)).length;
+  const source = unresolved.length === 1 ? "A configured upstream" : `${unresolved.length} configured upstreams`;
+  const errorSuffix = errorCount > 0 ? " and returned an error" : "";
+  return {
+    state,
+    stateLabel: STATE_LABELS[state],
+    count: unresolved.length,
+    errorCount,
+    reason: `${source} reports ${STATE_LABELS[state].toLowerCase()}${errorSuffix}; protocol-specific capability details are unavailable.`,
+  };
+}
+
 export function summarizeProtocolCapabilities(
   aggregate: CapabilitiesAggregate | null | undefined,
 ): ProtocolCapabilityStatus[] {
+  const aggregateUpstream = summarizeAggregateUpstream(aggregate);
   return PROTOCOL_WORKSPACE_TABS.map(({ id, label }) => {
     const evidence = aggregate ? connectorEvidence(aggregate, id) : [];
     const states = evidence.map(effectiveState);
@@ -158,7 +205,13 @@ export function summarizeProtocolCapabilities(
       label,
       state,
       stateLabel: STATE_LABELS[state],
-      reason: reasonFor(state, evidence.length, configuredCount, readyCount),
+      reason: reasonFor(
+        state,
+        evidence.length,
+        configuredCount,
+        readyCount,
+        aggregateUpstream ?? undefined,
+      ),
       evidenceCount: evidence.length,
       configuredCount,
       observedCount: readyCount,

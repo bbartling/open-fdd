@@ -163,6 +163,31 @@ describe("ProtocolWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect((await screen.findByTestId("protocol-state-modbus")).textContent).toContain("Not configured");
   });
+
+  it("shows configured upstream failure without assigning it to a protocol", async () => {
+    const response = capabilityResponse();
+    response.connector_capabilities.upstreams = [
+      {
+        address: "redacted-configured-upstream",
+        state: "unreachable",
+        hello: null,
+        error: "edge connector is unreachable",
+      },
+    ];
+    apiFetch.mockResolvedValueOnce(response);
+    render(
+      <MemoryRouter>
+        <ProtocolWorkspace protocol="modbus" onProtocolChange={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    const upstreamStatus = await screen.findByTestId("protocol-upstream-status");
+    expect(upstreamStatus.textContent).toContain("unreachable");
+    expect(upstreamStatus.textContent).not.toContain("redacted-configured-upstream");
+    expect(upstreamStatus.textContent).not.toContain("edge connector is unreachable");
+    expect(screen.getByTestId("protocol-state-modbus").textContent).toContain("Not configured");
+    expect(screen.getByTestId("protocol-status-modbus").textContent).toContain("configured upstream");
+  });
 });
 
 describe("Operations protocol navigation", () => {

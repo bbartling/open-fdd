@@ -5,6 +5,7 @@ import { Button } from "./widgets";
 import {
   capabilityResponseAggregate,
   PROTOCOL_WORKSPACE_TABS,
+  summarizeAggregateUpstream,
   summarizeProtocolCapabilities,
   type ProtocolCapabilityStatus,
   type ProtocolWorkspaceId,
@@ -91,10 +92,6 @@ function ActiveProtocolStatus({
         <>
           <p className={statusClass(status.state)}>{status.stateLabel}</p>
           <p className="muted">{status.reason}</p>
-          <p className="muted">
-            This phase provides navigation and status only. Protocol inventory and point reads remain
-            unavailable until the connector surface is enabled.
-          </p>
         </>
       ) : (
         <p className="muted">No capability evidence was returned.</p>
@@ -129,6 +126,10 @@ export function ProtocolWorkspace({ protocol, onProtocolChange }: ProtocolWorksp
     () => summarizeProtocolCapabilities(aggregate),
     [aggregate],
   );
+  const upstreamStatus = useMemo(
+    () => summarizeAggregateUpstream(aggregate),
+    [aggregate],
+  );
   const activeStatus = statuses.find((status) => status.protocol === protocol);
 
   return (
@@ -140,10 +141,6 @@ export function ProtocolWorkspace({ protocol, onProtocolChange }: ProtocolWorksp
       <div className="section-heading-row">
         <div>
           <h2 id="protocol-workspace-heading">Protocol workspace</h2>
-          <p className="muted">
-            Authenticated connector capability status for the selected Operations scope. Status checks
-            do not discover devices or perform protocol reads.
-          </p>
         </div>
         <Button
           id="protocol-status-refresh"
@@ -192,9 +189,20 @@ export function ProtocolWorkspace({ protocol, onProtocolChange }: ProtocolWorksp
           />
         </div>
       ) : (
-        <div className="protocol-status-grid" data-testid="protocol-status-grid">
-          {statuses.map((status) => <ProtocolStatusCard key={status.protocol} status={status} />)}
-        </div>
+        <>
+          {upstreamStatus ? (
+            <div
+              className="inline-alert inline-alert--error"
+              role="alert"
+              data-testid="protocol-upstream-status"
+            >
+              {upstreamStatus.reason}
+            </div>
+          ) : null}
+          <div className="protocol-status-grid" data-testid="protocol-status-grid">
+            {statuses.map((status) => <ProtocolStatusCard key={status.protocol} status={status} />)}
+          </div>
+        </>
       )}
 
       <ActiveProtocolStatus
