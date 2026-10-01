@@ -108,23 +108,10 @@ if [[ "$EQ_N" -lt 1 ]]; then
   exit 1
 fi
 
-# Pick a representative AHU for inspect/series-style bodies.
-AHU_ID="$(python3 - "$eq_body" <<'PY'
-import json,sys
-from pathlib import Path
-b=json.loads(Path(sys.argv[1]).read_text())
-eq=b.get("equipment") or b.get("items") or []
-ids=[]
-for e in eq if isinstance(eq,list) else []:
-    if isinstance(e,str): ids.append(e)
-    elif isinstance(e,dict):
-        eid=e.get("equipment_id") or e.get("id") or e.get("name")
-        if eid: ids.append(str(eid))
-prefer=[i for i in ids if "AHU" in i.upper() or "RTU" in i.upper()]
-print((prefer or ids or [""])[0])
-PY
-)"
-echo "ahu_id=${AHU_ID:-none}" | tee -a "$LOG"
+# Inspect target is the first exact id whose stamp is AHU. Id letters are not a kind.
+AHU_ID="$(python3 "$ROOT/scripts/qualification/no_equipment_id_heuristics.py" \
+  --pick-kind ahu --equipment-json "$eq_body")"
+echo "ahu_id=${AHU_ID:-none} (stamp ahu; empty when no AHU stamp)" | tee -a "$LOG"
 
 # Sequential Overview / charts matrix (UI-shaped). One at a time — do not
 # parallelize; concurrent agent probes can themselves trip nginx 502s.
@@ -134,6 +121,19 @@ PROBES_FILE="$ART/37_probes.jsonl"
 
 # Overview-shaped lookback (matches SPA). Unbounded runtime LEAD times out on ACME.
 START_ISO="$(python3 -c 'from datetime import datetime,timedelta,timezone; print((datetime.now(timezone.utc)-timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ"))')"
+
+require_probe_200() {
+  local name="$1"
+  local code
+  code="$(jq -r --arg n "$name" 'select(.name==$n) | .http_code' "$PROBES_FILE" | tail -n 1)"
+  if [[ "$code" != "200" ]]; then
+    jq -n --arg n "$name" --arg c "${code:-missing}" --arg b "$BUILDING" \
+      '{ok:false,broke_at:$n,http_code:$c,reason:"preset scope required HTTP 200",building:$b}' \
+      >"$SUMMARY"
+    echo "FAIL: $name HTTP ${code:-missing} (building_id scope required; 403 is not a pass)" | tee -a "$LOG"
+    exit 1
+  fi
+}
 
 probe() {
   local name="$1" method="$2" path="$3" body="${4:-}"
@@ -234,7 +234,25 @@ probe "analytics_mechanical_cooling" POST "/api/analytics/mechanical-cooling" "$
 probe "analytics_economizer" POST "/api/analytics/economizer" "$BID_JSON"
 probe "analytics_bas_vs_web_oat" POST "/api/analytics/bas-vs-web-oat" "$BID_JSON"
 probe "analytics_rcx_ahu" POST "/api/analytics/rcx/ahu" "$BID_JSON"
-probe "analytics_rcx_presets" GET "/api/analytics/rcx/presets"
+PRESETS_Q="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$BUILDING")"
+probe "analytics_rcx_presets" GET "/api/analytics/rcx/presets?building_id=${PRESETS_Q}"
+require_probe_200 "analytics_rcx_presets"
+AHU_PRESET_JSON="$(jq -nc --arg b "$BUILDING" --arg s "$START_ISO" \
+  '{building_id:$b, max_points:2000, start:$s, series:{preset_id:"ahu_dats"}}')"
+ZONE_PRESET_JSON="$(jq -nc --arg b "$BUILDING" --arg s "$START_ISO" \
+  '{building_id:$b, max_points:2000, start:$s, series:{preset_id:"zone_temps"}}')"
+probe "analytics_rcx_preset_ahu_dats" POST "/api/analytics/rcx/preset" "$AHU_PRESET_JSON"
+require_probe_200 "analytics_rcx_preset_ahu_dats"
+probe "analytics_rcx_preset_zone_temps" POST "/api/analytics/rcx/preset" "$ZONE_PRESET_JSON"
+require_probe_200 "analytics_rcx_preset_zone_temps"
+python3 "$ROOT/scripts/qualification/no_equipment_id_heuristics.py" \
+  --check-preset ahu \
+  --envelope "$ART/37_probe_analytics_rcx_preset_ahu_dats.json" \
+  --equipment-json "$eq_body" | tee -a "$LOG"
+python3 "$ROOT/scripts/qualification/no_equipment_id_heuristics.py" \
+  --check-preset zone \
+  --envelope "$ART/37_probe_analytics_rcx_preset_zone_temps.json" \
+  --equipment-json "$eq_body" | tee -a "$LOG"
 if [[ -n "$AHU_ID" ]]; then
   probe "analytics_inspect" POST "/api/analytics/inspect" "$INSPECT_JSON"
 fi
