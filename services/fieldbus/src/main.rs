@@ -241,7 +241,10 @@ mod tests {
             Arc::clone(&bacnet_server),
         ));
         let haystack = Arc::new(HaystackService::new(settings.haystack.clone()));
-        let rest_devices = config::load_rest_devices(None, &settings.rest).unwrap();
+        let rest_config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../config/fieldbus/rest_devices.toml");
+        let rest_devices =
+            config::load_rest_devices(Some(&rest_config_path), &settings.rest).unwrap();
         let rest =
             Arc::new(RestClientService::from_config(settings.rest.clone(), rest_devices).unwrap());
         let telemetry = Arc::new(TelemetryControl::new(
@@ -264,11 +267,23 @@ mod tests {
     }
 
     fn test_state() -> AppState {
-        std::env::set_var(
-            "OPENFDD_FIELDBUS_CONFIG_DIR",
-            format!("{}/../../config/fieldbus", env!("CARGO_MANIFEST_DIR")),
-        );
-        state_for_settings(load_settings())
+        let mut settings = load_settings();
+        settings.field_devices_toml = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../config/fieldbus/field_devices.toml");
+        settings.connector_tenant_id = None;
+        settings.connector_building_id = None;
+        settings.connector_edge_id = None;
+        state_for_settings(settings)
+    }
+
+    fn test_state_for_scope(tenant: &str, building: &str, edge: &str) -> AppState {
+        let mut settings = load_settings();
+        settings.field_devices_toml = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../config/fieldbus/field_devices.toml");
+        settings.connector_tenant_id = Some(tenant.into());
+        settings.connector_building_id = Some(building.into());
+        settings.connector_edge_id = Some(edge.into());
+        state_for_settings(settings)
     }
 
     #[tokio::test]
@@ -353,18 +368,7 @@ mod tests {
 
     #[tokio::test]
     async fn connector_inventory_is_bounded_scoped_and_broker_free() {
-        let original_edge = std::env::var("OPENFDD_EDGE_ID").ok();
-        let original_building = std::env::var("OPENFDD_BUILDING_ID").ok();
-        let original_tenant = std::env::var("OPENFDD_TENANT_ID").ok();
-        let original_mode = std::env::var("OPENFDD_INGEST_MODE").ok();
-        let original_mqtt = std::env::var("OPENFDD_MQTT_HOST").ok();
-        std::env::set_var("OPENFDD_EDGE_ID", "edge-local");
-        std::env::set_var("OPENFDD_BUILDING_ID", "building-local");
-        std::env::set_var("OPENFDD_TENANT_ID", "tenant-local");
-        std::env::set_var("OPENFDD_INGEST_MODE", "local_fieldbus");
-        std::env::remove_var("OPENFDD_MQTT_HOST");
-
-        let state = test_state();
+        let state = test_state_for_scope("tenant-local", "building-local", "edge-local");
         let client = state.bacnet_client.clone();
         let app = routes::api_routes(state);
         let request = serde_json::json!({
@@ -461,19 +465,6 @@ mod tests {
             .unwrap();
         assert_eq!(invalid_response.status(), StatusCode::BAD_REQUEST);
         assert_eq!(client.test_ot_call_count(), 0);
-
-        for (name, value) in [
-            ("OPENFDD_EDGE_ID", original_edge),
-            ("OPENFDD_BUILDING_ID", original_building),
-            ("OPENFDD_TENANT_ID", original_tenant),
-            ("OPENFDD_INGEST_MODE", original_mode),
-            ("OPENFDD_MQTT_HOST", original_mqtt),
-        ] {
-            match value {
-                Some(value) => std::env::set_var(name, value),
-                None => std::env::remove_var(name),
-            }
-        }
     }
 
     #[tokio::test]
@@ -513,29 +504,8 @@ mod tests {
 
     #[tokio::test]
     async fn connector_scope_identity_matrix_counts_only_authorized_ot_reads() {
-        let original_edge = std::env::var("OPENFDD_EDGE_ID").ok();
-        let original_building = std::env::var("OPENFDD_BUILDING_ID").ok();
-        let original_tenant = std::env::var("OPENFDD_TENANT_ID").ok();
-        let restore = || {
-            match original_edge.as_deref() {
-                Some(value) => std::env::set_var("OPENFDD_EDGE_ID", value),
-                None => std::env::remove_var("OPENFDD_EDGE_ID"),
-            }
-            match original_building.as_deref() {
-                Some(value) => std::env::set_var("OPENFDD_BUILDING_ID", value),
-                None => std::env::remove_var("OPENFDD_BUILDING_ID"),
-            }
-            match original_tenant.as_deref() {
-                Some(value) => std::env::set_var("OPENFDD_TENANT_ID", value),
-                None => std::env::remove_var("OPENFDD_TENANT_ID"),
-            }
-        };
-
         // Missing local identity fails before inventory lookup or a BACnet
         // client operation.
-        std::env::remove_var("OPENFDD_EDGE_ID");
-        std::env::remove_var("OPENFDD_BUILDING_ID");
-        std::env::remove_var("OPENFDD_TENANT_ID");
         let missing_state = test_state();
         let missing_client = missing_state.bacnet_client.clone();
         let missing_response = routes::api_routes(missing_state)
@@ -560,10 +530,7 @@ mod tests {
 
         // A foreign tenant is rejected even when the building and edge names
         // are otherwise plausible.
-        std::env::set_var("OPENFDD_EDGE_ID", "edge-a");
-        std::env::set_var("OPENFDD_BUILDING_ID", "building-a");
-        std::env::set_var("OPENFDD_TENANT_ID", "tenant-a");
-        let foreign_state = test_state();
+        let foreign_state = test_state_for_scope("tenant-a", "building-a", "edge-a");
         let foreign_client = foreign_state.bacnet_client.clone();
         let foreign_response = routes::api_routes(foreign_state)
             .oneshot(
@@ -607,6 +574,9 @@ mod tests {
         .unwrap();
         let mut settings = config::Settings {
             field_devices_toml: path.clone(),
+            connector_tenant_id: Some("tenant-a".into()),
+            connector_building_id: Some("building-a".into()),
+            connector_edge_id: Some("edge-a".into()),
             ..config::Settings::default()
         };
         settings.bacnet_client.interface = Ipv4Addr::LOCALHOST;
@@ -639,7 +609,6 @@ mod tests {
             StatusCode::BAD_GATEWAY | StatusCode::INTERNAL_SERVER_ERROR
         ));
         let _ = std::fs::remove_file(path);
-        restore();
     }
 
     #[tokio::test]

@@ -17,9 +17,10 @@ pub use envelope::{
     Protocol, Quality, SchemaVersion, TelemetryEnvelope, TelemetryPoint, ValueKind,
 };
 pub use inventory::{
-    ConnectorInventoryRequest, ConnectorInventoryResponse, InventoryAvailability,
-    InventoryCommandability, InventoryPointReference, InventoryProvenance, InventoryRecord,
-    CONNECTOR_INVENTORY_CONTRACT_V1, INVENTORY_MAX_CURSOR_LENGTH, INVENTORY_MAX_PAGE_SIZE,
+    sanitize_inventory_label, ConnectorInventoryRequest, ConnectorInventoryResponse,
+    InventoryAvailability, InventoryCommandability, InventoryPointReference, InventoryProvenance,
+    InventoryRecord, CONNECTOR_INVENTORY_CONTRACT_V1, INVENTORY_MAX_CURSOR_LENGTH,
+    INVENTORY_MAX_PAGE_SIZE,
 };
 pub use proxy::{
     ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult, ConnectorScope, ReadError,

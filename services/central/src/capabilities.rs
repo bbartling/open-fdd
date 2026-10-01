@@ -35,14 +35,14 @@ const MAX_UPSTREAMS: usize = 32;
 const MAX_CONCURRENT_PROBES: usize = 4;
 
 #[derive(Clone)]
-struct ConfiguredUpstream {
+pub(crate) struct ConfiguredUpstream {
     /// Scope is part of the server-side configuration. It is never accepted
     /// from the browser or copied from an untrusted upstream response.
-    tenant_id: String,
-    building_id: String,
-    edge_id: String,
-    base_url: Url,
-    token: Option<String>,
+    pub(crate) tenant_id: String,
+    pub(crate) building_id: String,
+    pub(crate) edge_id: String,
+    pub(crate) base_url: Url,
+    pub(crate) token: Option<String>,
 }
 
 struct CacheState {
@@ -117,7 +117,7 @@ impl CapabilitiesAggregator {
     }
 
     #[cfg(test)]
-    fn for_tests(upstreams: Vec<ConfiguredUpstream>) -> Arc<Self> {
+    pub(crate) fn for_tests(upstreams: Vec<ConfiguredUpstream>) -> Arc<Self> {
         Arc::new(Self {
             client: Client::builder()
                 .redirect(Policy::none())
@@ -1292,6 +1292,7 @@ mod tests {
                     object_instance: 4,
                     slots,
                     state: "supported".into(),
+                    observed_at: Utc::now(),
                 }),
             )
         };

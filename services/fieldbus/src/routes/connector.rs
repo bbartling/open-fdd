@@ -12,12 +12,13 @@ use axum::{
 };
 use chrono::Utc;
 use openfdd_contracts::{
-    CapabilityState, ConnectorAction, ConnectorCapability, ConnectorHelloResponse,
-    ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorProtocol, ConnectorReadRequest,
-    ConnectorReadResponse, ConnectorReadResult, DeliveryStatus, InventoryAvailability,
-    InventoryCommandability, InventoryPointReference, InventoryProvenance, InventoryRecord,
-    ReadPointResult, ReadPriorityArrayResult, ReadPrioritySlot, ReadValueState, RecipeObservation,
-    ServiceVersion, CAPABILITIES_CONTRACT_V1, CONNECTOR_INVENTORY_CONTRACT_V1,
+    sanitize_inventory_label, CapabilityState, ConnectorAction, ConnectorCapability,
+    ConnectorHelloResponse, ConnectorInventoryRequest, ConnectorInventoryResponse,
+    ConnectorProtocol, ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult,
+    DeliveryStatus, InventoryAvailability, InventoryCommandability, InventoryPointReference,
+    InventoryProvenance, InventoryRecord, ReadPointResult, ReadPriorityArrayResult,
+    ReadPrioritySlot, ReadValueState, RecipeObservation, ServiceVersion, CAPABILITIES_CONTRACT_V1,
+    CONNECTOR_INVENTORY_CONTRACT_V1,
 };
 use serde_json::Value;
 
@@ -294,25 +295,37 @@ pub fn hello_response(state: &AppState) -> ConnectorHelloResponse {
     }
 }
 
-fn local_scope_matches(scope: &openfdd_contracts::ConnectorScope) -> Result<(), ApiError> {
-    let expected_edge = std::env::var("OPENFDD_EDGE_ID")
-        .or_else(|_| std::env::var("RUSTY_GATEWAY_EDGE_ID"))
-        .map_err(|_| ApiError::Forbidden("fieldbus edge identity is not configured".into()))?;
+fn local_scope_matches(
+    settings: &crate::config::Settings,
+    scope: &openfdd_contracts::ConnectorScope,
+) -> Result<(), ApiError> {
+    let expected_edge = settings
+        .connector_edge_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| ApiError::Forbidden("fieldbus edge identity is not configured".into()))?;
     if expected_edge.trim() != scope.edge_id {
         return Err(ApiError::Forbidden(
             "edge is outside this fieldbus scope".into(),
         ));
     }
-    let expected_building = std::env::var("OPENFDD_BUILDING_ID")
-        .or_else(|_| std::env::var("OPENFDD_SITE_ID"))
-        .map_err(|_| ApiError::Forbidden("fieldbus building identity is not configured".into()))?;
+    let expected_building = settings
+        .connector_building_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            ApiError::Forbidden("fieldbus building identity is not configured".into())
+        })?;
     if expected_building.trim() != scope.building_id {
         return Err(ApiError::Forbidden(
             "building is outside this fieldbus scope".into(),
         ));
     }
-    let expected_tenant = std::env::var("OPENFDD_TENANT_ID")
-        .map_err(|_| ApiError::Forbidden("fieldbus tenant identity is not configured".into()))?;
+    let expected_tenant = settings
+        .connector_tenant_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| ApiError::Forbidden("fieldbus tenant identity is not configured".into()))?;
     if expected_tenant.trim() != scope.tenant_id {
         return Err(ApiError::Forbidden(
             "tenant is outside this fieldbus scope".into(),
@@ -345,20 +358,6 @@ fn safe_component(value: &str, fallback: &str) -> String {
     }
 }
 
-fn display_name(value: &str, fallback: &str) -> String {
-    let cleaned: String = value
-        .trim()
-        .chars()
-        .filter(|ch| !ch.is_control())
-        .take(128)
-        .collect();
-    if cleaned.trim().is_empty() {
-        fallback.into()
-    } else {
-        cleaned
-    }
-}
-
 fn inventory_units(value: &str) -> Option<String> {
     let mut cleaned = String::new();
     for ch in value.trim().chars() {
@@ -378,12 +377,9 @@ fn inventory_units(value: &str) -> Option<String> {
 fn inventory_records(state: &AppState) -> Vec<InventoryRecord> {
     let mut records = Vec::new();
     for device in state.bacnet_client.configured_devices() {
-        let device_component = format!(
-            "{}-{}",
-            safe_component(&device.name, "device"),
-            device.device_instance
-        );
-        let device_id = format!("bacnet:device:{device_component}");
+        // BACnet instance/object identity is stable when a human label is
+        // edited; labels are presentation only.
+        let device_id = format!("bacnet:device:{}", device.device_instance);
         let availability = if device.enabled {
             InventoryAvailability::Configured
         } else {
@@ -397,7 +393,7 @@ fn inventory_records(state: &AppState) -> Vec<InventoryRecord> {
         records.push(InventoryRecord::Device {
             device_id: device_id.clone(),
             protocol: ConnectorProtocol::Bacnet,
-            display_name: display_name(
+            display_name: sanitize_inventory_label(
                 &device.name,
                 &format!("BACnet device {}", device.device_instance),
             ),
@@ -417,7 +413,7 @@ fn inventory_records(state: &AppState) -> Vec<InventoryRecord> {
                 group_id,
                 device_id: device_id.clone(),
                 protocol: ConnectorProtocol::Bacnet,
-                display_name: display_name(&object_type, "BACnet object type"),
+                display_name: sanitize_inventory_label(&object_type, "BACnet object type"),
                 availability: availability.clone(),
                 commandability: InventoryCommandability::Unknown,
                 actions: if device.enabled {
@@ -440,7 +436,7 @@ fn inventory_records(state: &AppState) -> Vec<InventoryRecord> {
                 device_id: device_id.clone(),
                 group_id: Some(group_id),
                 protocol: ConnectorProtocol::Bacnet,
-                display_name: display_name(
+                display_name: sanitize_inventory_label(
                     &point.point_name,
                     &format!("{object_type} {}", point.object_instance),
                 ),
@@ -465,6 +461,26 @@ fn inventory_records(state: &AppState) -> Vec<InventoryRecord> {
                 },
             });
         }
+    }
+    if state.settings.modbus_configured {
+        records.push(InventoryRecord::Device {
+            device_id: "modbus:configured".into(),
+            protocol: ConnectorProtocol::Modbus,
+            display_name: "Configured Modbus connector".into(),
+            availability: InventoryAvailability::Unavailable,
+            commandability: InventoryCommandability::Unknown,
+            actions: Vec::new(),
+        });
+    }
+    if state.settings.haystack_configured {
+        records.push(InventoryRecord::Device {
+            device_id: "haystack:configured".into(),
+            protocol: ConnectorProtocol::Haystack,
+            display_name: "Configured Haystack connector".into(),
+            availability: InventoryAvailability::Unavailable,
+            commandability: InventoryCommandability::Unknown,
+            actions: Vec::new(),
+        });
     }
     records.sort_by(|left, right| left.key_for_order().cmp(&right.key_for_order()));
     records
@@ -495,11 +511,11 @@ fn build_inventory(
         .filter(|record| protocols.is_empty() || protocols.contains(&record.protocol()))
         .collect();
     let offset = request
-        .offset()
-        .map_err(|_| ApiError::BadRequest("inventory cursor is out of range".into()))?;
+        .offset_for_revision(&revision)
+        .map_err(|_| ApiError::BadRequest("inventory cursor is invalid or stale".into()))?;
     if offset > filtered.len() {
         return Err(ApiError::BadRequest(
-            "inventory cursor is out of range".into(),
+            "inventory cursor is invalid or stale".into(),
         ));
     }
     let end = offset
@@ -517,11 +533,16 @@ fn build_inventory(
         request_id: request.request_id,
         scope: request.scope.clone(),
         protocols: page_protocols,
-        revision,
+        revision: revision.clone(),
         captured_at: Utc::now(),
         provenance: InventoryProvenance::TrustedConfiguration,
         records: page,
-        next_cursor: (end < filtered.len()).then(|| end.to_string()),
+        next_cursor: (end < filtered.len())
+            .then(|| request.cursor_for_revision(&revision, end))
+            .transpose()
+            .map_err(|_| {
+                ApiError::Internal("connector returned an invalid inventory cursor".into())
+            })?,
     };
     response
         .validate_for(request)
@@ -534,7 +555,7 @@ async fn connector_read(
     Json(request): Json<ConnectorReadRequest>,
 ) -> ApiResult<Json<ConnectorReadResponse>> {
     request.validate().map_err(ApiError::BadRequest)?;
-    local_scope_matches(&request.scope)?;
+    local_scope_matches(&state.settings, &request.scope)?;
     let response = match &request.target {
         openfdd_contracts::ReadTarget::ConnectorMetadata => ConnectorReadResponse::success(
             &request,
@@ -609,7 +630,7 @@ async fn connector_inventory(
     Json(request): Json<ConnectorInventoryRequest>,
 ) -> ApiResult<Json<ConnectorInventoryResponse>> {
     request.validate().map_err(ApiError::BadRequest)?;
-    local_scope_matches(&request.scope)?;
+    local_scope_matches(&state.settings, &request.scope)?;
     Ok(Json(build_inventory(&state, &request)?))
 }
 
@@ -658,6 +679,7 @@ fn point_result(
         value_type: value_type.into(),
         value: object.get("value").cloned().unwrap_or(Value::Null),
         quality: quality.into(),
+        observed_at: Utc::now(),
     }))
 }
 
@@ -691,14 +713,32 @@ fn priority_array_result(
     for raw in raw_slots {
         let mut slot: ReadPrioritySlot = serde_json::from_value(raw.clone())
             .map_err(|_| ApiError::Internal("connector returned malformed priority slot".into()))?;
-        if matches!(slot.state, ReadValueState::Null) {
-            slot.value = None;
-            slot.error = None;
-        } else if matches!(slot.state, ReadValueState::Error | ReadValueState::Unknown) {
-            slot.value = None;
-            slot.error = Some("priority slot unavailable".into());
-        } else {
-            slot.error = None;
+        match slot.state {
+            ReadValueState::Null if slot.value.is_some() || slot.error.is_some() => {
+                return Err(ApiError::Internal(
+                    "connector returned contradictory null priority slot".into(),
+                ));
+            }
+            ReadValueState::Value if slot.value.is_none() || slot.error.is_some() => {
+                return Err(ApiError::Internal(
+                    "connector returned contradictory value priority slot".into(),
+                ));
+            }
+            ReadValueState::Error if slot.value.is_some() => {
+                return Err(ApiError::Internal(
+                    "connector returned contradictory error priority slot".into(),
+                ));
+            }
+            ReadValueState::Error => slot.error = Some("priority slot unavailable".into()),
+            ReadValueState::Unknown if slot.value.is_some() => {
+                return Err(ApiError::Internal(
+                    "connector returned contradictory unknown priority slot".into(),
+                ));
+            }
+            ReadValueState::Unknown => {
+                slot.error = slot.error.map(|_| "priority slot unavailable".into());
+            }
+            ReadValueState::Null | ReadValueState::Value => {}
         }
         slots.push(slot);
     }
@@ -714,6 +754,7 @@ fn priority_array_result(
             object_instance,
             slots,
             state: state.into(),
+            observed_at: Utc::now(),
         },
     ))
 }

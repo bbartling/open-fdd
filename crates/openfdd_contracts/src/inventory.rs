@@ -6,6 +6,7 @@
 //! availability, commandability, and actions remain separate fields.
 
 use std::collections::HashSet;
+use std::net::IpAddr;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -16,8 +17,10 @@ use crate::proxy::ConnectorScope;
 
 pub const CONNECTOR_INVENTORY_CONTRACT_V1: &str = "openfdd.connector.inventory.v1";
 pub const INVENTORY_MAX_PAGE_SIZE: u16 = 100;
-pub const INVENTORY_MAX_CURSOR_LENGTH: usize = 64;
+pub const INVENTORY_MAX_CURSOR_LENGTH: usize = 96;
 const INVENTORY_MAX_RECORDS: usize = INVENTORY_MAX_PAGE_SIZE as usize;
+const INVENTORY_CURSOR_VERSION: &str = "v1";
+const INVENTORY_CURSOR_BINDING_LENGTH: usize = 16;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -26,6 +29,9 @@ pub enum InventoryAvailability {
     /// Present in trusted configuration. No live OT probe is implied.
     Configured,
     Disabled,
+    /// The protocol is configured, but this phase has no typed catalog/read
+    /// projection for it. The record is intentionally not actionable.
+    Unavailable,
     Unknown,
 }
 
@@ -97,10 +103,7 @@ fn default_page_size() -> u16 {
 impl ConnectorInventoryRequest {
     pub fn validate(&self) -> Result<(), String> {
         if self.schema != CONNECTOR_INVENTORY_CONTRACT_V1 {
-            return Err(format!(
-                "unsupported connector inventory schema {}",
-                self.schema
-            ));
+            return Err("unsupported connector inventory schema".into());
         }
         self.scope.validate()?;
         if self.page_size == 0 || self.page_size > INVENTORY_MAX_PAGE_SIZE {
@@ -115,16 +118,27 @@ impl ConnectorInventoryRequest {
         Ok(())
     }
 
-    pub fn offset(&self) -> Result<usize, String> {
+    /// Decode a continuation only when it belongs to this exact query and
+    /// configuration revision. A cursor cannot be reused across scopes,
+    /// filters, page sizes, or changed configuration.
+    pub fn offset_for_revision(&self, revision: &str) -> Result<usize, String> {
         self.cursor
             .as_deref()
-            .map(|cursor| {
-                cursor
-                    .parse::<usize>()
-                    .map_err(|_| "inventory cursor is out of range".to_string())
-            })
+            .map(|cursor| decode_cursor(self, cursor, revision))
             .transpose()
             .map(|offset| offset.unwrap_or(0))
+    }
+
+    pub fn cursor_for_revision(&self, revision: &str, offset: usize) -> Result<String, String> {
+        validate_token(revision, 128, "inventory revision")?;
+        let cursor = format!(
+            "{INVENTORY_CURSOR_VERSION}.{}.{}.{}",
+            revision,
+            cursor_binding(self),
+            offset
+        );
+        validate_cursor(&cursor)?;
+        Ok(cursor)
     }
 }
 
@@ -218,18 +232,26 @@ impl InventoryRecord {
         match self {
             Self::Device {
                 device_id,
+                protocol,
                 display_name,
+                availability,
+                commandability,
                 actions,
                 ..
             } => {
                 validate_id(device_id, "inventory device id")?;
                 validate_display_name(display_name)?;
                 validate_actions(actions)?;
+                validate_actions_for_record(*protocol, false, actions)?;
+                validate_record_state(availability, *commandability, actions, false)?;
             }
             Self::Group {
                 group_id,
                 device_id,
+                protocol,
                 display_name,
+                availability,
+                commandability,
                 actions,
                 ..
             } => {
@@ -237,6 +259,8 @@ impl InventoryRecord {
                 validate_id(device_id, "inventory group device id")?;
                 validate_display_name(display_name)?;
                 validate_actions(actions)?;
+                validate_actions_for_record(*protocol, false, actions)?;
+                validate_record_state(availability, *commandability, actions, false)?;
             }
             Self::Point {
                 point_id,
@@ -244,6 +268,9 @@ impl InventoryRecord {
                 group_id,
                 display_name,
                 units,
+                protocol,
+                availability,
+                commandability,
                 actions,
                 reference,
                 ..
@@ -259,6 +286,11 @@ impl InventoryRecord {
                 }
                 validate_actions(actions)?;
                 validate_reference(reference)?;
+                if !reference_matches_protocol(*protocol, reference) {
+                    return Err("inventory point reference does not match protocol".into());
+                }
+                validate_actions_for_record(*protocol, true, actions)?;
+                validate_record_state(availability, *commandability, actions, true)?;
             }
         }
         Ok(())
@@ -276,13 +308,17 @@ impl ConnectorInventoryResponse {
         }
         validate_protocol_filter(&self.protocols)?;
         validate_token(&self.revision, 128, "inventory revision")?;
+        let offset = request.offset_for_revision(&self.revision)?;
         if self.records.len() > usize::from(request.page_size)
             || self.records.len() > INVENTORY_MAX_RECORDS
         {
             return Err("connector inventory page exceeds its bound".into());
         }
         if let Some(cursor) = self.next_cursor.as_deref() {
-            validate_cursor(cursor)?;
+            let next_offset = decode_cursor(request, cursor, &self.revision)?;
+            if next_offset <= offset {
+                return Err("inventory continuation cursor must advance".into());
+            }
         }
         let protocols: HashSet<_> = self.protocols.iter().copied().collect();
         let requested: HashSet<_> = request.protocols.iter().copied().collect();
@@ -320,16 +356,70 @@ fn validate_protocol_filter(protocols: &[ConnectorProtocol]) -> Result<(), Strin
 }
 
 fn validate_cursor(cursor: &str) -> Result<(), String> {
-    if cursor.is_empty()
-        || cursor.len() > INVENTORY_MAX_CURSOR_LENGTH
-        || !cursor.bytes().all(|byte| byte.is_ascii_digit())
+    if cursor.is_empty() || cursor.len() > INVENTORY_MAX_CURSOR_LENGTH {
+        return Err("inventory cursor is malformed".into());
+    }
+    let parts: Vec<_> = cursor.split('.').collect();
+    if parts.len() != 4
+        || parts[0] != INVENTORY_CURSOR_VERSION
+        || parts[2].len() != INVENTORY_CURSOR_BINDING_LENGTH
+        || !parts[2].bytes().all(|byte| byte.is_ascii_hexdigit())
     {
         return Err("inventory cursor is malformed".into());
     }
-    cursor
+    validate_token(parts[1], 128, "inventory cursor revision")?;
+    parts[3]
         .parse::<usize>()
         .map(|_| ())
         .map_err(|_| "inventory cursor is out of range".into())
+}
+
+fn decode_cursor(
+    request: &ConnectorInventoryRequest,
+    cursor: &str,
+    revision: &str,
+) -> Result<usize, String> {
+    validate_cursor(cursor)?;
+    let parts: Vec<_> = cursor.split('.').collect();
+    if parts[1] != revision {
+        return Err("inventory cursor is stale for this configuration revision".into());
+    }
+    if parts[2] != cursor_binding(request) {
+        return Err("inventory cursor is outside this scope or query".into());
+    }
+    parts[3]
+        .parse::<usize>()
+        .map_err(|_| "inventory cursor is out of range".into())
+}
+
+fn cursor_binding(request: &ConnectorInventoryRequest) -> String {
+    let mut hash = 0xcbf29ce484222325_u64;
+    fn feed(hash: &mut u64, bytes: &[u8]) {
+        for byte in bytes {
+            *hash ^= u64::from(*byte);
+            *hash = hash.wrapping_mul(0x100000001b3);
+        }
+        *hash ^= 0xff;
+        *hash = hash.wrapping_mul(0x100000001b3);
+    }
+    feed(&mut hash, request.scope.tenant_id.as_bytes());
+    feed(&mut hash, request.scope.building_id.as_bytes());
+    feed(&mut hash, request.scope.edge_id.as_bytes());
+    feed(&mut hash, request.page_size.to_string().as_bytes());
+    for protocol in &request.protocols {
+        feed(&mut hash, protocol_key(*protocol).as_bytes());
+    }
+    format!("{hash:016x}")
+}
+
+fn protocol_key(protocol: ConnectorProtocol) -> &'static str {
+    match protocol {
+        ConnectorProtocol::Bacnet => "bacnet",
+        ConnectorProtocol::Modbus => "modbus",
+        ConnectorProtocol::Haystack => "haystack",
+        ConnectorProtocol::Rest => "rest",
+        ConnectorProtocol::Mqtt => "mqtt",
+    }
 }
 
 fn validate_id(value: &str, field: &str) -> Result<(), String> {
@@ -343,8 +433,12 @@ fn validate_display_name(value: &str) -> Result<(), String> {
         || value.chars().any(|ch| ch.is_control())
         || value.contains("://")
         || value.contains('@')
+        || looks_like_network_address(value)
         || lower.contains("password")
         || lower.contains("authorization")
+        || lower.contains("credential")
+        || lower.contains("bearer ")
+        || lower.contains("api_key")
         || lower.contains("token=")
     {
         return Err("inventory display name is invalid".into());
@@ -366,6 +460,16 @@ fn validate_token(value: &str, max: usize, field: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn looks_like_network_address(value: &str) -> bool {
+    let trimmed = value.trim().trim_matches(['[', ']']);
+    if trimmed.parse::<IpAddr>().is_ok() {
+        return true;
+    }
+    trimmed
+        .rsplit_once(':')
+        .is_some_and(|(_, port)| !port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
 fn validate_actions(actions: &[ConnectorAction]) -> Result<(), String> {
     if actions.len() > 8 {
         return Err("inventory action list is too large".into());
@@ -377,17 +481,111 @@ fn validate_actions(actions: &[ConnectorAction]) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_actions_for_record(
+    protocol: ConnectorProtocol,
+    point: bool,
+    actions: &[ConnectorAction],
+) -> Result<(), String> {
+    for action in actions {
+        let allowed = match (protocol, point, action) {
+            (_, false, ConnectorAction::MetadataRead) => true,
+            (_, false, _) => false,
+            (ConnectorProtocol::Bacnet, true, _) => true,
+            (_, true, ConnectorAction::MetadataRead | ConnectorAction::PointRead) => true,
+            (_, true, ConnectorAction::PriorityArrayRead) => false,
+        };
+        if !allowed {
+            return Err("inventory action is unsupported for this record".into());
+        }
+    }
+    Ok(())
+}
+
+fn validate_record_state(
+    availability: &InventoryAvailability,
+    commandability: InventoryCommandability,
+    actions: &[ConnectorAction],
+    point: bool,
+) -> Result<(), String> {
+    if !point && commandability != InventoryCommandability::Unknown {
+        return Err("device and group commandability must remain unknown".into());
+    }
+    if matches!(
+        availability,
+        InventoryAvailability::Disabled | InventoryAvailability::Unavailable
+    ) && !actions.is_empty()
+    {
+        return Err("disabled or unavailable inventory records cannot advertise actions".into());
+    }
+    if matches!(availability, InventoryAvailability::Unavailable)
+        && commandability != InventoryCommandability::Unknown
+    {
+        return Err("unavailable inventory records cannot advertise commandability".into());
+    }
+    Ok(())
+}
+
+fn reference_matches_protocol(
+    protocol: ConnectorProtocol,
+    reference: &InventoryPointReference,
+) -> bool {
+    matches!(
+        (protocol, reference),
+        (
+            ConnectorProtocol::Bacnet,
+            InventoryPointReference::Bacnet { .. }
+        ) | (
+            ConnectorProtocol::Modbus,
+            InventoryPointReference::Modbus { .. }
+        ) | (
+            ConnectorProtocol::Haystack,
+            InventoryPointReference::Haystack { .. }
+        ) | (
+            ConnectorProtocol::Rest,
+            InventoryPointReference::Rest { .. }
+        )
+    )
+}
+
+/// Project configuration labels into the constrained public inventory text
+/// surface. Unsafe labels become a generic fallback so one bad entry cannot
+/// fail an otherwise valid page.
+pub fn sanitize_inventory_label(value: &str, fallback: &str) -> String {
+    let cleaned: String = value
+        .trim()
+        .chars()
+        .filter(|ch| !ch.is_control())
+        .take(128)
+        .collect();
+    if validate_display_name(&cleaned).is_ok() {
+        cleaned
+    } else if validate_display_name(fallback).is_ok() {
+        fallback.to_string()
+    } else {
+        "Unnamed connector record".into()
+    }
+}
+
 fn validate_reference(reference: &InventoryPointReference) -> Result<(), String> {
     match reference {
         InventoryPointReference::Bacnet {
+            device_instance,
             object_type,
+            object_instance,
             property_id,
-            ..
         } => {
+            if *device_instance > 4_194_303 || *object_instance > 4_194_303 {
+                return Err("BACnet instance is out of range".into());
+            }
             validate_token(object_type, 64, "BACnet object type")?;
             validate_token(property_id, 64, "BACnet property id")?;
         }
-        InventoryPointReference::Modbus { function, .. } => {
+        InventoryPointReference::Modbus {
+            unit_id, function, ..
+        } => {
+            if *unit_id > 247 {
+                return Err("Modbus unit id is out of range".into());
+            }
             validate_token(function, 32, "Modbus function")?;
         }
         InventoryPointReference::Haystack { id } => validate_token(id, 256, "Haystack id")?,
@@ -485,6 +683,128 @@ mod tests {
     }
 
     #[test]
+    fn inventory_cursor_is_bound_to_revision_scope_filter_and_page_size() {
+        let request = request();
+        let cursor = request.cursor_for_revision("config-0123", 1).unwrap();
+        assert_eq!(
+            request
+                .clone()
+                .with_cursor(cursor.clone())
+                .offset_for_revision("config-0123")
+                .unwrap(),
+            1
+        );
+
+        let mut changed_scope = request.clone().with_cursor(cursor.clone());
+        changed_scope.scope.tenant_id = "tenant-b".into();
+        assert!(changed_scope.offset_for_revision("config-0123").is_err());
+
+        let mut changed_filter = request.clone().with_cursor(cursor.clone());
+        changed_filter.protocols = vec![ConnectorProtocol::Modbus];
+        assert!(changed_filter.offset_for_revision("config-0123").is_err());
+
+        let mut changed_page = request.clone().with_cursor(cursor);
+        changed_page.page_size = 20;
+        assert!(changed_page.offset_for_revision("config-0123").is_err());
+        assert!(request
+            .clone()
+            .with_cursor(request.cursor_for_revision("config-0123", 1).unwrap())
+            .offset_for_revision("config-9999")
+            .is_err());
+    }
+
+    #[test]
+    fn inventory_continuation_must_advance_and_cannot_be_empty() {
+        let request = request();
+        let record = point();
+        let make_response = |next_cursor| ConnectorInventoryResponse {
+            schema: CONNECTOR_INVENTORY_CONTRACT_V1.into(),
+            request_id: request.request_id,
+            scope: request.scope.clone(),
+            protocols: vec![ConnectorProtocol::Bacnet],
+            revision: "config-0123".into(),
+            captured_at: Utc::now(),
+            provenance: InventoryProvenance::TrustedConfiguration,
+            records: vec![record.clone()],
+            next_cursor,
+        };
+        let valid = request.cursor_for_revision("config-0123", 1).unwrap();
+        assert!(make_response(Some(valid)).validate_for(&request).is_ok());
+        let repeated = request.cursor_for_revision("config-0123", 0).unwrap();
+        assert!(make_response(Some(repeated))
+            .validate_for(&request)
+            .is_err());
+        assert!(make_response(Some(String::new()))
+            .validate_for(&request)
+            .is_err());
+        let backwards = request.cursor_for_revision("config-0123", 0).unwrap();
+        let mut continued = request.clone().with_cursor(backwards);
+        continued.cursor = Some(request.cursor_for_revision("config-0123", 1).unwrap());
+        let same_page_cursor = request.cursor_for_revision("config-0123", 1).unwrap();
+        assert!(make_response(Some(same_page_cursor))
+            .validate_for(&continued)
+            .is_err());
+    }
+
+    #[test]
+    fn inventory_rejects_protocol_reference_and_action_mismatches() {
+        let request = request();
+        let mut response = make_response_for_record(request.clone(), point());
+        if let InventoryRecord::Point {
+            protocol,
+            reference,
+            ..
+        } = &mut response.records[0]
+        {
+            *protocol = ConnectorProtocol::Modbus;
+            *reference = InventoryPointReference::Bacnet {
+                device_instance: 7,
+                object_type: "analog-value".into(),
+                object_instance: 1,
+                property_id: "present-value".into(),
+            };
+        }
+        assert!(response.validate_for(&request).is_err());
+
+        let mut response = make_response_for_record(request.clone(), point());
+        if let InventoryRecord::Point {
+            protocol, actions, ..
+        } = &mut response.records[0]
+        {
+            *protocol = ConnectorProtocol::Modbus;
+            *actions = vec![ConnectorAction::PriorityArrayRead];
+        }
+        assert!(response.validate_for(&request).is_err());
+    }
+
+    #[test]
+    fn inventory_rejects_out_of_range_identifiers_and_false_availability() {
+        let request = request();
+        let mut response = make_response_for_record(request.clone(), point());
+        if let InventoryRecord::Point { reference, .. } = &mut response.records[0] {
+            *reference = InventoryPointReference::Bacnet {
+                device_instance: 4_194_304,
+                object_type: "analog-value".into(),
+                object_instance: 1,
+                property_id: "present-value".into(),
+            };
+        }
+        assert!(response.validate_for(&request).is_err());
+
+        let mut response = make_response_for_record(request.clone(), point());
+        if let InventoryRecord::Point {
+            availability,
+            actions,
+            ..
+        } = &mut response.records[0]
+        {
+            *availability = InventoryAvailability::Unavailable;
+            *actions = vec![ConnectorAction::PointRead];
+        }
+        assert!(response.validate_for(&request).is_err());
+    }
+
+    #[test]
     fn inventory_response_rejects_scope_protocol_and_duplicate_mismatches() {
         let request = request();
         let mut response = ConnectorInventoryResponse {
@@ -526,5 +846,41 @@ mod tests {
             *display_name = "https://user:secret@example.test".into();
         }
         assert!(response.validate_for(&request).is_err());
+        assert_eq!(
+            sanitize_inventory_label("127.0.0.1:47808", "safe fallback"),
+            "safe fallback"
+        );
+        assert_eq!(
+            sanitize_inventory_label("token=secret", "safe fallback"),
+            "safe fallback"
+        );
+    }
+
+    trait RequestCursorExt {
+        fn with_cursor(self, cursor: String) -> Self;
+    }
+
+    impl RequestCursorExt for ConnectorInventoryRequest {
+        fn with_cursor(mut self, cursor: String) -> Self {
+            self.cursor = Some(cursor);
+            self
+        }
+    }
+
+    fn make_response_for_record(
+        request: ConnectorInventoryRequest,
+        record: InventoryRecord,
+    ) -> ConnectorInventoryResponse {
+        ConnectorInventoryResponse {
+            schema: CONNECTOR_INVENTORY_CONTRACT_V1.into(),
+            request_id: request.request_id,
+            scope: request.scope,
+            protocols: vec![record.protocol()],
+            revision: "config-0123".into(),
+            captured_at: Utc::now(),
+            provenance: InventoryProvenance::TrustedConfiguration,
+            records: vec![record],
+            next_cursor: None,
+        }
     }
 }

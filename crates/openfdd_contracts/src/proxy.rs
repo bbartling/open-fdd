@@ -106,6 +106,8 @@ pub struct ReadPointResult {
     pub value_type: String,
     pub value: serde_json::Value,
     pub quality: String,
+    /// Server time at which the connector observed this value.
+    pub observed_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -129,6 +131,8 @@ pub struct ReadPriorityArrayResult {
     pub object_instance: u32,
     pub slots: Vec<ReadPrioritySlot>,
     pub state: String,
+    /// Server time at which the connector observed this priority array.
+    pub observed_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -257,10 +261,25 @@ fn safe_public_value(value: &serde_json::Value) -> bool {
         serde_json::Value::Null
         | serde_json::Value::Bool(_)
         | serde_json::Value::Number(_)
-        | serde_json::Value::String(_) => true,
+        | serde_json::Value::String(_) => match value {
+            serde_json::Value::String(text) => safe_public_text(text),
+            _ => true,
+        },
         serde_json::Value::Array(values) => values.iter().all(safe_public_value),
         serde_json::Value::Object(_) => false,
     }
+}
+
+fn safe_public_text(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    value.len() <= 512
+        && !value.chars().any(|ch| ch.is_control())
+        && !value.contains("://")
+        && !value.contains('@')
+        && !lower.contains("password")
+        && !lower.contains("authorization")
+        && !lower.contains("credential")
+        && !lower.contains("token=")
 }
 
 fn safe_public_token(value: &str) -> bool {
@@ -417,6 +436,7 @@ mod tests {
                 value_type: "real".into(),
                 value: serde_json::json!(42.0),
                 quality: "good".into(),
+                observed_at: chrono::Utc::now(),
             }
         }
 
@@ -435,6 +455,7 @@ mod tests {
                     })
                     .collect(),
                 state: "supported".into(),
+                observed_at: chrono::Utc::now(),
             }
         }
 
@@ -464,6 +485,14 @@ mod tests {
         ConnectorReadResponse::success(&point_req, ConnectorReadResult::Point(point()))
             .validate_for(&point_req)
             .unwrap();
+        let mut unsafe_point = point();
+        unsafe_point.value = serde_json::json!("https://internal.example/secret");
+        assert!(ConnectorReadResponse::success(
+            &point_req,
+            ConnectorReadResult::Point(unsafe_point),
+        )
+        .validate_for(&point_req)
+        .is_err());
         for wrong in [
             ReadTarget::BacnetPoint {
                 device_instance: 8,
