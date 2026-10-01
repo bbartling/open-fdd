@@ -140,6 +140,8 @@ describe("ProtocolWorkspace", () => {
     resolveRequest?.(capabilityResponse());
     expect((await screen.findByTestId("protocol-state-bacnet")).textContent).toContain("Checking");
     expect(screen.getByTestId("protocol-state-mqtt").textContent).toContain("Ready");
+    expect(screen.getByText("MQTT connection")).toBeTruthy();
+    expect(screen.getAllByText("ready", { selector: "dd" })).toHaveLength(2);
     expect(screen.getByTestId("protocol-state-modbus").textContent).toContain("Not configured");
     expect(screen.getByTestId("protocol-state-haystack").textContent).toContain("Authentication failed");
     const bacnetRadio = screen.getByRole("radio", { name: "BACnet" });
