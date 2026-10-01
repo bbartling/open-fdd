@@ -35,6 +35,7 @@ use crate::wattlab_dump;
 pub fn router(state: Arc<AppState>) -> Router {
     let public = Router::new()
         .route("/api/health", get(health))
+        .route("/api/version", get(version_public))
         .route("/health", get(health))
         .route("/api/auth/status", get(auth_status))
         .route("/api/auth/me", get(auth_me))
@@ -333,6 +334,19 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(public)
         .merge(protected)
         .with_state(state)
+}
+
+/// Public liveness body. No historian locks, so a wedged query cannot stall it.
+pub fn version_body() -> Value {
+    json!({
+        "ok": true,
+        "service": "openfdd-central",
+        "version": resolve_build_version(),
+    })
+}
+
+pub async fn version_public() -> Json<Value> {
+    Json(version_body())
 }
 
 /// Resolve the reported build version (OFDD-071).
@@ -4877,6 +4891,17 @@ mod version_tests {
             fallback.starts_with(env!("CARGO_PKG_VERSION")),
             "v={fallback}"
         );
+    }
+
+    #[test]
+    fn version_route_body_names_the_build_and_no_secret() {
+        let body = super::version_body();
+        assert_eq!(body["ok"], true);
+        assert_eq!(body["service"], "openfdd-central");
+        let version = body["version"].as_str().unwrap();
+        assert!(version.starts_with(env!("CARGO_PKG_VERSION")), "{version}");
+        assert!(body.get("token").is_none());
+        assert!(body.get("password").is_none());
     }
 
     #[tokio::test]

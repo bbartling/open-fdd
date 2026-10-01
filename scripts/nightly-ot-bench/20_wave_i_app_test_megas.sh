@@ -101,26 +101,60 @@ else
   record_soft inspect_zone_t "zone_t column absent non_null=${zt:-0}"
 fi
 
-# 4) bas-vs-web on the live MQTT building (requires dual-OAT catalog + soak)
+# 4) oa_t and web_oa_t are separate checks. An absent column is field-catalog
+#    Soft-OPEN. A present column with no values is a product FAIL. One missing
+#    role must not hide a product fail on the other, and Soft-OPEN is not a PASS.
+ROLE_STATE=soft
+role_probe() {
+  local id="$1" equip="$2" role="$3" art_name="$4"
+  local payload body
+  payload="$(jq -nc --arg b "$MQTT_BUILDING" --arg e "$equip" --arg r "$role" \
+    '{building_id:$b, equipment_ids:[$e], max_points:800, series:{columns:[$r]}}')"
+  body="$(cpost /api/analytics/inspect "$payload")"
+  echo "$body" >"$ART/$art_name"
+  eval "$(echo "$body" | ROLE="$role" python3 -c '
+import json, os, sys
+role = os.environ["ROLE"]
+a = (json.load(sys.stdin).get("analytics") or {})
+cov = a.get("coverage") or {}
+plot = set(cov.get("plottable_columns") or [])
+pts = a.get("points") or []
+n = sum(1 for p in pts if isinstance(p, dict) and p.get(role) is not None)
+print("role_n=%d" % n)
+print("role_col=%d" % (1 if role in plot else 0))
+')"
+  if [[ "${role_n:-0}" -gt 0 ]]; then
+    record "$id" 1 "$role non_null=$role_n"
+    ROLE_STATE=pass
+  elif [[ "${role_col:-0}" == "1" ]]; then
+    record "$id" 0 "$role column present non_null=${role_n:-0}"
+    ROLE_STATE=product
+  else
+    record_soft "$id" "$role column absent non_null=${role_n:-0}"
+    ROLE_STATE=soft
+  fi
+}
+role_probe bas_oa_t "$LOOPBACK_EQ" oa_t wave_i_inspect_oa_t.json
+OA_STATE="$ROLE_STATE"
+role_probe bas_web_oa_t "$WEATHER_EQ" web_oa_t wave_i_inspect_web_oa_t.json
+WEB_STATE="$ROLE_STATE"
+
 payload="$(jq -nc --arg b "$MQTT_BUILDING" '{building_id:$b, max_points:2000}')"
 body="$(cpost /api/analytics/bas-vs-web-oat "$payload")"
 echo "$body" >"$ART/wave_i_bas_vs_web_acme.json"
-eval "$(echo "$body" | python3 -c '
+pts="$(echo "$body" | python3 -c '
 import json,sys
-body=json.load(sys.stdin)
-a=body.get("analytics") or {}
-pts=len(a.get("points") or [])
-warns=" ".join(str(w) for w in (a.get("warnings") or [])).lower()
-missing=1 if ("unavailable" in warns or "need distinct" in warns) else 0
-print("pts=%d" % pts)
-print("missing_roles=%d" % missing)
+a=(json.load(sys.stdin).get("analytics") or {})
+print(len(a.get("points") or []))
 ')"
 if [[ "${pts:-0}" -gt 0 ]]; then
   record bas_vs_web_acme 1 "building=$MQTT_BUILDING points=$pts"
-elif [[ "${missing_roles:-0}" == "1" ]]; then
-  record_soft bas_vs_web_acme "building=$MQTT_BUILDING oa_t/web_oa_t columns absent points=0"
+elif [[ "$OA_STATE" == "product" || "$WEB_STATE" == "product" ]]; then
+  record bas_vs_web_acme 0 "building=$MQTT_BUILDING points=0 oa_t=$OA_STATE web_oa_t=$WEB_STATE"
+elif [[ "$OA_STATE" == "soft" || "$WEB_STATE" == "soft" ]]; then
+  record_soft bas_vs_web_acme "building=$MQTT_BUILDING join empty; see bas_oa_t ($OA_STATE) and bas_web_oa_t ($WEB_STATE)"
 else
-  record bas_vs_web_acme 0 "building=$MQTT_BUILDING points=0 roles_present"
+  record bas_vs_web_acme 0 "building=$MQTT_BUILDING points=0 oa_t=$OA_STATE web_oa_t=$WEB_STATE"
 fi
 
 # 5) B100 inspect — span-preserving downsample (equipment_id required; AHU_1).

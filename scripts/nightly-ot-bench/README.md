@@ -123,7 +123,9 @@ Patch-cycle stress on the live hub is `./scripts/nightly-ot-bench/run_railway_hu
 
 **STRESS NOTE #1:** Pro `openfdd-central` replica memory limit is 24 GB (Hobby hard-cap was 8 GB; 2026-09-28 OOM under Overview/RCx). Watch Railway metrics (memory limit/current/max) and the capacity sampler (`lib_capacity_sample.sh`) against building count and historian file pressure. A silent restart, an OOM, or a 499 storm fails closeout. ACME continuous AFDD (gate 38) uses lookback-sized windows tied to the 1440-minute cadence (24h), checkpoint-relative, with an ops preference for ~05:00 America/Chicago before the 06:00 digest. See [`AFDD_MODES.md`](../../docs/operations/AFDD_MODES.md) § ACME.
 
-Gate **39** (`39_mqtts_gap_blame.sh`) is the MQTTS blame scorecard (EDGE / TRANSIT / RAILWAY / SPARSE_OK / INCONCLUSIVE) for the same hub stress when ACME/vim-1 is live. How to read it: [`STRESS_CLOSEOUT.md`](../../docs/operations/STRESS_CLOSEOUT.md) § MQTTS gap blame.
+Gate **39** (`39_mqtts_gap_blame.sh`) is the MQTTS blame scorecard (EDGE / TRANSIT / RAILWAY / SPARSE_OK / INCONCLUSIVE) for the same hub stress when ACME/vim-1 is live. The scorecard `probes` block names the publish-ledger read. `rows=[]` stays BLOCKED. How to read it: [`STRESS_CLOSEOUT.md`](../../docs/operations/STRESS_CLOSEOUT.md) § MQTTS gap blame.
+
+Gate **42** (`42_cache_retention_preview_health.sh`) records cache/unload, 100 GiB preflight, series-preview, and health-hang contracts. It is not required for `fully_qualified`. `CACHE_HEALTH_SMOKE=0` skips it.
 
 ## Related
 

@@ -68,6 +68,44 @@ function clearAuthIfCurrentSession(requestGen: number): void {
   }
 }
 
+/** Interactive calls that must not inherit the analytics proxy budget. */
+const LIVENESS_TIMEOUT_MS: Record<string, number> = {
+  "/api/health": 8_000,
+  "/api/version": 8_000,
+  "/api/auth/status": 12_000,
+  "/api/auth/login": 20_000,
+};
+
+export function livenessTimeoutMs(path: string): number | null {
+  const bare = path.split("?")[0] ?? path;
+  const exact = bare.startsWith("/") ? bare : `/${bare}`;
+  return LIVENESS_TIMEOUT_MS[exact] ?? null;
+}
+
+export function isCentralUnavailable(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === "AbortError") return true;
+  if (err instanceof Error && err.name === "AbortError") return true;
+  if (err && typeof err === "object" && "status" in err) {
+    const status = Number((err as { status: unknown }).status);
+    return status === 502 || status === 503 || status === 504;
+  }
+  return false;
+}
+
+/** Attach a short abort when the caller did not pass one. */
+export function attachLivenessSignal(
+  path: string,
+  init?: RequestInit,
+  timeoutMs?: number,
+): RequestInit {
+  if (init?.signal) return init;
+  const ms = timeoutMs ?? livenessTimeoutMs(path);
+  if (ms == null || typeof AbortSignal === "undefined" || !("timeout" in AbortSignal)) {
+    return init ?? {};
+  }
+  return { ...(init ?? {}), signal: AbortSignal.timeout(ms) };
+}
+
 function redirectToAuth(): void {
   if (typeof window === "undefined") return;
   const here = `${window.location.pathname}${window.location.search}`;
@@ -89,13 +127,14 @@ export async function apiFetch<T>(
   } catch {
     // ignore
   }
+  const timed = attachLivenessSignal(path, init);
   const res = await fetch(buildUrl(path), {
-    ...init,
+    ...timed,
     headers: {
       Accept: "application/json",
       [REQUEST_ID_HEADER]: requestId,
       ...authHeader,
-      ...(init?.headers ?? {}),
+      ...(timed.headers ?? {}),
     },
   });
 
