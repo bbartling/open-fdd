@@ -131,12 +131,13 @@ describe("useConnectorInventory", () => {
     expect(hook.result.current.status).toBe("idle");
   });
 
-  it("retains authenticated 401/403 transport errors without broadening the scope", async () => {
-    const forbidden = Object.assign(new Error("forbidden"), { status: 403 });
-    fetchPage.mockRejectedValueOnce(forbidden);
+  it.each([401, 403] as const)("retains authenticated %s transport errors without broadening the scope", async (status) => {
+    const transportError = Object.assign(new Error(status === 401 ? "unauthorized" : "forbidden"), { status });
+    fetchPage.mockRejectedValueOnce(transportError);
     const hook = renderHook(() => useConnectorInventory({ scope: scopeA, protocols: ["haystack"] }));
     await waitFor(() => expect(hook.result.current.status).toBe("error"));
-    expect(hook.result.current.error).toBe(forbidden);
+    expect(hook.result.current.error).toBe(transportError);
+    expect(hook.result.current.error).toMatchObject({ status });
     expect(hook.result.current.records).toEqual([]);
   });
 });
