@@ -117,7 +117,7 @@ function useInventoryScope(): ScopeSnapshot & {
     const next = new URLSearchParams(searchParams);
     next.delete("edge");
     setSearchParams(next, { replace: true });
-  }, [edgeId, requestedEdge, searchParams, setSearchParams]);
+  }, [buildingId, edgeId, edgeResponse, requestedEdge, searchParams, setSearchParams]);
 
   const setBuilding = useCallback((nextBuilding: string) => {
     const next = normalizeId(nextBuilding);
@@ -282,6 +282,7 @@ function InventoryContextMenu({ node, expanded, onAction, onEscape }: InventoryC
     <div
       className="inventory-context-menu"
       role="menu"
+      tabIndex={-1}
       aria-label={`Actions for ${node.record.display_name}`}
       data-testid="inventory-context-menu"
       onKeyDown={(event) => {
@@ -464,6 +465,7 @@ function InventoryTreeView({
       <div
         className="inventory-tree"
         role="tree"
+        tabIndex={-1}
         aria-label="Connector inventory"
         data-testid="inventory-tree"
         onContextMenu={(event) => event.preventDefault()}

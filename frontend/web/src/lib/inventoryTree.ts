@@ -116,4 +116,3 @@ export function flattenVisibleInventoryTree(
 export function nodeIsExpandable(node: InventoryTreeNode): boolean {
   return node.children.length > 0;
 }
-
