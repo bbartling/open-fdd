@@ -1,6 +1,7 @@
 """Wave I/K MEGA gates query the live MQTT building ACME.
 
 `bldg2` is equipment (`bldg2-zone-loopback`), not a hub building id.
+BAS/MQTT `oa_t` is probed on AHU `rtu_01` (`OPENFDD_WAVE_MQTT_OA_EQ`).
 Missing AV columns stay field-catalog Soft-OPEN and still fail the gate.
 A mapped column with no values is a product fail.
 """
@@ -22,6 +23,7 @@ WAVE_I = ROOT / "scripts/nightly-ot-bench/20_wave_i_app_test_megas.sh"
 WAVE_K = ROOT / "scripts/nightly-ot-bench/21_wave_k_app_test_megas.sh"
 
 LOOPBACK = "bldg2-zone-loopback"
+OA_EQ = "rtu_01"
 WEATHER = "hosted-weather"
 
 
@@ -103,10 +105,15 @@ class _Hub(BaseHTTPRequestHandler):
         return {
             "ok": True,
             "building_id": "ACME",
-            "equipment_ids": [LOOPBACK, WEATHER],
+            "equipment_ids": [LOOPBACK, OA_EQ, WEATHER],
             "equipment": [
                 {
                     "equipment_id": LOOPBACK,
+                    "columns": [column],
+                    "roles": {"timestamp_utc": "timestamp_utc"},
+                },
+                {
+                    "equipment_id": OA_EQ,
                     "columns": [column],
                     "roles": {"timestamp_utc": "timestamp_utc"},
                 },
@@ -132,8 +139,11 @@ class _Hub(BaseHTTPRequestHandler):
         columns: list[str] = []
         point: dict = {"timestamp_utc": "2026-09-30T00:00:00Z"}
         if mode == "column_present_null" and LOOPBACK in ids:
-            columns = ["zone_t", "oa_t", "zone_rh"]
-            point.update({"zone_t": None, "oa_t": None, "zone_rh": None})
+            columns = ["zone_t", "zone_rh"]
+            point.update({"zone_t": None, "zone_rh": None})
+        if mode == "column_present_null" and OA_EQ in ids:
+            columns = ["oa_t"]
+            point["oa_t"] = None
         if mode == "column_present_null" and WEATHER in ids:
             columns = ["web_oa_t"]
             point["web_oa_t"] = None
@@ -142,6 +152,13 @@ class _Hub(BaseHTTPRequestHandler):
                 "analytics": {
                     "coverage": {"plottable_columns": ["zone_t"]},
                     "points": [{"timestamp_utc": "2026-09-30T00:00:00Z", "zone_t": 72.0}],
+                }
+            }
+        if mode == "oa_absent_zone_present" and OA_EQ in ids:
+            return {
+                "analytics": {
+                    "coverage": {"plottable_columns": []},
+                    "points": [{"timestamp_utc": "2026-09-30T00:00:00Z"}],
                 }
             }
         if mode == "oa_absent_zone_present" and WEATHER in ids:
