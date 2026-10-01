@@ -110,6 +110,7 @@ describe("ProtocolInventory", () => {
 
   it("supports roving arrows, home/end, selection, and keyboard context escape", async () => {
     renderInventory();
+    await screen.findByTestId("inventory-treeitem-point:opaque-point");
     await screen.findByTestId("inventory-treeitem-device:opaque-device");
     const deviceItem = screen.getByTestId("inventory-treeitem-device:opaque-device");
     deviceItem.focus();
