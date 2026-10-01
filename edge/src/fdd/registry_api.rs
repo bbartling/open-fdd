@@ -673,6 +673,56 @@ pub fn results_response(building_id: Option<&str>) -> Value {
     json!({"ok": true, "count": rows.len(), "results": rows})
 }
 
+/// `GET /api/afdd/scheduler/result-slices` — per-rule window hashes.
+///
+/// Stress compares slices that sit outside the cycle window before and after
+/// a lookback upsert. The display `rows` array is not this proof: a full-file
+/// rewrite would still publish a fresh `rows` list.
+pub fn result_slice_report(building_id: Option<&str>) -> Value {
+    let dir = results_dir(building_id);
+    let mut rules = Vec::new();
+    if dir.is_dir() {
+        let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.extension().and_then(|ext| ext.to_str()) == Some("json")
+                    && path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| !name.starts_with('_'))
+            })
+            .collect();
+        files.sort();
+        for path in files {
+            let Some(rule_id) = path.file_stem().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if rule_id.starts_with('_') {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let Ok(body) = serde_json::from_str::<Value>(&text) else {
+                continue;
+            };
+            rules.push(json!({
+                "rule_id": rule_id,
+                "result_scope": body.get("result_scope").cloned().unwrap_or(Value::Null),
+                "windows": fdd_store::rule_result_window_fingerprints(&body),
+            }));
+        }
+    }
+    json!({
+        "ok": true,
+        "building_id": building_id,
+        "rules": rules,
+    })
+}
+
 /// Roles used for FDD Plots series SELECT (required ∪ optional, SQL-safe).
 ///
 /// Portable rules keep `required_roles` empty and put sensors in

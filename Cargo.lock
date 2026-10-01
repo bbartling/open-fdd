@@ -2011,6 +2011,7 @@ name = "fdd_rules"
 version = "3.5.59"
 dependencies = [
  "anyhow",
+ "chrono",
  "datafusion",
  "fdd_core",
  "fdd_sql",
