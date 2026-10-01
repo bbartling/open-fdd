@@ -111,7 +111,11 @@ Gate 21 only checks that `ingest_ok` moved. Gate **39** (`39_mqtts_gap_blame.sh`
 
 QoS 1 ack means the **broker accepted** the packet. Ack plus a quiet central monitor is **RAILWAY**, not the internet. Poll success alone is not proof the envelope left the edge — that needs `GET /api/mqtt/publish-ledger` on fieldbus (acks, fails, no-session, recent equipment ids). `/bacnet/poll/status` is the current cycle only. `/api/mqtt/monitor` is about 100 messages, not a 24h ledger. Inspect points are used for historian gaps only when in-window median spacing stays near 300s; a coarse stride is **INCONCLUSIVE** (downsample hides holes).
 
+The JSON `probes` object names what was actually read: equipment inventory, `GET /api/mqtt/publish-ledger` (HTTP status, ring coverage, `equipment_ids_truncated`), mqtt monitor depth, and inspect point counts. `rows=[]` with only a snapshot clock is **not** instrumentation-complete. A truncated equipment-id list is **INCONCLUSIVE**, not EDGE: the ledger dropped ids past the cap, so a missing id is not proof the edge skipped that device. `publish_no_session` marks are coalesced per poll interval so a reconnect loop does not erase the ack ring.
+
 Scorecard counts plus the worst IOs are the BUG_REPORT lines. Exit 0 is a complete window with no loss. Exit 1 is a proven loss class. Exit 2 is recorded **BLOCKED** (missing probe — not a green pass). `MQTTS_GAP_BLAME=0` skips the gate.
+
+Gate **42** (`42_cache_retention_preview_health.sh`) is local evidence for the analytics-cache hit/unload classifiers, the 100 GiB oldest-first preflight self-test, the series-preview contract (newest N, default 10), and a blackhole-central check that `/` stays 200 while `/api/health` and `/api/version` return 503. It is **not** a required FQ gate. A live health or version call that returns no bytes inside 12s fails the smoke. It does not close #1044, #1049, #1050, or #1063.
 
 Standalone from the OptiPlex against Railway:
 

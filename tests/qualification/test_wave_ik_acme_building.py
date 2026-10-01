@@ -137,6 +137,20 @@ class _Hub(BaseHTTPRequestHandler):
         if mode == "column_present_null" and WEATHER in ids:
             columns = ["web_oa_t"]
             point["web_oa_t"] = None
+        if mode == "oa_absent_zone_present" and LOOPBACK in ids:
+            return {
+                "analytics": {
+                    "coverage": {"plottable_columns": ["zone_t"]},
+                    "points": [{"timestamp_utc": "2026-09-30T00:00:00Z", "zone_t": 72.0}],
+                }
+            }
+        if mode == "oa_absent_zone_present" and WEATHER in ids:
+            return {
+                "analytics": {
+                    "coverage": {"plottable_columns": []},
+                    "points": [{"timestamp_utc": "2026-09-30T00:00:00Z"}],
+                }
+            }
         return {
             "analytics": {
                 "coverage": {"plottable_columns": columns},
@@ -216,18 +230,21 @@ class WaveIkAcmeBuildingTests(unittest.TestCase):
                 summary_i = json.loads((art / "i" / "wave_i_app_test_megas.json").read_text())
                 summary_k = json.loads((art / "k" / "wave_k_app_test_megas.json").read_text())
                 self.assertEqual(summary_i["product_fail"], 0)
-                self.assertEqual(summary_i["field_catalog_soft_open"], 2)
+                self.assertEqual(summary_i["field_catalog_soft_open"], 4)
                 self.assertEqual(summary_i["fail"], 1)
                 self.assertEqual(summary_k["product_fail"], 0)
-                self.assertEqual(summary_k["field_catalog_soft_open"], 3)
+                self.assertEqual(summary_k["field_catalog_soft_open"], 4)
                 self.assertEqual(summary_k["fail"], 1)
                 log_i = (art / "i" / "wave_i_app_test_megas.log").read_text()
                 log_k = (art / "k" / "wave_k_app_test_megas.log").read_text()
                 self.assertIn("mapping_acme ok=1 building=ACME", log_i)
                 self.assertIn("inspect_zone_t ok=0 soft_open=1", log_i)
+                self.assertIn("bas_oa_t ok=0 soft_open=1", log_i)
+                self.assertIn("bas_web_oa_t ok=0 soft_open=1", log_i)
                 self.assertIn("bas_vs_web_acme ok=0 soft_open=1", log_i)
                 self.assertIn("mapping_acme_roles ok=1 building=ACME", log_k)
-                self.assertIn("mqtt_zone_and_oa ok=0 soft_open=1", log_k)
+                self.assertIn("mqtt_zone_t ok=0 soft_open=1", log_k)
+                self.assertIn("mqtt_oa_t ok=0 soft_open=1", log_k)
                 self.assertIn("mqtt_zone_rh ok=0 soft_open=1", log_k)
                 self.assertIn("mqtt_web_oa_t ok=0 soft_open=1", log_k)
                 self.assertIn("mapping_cross_site ok=1", log_k)
@@ -257,9 +274,44 @@ class WaveIkAcmeBuildingTests(unittest.TestCase):
                 log_k = (art / "k" / "wave_k_app_test_megas.log").read_text()
                 self.assertIn("inspect_zone_t ok=0 zone_t column present", log_i)
                 self.assertNotIn("inspect_zone_t ok=0 soft_open=1", log_i)
-                self.assertIn("mqtt_zone_and_oa ok=0 columns present", log_k)
-                self.assertNotIn("mqtt_zone_and_oa ok=0 soft_open=1", log_k)
+                self.assertIn("bas_oa_t ok=0 oa_t column present", log_i)
+                self.assertIn("bas_web_oa_t ok=0 web_oa_t column present", log_i)
+                self.assertNotIn("bas_oa_t ok=0 soft_open=1", log_i)
+                self.assertNotIn("bas_web_oa_t ok=0 soft_open=1", log_i)
+                self.assertIn("mqtt_zone_t ok=0 zone_t column present", log_k)
+                self.assertIn("mqtt_oa_t ok=0 oa_t column present", log_k)
+                self.assertNotIn("mqtt_zone_t ok=0 soft_open=1", log_k)
+                self.assertNotIn("mqtt_oa_t ok=0 soft_open=1", log_k)
                 self.assertNotIn("bldg2", _building_ids(server))
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_oa_absent_does_not_hide_a_zone_value(self) -> None:
+        """zone_t with values stays a product pass when oa_t is field-catalog."""
+        server, base = _serve("oa_absent_zone_present")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                art = Path(tmp)
+                wave_i = _run(WAVE_I, art / "i", base)
+                wave_k = _run(WAVE_K, art / "k", base)
+                self.assertEqual(wave_i.returncode, 1, wave_i.stderr + wave_i.stdout)
+                self.assertEqual(wave_k.returncode, 1, wave_k.stderr + wave_k.stdout)
+                summary_i = json.loads((art / "i" / "wave_i_app_test_megas.json").read_text())
+                summary_k = json.loads((art / "k" / "wave_k_app_test_megas.json").read_text())
+                self.assertEqual(summary_i["product_fail"], 0)
+                self.assertGreaterEqual(summary_i["field_catalog_soft_open"], 1)
+                self.assertEqual(summary_k["product_fail"], 0)
+                log_i = (art / "i" / "wave_i_app_test_megas.log").read_text()
+                log_k = (art / "k" / "wave_k_app_test_megas.log").read_text()
+                self.assertIn("inspect_zone_t ok=1", log_i)
+                self.assertIn("bas_oa_t ok=0 soft_open=1", log_i)
+                self.assertIn("bas_web_oa_t ok=0 soft_open=1", log_i)
+                self.assertNotIn("bas_oa_t ok=1", log_i)
+                self.assertIn("mqtt_zone_t ok=1", log_k)
+                self.assertIn("mqtt_oa_t ok=0 soft_open=1", log_k)
+                self.assertNotIn("mqtt_oa_t ok=1", log_k)
+                self.assertNotIn("mqtt_zone_t ok=0 soft_open=1", log_k)
         finally:
             server.shutdown()
             server.server_close()

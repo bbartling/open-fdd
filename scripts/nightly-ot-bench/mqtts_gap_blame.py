@@ -615,6 +615,7 @@ def edge_window_from_ledger(
         return layer_absent("fieldbus_publish_ledger", EDGE_PROBE + " recent[] missing.")
     all_times: list[datetime] = []
     equip_times: list[datetime] = []
+    truncated_unnamed = False
     for mark in recent:
         if not isinstance(mark, dict) or mark.get("ok") is False:
             continue
@@ -624,6 +625,15 @@ def edge_window_from_ledger(
         all_times.append(parsed)
         if _id_list_has(mark.get("equipment_ids"), equipment_id):
             equip_times.append(parsed)
+        elif mark.get("equipment_ids_truncated") is True:
+            truncated_unnamed = True
+    if truncated_unnamed and len(equip_times) < len(all_times):
+        return layer_absent(
+            "fieldbus_publish_ledger",
+            EDGE_PROBE
+            + " equipment_ids_truncated on an in-window ack that does not name this id. "
+            "Absence is not an EDGE verdict.",
+        )
     if len(all_times) < 2:
         return layer_absent(
             "fieldbus_publish_ledger",
@@ -847,6 +857,17 @@ def render_scorecard(report: dict[str, Any]) -> str:
             f"{row.get('reason')}"
         )
         lines.append(f"    next: {row.get('next_action')}")
+    probes = report.get("probes") or {}
+    if isinstance(probes, dict) and probes:
+        lines.append("probes:")
+        for name, probe in probes.items():
+            if not isinstance(probe, dict):
+                continue
+            missing = probe.get("missing")
+            if missing:
+                lines.append(f"  {name} missing  {missing}")
+            else:
+                lines.append(f"  {name} present")
     lines.append(f"instrumentation_complete={str(bool(report.get('instrumentation_complete'))).lower()}")
     lines.append(f"recommended  {report.get('recommended')}")
     return "\n".join(lines) + "\n"
@@ -860,6 +881,7 @@ def assemble_report(
     interval_secs: float,
     building_id: str,
     edge_id: str | None,
+    probes: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     blames = [row["blame"] for row in rows] + [snapshot["blame"]]
     counts = count_blames(blames)
@@ -901,6 +923,7 @@ def assemble_report(
         "worst": worst,
         "instrumentation_complete": complete,
         "recommended": recommended,
+        "probes": probes or {},
     }
 
 
@@ -1030,8 +1053,13 @@ def collect_live(args: argparse.Namespace) -> dict[str, Any]:
 
     ledger = _load_json_arg(args.edge_export)
     poll_status = None
-    if ledger is None and args.edge_base:
-        ledger, poll_status = _fetch_edge(args.edge_base.rstrip("/"), args.edge_api_key)
+    edge_meta: dict[str, Any] = {"attempted": False}
+    if ledger is not None:
+        edge_meta = {"attempted": True, "source": "edge_export", "ledger_http": 200}
+    elif args.edge_base:
+        ledger, poll_status, edge_meta = _fetch_edge(
+            args.edge_base.rstrip("/"), args.edge_api_key
+        )
 
     rows_src = _equipment_rows(equipment_payload)
     selected = select_samples(rows_src)
@@ -1055,6 +1083,18 @@ def collect_live(args: argparse.Namespace) -> dict[str, Any]:
             inspect_by[equip["equipment_id"]] = points
             roles_by[equip["equipment_id"]] = _roles_from_points(points)
 
+    probes = _live_probes(
+        attempted_api=bool(base and token),
+        equipment_rows=len(rows_src),
+        selected=selected,
+        ledger=ledger,
+        edge_meta=edge_meta,
+        monitor=monitor if isinstance(monitor, dict) else None,
+        inspect_by=inspect_by,
+        use_inspect=bool(args.use_inspect),
+        start=start,
+        end=end,
+    )
     rows = build_rows(
         equipment=selected,
         ledger=ledger,
@@ -1084,6 +1124,7 @@ def collect_live(args: argparse.Namespace) -> dict[str, Any]:
         interval_secs=interval,
         building_id=building,
         edge_id=edge_id,
+        probes=probes,
     )
 
 
@@ -1140,21 +1181,167 @@ def _pick_edge_id(payload: Any) -> str | None:
     return preferred or fallback
 
 
-def _fetch_edge(base: str, api_key: str | None) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+def _fetch_edge(
+    base: str, api_key: str | None
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any]]:
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     ledger = None
+    ledger_http = 0
+    ledger_path = ""
     for path in ("/api/mqtt/publish-ledger", "/mqtt/publish-ledger"):
         code, payload = _http_json(f"{base}{path}", headers=headers)
+        ledger_http = code
+        ledger_path = path
         if code == 200 and isinstance(payload, dict) and "publish_acks" in payload:
             ledger = payload
             break
     poll = None
+    poll_http = 0
     for path in ("/bacnet/poll/status", "/api/bacnet/poll/status"):
         code, payload = _http_json(f"{base}{path}", headers=headers, timeout=20)
+        poll_http = code
         if code == 200 and isinstance(payload, dict):
             poll = payload
             break
-    return ledger, poll
+    return ledger, poll, {
+        "attempted": True,
+        "source": "edge_base",
+        "ledger_http": ledger_http,
+        "ledger_path": ledger_path,
+        "poll_http": poll_http,
+    }
+
+
+def _live_probes(
+    *,
+    attempted_api: bool,
+    equipment_rows: int,
+    selected: list[dict[str, str]],
+    ledger: dict[str, Any] | None,
+    edge_meta: dict[str, Any],
+    monitor: dict[str, Any] | None,
+    inspect_by: dict[str, list[dict[str, Any]]],
+    use_inspect: bool,
+    start: datetime,
+    end: datetime,
+) -> dict[str, Any]:
+    """Name each probe. A missing probe stays missing — this does not invent a PASS."""
+    if not attempted_api:
+        inventory_missing = "No API token. Set OPENFDD_API_BASE and OPENFDD_ADMIN_PASSWORD."
+    elif equipment_rows == 0:
+        inventory_missing = (
+            "GET /api/fdd/equipment returned no rows. "
+            "Hub admin often cannot read the tenant inventory; set the operator password."
+        )
+    elif not selected:
+        inventory_missing = (
+            "Inventory rows have no air-handler or VAV equipment_type. "
+            "rows=[] is not EDGE loss and is not a clean pass."
+        )
+    else:
+        inventory_missing = None
+    ledger_summary = ledger_probe_summary(ledger, start=start, end=end)
+    if not edge_meta.get("attempted"):
+        ledger_summary["missing"] = (
+            "Publish ledger was not read. Set OPENFDD_EDGE_BASE "
+            "(GET /api/mqtt/publish-ledger) or OPENFDD_EDGE_EXPORT."
+        )
+        ledger_summary["present"] = False
+    elif ledger is None:
+        ledger_summary["missing"] = (
+            "Publish ledger HTTP "
+            f"{edge_meta.get('ledger_http')} at {edge_meta.get('ledger_path') or '/api/mqtt/publish-ledger'} "
+            "did not return publish_acks."
+        )
+        ledger_summary["present"] = False
+    messages = 0
+    if isinstance(monitor, dict):
+        raw = monitor.get("recent_messages") or monitor.get("messages") or []
+        if isinstance(raw, list):
+            messages = len(raw)
+    monitor_missing = None if messages else (
+        "GET /api/mqtt/monitor has no recent_messages for this window. "
+        + TRANSIT_PROBE
+    )
+    inspect_counts = {eid: len(points) for eid, points in inspect_by.items()}
+    if not use_inspect:
+        inspect_missing = "Inspect disabled (OPENFDD_GAP_USE_INSPECT=0)."
+    elif not selected:
+        inspect_missing = "No typed equipment to inspect."
+    elif not any(inspect_counts.values()):
+        inspect_missing = "Inspect returned no points for the selected equipment."
+    else:
+        inspect_missing = None
+    return {
+        "equipment_inventory": {
+            "attempted": attempted_api,
+            "row_count": equipment_rows,
+            "selected": [row["equipment_id"] for row in selected],
+            "missing": inventory_missing,
+        },
+        "publish_ledger": {
+            **ledger_summary,
+            "ledger_http": edge_meta.get("ledger_http"),
+            "poll_http": edge_meta.get("poll_http"),
+        },
+        "mqtt_monitor": {
+            "present": messages > 0,
+            "recent_messages": messages,
+            "missing": monitor_missing,
+        },
+        "historian_inspect": {
+            "attempted": use_inspect,
+            "points": inspect_counts,
+            "missing": inspect_missing,
+        },
+    }
+
+
+def ledger_probe_summary(
+    ledger: dict[str, Any] | None,
+    *,
+    start: datetime,
+    end: datetime,
+) -> dict[str, Any]:
+    if not isinstance(ledger, dict) or "publish_acks" not in ledger:
+        return {
+            "present": False,
+            "recent_count": 0,
+            "in_window_acks": 0,
+            "covers_half_window": False,
+            "equipment_ids_truncated": False,
+            "missing": EDGE_PROBE,
+        }
+    recent = ledger.get("recent") if isinstance(ledger.get("recent"), list) else []
+    times: list[datetime] = []
+    truncated = ledger.get("equipment_ids_truncated") is True
+    for mark in recent:
+        if not isinstance(mark, dict) or mark.get("ok") is False:
+            continue
+        if mark.get("equipment_ids_truncated") is True:
+            truncated = True
+        parsed = parse_ts(mark.get("at") or mark.get("unix_ms"))
+        if parsed is not None and start <= parsed <= end:
+            times.append(parsed)
+    span = (max(times) - min(times)).total_seconds() if len(times) >= 2 else 0.0
+    window_span = (end - start).total_seconds()
+    covers = len(times) >= 2 and (window_span <= 0 or span >= window_span * 0.5)
+    missing = None
+    if not isinstance(ledger.get("recent"), list):
+        missing = EDGE_PROBE + " recent[] missing."
+    elif not covers:
+        missing = EDGE_PROBE + " Ledger ring does not cover this window yet."
+    return {
+        "present": missing is None,
+        "recent_count": len(recent) if isinstance(recent, list) else 0,
+        "in_window_acks": len(times),
+        "covers_half_window": covers,
+        "equipment_ids_truncated": truncated,
+        "publish_acks": ledger.get("publish_acks"),
+        "publish_fails": ledger.get("publish_fails"),
+        "publish_no_session": ledger.get("publish_no_session"),
+        "missing": missing,
+    }
 
 
 def _snapshot_evidence(
@@ -1232,6 +1419,7 @@ def report_from_evidence(payload: dict[str, Any]) -> dict[str, Any]:
         }
     else:
         snapshot = classify_snapshot(snap_in, interval=interval)
+    evidence_probes = payload.get("probes")
     return assemble_report(
         rows=rows_out,
         snapshot=snapshot,
@@ -1239,6 +1427,7 @@ def report_from_evidence(payload: dict[str, Any]) -> dict[str, Any]:
         interval_secs=interval,
         building_id=str(payload.get("building_id") or ""),
         edge_id=payload.get("edge_id"),
+        probes=evidence_probes if isinstance(evidence_probes, dict) else None,
     )
 
 
@@ -1281,6 +1470,21 @@ def main(argv: list[str] | None = None) -> int:
             interval_secs=args.interval_secs,
             building_id=args.building_id,
             edge_id=args.edge_id or None,
+            probes={
+                "equipment_inventory": {
+                    "attempted": False,
+                    "row_count": 0,
+                    "selected": [],
+                    "missing": (
+                        "No API base. rows=[] is snapshot-only. "
+                        "instrumentation_complete stays false."
+                    ),
+                },
+                "publish_ledger": {
+                    "present": False,
+                    "missing": "Set OPENFDD_EDGE_BASE for GET /api/mqtt/publish-ledger. " + EDGE_PROBE,
+                },
+            },
         )
     else:
         report = collect_live(args)

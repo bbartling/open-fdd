@@ -88,13 +88,23 @@ print("zone_col=%d" % has("zone_t"))
 print("oa_col=%d" % has("oa_t"))
 print("rh_col=%d" % has("zone_rh"))
 ')"
-if [[ "${zt:-0}" -gt 0 && "${oa:-0}" -gt 0 ]]; then
-  record mqtt_zone_and_oa 1 "zone_t=$zt oa_t=$oa n=$n"
-elif [[ "${zone_col:-0}" == "1" && "${oa_col:-0}" == "1" ]]; then
-  record mqtt_zone_and_oa 0 "columns present zone_t=$zt oa_t=$oa n=$n"
+# zone_t and oa_t are separate. A present null is a product fail even when the
+# other role is a field-catalog Soft-OPEN. Soft-OPEN is not a product PASS.
+if [[ "${zt:-0}" -gt 0 ]]; then
+  record mqtt_zone_t 1 "zone_t=$zt n=$n"
+elif [[ "${zone_col:-0}" == "1" ]]; then
+  record mqtt_zone_t 0 "zone_t column present value=${zt:-0} n=$n"
 else
-  record_soft mqtt_zone_and_oa "zone_t/oa_t column absent zone_t=${zt:-0} oa_t=${oa:-0} n=${n:-0}"
+  record_soft mqtt_zone_t "zone_t column absent value=${zt:-0} n=${n:-0}"
 fi
+if [[ "${oa:-0}" -gt 0 ]]; then
+  record mqtt_oa_t 1 "oa_t=$oa n=$n"
+elif [[ "${oa_col:-0}" == "1" ]]; then
+  record mqtt_oa_t 0 "oa_t column present value=${oa:-0} n=$n"
+else
+  record_soft mqtt_oa_t "oa_t column absent value=${oa:-0} n=${n:-0}"
+fi
+echo "mqtt_zone_and_oa detail zone_t=${zt:-0} oa_t=${oa:-0} split=mqtt_zone_t,mqtt_oa_t" | tee -a "$LOG"
 if [[ "${rh:-0}" -gt 0 ]]; then
   record mqtt_zone_rh 1 "zone_rh=$rh"
 elif [[ "${rh_col:-0}" == "1" ]]; then

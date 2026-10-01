@@ -4,7 +4,7 @@ import { SectionTabs } from "./SectionTabs";
 import { OracleSidebar } from "./OracleSidebar";
 import { SIDEBAR_NAV } from "../nav/sections";
 import { hrefWithSession } from "../session/sessionQuery";
-import { apiFetch } from "../api/client";
+import { apiFetch, isCentralUnavailable } from "../api/client";
 import {
   getAuthMe,
   getStoredToken,
@@ -102,6 +102,7 @@ export function AppShell({
     collapsed: string;
   } | null>(null);
   const [updateAvailable, setUpdateAvailable] = useState<string | null>(null);
+  const [centralNotice, setCentralNotice] = useState<string | null>(null);
   const [tenantLabel, setTenantLabel] = useState<string | null>(() => {
     return getStoredActiveTenant();
   });
@@ -224,8 +225,13 @@ export function AppShell({
         const h = await apiFetch<{ version?: string }>("/api/health");
         centralVer = String(h.version ?? "").trim();
         if (!cancelled && centralVer) setRevision(shortRevision(centralVer));
-      } catch {
-        /* fall through to web version.json */
+        if (!cancelled) setCentralNotice(null);
+      } catch (err) {
+        if (!cancelled && isCentralUnavailable(err)) {
+          setCentralNotice(
+            "Central is not answering. This page stays up; API calls fail until it is back.",
+          );
+        }
       }
       try {
         const r = await fetch(`/version.json?t=${Date.now()}`, {
@@ -294,6 +300,22 @@ export function AppShell({
       data-sidebar-collapsed={collapsed ? "true" : "false"}
       style={{ ["--sidebar-width" as any]: `${sidebarWidthPx}px` }}
     >
+      {centralNotice ? (
+        <div
+          className="app-shell__update-banner"
+          data-testid="central-unavailable-banner"
+          role="status"
+        >
+          <span>{centralNotice}</span>
+          <button
+            type="button"
+            className="button button--small button--ghost"
+            onClick={() => setCentralNotice(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
       {updateAvailable ? (
         <div
           className="app-shell__update-banner"
