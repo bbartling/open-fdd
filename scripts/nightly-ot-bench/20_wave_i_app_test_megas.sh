@@ -49,6 +49,8 @@ record_soft() {
 # Override with OPENFDD_WAVE_MQTT_BUILDING when the hub site id is not ACME.
 MQTT_BUILDING="${OPENFDD_WAVE_MQTT_BUILDING:-ACME}"
 LOOPBACK_EQ="${OPENFDD_WAVE_MQTT_LOOPBACK_EQ:-bldg2-zone-loopback}"
+# BAS oa_t lives on the AHU (rtu_01), not the zone loopback AV. Override with OPENFDD_WAVE_MQTT_OA_EQ.
+OA_EQ="${OPENFDD_WAVE_MQTT_OA_EQ:-rtu_01}"
 WEATHER_EQ="${OPENFDD_WAVE_MQTT_WEATHER_EQ:-hosted-weather}"
 urlencode() {
   python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
@@ -134,7 +136,7 @@ print("role_col=%d" % (1 if role in plot else 0))
     ROLE_STATE=soft
   fi
 }
-role_probe bas_oa_t "$LOOPBACK_EQ" oa_t wave_i_inspect_oa_t.json
+role_probe bas_oa_t "$OA_EQ" oa_t wave_i_inspect_oa_t.json
 OA_STATE="$ROLE_STATE"
 role_probe bas_web_oa_t "$WEATHER_EQ" web_oa_t wave_i_inspect_web_oa_t.json
 WEB_STATE="$ROLE_STATE"
