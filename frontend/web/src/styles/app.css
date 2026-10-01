@@ -1557,6 +1557,129 @@ body {
   font-size: var(--font-size-sm);
 }
 
+/* Operations protocol workspace. Native radios retain arrow-key navigation;
+   the label owns the visible focus treatment so the control stays discoverable
+   when the radio is visually compact. */
+.protocol-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0 0 var(--space-md);
+  padding: 0.5rem 0;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.protocol-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.protocol-tab:hover {
+  color: var(--color-text);
+  background: var(--color-secondary-bg);
+}
+
+.protocol-tab input {
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.protocol-tab:focus-within {
+  box-shadow: var(--focus-ring);
+}
+
+.protocol-tab--active {
+  color: var(--color-text);
+  font-weight: 600;
+  border-color: var(--color-border);
+  background: var(--color-widget-bg);
+}
+
+.protocol-workspace {
+  margin-bottom: var(--space-lg);
+}
+
+.protocol-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--space-sm);
+  margin: var(--space-sm) 0 var(--space-md);
+}
+
+.protocol-status-card {
+  min-width: 0;
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-widget-bg);
+}
+
+.protocol-status-card h3 {
+  margin: 0 0 0.35rem;
+  font-size: var(--font-size-md);
+}
+
+.protocol-status-card__state {
+  margin: 0;
+  font-weight: 600;
+}
+
+.protocol-status-card__state--ready {
+  color: var(--color-success, #166534);
+}
+
+.protocol-status-card__state--degraded,
+.protocol-status-card__state--checking,
+.protocol-status-card__state--stale {
+  color: var(--color-warning, #92400e);
+}
+
+.protocol-status-card__state--unreachable,
+.protocol-status-card__state--auth_failure,
+.protocol-status-card__state--incompatible {
+  color: var(--color-danger, #991b1b);
+}
+
+.protocol-status-card__facts {
+  display: flex;
+  gap: var(--space-md);
+  margin: var(--space-sm) 0 0;
+}
+
+.protocol-status-card__facts div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.protocol-status-card__facts dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs, 0.75rem);
+}
+
+.protocol-status-card__facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.protocol-workspace__active {
+  margin: var(--space-sm) 0 var(--space-md);
+  padding: var(--space-md);
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-secondary-bg);
+}
+
+.protocol-workspace__active h2 {
+  margin-top: 0;
+}
+
 .inline-alert {
   margin: var(--space-sm) 0;
   padding: 0.65rem 0.85rem;
