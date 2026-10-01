@@ -107,6 +107,13 @@ describe("inventoryApi", () => {
     )).toThrow("scope correlation");
   });
 
+  it("rejects an empty page that advertises a continuation cursor", () => {
+    expect(() => validateConnectorInventoryResponse(
+      response([], { next_cursor: "opaque.cursor" }),
+      request,
+    )).toThrow("empty pages cannot continue");
+  });
+
   it("rejects invalid references and false action availability", () => {
     expect(() => validateConnectorInventoryResponse(response([{
       ...point,

@@ -365,6 +365,9 @@ export function validateConnectorInventoryResponse(
   if (value.next_cursor != null && (typeof value.next_cursor !== "string" || value.next_cursor.trim() === "")) {
     throw new InventoryContractError("inventory continuation cursor is malformed");
   }
+  if (value.next_cursor != null && records.length === 0) {
+    throw new InventoryContractError("inventory empty pages cannot continue");
+  }
   return {
     schema: CONNECTOR_INVENTORY_CONTRACT_V1,
     request_id: responseRequestId,
