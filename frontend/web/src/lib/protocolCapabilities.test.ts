@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   capabilityResponseAggregate,
+  summarizeAggregateUpstream,
   summarizeProtocolCapabilities,
 } from "./protocolCapabilities";
 
@@ -65,6 +66,39 @@ describe("protocol capability summaries", () => {
 
     expect(bacnet?.state).toBe("stale");
     expect(bacnet?.stateLabel).toBe("Stale");
+  });
+
+  it("surfaces configured upstream failures without assigning an unknown protocol", () => {
+    const aggregate = {
+      upstreams: [
+        {
+          address: "redacted-configured-upstream",
+          state: "unreachable",
+          hello: null,
+          error: "edge connector is unreachable",
+        },
+      ],
+    };
+    const statuses = summarizeProtocolCapabilities(aggregate);
+    const upstream = summarizeAggregateUpstream(aggregate);
+
+    expect(upstream?.state).toBe("unreachable");
+    expect(upstream?.reason).toContain("configured upstream");
+    expect(upstream?.reason).toContain("returned an error");
+    expect(upstream?.reason).not.toContain("redacted-configured-upstream");
+    expect(statuses.every((status) => status.state === "not_configured")).toBe(true);
+    expect(statuses.every((status) => status.reason.includes("protocol-specific connector"))).toBe(true);
+    expect(statuses.every((status) => !status.reason.includes("edge connector is unreachable"))).toBe(true);
+  });
+
+  it("keeps a null hello in checking while preserving the aggregate status", () => {
+    const upstream = summarizeAggregateUpstream({
+      upstreams: [{ state: "checking", hello: null, error: null }],
+    });
+
+    expect(upstream?.state).toBe("checking");
+    expect(upstream?.stateLabel).toBe("Checking");
+    expect(upstream?.reason).toContain("protocol-specific capability details are unavailable");
   });
 
   it("requires the authenticated aggregate before rendering protocol status", () => {
