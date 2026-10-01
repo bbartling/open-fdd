@@ -4,8 +4,13 @@ import { getStoredToken } from "../api/authApi";
 import { apiFetch, apiFetchBlob } from "../api/client";
 import { getStoredActiveTenant } from "../api/tenantApi";
 import { AppShell } from "../components/AppShell";
+import { ProtocolWorkspace } from "../components/ProtocolWorkspace";
 import { SitesPanel } from "../components/SitesPanel";
 import { Button } from "../components/widgets";
+import {
+  PROTOCOL_WORKSPACE_TABS,
+  type ProtocolWorkspaceId,
+} from "../lib/protocolCapabilities";
 import {
   buildAfddBackfillPayload,
   buildAfddSchedulePayload,
@@ -1166,11 +1171,24 @@ export function OperationsPage() {
   const rawView = searchParams.get("view");
   const view: OperationsView =
     rawView === "afdd" || rawView === "sites" ? rawView : "mqtt";
+  const rawProtocol = searchParams.get("protocol");
+  const protocol: ProtocolWorkspaceId = PROTOCOL_WORKSPACE_TABS.some(
+    (tab) => tab.id === rawProtocol,
+  )
+    ? (rawProtocol as ProtocolWorkspaceId)
+    : "mqtt";
 
   const setView = (next: OperationsView) => {
     const params = new URLSearchParams(searchParams);
     if (next === "mqtt") params.delete("view");
     else params.set("view", next);
+    setSearchParams(params, { replace: true });
+  };
+
+  const setProtocol = (next: ProtocolWorkspaceId) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "mqtt") params.delete("protocol");
+    else params.set("protocol", next);
     setSearchParams(params, { replace: true });
   };
 
@@ -1222,9 +1240,14 @@ export function OperationsPage() {
         <AfddPanel />
       ) : (
         <>
-          <EdgeKitDownloadPanel />
-          <MqttPanel />
-          <TelemetrySuspendPanel />
+          <ProtocolWorkspace protocol={protocol} onProtocolChange={setProtocol} />
+          {protocol === "mqtt" ? (
+            <>
+              <EdgeKitDownloadPanel />
+              <MqttPanel />
+              <TelemetrySuspendPanel />
+            </>
+          ) : null}
         </>
       )}
     </AppShell>

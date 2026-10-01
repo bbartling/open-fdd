@@ -1,3 +1,8 @@
+## 2026-10-01 — Operations protocol workspace Phase 3B (in progress)
+
+- Added an authenticated capability-driven Operations protocol shell with nested MQTT troubleshooting, BACnet, Modbus and Haystack radios. Existing Sites, MQTT and AFDD query views remain intact; this phase performs no connector inventory, protocol reads or writes.
+- Added exact protocol/state summarization, keyboard-focusable radio navigation, loading/unavailable/error/retry states and focused frontend tests. No VERSION, GHCR, Railway or release action.
+
 ## 2026-10-01 — Id-heuristic prove path (#1037–#1047, not FQ)
 
 - RCx preset catalog requests include `building_id` so multi-tenant mode does not 403 `GET /api/analytics/rcx/presets`.
