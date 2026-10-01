@@ -1161,3 +1161,7 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 ## 2026-09-30 — tip 3.5.59
 
 - VERSION **3.5.59** after docs #1076 + wave I/K ACME retarget #1079. Soft-OPEN #1069/#1070. Parked: #1067, #1075, #1080. No FQ claim.
+## 2026-10-01 — tip 3.5.60
+
+- VERSION **3.5.60** after fail-fast health / honest closeout probes #1085 (and inventory `GET /api/version`). Issues #1034–#1070 stay open pending tip+field stress. Parked Codex drafts #1067, #1075, #1080 untouched. No FQ claim on this bump.
+
