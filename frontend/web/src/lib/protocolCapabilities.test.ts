@@ -86,7 +86,7 @@ describe("protocol capability summaries", () => {
     expect(upstream?.reason).toContain("configured upstream");
     expect(upstream?.reason).toContain("returned an error");
     expect(upstream?.reason).not.toContain("redacted-configured-upstream");
-    expect(statuses.every((status) => status.state === "not_configured")).toBe(true);
+    expect(statuses.every((status) => status.state === "unknown")).toBe(true);
     expect(statuses.every((status) => status.reason.includes("protocol-specific connector"))).toBe(true);
     expect(statuses.every((status) => !status.reason.includes("edge connector is unreachable"))).toBe(true);
   });
@@ -99,6 +99,21 @@ describe("protocol capability summaries", () => {
     expect(upstream?.state).toBe("checking");
     expect(upstream?.stateLabel).toBe("Checking");
     expect(upstream?.reason).toContain("protocol-specific capability details are unavailable");
+  });
+
+  it("surfaces an aggregate diagnostic when no upstream row is available", () => {
+    const statuses = summarizeProtocolCapabilities({
+      upstreams: [],
+      diagnostic: "configured upstream entry is invalid",
+    });
+    const upstream = summarizeAggregateUpstream({
+      upstreams: [],
+      diagnostic: "configured upstream entry is invalid",
+    });
+
+    expect(upstream?.state).toBe("unknown");
+    expect(upstream?.reason).toContain("configuration reported an error");
+    expect(statuses.every((status) => status.state === "unknown")).toBe(true);
   });
 
   it("requires the authenticated aggregate before rendering protocol status", () => {
