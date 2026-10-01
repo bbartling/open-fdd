@@ -19,6 +19,11 @@ function statusClass(state: ProtocolCapabilityStatus["state"]): string {
   return `protocol-status-card__state protocol-status-card__state--${state}`;
 }
 
+function evidenceLabels(states: ProtocolCapabilityStatus["connectionStates"]): string {
+  const labels = [...new Set(states)].map((state) => state.replaceAll("_", " "));
+  return labels.length > 0 ? labels.join(", ") : "Not reported";
+}
+
 function ProtocolStatusCard({ status }: { status: ProtocolCapabilityStatus }) {
   return (
     <article
@@ -41,6 +46,18 @@ function ProtocolStatusCard({ status }: { status: ProtocolCapabilityStatus }) {
             <dt>Ready sources</dt>
             <dd>{status.readyCount}</dd>
           </div>
+          {status.protocol === "mqtt" ? (
+            <>
+              <div>
+                <dt>MQTT connection</dt>
+                <dd>{evidenceLabels(status.connectionStates)}</dd>
+              </div>
+              <div>
+                <dt>Durable delivery</dt>
+                <dd>{evidenceLabels(status.durableStates)}</dd>
+              </div>
+            </>
+          ) : null}
         </dl>
       ) : null}
     </article>
