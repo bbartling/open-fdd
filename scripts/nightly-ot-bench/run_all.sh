@@ -77,6 +77,7 @@ if [[ "$SKIP_PULL" != "1" ]]; then
       # Still run Phase-1 honesty gates (no stack required for ledger; live API may skip)
       run_phase 14_capability_ledger.sh "14 capability ledger (P1-M0)" || OVERALL=1
       run_phase 15_product_truth_honesty.sh "15 product-truth honesty (P1)" || OVERALL=1
+      run_phase 40_no_id_heuristics.sh "40 equipment-id heuristic source gate" || OVERALL=1
       finish_report
     fi
   fi
@@ -122,6 +123,7 @@ run_phase 13_mcp_accuracy.sh "13 MCP accuracy vs central" || OVERALL=1
 # P1-M0 recovery honesty — runs even when OT LAN is red (ledger is tree-local).
 run_phase 14_capability_ledger.sh "14 capability ledger (P1-M0)" || OVERALL=1
 run_phase 15_product_truth_honesty.sh "15 product-truth honesty (P1)" || OVERALL=1
+run_phase 40_no_id_heuristics.sh "40 equipment-id heuristic source gate" || OVERALL=1
 
 # P1-M3 real-stack Playwright — requires live SPA (hard fail if up-but-broken).
 run_phase 16_playwright_web.sh "16 Playwright product workflows" || OVERALL=1

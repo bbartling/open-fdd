@@ -106,6 +106,7 @@ describe("RcxPage vibe19 catalog", () => {
     await waitFor(() => {
       expect(postRcxPreset).toHaveBeenCalled();
     });
+    expect(listRcxPresets).toHaveBeenCalledWith("BUILDING_100");
     expect(screen.getByTestId("rcx-comfort-donut")).toBeTruthy();
     expect(screen.getByTestId("rcx-companion-note").textContent).toMatch(
       /Worst-zones timeseries/,

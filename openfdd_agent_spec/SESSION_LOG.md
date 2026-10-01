@@ -1,3 +1,9 @@
+## 2026-10-01 — Id-heuristic prove path (#1037–#1047, not FQ)
+
+- RCx preset catalog requests include `building_id` so multi-tenant mode does not 403 `GET /api/analytics/rcx/presets`.
+- Gate 40 and `tests/qualification/test_no_equipment_id_heuristics.py` fail closed on `equipment_id` `LIKE` / id-text selectors. Gate 37 picks an AHU by stamp and checks preset membership. Empty points are not inclusion proof.
+- No VERSION bump. No OPS pin. Tip+field on a published tip is still required before closing #1037–#1042 and #1045–#1047.
+
 ## 2026-09-30 — Equipment selection by stamp (#1037–#1043, not FQ)
 
 - OAT-METEO no longer filters `equipment_id LIKE 'AHU%'`. The rule targets registry kind `ahu` after the query, so a stamped opaque AHU stays in scope and an `AHU*` id stamped `vav` does not.
