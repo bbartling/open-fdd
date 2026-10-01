@@ -49,6 +49,8 @@ record_soft() {
 # Override with OPENFDD_WAVE_MQTT_BUILDING when the hub site id is not ACME.
 MQTT_BUILDING="${OPENFDD_WAVE_MQTT_BUILDING:-ACME}"
 LOOPBACK_EQ="${OPENFDD_WAVE_MQTT_LOOPBACK_EQ:-bldg2-zone-loopback}"
+# MQTT oa_t on ACME is the AHU outdoor-air role (rtu_01), not zone loopback.
+OA_EQ="${OPENFDD_WAVE_MQTT_OA_EQ:-rtu_01}"
 WEATHER_EQ="${OPENFDD_WAVE_MQTT_WEATHER_EQ:-hosted-weather}"
 urlencode() {
   python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
@@ -65,7 +67,7 @@ else
   record sensor_faults_lakeside 0 "matched=$matched rows=$rows"
 fi
 
-# 2) MQTT quad — recent loopback has zone_t + oa_t + zone_rh; hosted-weather web_oa_t.
+# 2) MQTT quad — loopback zone_t/zone_rh; AHU oa_t (OA_EQ); hosted-weather web_oa_t.
 # Absent columns stay field-catalog Soft-OPEN. A present column with no values is a product fail.
 payload="$(jq -nc --arg b "$MQTT_BUILDING" --arg e "$LOOPBACK_EQ" \
   '{building_id:$b, equipment_ids:[$e], max_points:200}')"
@@ -88,8 +90,7 @@ print("zone_col=%d" % has("zone_t"))
 print("oa_col=%d" % has("oa_t"))
 print("rh_col=%d" % has("zone_rh"))
 ')"
-# zone_t and oa_t are separate. A present null is a product fail even when the
-# other role is a field-catalog Soft-OPEN. Soft-OPEN is not a product PASS.
+# zone_t and oa_t are separate. Soft-OPEN is not a product PASS.
 if [[ "${zt:-0}" -gt 0 ]]; then
   record mqtt_zone_t 1 "zone_t=$zt n=$n"
 elif [[ "${zone_col:-0}" == "1" ]]; then
@@ -97,12 +98,28 @@ elif [[ "${zone_col:-0}" == "1" ]]; then
 else
   record_soft mqtt_zone_t "zone_t column absent value=${zt:-0} n=${n:-0}"
 fi
+# oa_t from AHU (OA_EQ), not zone loopback.
+payload="$(jq -nc --arg b "$MQTT_BUILDING" --arg e "$OA_EQ" \
+  '{building_id:$b, equipment_ids:[$e], max_points:200, series:{columns:["oa_t"]}}')"
+body="$(cpost /api/analytics/inspect "$payload")"
+echo "$body" >"$ART/wave_k_inspect_oa_t.json"
+eval "$(echo "$body" | python3 -c '
+import json,sys
+a=(json.load(sys.stdin).get("analytics") or {})
+cov=a.get("coverage") or {}
+plot=set(cov.get("plottable_columns") or [])
+pts=a.get("points") or []
+oa=sum(1 for p in pts if isinstance(p, dict) and p.get("oa_t") is not None)
+print("oa=%d" % oa)
+print("n=%d" % len(pts))
+print("oa_col=%d" % (1 if "oa_t" in plot else 0))
+')"
 if [[ "${oa:-0}" -gt 0 ]]; then
-  record mqtt_oa_t 1 "oa_t=$oa n=$n"
+  record mqtt_oa_t 1 "oa_t=$oa n=$n equip=$OA_EQ"
 elif [[ "${oa_col:-0}" == "1" ]]; then
-  record mqtt_oa_t 0 "oa_t column present value=${oa:-0} n=$n"
+  record mqtt_oa_t 0 "oa_t column present value=${oa:-0} n=$n equip=$OA_EQ"
 else
-  record_soft mqtt_oa_t "oa_t column absent value=${oa:-0} n=${n:-0}"
+  record_soft mqtt_oa_t "oa_t column absent value=${oa:-0} n=${n:-0} equip=$OA_EQ"
 fi
 echo "mqtt_zone_and_oa detail zone_t=${zt:-0} oa_t=${oa:-0} split=mqtt_zone_t,mqtt_oa_t" | tee -a "$LOG"
 if [[ "${rh:-0}" -gt 0 ]]; then
