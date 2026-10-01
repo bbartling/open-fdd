@@ -5130,12 +5130,18 @@ mod version_tests {
     };
     use crate::capabilities::{CapabilitiesAggregator, ConfiguredUpstream};
     use crate::state::AppState;
-    use axum::http::{HeaderMap, HeaderValue, StatusCode};
-    use axum::Json;
+    use axum::body::Body;
+    use axum::http::{HeaderMap, HeaderValue, Request, StatusCode};
+    use axum::routing::post;
+    use axum::{Json, Router};
     use bytes::Bytes;
-    use openfdd_contracts::{Protocol, Quality, TelemetryEnvelope, TelemetryPoint, ValueKind};
+    use openfdd_contracts::{
+        ConnectorInventoryRequest, ConnectorInventoryResponse, InventoryProvenance, Protocol,
+        Quality, TelemetryEnvelope, TelemetryPoint, ValueKind, CONNECTOR_INVENTORY_CONTRACT_V1,
+    };
     use serde_json::Value;
     use std::sync::Arc;
+    use tower::ServiceExt;
     use url::Url;
 
     #[test]
@@ -5143,6 +5149,102 @@ mod version_tests {
         assert!(connector_proxy_role_allowed(crate::auth::Role::Viewer));
         assert!(connector_proxy_role_allowed(crate::auth::Role::Operator));
         assert!(connector_proxy_role_allowed(crate::auth::Role::Admin));
+    }
+
+    #[tokio::test]
+    async fn connector_inventory_http_enforces_jwt_roles_and_scope() {
+        async fn inventory_upstream(
+            Json(request): Json<ConnectorInventoryRequest>,
+        ) -> Json<ConnectorInventoryResponse> {
+            Json(ConnectorInventoryResponse {
+                schema: CONNECTOR_INVENTORY_CONTRACT_V1.into(),
+                request_id: request.request_id,
+                scope: request.scope,
+                protocols: Vec::new(),
+                revision: "config-http-test".into(),
+                captured_at: chrono::Utc::now(),
+                provenance: InventoryProvenance::TrustedConfiguration,
+                records: Vec::new(),
+                next_cursor: None,
+            })
+        }
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let upstream = Router::new().route("/api/connector/inventory", post(inventory_upstream));
+        let server = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+
+        let secret = "connector-http-role-policy-test-secret".to_string();
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some(secret),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        state.capabilities = CapabilitiesAggregator::for_tests(vec![ConfiguredUpstream {
+            tenant_id: "legacy".into(),
+            building_id: "building-a".into(),
+            edge_id: "edge-a".into(),
+            base_url: Url::parse(&format!("http://{address}/")).unwrap(),
+            token: Some("synthetic-upstream-token".into()),
+        }]);
+        let state = Arc::new(state);
+        let app = super::router(Arc::clone(&state));
+        let body = |tenant_id: &str| {
+            serde_json::json!({
+                "schema": CONNECTOR_INVENTORY_CONTRACT_V1,
+                "request_id": uuid::Uuid::nil(),
+                "scope": {
+                    "tenant_id": tenant_id,
+                    "building_id": "building-a",
+                    "edge_id": "edge-a"
+                },
+                "protocols": ["bacnet"],
+                "page_size": 10
+            })
+            .to_string()
+        };
+        let request = |token: Option<&str>, tenant_id: &str| {
+            let mut builder = Request::post("/api/connectors/edge-a/inventory")
+                .header("content-type", "application/json");
+            if let Some(token) = token {
+                builder = builder.header("authorization", format!("Bearer {token}"));
+            }
+            builder.body(Body::from(body(tenant_id))).unwrap()
+        };
+
+        let anonymous = app.clone().oneshot(request(None, "legacy")).await.unwrap();
+        assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+
+        for role in [
+            crate::auth::Role::Viewer,
+            crate::auth::Role::Operator,
+            crate::auth::Role::Admin,
+        ] {
+            let token = state
+                .auth
+                .issue_token_with_tenants("connector-test", role, 60, &[])
+                .unwrap();
+            let allowed = app
+                .clone()
+                .oneshot(request(Some(&token), "legacy"))
+                .await
+                .unwrap();
+            assert_eq!(allowed.status(), StatusCode::OK, "role {role}");
+        }
+
+        let viewer = state
+            .auth
+            .issue_token_with_tenants("connector-test", crate::auth::Role::Viewer, 60, &[])
+            .unwrap();
+        let foreign = app
+            .oneshot(request(Some(&viewer), "tenant-foreign"))
+            .await
+            .unwrap();
+        assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
+        server.abort();
     }
 
     #[test]
