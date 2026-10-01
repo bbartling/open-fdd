@@ -373,7 +373,7 @@ function InventoryTreeView({
     const key = contextKey;
     setContextOpen(false);
     setContextKey(null);
-    if (restore && key) window.requestAnimationFrame(() => focusKey(key));
+    if (restore && key) focusKey(key);
   }, [contextKey, focusKey]);
 
   const openContext = useCallback((node: InventoryTreeNode) => {
