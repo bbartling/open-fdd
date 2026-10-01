@@ -141,7 +141,7 @@ OA_STATE="$ROLE_STATE"
 role_probe bas_web_oa_t "$WEATHER_EQ" web_oa_t wave_i_inspect_web_oa_t.json
 WEB_STATE="$ROLE_STATE"
 
-payload="$(jq -nc --arg b "$MQTT_BUILDING" '{building_id:$b, max_points:2000}')"
+payload="$(jq -nc --arg b "$MQTT_BUILDING" '{building_id:$b, max_points:2000, refresh:true}')"
 body="$(cpost /api/analytics/bas-vs-web-oat "$payload")"
 echo "$body" >"$ART/wave_i_bas_vs_web_acme.json"
 pts="$(echo "$body" | python3 -c '
