@@ -352,6 +352,131 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn connector_inventory_is_bounded_scoped_and_broker_free() {
+        let original_edge = std::env::var("OPENFDD_EDGE_ID").ok();
+        let original_building = std::env::var("OPENFDD_BUILDING_ID").ok();
+        let original_tenant = std::env::var("OPENFDD_TENANT_ID").ok();
+        let original_mode = std::env::var("OPENFDD_INGEST_MODE").ok();
+        let original_mqtt = std::env::var("OPENFDD_MQTT_HOST").ok();
+        std::env::set_var("OPENFDD_EDGE_ID", "edge-local");
+        std::env::set_var("OPENFDD_BUILDING_ID", "building-local");
+        std::env::set_var("OPENFDD_TENANT_ID", "tenant-local");
+        std::env::set_var("OPENFDD_INGEST_MODE", "local_fieldbus");
+        std::env::remove_var("OPENFDD_MQTT_HOST");
+
+        let state = test_state();
+        let client = state.bacnet_client.clone();
+        let app = routes::api_routes(state);
+        let request = serde_json::json!({
+            "schema": openfdd_contracts::CONNECTOR_INVENTORY_CONTRACT_V1,
+            "request_id": uuid::Uuid::nil(),
+            "scope": {
+                "tenant_id": "tenant-local",
+                "building_id": "building-local",
+                "edge_id": "edge-local"
+            },
+            "protocols": ["bacnet"],
+            "page_size": 2
+        });
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/api/connector/inventory")
+                    .header("content-type", "application/json")
+                    .body(Body::from(request.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            value["schema"],
+            openfdd_contracts::CONNECTOR_INVENTORY_CONTRACT_V1
+        );
+        assert_eq!(value["provenance"], "trusted_configuration");
+        assert_eq!(value["records"].as_array().unwrap().len(), 2);
+        assert!(value["next_cursor"].as_str().is_some());
+        let serialized = value.to_string();
+        assert!(!serialized.contains("127.0.0.1"));
+        assert!(!serialized.contains("47808"));
+        assert_eq!(client.test_ot_call_count(), 0);
+
+        let mut cursor = value["next_cursor"].clone();
+        let mut all_records = value["records"].as_array().unwrap().clone();
+        while let Some(cursor_value) = cursor.as_str() {
+            let mut page_request = request.clone();
+            page_request["cursor"] = serde_json::json!(cursor_value);
+            let page_response = app
+                .clone()
+                .oneshot(
+                    Request::post("/api/connector/inventory")
+                        .header("content-type", "application/json")
+                        .body(Body::from(page_request.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(page_response.status(), StatusCode::OK);
+            let page_body = page_response
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes();
+            let page: serde_json::Value = serde_json::from_slice(&page_body).unwrap();
+            assert_eq!(page["revision"], value["revision"]);
+            assert!(page["records"].as_array().unwrap().len() <= 2);
+            all_records.extend(page["records"].as_array().unwrap().iter().cloned());
+            cursor = page["next_cursor"].clone();
+        }
+        assert!(all_records.iter().any(|record| record["kind"] == "point"));
+        assert_eq!(client.test_ot_call_count(), 0);
+
+        let mut foreign_request = request.clone();
+        foreign_request["scope"]["tenant_id"] = serde_json::json!("foreign-tenant");
+        let foreign_response = app
+            .clone()
+            .oneshot(
+                Request::post("/api/connector/inventory")
+                    .header("content-type", "application/json")
+                    .body(Body::from(foreign_request.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(foreign_response.status(), StatusCode::FORBIDDEN);
+
+        let mut invalid_page = request;
+        invalid_page["page_size"] = serde_json::json!(101);
+        let invalid_response = app
+            .oneshot(
+                Request::post("/api/connector/inventory")
+                    .header("content-type", "application/json")
+                    .body(Body::from(invalid_page.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(invalid_response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(client.test_ot_call_count(), 0);
+
+        for (name, value) in [
+            ("OPENFDD_EDGE_ID", original_edge),
+            ("OPENFDD_BUILDING_ID", original_building),
+            ("OPENFDD_TENANT_ID", original_tenant),
+            ("OPENFDD_INGEST_MODE", original_mode),
+            ("OPENFDD_MQTT_HOST", original_mqtt),
+        ] {
+            match value {
+                Some(value) => std::env::set_var(name, value),
+                None => std::env::remove_var(name),
+            }
+        }
+    }
+
+    #[tokio::test]
     async fn connector_read_rejects_untrusted_scope_before_ot_access() {
         let state = test_state();
         let app = routes::api_routes(state.clone());

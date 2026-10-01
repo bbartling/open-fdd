@@ -3,6 +3,7 @@
 pub mod capabilities;
 pub mod command;
 pub mod envelope;
+pub mod inventory;
 pub mod proxy;
 pub mod topics;
 
@@ -14,6 +15,11 @@ pub use capabilities::{
 pub use command::{CommandAck, CommandEnvelope, CommandStatus};
 pub use envelope::{
     Protocol, Quality, SchemaVersion, TelemetryEnvelope, TelemetryPoint, ValueKind,
+};
+pub use inventory::{
+    ConnectorInventoryRequest, ConnectorInventoryResponse, InventoryAvailability,
+    InventoryCommandability, InventoryPointReference, InventoryProvenance, InventoryRecord,
+    CONNECTOR_INVENTORY_CONTRACT_V1, INVENTORY_MAX_CURSOR_LENGTH, INVENTORY_MAX_PAGE_SIZE,
 };
 pub use proxy::{
     ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult, ConnectorScope, ReadError,

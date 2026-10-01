@@ -307,8 +307,7 @@ pub struct FieldPoint {
     pub object_type: String,
     pub object_instance: u32,
     pub point_name: String,
-    /// Loaded from field_devices.toml units column; display/export TBD.
-    #[expect(dead_code)]
+    /// Loaded from field_devices.toml and exposed as a typed inventory unit.
     pub units: String,
 }
 

@@ -13,9 +13,11 @@ use axum::{
 use chrono::Utc;
 use openfdd_contracts::{
     CapabilityState, ConnectorAction, ConnectorCapability, ConnectorHelloResponse,
-    ConnectorProtocol, ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult,
-    DeliveryStatus, ReadPointResult, ReadPriorityArrayResult, ReadPrioritySlot, ReadValueState,
-    RecipeObservation, ServiceVersion, CAPABILITIES_CONTRACT_V1,
+    ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorProtocol, ConnectorReadRequest,
+    ConnectorReadResponse, ConnectorReadResult, DeliveryStatus, InventoryAvailability,
+    InventoryCommandability, InventoryPointReference, InventoryProvenance, InventoryRecord,
+    ReadPointResult, ReadPriorityArrayResult, ReadPrioritySlot, ReadValueState, RecipeObservation,
+    ServiceVersion, CAPABILITIES_CONTRACT_V1, CONNECTOR_INVENTORY_CONTRACT_V1,
 };
 use serde_json::Value;
 
@@ -323,6 +325,210 @@ async fn connector_hello(State(state): State<AppState>) -> Json<ConnectorHelloRe
     Json(hello_response(&state))
 }
 
+fn safe_component(value: &str, fallback: &str) -> String {
+    let mut component = String::new();
+    for ch in value.trim().chars() {
+        if component.len() >= 64 {
+            break;
+        }
+        if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.') {
+            component.push(ch.to_ascii_lowercase());
+        } else if !component.ends_with('_') {
+            component.push('_');
+        }
+    }
+    let component = component.trim_matches('_').to_string();
+    if component.is_empty() {
+        fallback.into()
+    } else {
+        component
+    }
+}
+
+fn display_name(value: &str, fallback: &str) -> String {
+    let cleaned: String = value
+        .trim()
+        .chars()
+        .filter(|ch| !ch.is_control())
+        .take(128)
+        .collect();
+    if cleaned.trim().is_empty() {
+        fallback.into()
+    } else {
+        cleaned
+    }
+}
+
+fn inventory_units(value: &str) -> Option<String> {
+    let mut cleaned = String::new();
+    for ch in value.trim().chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | ':' | '/') {
+            cleaned.push(ch);
+        } else if !cleaned.ends_with('_') {
+            cleaned.push('_');
+        }
+        if cleaned.len() >= 64 {
+            break;
+        }
+    }
+    let cleaned = cleaned.trim_matches('_').to_string();
+    (!cleaned.is_empty()).then_some(cleaned)
+}
+
+fn inventory_records(state: &AppState) -> Vec<InventoryRecord> {
+    let mut records = Vec::new();
+    for device in state.bacnet_client.configured_devices() {
+        let device_component = format!(
+            "{}-{}",
+            safe_component(&device.name, "device"),
+            device.device_instance
+        );
+        let device_id = format!("bacnet:device:{device_component}");
+        let availability = if device.enabled {
+            InventoryAvailability::Configured
+        } else {
+            InventoryAvailability::Disabled
+        };
+        let actions = if device.enabled {
+            vec![ConnectorAction::MetadataRead]
+        } else {
+            Vec::new()
+        };
+        records.push(InventoryRecord::Device {
+            device_id: device_id.clone(),
+            protocol: ConnectorProtocol::Bacnet,
+            display_name: display_name(
+                &device.name,
+                &format!("BACnet device {}", device.device_instance),
+            ),
+            availability: availability.clone(),
+            commandability: InventoryCommandability::Unknown,
+            actions,
+        });
+
+        let mut object_types = std::collections::BTreeSet::new();
+        for point in &device.points {
+            object_types.insert(point.object_type.to_ascii_lowercase());
+        }
+        for object_type in object_types {
+            let object_component = safe_component(&object_type, "object");
+            let group_id = format!("{device_id}:object-type:{object_component}");
+            records.push(InventoryRecord::Group {
+                group_id,
+                device_id: device_id.clone(),
+                protocol: ConnectorProtocol::Bacnet,
+                display_name: display_name(&object_type, "BACnet object type"),
+                availability: availability.clone(),
+                commandability: InventoryCommandability::Unknown,
+                actions: if device.enabled {
+                    vec![ConnectorAction::MetadataRead]
+                } else {
+                    Vec::new()
+                },
+            });
+        }
+        for point in device.points {
+            let object_type = point.object_type.to_ascii_lowercase();
+            let object_component = safe_component(&object_type, "object");
+            let group_id = format!("{device_id}:object-type:{object_component}");
+            let point_id = format!(
+                "{device_id}:{object_component}:{}:present-value",
+                point.object_instance
+            );
+            records.push(InventoryRecord::Point {
+                point_id,
+                device_id: device_id.clone(),
+                group_id: Some(group_id),
+                protocol: ConnectorProtocol::Bacnet,
+                display_name: display_name(
+                    &point.point_name,
+                    &format!("{object_type} {}", point.object_instance),
+                ),
+                units: inventory_units(&point.units),
+                availability: availability.clone(),
+                // Configured object type does not prove commandability. The
+                // typed read seam determines this from an actual PA result.
+                commandability: InventoryCommandability::Unknown,
+                actions: if device.enabled {
+                    vec![
+                        ConnectorAction::PointRead,
+                        ConnectorAction::PriorityArrayRead,
+                    ]
+                } else {
+                    Vec::new()
+                },
+                reference: InventoryPointReference::Bacnet {
+                    device_instance: device.device_instance,
+                    object_type,
+                    object_instance: point.object_instance,
+                    property_id: "present-value".into(),
+                },
+            });
+        }
+    }
+    records.sort_by(|left, right| left.key_for_order().cmp(&right.key_for_order()));
+    records
+}
+
+fn inventory_revision(records: &[InventoryRecord]) -> String {
+    let bytes = match serde_json::to_vec(records) {
+        Ok(bytes) => bytes,
+        Err(_) => return "config-invalid".into(),
+    };
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in bytes {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("config-{hash:016x}")
+}
+
+fn build_inventory(
+    state: &AppState,
+    request: &ConnectorInventoryRequest,
+) -> Result<ConnectorInventoryResponse, ApiError> {
+    let all_records = inventory_records(state);
+    let revision = inventory_revision(&all_records);
+    let protocols = &request.protocols;
+    let filtered: Vec<_> = all_records
+        .into_iter()
+        .filter(|record| protocols.is_empty() || protocols.contains(&record.protocol()))
+        .collect();
+    let offset = request
+        .offset()
+        .map_err(|_| ApiError::BadRequest("inventory cursor is out of range".into()))?;
+    if offset > filtered.len() {
+        return Err(ApiError::BadRequest(
+            "inventory cursor is out of range".into(),
+        ));
+    }
+    let end = offset
+        .saturating_add(usize::from(request.page_size))
+        .min(filtered.len());
+    let page = filtered[offset..end].to_vec();
+    let mut page_protocols = page
+        .iter()
+        .map(InventoryRecord::protocol)
+        .collect::<Vec<_>>();
+    page_protocols.sort_by_key(|protocol| *protocol as u8);
+    page_protocols.dedup();
+    let response = ConnectorInventoryResponse {
+        schema: CONNECTOR_INVENTORY_CONTRACT_V1.into(),
+        request_id: request.request_id,
+        scope: request.scope.clone(),
+        protocols: page_protocols,
+        revision,
+        captured_at: Utc::now(),
+        provenance: InventoryProvenance::TrustedConfiguration,
+        records: page,
+        next_cursor: (end < filtered.len()).then(|| end.to_string()),
+    };
+    response
+        .validate_for(request)
+        .map_err(|_| ApiError::Internal("connector returned an invalid inventory page".into()))?;
+    Ok(response)
+}
+
 async fn connector_read(
     State(state): State<AppState>,
     Json(request): Json<ConnectorReadRequest>,
@@ -396,6 +602,15 @@ async fn connector_read(
         ApiError::Internal("connector returned an invalid public read result".into())
     })?;
     Ok(Json(response))
+}
+
+async fn connector_inventory(
+    State(state): State<AppState>,
+    Json(request): Json<ConnectorInventoryRequest>,
+) -> ApiResult<Json<ConnectorInventoryResponse>> {
+    request.validate().map_err(ApiError::BadRequest)?;
+    local_scope_matches(&request.scope)?;
+    Ok(Json(build_inventory(&state, &request)?))
 }
 
 fn point_result(
@@ -506,6 +721,7 @@ fn priority_array_result(
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/connector/hello", get(connector_hello))
+        .route("/api/connector/inventory", post(connector_inventory))
         .route("/api/connector/read", post(connector_read))
 }
 

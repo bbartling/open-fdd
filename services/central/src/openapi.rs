@@ -140,6 +140,17 @@ mod live_routes {
     pub fn capabilities() {}
 
     #[utoipa::path(
+        post, path = "/api/connectors/{edge_id}/inventory", tag = "central",
+        params(("edge_id" = String, Path, description = "Configured edge identifier")),
+        request_body = openfdd_contracts::ConnectorInventoryRequest,
+        responses(
+            (status = 200, description = "Scoped typed connector inventory page", body = openfdd_contracts::ConnectorInventoryResponse),
+            (status = 403, description = "Authenticated tenant or edge scope denied")
+        )
+    )]
+    pub fn connector_inventory() {}
+
+    #[utoipa::path(
         post, path = "/api/connectors/{edge_id}/read", tag = "central",
         params(("edge_id" = String, Path, description = "Configured edge identifier")),
         request_body = openfdd_contracts::ConnectorReadRequest,
@@ -346,6 +357,7 @@ mod live_routes {
         live_routes::datasets_delete,
         live_routes::local_fieldbus_ingest,
         live_routes::capabilities,
+        live_routes::connector_inventory,
         live_routes::connector_read,
         live_routes::fuel_weather_fetch,
         live_routes::fdd_results,
