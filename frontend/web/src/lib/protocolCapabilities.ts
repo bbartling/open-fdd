@@ -172,10 +172,20 @@ export function summarizeAggregateUpstream(
   aggregate: CapabilitiesAggregate | null | undefined,
 ): AggregateUpstreamStatus | null {
   const unresolved = (aggregate?.upstreams ?? []).filter((upstream) => !upstream.hello);
-  if (unresolved.length === 0) return null;
+  const hasDiagnostic = Boolean(aggregate?.diagnostic?.trim());
+  if (unresolved.length === 0 && !hasDiagnostic) return null;
+  if (unresolved.length === 0) {
+    return {
+      state: "unknown",
+      stateLabel: STATE_LABELS.unknown,
+      count: 0,
+      errorCount: 1,
+      reason: "Capability configuration reported an error; protocol-specific capability details are unavailable.",
+    };
+  }
   const states = unresolved.map(unresolvedUpstreamState);
-  const state = chooseState(states);
-  const errorCount = unresolved.filter((upstream) => Boolean(upstream.error)).length;
+  const state = states.length > 0 ? chooseState(states) : "unknown";
+  const errorCount = unresolved.filter((upstream) => Boolean(upstream.error)).length + (hasDiagnostic ? 1 : 0);
   const source = unresolved.length === 1 ? "A configured upstream" : `${unresolved.length} configured upstreams`;
   const errorSuffix = errorCount > 0 ? " and returned an error" : "";
   return {
@@ -194,7 +204,7 @@ export function summarizeProtocolCapabilities(
   return PROTOCOL_WORKSPACE_TABS.map(({ id, label }) => {
     const evidence = aggregate ? connectorEvidence(aggregate, id) : [];
     const states = evidence.map(effectiveState);
-    const state = chooseState(states);
+    const state = states.length === 0 && aggregateUpstream ? "unknown" : chooseState(states);
     const configuredCount = evidence.filter(({ connector }) => connector.configured).length;
     const readyCount = states.filter((item) => item === "ready").length;
     const sourceHealth = evidence.map(({ connector }) => normalizeState(connector.source_health));

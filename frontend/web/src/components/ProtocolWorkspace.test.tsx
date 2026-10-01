@@ -185,7 +185,7 @@ describe("ProtocolWorkspace", () => {
     expect(upstreamStatus.textContent).toContain("unreachable");
     expect(upstreamStatus.textContent).not.toContain("redacted-configured-upstream");
     expect(upstreamStatus.textContent).not.toContain("edge connector is unreachable");
-    expect(screen.getByTestId("protocol-state-modbus").textContent).toContain("Not configured");
+    expect(screen.getByTestId("protocol-state-modbus").textContent).toContain("Unknown");
     expect(screen.getByTestId("protocol-status-modbus").textContent).toContain("configured upstream");
   });
 });
