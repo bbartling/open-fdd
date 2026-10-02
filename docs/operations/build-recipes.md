@@ -116,13 +116,21 @@ OPENFDD_PRIORITY_SCAN_MAX_POINTS_PER_DEVICE=100 \
 ./scripts/openfdd_stack_up.sh standalone
 ```
 
-The scheduler visits one configured device per completed interval, defaults to
-one hour, enforces a five-minute minimum, and does not catch up after a
-restart. It reads only configured points and never performs discovery, writes,
-priority releases, or remediation. The history endpoint is
-`POST /api/connector/priority-history` on the edge and the authenticated
-central projection is
-`POST /api/connectors/{edge_id}/priority-history`.
+The scheduler visits one configured device after a delay following each
+completed visit, defaults to one hour, enforces a five-minute minimum, and
+does not catch up after a restart. It reads only configured points and never
+performs discovery, writes, priority releases, or remediation. The edge
+history endpoint is `POST /api/connector/priority-history`; the authenticated
+central projection is `POST /api/connectors/{edge_id}/priority-history`.
+Operators and admins can request one bounded visit through
+`POST /api/connectors/{edge_id}/priority-history/trigger`; viewers are denied
+before the edge proxy is contacted. The trigger shares the scheduler's
+non-overlap guard and does not bypass the explicit enable flag.
+
+History is retained on the edge in an append-only, fsynced JSONL journal with
+bounded checkpoint compaction. Torn trailing lines are repaired on restart;
+corrupt non-tail state disables history fail-closed while core BACnet polling
+continues. The cloud recipes do not create an edge store or scanner.
 
 ### central — hub for remote edges
 

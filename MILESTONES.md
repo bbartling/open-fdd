@@ -17,7 +17,7 @@ A merged PR, a passing unit suite, a completed scan, and a verified deployment a
 
 **Owner path:** draft PR [#1099](https://github.com/bbartling/open-fdd/pull/1099),
 branch `feat/protocol-workspace-phase4`, stacked on Phase 3D. The implementation
-head currently recorded in the session log is `c779a851`.
+head is `9e355a26`.
 
 ### Landed in the draft branch
 
@@ -26,23 +26,31 @@ head currently recorded in the session log is `c779a851`.
 - Edge-local durable history store and opt-in scheduler. It visits one trusted
   configured device after each completed interval (default 3600 seconds,
   minimum 300), has no catch-up burst, and performs no discovery, write,
-  release, or remediation action.
+  release, or remediation action. History uses an append-only JSONL journal,
+  periodic bounded checkpoints, file and parent-directory sync, and recovery
+  tests for torn tails, corrupt non-tail entries, stale temporary files, and
+  restart/cursor retention. Store failure disables history fail-closed without
+  taking down core BACnet polling.
 - Authenticated fieldbus and central history routes, capability/inventory
   advertisement, OpenAPI declarations, and a React panel that loads history
-  only after an explicit user action.
+  only after an explicit capability-backed user action. An explicitly typed
+  operator/admin trigger runs one bounded visit through the same non-overlap
+  guard; viewers receive 403 before any upstream proxy or OT call.
 - OT recipes persist `/edge-state`; `central` and `csv` remain cloud-only and
   contain no fieldbus/scanner service. MQTT history synchronization is deferred
   to a separately versioned future transport contract.
 
 ### Evidence and remaining acceptance
 
-- Local fieldbus tests, central compile/route tests, frontend contract/UI tests,
-  production build, and Compose/topology checks pass on the draft branch.
+- Targeted local fieldbus tests and clippy, central compile/route tests,
+  frontend contract/UI tests and typecheck/build, security inventory tests,
+  and Compose/topology checks pass at `9e355a26`.
 - Frontend lint still reports pre-existing repository warnings when run with
   `--max-warnings=0`; this is a CI hygiene item, not silently treated as pass.
-- GH Actions and Astra review must pass before the PR is mergeable. No GHCR
-  refresh, deployment, live BACnet bench test, live Haystack probe, device
-  discovery, WriteProperty/release, or FQ/field qualification has happened.
+- GH Actions Rust checks and Astra exact-SHA review remain pending before the
+  PR is mergeable. No GHCR refresh, deployment, live BACnet bench test, live
+  Haystack probe, device discovery, WriteProperty/release, or FQ/field
+  qualification has happened.
 - Bench qualification is a separate gate: verify reachability of the known
   read-only BACnet device 5007 first, halt if unreachable, and discover/verify
   any Haystack endpoint instead of assuming an address. Record evidence and
