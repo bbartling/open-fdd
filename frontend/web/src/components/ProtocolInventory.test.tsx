@@ -68,7 +68,7 @@ function page(records: InventoryRecord[]): ConnectorInventoryResponse {
   };
 }
 
-function renderInventory(capabilityEdgeIds: readonly string[] = []) {
+function renderInventory(capabilityEdgeIds: readonly string[] = [], records: InventoryRecord[] = [device, group, point]) {
   apiFetch.mockImplementation(async (path: string) => {
     if (path === "/api/tenants") {
       return {
@@ -81,7 +81,7 @@ function renderInventory(capabilityEdgeIds: readonly string[] = []) {
     if (path === "/api/edges") return { ok: true, edges: [{ edge_id: "edge-a", site_id: "building-a" }] };
     return {};
   });
-  fetchPage.mockResolvedValue(page([device, group, point]));
+  fetchPage.mockResolvedValue(page(records));
   return render(
     <MemoryRouter initialEntries={["/operations?site=building-a&edge=edge-a"]}>
       <ProtocolInventory protocol="bacnet" capabilityEdgeIds={capabilityEdgeIds} />
@@ -149,6 +149,32 @@ describe("ProtocolInventory", () => {
     expect(menu.textContent).not.toMatch(/read|write|discover|release/i);
     fireEvent.click(screen.getByRole("menuitem", { name: "Copy ID" }));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("opaque-group");
+  });
+
+  it("performs one explicit advertised read and never reads during selection", async () => {
+    renderInventory([], [device, group, { ...point, availability: "configured", actions: ["point_read"] }]);
+    const pointItem = await screen.findByTestId("inventory-treeitem-point:opaque-point");
+    fireEvent.click(pointItem);
+    expect(apiFetch.mock.calls.some(([path]) => String(path).includes("/read"))).toBe(false);
+    apiFetch.mockImplementation(async (path: string, options?: RequestInit) => {
+      if (path === "/api/tenants") return {
+        ok: true, active_tenant_id: "tenant-a", buildings_visible: ["building-a"],
+        tenants: [{ id: "tenant-a", name: "Tenant A", building_ids: ["building-a"] }],
+      };
+      if (path === "/api/edges") return { ok: true, edges: [{ edge_id: "edge-a", site_id: "building-a" }] };
+      if (path === "/api/connectors/edge-a/read") {
+        const request = JSON.parse(String(options?.body));
+        return {
+          schema: "openfdd.connector.read.v1", request_id: request.request_id, scope, ok: true,
+          capability_contract: "openfdd.connector.capabilities.v1", error: null,
+          result: { kind: "point", device_instance: 7, object_type: "analog-value", object_instance: 1, property_id: "present-value", type: "real", value: 71.25, quality: "good", observed_at: "2026-10-01T01:00:00Z" },
+        };
+      }
+      return {};
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Read present value" }));
+    expect((await screen.findByTestId("inventory-read-point-result")).textContent).toContain("71.25");
+    expect(apiFetch.mock.calls.filter(([path]) => String(path).includes("/read"))).toHaveLength(1);
   });
 
   it("does not issue inventory calls without an explicit edge selection", async () => {

@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../api/client";
+import {
+  readConnectorTarget,
+  type ConnectorReadResult,
+} from "../api/connectorReadApi";
 import { getStoredActiveTenant } from "../api/tenantApi";
 import {
   type ConnectorInventoryResponse,
@@ -286,6 +290,86 @@ function InventoryDetails({
   );
 }
 
+function InventoryReadPanel({
+  node,
+  scope,
+}: {
+  node: InventoryTreeNode | null;
+  scope: InventoryScope;
+}) {
+  const [loading, setLoading] = useState<"point" | "priority" | null>(null);
+  const [result, setResult] = useState<ConnectorReadResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const point = node?.record.kind === "point" && node.record.reference.kind === "bacnet"
+    ? node.record
+    : null;
+  const canReadPoint = Boolean(point?.actions.includes("point_read"));
+  const canReadPriority = Boolean(point?.actions.includes("priority_array_read"));
+
+  useEffect(() => {
+    setLoading(null);
+    setResult(null);
+    setError(null);
+  }, [node?.key, scope.building_id, scope.edge_id, scope.tenant_id]);
+
+  if (!point || (!canReadPoint && !canReadPriority)) return null;
+  const run = async (kind: "point" | "priority") => {
+    setLoading(kind);
+    setError(null);
+    setResult(null);
+    const reference = point.reference;
+    if (reference.kind !== "bacnet") return;
+    try {
+      const target = kind === "point"
+        ? {
+            kind: "bacnet_point" as const,
+            device_instance: reference.device_instance,
+            object_type: reference.object_type,
+            object_instance: reference.object_instance,
+            property_id: reference.property_id,
+          }
+        : {
+            kind: "bacnet_priority_array" as const,
+            device_instance: reference.device_instance,
+            object_type: reference.object_type,
+            object_instance: reference.object_instance,
+          };
+      setResult(await readConnectorTarget(scope, target));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Connector read failed");
+    } finally {
+      setLoading(null);
+    }
+  };
+  return (
+    <section className="inventory-read-panel" aria-labelledby="inventory-read-heading" data-testid="inventory-read-panel">
+      <h3 id="inventory-read-heading">Live read</h3>
+      <p className="muted">Runs once when requested. The inventory action and server authorization must both allow it.</p>
+      <div className="inventory-read-panel__actions">
+        {canReadPoint ? <Button id="inventory-read-point" label={loading === "point" ? "Reading…" : "Read present value"} loading={loading === "point"} onClick={() => void run("point")} testId="inventory-read-point" /> : null}
+        {canReadPriority ? <Button id="inventory-read-priority" label={loading === "priority" ? "Reading…" : "Read priority array"} loading={loading === "priority"} onClick={() => void run("priority")} testId="inventory-read-priority" /> : null}
+      </div>
+      {error ? <InlineAlert id="inventory-read-error" variant="danger" testId="inventory-read-error">{error}</InlineAlert> : null}
+      {result?.kind === "point" ? (
+        <dl className="inventory-read-result" data-testid="inventory-read-point-result">
+          <div><dt>Value</dt><dd>{JSON.stringify(result.value)}</dd></div>
+          <div><dt>Type</dt><dd>{result.type}</dd></div>
+          <div><dt>Quality</dt><dd>{result.quality}</dd></div>
+          <div><dt>Observed</dt><dd>{result.observed_at}</dd></div>
+        </dl>
+      ) : null}
+      {result?.kind === "priority_array" ? (
+        <div data-testid="inventory-read-priority-result">
+          <p>State: {result.state} · Observed: {result.observed_at}</p>
+          <table><thead><tr><th>Priority</th><th>State</th><th>Value</th></tr></thead><tbody>
+            {result.slots.map((slot) => <tr key={slot.priority_level}><td>P{slot.priority_level}</td><td>{slot.state}</td><td>{slot.state === "value" ? JSON.stringify(slot.value) : slot.error ?? "—"}</td></tr>)}
+          </tbody></table>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 interface InventoryContextMenuProps {
   node: InventoryTreeNode;
   expanded: boolean;
@@ -557,7 +641,10 @@ export function ProtocolInventory({
           ) : null}
           <div className="inventory-layout">
             <InventoryTreeView model={model} selectedKey={selectedKey} onSelect={(key) => setSelectedKey(key || null)} onModelAction={() => undefined} />
-            <InventoryDetails node={selectedNode} provenance={inventory.provenance} capturedAt={inventory.capturedAt} />
+            <div>
+              <InventoryDetails node={selectedNode} provenance={inventory.provenance} capturedAt={inventory.capturedAt} />
+              <InventoryReadPanel node={selectedNode} scope={snapshot.scope} />
+            </div>
           </div>
         </>
       ) : null}
