@@ -267,7 +267,7 @@ OPENFDD_NGINX_RESOLVER=auto
 
 Do not include `http://` in `OPENFDD_CENTRAL_UPSTREAM`. `OPENFDD_NGINX_RESOLVER=auto` (image default) prefers an IPv4 nameserver from `/etc/resolv.conf`, then brackets IPv6 (`[fd12::10]`) so nginx does not treat `::` as a port. Override with an explicit IP if needed.
 
-`/api/health` uses a 3s connect and 5s read timeout. While central is restarting, the web proxy returns JSON `503` `central_unavailable` instead of holding the socket open. Other `/api/` calls still allow 600s for analytics reads, with a 5s connect timeout. A green demo through a restart still needs a tip re-pin and Railway memory evidence. Soft-OPEN until that field pass.
+`/api/health` and `/api/version` use a 3s connect and 5s read timeout. `/api/auth/status` is 8s and `/api/auth/login` is 15s. While central is restarting or accepts TCP without answering, those routes return JSON `503` `central_unavailable` instead of holding the socket open. The SPA aborts the same calls on its own timer and leaves the shell up. Other `/api/` calls still allow 600s for analytics reads, with a 5s connect timeout. A green demo through a restart still needs a tip re-pin and Railway memory evidence. Soft-OPEN until that field pass (#1063).
 
 ## Health and verification
 

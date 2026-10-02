@@ -49,6 +49,40 @@
     },
     {
       "method": "GET",
+      "path": "/api/version",
+      "section": "public",
+      "auth": "public",
+      "policy": "public",
+      "disposition": "PLANNED",
+      "deny_statuses": [],
+      "anon_expected": [
+        200
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.public.get_api_version"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.public.get_api_version"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Public liveness twin of /api/health. PLANNED until a suite emits x.preauth.public.get_api_version."
+    },
+    {
+      "method": "GET",
       "path": "/health",
       "section": "public",
       "auth": "public",

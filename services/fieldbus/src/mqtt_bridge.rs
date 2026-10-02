@@ -12,7 +12,7 @@ use openfdd_contracts::{
     TelemetryPoint, TopicBuilder, TopicKind, ValueKind,
 };
 use openfdd_mqtt::{
-    publish_json, AsyncClient, Incoming, MqttConfig, MqttHandle, Publish, SpoolConfig,
+    publish_json, AsyncClient, Incoming, MqttConfig, MqttHandle, Publish, SpoolConfig, SpoolRecord,
     TelemetrySpool,
 };
 use tokio::sync::{mpsc, Mutex};
@@ -698,7 +698,7 @@ async fn drain_mqtt_spool(
                 }
             }
             Err(err) => {
-                publish_ledger.record_fail();
+                publish_ledger.record_fail(&equipment_ids_in(&rec.envelope));
                 warn!(%err, "publish failed; will retry");
                 session.command_task.abort();
                 return true;
@@ -918,7 +918,9 @@ pub async fn spawn_if_configured(
                                 .ok()
                                 .flatten();
                                 if mqtt.is_none() {
-                                    remote_ledger.record_no_session();
+                                    remote_ledger.record_no_session(&equipment_ids_from_pending(
+                                        pending.as_deref(),
+                                    ));
                                     pace_after(DrainPace::Blocked).await;
                                     continue;
                                 }
@@ -1073,6 +1075,21 @@ fn enqueue_isolated(
             warn!("remote sink worker stopped");
         }
     }
+}
+
+fn equipment_ids_from_pending(pending: Option<&[SpoolRecord]>) -> Vec<String> {
+    let mut ids = Vec::new();
+    let Some(rows) = pending else {
+        return ids;
+    };
+    for rec in rows {
+        for id in equipment_ids_in(&rec.envelope) {
+            if !ids.iter().any(|seen| seen == &id) {
+                ids.push(id);
+            }
+        }
+    }
+    ids
 }
 
 fn equipment_ids_in(env: &TelemetryEnvelope) -> Vec<String> {

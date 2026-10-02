@@ -246,6 +246,65 @@ fn slice_bounds(slice: &Value) -> Option<(DateTime<Utc>, DateTime<Utc>)> {
     Some((parse_utc(start).ok()?, parse_utc(end).ok()?))
 }
 
+fn bound_absent(value: Option<&Value>) -> bool {
+    match value {
+        None | Some(Value::Null) => true,
+        Some(Value::String(raw)) => raw.trim().is_empty(),
+        _ => false,
+    }
+}
+
+/// No usable window: missing, JSON null, or blank start and end together.
+fn unscoped_bounds(slice: &Value) -> bool {
+    bound_absent(slice.get("start_utc")) && bound_absent(slice.get("end_utc"))
+}
+
+/// One identity for rows-only files and null-bound slices.
+///
+/// A lookback upsert relabels legacy `rows` as `preserved_unscoped`. The
+/// fingerprint must not change with that label, or gate 38 reports the slice
+/// as rewritten.
+fn fingerprint_slice(slice: &Value) -> Value {
+    let rows_sha256 = sha256_json(slice.get("rows").unwrap_or(&json!([])));
+    if unscoped_bounds(slice) {
+        json!({
+            "start_utc": Value::Null,
+            "end_utc": Value::Null,
+            "preserved_unscoped": true,
+            "legacy_unscoped": false,
+            "rows_sha256": rows_sha256,
+        })
+    } else {
+        json!({
+            "start_utc": slice.get("start_utc").cloned().unwrap_or(Value::Null),
+            "end_utc": slice.get("end_utc").cloned().unwrap_or(Value::Null),
+            "preserved_unscoped": false,
+            "legacy_unscoped": false,
+            "rows_sha256": rows_sha256,
+        })
+    }
+}
+
+/// Null-bound slices become the preserved form and stay that way.
+///
+/// Dropping explicit null bounds and setting `preserved_unscoped` once makes
+/// a second merge a no-op on that slice, and gives the slice an epoch display
+/// rank so an errored upsert cannot blank the previous rows.
+fn canonicalize_unscoped_slice(slice: Value) -> Value {
+    if !unscoped_bounds(&slice) {
+        return slice;
+    }
+    let Value::Object(mut map) = slice else {
+        return slice;
+    };
+    // Explicit null bounds and the legacy label are not part of the stable slice.
+    let _ = map.remove("start_utc");
+    let _ = map.remove("end_utc");
+    let _ = map.remove("legacy_unscoped");
+    map.insert("preserved_unscoped".into(), Value::Bool(true));
+    Value::Object(map)
+}
+
 fn existing_windows(existing: Option<&Value>) -> Vec<Value> {
     let Some(existing) = existing else {
         return Vec::new();
@@ -323,6 +382,31 @@ fn display_rows(windows: &[Value]) -> Value {
         .unwrap_or_else(|| json!([]))
 }
 
+fn sha256_json(value: &Value) -> String {
+    use sha2::{Digest, Sha256};
+    // `Value` map keys are strings, so encoding does not fail.
+    let bytes = serde_json::to_vec(value).unwrap_or_else(|_| Vec::from(b"null"));
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+/// Window fingerprints for one rule-result document.
+///
+/// Each entry is a slice the lookback upsert must leave unchanged when that
+/// slice is not fully inside the next cycle window. Rows-only files and
+/// slices with no bounds share one unscoped identity: null bounds,
+/// `preserved_unscoped`, and the rows hash. The merge keeps that hash.
+pub fn rule_result_window_fingerprints(body: &Value) -> Vec<Value> {
+    if let Some(windows) = body.get("windows").and_then(Value::as_array) {
+        return windows.iter().map(fingerprint_slice).collect();
+    }
+    if body.get("rows").is_some() {
+        return vec![fingerprint_slice(&json!({
+            "rows": body.get("rows").cloned().unwrap_or(json!([])),
+        }))];
+    }
+    Vec::new()
+}
+
 /// Upsert `incoming` rows for `[start_utc, end_utc)`.
 ///
 /// Slices that extend outside the window, disjoint slices, and legacy unscoped
@@ -341,8 +425,11 @@ pub fn merge_windowed_rule_result(
     if win_end <= win_start {
         bail!("AFDD result window end must be after start");
     }
-    let mut windows = existing_windows(existing);
-    windows.retain(|slice| !slice_fully_covered(slice, win_start, win_end));
+    let mut windows: Vec<Value> = existing_windows(existing)
+        .into_iter()
+        .filter(|slice| !slice_fully_covered(slice, win_start, win_end))
+        .map(canonicalize_unscoped_slice)
+        .collect();
     windows.push(new_slice(start_utc, end_utc, incoming));
     let rows = display_rows(&windows);
     Ok(json!({
@@ -564,6 +651,164 @@ mod tests {
             Some("2026-09-29T00:00:00Z")
         )
         .is_err());
+    }
+
+    #[test]
+    fn outside_slice_fingerprint_survives_upsert() {
+        let kept = outside_slice();
+        let existing = json!({
+            "rows": [{
+                "equipment_id": "AHU_1",
+                "fault_hours": 3.5,
+                "marker": "keep-me"
+            }],
+            "windows": [{
+                "start_utc": "2026-09-01T05:00:00Z",
+                "end_utc": "2026-09-02T05:00:00Z",
+                "rows": [{
+                    "equipment_id": "AHU_1",
+                    "fault_hours": 3.5,
+                    "marker": "keep-me"
+                }]
+            }]
+        });
+        assert_eq!(existing["windows"][0], kept);
+        let before = rule_result_window_fingerprints(&existing);
+        let updated = merge_windowed_rule_result(
+            Some(&existing),
+            "2026-09-28T10:00:00Z",
+            "2026-09-29T10:00:00Z",
+            &json!({"rows": [{"equipment_id": "AHU_1", "fault_hours": 1.0}]}),
+        )
+        .unwrap();
+        let after = rule_result_window_fingerprints(&updated);
+        assert_eq!(before[0]["rows_sha256"], after[0]["rows_sha256"]);
+        assert_eq!(before[0]["start_utc"], after[0]["start_utc"]);
+        assert_eq!(before[0]["end_utc"], after[0]["end_utc"]);
+        assert_eq!(after.len(), 2);
+        assert_ne!(after[1]["rows_sha256"], before[0]["rows_sha256"]);
+    }
+
+    #[test]
+    fn legacy_and_null_bound_unscoped_fingerprints_match_after_upsert() {
+        let legacy_rows = json!([{
+            "equipment_id": "AHU_1",
+            "fault_hours": 8.0,
+            "marker": "legacy"
+        }]);
+        let legacy = json!({"rows": legacy_rows});
+        let before_legacy = rule_result_window_fingerprints(&legacy);
+        let from_legacy = merge_windowed_rule_result(
+            Some(&legacy),
+            "2026-09-28T10:00:00Z",
+            "2026-09-29T10:00:00Z",
+            &json!({"rows": [{"equipment_id": "AHU_1", "fault_hours": 1.0}]}),
+        )
+        .unwrap();
+        let after_legacy = rule_result_window_fingerprints(&from_legacy);
+        let preserved = after_legacy
+            .iter()
+            .find(|slice| slice.get("start_utc").is_none_or(Value::is_null))
+            .unwrap();
+        assert_eq!(&before_legacy[0], preserved);
+
+        let null_rows = json!([{
+            "equipment_id": "AHU_1",
+            "fault_hours": 4.0,
+            "marker": "null-bound"
+        }]);
+        let null_bound = json!({
+            "rows": null_rows,
+            "windows": [{
+                "start_utc": Value::Null,
+                "end_utc": Value::Null,
+                "rows": null_rows,
+            }]
+        });
+        let before_null = rule_result_window_fingerprints(&null_bound);
+        assert_eq!(before_null[0]["preserved_unscoped"], true);
+        assert_eq!(before_null[0]["legacy_unscoped"], false);
+        let once = merge_windowed_rule_result(
+            Some(&null_bound),
+            "2026-09-28T10:00:00Z",
+            "2026-09-29T10:00:00Z",
+            &json!({"rows": [{"equipment_id": "AHU_1", "fault_hours": 1.0}]}),
+        )
+        .unwrap();
+        let after_null = rule_result_window_fingerprints(&once);
+        let unscoped: Vec<_> = after_null
+            .iter()
+            .filter(|slice| slice.get("start_utc").is_none_or(Value::is_null))
+            .collect();
+        assert_eq!(unscoped.len(), 1);
+        assert_eq!(&before_null[0], unscoped[0]);
+        let stored = once["windows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|slice| slice.get("preserved_unscoped") == Some(&json!(true)))
+            .unwrap();
+        assert!(stored.get("start_utc").is_none());
+        assert_eq!(stored["rows"], null_rows);
+        let twice = merge_windowed_rule_result(
+            Some(&once),
+            "2026-09-29T10:00:00Z",
+            "2026-09-30T10:00:00Z",
+            &json!({"rows": [{"equipment_id": "AHU_1", "fault_hours": 2.0}]}),
+        )
+        .unwrap();
+        let stored_again = twice["windows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|slice| slice.get("preserved_unscoped") == Some(&json!(true)))
+            .unwrap();
+        assert_eq!(stored, stored_again);
+        assert_eq!(once["rows"][0]["fault_hours"], 1.0);
+    }
+
+    #[test]
+    fn null_bound_rows_remain_on_display_when_upsert_errors() {
+        let existing = json!({
+            "rows": [{"fault_hours": 4.0, "marker": "null-bound"}],
+            "windows": [{
+                "start_utc": Value::Null,
+                "end_utc": Value::Null,
+                "rows": [{"fault_hours": 4.0, "marker": "null-bound"}]
+            }]
+        });
+        let updated = merge_windowed_rule_result(
+            Some(&existing),
+            "2026-09-28T10:00:00Z",
+            "2026-09-29T10:00:00Z",
+            &json!({"rows": [], "error": "boom"}),
+        )
+        .unwrap();
+        assert_eq!(updated["rows"][0]["marker"], "null-bound");
+        assert_eq!(updated["windows"][1]["error"], "boom");
+    }
+
+    #[test]
+    fn legacy_row_hash_is_kept_on_the_preserved_slice() {
+        let existing = json!({
+            "rows": [{"equipment_id": "AHU_1", "fault_hours": 8.0, "marker": "legacy"}]
+        });
+        let before = rule_result_window_fingerprints(&existing);
+        assert_eq!(before[0]["preserved_unscoped"], true);
+        assert_eq!(before[0]["legacy_unscoped"], false);
+        let updated = merge_windowed_rule_result(
+            Some(&existing),
+            "2026-09-28T10:00:00Z",
+            "2026-09-29T10:00:00Z",
+            &json!({"rows": [{"equipment_id": "AHU_1", "fault_hours": 1.0}]}),
+        )
+        .unwrap();
+        let after = rule_result_window_fingerprints(&updated);
+        let preserved = after
+            .iter()
+            .find(|slice| slice.get("preserved_unscoped") == Some(&json!(true)))
+            .unwrap();
+        assert_eq!(preserved["rows_sha256"], before[0]["rows_sha256"]);
     }
 
     #[test]

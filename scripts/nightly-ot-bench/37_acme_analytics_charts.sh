@@ -11,6 +11,47 @@
 # - Gate 24 picks a building + one FDD/run; UI charts fire many analytics POSTs.
 # - Agent JWT is hub-scoped and gets 403 on ACME under MT; UI uses acme-ops.
 set -euo pipefail
+
+# Retain JSON probe bodies. This gate parses them with jq (fail-closed /
+# timeout) and passes two of them to no_equipment_id_heuristics.py --envelope.
+# Cutting a body at 4096 bytes and appending "…(truncated)" is not valid JSON
+# (JSONDecodeError near the cut; ART nightly-ot-bench_20261001T162229Z on tip
+# 3.5.60+c51ee6f, HTTP 200). Oversized non-JSON artifacts (HTML 502 pages)
+# stay truncated in the probe artifact.
+keep_or_truncate_probe_body() {
+  local out="$1"
+  [[ -f "$out" ]] || return 0
+  local bytes py_rc
+  bytes="$(wc -c <"$out" | tr -d '[:space:]')"
+  if [[ "$bytes" -le 8192 ]]; then
+    return 0
+  fi
+  py_rc=0
+  python3 -c '
+import sys
+with open(sys.argv[1], "rb") as fh:
+    blob = fh.read(128).lstrip()
+if blob.startswith(b"\xef\xbb\xbf"):
+    blob = blob[3:].lstrip()
+raise SystemExit(0 if blob[:1] in (b"{", b"[") else 1)
+' "$out" || py_rc=$?
+  if [[ "$py_rc" -eq 0 ]]; then
+    return 0
+  fi
+  if [[ "$py_rc" -ne 1 ]]; then
+    echo "FAIL: could not classify probe body (python rc=$py_rc)" >&2
+    return 1
+  fi
+  head -c 4096 "$out" >"$out.tmp"
+  echo "…(truncated)" >>"$out.tmp"
+  mv "$out.tmp" "$out"
+}
+
+# Tests source this file to call keep_or_truncate_probe_body without logging in.
+if [[ "${OPENFDD_GATE37_SOURCE_FUNCS:-0}" == "1" ]]; then
+  return 0 2>/dev/null || exit 0
+fi
+
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$DIR/lib.sh"
@@ -163,12 +204,7 @@ probe() {
     if [[ "$curl_rc" -ne 0 || -z "$code" || "$code" =~ ^0+$ ]]; then
       code="000"
     fi
-    # Truncate body artifact if huge HTML 502 page.
-    if [[ -f "$out" ]] && [[ "$(wc -c <"$out")" -gt 8192 ]]; then
-      head -c 4096 "$out" >"$out.tmp"
-      echo "…(truncated)" >>"$out.tmp"
-      mv "$out.tmp" "$out"
-    fi
+    keep_or_truncate_probe_body "$out"
     jq -nc --arg n "$name" --arg m "$method" --arg p "$path" --arg c "$code" \
       --argjson s "$elapsed" --argjson rc "$curl_rc" --argjson a "$attempt" \
       '{name:$n,method:$m,path:$p,http_code:$c,elapsed_s:$s,curl_rc:$rc,attempt:$a}' >>"$PROBES_FILE"
