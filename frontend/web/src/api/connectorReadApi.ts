@@ -76,8 +76,11 @@ function text(value: unknown, field: string): string {
   return value;
 }
 
-function token(value: unknown, field: string): string {
+function token(value: unknown, field: string, max = 512): string {
   const result = text(value, field);
+  if (result.length > max) {
+    throw new ConnectorReadContractError(`${field} is invalid`);
+  }
   if (!/^[A-Za-z0-9_.-]+$/u.test(result)) {
     throw new ConnectorReadContractError(`${field} is invalid`);
   }
@@ -86,7 +89,7 @@ function token(value: unknown, field: string): string {
 
 function timestamp(value: unknown, field: string): string {
   const result = text(value, field);
-  if (Number.isNaN(Date.parse(result))) {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u.test(result) || Number.isNaN(Date.parse(result))) {
     throw new ConnectorReadContractError(`${field} is invalid`);
   }
   return result;
@@ -114,13 +117,13 @@ function validateTarget(target: ConnectorReadTarget): void {
   switch (target.kind) {
     case "bacnet_point":
       uint(target.device_instance, "device_instance");
-      token(target.object_type, "object_type");
+      token(target.object_type, "object_type", 64);
       uint(target.object_instance, "object_instance");
-      token(target.property_id, "property_id");
+      token(target.property_id, "property_id", 64);
       return;
     case "bacnet_priority_array":
       uint(target.device_instance, "device_instance");
-      token(target.object_type, "object_type");
+      token(target.object_type, "object_type", 64);
       uint(target.object_instance, "object_instance");
       return;
     default:
@@ -146,7 +149,7 @@ function validatePoint(value: Record<string, unknown>, target: BacnetPointTarget
       (value.quality !== "good" && value.quality !== "bad") || !publicValue(value.value)) {
     throw new ConnectorReadContractError("point result does not match its request");
   }
-  token(value.type, "point type");
+  token(value.type, "point type", 64);
   timestamp(value.observed_at, "point observed_at");
   return value as unknown as ReadPointResult;
 }
@@ -167,9 +170,12 @@ function validatePriority(value: Record<string, unknown>, target: BacnetPriority
       throw new ConnectorReadContractError("priority slots must be unique P1-P16");
     }
     levels.add(level);
-    token(raw.type, "priority type");
+    token(raw.type, "priority type", 64);
     if (raw.value !== undefined && !publicValue(raw.value)) throw new ConnectorReadContractError("priority value is invalid");
-    if (raw.error !== undefined) text(raw.error, "priority error");
+    if (raw.error !== undefined) {
+      const error = text(raw.error, "priority error");
+      if (error.length > 128) throw new ConnectorReadContractError("priority error is invalid");
+    }
     if (raw.state === "value" && raw.value === undefined) throw new ConnectorReadContractError("priority value is missing");
     if (raw.state === "null" && (raw.value !== undefined || raw.error !== undefined)) throw new ConnectorReadContractError("NULL priority slot is malformed");
     if (raw.state === "error" && (raw.value !== undefined || raw.error === undefined)) throw new ConnectorReadContractError("error priority slot is malformed");
