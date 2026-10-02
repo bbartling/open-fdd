@@ -130,7 +130,9 @@ non-overlap guard and does not bypass the explicit enable flag.
 History is retained on the edge in an append-only, fsynced JSONL journal with
 bounded checkpoint compaction. Torn trailing lines are repaired on restart;
 corrupt non-tail state disables history fail-closed while core BACnet polling
-continues. The cloud recipes do not create an edge store or scanner.
+continues. Cursors cannot address beyond the retained 100,000-record window;
+page traversal stops after the requested offset, page, and one continuation
+probe. The cloud recipes do not create an edge store or scanner.
 
 ### central — hub for remote edges
 

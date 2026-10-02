@@ -67,6 +67,9 @@ compacts them into a bounded checkpoint, and fsyncs the containing directory
 after replacement. A torn trailing line is truncated during recovery. A
 corrupt non-tail entry makes history unavailable while the core BACnet polling
 service continues; no whole-history rewrite is used for each observation.
+History cursors are bounded to the retained 100,000-record window, and a page
+probes at most `offset + page_size + 1` matching records to determine whether
+continuation exists.
 
 The cloud-only `central` and Railway recipes intentionally have no fieldbus
 scanner or BACnet socket. MQTT history synchronization is not part of this
