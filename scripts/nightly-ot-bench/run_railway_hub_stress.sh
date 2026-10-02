@@ -494,6 +494,34 @@ else
     "MQTTS_GAP_BLAME=0"
 fi
 
+# --- 42 cache / retention / series preview / health hang (not an FQ gate) ---
+# Local contracts always run. A live /api/health or /api/version hang fails the
+# smoke. Issue closeout still needs tip+field evidence; this does not set FQ.
+if [[ "${CACHE_HEALTH_SMOKE:-1}" == "1" ]]; then
+  set +e
+  env ARTIFACT_DIR="$ART/gate42_cache_retention_preview_health" \
+    RAILWAY_BASE="${RAILWAY_BASE:-}" \
+    bash "$DIR/42_cache_retention_preview_health.sh" \
+    2>&1 | tee "$ART/42_cache_retention_preview_health.log"
+  CACHE_RC=${PIPESTATUS[0]}
+  set -e
+  if [[ "$CACHE_RC" -eq 0 ]]; then
+    record_gate "42_cache_retention_preview_health" PASS \
+      "42 cache retention preview health" \
+      "local contracts; not FQ; issues stay open" \
+      "$ART/42_cache_retention_preview_health.log" \
+      "$ART/gate42_cache_retention_preview_health/cache_retention_preview_health.json"
+  else
+    record_gate "42_cache_retention_preview_health" FAIL \
+      "42 cache retention preview health" "exit=$CACHE_RC" \
+      "$ART/42_cache_retention_preview_health.log" \
+      "$ART/gate42_cache_retention_preview_health/cache_retention_preview_health.json"
+  fi
+else
+  record_gate "42_cache_retention_preview_health" SKIPPED \
+    "42 cache retention preview health" "CACHE_HEALTH_SMOKE=0"
+fi
+
 # --- 22 Wave O admin + data-model/session ACL ---
 if [[ "${WAVE_O_ADMIN_ACL:-1}" == "1" ]]; then
   run_gate "22_wave_o_admin_datamodel_acl" "22 Wave O admin + data-model ACL" \

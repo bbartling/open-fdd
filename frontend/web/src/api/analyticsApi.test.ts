@@ -4,6 +4,7 @@ import {
   postMetering,
   SAMPLE_METER_ROWS,
   listFddEquipment,
+  listRcxPresets,
 } from "./analyticsApi";
 
 vi.mock("./client", () => ({
@@ -93,6 +94,24 @@ describe("unwrapAnalyticsEnvelope", () => {
     });
     expect(env.rows).toHaveLength(1);
     expect(env.engine).toBe("datafusion");
+  });
+});
+
+describe("listRcxPresets", () => {
+  beforeEach(() => {
+    vi.mocked(apiFetch).mockReset();
+  });
+
+  it("scopes the catalog to the caller building", async () => {
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      presets: [{ id: "zone_temps", title: "Zones", family: "Zones / VAV", chart: "timeseries" }],
+    });
+    const presets = await listRcxPresets("ACME");
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/analytics/rcx/presets?building_id=ACME",
+    );
+    expect(presets.map((p) => p.id)).toEqual(["zone_temps"]);
   });
 });
 

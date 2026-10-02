@@ -107,3 +107,61 @@ This closes the **resource / crash-recovery acceptance** for the compact-hive en
 ## 2026-09-23 — Issue #996 — candidate verification (historical)
 
 Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT/web after verified backup and green publish checks. Daily AFDD remained **bulk/off** during early smoke. Selected analytics + concurrent manual AFDD smoke passed. **Superseded 2026-09-24** by maintainer closeout: compact hive + bounded queries accepted; see AFDD-996 CLOSED above.
+
+
+## 2026-09-30 — tip 3.5.59 / sha-97ca09d field stress (not FQ)
+
+| Item | Evidence |
+| --- | --- |
+| Tip | VERSION **3.5.59** · commit `97ca09d0c1ca` · GHCR `sha-97ca09d` |
+| Merged this cycle | #1076 docs cookbook sidebar · #1079 wave I/K ACME retarget (#1069 product) · #1081 tip bump |
+| Parked (do not merge) | Codex drafts **#1075** · **#1067** · draft **#1080** |
+| Railway hub | health `3.5.59+97ca09d0c1ca` · edges=2 · ingest_reject=0 · no Railway backup this cycle |
+| Field | fieldbus `pi-1` ACME `has_telemetry=true`; `vim-1` `has_telemetry=false` |
+| ART | `reports/nightly-ot-bench_20260930T221540Z/` · **FAIL** · `fully_qualified=false` |
+| Soft-OPEN leave open | **#1069** Wave I `bas_vs_web_acme` oa_t/web_oa_t absent (`product_fail=0`, `field_catalog_soft_open=1`); Wave K `mqtt_zone_and_oa` oa_t absent |
+| Gate39 leave open | **#1070** `39_mqtts_gap_blame` **BLOCKED** `instrumentation_complete=false` rows=[] snapshot-only |
+| GH tidy | squash-merged #1076/#1079/#1081; head branches deleted; only parked drafts remain open |
+
+Do **not** claim FQ or OPS pin from this run. Close Soft-OPEN only after tip+field unique prove clears Soft-OPEN + full stress notes.
+
+## Draft — #1034–#1070 closeout checklist (2026-10-01)
+
+This list is for Ben. It does **not** close any GitHub issue. A merged PR is not acceptance. Do not mark `fully_qualified` or move the OPS pin from this note.
+
+| Issue | GitHub | Where the work stands | Still required before close |
+| --- | --- | --- | --- |
+| #1034 | OPEN | Schedule code landed with #1054. Issue still open. | Tip+field proof of the wall-clock cadence. Not re-litigated here. |
+| #1035 | OPEN | Lookback upsert landed with #1054. Issue still open. | Same tip+field proof. `update_all` stays rejected. |
+| #1036 | PR merged | Stress RAM / ACME lookback note. Not an open product issue. | — |
+| #1037 | OPEN | RCx `equipment_id` LIKE. Not in this change. | Type/role selection, then tip proof. |
+| #1038 | OPEN | Mechanical-cooling id LIKE. Not in this change. | Type/role selection, then tip proof. |
+| #1039 | OPEN | Related merge #1060. Issue still open. | Confirm the tip no longer picks weather by id text, then field proof. |
+| #1040 | OPEN | OAT-METEO `AHU%` LIKE. Not in this change. | Type/role SQL, then tip proof. |
+| #1041 | OPEN | Analytics labels inferred from id text. Not in this change. | Stamp/role labels, then tip proof. |
+| #1042 | OPEN | Related merge #1060. Issue still open. | Overview / plant-health / applicability proof on tip. |
+| #1043 | CLOSED | Epic. | — |
+| #1044 | OPEN | Parquet cache + session unload are in tree (#1056). Gate 42 classifies cache hit (`elapsed_ms`, no silent stale) and `historian_resident` clear on leave. | Tip+field: cache-hit latency and RSS after CSV unload. Do not close on the classifier. |
+| #1045 | OPEN | Related merge #1059. Issue still open. | PyPI/WattLab stamp proof. |
+| #1046 | OPEN | Related merge #1059. Issue still open. | Pandas cohort proof. |
+| #1047 | OPEN | Related merge #1058. Issue still open. | Agent-spec proof that id heuristics are not the fallback. |
+| #1048 | CLOSED | Local fieldbus ingest. | — |
+| #1049 | OPEN | 100 GiB oldest-first + preflight are in tree (#1056). Gate 42 runs `openfdd_disk_preflight.py --self-test`. Railway eviction stays off unless enabled. | Real edge disk: live cap, prune, update with and without headroom. |
+| #1050 | OPEN | SPA preview is newest-N, default 10, options 10/20/50/100/500 (#1052). Gate 42 checks that contract. | Tip field check on a package or ACME plot. |
+| #1051 | PR merged | Gap-blame scorecard. | See #1070. |
+| #1052 | PR merged | Series preview. | See #1050. |
+| #1053 | CLOSED | VAV/zone RCx gate. | — |
+| #1054 | PR merged | AFDD schedule. | See #1034 / #1035. |
+| #1055 | PR merged | VAV occupied comfort. | — |
+| #1056 | PR merged | Cache + disk budget. | See #1044 / #1049. |
+| #1057–#1062 | PRs merged | Id-heuristic and fieldbus follow-ons. | Matching open issues above stay open until tip proof. |
+| #1063 | OPEN | Web `/api/health`, `/api/version`, `/api/auth/status`, and `/api/auth/login` fail fast to JSON 503. SPA aborts those calls and keeps the shell up. Gate 42 blackhole-checks that contract. | Railway re-pin of this web+central, then a demo path with no multi-minute API blackout, plus central memory notes. |
+| #1064 | CLOSED | Tenant-from-scope ingest. | — |
+| #1065 | PR merged | Historian scope fix. | — |
+| #1066 | PR merged | Frontend dependency bump. | — |
+| #1067 | OPEN | Codex docs draft. **Left alone.** | Do not merge from this cycle. |
+| #1068 | CLOSED | Gate 17 chiller health fields. | — |
+| #1069 | OPEN | Wave I/K now split `oa_t` and `web_oa_t` (and Wave K `zone_t` vs `oa_t`). Absent column = field-catalog Soft-OPEN and still fails the gate. Present column with no values = product FAIL. A zone value is not hidden inside an oa_t Soft-OPEN. | Tip+field: product_fail=0 only when the columns that exist have values; Soft-OPEN clears only when the missing AV columns are actually in the catalog. Not a product PASS. |
+| #1070 | OPEN | Gate 39 `probes` names the publish-ledger read. Truncated equipment ids are INCONCLUSIVE, not EDGE. `rows=[]` stays `instrumentation_complete=false` (exit 2 BLOCKED). | OptiPlex `OPENFDD_EDGE_BASE` plus hub inventory so the scorecard has rows. Trailing window still needs non-empty RTU and VAV series. Do not close on an empty snapshot. |
+
+Parked and not touched: Codex **#1067**, **#1075**, **#1080**.

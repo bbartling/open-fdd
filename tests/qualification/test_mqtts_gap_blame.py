@@ -306,6 +306,64 @@ class SelectionAndInspectTests(unittest.TestCase):
         )
         self.assertEqual(layer["samples"], 2)
 
+    def test_truncated_ledger_is_inconclusive_not_edge(self) -> None:
+        start = datetime(2026, 9, 28, tzinfo=timezone.utc)
+        end = start + timedelta(hours=1)
+
+        def mark(minutes: int):
+            return {
+                "at": (start + timedelta(minutes=minutes)).isoformat(),
+                "ok": True,
+                "equipment_ids": ["OTHER"],
+                "equipment_ids_truncated": True,
+            }
+
+        ledger = {"publish_acks": 2, "recent": [mark(0), mark(40)]}
+        layer = blame.edge_window_from_ledger(
+            ledger,
+            equipment_id="RTU_01",
+            start=start,
+            end=end,
+            expected=12,
+            interval=300,
+        )
+        self.assertFalse(layer["present"])
+        self.assertIn("truncated", layer["missing_probe"])
+        verdict = blame.classify_io(
+            _io(layer, _layer(samples=0, max_gap_secs=None), _layer(samples=0, max_gap_secs=None)),
+            interval=300,
+            expected=12,
+        )
+        self.assertEqual(verdict["blame"], "INCONCLUSIVE")
+        self.assertNotEqual(verdict["blame"], "EDGE")
+
+    def test_snapshot_only_names_the_publish_ledger_probe(self) -> None:
+        report = blame.assemble_report(
+            rows=[],
+            snapshot=blame._verdict(
+                "INCONCLUSIVE",
+                "no api",
+            ),
+            window_hours=24,
+            interval_secs=300,
+            building_id="ACME",
+            edge_id=None,
+            probes={
+                "publish_ledger": {
+                    "present": False,
+                    "missing": "Set OPENFDD_EDGE_BASE for GET /api/mqtt/publish-ledger.",
+                }
+            },
+        )
+        self.assertFalse(report["instrumentation_complete"])
+        self.assertEqual(blame.exit_code(report), 2)
+        text = blame.render_scorecard(report)
+        self.assertIn("publish_ledger missing", text)
+        self.assertIn("publish-ledger", text)
+        summary = blame.ledger_probe_summary(None, start=datetime.now(timezone.utc), end=datetime.now(timezone.utc))
+        self.assertFalse(summary["present"])
+        self.assertIn("publish-ledger", summary["missing"])
+
 
 if __name__ == "__main__":
     unittest.main()

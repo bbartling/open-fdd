@@ -11,6 +11,47 @@
 # - Gate 24 picks a building + one FDD/run; UI charts fire many analytics POSTs.
 # - Agent JWT is hub-scoped and gets 403 on ACME under MT; UI uses acme-ops.
 set -euo pipefail
+
+# Retain JSON probe bodies. This gate parses them with jq (fail-closed /
+# timeout) and passes two of them to no_equipment_id_heuristics.py --envelope.
+# Cutting a body at 4096 bytes and appending "…(truncated)" is not valid JSON
+# (JSONDecodeError near the cut; ART nightly-ot-bench_20261001T162229Z on tip
+# 3.5.60+c51ee6f, HTTP 200). Oversized non-JSON artifacts (HTML 502 pages)
+# stay truncated in the probe artifact.
+keep_or_truncate_probe_body() {
+  local out="$1"
+  [[ -f "$out" ]] || return 0
+  local bytes py_rc
+  bytes="$(wc -c <"$out" | tr -d '[:space:]')"
+  if [[ "$bytes" -le 8192 ]]; then
+    return 0
+  fi
+  py_rc=0
+  python3 -c '
+import sys
+with open(sys.argv[1], "rb") as fh:
+    blob = fh.read(128).lstrip()
+if blob.startswith(b"\xef\xbb\xbf"):
+    blob = blob[3:].lstrip()
+raise SystemExit(0 if blob[:1] in (b"{", b"[") else 1)
+' "$out" || py_rc=$?
+  if [[ "$py_rc" -eq 0 ]]; then
+    return 0
+  fi
+  if [[ "$py_rc" -ne 1 ]]; then
+    echo "FAIL: could not classify probe body (python rc=$py_rc)" >&2
+    return 1
+  fi
+  head -c 4096 "$out" >"$out.tmp"
+  echo "…(truncated)" >>"$out.tmp"
+  mv "$out.tmp" "$out"
+}
+
+# Tests source this file to call keep_or_truncate_probe_body without logging in.
+if [[ "${OPENFDD_GATE37_SOURCE_FUNCS:-0}" == "1" ]]; then
+  return 0 2>/dev/null || exit 0
+fi
+
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$DIR/lib.sh"
@@ -108,23 +149,10 @@ if [[ "$EQ_N" -lt 1 ]]; then
   exit 1
 fi
 
-# Pick a representative AHU for inspect/series-style bodies.
-AHU_ID="$(python3 - "$eq_body" <<'PY'
-import json,sys
-from pathlib import Path
-b=json.loads(Path(sys.argv[1]).read_text())
-eq=b.get("equipment") or b.get("items") or []
-ids=[]
-for e in eq if isinstance(eq,list) else []:
-    if isinstance(e,str): ids.append(e)
-    elif isinstance(e,dict):
-        eid=e.get("equipment_id") or e.get("id") or e.get("name")
-        if eid: ids.append(str(eid))
-prefer=[i for i in ids if "AHU" in i.upper() or "RTU" in i.upper()]
-print((prefer or ids or [""])[0])
-PY
-)"
-echo "ahu_id=${AHU_ID:-none}" | tee -a "$LOG"
+# Inspect target is the first exact id whose stamp is AHU. Id letters are not a kind.
+AHU_ID="$(python3 "$ROOT/scripts/qualification/no_equipment_id_heuristics.py" \
+  --pick-kind ahu --equipment-json "$eq_body")"
+echo "ahu_id=${AHU_ID:-none} (stamp ahu; empty when no AHU stamp)" | tee -a "$LOG"
 
 # Sequential Overview / charts matrix (UI-shaped). One at a time — do not
 # parallelize; concurrent agent probes can themselves trip nginx 502s.
@@ -134,6 +162,19 @@ PROBES_FILE="$ART/37_probes.jsonl"
 
 # Overview-shaped lookback (matches SPA). Unbounded runtime LEAD times out on ACME.
 START_ISO="$(python3 -c 'from datetime import datetime,timedelta,timezone; print((datetime.now(timezone.utc)-timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ"))')"
+
+require_probe_200() {
+  local name="$1"
+  local code
+  code="$(jq -r --arg n "$name" 'select(.name==$n) | .http_code' "$PROBES_FILE" | tail -n 1)"
+  if [[ "$code" != "200" ]]; then
+    jq -n --arg n "$name" --arg c "${code:-missing}" --arg b "$BUILDING" \
+      '{ok:false,broke_at:$n,http_code:$c,reason:"preset scope required HTTP 200",building:$b}' \
+      >"$SUMMARY"
+    echo "FAIL: $name HTTP ${code:-missing} (building_id scope required; 403 is not a pass)" | tee -a "$LOG"
+    exit 1
+  fi
+}
 
 probe() {
   local name="$1" method="$2" path="$3" body="${4:-}"
@@ -163,12 +204,7 @@ probe() {
     if [[ "$curl_rc" -ne 0 || -z "$code" || "$code" =~ ^0+$ ]]; then
       code="000"
     fi
-    # Truncate body artifact if huge HTML 502 page.
-    if [[ -f "$out" ]] && [[ "$(wc -c <"$out")" -gt 8192 ]]; then
-      head -c 4096 "$out" >"$out.tmp"
-      echo "…(truncated)" >>"$out.tmp"
-      mv "$out.tmp" "$out"
-    fi
+    keep_or_truncate_probe_body "$out"
     jq -nc --arg n "$name" --arg m "$method" --arg p "$path" --arg c "$code" \
       --argjson s "$elapsed" --argjson rc "$curl_rc" --argjson a "$attempt" \
       '{name:$n,method:$m,path:$p,http_code:$c,elapsed_s:$s,curl_rc:$rc,attempt:$a}' >>"$PROBES_FILE"
@@ -234,7 +270,25 @@ probe "analytics_mechanical_cooling" POST "/api/analytics/mechanical-cooling" "$
 probe "analytics_economizer" POST "/api/analytics/economizer" "$BID_JSON"
 probe "analytics_bas_vs_web_oat" POST "/api/analytics/bas-vs-web-oat" "$BID_JSON"
 probe "analytics_rcx_ahu" POST "/api/analytics/rcx/ahu" "$BID_JSON"
-probe "analytics_rcx_presets" GET "/api/analytics/rcx/presets"
+PRESETS_Q="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$BUILDING")"
+probe "analytics_rcx_presets" GET "/api/analytics/rcx/presets?building_id=${PRESETS_Q}"
+require_probe_200 "analytics_rcx_presets"
+AHU_PRESET_JSON="$(jq -nc --arg b "$BUILDING" --arg s "$START_ISO" \
+  '{building_id:$b, max_points:2000, start:$s, series:{preset_id:"ahu_dats"}}')"
+ZONE_PRESET_JSON="$(jq -nc --arg b "$BUILDING" --arg s "$START_ISO" \
+  '{building_id:$b, max_points:2000, start:$s, series:{preset_id:"zone_temps"}}')"
+probe "analytics_rcx_preset_ahu_dats" POST "/api/analytics/rcx/preset" "$AHU_PRESET_JSON"
+require_probe_200 "analytics_rcx_preset_ahu_dats"
+probe "analytics_rcx_preset_zone_temps" POST "/api/analytics/rcx/preset" "$ZONE_PRESET_JSON"
+require_probe_200 "analytics_rcx_preset_zone_temps"
+python3 "$ROOT/scripts/qualification/no_equipment_id_heuristics.py" \
+  --check-preset ahu \
+  --envelope "$ART/37_probe_analytics_rcx_preset_ahu_dats.json" \
+  --equipment-json "$eq_body" | tee -a "$LOG"
+python3 "$ROOT/scripts/qualification/no_equipment_id_heuristics.py" \
+  --check-preset zone \
+  --envelope "$ART/37_probe_analytics_rcx_preset_zone_temps.json" \
+  --equipment-json "$eq_body" | tee -a "$LOG"
 if [[ -n "$AHU_ID" ]]; then
   probe "analytics_inspect" POST "/api/analytics/inspect" "$INSPECT_JSON"
 fi

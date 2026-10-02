@@ -37,6 +37,7 @@ use crate::wattlab_dump;
 pub fn router(state: Arc<AppState>) -> Router {
     let public = Router::new()
         .route("/api/health", get(health))
+        .route("/api/version", get(version_public))
         .route("/health", get(health))
         .route("/api/auth/status", get(auth_status))
         .route("/api/auth/me", get(auth_me))
@@ -336,6 +337,19 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(public)
         .merge(protected)
         .with_state(state)
+}
+
+/// Public liveness body. No historian locks, so a wedged query cannot stall it.
+pub fn version_body() -> Value {
+    json!({
+        "ok": true,
+        "service": "openfdd-central",
+        "version": resolve_build_version(),
+    })
+}
+
+pub async fn version_public() -> Json<Value> {
+    Json(version_body())
 }
 
 /// Resolve the reported build version (OFDD-071).
@@ -4382,7 +4396,7 @@ async fn analytics_bas_vs_web_oat(
     req.read_tenant_id = preferred_tenant_for_building_read(&ctx, req.query.building_id.as_deref());
     cached_analytics!(
         "bas-vs-web-oat",
-        "bas-vs-web-oat-v2",
+        "bas-vs-web-oat-v3",
         &state,
         &headers,
         req,
@@ -4398,7 +4412,7 @@ async fn analytics_bas_vs_web_oat(
             {
                 Ok(Some(env)) => env,
                 Ok(None) => analytics::envelope_with_engine(
-                    "bas-vs-web-oat-v2",
+                    "bas-vs-web-oat-v3",
                     &req.query,
                     vec![
                         "BAS vs web OAT unavailable — need distinct oa_t and web OAT \
@@ -4410,7 +4424,7 @@ async fn analytics_bas_vs_web_oat(
                 Err(e) => {
                     tracing::warn!(error = %e, "bas-vs-web-oat historian path failed");
                     analytics::envelope(
-                        "bas-vs-web-oat-v2",
+                        "bas-vs-web-oat-v3",
                         &req.query,
                         vec![format!("bas-vs-web-oat failed: {e}")],
                     )
@@ -5074,6 +5088,17 @@ mod version_tests {
             fallback.starts_with(env!("CARGO_PKG_VERSION")),
             "v={fallback}"
         );
+    }
+
+    #[test]
+    fn version_route_body_names_the_build_and_no_secret() {
+        let body = super::version_body();
+        assert_eq!(body["ok"], true);
+        assert_eq!(body["service"], "openfdd-central");
+        let version = body["version"].as_str().unwrap();
+        assert!(version.starts_with(env!("CARGO_PKG_VERSION")), "{version}");
+        assert!(body.get("token").is_none());
+        assert!(body.get("password").is_none());
     }
 
     #[tokio::test]

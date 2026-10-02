@@ -2,6 +2,10 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
+use datafusion::arrow::datatypes::{DataType, TimeUnit};
+use datafusion::common::ScalarValue;
+use datafusion::logical_expr::Expr;
 use datafusion::prelude::*;
 use fdd_sql::{
     new_historian_session, register_historian_building, register_parquet_tree,
@@ -202,41 +206,86 @@ pub async fn run_all_rules(
     .await
 }
 
-/// Escape a timestamp literal for DataFusion SQL (single quotes only).
-fn sql_literal(value: &str) -> String {
-    value.replace('\'', "''")
-}
-
 /// Restrict registered `history` (and `weather` when present) to `[start, end)`.
 ///
-/// Used by continuous AFDD lookback so DataFusion scans only the rolling window.
+/// Continuous AFDD lookback uses a DataFrame filter so the predicate stays on
+/// the scan (partition and stats pruning) instead of a string-built SQL view.
 pub async fn scope_history_to_time_window(
     ctx: &SessionContext,
     start_utc: &str,
     end_utc: &str,
 ) -> Result<()> {
-    let start = sql_literal(start_utc.trim());
-    let end = sql_literal(end_utc.trim());
+    let start = start_utc.trim();
+    let end = end_utc.trim();
     if start.is_empty() || end.is_empty() {
         anyhow::bail!("AFDD time window requires non-empty start_utc and end_utc");
     }
-    let scoped = ctx
-        .sql(&format!(
-            "SELECT * FROM history WHERE timestamp_utc >= '{start}' AND timestamp_utc < '{end}'"
-        ))
-        .await?;
-    ctx.deregister_table("history")?;
-    ctx.register_table("history", scoped.into_view())?;
+    scope_table_to_time_window(ctx, "history", start, end).await?;
     if ctx.table("weather").await.is_ok() {
-        let wx = ctx
-            .sql(&format!(
-                "SELECT * FROM weather WHERE timestamp_utc >= '{start}' AND timestamp_utc < '{end}'"
-            ))
-            .await?;
-        ctx.deregister_table("weather")?;
-        ctx.register_table("weather", wx.into_view())?;
+        scope_table_to_time_window(ctx, "weather", start, end).await?;
     }
     Ok(())
+}
+
+async fn scope_table_to_time_window(
+    ctx: &SessionContext,
+    table: &str,
+    start_utc: &str,
+    end_utc: &str,
+) -> Result<()> {
+    let frame = ctx
+        .table(table)
+        .await
+        .with_context(|| format!("open registered {table} for AFDD lookback"))?;
+    let dtype = frame
+        .schema()
+        .field_with_name(None, "timestamp_utc")
+        .with_context(|| format!("{table} is missing timestamp_utc"))?
+        .data_type()
+        .clone();
+    let start = time_bound_expr(&dtype, start_utc)?;
+    let end = time_bound_expr(&dtype, end_utc)?;
+    let scoped = frame.filter(
+        col("timestamp_utc")
+            .gt_eq(start)
+            .and(col("timestamp_utc").lt(end)),
+    )?;
+    ctx.deregister_table(table)?;
+    ctx.register_table(table, scoped.into_view())?;
+    Ok(())
+}
+
+/// Bound literal matching the registered `timestamp_utc` type.
+///
+/// Utf8 historians compare the ISO text as stored. Timestamp historians use
+/// the same UTC instant so the filter type-checks and can be pushed into the
+/// Parquet scan.
+fn time_bound_expr(dtype: &DataType, raw: &str) -> Result<Expr> {
+    match dtype {
+        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => Ok(lit(raw)),
+        DataType::Timestamp(unit, tz) => {
+            let parsed = DateTime::parse_from_rfc3339(raw)
+                .with_context(|| format!("AFDD window bound is not RFC3339: {raw}"))?;
+            let utc = parsed.with_timezone(&Utc);
+            let value = match unit {
+                TimeUnit::Second => ScalarValue::TimestampSecond(Some(utc.timestamp()), tz.clone()),
+                TimeUnit::Millisecond => {
+                    ScalarValue::TimestampMillisecond(Some(utc.timestamp_millis()), tz.clone())
+                }
+                TimeUnit::Microsecond => {
+                    ScalarValue::TimestampMicrosecond(Some(utc.timestamp_micros()), tz.clone())
+                }
+                TimeUnit::Nanosecond => {
+                    let nanos = utc
+                        .timestamp_nanos_opt()
+                        .context("AFDD window timestamp exceeds nanosecond range")?;
+                    ScalarValue::TimestampNanosecond(Some(nanos), tz.clone())
+                }
+            };
+            Ok(lit(value))
+        }
+        other => anyhow::bail!("AFDD lookback cannot filter timestamp_utc type {other}"),
+    }
 }
 
 /// Run registry rules with request/session parameter overrides.
@@ -555,6 +604,62 @@ mod time_window_tests {
             .unwrap()
             .value(0);
         // [11:00, 13:00) -> 11:00 and 12:00
+        assert_eq!(c, 2);
+    }
+
+    #[tokio::test]
+    async fn time_window_prunes_timestamp_column() {
+        use datafusion::arrow::array::TimestampNanosecondArray;
+        use datafusion::arrow::datatypes::{DataType, TimeUnit};
+
+        let nanos = |raw: &str| {
+            chrono::DateTime::parse_from_rfc3339(raw)
+                .unwrap()
+                .with_timezone(&chrono::Utc)
+                .timestamp_nanos_opt()
+                .unwrap()
+        };
+        let schema = Arc::new(Schema::new(vec![
+            Field::new(
+                "timestamp_utc",
+                DataType::Timestamp(TimeUnit::Nanosecond, None),
+                false,
+            ),
+            Field::new("equipment_id", DataType::Utf8, false),
+            Field::new("sat", DataType::Float64, true),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(TimestampNanosecondArray::from(vec![
+                    nanos("2026-01-07T10:00:00Z"),
+                    nanos("2026-01-07T11:00:00Z"),
+                    nanos("2026-01-07T12:00:00Z"),
+                    nanos("2026-01-07T13:00:00Z"),
+                ])),
+                Arc::new(StringArray::from(vec!["AHU_1"; 4])),
+                Arc::new(Float64Array::from(vec![55.0, 56.0, 57.0, 58.0])),
+            ],
+        )
+        .unwrap();
+        let ctx = SessionContext::new();
+        ctx.register_batch("history", batch).unwrap();
+        scope_history_to_time_window(&ctx, "2026-01-07T11:00:00Z", "2026-01-07T13:00:00Z")
+            .await
+            .unwrap();
+        let n = ctx
+            .sql("SELECT COUNT(*) AS c FROM history")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+        let c = n[0]
+            .column(0)
+            .as_any()
+            .downcast_ref::<datafusion::arrow::array::Int64Array>()
+            .unwrap()
+            .value(0);
         assert_eq!(c, 2);
     }
 }

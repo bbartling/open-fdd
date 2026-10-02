@@ -15,18 +15,18 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration as StdDuration;
 
 use anyhow::{Context, Result};
-use axum::extract::Extension;
+use axum::extract::{Extension, Query};
 use axum::middleware;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::{DateTime, Duration, Utc};
 use dashmap::DashMap;
 use fdd_store::{
-    apply_scheduler_config_update, next_due_at, parse_backfill_request, plan_bounded_backfill,
-    plan_continuous_cycle, wall_clock_local_rfc3339, AfddConfig, AfddCycleWindow, AfddMode,
-    AfddOperatorSchedule, AfddSchedulerCheckpoint, SchedulerConfigUpdate,
-    AFDD_SCHEDULER_CHECKPOINT_PATH, AFDD_SCHEDULER_RUNTIME_CONFIG_PATH, OPERATOR_INTERVAL_MINUTES,
-    OPERATOR_LOOKBACK_DAYS,
+    apply_scheduler_config_update, lookback_matches_cadence, next_due_at, parse_backfill_request,
+    plan_bounded_backfill, plan_continuous_cycle, wall_clock_local_rfc3339, AfddConfig,
+    AfddCycleWindow, AfddMode, AfddOperatorSchedule, AfddSchedulerCheckpoint,
+    SchedulerConfigUpdate, AFDD_SCHEDULER_CHECKPOINT_PATH, AFDD_SCHEDULER_RUNTIME_CONFIG_PATH,
+    OPERATOR_INTERVAL_MINUTES, OPERATOR_LOOKBACK_DAYS,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -344,6 +344,7 @@ impl AfddSchedulerRuntime {
             "next_due_at_utc": if timer_enabled { Some(next_due) } else { None },
             "next_due_local": if timer_enabled { next_due_local } else { None },
             "result_write": "lookback_window",
+            "lookback_matches_cadence": lookback_matches_cadence(&config),
             "timer_scope": timer_scope,
             "last_error": status.last_error,
             "recent_cycles": status.recent_cycles,
@@ -387,6 +388,10 @@ fn normalize_scope(building_id: Option<&str>) -> String {
 pub fn router(state: Arc<AppState>, runtime: Arc<AfddSchedulerRuntime>) -> Router {
     Router::new()
         .route("/api/afdd/scheduler/status", get(scheduler_status))
+        .route(
+            "/api/afdd/scheduler/result-slices",
+            get(scheduler_result_slices),
+        )
         .route("/api/afdd/scheduler/run-now", post(scheduler_run_now))
         .route("/api/afdd/scheduler/config", post(scheduler_update_config))
         .route("/api/afdd/scheduler/backfill", post(scheduler_backfill))
@@ -396,6 +401,20 @@ pub fn router(state: Arc<AppState>, runtime: Arc<AfddSchedulerRuntime>) -> Route
             auth::jwt_middleware,
         ))
         .with_state(state)
+}
+
+#[derive(Debug, Deserialize)]
+struct ResultSliceQuery {
+    #[serde(default)]
+    building_id: Option<String>,
+}
+
+async fn scheduler_result_slices(Query(query): Query<ResultSliceQuery>) -> Json<Value> {
+    Json(
+        open_fdd_edge_prototype::fdd::registry_api::result_slice_report(
+            query.building_id.as_deref(),
+        ),
+    )
 }
 
 async fn scheduler_status(Extension(runtime): Extension<Arc<AfddSchedulerRuntime>>) -> Json<Value> {

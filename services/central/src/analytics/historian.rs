@@ -2419,8 +2419,10 @@ ORDER BY series_kind, equipment_id, bin_lo
 }
 
 /// BAS oa_t vs web OAT overlay samples + deviation histogram rows.
-/// Site-broadcasts BAS and web OAT by timestamp so Liberty works when `oa_t`
-/// lives on AHU rows and `web_oa_t` on weather (not co-located on one row).
+/// Site-broadcasts BAS and web OAT by truncated-second timestamp so Liberty
+/// works when `oa_t` lives on AHU rows and `web_oa_t` on weather (not
+/// co-located on one row). MQTT poll clocks rarely share exact micros — join
+/// keys use `date_trunc('second', …)` so ACME rtu_01×hosted-weather aligns.
 /// When only `oa_t` exists (Liberty), weather equipment rows supply web OAT and
 /// non-weather rows supply BAS OAT.
 pub async fn bas_vs_web_from_history(
@@ -2455,16 +2457,16 @@ pub async fn bas_vs_web_from_history(
             format!(
                 r#"
 WITH bas_by_ts AS (
-  SELECT {ts_col} AS ts, AVG({bas}) AS bas_oat_f
+  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas}) AS bas_oat_f
   FROM history
   WHERE {bas} IS NOT NULL
-  GROUP BY {ts_col}
+  GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
 ),
 web_by_ts AS (
-  SELECT {ts_col} AS ts, AVG({web}) AS web_oat_f
+  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({web}) AS web_oat_f
   FROM history
   WHERE {web} IS NOT NULL
-  GROUP BY {ts_col}
+  GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
 ),
 joined AS (
   SELECT
@@ -2498,16 +2500,16 @@ LIMIT {limit}
             format!(
                 r#"
 WITH bas_by_ts AS (
-  SELECT {ts_col} AS ts, AVG({bas}) AS bas_oat_f
+  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas}) AS bas_oat_f
   FROM history
   WHERE {bas} IS NOT NULL{weather_excluded}
-  GROUP BY {ts_col}
+  GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
 ),
 web_by_ts AS (
-  SELECT {ts_col} AS ts, AVG({bas}) AS web_oat_f
+  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas}) AS web_oat_f
   FROM history
   WHERE {bas} IS NOT NULL{weather_only}
-  GROUP BY {ts_col}
+  GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
 ),
 joined AS (
   SELECT
@@ -2575,7 +2577,7 @@ LIMIT {limit}
         );
     }
     let query = AnalyticsQuery::default();
-    let mut env = envelope_with_engine("bas-vs-web-oat-v2", &query, warnings, DF_ENGINE);
+    let mut env = envelope_with_engine("bas-vs-web-oat-v3", &query, warnings, DF_ENGINE);
     env.points = points;
     env.rows = rows;
     env.coverage = Some(json!({
@@ -2585,7 +2587,7 @@ LIMIT {limit}
         "bas_column": bas,
         "web_column": web_label,
         "weather_equipment_split": weather_split,
-        "oat_join": "site_broadcast_by_ts",
+        "oat_join": "site_broadcast_by_second",
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
     }));
@@ -5106,9 +5108,61 @@ mod tests {
         assert!(!env.points.is_empty());
         assert_eq!(
             env.coverage.as_ref().unwrap()["oat_join"],
-            "site_broadcast_by_ts"
+            "site_broadcast_by_second"
         );
         assert!(env.rows.iter().any(|r| r["kind"] == "delta_hist"));
+    }
+
+    #[tokio::test]
+    async fn bas_vs_web_joins_when_bas_and_web_micros_differ() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_MICRO");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+
+        let ahu = building.join("rtu_01");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(ahu.join("columns.csv"), "col,point_role\noa_t,oa_t\n").unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,oa_t").unwrap();
+        // BAS poll clock with fractional seconds — must still join web on second.
+        writeln!(f, "2026-07-01T00:00:00.320474219Z,70").unwrap();
+        writeln!(f, "2026-07-01T00:05:00.416697337Z,71").unwrap();
+        writeln!(f, "2026-07-01T00:10:00.510652410Z,72").unwrap();
+
+        let wx = building.join("hosted-weather");
+        std::fs::create_dir_all(&wx).unwrap();
+        std::fs::write(
+            wx.join("columns.csv"),
+            "col,point_role\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut wf = std::fs::File::create(wx.join("history_wide.csv")).unwrap();
+        writeln!(wf, "timestamp_utc,web_oa_t").unwrap();
+        writeln!(wf, "2026-07-01T00:00:00.111111111Z,68").unwrap();
+        writeln!(wf, "2026-07-01T00:05:00.222222222Z,69").unwrap();
+        writeln!(wf, "2026-07-01T00:10:00.333333333Z,70").unwrap();
+
+        let parquet = tmp.path().join("parquet_micro");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_MICRO", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = bas_vs_web_from_history(None, 500, Some("BUILDING_MICRO"), None)
+            .await
+            .unwrap()
+            .expect("second-truncated join should align mismatched micros");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(
+            env.points.len() >= 3,
+            "expected overlay points, got {}",
+            env.points.len()
+        );
+        assert_eq!(
+            env.coverage.as_ref().unwrap()["oat_join"],
+            "site_broadcast_by_second"
+        );
     }
 
     #[tokio::test]
