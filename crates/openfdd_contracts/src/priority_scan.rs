@@ -23,6 +23,7 @@ pub const PRIORITY_SCAN_MIN_INTERVAL_SECS: u64 = 300;
 pub const PRIORITY_SCAN_MAX_INTERVAL_SECS: u64 = 7 * 24 * 3_600;
 pub const PRIORITY_SCAN_DEFAULT_MAX_POINTS_PER_DEVICE: u16 = 100;
 pub const PRIORITY_SCAN_MAX_POINTS_PER_DEVICE: u16 = 1_000;
+pub const BACNET_MAX_INSTANCE: u32 = 4_194_303;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -34,6 +35,10 @@ pub struct PriorityScanTarget {
 
 impl PriorityScanTarget {
     pub fn validate(&self) -> Result<(), String> {
+        if self.device_instance > BACNET_MAX_INSTANCE || self.object_instance > BACNET_MAX_INSTANCE
+        {
+            return Err("priority scan BACnet instance is out of range".into());
+        }
         if self.object_type.trim().is_empty()
             || self.object_type.len() > 64
             || !self
@@ -150,6 +155,16 @@ impl PriorityScanStatus {
             .is_some_and(|value| value.len() > 256 || value.chars().any(|ch| ch.is_control()))
         {
             return Err("priority scheduler error is invalid".into());
+        }
+        if self.last_device_identity.as_deref().is_some_and(|value| {
+            value.len() > 128
+                || !value.starts_with("bacnet-device:")
+                || value["bacnet-device:".len()..].parse::<u32>().is_err()
+                || value
+                    .chars()
+                    .any(|ch| !(ch.is_ascii_alphanumeric() || matches!(ch, '-' | ':')))
+        }) {
+            return Err("priority scheduler device cursor is invalid".into());
         }
         Ok(())
     }
@@ -279,6 +294,7 @@ impl PriorityHistoryResponse {
         {
             return Err("priority history response correlation failed".into());
         }
+        validate_revision(&self.revision)?;
         if self.records.len() > usize::from(request.page_size) {
             return Err("priority history page exceeds its bound".into());
         }
@@ -323,18 +339,23 @@ fn validate_cursor(cursor: &str) -> Result<(), String> {
     {
         return Err("priority history cursor is malformed".into());
     }
-    if parts[1].is_empty()
-        || parts[1].len() > 128
-        || !parts[1]
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
-    {
-        return Err("priority history cursor revision is malformed".into());
-    }
+    validate_revision(parts[1])?;
     parts[3]
         .parse::<usize>()
         .map(|_| ())
         .map_err(|_| "priority history cursor offset is malformed".into())
+}
+
+fn validate_revision(revision: &str) -> Result<(), String> {
+    if revision.is_empty()
+        || revision.len() > 128
+        || !revision
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
+    {
+        return Err("priority history revision is malformed".into());
+    }
+    Ok(())
 }
 
 fn decode_cursor(
@@ -517,5 +538,26 @@ mod tests {
     #[test]
     fn scan_contract_does_not_accidentally_reuse_read_schema() {
         assert_ne!(PRIORITY_SCAN_CONTRACT_V1, READ_PROXY_CONTRACT_V1);
+    }
+
+    #[test]
+    fn bacnet_instances_are_bounded_and_revisions_are_always_validated() {
+        let mut target = target();
+        target.device_instance = BACNET_MAX_INSTANCE + 1;
+        assert!(target.validate().is_err());
+
+        let request = request();
+        let mut response = PriorityHistoryResponse {
+            schema: PRIORITY_SCAN_CONTRACT_V1.into(),
+            request_id: request.request_id,
+            scope: request.scope.clone(),
+            revision: "history-1".into(),
+            captured_at: Utc::now(),
+            records: Vec::new(),
+            next_cursor: None,
+            scanner: status(),
+        };
+        response.revision = "bad revision".into();
+        assert!(response.validate_for(&request).is_err());
     }
 }

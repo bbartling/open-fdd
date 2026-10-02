@@ -25,7 +25,7 @@ pub use inventory::{
 };
 pub use priority_scan::{
     PriorityHistoryRecord, PriorityHistoryRequest, PriorityHistoryResponse, PriorityScanConfig,
-    PriorityScanStatus, PriorityScanTarget, PRIORITY_SCAN_CONTRACT_V1,
+    PriorityScanStatus, PriorityScanTarget, BACNET_MAX_INSTANCE, PRIORITY_SCAN_CONTRACT_V1,
     PRIORITY_SCAN_DEFAULT_INTERVAL_SECS, PRIORITY_SCAN_DEFAULT_MAX_POINTS_PER_DEVICE,
     PRIORITY_SCAN_MAX_INTERVAL_SECS, PRIORITY_SCAN_MAX_PAGE_SIZE,
     PRIORITY_SCAN_MAX_POINTS_PER_DEVICE, PRIORITY_SCAN_MIN_INTERVAL_SECS,

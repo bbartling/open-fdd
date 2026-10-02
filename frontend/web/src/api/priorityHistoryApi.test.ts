@@ -93,4 +93,19 @@ describe("priorityHistoryApi", () => {
     await expect(fetchPriorityHistoryPage({ scope, pageSize: 101 })).rejects.toThrow(/page size/);
     expect(apiFetch).not.toHaveBeenCalled();
   });
+
+  it("rejects oversized, duplicate, and empty continuation pages", async () => {
+    const oversized = response();
+    oversized.records = [oversized.records[0], { ...oversized.records[0], sequence: 2 }];
+    apiFetch.mockResolvedValueOnce(oversized);
+    await expect(fetchPriorityHistoryPage({ scope, pageSize: 1 })).rejects.toThrow(/exceeds its bound/);
+
+    const duplicate = response({ records: [response().records[0], response().records[0]] });
+    apiFetch.mockResolvedValueOnce(duplicate);
+    await expect(fetchPriorityHistoryPage({ scope, pageSize: 10 })).rejects.toThrow(/duplicate sequences/);
+
+    const emptyContinuation = response({ records: [], next_cursor: "v1.history-1.0000000000000000.0" });
+    apiFetch.mockResolvedValueOnce(emptyContinuation);
+    await expect(fetchPriorityHistoryPage({ scope })).rejects.toThrow(/continuation cursor/);
+  });
 });

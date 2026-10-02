@@ -181,11 +181,19 @@ function validateStatus(value: unknown, requestedScope: InventoryScope): Priorit
   if (value.last_started_at != null) timestamp(value.last_started_at, "scanner.last_started_at");
   if (value.last_completed_at != null) timestamp(value.last_completed_at, "scanner.last_completed_at");
   if (value.next_due_at != null) timestamp(value.next_due_at, "scanner.next_due_at");
+  if (value.last_device_identity != null) text(value.last_device_identity, "scanner.last_device_identity", 128);
   if (value.last_error != null) text(value.last_error, "scanner.last_error", 256);
+  uint(value.records_retained, "scanner.records_retained", 100_000);
   return value as unknown as PriorityScanStatus;
 }
 
-function validateResponse(value: unknown, requestId: string, requestedScope: InventoryScope, requestedTarget?: PriorityHistoryTarget): PriorityHistoryResponse {
+function validateResponse(
+  value: unknown,
+  requestId: string,
+  requestedScope: InventoryScope,
+  pageSize: number,
+  requestedTarget?: PriorityHistoryTarget,
+): PriorityHistoryResponse {
   if (!isRecord(value) || value.schema !== PRIORITY_SCAN_CONTRACT_V1 || value.request_id !== requestId || !sameScope(scope(value.scope), requestedScope) || typeof value.revision !== "string" || !Array.isArray(value.records)) {
     throw new PriorityHistoryContractError("priority history response correlation failed");
   }
@@ -196,6 +204,12 @@ function validateResponse(value: unknown, requestId: string, requestedScope: Inv
     const label = raw.label == null ? null : text(raw.label, `priority history record ${index}.label`, 128);
     return { sequence: raw.sequence as number, target: recordTarget, label, snapshot: snapshot(raw.snapshot, recordTarget), source: "scheduled_scan" as const };
   });
+  if (records.length > pageSize) throw new PriorityHistoryContractError("priority history page exceeds its bound");
+  const sequences = new Set(records.map((record) => record.sequence));
+  if (sequences.size !== records.length) throw new PriorityHistoryContractError("priority history page contains duplicate sequences");
+  if (value.next_cursor != null && records.length === 0) {
+    throw new PriorityHistoryContractError("priority history continuation cursor is invalid");
+  }
   const scanner = validateStatus(value.scanner, requestedScope);
   return {
     schema: PRIORITY_SCAN_CONTRACT_V1,
@@ -226,5 +240,5 @@ export async function fetchPriorityHistoryPage({ scope: requestedScope, target: 
     body: JSON.stringify(request),
     signal,
   });
-  return validateResponse(response, requestId, requestedScope, requestedTarget);
+  return validateResponse(response, requestId, requestedScope, pageSize, requestedTarget);
 }
