@@ -16,9 +16,9 @@ use openfdd_contracts::{
     ConnectorHelloResponse, ConnectorInventoryRequest, ConnectorInventoryResponse,
     ConnectorProtocol, ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult,
     DeliveryStatus, InventoryAvailability, InventoryCommandability, InventoryPointReference,
-    InventoryProvenance, InventoryRecord, ReadPointResult, ReadPriorityArrayResult,
-    ReadPrioritySlot, ReadValueState, RecipeObservation, ServiceVersion, CAPABILITIES_CONTRACT_V1,
-    CONNECTOR_INVENTORY_CONTRACT_V1,
+    InventoryProvenance, InventoryRecord, PriorityHistoryRequest, PriorityHistoryResponse,
+    ReadPointResult, ReadPriorityArrayResult, ReadPrioritySlot, ReadValueState, RecipeObservation,
+    ServiceVersion, CAPABILITIES_CONTRACT_V1, CONNECTOR_INVENTORY_CONTRACT_V1,
 };
 use serde_json::Value;
 
@@ -215,20 +215,39 @@ pub fn hello_response(state: &AppState) -> ConnectorHelloResponse {
         && std::env::var("OPENFDD_MQTT_HOST")
             .ok()
             .is_some_and(|host| !host.trim().is_empty());
+    let priority_history_detail = state
+        .priority_scan
+        .status()
+        .map(|status| {
+            format!(
+                "read-only priority history; scheduler enabled={} interval_secs={} records_retained={}",
+                status.enabled, status.interval_secs, status.records_retained
+            )
+        })
+        .unwrap_or_else(|_| "read-only priority history scope is not configured".into());
+    let priority_history_available = state.priority_scan.status().is_ok();
+    let mut bacnet_actions = vec![
+        ConnectorAction::MetadataRead,
+        ConnectorAction::PointRead,
+        ConnectorAction::PriorityArrayRead,
+    ];
+    if priority_history_available {
+        bacnet_actions.push(ConnectorAction::PriorityHistoryRead);
+    }
 
     let connectors = vec![
         capability(
             ConnectorProtocol::Bacnet,
             bacnet_devices > 0,
             bacnet_enabled,
-            vec![
-                ConnectorAction::MetadataRead,
-                ConnectorAction::PointRead,
-                ConnectorAction::PriorityArrayRead,
-            ],
+            bacnet_actions,
             mqtt,
             durable,
-            bacnet_detail,
+            Some(format!(
+                "{}; {}",
+                bacnet_detail.unwrap_or_default(),
+                priority_history_detail
+            )),
         ),
         capability(
             ConnectorProtocol::Modbus,
@@ -376,6 +395,7 @@ fn inventory_units(value: &str) -> Option<String> {
 
 fn inventory_records(state: &AppState) -> Vec<InventoryRecord> {
     let mut records = Vec::new();
+    let priority_history_available = state.priority_scan.status().is_ok();
     for device in state.bacnet_client.configured_devices() {
         // BACnet instance/object identity is stable when a human label is
         // edited; labels are presentation only.
@@ -446,10 +466,14 @@ fn inventory_records(state: &AppState) -> Vec<InventoryRecord> {
                 // typed read seam determines this from an actual PA result.
                 commandability: InventoryCommandability::Unknown,
                 actions: if device.enabled {
-                    vec![
+                    let mut actions = vec![
                         ConnectorAction::PointRead,
                         ConnectorAction::PriorityArrayRead,
-                    ]
+                    ];
+                    if priority_history_available {
+                        actions.push(ConnectorAction::PriorityHistoryRead);
+                    }
+                    actions
                 } else {
                     Vec::new()
                 },
@@ -634,6 +658,22 @@ async fn connector_inventory(
     Ok(Json(build_inventory(&state, &request)?))
 }
 
+async fn connector_priority_history(
+    State(state): State<AppState>,
+    Json(request): Json<PriorityHistoryRequest>,
+) -> ApiResult<Json<PriorityHistoryResponse>> {
+    request.validate().map_err(ApiError::BadRequest)?;
+    local_scope_matches(&state.settings, &request.scope)?;
+    let response = state.priority_scan.history(&request).map_err(|error| {
+        if error.contains("outside") || error.contains("scope") {
+            ApiError::Forbidden(error)
+        } else {
+            ApiError::BadRequest(error)
+        }
+    })?;
+    Ok(Json(response))
+}
+
 fn point_result(
     value: Value,
     device_instance: u32,
@@ -764,6 +804,10 @@ pub fn router() -> Router<AppState> {
         .route("/api/connector/hello", get(connector_hello))
         .route("/api/connector/inventory", post(connector_inventory))
         .route("/api/connector/read", post(connector_read))
+        .route(
+            "/api/connector/priority-history",
+            post(connector_priority_history),
+        )
 }
 
 #[cfg(test)]

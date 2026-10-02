@@ -16,8 +16,9 @@ use openfdd_contracts::{
     CapabilitiesAggregateResponse, CapabilityState, ConnectorAction, ConnectorCapability,
     ConnectorHelloResponse, ConnectorInventoryRequest, ConnectorInventoryResponse,
     ConnectorProtocol, ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult,
-    DeliveryStatus, ReadValueState, RecipeObservation, ServiceVersion, UpstreamCapability,
-    CAPABILITIES_AGGREGATE_CONTRACT_V1, CAPABILITIES_CONTRACT_V1,
+    DeliveryStatus, PriorityHistoryRequest, PriorityHistoryResponse, ReadValueState,
+    RecipeObservation, ServiceVersion, UpstreamCapability, CAPABILITIES_AGGREGATE_CONTRACT_V1,
+    CAPABILITIES_CONTRACT_V1,
 };
 use reqwest::redirect::Policy;
 use reqwest::Client;
@@ -422,6 +423,59 @@ impl CapabilitiesAggregator {
             .map_err(|_| ProxyError::Incompatible)?;
         Ok(result)
     }
+
+    /// Forward one bounded, read-only priority history page through the
+    /// configured edge. This is a history projection only; central never
+    /// asks the edge to discover, write, release, or remediate an OT value.
+    pub async fn proxy_priority_history(
+        &self,
+        edge_id: &str,
+        request: &PriorityHistoryRequest,
+    ) -> Result<PriorityHistoryResponse, ProxyError> {
+        request.validate().map_err(|_| ProxyError::BadRequest)?;
+        let upstream = self
+            .upstreams
+            .iter()
+            .find(|upstream| upstream.edge_id == edge_id)
+            .ok_or(ProxyError::NotConfigured)?;
+        if upstream.tenant_id != request.scope.tenant_id
+            || upstream.building_id != request.scope.building_id
+        {
+            return Err(ProxyError::BadRequest);
+        }
+        if upstream.token.is_none() && !central_bool("OPENFDD_FIELDBUS_UPSTREAM_ALLOW_ANONYMOUS") {
+            return Err(ProxyError::AuthFailure);
+        }
+        let client = self.client.as_ref().ok_or(ProxyError::Incompatible)?;
+        let _probe_permit = timeout(Duration::from_secs(2), self.probe_gate.acquire())
+            .await
+            .map_err(|_| ProxyError::Unreachable)?
+            .map_err(|_| ProxyError::Unreachable)?;
+        let endpoint = endpoint(&upstream.base_url, "api/connector/priority-history")
+            .map_err(|_| ProxyError::Incompatible)?;
+        let mut outgoing = client.post(endpoint).json(request);
+        if let Some(token) = upstream.token.as_deref() {
+            outgoing = outgoing.bearer_auth(token);
+        }
+        let response = timeout(REQUEST_TIMEOUT, outgoing.send())
+            .await
+            .map_err(|_| ProxyError::Unreachable)?
+            .map_err(|_| ProxyError::Unreachable)?;
+        if response.status() == StatusCode::UNAUTHORIZED
+            || response.status() == StatusCode::FORBIDDEN
+        {
+            return Err(ProxyError::AuthFailure);
+        }
+        if !response.status().is_success() || response.status().is_redirection() {
+            return Err(ProxyError::Incompatible);
+        }
+        let body = bounded_body(response)
+            .await
+            .map_err(|_| ProxyError::Incompatible)?;
+        let response: PriorityHistoryResponse =
+            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
+        sanitize_public_priority_history(response, request).map_err(|_| ProxyError::Incompatible)
+    }
 }
 
 /// Validate and reduce every connector read to the public DTO surface.  The
@@ -466,6 +520,24 @@ fn sanitize_public_read_response(
             code: "upstream_rejected".into(),
             message: "connector read rejected".into(),
         });
+    }
+    response.validate_for(request).map_err(|_| ())?;
+    Ok(response)
+}
+
+fn sanitize_public_priority_history(
+    mut response: PriorityHistoryResponse,
+    request: &PriorityHistoryRequest,
+) -> Result<PriorityHistoryResponse, ()> {
+    response.validate_for(request).map_err(|_| ())?;
+    for record in &mut response.records {
+        for slot in &mut record.snapshot.slots {
+            if matches!(slot.state, ReadValueState::Error | ReadValueState::Unknown)
+                && slot.error.is_some()
+            {
+                slot.error = Some("priority slot unavailable".into());
+            }
+        }
     }
     response.validate_for(request).map_err(|_| ())?;
     Ok(response)

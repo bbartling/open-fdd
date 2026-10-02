@@ -14,7 +14,7 @@ use chrono::Utc;
 use openfdd_contracts::{CommandEnvelope, Protocol, TelemetryEnvelope, TopicBuilder, TopicKind};
 use openfdd_contracts::{
     ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorReadRequest,
-    ConnectorReadResponse, ConnectorScope,
+    ConnectorReadResponse, ConnectorScope, PriorityHistoryRequest, PriorityHistoryResponse,
 };
 use openfdd_mqtt::publish_json;
 use serde::Deserialize;
@@ -114,6 +114,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(connector_inventory),
         )
         .route("/api/connectors/{edge_id}/read", post(connector_read))
+        .route(
+            "/api/connectors/{edge_id}/priority-history",
+            post(connector_priority_history),
+        )
         .route("/api/health/stack", get(health_stack))
         .route("/api/building/snapshot", get(building_snapshot))
         .route("/api/dashboard/summary", get(dashboard_summary))
@@ -1291,6 +1295,49 @@ pub async fn connector_inventory(
     let response = state
         .capabilities
         .proxy_inventory(&edge_id, &request)
+        .await
+        .map_err(|error| {
+            (
+                error.status(),
+                Json(json!({"ok": false, "error": error.message()})),
+            )
+        })?;
+    Ok(Json(response))
+}
+
+/// Return a bounded, authenticated priority-array history page from the
+/// configured edge. The route never turns a history request into a live OT
+/// read and never exposes cloud-side fieldbus credentials or URLs.
+pub async fn connector_priority_history(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<auth::AuthUser>,
+    Path(edge_id): Path<String>,
+    Json(request): Json<PriorityHistoryRequest>,
+) -> Result<Json<PriorityHistoryResponse>, (StatusCode, Json<Value>)> {
+    if !connector_proxy_role_allowed(user.role) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "connector role is not authorized"})),
+        ));
+    }
+    request.validate().map_err(|error| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": error})),
+        )
+    })?;
+    if request.scope.edge_id != edge_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "path edge_id and scoped edge_id differ"})),
+        ));
+    }
+    let ctx = resolve_tenant_context_for_user(&user);
+    authorize_connector_scope(&state, &ctx, &edge_id, &request.scope)?;
+    let _subject = user.sub;
+    let response = state
+        .capabilities
+        .proxy_priority_history(&edge_id, &request)
         .await
         .map_err(|error| {
             (

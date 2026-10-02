@@ -26,6 +26,7 @@ use crate::openapi_paths::*;
         doc_connector_hello,
         doc_connector_inventory,
         doc_connector_read,
+        doc_connector_priority_history,
         doc_bacnet_read,
         doc_bacnet_write,
         doc_bacnet_write_dry_run,
@@ -79,6 +80,8 @@ use crate::openapi_paths::*;
         openfdd_contracts::ConnectorInventoryResponse,
         openfdd_contracts::ConnectorReadRequest,
         openfdd_contracts::ConnectorReadResponse,
+        openfdd_contracts::PriorityHistoryRequest,
+        openfdd_contracts::PriorityHistoryResponse,
     )),
     modifiers(&SecurityAddon, &SwaggerExamplesAddon),
     tags(

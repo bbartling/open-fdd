@@ -19,7 +19,8 @@ use config::load_settings;
 use services::{
     bacnet_client::BacnetClientService, bacnet_server::BacnetServerManager,
     haystack::HaystackService, mqtt_publish_ledger::MqttPublishLedger, poll::PollEngine,
-    rest::RestClientService, telemetry_control::TelemetryControl, weather::WeatherService,
+    priority_scan::PriorityScanService, rest::RestClientService,
+    telemetry_control::TelemetryControl, weather::WeatherService,
 };
 use state::AppState;
 use tower_http::trace::TraceLayer;
@@ -151,6 +152,9 @@ async fn run(
 
     let api_key_opt = require_api_key_for_bind(&settings.http_host, auth::api_key())?;
 
+    let priority_scan = PriorityScanService::from_settings(&settings, Arc::clone(&bacnet_client))?;
+    let priority_scan_task = priority_scan.spawn();
+
     let state = AppState {
         settings: Arc::clone(&settings),
         api_key: api_key_opt,
@@ -161,6 +165,7 @@ async fn run(
         haystack,
         rest,
         telemetry,
+        priority_scan: Arc::clone(&priority_scan),
         publish_ledger,
     };
 
@@ -191,6 +196,7 @@ async fn run(
             state.bacnet_server.clone(),
             state.haystack.clone(),
             state.rest.clone(),
+            priority_scan_task,
         ))
         .await?;
 
@@ -203,12 +209,16 @@ async fn shutdown_signal(
     bacnet_server: Arc<BacnetServerManager>,
     haystack: Arc<HaystackService>,
     rest: Arc<RestClientService>,
+    priority_scan_task: Option<tokio::task::JoinHandle<()>>,
 ) {
     let _ = tokio::signal::ctrl_c().await;
     info!("Shutting down...");
     haystack.close().await;
     rest.stop().await;
     poll_engine.stop().await;
+    if let Some(task) = priority_scan_task {
+        task.abort();
+    }
     weather.stop().await;
     let _ = bacnet_server.stop().await;
     info!("openfdd-fieldbus stopped");
@@ -252,6 +262,15 @@ mod tests {
             Arc::clone(&weather),
             Arc::clone(&rest),
         ));
+        let priority_scan = PriorityScanService::for_tests(
+            &settings,
+            Arc::clone(&bacnet_client),
+            std::env::temp_dir().join(format!(
+                "openfdd-fieldbus-priority-test-{}.json",
+                std::process::id()
+            )),
+        )
+        .unwrap();
         AppState {
             settings,
             api_key: None,
@@ -262,6 +281,7 @@ mod tests {
             haystack,
             rest,
             telemetry,
+            priority_scan,
             publish_ledger: Arc::new(MqttPublishLedger::default()),
         }
     }
