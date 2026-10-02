@@ -19,6 +19,7 @@ pub const PRIORITY_SCAN_TRIGGER_CONTRACT_V1: &str = "openfdd.connector.priority_
 pub const PRIORITY_SCAN_CURSOR_VERSION: &str = "v1";
 pub const PRIORITY_SCAN_MAX_PAGE_SIZE: u16 = 100;
 pub const PRIORITY_SCAN_MAX_CURSOR_LENGTH: usize = 160;
+pub const PRIORITY_SCAN_MAX_CURSOR_OFFSET: usize = 100_000;
 pub const PRIORITY_SCAN_DEFAULT_INTERVAL_SECS: u64 = 3_600;
 pub const PRIORITY_SCAN_MIN_INTERVAL_SECS: u64 = 300;
 pub const PRIORITY_SCAN_MAX_INTERVAL_SECS: u64 = 7 * 24 * 3_600;
@@ -387,10 +388,13 @@ fn validate_cursor(cursor: &str) -> Result<(), String> {
         return Err("priority history cursor is malformed".into());
     }
     validate_revision(parts[1])?;
-    parts[3]
+    let offset = parts[3]
         .parse::<usize>()
-        .map(|_| ())
-        .map_err(|_| "priority history cursor offset is malformed".into())
+        .map_err(|_| "priority history cursor offset is malformed".to_string())?;
+    if offset > PRIORITY_SCAN_MAX_CURSOR_OFFSET {
+        return Err("priority history cursor offset is out of bounds".into());
+    }
+    Ok(())
 }
 
 fn validate_revision(revision: &str) -> Result<(), String> {
@@ -524,8 +528,10 @@ mod tests {
 
     #[test]
     fn interval_cannot_create_a_fast_scan() {
-        let mut config = PriorityScanConfig::default();
-        config.interval_secs = PRIORITY_SCAN_MIN_INTERVAL_SECS - 1;
+        let config = PriorityScanConfig {
+            interval_secs: PRIORITY_SCAN_MIN_INTERVAL_SECS - 1,
+            ..PriorityScanConfig::default()
+        };
         assert!(config.validate().is_err());
     }
 
