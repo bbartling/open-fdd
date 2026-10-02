@@ -53,6 +53,18 @@ const point: InventoryRecord = {
     property_id: "present-value",
   },
 };
+const secondPoint: InventoryRecord = {
+  ...point,
+  point_id: "opaque-point-2",
+  display_name: "Return temperature",
+  reference: {
+    kind: "bacnet",
+    device_instance: 7,
+    object_type: "analog-value",
+    object_instance: 2,
+    property_id: "present-value",
+  },
+};
 
 function page(records: InventoryRecord[]): ConnectorInventoryResponse {
   return {
@@ -175,6 +187,114 @@ describe("ProtocolInventory", () => {
     fireEvent.click(screen.getByRole("button", { name: "Read present value" }));
     expect((await screen.findByTestId("inventory-read-point-result")).textContent).toContain("71.25");
     expect(apiFetch.mock.calls.filter(([path]) => String(path).includes("/read"))).toHaveLength(1);
+  });
+
+  it("gates each live-read button to the advertised action", async () => {
+    renderInventory([], [device, group, { ...point, availability: "configured", actions: ["priority_array_read"] }]);
+    const pointItem = await screen.findByTestId("inventory-treeitem-point:opaque-point");
+    fireEvent.click(pointItem);
+    expect(await screen.findByRole("button", { name: "Read priority array" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Read present value" })).toBeNull();
+  });
+
+  it("submits one live read and blocks every other action while it is pending", async () => {
+    let resolveRead: ((value: unknown) => void) | undefined;
+    renderInventory([], [device, group, { ...point, availability: "configured", actions: ["point_read", "priority_array_read"] }]);
+    const pointItem = await screen.findByTestId("inventory-treeitem-point:opaque-point");
+    apiFetch.mockImplementation(async (path: string, options?: RequestInit) => {
+      if (path === "/api/connectors/edge-a/read") {
+        const request = JSON.parse(String(options?.body));
+        return new Promise((resolve) => {
+          resolveRead = (value) => resolve({ ...(value as Record<string, unknown>), request_id: request.request_id });
+        });
+      }
+      return {};
+    });
+    fireEvent.click(pointItem);
+    const readButton = screen.getByRole("button", { name: "Read present value" });
+    const priorityButton = screen.getByRole("button", { name: "Read priority array" });
+    fireEvent.click(readButton);
+    fireEvent.click(readButton);
+    fireEvent.click(priorityButton);
+    expect(apiFetch.mock.calls.filter(([path]) => String(path).includes("/read"))).toHaveLength(1);
+    expect((readButton as HTMLButtonElement).disabled).toBe(true);
+    expect((priorityButton as HTMLButtonElement).disabled).toBe(true);
+    resolveRead?.({
+      schema: "openfdd.connector.read.v1", request_id: "request-1", scope, ok: true,
+      capability_contract: "openfdd.connector.capabilities.v1", error: null,
+      result: { kind: "point", device_instance: 7, object_type: "analog-value", object_instance: 1, property_id: "present-value", type: "real", value: 71.25, quality: "good", observed_at: "2026-10-01T01:00:00Z" },
+    });
+    await screen.findByTestId("inventory-read-point-result");
+  });
+
+  it("cancels a selected point read and ignores its late result", async () => {
+    let resolveRead: ((value: unknown) => void) | undefined;
+    let readSignal: AbortSignal | undefined;
+    renderInventory([], [device, group, { ...point, availability: "configured", actions: ["point_read"] }, secondPoint]);
+    const firstPoint = await screen.findByTestId("inventory-treeitem-point:opaque-point");
+    const secondPointItem = await screen.findByTestId("inventory-treeitem-point:opaque-point-2");
+    apiFetch.mockImplementation(async (path: string, options?: RequestInit) => {
+      if (path === "/api/connectors/edge-a/read") {
+        readSignal = options?.signal;
+        return new Promise((resolve) => { resolveRead = resolve; });
+      }
+      return {};
+    });
+    fireEvent.click(firstPoint);
+    fireEvent.click(screen.getByRole("button", { name: "Read present value" }));
+    fireEvent.click(secondPointItem);
+    expect(readSignal?.aborted).toBe(true);
+    resolveRead?.({
+      schema: "openfdd.connector.read.v1", request_id: "request-1", scope, ok: true,
+      capability_contract: "openfdd.connector.capabilities.v1", error: null,
+      result: { kind: "point", device_instance: 7, object_type: "analog-value", object_instance: 1, property_id: "present-value", type: "real", value: 71.25, quality: "good", observed_at: "2026-10-01T01:00:00Z" },
+    });
+    await waitFor(() => expect(screen.queryByTestId("inventory-read-point-result")).toBeNull());
+    expect(screen.getByTestId("inventory-treeitem-point:opaque-point-2")).toBeTruthy();
+  });
+
+  it.each([401, 403])("shows an honest authenticated HTTP %s read failure", async (status) => {
+    renderInventory([], [device, group, { ...point, availability: "configured", actions: ["point_read"] }]);
+    const pointItem = await screen.findByTestId("inventory-treeitem-point:opaque-point");
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path === "/api/connectors/edge-a/read") {
+        throw Object.assign(new Error(status === 401 ? "unauthorized" : "forbidden"), { status });
+      }
+      return {};
+    });
+    fireEvent.click(pointItem);
+    fireEvent.click(screen.getByRole("button", { name: "Read present value" }));
+    expect((await screen.findByTestId("inventory-read-error")).textContent).toContain("not authorized");
+    expect(screen.queryByTestId("inventory-read-point-result")).toBeNull();
+  });
+
+  it("clears the edge and inventory when the active building changes", async () => {
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path === "/api/tenants") {
+        return {
+          ok: true, active_tenant_id: "tenant-a", buildings_visible: ["building-a", "building-b"],
+          tenants: [{ id: "tenant-a", name: "Tenant A", building_ids: ["building-a", "building-b"] }],
+        };
+      }
+      if (path === "/api/edges") return {
+        ok: true,
+        edges: [
+          { edge_id: "edge-a", site_id: "building-a" },
+          { edge_id: "edge-b", site_id: "building-b" },
+        ],
+      };
+      return {};
+    });
+    fetchPage.mockResolvedValue(page([device]));
+    render(
+      <MemoryRouter initialEntries={["/operations?site=building-a&edge=edge-a"]}>
+        <ProtocolInventory protocol="bacnet" />
+      </MemoryRouter>,
+    );
+    await screen.findByTestId("inventory-treeitem-device:opaque-device");
+    fireEvent.change(screen.getByTestId("inventory-building"), { target: { value: "building-b" } });
+    await waitFor(() => expect((screen.getByTestId("inventory-edge") as HTMLSelectElement).value).toBe(""));
+    expect(screen.queryByTestId("inventory-treeitem-device:opaque-device")).toBeNull();
   });
 
   it("does not issue inventory calls without an explicit edge selection", async () => {

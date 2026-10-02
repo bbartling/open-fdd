@@ -60,6 +60,7 @@ function useInventoryScope(capabilityEdgeIds: readonly string[]): ScopeSnapshot 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParamsCompat();
+  const previousBuilding = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,6 +129,15 @@ function useInventoryScope(capabilityEdgeIds: readonly string[]): ScopeSnapshot 
   }, [buildingId, capabilityEdgeIds, edgeResponse]);
   const requestedEdge = normalizeId(searchParams.get("edge"));
   const edgeId = edges.some((edge) => edge.edge_id === requestedEdge) ? requestedEdge : null;
+
+  useEffect(() => {
+    const previous = previousBuilding.current;
+    previousBuilding.current = buildingId;
+    if (previous === null || previous === buildingId || !searchParams.has("edge")) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("edge");
+    setSearchParams(next, { replace: true });
+  }, [buildingId, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!requestedEdge || edgeId || !edgeResponse || !buildingId) return;
@@ -300,25 +310,52 @@ function InventoryReadPanel({
   const [loading, setLoading] = useState<"point" | "priority" | null>(null);
   const [result, setResult] = useState<ConnectorReadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const readController = useRef<AbortController | null>(null);
+  const readGeneration = useRef(0);
+  const loadingRef = useRef<"point" | "priority" | null>(null);
   const point = node?.record.kind === "point" && node.record.reference.kind === "bacnet"
     ? node.record
     : null;
   const canReadPoint = Boolean(point?.actions.includes("point_read"));
   const canReadPriority = Boolean(point?.actions.includes("priority_array_read"));
+  const pointTargetKey = point?.reference.kind === "bacnet"
+    ? `${point.reference.device_instance}:${point.reference.object_type}:${point.reference.object_instance}:${point.reference.property_id}:${point.actions.join(",")}`
+    : "";
 
   useEffect(() => {
+    readController.current?.abort();
+    readController.current = null;
+    loadingRef.current = null;
+    readGeneration.current += 1;
     setLoading(null);
     setResult(null);
     setError(null);
-  }, [node?.key, scope.building_id, scope.edge_id, scope.tenant_id]);
+    return () => {
+      readController.current?.abort();
+      readController.current = null;
+      loadingRef.current = null;
+      readGeneration.current += 1;
+    };
+  }, [pointTargetKey, node?.key, scope.building_id, scope.edge_id, scope.tenant_id]);
 
   if (!point || (!canReadPoint && !canReadPriority)) return null;
   const run = async (kind: "point" | "priority") => {
+    if (loadingRef.current) return;
+    const controller = new AbortController();
+    const requestGeneration = readGeneration.current + 1;
+    readGeneration.current = requestGeneration;
+    readController.current = controller;
+    loadingRef.current = kind;
     setLoading(kind);
     setError(null);
     setResult(null);
     const reference = point.reference;
-    if (reference.kind !== "bacnet") return;
+    if (reference.kind !== "bacnet") {
+      loadingRef.current = null;
+      readController.current = null;
+      setLoading(null);
+      return;
+    }
     try {
       const target = kind === "point"
         ? {
@@ -334,11 +371,25 @@ function InventoryReadPanel({
             object_type: reference.object_type,
             object_instance: reference.object_instance,
           };
-      setResult(await readConnectorTarget(scope, target));
+      const next = await readConnectorTarget(scope, target, controller.signal);
+      if (readGeneration.current === requestGeneration && !controller.signal.aborted) {
+        setResult(next);
+      }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Connector read failed");
+      if (controller.signal.aborted || (reason instanceof Error && reason.name === "AbortError")) return;
+      if (readGeneration.current !== requestGeneration) return;
+      const status = typeof reason === "object" && reason !== null && "status" in reason
+        ? Number((reason as { status?: unknown }).status)
+        : null;
+      setError(status === 401 || status === 403
+        ? "Connector read is not authorized for the selected scope."
+        : reason instanceof Error ? reason.message : "Connector read failed");
     } finally {
-      setLoading(null);
+      if (readGeneration.current === requestGeneration) {
+        readController.current = null;
+        loadingRef.current = null;
+        setLoading(null);
+      }
     }
   };
   return (
@@ -346,8 +397,8 @@ function InventoryReadPanel({
       <h3 id="inventory-read-heading">Live read</h3>
       <p className="muted">Runs once when requested. The inventory action and server authorization must both allow it.</p>
       <div className="inventory-read-panel__actions">
-        {canReadPoint ? <Button id="inventory-read-point" label={loading === "point" ? "Reading…" : "Read present value"} loading={loading === "point"} onClick={() => void run("point")} testId="inventory-read-point" /> : null}
-        {canReadPriority ? <Button id="inventory-read-priority" label={loading === "priority" ? "Reading…" : "Read priority array"} loading={loading === "priority"} onClick={() => void run("priority")} testId="inventory-read-priority" /> : null}
+        {canReadPoint ? <Button id="inventory-read-point" label={loading === "point" ? "Reading…" : "Read present value"} loading={loading === "point"} disabled={loading !== null} onClick={() => void run("point")} testId="inventory-read-point" /> : null}
+        {canReadPriority ? <Button id="inventory-read-priority" label={loading === "priority" ? "Reading…" : "Read priority array"} loading={loading === "priority"} disabled={loading !== null} onClick={() => void run("priority")} testId="inventory-read-priority" /> : null}
       </div>
       {error ? <InlineAlert id="inventory-read-error" variant="danger" testId="inventory-read-error">{error}</InlineAlert> : null}
       {result?.kind === "point" ? (

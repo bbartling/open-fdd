@@ -49,6 +49,8 @@ export interface ReadPriorityArrayResult extends Omit<BacnetPriorityArrayTarget,
 
 export type ConnectorReadResult = ReadPointResult | ReadPriorityArrayResult;
 
+const MAX_BACNET_INSTANCE = 4_194_303;
+
 export class ConnectorReadContractError extends Error {
   constructor(message: string) {
     super(message);
@@ -60,18 +62,67 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function hasControlCharacter(value: string): boolean {
+  return /[\u0000-\u001f\u007f-\u009f]/u.test(value);
+}
+
 function text(value: unknown, field: string): string {
-  if (typeof value !== "string" || !value.trim() || value.length > 512 || value.split("").some((ch) => ch < " ")) {
+  if (typeof value !== "string" || !value.trim() || value.length > 512 || hasControlCharacter(value)) {
     throw new ConnectorReadContractError(`${field} is invalid`);
   }
   return value;
 }
 
-function uint(value: unknown, field: string, max = 4_194_303): number {
+function token(value: unknown, field: string): string {
+  const result = text(value, field);
+  if (!/^[A-Za-z0-9_.-]+$/u.test(result)) {
+    throw new ConnectorReadContractError(`${field} is invalid`);
+  }
+  return result;
+}
+
+function timestamp(value: unknown, field: string): string {
+  const result = text(value, field);
+  if (Number.isNaN(Date.parse(result))) {
+    throw new ConnectorReadContractError(`${field} is invalid`);
+  }
+  return result;
+}
+
+function uint(value: unknown, field: string, max = MAX_BACNET_INSTANCE): number {
   if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > max) {
     throw new ConnectorReadContractError(`${field} is invalid`);
   }
   return value as number;
+}
+
+function validateScope(scope: InventoryScope): void {
+  if (!isObject(scope)) throw new ConnectorReadContractError("scope is invalid");
+  for (const field of ["tenant_id", "building_id", "edge_id"] as const) {
+    const value = text(scope[field], `scope.${field}`);
+    if (value.includes("/") || value.includes("\\") || value.includes("..")) {
+      throw new ConnectorReadContractError(`scope.${field} is invalid`);
+    }
+  }
+}
+
+function validateTarget(target: ConnectorReadTarget): void {
+  if (!isObject(target)) throw new ConnectorReadContractError("target is invalid");
+  switch (target.kind) {
+    case "bacnet_point":
+      uint(target.device_instance, "device_instance");
+      token(target.object_type, "object_type");
+      uint(target.object_instance, "object_instance");
+      token(target.property_id, "property_id");
+      return;
+    case "bacnet_priority_array":
+      uint(target.device_instance, "device_instance");
+      token(target.object_type, "object_type");
+      uint(target.object_instance, "object_instance");
+      return;
+    default:
+      throw new ConnectorReadContractError("target kind is unsupported");
+  }
 }
 
 function sameScope(left: unknown, right: InventoryScope): boolean {
@@ -79,32 +130,32 @@ function sameScope(left: unknown, right: InventoryScope): boolean {
 }
 
 function publicValue(value: unknown): value is PublicReadValue {
-  return value === null || typeof value === "boolean" || typeof value === "number" ||
-    (typeof value === "string" && value.length <= 512 && !value.includes("://") && !value.includes("@") && !/password|authorization|credential|token=/i.test(value)) ||
+  return value === null || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value)) ||
+    (typeof value === "string" && value.length <= 512 && !hasControlCharacter(value) && !value.includes("://") && !value.includes("@") && !/password|authorization|credential|token=/i.test(value)) ||
     (Array.isArray(value) && value.every(publicValue));
 }
 
 function validatePoint(value: Record<string, unknown>, target: BacnetPointTarget): ReadPointResult {
   if (value.kind !== "point" || uint(value.device_instance, "device_instance") !== target.device_instance ||
       uint(value.object_instance, "object_instance") !== target.object_instance ||
-      text(value.object_type, "object_type").toLowerCase() !== target.object_type.toLowerCase() ||
-      text(value.property_id, "property_id").toLowerCase() !== target.property_id.toLowerCase() ||
+      token(value.object_type, "object_type").toLowerCase() !== target.object_type.toLowerCase() ||
+      token(value.property_id, "property_id").toLowerCase() !== target.property_id.toLowerCase() ||
       (value.quality !== "good" && value.quality !== "bad") || !publicValue(value.value)) {
     throw new ConnectorReadContractError("point result does not match its request");
   }
-  text(value.type, "point type");
-  text(value.observed_at, "point observed_at");
+  token(value.type, "point type");
+  timestamp(value.observed_at, "point observed_at");
   return value as unknown as ReadPointResult;
 }
 
 function validatePriority(value: Record<string, unknown>, target: BacnetPriorityArrayTarget): ReadPriorityArrayResult {
   if (value.kind !== "priority_array" || uint(value.device_instance, "device_instance") !== target.device_instance ||
       uint(value.object_instance, "object_instance") !== target.object_instance ||
-      text(value.object_type, "object_type").toLowerCase() !== target.object_type.toLowerCase() ||
+      token(value.object_type, "object_type").toLowerCase() !== target.object_type.toLowerCase() ||
       !["supported", "unsupported", "unknown"].includes(String(value.state)) || !Array.isArray(value.slots) || value.slots.length !== 16) {
     throw new ConnectorReadContractError("priority-array result does not match its request");
   }
-  text(value.observed_at, "priority observed_at");
+  timestamp(value.observed_at, "priority observed_at");
   const levels = new Set<number>();
   for (const raw of value.slots) {
     if (!isObject(raw)) throw new ConnectorReadContractError("priority slot is invalid");
@@ -113,7 +164,7 @@ function validatePriority(value: Record<string, unknown>, target: BacnetPriority
       throw new ConnectorReadContractError("priority slots must be unique P1-P16");
     }
     levels.add(level);
-    text(raw.type, "priority type");
+    token(raw.type, "priority type");
     if (raw.value !== undefined && !publicValue(raw.value)) throw new ConnectorReadContractError("priority value is invalid");
     if (raw.error !== undefined) text(raw.error, "priority error");
     if (raw.state === "value" && raw.value === undefined) throw new ConnectorReadContractError("priority value is missing");
@@ -125,6 +176,8 @@ function validatePriority(value: Record<string, unknown>, target: BacnetPriority
 }
 
 export async function readConnectorTarget(scope: InventoryScope, target: ConnectorReadTarget, signal?: AbortSignal): Promise<ConnectorReadResult> {
+  validateScope(scope);
+  validateTarget(target);
   const request = { schema: CONNECTOR_READ_CONTRACT_V1, request_id: newRequestId(), scope, target };
   const response = await apiFetch<unknown>(`/api/connectors/${encodeURIComponent(scope.edge_id)}/read`, {
     method: "POST",
