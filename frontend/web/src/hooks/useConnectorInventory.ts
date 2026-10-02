@@ -79,88 +79,63 @@ interface LoadArgs {
   baseProvenance: ConnectorInventoryResponse["provenance"] | null;
   baseCapturedAt: string | null;
   replace: boolean;
+  requestedCursors: Set<string>;
 }
 
 /**
- * Fetch a complete bounded inventory projection while preserving page-level
- * progress when a later page fails. Cursors are opaque: the browser only
- * repeats the token supplied by central and never parses or manufactures one.
+ * Fetch exactly one bounded inventory page. Cursors are opaque: the browser
+ * only repeats the token supplied by central and never parses or manufactures
+ * one. Additional pages require an explicit operator action.
  */
 async function loadPages(
   args: LoadArgs,
   signal: AbortSignal,
   onProgress: (state: Partial<ConnectorInventoryState>) => void,
 ): Promise<void> {
-  let cursor = args.cursor;
-  let revision = args.baseRevision;
-  let provenance = args.baseProvenance;
-  let capturedAt = args.baseCapturedAt;
+  const cursor = args.cursor;
   let records = args.replace ? [] : [...args.baseRecords];
-  const requestedCursors = new Set<string>();
-  if (cursor) requestedCursors.add(cursor);
 
   try {
-    while (true) {
-      if (signal.aborted) return;
-      const pageRequest: InventoryPageRequest = {
-        scope: args.scope,
-        protocols: args.protocols,
-        pageSize: args.pageSize,
-        ...(cursor ? { cursor } : {}),
-        signal,
-      };
-      const page = await fetchConnectorInventoryPage(pageRequest);
-      if (signal.aborted) return;
-      if (revision && page.revision !== revision) {
-        throw new Error("connector inventory revision changed during pagination");
-      }
-      if (provenance && page.provenance !== provenance) {
-        throw new Error("connector inventory provenance changed during pagination");
-      }
-      revision ??= page.revision;
-      provenance ??= page.provenance;
-      capturedAt = page.captured_at;
-      records = mergeRecords(records, page.records);
-      const nextCursor = page.next_cursor ?? null;
-      onProgress({
-        records: [...records],
-        revision,
-        provenance,
-        capturedAt,
-        nextCursor,
-        status: nextCursor ? "loading" : "ready",
-        loading: true,
-        partial: false,
-        error: null,
-      });
-      if (!nextCursor) {
-        onProgress({
-          records: [...records],
-          revision,
-          provenance,
-          capturedAt,
-          nextCursor: null,
-          status: "ready",
-          loading: false,
-          partial: false,
-          error: null,
-        });
-        return;
-      }
-      if (requestedCursors.has(nextCursor)) {
-        throw new Error("connector inventory repeated a continuation cursor");
-      }
-      requestedCursors.add(nextCursor);
-      cursor = nextCursor;
+    const pageRequest: InventoryPageRequest = {
+      scope: args.scope,
+      protocols: args.protocols,
+      pageSize: args.pageSize,
+      ...(cursor ? { cursor } : {}),
+      signal,
+    };
+    const page = await fetchConnectorInventoryPage(pageRequest);
+    if (signal.aborted) return;
+    if (args.baseRevision && page.revision !== args.baseRevision) {
+      throw new Error("connector inventory revision changed during pagination");
     }
+    if (args.baseProvenance && page.provenance !== args.baseProvenance) {
+      throw new Error("connector inventory provenance changed during pagination");
+    }
+    records = mergeRecords(records, page.records);
+    const nextCursor = page.next_cursor ?? null;
+    if (nextCursor && args.requestedCursors.has(nextCursor)) {
+      throw new Error("connector inventory repeated a continuation cursor");
+    }
+    if (nextCursor) args.requestedCursors.add(nextCursor);
+    onProgress({
+      records: [...records],
+      revision: args.baseRevision ?? page.revision,
+      provenance: args.baseProvenance ?? page.provenance,
+      capturedAt: page.captured_at,
+      nextCursor,
+      status: nextCursor ? "partial" : "ready",
+      loading: false,
+      partial: Boolean(nextCursor),
+      error: null,
+    });
   } catch (error) {
     if (signal.aborted) return;
     const normalized = error instanceof Error ? error : new Error(String(error));
     onProgress({
       records: [...records],
-      revision,
-      provenance,
-      capturedAt,
+      revision: args.baseRevision,
+      provenance: args.baseProvenance,
+      capturedAt: args.baseCapturedAt,
       nextCursor: cursor,
       status: records.length > 0 ? "partial" : "error",
       loading: false,
@@ -179,6 +154,7 @@ export function useConnectorInventory({
   const [state, setState] = useState<ConnectorInventoryState>(EMPTY_STATE);
   const generation = useRef(0);
   const controller = useRef<AbortController | null>(null);
+  const requestedCursors = useRef(new Set<string>());
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -203,6 +179,8 @@ export function useConnectorInventory({
     controller.current = abort;
     const runGeneration = ++generation.current;
     const snapshot = stateRef.current;
+    if (replace) requestedCursors.current = new Set<string>();
+    if (cursor) requestedCursors.current.add(cursor);
     const baseRecords = replace ? [] : snapshot.records;
     const baseRevision = replace ? null : snapshot.revision;
     const baseProvenance = replace ? null : snapshot.provenance;
@@ -229,6 +207,7 @@ export function useConnectorInventory({
         baseProvenance,
         baseCapturedAt,
         replace,
+        requestedCursors: requestedCursors.current,
       },
       abort.signal,
       (patch) => {

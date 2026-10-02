@@ -68,7 +68,7 @@ function page(records: InventoryRecord[]): ConnectorInventoryResponse {
   };
 }
 
-function renderInventory() {
+function renderInventory(capabilityEdgeIds: readonly string[] = []) {
   apiFetch.mockImplementation(async (path: string) => {
     if (path === "/api/tenants") {
       return {
@@ -84,7 +84,7 @@ function renderInventory() {
   fetchPage.mockResolvedValue(page([device, group, point]));
   return render(
     <MemoryRouter initialEntries={["/operations?site=building-a&edge=edge-a"]}>
-      <ProtocolInventory protocol="bacnet" />
+      <ProtocolInventory protocol="bacnet" capabilityEdgeIds={capabilityEdgeIds} />
     </MemoryRouter>,
   );
 }
@@ -169,5 +169,54 @@ describe("ProtocolInventory", () => {
     await screen.findByTestId("inventory-edge");
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(fetchPage).not.toHaveBeenCalled();
+  });
+
+  it("offers broker-free configured capability edges without telemetry registration", async () => {
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path === "/api/tenants") return {
+        ok: true,
+        active_tenant_id: "tenant-a",
+        buildings_visible: ["building-a"],
+        tenants: [{ id: "tenant-a", name: "Tenant A", building_ids: ["building-a"] }],
+      };
+      if (path === "/api/edges") return { ok: true, edges: [] };
+      return {};
+    });
+    fetchPage.mockResolvedValue(page([device]));
+    render(
+      <MemoryRouter initialEntries={["/operations?site=building-a&edge=edge-configured"]}>
+        <ProtocolInventory protocol="bacnet" capabilityEdgeIds={["edge-configured"]} />
+      </MemoryRouter>,
+    );
+    expect((await screen.findByTestId("inventory-edge") as HTMLSelectElement).value).toBe("edge-configured");
+    await waitFor(() => expect(fetchPage).toHaveBeenCalledWith(expect.objectContaining({
+      scope: { tenant_id: "tenant-a", building_id: "building-a", edge_id: "edge-configured" },
+    })));
+  });
+
+  it("requires an explicit load-more action for continuation pages", async () => {
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path === "/api/tenants") return {
+        ok: true,
+        active_tenant_id: "tenant-a",
+        buildings_visible: ["building-a"],
+        tenants: [{ id: "tenant-a", name: "Tenant A", building_ids: ["building-a"] }],
+      };
+      if (path === "/api/edges") return { ok: true, edges: [{ edge_id: "edge-a", site_id: "building-a" }] };
+      return {};
+    });
+    fetchPage
+      .mockResolvedValueOnce({ ...page([device]), next_cursor: "opaque-next" })
+      .mockResolvedValueOnce(page([group]));
+    render(
+      <MemoryRouter initialEntries={["/operations?site=building-a&edge=edge-a"]}>
+        <ProtocolInventory protocol="bacnet" />
+      </MemoryRouter>,
+    );
+    await screen.findByTestId("inventory-load-more");
+    expect(fetchPage).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    await screen.findByTestId("inventory-treeitem-group:opaque-group");
+    expect(fetchPage).toHaveBeenCalledTimes(2);
   });
 });

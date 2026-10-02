@@ -77,12 +77,16 @@ describe("useConnectorInventory", () => {
   beforeEach(() => fetchPage.mockReset());
   afterEach(() => vi.restoreAllMocks());
 
-  it("loads opaque-cursor pages and attaches cross-page parents after accumulation", async () => {
+  it("loads opaque-cursor pages only after explicit continuation and accumulates cross-page parents", async () => {
     fetchPage
       .mockResolvedValueOnce(page(scopeA, [point], { next_cursor: "opaque-cursor-1" }))
       .mockResolvedValueOnce(page(scopeA, [device, group]));
     const hook = renderHook(() => useConnectorInventory({ scope: scopeA, protocols: ["bacnet"], pageSize: 2 }));
 
+    await waitFor(() => expect(hook.result.current.status).toBe("partial"));
+    expect(hook.result.current.records).toEqual([point]);
+    expect(fetchPage).toHaveBeenCalledTimes(1);
+    act(() => hook.result.current.loadMore());
     await waitFor(() => expect(hook.result.current.status).toBe("ready"));
     expect(hook.result.current.records.map((record) => record.kind)).toEqual(["point", "device", "group"]);
     expect(fetchPage).toHaveBeenCalledTimes(2);
@@ -95,6 +99,8 @@ describe("useConnectorInventory", () => {
       .mockResolvedValueOnce(page(scopeA, [group], { revision: "revision-2" }));
     const revisionHook = renderHook(() => useConnectorInventory({ scope: scopeA, protocols: ["bacnet"] }));
     await waitFor(() => expect(revisionHook.result.current.status).toBe("partial"));
+    act(() => revisionHook.result.current.loadMore());
+    await waitFor(() => expect(revisionHook.result.current.error?.message).toContain("revision changed"));
     expect(revisionHook.result.current.records).toHaveLength(1);
     expect(revisionHook.result.current.error?.message).toContain("revision changed");
 
@@ -102,6 +108,8 @@ describe("useConnectorInventory", () => {
       .mockResolvedValueOnce(page(scopeA, [device], { next_cursor: "cursor-1" }))
       .mockResolvedValueOnce(page(scopeA, [group], { next_cursor: "cursor-1" }));
     act(() => revisionHook.result.current.refresh());
+    await waitFor(() => expect(revisionHook.result.current.status).toBe("partial"));
+    act(() => revisionHook.result.current.loadMore());
     await waitFor(() => expect(revisionHook.result.current.error?.message).toContain("repeated a continuation cursor"));
     expect(revisionHook.result.current.partial).toBe(true);
   });

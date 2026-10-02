@@ -132,6 +132,12 @@ export function ProtocolWorkspace({ protocol, onProtocolChange }: ProtocolWorksp
     [aggregate],
   );
   const activeStatus = statuses.find((status) => status.protocol === protocol);
+  const capabilityEdgeIds = useMemo(
+    () => [...new Set((aggregate?.upstreams ?? [])
+      .map((upstream) => upstream.edge_id?.trim() ?? "")
+      .filter(Boolean))],
+    [aggregate],
+  );
 
   return (
     <section
@@ -212,7 +218,7 @@ export function ProtocolWorkspace({ protocol, onProtocolChange }: ProtocolWorksp
         error={error}
         status={activeStatus}
       />
-      {!loading && !error ? <ProtocolInventory protocol={protocol} /> : null}
+      {!loading && !error ? <ProtocolInventory protocol={protocol} capabilityEdgeIds={capabilityEdgeIds} /> : null}
     </section>
   );
 }

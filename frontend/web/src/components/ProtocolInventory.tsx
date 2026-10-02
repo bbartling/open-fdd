@@ -46,7 +46,7 @@ function normalizeId(value: string | null | undefined): string {
   return (value ?? "").trim();
 }
 
-function useInventoryScope(): ScopeSnapshot & {
+function useInventoryScope(capabilityEdgeIds: readonly string[]): ScopeSnapshot & {
   setBuilding: (buildingId: string) => void;
   setEdge: (edgeId: string) => void;
 } {
@@ -101,14 +101,27 @@ function useInventoryScope(): ScopeSnapshot & {
 
   const requestedBuilding = normalizeId(query.siteId);
   const buildingId = buildings.includes(requestedBuilding) ? requestedBuilding : null;
-  const edges = useMemo(() => (edgeResponse?.edges ?? [])
-    .map((edge) => ({
+  const edges = useMemo(() => {
+    const registered = (edgeResponse?.edges ?? [])
+      .map((edge) => ({
       edge_id: normalizeId(edge.edge_id),
       site_id: normalizeId(edge.site_id),
       has_telemetry: edge.has_telemetry,
-    }))
-    .filter((edge) => edge.edge_id && edge.site_id && edge.site_id === buildingId)
-    .sort((left, right) => left.edge_id.localeCompare(right.edge_id)), [buildingId, edgeResponse]);
+      }))
+      .filter((edge) => edge.edge_id && edge.site_id && edge.site_id === buildingId);
+    const known = new Set(registered.map((edge) => edge.edge_id));
+    for (const rawEdgeId of capabilityEdgeIds) {
+      const edgeId = normalizeId(rawEdgeId);
+      if (edgeId && !known.has(edgeId)) {
+        // Capability upstreams are authenticated connector candidates. Their
+        // building binding is intentionally enforced by central when the
+        // operator submits the explicit scope.
+        registered.push({ edge_id: edgeId, site_id: "", has_telemetry: false });
+        known.add(edgeId);
+      }
+    }
+    return registered.sort((left, right) => left.edge_id.localeCompare(right.edge_id));
+  }, [buildingId, capabilityEdgeIds, edgeResponse]);
   const requestedEdge = normalizeId(searchParams.get("edge"));
   const edgeId = edges.some((edge) => edge.edge_id === requestedEdge) ? requestedEdge : null;
 
@@ -507,8 +520,14 @@ function InventoryTreeView({
   );
 }
 
-export function ProtocolInventory({ protocol }: { protocol: InventoryProtocol }) {
-  const snapshot = useInventoryScope();
+export function ProtocolInventory({
+  protocol,
+  capabilityEdgeIds = [],
+}: {
+  protocol: InventoryProtocol;
+  capabilityEdgeIds?: readonly string[];
+}) {
+  const snapshot = useInventoryScope(capabilityEdgeIds);
   const inventory = useConnectorInventory({ scope: snapshot.scope, protocols: [protocol], enabled: Boolean(snapshot.scope) });
   const model = useMemo(() => buildInventoryTree(inventory.records), [inventory.records]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -526,7 +545,13 @@ export function ProtocolInventory({ protocol }: { protocol: InventoryProtocol })
             <Button id="inventory-refresh" label={inventory.loading ? "Loading…" : "Refresh inventory"} variant="secondary" loading={inventory.loading} onClick={refresh} testId="inventory-refresh" />
           </div>
           {inventory.error ? <InlineAlert id="inventory-error" variant="danger" testId="inventory-error">{inventory.error.message}{inventory.partial ? " Some records remain visible." : ""}</InlineAlert> : null}
-          {inventory.loading && inventory.records.length > 0 ? <p role="status" data-testid="inventory-partial-loading">Loading additional inventory pages…</p> : null}
+          {inventory.loading && inventory.records.length > 0 ? <p role="status" data-testid="inventory-partial-loading">Loading the next inventory page…</p> : null}
+          {!inventory.loading && inventory.nextCursor ? (
+            <div className="inventory-pagination">
+              <p className="muted" role="status">Partial inventory snapshot. More records are available.</p>
+              <Button id="inventory-load-more" label="Load more" variant="secondary" onClick={inventory.loadMore} testId="inventory-load-more" />
+            </div>
+          ) : null}
           <div className="inventory-layout">
             <InventoryTreeView model={model} selectedKey={selectedKey} onSelect={(key) => setSelectedKey(key || null)} onModelAction={() => undefined} />
             <InventoryDetails node={selectedNode} provenance={inventory.provenance} />
