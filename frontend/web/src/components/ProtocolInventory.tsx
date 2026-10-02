@@ -561,5 +561,3 @@ export function ProtocolInventory({
     </section>
   );
 }
-
-export { buildInventoryTree, InventoryDetails, InventoryTreeView, ScopePicker };

@@ -160,10 +160,18 @@ export function useConnectorInventory({
 
   const protocolKey = useMemo(() => protocols.join(","), [protocols]);
   const currentScopeKey = scopeKey(scope);
-  const requestedProtocols = useMemo(() => [...protocols], [protocolKey]);
+  const requestedProtocols = useMemo(
+    () => protocolKey ? protocolKey.split(",") as InventoryProtocol[] : [],
+    [protocolKey],
+  );
+  const tenantId = scope?.tenant_id ?? "";
+  const buildingId = scope?.building_id ?? "";
+  const edgeId = scope?.edge_id ?? "";
   const requestedScope = useMemo(
-    () => (scope ? { ...scope } : null),
-    [currentScopeKey],
+    () => (tenantId && buildingId && edgeId
+      ? { tenant_id: tenantId, building_id: buildingId, edge_id: edgeId }
+      : null),
+    [buildingId, edgeId, tenantId],
   );
   const requestKey = `${currentScopeKey}\u0000${protocolKey}\u0000${pageSize}\u0000${enabled ? "on" : "off"}`;
 
