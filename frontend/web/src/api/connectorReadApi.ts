@@ -63,7 +63,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function hasControlCharacter(value: string): boolean {
-  return /[\u0000-\u001f\u007f-\u009f]/u.test(value);
+  return [...value].some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+  });
 }
 
 function text(value: unknown, field: string): string {
