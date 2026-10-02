@@ -250,9 +250,11 @@ function referenceFields(reference: InventoryPointReference): Array<[string, str
 function InventoryDetails({
   node,
   provenance,
+  capturedAt,
 }: {
   node: InventoryTreeNode | null;
   provenance: ConnectorInventoryResponse["provenance"] | null;
+  capturedAt: string | null;
 }) {
   if (!node) {
     return <section className="inventory-details" data-testid="inventory-details-empty"><h3>Details</h3><p className="muted">Select a device, group, or point.</p></section>;
@@ -264,6 +266,7 @@ function InventoryDetails({
     ["Name", record.display_name],
     ["Availability", availabilityLabel(record.availability)],
     ["Provenance", provenance?.replaceAll("_", " ") ?? "unknown"],
+    ["Captured", capturedAt ?? "unknown"],
     ["Commandability", commandabilityLabel(record.commandability)],
   ];
   if (record.kind !== "device") fields.push(["Device", record.device_id]);
@@ -554,7 +557,7 @@ export function ProtocolInventory({
           ) : null}
           <div className="inventory-layout">
             <InventoryTreeView model={model} selectedKey={selectedKey} onSelect={(key) => setSelectedKey(key || null)} onModelAction={() => undefined} />
-            <InventoryDetails node={selectedNode} provenance={inventory.provenance} />
+            <InventoryDetails node={selectedNode} provenance={inventory.provenance} capturedAt={inventory.capturedAt} />
           </div>
         </>
       ) : null}

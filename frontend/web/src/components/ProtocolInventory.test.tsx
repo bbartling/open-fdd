@@ -106,6 +106,7 @@ describe("ProtocolInventory", () => {
     fireEvent.click(screen.getByText("Supply temperature"));
     expect((await screen.findByTestId("inventory-details")).textContent).toContain("unavailable");
     expect(screen.getByTestId("inventory-details").textContent).toContain("trusted configuration");
+    expect(screen.getByTestId("inventory-details").textContent).toContain("2026-10-01T00:00:00Z");
   });
 
   it("supports roving arrows, home/end, selection, and keyboard context escape", async () => {
