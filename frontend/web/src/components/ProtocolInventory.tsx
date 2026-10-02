@@ -429,9 +429,11 @@ function InventoryReadPanel({
 function PriorityHistoryPanel({
   point,
   scope,
+  enabled,
 }: {
   point: Extract<InventoryTreeNode["record"], { kind: "point" }> | null;
   scope: InventoryScope;
+  enabled: boolean;
 }) {
   const target = point?.reference.kind === "bacnet"
     ? {
@@ -461,7 +463,7 @@ function PriorityHistoryPanel({
     return () => controller.current?.abort();
   }, [scope.building_id, scope.edge_id, scope.tenant_id, targetKey]);
 
-  if (!point || !target || !point.actions.includes("priority_array_read")) return null;
+  if (!point || !target || !enabled) return null;
 
   const load = async (nextCursor: string | null = null) => {
     if (loading) return;
@@ -751,9 +753,11 @@ function InventoryTreeView({
 export function ProtocolInventory({
   protocol,
   capabilityEdgeIds = [],
+  priorityHistoryCapabilityEdgeIds = [],
 }: {
   protocol: InventoryProtocol;
   capabilityEdgeIds?: readonly string[];
+  priorityHistoryCapabilityEdgeIds?: readonly string[];
 }) {
   const snapshot = useInventoryScope(capabilityEdgeIds);
   const inventory = useConnectorInventory({ scope: snapshot.scope, protocols: [protocol], enabled: Boolean(snapshot.scope) });
@@ -785,7 +789,11 @@ export function ProtocolInventory({
             <div>
               <InventoryDetails node={selectedNode} provenance={inventory.provenance} capturedAt={inventory.capturedAt} />
               <InventoryReadPanel node={selectedNode} scope={snapshot.scope} />
-              <PriorityHistoryPanel point={selectedNode?.record.kind === "point" ? selectedNode.record : null} scope={snapshot.scope} />
+              <PriorityHistoryPanel
+                point={selectedNode?.record.kind === "point" ? selectedNode.record : null}
+                scope={snapshot.scope}
+                enabled={priorityHistoryCapabilityEdgeIds.includes(snapshot.scope.edge_id)}
+              />
             </div>
           </div>
         </>

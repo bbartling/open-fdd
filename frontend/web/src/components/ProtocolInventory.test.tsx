@@ -134,7 +134,11 @@ function historyPage() {
   };
 }
 
-function renderInventory(capabilityEdgeIds: readonly string[] = [], records: InventoryRecord[] = [device, group, point]) {
+function renderInventory(
+  capabilityEdgeIds: readonly string[] = [],
+  records: InventoryRecord[] = [device, group, point],
+  priorityHistoryCapabilityEdgeIds: readonly string[] = [],
+) {
   apiFetch.mockImplementation(async (path: string) => {
     if (path === "/api/tenants") {
       return {
@@ -150,7 +154,11 @@ function renderInventory(capabilityEdgeIds: readonly string[] = [], records: Inv
   fetchPage.mockResolvedValue(page(records));
   return render(
     <MemoryRouter initialEntries={["/operations?site=building-a&edge=edge-a"]}>
-      <ProtocolInventory protocol="bacnet" capabilityEdgeIds={capabilityEdgeIds} />
+      <ProtocolInventory
+        protocol="bacnet"
+        capabilityEdgeIds={capabilityEdgeIds}
+        priorityHistoryCapabilityEdgeIds={priorityHistoryCapabilityEdgeIds}
+      />
     </MemoryRouter>,
   );
 }
@@ -254,7 +262,7 @@ describe("ProtocolInventory", () => {
 
   it("loads durable priority history only after explicit user action", async () => {
     fetchHistory.mockResolvedValue(historyPage());
-    renderInventory([], [device, group, { ...point, availability: "configured", actions: ["priority_array_read"] }]);
+    renderInventory([], [device, group, { ...point, availability: "configured", actions: [] }], ["edge-a"]);
     const pointItem = await screen.findByTestId("inventory-treeitem-point:opaque-point");
     fireEvent.click(pointItem);
     const panel = await screen.findByTestId("inventory-priority-history");
@@ -268,6 +276,19 @@ describe("ProtocolInventory", () => {
     expect(panel.textContent).toContain("P1");
     expect(panel.textContent).toContain("Supply command");
     expect(apiFetch.mock.calls.some(([path]) => String(path).includes("priority-history"))).toBe(false);
+  });
+
+  it("gates durable history on the connector capability, independently of point actions", async () => {
+    fetchHistory.mockResolvedValue(historyPage());
+    renderInventory([], [device, group, { ...point, availability: "configured", actions: [] }], ["edge-a"]);
+    fireEvent.click(await screen.findByTestId("inventory-treeitem-point:opaque-point"));
+    expect(await screen.findByTestId("inventory-priority-history")).toBeTruthy();
+  });
+
+  it("does not infer durable history capability from a point read action", async () => {
+    renderInventory([], [device, group, { ...point, availability: "configured", actions: ["priority_array_read"] }]);
+    fireEvent.click(await screen.findByTestId("inventory-treeitem-point:opaque-point"));
+    expect(screen.queryByTestId("inventory-priority-history")).toBeNull();
   });
 
   it("submits one live read and blocks every other action while it is pending", async () => {
