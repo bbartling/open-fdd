@@ -1,7 +1,8 @@
 ---
 title: Benchmark & regression strategy
-parent: Rule Cookbook
-nav_order: 9
+parent: Cookbook reference
+grand_parent: Rule Cookbook
+nav_order: 8
 ---
 
 # Benchmark and regression strategy

@@ -1,7 +1,8 @@
 ---
 title: Public FDD taxonomy
-parent: Rule Cookbook
-nav_order: 3
+parent: Cookbook reference
+grand_parent: Rule Cookbook
+nav_order: 1
 ---
 
 # Canonical public FDD taxonomy

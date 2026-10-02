@@ -100,7 +100,7 @@ GHCR_WAIT_SECS=900 GHCR_POLL_SECS=30 ./scripts/nightly-ot-bench/00_pull_ghcr_up.
 4. Device **5007** read/poll of AI:1173 succeeds
 5. Central ingest/Parquet shows **new** telemetry when MQTT path is live
 6. React SPA routes + honesty/MCP gates pass
-7. Gates **14–15** PASS (capability ledger validator + product-truth honesty)
+7. Gates **14–15** and **40** PASS (capability ledger, product-truth honesty, and the offline equipment-id heuristic scan). Gate 40 is source-only. It is not tip+field proof and not `fully_qualified`.
 8. Optional dual-MQTT (`RUN_CLOUD_SIM=1`): gate **10** — bosspi fieldbus OCI rev matches bench; both sites telemetry + ingest
 9. **Patch-cycle restore:** gate **18** — `18_volume_restore_smoke.sh` after central re-pin (CSV + MQTT-stream Parquet on same volume)
 
@@ -117,13 +117,21 @@ BUG_REPORT `fieldbus-poll-stale`).
 Default write policy is **read/poll/discover**. Active REST write clamps require
 `BENCH_ALLOW_WRITES=1`.
 
+## Equipment selection (#1037–#1047)
+
+Gate **40** (`40_no_id_heuristics.sh`) scans product source for `equipment_id` `LIKE` / id-text selectors and checks the agent-spec pages do not authorize that fallback. It runs with no stack. The same check is `python3 -B -m unittest tests.qualification.test_no_equipment_id_heuristics`.
+
+Gate **37** sends `building_id` on `GET /api/analytics/rcx/presets` and checks `ahu_dats` / `zone_temps` membership against package stamps. Empty preset points are a warning, not inclusion proof. Stamped opaque ids on a live ACME historian still need a tip pack before those issues close.
+
 ## Railway field closeout
 
 Patch-cycle stress on the live hub is `./scripts/nightly-ot-bench/run_railway_hub_stress.sh`. Handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../../docs/operations/STRESS_CLOSEOUT.md).
 
-**STRESS NOTE #1:** Pro `openfdd-central` replica memory limit is 24 GB (Hobby hard-cap was 8 GB; 2026-09-28 OOM under Overview/RCx). Watch Railway metrics (memory limit/current/max) and the capacity sampler (`lib_capacity_sample.sh`) against building count and historian file pressure. A silent restart, an OOM, or a 499 storm fails closeout. ACME continuous AFDD (gate 38) uses lookback-sized windows tied to the 1440-minute cadence (24h), checkpoint-relative, with an ops preference for ~05:00 America/Chicago before the 06:00 digest. See [`AFDD_MODES.md`](../../docs/operations/AFDD_MODES.md) § ACME.
+**STRESS NOTE #1:** Pro `openfdd-central` replica memory limit is 24 GB (Hobby hard-cap was 8 GB; 2026-09-28 OOM under Overview/RCx). Watch Railway metrics (memory limit/current/max) and the capacity sampler (`lib_capacity_sample.sh`) against building count and historian file pressure. A silent restart, an OOM, or a 499 storm fails closeout. ACME continuous AFDD (gate 38) uses a lookback-sized window (daily cadence → 24h). Wall-clock mode pins a local HH:MM; interval mode stays checkpoint-relative. The lab recipe is 05:00 America/Chicago before the 06:00 digest. Gate 38 also checks outside-window result-slice hashes (null-bound legacy and `preserved_unscoped` are one identity), rejects `update_all`, and fails if central `started_at` changes during the cycle. Host RSS in that artifact is not the replica cap. See [`AFDD_MODES.md`](../../docs/operations/AFDD_MODES.md) § ACME.
 
-Gate **39** (`39_mqtts_gap_blame.sh`) is the MQTTS blame scorecard (EDGE / TRANSIT / RAILWAY / SPARSE_OK / INCONCLUSIVE) for the same hub stress when ACME/vim-1 is live. How to read it: [`STRESS_CLOSEOUT.md`](../../docs/operations/STRESS_CLOSEOUT.md) § MQTTS gap blame.
+Gate **39** (`39_mqtts_gap_blame.sh`) is the MQTTS blame scorecard (EDGE / TRANSIT / RAILWAY / SPARSE_OK / INCONCLUSIVE) for the same hub stress when ACME/vim-1 is live. The scorecard `probes` block names the publish-ledger read. `rows=[]` stays BLOCKED. How to read it: [`STRESS_CLOSEOUT.md`](../../docs/operations/STRESS_CLOSEOUT.md) § MQTTS gap blame.
+
+Gate **42** (`42_cache_retention_preview_health.sh`) records cache/unload, 100 GiB preflight, series-preview, and health-hang contracts. It is not required for `fully_qualified`. `CACHE_HEALTH_SMOKE=0` skips it.
 
 ## Related
 

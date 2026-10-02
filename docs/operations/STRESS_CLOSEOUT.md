@@ -87,7 +87,7 @@ Low-RAM: never local `docker build`; no local central/web/mqtt on the closeout p
 | # | Name | Command / artifact | Pass |
 |---|------|--------------------|------|
 | **19** | Synth AFDD flood | `2N_wave_m_afdd_flood.sh` | Budgeted registry flood on Synthetic-59 (authorized live) — **not** ACME continuous proof |
-| **38** | **ACME continuous AFDD** | `38_acme_afdd_qualification.sh` | Hub `continuous` + **1440**/24h + `timer_scope=ACME`; live `run-now` ok; window ≤24h+5m (lookback-sized, not full history); durable `recent_cycles` — **continuous-AFDD SoT** |
+| **38** | **ACME continuous AFDD** | `38_acme_afdd_qualification.sh` | Hub `continuous` + **1440**/24h + `timer_scope=ACME`; live `run-now` ok; window ≤24h+5m; outside-window `result-slices` hashes unchanged (null-bound legacy and `preserved_unscoped` are one identity); `update_all` rejected; schedule kind proven; central `started_at` unchanged (STRESS NOTE #1) — **continuous-AFDD SoT**. Not a field-qualification claim. |
 
 Compact ACME hive parts before enabling continuous AFDD (`scripts/ops/railway_compact_hub.sh`). Recipe: [`AFDD_MODES.md`](AFDD_MODES.md) § ACME.
 
@@ -95,7 +95,7 @@ Compact ACME hive parts before enabling continuous AFDD (`scripts/ops/railway_co
 
 **Wall clock (product, not yet the field pin).** `OPENFDD_AFDD_SCHEDULE=wall_clock` with `OPENFDD_AFDD_WALL_CLOCK_HHMM` and `OPENFDD_AFDD_WALL_CLOCK_TIMEZONE` runs once per local day. The lab recipe is **05:00 America/Chicago** so the cycle can finish before the **06:00** digest, with lookback 24h. `OPENFDD_AFDD_INTERVAL_MINUTES=1440` remains the checkpoint-relative cadence when schedule kind is `interval`. The current field hub is still interval until this build is pinned. Soft-open: do not claim field qualification from the unit tests.
 
-After downtime the next cycle is still one lookback-sized window (`catch_up`). Replaying a chosen range is `POST /api/afdd/scheduler/backfill` (`plan_bounded_backfill`). Scheduler config rejects `update_all`. Gate 38 checks config truth and a bounded `run-now` window. It records `schedule_kind` / `result_scope` when the hub sends them and does not require 05:00 until the field pin flips. Watch central RAM across that cycle (STRESS NOTE #1). Live lab env until re-pin: `OPENFDD_AFDD_MODE=continuous`, interval 1440, lookback 24 hours, `OPENFDD_AFDD_BUILDING_ID=ACME`.
+After downtime the next cycle is still one lookback-sized window (`catch_up`). Replaying a chosen range is `POST /api/afdd/scheduler/backfill` (`plan_bounded_backfill`). Scheduler config rejects `update_all`. Gate 38 checks config truth, a bounded `run-now` window, outside-window slice hashes, that rejection, and that central `started_at` does not change across the cycle. A rows-only file and a `preserved_unscoped` slice with the same rows hash are the same outside-window identity (null bounds). The gate does not treat that relabel as a rewrite. It proves wall-clock `next_due_local` when `schedule_kind=wall_clock`, and interval `next_due` when the kind is interval. It does not require 05:00 until `OPENFDD_ACME_AFDD_EXPECT_SCHEDULE=wall_clock`. Host RSS in the artifact is not the replica cgroup cap (STRESS NOTE #1). Live lab env until re-pin: `OPENFDD_AFDD_MODE=continuous`, interval 1440, lookback 24 hours, `OPENFDD_AFDD_BUILDING_ID=ACME`. `lookback_matches_cadence` is true for that pair.
 
 ### MQTTS gap blame (gate 39)
 
@@ -111,7 +111,11 @@ Gate 21 only checks that `ingest_ok` moved. Gate **39** (`39_mqtts_gap_blame.sh`
 
 QoS 1 ack means the **broker accepted** the packet. Ack plus a quiet central monitor is **RAILWAY**, not the internet. Poll success alone is not proof the envelope left the edge — that needs `GET /api/mqtt/publish-ledger` on fieldbus (acks, fails, no-session, recent equipment ids). `/bacnet/poll/status` is the current cycle only. `/api/mqtt/monitor` is about 100 messages, not a 24h ledger. Inspect points are used for historian gaps only when in-window median spacing stays near 300s; a coarse stride is **INCONCLUSIVE** (downsample hides holes).
 
+The JSON `probes` object names what was actually read: equipment inventory, `GET /api/mqtt/publish-ledger` (HTTP status, ring coverage, `equipment_ids_truncated`), mqtt monitor depth, and inspect point counts. `rows=[]` with only a snapshot clock is **not** instrumentation-complete. A truncated equipment-id list is **INCONCLUSIVE**, not EDGE: the ledger dropped ids past the cap, so a missing id is not proof the edge skipped that device. `publish_no_session` marks are coalesced per poll interval so a reconnect loop does not erase the ack ring.
+
 Scorecard counts plus the worst IOs are the BUG_REPORT lines. Exit 0 is a complete window with no loss. Exit 1 is a proven loss class. Exit 2 is recorded **BLOCKED** (missing probe — not a green pass). `MQTTS_GAP_BLAME=0` skips the gate.
+
+Gate **42** (`42_cache_retention_preview_health.sh`) is local evidence for the analytics-cache hit/unload classifiers, the 100 GiB oldest-first preflight self-test, the series-preview contract (newest N, default 10), and a blackhole-central check that `/` stays 200 while `/api/health` and `/api/version` return 503. It is **not** a required FQ gate. A live health or version call that returns no bytes inside 12s fails the smoke. It does not close #1044, #1049, #1050, or #1063.
 
 Standalone from the OptiPlex against Railway:
 

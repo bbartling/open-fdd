@@ -1,3 +1,9 @@
+## 2026-10-01 — Id-heuristic prove path (#1037–#1047, not FQ)
+
+- RCx preset catalog requests include `building_id` so multi-tenant mode does not 403 `GET /api/analytics/rcx/presets`.
+- Gate 40 and `tests/qualification/test_no_equipment_id_heuristics.py` fail closed on `equipment_id` `LIKE` / id-text selectors. Gate 37 picks an AHU by stamp and checks preset membership. Empty points are not inclusion proof.
+- No VERSION bump. No OPS pin. Tip+field on a published tip is still required before closing #1037–#1042 and #1045–#1047.
+
 ## 2026-09-30 — Equipment selection by stamp (#1037–#1043, not FQ)
 
 - OAT-METEO no longer filters `equipment_id LIKE 'AHU%'`. The rule targets registry kind `ahu` after the query, so a stamped opaque AHU stays in scope and an `AHU*` id stamped `vav` does not.
@@ -1170,3 +1176,10 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 - Merged current `origin/master` (`32a6d447`) while preserving the fieldbus correctness work. Fixed the discovery implementation contract so unconfigured point discovery and supervisory discovery hold a real discovery-port guard across the scan and the supervisory priority-read client; cancellation and client shutdown release it by scope drop.
 - Added a synthetic unconfigured-device integration test with a loopback I-Am/object-list responder. It proves an interactive Who-Is queues behind an active scan, receives the correct device after scan cancellation, and allows a queued scan to make eventual progress with no competing discovery receiver.
 - The test uses only ephemeral localhost sockets and read-only BACnet frames. No live device writes, deployment, merge-to-master, UI work or issue closure was performed.
+## 2026-09-30 — tip 3.5.59
+
+- VERSION **3.5.59** after docs #1076 + wave I/K ACME retarget #1079. Soft-OPEN #1069/#1070. Parked: #1067, #1075, #1080. No FQ claim.
+## 2026-10-01 — tip 3.5.60
+
+- VERSION **3.5.60** after fail-fast health / honest closeout probes #1085 (and inventory `GET /api/version`). Issues #1034–#1070 stay open pending tip+field stress. Parked Codex drafts #1067, #1075, #1080 untouched. No FQ claim on this bump.
+

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Gate 20 — Wave I app-test MEGAs (basic app + dual OAT + plot span).
+# Live MQTT building is ACME (edges vim-1 / pi-1). `bldg2` is not a building id.
+# Loopback / hosted-weather equipment ids are unchanged. Missing AV columns stay Soft-OPEN.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -44,6 +46,16 @@ record_soft() {
   SOFT=$((SOFT + 1))
 }
 
+# Override with OPENFDD_WAVE_MQTT_BUILDING when the hub site id is not ACME.
+MQTT_BUILDING="${OPENFDD_WAVE_MQTT_BUILDING:-ACME}"
+LOOPBACK_EQ="${OPENFDD_WAVE_MQTT_LOOPBACK_EQ:-bldg2-zone-loopback}"
+# BAS oa_t lives on the AHU (rtu_01), not the zone loopback AV. Override with OPENFDD_WAVE_MQTT_OA_EQ.
+OA_EQ="${OPENFDD_WAVE_MQTT_OA_EQ:-rtu_01}"
+WEATHER_EQ="${OPENFDD_WAVE_MQTT_WEATHER_EQ:-hosted-weather}"
+urlencode() {
+  python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+}
+
 # 1) Lakeside FC1 — must not hit read_csv planning error
 body="$(cpost /api/fdd/run '{"building_id":"LAKESIDE_ES","rule_ids":["FC1"]}')"
 echo "$body" >"$ART/wave_i_lakeside_fc1.json"
@@ -55,20 +67,24 @@ else
   record lakeside_fc1 1 "no read_csv planning error"
 fi
 
-# 2) Data model mapping for MQTT bldg2
-body="$(cget "/api/csv/import/package/mapping?building_id=bldg2")"
-echo "$body" >"$ART/wave_i_mapping_bldg2.json"
+# 2) Data model mapping for the live MQTT building (ACME).
+body="$(cget "/api/csv/import/package/mapping?building_id=$(urlencode "$MQTT_BUILDING")")"
+echo "$body" >"$ART/wave_i_mapping_acme.json"
 eq_n="$(echo "$body" | jq -r '(.equipment // []) | length' 2>/dev/null || echo 0)"
 ok_map="$(echo "$body" | jq -r '.ok // false' 2>/dev/null || echo false)"
-if [[ "$ok_map" == "true" && "$eq_n" =~ ^[0-9]+$ && "$eq_n" -gt 0 ]]; then
-  record mapping_bldg2 1 "equipment=$eq_n"
+has_loop="$(echo "$body" | jq -r --arg e "$LOOPBACK_EQ" '([.equipment_ids[]?, .equipment[]?.equipment_id] | index($e) != null)')"
+has_wx="$(echo "$body" | jq -r --arg e "$WEATHER_EQ" '([.equipment_ids[]?, .equipment[]?.equipment_id] | index($e) != null)')"
+if [[ "$ok_map" == "true" && "$eq_n" =~ ^[0-9]+$ && "$eq_n" -gt 0 && "$has_loop" == "true" && "$has_wx" == "true" ]]; then
+  record mapping_acme 1 "building=$MQTT_BUILDING equipment=$eq_n"
 else
-  record mapping_bldg2 0 "ok=$ok_map equipment=$eq_n"
+  record mapping_acme 0 "building=$MQTT_BUILDING ok=$ok_map equipment=$eq_n loopback=$has_loop weather=$has_wx"
 fi
 
-# 3) Inspect bldg2 zone_t
-body="$(cpost /api/analytics/inspect '{"building_id":"bldg2","equipment_ids":["bldg2-zone-loopback"],"max_points":800,"series":{"columns":["zone_t"]}}')"
-echo "$body" >"$ART/wave_i_inspect_bldg2.json"
+# 3) Inspect ACME loopback zone_t. Absent column is field-catalog Soft-OPEN.
+payload="$(jq -nc --arg b "$MQTT_BUILDING" --arg e "$LOOPBACK_EQ" \
+  '{building_id:$b, equipment_ids:[$e], max_points:800, series:{columns:["zone_t"]}}')"
+body="$(cpost /api/analytics/inspect "$payload")"
+echo "$body" >"$ART/wave_i_inspect_zone_t.json"
 eval "$(echo "$body" | python3 -c '
 import json,sys
 a=(json.load(sys.stdin).get("analytics") or {})
@@ -87,25 +103,60 @@ else
   record_soft inspect_zone_t "zone_t column absent non_null=${zt:-0}"
 fi
 
-# 4) bas-vs-web bldg2 (requires dual-OAT catalog + soak)
-body="$(cpost /api/analytics/bas-vs-web-oat '{"building_id":"bldg2","max_points":2000}')"
-echo "$body" >"$ART/wave_i_bas_vs_web_bldg2.json"
-eval "$(echo "$body" | python3 -c '
+# 4) oa_t and web_oa_t are separate checks. An absent column is field-catalog
+#    Soft-OPEN. A present column with no values is a product FAIL. One missing
+#    role must not hide a product fail on the other, and Soft-OPEN is not a PASS.
+ROLE_STATE=soft
+role_probe() {
+  local id="$1" equip="$2" role="$3" art_name="$4"
+  local payload body
+  payload="$(jq -nc --arg b "$MQTT_BUILDING" --arg e "$equip" --arg r "$role" \
+    '{building_id:$b, equipment_ids:[$e], max_points:800, series:{columns:[$r]}}')"
+  body="$(cpost /api/analytics/inspect "$payload")"
+  echo "$body" >"$ART/$art_name"
+  eval "$(echo "$body" | ROLE="$role" python3 -c '
+import json, os, sys
+role = os.environ["ROLE"]
+a = (json.load(sys.stdin).get("analytics") or {})
+cov = a.get("coverage") or {}
+plot = set(cov.get("plottable_columns") or [])
+pts = a.get("points") or []
+n = sum(1 for p in pts if isinstance(p, dict) and p.get(role) is not None)
+print("role_n=%d" % n)
+print("role_col=%d" % (1 if role in plot else 0))
+')"
+  if [[ "${role_n:-0}" -gt 0 ]]; then
+    record "$id" 1 "$role non_null=$role_n"
+    ROLE_STATE=pass
+  elif [[ "${role_col:-0}" == "1" ]]; then
+    record "$id" 0 "$role column present non_null=${role_n:-0}"
+    ROLE_STATE=product
+  else
+    record_soft "$id" "$role column absent non_null=${role_n:-0}"
+    ROLE_STATE=soft
+  fi
+}
+role_probe bas_oa_t "$OA_EQ" oa_t wave_i_inspect_oa_t.json
+OA_STATE="$ROLE_STATE"
+role_probe bas_web_oa_t "$WEATHER_EQ" web_oa_t wave_i_inspect_web_oa_t.json
+WEB_STATE="$ROLE_STATE"
+
+payload="$(jq -nc --arg b "$MQTT_BUILDING" '{building_id:$b, max_points:2000, refresh:true}')"
+body="$(cpost /api/analytics/bas-vs-web-oat "$payload")"
+echo "$body" >"$ART/wave_i_bas_vs_web_acme.json"
+pts="$(echo "$body" | python3 -c '
 import json,sys
-body=json.load(sys.stdin)
-a=body.get("analytics") or {}
-pts=len(a.get("points") or [])
-warns=" ".join(str(w) for w in (a.get("warnings") or [])).lower()
-missing=1 if ("unavailable" in warns or "need distinct" in warns) else 0
-print("pts=%d" % pts)
-print("missing_roles=%d" % missing)
+a=(json.load(sys.stdin).get("analytics") or {})
+print(len(a.get("points") or []))
 ')"
 if [[ "${pts:-0}" -gt 0 ]]; then
-  record bas_vs_web_bldg2 1 "points=$pts"
-elif [[ "${missing_roles:-0}" == "1" ]]; then
-  record_soft bas_vs_web_bldg2 "oa_t/web_oa_t columns absent points=0"
+  record bas_vs_web_acme 1 "building=$MQTT_BUILDING points=$pts"
+elif [[ "$OA_STATE" == "product" || "$WEB_STATE" == "product" ]]; then
+  record bas_vs_web_acme 0 "building=$MQTT_BUILDING points=0 oa_t=$OA_STATE web_oa_t=$WEB_STATE"
+elif [[ "$OA_STATE" == "soft" || "$WEB_STATE" == "soft" ]]; then
+  record_soft bas_vs_web_acme "building=$MQTT_BUILDING join empty; see bas_oa_t ($OA_STATE) and bas_web_oa_t ($WEB_STATE)"
 else
-  record bas_vs_web_bldg2 0 "points=0 roles_present"
+  record bas_vs_web_acme 0 "building=$MQTT_BUILDING points=0 oa_t=$OA_STATE web_oa_t=$WEB_STATE"
 fi
 
 # 5) B100 inspect — span-preserving downsample (equipment_id required; AHU_1).

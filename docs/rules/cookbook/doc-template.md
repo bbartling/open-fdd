@@ -1,7 +1,8 @@
 ---
 title: Rule documentation template
-parent: Rule Cookbook
-nav_order: 10
+parent: Cookbook reference
+grand_parent: Rule Cookbook
+nav_order: 9
 ---
 
 # Rule documentation template

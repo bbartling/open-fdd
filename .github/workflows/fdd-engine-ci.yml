@@ -43,6 +43,8 @@ jobs:
         run: cargo clippy -p fdd_core -p fdd_csv -p fdd_store -p fdd_sql -p fdd_rules -p fdd_bench -p fdd_cli --all-targets -- -D warnings
       - name: cargo test (fdd crates)
         run: cargo test -p fdd_core -p fdd_csv -p fdd_store -p fdd_sql -p fdd_rules -p fdd_bench -p fdd_cli
+      - name: AFDD schedule and lookback-upsert contract
+        run: bash scripts/gates/afdd_schedule_upsert_contract.sh --cargo
       - name: SQL registry files exist
         run: |
           python3 - <<'PY'

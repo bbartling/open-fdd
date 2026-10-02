@@ -1,7 +1,8 @@
 ---
 title: P0 rule catalog (metadata)
-parent: Rule Cookbook
-nav_order: 11
+parent: Cookbook reference
+grand_parent: Rule Cookbook
+nav_order: 10
 ---
 
 # P0 rule catalog — full metadata

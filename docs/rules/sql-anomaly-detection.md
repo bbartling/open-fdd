@@ -1,7 +1,7 @@
 ---
 title: SQL anomaly detection
 parent: Rule Cookbook
-nav_order: 2
+nav_order: 0
 permalink: /rules/sql-anomaly-detection/
 ---
 
