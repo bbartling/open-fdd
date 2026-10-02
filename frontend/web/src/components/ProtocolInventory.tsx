@@ -393,7 +393,7 @@ function InventoryReadPanel({
     }
   };
   return (
-    <section className="inventory-read-panel" aria-labelledby="inventory-read-heading" data-testid="inventory-read-panel">
+    <section className="inventory-read-panel" aria-labelledby="inventory-read-heading" aria-busy={loading !== null} data-testid="inventory-read-panel">
       <h3 id="inventory-read-heading">Live read</h3>
       <p className="muted">Runs once when requested. The inventory action and server authorization must both allow it.</p>
       <div className="inventory-read-panel__actions">
@@ -402,7 +402,7 @@ function InventoryReadPanel({
       </div>
       {error ? <InlineAlert id="inventory-read-error" variant="danger" testId="inventory-read-error">{error}</InlineAlert> : null}
       {result?.kind === "point" ? (
-        <dl className="inventory-read-result" data-testid="inventory-read-point-result">
+        <dl className="inventory-read-result" role="status" data-testid="inventory-read-point-result">
           <div><dt>Value</dt><dd>{JSON.stringify(result.value)}</dd></div>
           <div><dt>Type</dt><dd>{result.type}</dd></div>
           <div><dt>Quality</dt><dd>{result.quality}</dd></div>
@@ -410,9 +410,9 @@ function InventoryReadPanel({
         </dl>
       ) : null}
       {result?.kind === "priority_array" ? (
-        <div data-testid="inventory-read-priority-result">
+        <div role="status" data-testid="inventory-read-priority-result">
           <p>State: {result.state} · Observed: {result.observed_at}</p>
-          <table><thead><tr><th>Priority</th><th>State</th><th>Value</th></tr></thead><tbody>
+          <table><caption>BACnet priority array</caption><thead><tr><th scope="col">Priority</th><th scope="col">State</th><th scope="col">Value</th></tr></thead><tbody>
             {result.slots.map((slot) => <tr key={slot.priority_level}><td>P{slot.priority_level}</td><td>{slot.state}</td><td>{slot.state === "value" ? JSON.stringify(slot.value) : slot.error ?? "—"}</td></tr>)}
           </tbody></table>
         </div>
