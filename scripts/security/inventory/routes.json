@@ -3,10 +3,10 @@
   "source_commit_hint": "4a5c11e50b921df83f2ca3a59c52d4e99908157f",
   "source_file": "services/central/src/routes.rs",
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission.",
-  "route_count": 148,
+  "route_count": 149,
   "disposition_counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 89,
+    "PLANNED": 90,
     "BLOCKED_POLICY": 29,
     "EXCLUDED": 0
   },
@@ -1079,6 +1079,52 @@
         "configured_edge"
       ],
       "notes": "Authenticated, tenant/building/edge-scoped typed inventory proxy; connector inventory is configuration-backed and causes no OT discovery or reads"
+    },
+    {
+      "method": "POST",
+      "path": "/api/connectors/{edge_id}/priority-history",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_edge_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_connectors_edge_priority_history_401",
+        "y.authz.post_api_connectors_edge_id_priority_history"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon_connectors_edge_priority_history_401",
+        "y.authz.post_api_connectors_edge_id_priority_history"
+      ],
+      "request_schema": {
+        "type": "openfdd.connector.priority_scan.v1",
+        "status": "defined"
+      },
+      "response_schema": {
+        "type": "openfdd.connector.priority_scan.v1",
+        "status": "defined"
+      },
+      "selectors": [
+        "edge_id",
+        "tenant_id",
+        "building_id",
+        "cursor",
+        "target"
+      ],
+      "side_effects": "read_only_upstream_proxy",
+      "fixture_needs": [
+        "identity",
+        "configured_edge",
+        "priority_history"
+      ],
+      "notes": "Authenticated, tenant/building/edge-scoped bounded history projection; no live OT read, writes, releases, discovery, or catch-up"
     },
     {
       "method": "GET",

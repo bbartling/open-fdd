@@ -183,23 +183,12 @@ fn load_history(path: &Path, max_records: usize) -> Result<PersistedHistory, Str
     Ok(state)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct RuntimeStatus {
     last_started_at: Option<DateTime<Utc>>,
     last_completed_at: Option<DateTime<Utc>>,
     next_due_at: Option<DateTime<Utc>>,
     last_error: Option<String>,
-}
-
-impl Default for RuntimeStatus {
-    fn default() -> Self {
-        Self {
-            last_started_at: None,
-            last_completed_at: None,
-            next_due_at: None,
-            last_error: None,
-        }
-    }
 }
 
 /// The edge scanner and its durable history store.
