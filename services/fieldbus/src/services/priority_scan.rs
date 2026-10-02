@@ -104,6 +104,16 @@ impl Default for PersistedHistory {
     }
 }
 
+struct ScanRunGuard<'a> {
+    running: &'a AtomicBool,
+}
+
+impl Drop for ScanRunGuard<'_> {
+    fn drop(&mut self) {
+        self.running.store(false, Ordering::Release);
+    }
+}
+
 #[derive(Debug)]
 pub struct PriorityHistoryStore {
     path: PathBuf,
@@ -208,9 +218,30 @@ impl PriorityHistoryStore {
         offset: usize,
         limit: usize,
     ) -> Result<(String, Vec<PriorityHistoryRecord>, bool), String> {
+        let (revision, records, has_more, _) = self.page_impl(target, offset, limit)?;
+        Ok((revision, records, has_more))
+    }
+
+    #[cfg(test)]
+    fn page_with_work(
+        &self,
+        target: Option<&PriorityScanTarget>,
+        offset: usize,
+        limit: usize,
+    ) -> Result<(String, Vec<PriorityHistoryRecord>, bool, usize), String> {
+        self.page_impl(target, offset, limit)
+    }
+
+    fn page_impl(
+        &self,
+        target: Option<&PriorityScanTarget>,
+        offset: usize,
+        limit: usize,
+    ) -> Result<(String, Vec<PriorityHistoryRecord>, bool, usize), String> {
         let guard = self.lock_state()?;
         let mut matching = 0usize;
         let mut records = Vec::with_capacity(limit);
+        let work_bound = offset.saturating_add(limit).saturating_add(1);
         for record in guard.records.iter().rev() {
             if target.is_some_and(|requested| requested != &record.target) {
                 continue;
@@ -219,12 +250,15 @@ impl PriorityHistoryStore {
                 records.push(record.clone());
             }
             matching = matching.saturating_add(1);
+            if matching >= work_bound {
+                break;
+            }
         }
         if offset > matching {
             return Err("priority history cursor is outside retained history".into());
         }
         let has_more = matching > offset.saturating_add(records.len());
-        Ok((revision_string(guard.revision), records, has_more))
+        Ok((revision_string(guard.revision), records, has_more, matching))
     }
 
     pub fn records_retained(&self) -> Result<u64, String> {
@@ -606,9 +640,10 @@ impl PriorityScanService {
         if self.running.swap(true, Ordering::AcqRel) {
             return Err("priority scan already in progress".into());
         }
-        let result = self.run_one_device(scope).await;
-        self.running.store(false, Ordering::Release);
-        result
+        let _guard = ScanRunGuard {
+            running: &self.running,
+        };
+        self.run_one_device(scope).await
     }
 
     pub async fn trigger(&self) -> Result<u16, String> {
@@ -1043,6 +1078,21 @@ mod tests {
     }
 
     #[test]
+    fn history_page_stops_after_offset_page_and_has_more_probe() {
+        let path = temp_path("page-work");
+        let store = PriorityHistoryStore::open(path.clone(), 100).unwrap();
+        for object_instance in 1..=20 {
+            store.append(record(1, object_instance)).unwrap();
+        }
+
+        let (_, page, has_more, matching_work) = store.page_with_work(None, 7, 5).unwrap();
+        assert_eq!(page.len(), 5);
+        assert!(has_more);
+        assert_eq!(matching_work, 13);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn error_snapshot_is_exactly_sixteen_typed_error_slots() {
         let snapshot = error_snapshot(&target(7, 4), "priority read failed");
         assert_eq!(snapshot.slots.len(), 16);
@@ -1113,21 +1163,82 @@ mod tests {
                 if failed {
                     return Err("mock priority read failed".into());
                 }
-                let slots = (1..=16)
-                    .map(|priority_level| ReadPrioritySlot {
-                        priority_level,
-                        state: ReadValueState::Null,
-                        value_type: "null".into(),
-                        value: None,
-                        error: None,
-                    })
-                    .collect::<Vec<_>>();
-                Ok(serde_json::json!({
-                    "device_instance": device_instance,
-                    "object_identifier": format!("{object_type},{object_instance}"),
-                    "priority_array": slots,
-                    "priority_array_state": "supported"
-                }))
+                Ok(mock_priority_response(
+                    device_instance,
+                    &object_type,
+                    object_instance,
+                ))
+            })
+        }
+    }
+
+    fn mock_priority_response(
+        device_instance: u32,
+        object_type: &str,
+        object_instance: u32,
+    ) -> Value {
+        let slots = (1..=16)
+            .map(|priority_level| ReadPrioritySlot {
+                priority_level,
+                state: ReadValueState::Null,
+                value_type: "null".into(),
+                value: None,
+                error: None,
+            })
+            .collect::<Vec<_>>();
+        serde_json::json!({
+            "device_instance": device_instance,
+            "object_identifier": format!("{object_type},{object_instance}"),
+            "priority_array": slots,
+            "priority_array_state": "supported"
+        })
+    }
+
+    struct BlockingPriorityReader {
+        devices: Vec<FieldDevice>,
+        calls: Arc<std::sync::atomic::AtomicUsize>,
+        started: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+    }
+
+    impl BlockingPriorityReader {
+        fn new(device: FieldDevice) -> Self {
+            Self {
+                devices: vec![device],
+                calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                started: Arc::new(tokio::sync::Notify::new()),
+                release: Arc::new(tokio::sync::Notify::new()),
+            }
+        }
+
+        fn call_count(&self) -> usize {
+            self.calls.load(std::sync::atomic::Ordering::Acquire)
+        }
+    }
+
+    impl PriorityArrayReader for BlockingPriorityReader {
+        fn configured_devices(&self) -> Vec<FieldDevice> {
+            self.devices.clone()
+        }
+
+        fn read_priority_array(
+            &self,
+            device_instance: u32,
+            object_type: &str,
+            object_instance: u32,
+        ) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send + '_>> {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            let started = Arc::clone(&self.started);
+            let release = Arc::clone(&self.release);
+            let object_type = object_type.to_string();
+            Box::pin(async move {
+                started.notify_one();
+                release.notified().await;
+                Ok(mock_priority_response(
+                    device_instance,
+                    &object_type,
+                    object_instance,
+                ))
             })
         }
     }
@@ -1240,6 +1351,61 @@ mod tests {
         assert_eq!(service.run_once().await.unwrap(), 1);
         assert_eq!(reader.calls().len(), 3);
         assert_eq!(reader.calls()[2].0, 2);
+    }
+
+    #[tokio::test]
+    async fn concurrent_triggers_allow_only_one_reader_visit() {
+        let reader = Arc::new(BlockingPriorityReader::new(mock_device(1, &[1])));
+        let service = PriorityScanService::for_tests_with_reader(
+            &scheduler_settings(),
+            Arc::clone(&reader),
+            temp_path("trigger-overlap"),
+            enabled_scheduler_config(1),
+        )
+        .unwrap();
+        let first = tokio::spawn({
+            let service = Arc::clone(&service);
+            async move { service.trigger().await }
+        });
+        reader.started.notified().await;
+
+        let second = service.trigger().await.unwrap_err();
+        assert!(second.contains("already in progress"));
+        assert_eq!(reader.call_count(), 1);
+
+        reader.release.notify_one();
+        assert_eq!(first.await.unwrap().unwrap(), 1);
+        assert_eq!(reader.call_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn cancelled_trigger_releases_overlap_guard_for_next_visit() {
+        let reader = Arc::new(BlockingPriorityReader::new(mock_device(1, &[1])));
+        let service = PriorityScanService::for_tests_with_reader(
+            &scheduler_settings(),
+            Arc::clone(&reader),
+            temp_path("trigger-cancel"),
+            enabled_scheduler_config(1),
+        )
+        .unwrap();
+        let first = tokio::spawn({
+            let service = Arc::clone(&service);
+            async move { service.trigger().await }
+        });
+        reader.started.notified().await;
+        first.abort();
+        assert!(first.await.unwrap_err().is_cancelled());
+        assert_eq!(reader.call_count(), 1);
+
+        // The cancelled read no longer owns the future.  Leave one permit for
+        // the next visit and prove the guard did not remain stuck.
+        reader.release.notify_one();
+        let second = tokio::time::timeout(Duration::from_secs(1), service.trigger())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(second, 1);
+        assert_eq!(reader.call_count(), 2);
     }
 
     #[tokio::test(start_paused = true)]
