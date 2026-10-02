@@ -1219,3 +1219,10 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 
 - VERSION **3.5.60** after fail-fast health / honest closeout probes #1085 (and inventory `GET /api/version`). Issues #1034–#1070 stay open pending tip+field stress. Parked Codex drafts #1067, #1075, #1080 untouched. No FQ claim on this bump.
 
+## 2026-10-01 — Operations protocol workspace Phase 4 (draft PR #1099)
+
+- Branch `feat/protocol-workspace-phase4`, stacked on Phase 3D exact head `8bc23f918979503dbf13eece3ebd1d135fe2c59e`; draft PR [#1099](https://github.com/bbartling/open-fdd/pull/1099), latest pushed head `c779a851`.
+- Added the versioned `openfdd.connector.priority_scan.v1` contract, bounded P1–P16 snapshots, cursor binding, durable edge-local JSON store, opt-in one-device scheduler (default 3600 seconds, minimum 300, no catch-up), scoped fieldbus/central history routes, and React history panel/API validation.
+- Edge/standalone/local fieldbus recipes mount `/edge-state`; cloud `central`/`csv` recipes contain no fieldbus or priority scanner. MQTT history synchronization remains a separate future contract. No arbitrary HTTP-over-MQTT path was added.
+- Local evidence: `cargo test -p openfdd-fieldbus` **117 + 1 passed**; central compile and route tests passed; frontend priority/API tests **17 passed** and production build passed; Compose configs and topology negative checks passed. Existing frontend lint warnings remain the repository baseline (`--max-warnings=0` is not green until those unrelated warnings are addressed).
+- No live BACnet bench access, device discovery, WriteProperty/release, deployment, GHCR refresh, merge, or FQ/field qualification was performed. Before qualification, confirm device 5007 reachability and use a read-only path that halts on an unreachable device; do not assume a Haystack Pi address.

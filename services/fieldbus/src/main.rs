@@ -266,8 +266,12 @@ mod tests {
             &settings,
             Arc::clone(&bacnet_client),
             std::env::temp_dir().join(format!(
-                "openfdd-fieldbus-priority-test-{}.json",
-                std::process::id()
+                "openfdd-fieldbus-priority-test-{}-{}.json",
+                std::process::id(),
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
             )),
         )
         .unwrap();
@@ -484,6 +488,58 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(invalid_response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(client.test_ot_call_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn connector_priority_history_is_scoped_and_never_reads_the_bus() {
+        let state = test_state_for_scope("tenant-local", "building-local", "edge-local");
+        let client = state.bacnet_client.clone();
+        let app = routes::api_routes(state);
+        let request = |tenant_id: &str| {
+            serde_json::json!({
+                "schema": openfdd_contracts::PRIORITY_SCAN_CONTRACT_V1,
+                "request_id": uuid::Uuid::nil(),
+                "scope": {
+                    "tenant_id": tenant_id,
+                    "building_id": "building-local",
+                    "edge_id": "edge-local"
+                },
+                "page_size": 10
+            })
+        };
+        let allowed = app
+            .clone()
+            .oneshot(
+                Request::post("/api/connector/priority-history")
+                    .header("content-type", "application/json")
+                    .body(Body::from(request("tenant-local").to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(allowed.status(), StatusCode::OK);
+        let body = allowed.into_body().collect().await.unwrap().to_bytes();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            value["schema"],
+            openfdd_contracts::PRIORITY_SCAN_CONTRACT_V1
+        );
+        assert_eq!(value["scanner"]["enabled"], false);
+        assert_eq!(value["scanner"]["read_only"], true);
+        assert!(value["records"].as_array().unwrap().is_empty());
+        assert_eq!(client.test_ot_call_count(), 0);
+
+        let foreign = app
+            .oneshot(
+                Request::post("/api/connector/priority-history")
+                    .header("content-type", "application/json")
+                    .body(Body::from(request("tenant-foreign").to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
         assert_eq!(client.test_ot_call_count(), 0);
     }
 

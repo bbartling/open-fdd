@@ -1109,9 +1109,10 @@ mod tests {
     use openfdd_contracts::{
         ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorReadRequest,
         ConnectorReadResponse, ConnectorReadResult, ConnectorScope, InventoryAvailability,
-        InventoryCommandability, InventoryProvenance, InventoryRecord, ReadPriorityArrayResult,
-        ReadPrioritySlot, ReadTarget, ReadValueState, CONNECTOR_INVENTORY_CONTRACT_V1,
-        READ_PROXY_CONTRACT_V1,
+        InventoryCommandability, InventoryProvenance, InventoryRecord, PriorityHistoryRecord,
+        PriorityHistoryRequest, PriorityHistoryResponse, PriorityScanStatus, PriorityScanTarget,
+        ReadPriorityArrayResult, ReadPrioritySlot, ReadTarget, ReadValueState,
+        CONNECTOR_INVENTORY_CONTRACT_V1, PRIORITY_SCAN_CONTRACT_V1, READ_PROXY_CONTRACT_V1,
     };
     use std::convert::Infallible;
     use std::net::SocketAddr;
@@ -1400,6 +1401,92 @@ mod tests {
             contradictory[0].error = error;
             assert!(sanitize_public_read_response(response_for(contradictory), &request).is_err());
         }
+    }
+
+    #[test]
+    fn public_priority_history_sanitizer_removes_edge_diagnostics() {
+        let scope = ConnectorScope {
+            tenant_id: "tenant-a".into(),
+            building_id: "building-a".into(),
+            edge_id: "edge-a".into(),
+        };
+        let request = PriorityHistoryRequest {
+            schema: PRIORITY_SCAN_CONTRACT_V1.into(),
+            request_id: uuid::Uuid::nil(),
+            scope: scope.clone(),
+            page_size: 10,
+            cursor: None,
+            target: None,
+        };
+        let target = PriorityScanTarget {
+            device_instance: 7,
+            object_type: "analog-output".into(),
+            object_instance: 4,
+        };
+        let snapshot = ReadPriorityArrayResult {
+            device_instance: target.device_instance,
+            object_type: target.object_type.clone(),
+            object_instance: target.object_instance,
+            slots: (1..=16)
+                .map(|priority_level| ReadPrioritySlot {
+                    priority_level,
+                    state: if priority_level == 3 {
+                        ReadValueState::Error
+                    } else {
+                        ReadValueState::Null
+                    },
+                    value_type: if priority_level == 3 {
+                        "error".into()
+                    } else {
+                        "null".into()
+                    },
+                    value: None,
+                    error: (priority_level == 3)
+                        .then_some("BACnet tcp://10.0.0.7:47808 secret".into()),
+                })
+                .collect(),
+            state: "supported".into(),
+            observed_at: Utc::now(),
+        };
+        let response = PriorityHistoryResponse {
+            schema: PRIORITY_SCAN_CONTRACT_V1.into(),
+            request_id: request.request_id,
+            scope: scope.clone(),
+            revision: "history-0000000000000001".into(),
+            captured_at: Utc::now(),
+            records: vec![PriorityHistoryRecord {
+                sequence: 1,
+                target,
+                snapshot,
+                label: None,
+                source: "scheduled_scan".into(),
+            }],
+            next_cursor: None,
+            scanner: PriorityScanStatus {
+                schema: PRIORITY_SCAN_CONTRACT_V1.into(),
+                scope,
+                enabled: false,
+                interval_secs: 3_600,
+                max_points_per_device: 100,
+                catch_up: false,
+                read_only: true,
+                discovery_enabled: false,
+                writes_enabled: false,
+                last_started_at: None,
+                last_completed_at: None,
+                next_due_at: None,
+                last_device_identity: None,
+                last_error: None,
+                records_retained: 1,
+            },
+        };
+        let sanitized = sanitize_public_priority_history(response, &request).unwrap();
+        let encoded = serde_json::to_string(&sanitized).unwrap();
+        assert!(!encoded.contains("10.0.0.7"));
+        assert_eq!(
+            sanitized.records[0].snapshot.slots[2].error.as_deref(),
+            Some("priority slot unavailable")
+        );
     }
 
     #[tokio::test]

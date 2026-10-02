@@ -5197,8 +5197,10 @@ mod version_tests {
     use axum::{Json, Router};
     use bytes::Bytes;
     use openfdd_contracts::{
-        ConnectorInventoryRequest, ConnectorInventoryResponse, InventoryProvenance, Protocol,
-        Quality, TelemetryEnvelope, TelemetryPoint, ValueKind, CONNECTOR_INVENTORY_CONTRACT_V1,
+        ConnectorInventoryRequest, ConnectorInventoryResponse, InventoryProvenance,
+        PriorityHistoryRequest, PriorityHistoryResponse, PriorityScanStatus, Protocol, Quality,
+        TelemetryEnvelope, TelemetryPoint, ValueKind, CONNECTOR_INVENTORY_CONTRACT_V1,
+        PRIORITY_SCAN_CONTRACT_V1,
     };
     use serde_json::Value;
     use std::sync::Arc;
@@ -5300,6 +5302,107 @@ mod version_tests {
             .auth
             .issue_token_with_tenants("connector-test", crate::auth::Role::Viewer, 60, &[])
             .unwrap();
+        let foreign = app
+            .oneshot(request(Some(&viewer), "tenant-foreign"))
+            .await
+            .unwrap();
+        assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn connector_priority_history_http_enforces_jwt_roles_and_scope() {
+        async fn history_upstream(
+            Json(request): Json<PriorityHistoryRequest>,
+        ) -> Json<PriorityHistoryResponse> {
+            Json(PriorityHistoryResponse {
+                schema: PRIORITY_SCAN_CONTRACT_V1.into(),
+                request_id: request.request_id,
+                scope: request.scope.clone(),
+                revision: "history-http-test".into(),
+                captured_at: chrono::Utc::now(),
+                records: Vec::new(),
+                next_cursor: None,
+                scanner: PriorityScanStatus {
+                    schema: PRIORITY_SCAN_CONTRACT_V1.into(),
+                    scope: request.scope,
+                    enabled: false,
+                    interval_secs: 3_600,
+                    max_points_per_device: 100,
+                    catch_up: false,
+                    read_only: true,
+                    discovery_enabled: false,
+                    writes_enabled: false,
+                    last_started_at: None,
+                    last_completed_at: None,
+                    next_due_at: None,
+                    last_device_identity: None,
+                    last_error: None,
+                    records_retained: 0,
+                },
+            })
+        }
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let upstream =
+            Router::new().route("/api/connector/priority-history", post(history_upstream));
+        let server = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+
+        let secret = "connector-history-role-policy-test-secret".to_string();
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some(secret),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        state.capabilities = CapabilitiesAggregator::for_tests(vec![ConfiguredUpstream {
+            tenant_id: "legacy".into(),
+            building_id: "building-a".into(),
+            edge_id: "edge-a".into(),
+            base_url: Url::parse(&format!("http://{address}/")).unwrap(),
+            token: Some("synthetic-upstream-token".into()),
+        }]);
+        let state = Arc::new(state);
+        let app = super::router(Arc::clone(&state));
+        let body = |tenant_id: &str| {
+            serde_json::json!({
+                "schema": PRIORITY_SCAN_CONTRACT_V1,
+                "request_id": uuid::Uuid::nil(),
+                "scope": {
+                    "tenant_id": tenant_id,
+                    "building_id": "building-a",
+                    "edge_id": "edge-a"
+                },
+                "page_size": 10
+            })
+            .to_string()
+        };
+        let request = |token: Option<&str>, tenant_id: &str| {
+            let mut builder = Request::post("/api/connectors/edge-a/priority-history")
+                .header("content-type", "application/json");
+            if let Some(token) = token {
+                builder = builder.header("authorization", format!("Bearer {token}"));
+            }
+            builder.body(Body::from(body(tenant_id))).unwrap()
+        };
+
+        let anonymous = app.clone().oneshot(request(None, "legacy")).await.unwrap();
+        assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+
+        let viewer = state
+            .auth
+            .issue_token_with_tenants("connector-history-test", crate::auth::Role::Viewer, 60, &[])
+            .unwrap();
+        let allowed = app
+            .clone()
+            .oneshot(request(Some(&viewer), "legacy"))
+            .await
+            .unwrap();
+        assert_eq!(allowed.status(), StatusCode::OK);
+
         let foreign = app
             .oneshot(request(Some(&viewer), "tenant-foreign"))
             .await

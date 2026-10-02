@@ -161,6 +161,10 @@ pub struct PriorityHistoryRecord {
     pub sequence: u64,
     pub target: PriorityScanTarget,
     pub snapshot: ReadPriorityArrayResult,
+    /// Optional operator/configuration label. Identity and authorization use
+    /// the typed target, so changing a label cannot move or merge history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
     /// Stable source label.  It intentionally does not contain a host, URL,
     /// MQTT topic, credential, or vendor detail.
     pub source: String,
@@ -172,6 +176,11 @@ impl PriorityHistoryRecord {
             return Err("priority history record identity is invalid".into());
         }
         self.target.validate()?;
+        if self.label.as_deref().is_some_and(|label| {
+            label.trim().is_empty() || label.len() > 128 || label.chars().any(|ch| ch.is_control())
+        }) {
+            return Err("priority history label is invalid".into());
+        }
         ConnectorReadResult::PriorityArray(self.snapshot.clone())
             .validate_for_target(&self.target.read_target())
             .map_err(|_| "priority history snapshot does not match target".to_string())
@@ -456,6 +465,7 @@ mod tests {
             sequence: 1,
             target: target(),
             snapshot: snapshot(),
+            label: None,
             source: "scheduled_scan".into(),
         };
         let mut response = PriorityHistoryResponse {
@@ -495,6 +505,7 @@ mod tests {
             sequence: 1,
             target: target(),
             snapshot: value,
+            label: None,
             source: "scheduled_scan".into(),
         };
         assert!(record.validate().is_err());

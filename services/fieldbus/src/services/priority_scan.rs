@@ -29,6 +29,7 @@ const STORE_VERSION: u8 = 1;
 const DEFAULT_MAX_RECORDS: usize = 10_000;
 const MAX_RECORDS: usize = 100_000;
 const DEFAULT_STORE_FILE: &str = "state/priority-history.json";
+const PRIORITY_SCAN_READ_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PersistedHistory {
@@ -386,34 +387,45 @@ impl PriorityScanService {
         };
         let identity = device_identity(device);
         let mut targets = configured_targets(device);
-        targets.sort_by_key(PriorityScanTarget::identity);
+        targets.sort_by_key(|(target, _)| target.identity());
         targets.truncate(usize::from(self.config.max_points_per_device));
 
         let mut completed = 0usize;
         let mut first_error = None;
-        for target in targets {
-            let snapshot = match self
-                .client
-                .read_priority_array(
+        for (target, label) in targets {
+            let snapshot = match tokio::time::timeout(
+                PRIORITY_SCAN_READ_TIMEOUT,
+                self.client.read_priority_array(
                     target.device_instance,
                     &target.object_type,
                     target.object_instance,
-                )
-                .await
+                ),
+            )
+            .await
             {
-                Ok(raw) => match public_snapshot(raw, &target) {
+                Ok(Ok(raw)) => match public_snapshot(raw, &target) {
                     Ok(snapshot) => snapshot,
-                    Err(_) => error_snapshot(&target, "priority read returned invalid data"),
+                    Err(_) => {
+                        first_error.get_or_insert_with(|| {
+                            "priority read returned invalid data".to_string()
+                        });
+                        error_snapshot(&target, "priority read returned invalid data")
+                    }
                 },
-                Err(_) => {
+                Ok(Err(_)) => {
                     first_error.get_or_insert_with(|| "priority read failed".to_string());
                     error_snapshot(&target, "priority read failed")
+                }
+                Err(_) => {
+                    first_error.get_or_insert_with(|| "priority read timed out".to_string());
+                    error_snapshot(&target, "priority read timed out")
                 }
             };
             let record = PriorityHistoryRecord {
                 sequence: 0,
                 target,
                 snapshot,
+                label,
                 source: "scheduled_scan".into(),
             };
             self.store.append(record)?;
@@ -493,16 +505,21 @@ fn next_device<'a>(devices: &[&'a FieldDevice], last: Option<String>) -> Option<
     devices.get(start).copied()
 }
 
-fn configured_targets(device: &FieldDevice) -> Vec<PriorityScanTarget> {
+fn configured_targets(device: &FieldDevice) -> Vec<(PriorityScanTarget, Option<String>)> {
     device
         .points
         .iter()
-        .map(|point| PriorityScanTarget {
-            device_instance: device.device_instance,
-            object_type: point.object_type.to_ascii_lowercase(),
-            object_instance: point.object_instance,
+        .map(|point| {
+            (
+                PriorityScanTarget {
+                    device_instance: device.device_instance,
+                    object_type: point.object_type.to_ascii_lowercase(),
+                    object_instance: point.object_instance,
+                },
+                (!point.point_name.trim().is_empty()).then(|| point.point_name.clone()),
+            )
         })
-        .filter(|target| target.validate().is_ok())
+        .filter(|(target, _)| target.validate().is_ok())
         .collect()
 }
 
@@ -658,6 +675,7 @@ mod tests {
             sequence: 1,
             target: target.clone(),
             snapshot: error_snapshot(&target, "priority read failed"),
+            label: None,
             source: "scheduled_scan".into(),
         }
     }

@@ -44,10 +44,15 @@ services:
       OPENFDD_LOCAL_INGEST_TOKEN: ${OPENFDD_LOCAL_INGEST_TOKEN:-}
       OPENFDD_LOCAL_SPOOL_DIR: /local-spool
       OPENFDD_LOCAL_SPOOL_MAX_RECORDS: ${OPENFDD_LOCAL_SPOOL_MAX_RECORDS:-50000}
+      OPENFDD_PRIORITY_SCAN_ENABLED: ${OPENFDD_PRIORITY_SCAN_ENABLED:-0}
+      OPENFDD_PRIORITY_SCAN_INTERVAL_SECS: ${OPENFDD_PRIORITY_SCAN_INTERVAL_SECS:-3600}
+      OPENFDD_PRIORITY_SCAN_MAX_POINTS_PER_DEVICE: ${OPENFDD_PRIORITY_SCAN_MAX_POINTS_PER_DEVICE:-100}
+      OPENFDD_EDGE_STORE_DIR: /edge-state
       OPENFDD_FIELDBUS_CONFIG_DIR: /app/config
     volumes:
       - ../config/fieldbus:/app/config:ro
       - local-fieldbus-spool:/local-spool
+      - local-fieldbus-state:/edge-state
     ports:
       - "8081:8081"
     depends_on:
@@ -56,3 +61,4 @@ services:
 
 volumes:
   local-fieldbus-spool:
+  local-fieldbus-state:

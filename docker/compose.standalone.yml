@@ -78,11 +78,18 @@ services:
       OPENFDD_LOCAL_INGEST_TOKEN: ${OPENFDD_LOCAL_INGEST_TOKEN:-}
       OPENFDD_LOCAL_SPOOL_DIR: /local-spool
       OPENFDD_LOCAL_SPOOL_MAX_RECORDS: ${OPENFDD_LOCAL_SPOOL_MAX_RECORDS:-50000}
+      # Durable, opt-in BACnet priority history. No scan is scheduled by
+      # default; enabling it still uses only the trusted field-device catalog.
+      OPENFDD_PRIORITY_SCAN_ENABLED: ${OPENFDD_PRIORITY_SCAN_ENABLED:-0}
+      OPENFDD_PRIORITY_SCAN_INTERVAL_SECS: ${OPENFDD_PRIORITY_SCAN_INTERVAL_SECS:-3600}
+      OPENFDD_PRIORITY_SCAN_MAX_POINTS_PER_DEVICE: ${OPENFDD_PRIORITY_SCAN_MAX_POINTS_PER_DEVICE:-100}
+      OPENFDD_EDGE_STORE_DIR: /edge-state
     volumes:
       - ../config/fieldbus:/app/config:ro
       - ../deploy/mqtt/kits/${OPENFDD_SITE_ID:-local}__${OPENFDD_EDGE_ID:-fieldbus-1}:/mqtt:ro
       - fieldbus-spool:/spool
       - fieldbus-local-spool:/local-spool
+      - fieldbus-state:/edge-state
     restart: unless-stopped
 
   mcp:
@@ -104,3 +111,4 @@ volumes:
   mqtt-data:
   fieldbus-spool:
   fieldbus-local-spool:
+  fieldbus-state:

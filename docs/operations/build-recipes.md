@@ -42,6 +42,11 @@ See [Release channels](release-channels.html) and [GHCR images](ghcr-images.html
 | `central` | `docker/compose.central.yml` | mqtt + central + web | hub for remote fieldbus edges |
 | `edge` | `docker/compose.edge.yml` | fieldbus only | remote OT edge |
 
+The `central` and `csv` recipes contain no fieldbus service and never start a
+BACnet/Modbus/Haystack process. Use `edge` or `standalone` when the host is
+deliberately connected to an OT network. This separation is a deployment
+boundary, not a runtime capability flag.
+
 ## Bring a recipe up
 
 `openfdd_stack_up.sh` pulls the GHCR images for the recipe (unless
@@ -99,6 +104,26 @@ network for BACnet/IP.
 ./scripts/openfdd_stack_up.sh standalone
 ```
 
+The fieldbus service mounts the named `fieldbus-state` volume at
+`/edge-state`. The opt-in priority history scheduler uses that volume for its
+durable cursor and bounded P1–P16 snapshots. It is disabled by default. To
+enable it, provide a trusted field-device catalog and set:
+
+```bash
+OPENFDD_PRIORITY_SCAN_ENABLED=1 \
+OPENFDD_PRIORITY_SCAN_INTERVAL_SECS=3600 \
+OPENFDD_PRIORITY_SCAN_MAX_POINTS_PER_DEVICE=100 \
+./scripts/openfdd_stack_up.sh standalone
+```
+
+The scheduler visits one configured device per completed interval, defaults to
+one hour, enforces a five-minute minimum, and does not catch up after a
+restart. It reads only configured points and never performs discovery, writes,
+priority releases, or remediation. The history endpoint is
+`POST /api/connector/priority-history` on the edge and the authenticated
+central projection is
+`POST /api/connectors/{edge_id}/priority-history`.
+
 ### central — hub for remote edges
 
 `mqtt + central + web`. Run the hub on a local server or private infrastructure; remote fieldbus edges attach over MQTTS with the `edge` recipe.
@@ -112,6 +137,12 @@ network for BACnet/IP.
 `fieldbus` only, host networking for BACnet/IP, needs outbound TCP 8883 to a
 central broker. Required env: `OPENFDD_MQTT_HOST`, `OPENFDD_SITE_ID`,
 `OPENFDD_EDGE_KIT_DIR` (path to the provisioning kit for this edge).
+
+The edge recipe also mounts `fieldbus-state` at `/edge-state` so a restart
+does not reset the stable device cursor or discard retained history. History is
+edge-local in this phase. MQTT history synchronization is a separate future
+contract; the cloud service does not invent HTTP-over-MQTT and does not boot a
+fieldbus scanner.
 
 ```bash
 OPENFDD_MQTT_HOST=hub.example.com \
@@ -136,6 +167,10 @@ OPENFDD_EDGE_KIT_DIR=./deploy/mqtt/kits/site-a__fieldbus-1 \
 | `OPENFDD_CENTRAL_BIND` | `0.0.0.0` | Central host bind; use `127.0.0.1` on a dashboard VM unless direct API access is needed |
 | `OPENFDD_WEB_BIND` | `0.0.0.0` | React web host bind (LAN/VPN access) |
 | `OPENFDD_CENTRAL_UPSTREAM` | `central:8080` | Runtime web proxy target; Railway uses private service DNS |
+| `OPENFDD_PRIORITY_SCAN_ENABLED` | `0` | Explicitly enable the read-only edge priority history scheduler |
+| `OPENFDD_PRIORITY_SCAN_INTERVAL_SECS` | `3600` | Delay after each completed device visit; minimum `300` |
+| `OPENFDD_PRIORITY_SCAN_MAX_POINTS_PER_DEVICE` | `100` | Bound configured points visited per device cycle; maximum `1000` |
+| `OPENFDD_EDGE_STORE_DIR` | `/edge-state` in fieldbus recipes | Durable edge store root; do not mount this into central/cloud |
 
 Pin a build by SHA across a recipe:
 

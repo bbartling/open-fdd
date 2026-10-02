@@ -13,6 +13,42 @@ This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER
 
 A merged PR, a passing unit suite, a completed scan, and a verified deployment are different achievements. Record them separately. No milestone becomes VERIFIED from an old pin, skipped test, changed threshold or unreviewed exception. Actual licensed Nessus results are separate from readiness work that needs no license.
 
+## Operations protocol workspace Phase 4 — draft / not field-qualified
+
+**Owner path:** draft PR [#1099](https://github.com/bbartling/open-fdd/pull/1099),
+branch `feat/protocol-workspace-phase4`, stacked on Phase 3D. The implementation
+head currently recorded in the session log is `c779a851`.
+
+### Landed in the draft branch
+
+- Versioned bounded priority-history contract with exact P1–P16 snapshots,
+  scope and request correlation, opaque cursor binding, and safe typed errors.
+- Edge-local durable history store and opt-in scheduler. It visits one trusted
+  configured device after each completed interval (default 3600 seconds,
+  minimum 300), has no catch-up burst, and performs no discovery, write,
+  release, or remediation action.
+- Authenticated fieldbus and central history routes, capability/inventory
+  advertisement, OpenAPI declarations, and a React panel that loads history
+  only after an explicit user action.
+- OT recipes persist `/edge-state`; `central` and `csv` remain cloud-only and
+  contain no fieldbus/scanner service. MQTT history synchronization is deferred
+  to a separately versioned future transport contract.
+
+### Evidence and remaining acceptance
+
+- Local fieldbus tests, central compile/route tests, frontend contract/UI tests,
+  production build, and Compose/topology checks pass on the draft branch.
+- Frontend lint still reports pre-existing repository warnings when run with
+  `--max-warnings=0`; this is a CI hygiene item, not silently treated as pass.
+- GH Actions and Astra review must pass before the PR is mergeable. No GHCR
+  refresh, deployment, live BACnet bench test, live Haystack probe, device
+  discovery, WriteProperty/release, or FQ/field qualification has happened.
+- Bench qualification is a separate gate: verify reachability of the known
+  read-only BACnet device 5007 first, halt if unreachable, and discover/verify
+  any Haystack endpoint instead of assuming an address. Record evidence and
+  rollback details here and in `openfdd_agent_spec/SESSION_LOG.md` before
+  changing status to VERIFIED.
+
 ## Wave U outcomes — acceptance snapshot 2026-09-20
 
 The independent audit reopened acceptance checks. Statuses below do not erase earlier test runs or imply that existing improvements were absent. The snapshot covered #959/#960 merged and #961 in flight; consult GitHub and BUG_REPORT for later changes.
