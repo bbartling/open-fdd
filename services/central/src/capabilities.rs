@@ -1487,6 +1487,10 @@ mod tests {
             sanitized.records[0].snapshot.slots[2].error.as_deref(),
             Some("priority slot unavailable")
         );
+
+        let mut foreign_scanner = sanitized.clone();
+        foreign_scanner.scanner.scope.edge_id = "edge-foreign".into();
+        assert!(sanitize_public_priority_history(foreign_scanner, &request).is_err());
     }
 
     #[tokio::test]

@@ -283,6 +283,9 @@ impl PriorityHistoryResponse {
             return Err("priority history page exceeds its bound".into());
         }
         self.scanner.validate()?;
+        if self.scanner.scope != request.scope {
+            return Err("priority history scanner scope does not match response scope".into());
+        }
         let offset = request.offset_for_revision(&self.revision)?;
         if let Some(cursor) = self.next_cursor.as_deref() {
             let next_offset = decode_cursor(request, cursor, &self.revision)?;
