@@ -15,6 +15,7 @@ use openfdd_contracts::{CommandEnvelope, Protocol, TelemetryEnvelope, TopicBuild
 use openfdd_contracts::{
     ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorReadRequest,
     ConnectorReadResponse, ConnectorScope, PriorityHistoryRequest, PriorityHistoryResponse,
+    PriorityHistoryTriggerRequest, PriorityHistoryTriggerResponse,
 };
 use openfdd_mqtt::publish_json;
 use serde::Deserialize;
@@ -117,6 +118,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/api/connectors/{edge_id}/priority-history",
             post(connector_priority_history),
+        )
+        .route(
+            "/api/connectors/{edge_id}/priority-history/trigger",
+            post(connector_priority_history_trigger),
         )
         .route("/api/health/stack", get(health_stack))
         .route("/api/building/snapshot", get(building_snapshot))
@@ -1348,6 +1353,47 @@ pub async fn connector_priority_history(
     Ok(Json(response))
 }
 
+/// Trigger one bounded, read-only priority-array device visit. Operators and
+/// admins may request it; viewers are denied before the edge proxy is called.
+pub async fn connector_priority_history_trigger(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<auth::AuthUser>,
+    Path(edge_id): Path<String>,
+    Json(request): Json<PriorityHistoryTriggerRequest>,
+) -> Result<Json<PriorityHistoryTriggerResponse>, (StatusCode, Json<Value>)> {
+    if !connector_trigger_role_allowed(user.role) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "priority history trigger requires operator role"})),
+        ));
+    }
+    request.validate().map_err(|error| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": error})),
+        )
+    })?;
+    if request.scope.edge_id != edge_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "path edge_id and scoped edge_id differ"})),
+        ));
+    }
+    let ctx = resolve_tenant_context_for_user(&user);
+    authorize_connector_scope(&state, &ctx, &edge_id, &request.scope)?;
+    let response = state
+        .capabilities
+        .proxy_priority_history_trigger(&edge_id, &request)
+        .await
+        .map_err(|error| {
+            (
+                error.status(),
+                Json(json!({"ok": false, "error": error.message()})),
+            )
+        })?;
+    Ok(Json(response))
+}
+
 fn request_scope_allowed(ctx: &crate::tenant::TenantContext, scope: &ConnectorScope) -> bool {
     ctx.allow_building(&scope.building_id)
         && (ctx.hub_admin || ctx.tenant_id.as_deref() == Some(scope.tenant_id.as_str()))
@@ -1362,6 +1408,10 @@ fn connector_proxy_role_allowed(role: auth::Role) -> bool {
         role,
         auth::Role::Viewer | auth::Role::Operator | auth::Role::Admin
     )
+}
+
+fn connector_trigger_role_allowed(role: auth::Role) -> bool {
+    matches!(role, auth::Role::Operator | auth::Role::Admin)
 }
 
 #[utoipa::path(
@@ -5187,7 +5237,8 @@ pub async fn fuel_campus_weather_fetch(Json(body): Json<FuelWeatherFetchBody>) -
 mod version_tests {
     use super::{
         authorize_connector_scope, authorized_edge_ids, connector_proxy_role_allowed,
-        local_fieldbus_ingest, request_scope_allowed, resolve_build_version,
+        connector_trigger_role_allowed, local_fieldbus_ingest, request_scope_allowed,
+        resolve_build_version,
     };
     use crate::capabilities::{CapabilitiesAggregator, ConfiguredUpstream};
     use crate::state::AppState;
@@ -5198,11 +5249,13 @@ mod version_tests {
     use bytes::Bytes;
     use openfdd_contracts::{
         ConnectorInventoryRequest, ConnectorInventoryResponse, InventoryProvenance,
-        PriorityHistoryRequest, PriorityHistoryResponse, PriorityScanStatus, Protocol, Quality,
-        TelemetryEnvelope, TelemetryPoint, ValueKind, CONNECTOR_INVENTORY_CONTRACT_V1,
-        PRIORITY_SCAN_CONTRACT_V1,
+        PriorityHistoryRequest, PriorityHistoryResponse, PriorityHistoryTriggerRequest,
+        PriorityHistoryTriggerResponse, PriorityScanStatus, Protocol, Quality, TelemetryEnvelope,
+        TelemetryPoint, ValueKind, CONNECTOR_INVENTORY_CONTRACT_V1, PRIORITY_SCAN_CONTRACT_V1,
+        PRIORITY_SCAN_TRIGGER_CONTRACT_V1,
     };
     use serde_json::Value;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use tower::ServiceExt;
     use url::Url;
@@ -5212,6 +5265,94 @@ mod version_tests {
         assert!(connector_proxy_role_allowed(crate::auth::Role::Viewer));
         assert!(connector_proxy_role_allowed(crate::auth::Role::Operator));
         assert!(connector_proxy_role_allowed(crate::auth::Role::Admin));
+    }
+
+    #[test]
+    fn connector_trigger_role_policy_excludes_viewers() {
+        assert!(!connector_trigger_role_allowed(crate::auth::Role::Viewer));
+        assert!(connector_trigger_role_allowed(crate::auth::Role::Operator));
+        assert!(connector_trigger_role_allowed(crate::auth::Role::Admin));
+    }
+
+    #[tokio::test]
+    async fn connector_priority_history_trigger_denies_viewer_before_proxy() {
+        let trigger_calls = Arc::new(AtomicUsize::new(0));
+        let trigger_calls_for_route = Arc::clone(&trigger_calls);
+        let upstream = Router::new().route(
+            "/api/connector/priority-history/trigger",
+            post(move |Json(request): Json<PriorityHistoryTriggerRequest>| {
+                let trigger_calls = Arc::clone(&trigger_calls_for_route);
+                async move {
+                    trigger_calls.fetch_add(1, Ordering::SeqCst);
+                    Json(PriorityHistoryTriggerResponse {
+                        schema: PRIORITY_SCAN_TRIGGER_CONTRACT_V1.into(),
+                        request_id: request.request_id,
+                        scope: request.scope.clone(),
+                        records_added: 0,
+                        scanner: PriorityScanStatus {
+                            schema: PRIORITY_SCAN_CONTRACT_V1.into(),
+                            scope: request.scope,
+                            enabled: false,
+                            interval_secs: 3_600,
+                            max_points_per_device: 100,
+                            catch_up: false,
+                            read_only: true,
+                            discovery_enabled: false,
+                            writes_enabled: false,
+                            last_started_at: None,
+                            last_completed_at: None,
+                            next_due_at: None,
+                            last_device_identity: None,
+                            last_error: None,
+                            records_retained: 0,
+                        },
+                    })
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some("connector-trigger-role-policy-test-secret".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        state.capabilities = CapabilitiesAggregator::for_tests(vec![ConfiguredUpstream {
+            tenant_id: "legacy".into(),
+            building_id: "building-a".into(),
+            edge_id: "edge-a".into(),
+            base_url: Url::parse(&format!("http://{address}/")).unwrap(),
+            token: Some("synthetic-upstream-token".into()),
+        }]);
+        let state = Arc::new(state);
+        let app = super::router(Arc::clone(&state));
+        let viewer = state
+            .auth
+            .issue_token_with_tenants("connector-trigger-test", crate::auth::Role::Viewer, 60, &[])
+            .unwrap();
+        let body = serde_json::json!({
+            "schema": PRIORITY_SCAN_TRIGGER_CONTRACT_V1,
+            "request_id": uuid::Uuid::nil(),
+            "scope": {
+                "tenant_id": "legacy",
+                "building_id": "building-a",
+                "edge_id": "edge-a"
+            }
+        });
+        let request = Request::post("/api/connectors/edge-a/priority-history/trigger")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {viewer}"))
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(trigger_calls.load(Ordering::SeqCst), 0);
+        server.abort();
     }
 
     #[tokio::test]

@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::proxy::{ConnectorReadResult, ConnectorScope, ReadPriorityArrayResult, ReadTarget};
 
 pub const PRIORITY_SCAN_CONTRACT_V1: &str = "openfdd.connector.priority_scan.v1";
+pub const PRIORITY_SCAN_TRIGGER_CONTRACT_V1: &str = "openfdd.connector.priority_scan.trigger.v1";
 pub const PRIORITY_SCAN_CURSOR_VERSION: &str = "v1";
 pub const PRIORITY_SCAN_MAX_PAGE_SIZE: u16 = 100;
 pub const PRIORITY_SCAN_MAX_CURSOR_LENGTH: usize = 160;
@@ -283,6 +284,52 @@ pub struct PriorityHistoryResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
     pub scanner: PriorityScanStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct PriorityHistoryTriggerRequest {
+    pub schema: String,
+    pub request_id: Uuid,
+    pub scope: ConnectorScope,
+}
+
+impl PriorityHistoryTriggerRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema != PRIORITY_SCAN_TRIGGER_CONTRACT_V1 {
+            return Err("unsupported priority history trigger schema".into());
+        }
+        self.scope.validate()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct PriorityHistoryTriggerResponse {
+    pub schema: String,
+    pub request_id: Uuid,
+    pub scope: ConnectorScope,
+    pub records_added: u16,
+    pub scanner: PriorityScanStatus,
+}
+
+impl PriorityHistoryTriggerResponse {
+    pub fn validate_for(&self, request: &PriorityHistoryTriggerRequest) -> Result<(), String> {
+        request.validate()?;
+        if self.schema != PRIORITY_SCAN_TRIGGER_CONTRACT_V1
+            || self.request_id != request.request_id
+            || self.scope != request.scope
+        {
+            return Err("priority history trigger response correlation failed".into());
+        }
+        self.scanner.validate()?;
+        if self.scanner.scope != request.scope
+            || self.records_added > self.scanner.max_points_per_device
+        {
+            return Err("priority history trigger response is out of scope or unbounded".into());
+        }
+        Ok(())
+    }
 }
 
 impl PriorityHistoryResponse {

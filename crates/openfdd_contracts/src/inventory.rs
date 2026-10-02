@@ -531,7 +531,9 @@ fn validate_actions_for_record(
             (
                 _,
                 true,
-                ConnectorAction::PriorityArrayRead | ConnectorAction::PriorityHistoryRead,
+                ConnectorAction::PriorityArrayRead
+                | ConnectorAction::PriorityHistoryRead
+                | ConnectorAction::PriorityHistoryTrigger,
             ) => false,
         };
         if !allowed {

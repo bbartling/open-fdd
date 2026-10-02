@@ -17,8 +17,9 @@ use openfdd_contracts::{
     ConnectorProtocol, ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult,
     DeliveryStatus, InventoryAvailability, InventoryCommandability, InventoryPointReference,
     InventoryProvenance, InventoryRecord, PriorityHistoryRequest, PriorityHistoryResponse,
-    ReadPointResult, ReadPriorityArrayResult, ReadPrioritySlot, ReadValueState, RecipeObservation,
-    ServiceVersion, CAPABILITIES_CONTRACT_V1, CONNECTOR_INVENTORY_CONTRACT_V1,
+    PriorityHistoryTriggerRequest, PriorityHistoryTriggerResponse, ReadPointResult,
+    ReadPriorityArrayResult, ReadPrioritySlot, ReadValueState, RecipeObservation, ServiceVersion,
+    CAPABILITIES_CONTRACT_V1, CONNECTOR_INVENTORY_CONTRACT_V1,
 };
 use serde_json::Value;
 
@@ -215,17 +216,17 @@ pub fn hello_response(state: &AppState) -> ConnectorHelloResponse {
         && std::env::var("OPENFDD_MQTT_HOST")
             .ok()
             .is_some_and(|host| !host.trim().is_empty());
-    let priority_history_detail = state
-        .priority_scan
-        .status()
+    let priority_scan_status = state.priority_scan.status().ok();
+    let priority_history_detail = priority_scan_status
+        .as_ref()
         .map(|status| {
             format!(
                 "read-only priority history; scheduler enabled={} interval_secs={} records_retained={}",
                 status.enabled, status.interval_secs, status.records_retained
             )
         })
-        .unwrap_or_else(|_| "read-only priority history scope is not configured".into());
-    let priority_history_available = state.priority_scan.status().is_ok();
+        .unwrap_or_else(|| "read-only priority history scope is not configured".into());
+    let priority_history_available = priority_scan_status.is_some();
     let mut bacnet_actions = vec![
         ConnectorAction::MetadataRead,
         ConnectorAction::PointRead,
@@ -233,6 +234,12 @@ pub fn hello_response(state: &AppState) -> ConnectorHelloResponse {
     ];
     if priority_history_available {
         bacnet_actions.push(ConnectorAction::PriorityHistoryRead);
+    }
+    if priority_scan_status
+        .as_ref()
+        .is_some_and(|status| status.enabled)
+    {
+        bacnet_actions.push(ConnectorAction::PriorityHistoryTrigger);
     }
 
     let connectors = vec![
@@ -674,6 +681,30 @@ async fn connector_priority_history(
     Ok(Json(response))
 }
 
+async fn connector_priority_history_trigger(
+    State(state): State<AppState>,
+    Json(request): Json<PriorityHistoryTriggerRequest>,
+) -> ApiResult<Json<PriorityHistoryTriggerResponse>> {
+    request.validate().map_err(ApiError::BadRequest)?;
+    local_scope_matches(&state.settings, &request.scope)?;
+    let records_added = state
+        .priority_scan
+        .trigger()
+        .await
+        .map_err(ApiError::BadRequest)?;
+    let response = PriorityHistoryTriggerResponse {
+        schema: openfdd_contracts::PRIORITY_SCAN_TRIGGER_CONTRACT_V1.into(),
+        request_id: request.request_id,
+        scope: request.scope.clone(),
+        records_added,
+        scanner: state.priority_scan.status().map_err(ApiError::Internal)?,
+    };
+    response
+        .validate_for(&request)
+        .map_err(ApiError::Internal)?;
+    Ok(Json(response))
+}
+
 fn point_result(
     value: Value,
     device_instance: u32,
@@ -807,6 +838,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/connector/priority-history",
             post(connector_priority_history),
+        )
+        .route(
+            "/api/connector/priority-history/trigger",
+            post(connector_priority_history_trigger),
         )
 }
 

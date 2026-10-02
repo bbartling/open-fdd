@@ -16,9 +16,9 @@ use openfdd_contracts::{
     CapabilitiesAggregateResponse, CapabilityState, ConnectorAction, ConnectorCapability,
     ConnectorHelloResponse, ConnectorInventoryRequest, ConnectorInventoryResponse,
     ConnectorProtocol, ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult,
-    DeliveryStatus, PriorityHistoryRequest, PriorityHistoryResponse, ReadValueState,
-    RecipeObservation, ServiceVersion, UpstreamCapability, CAPABILITIES_AGGREGATE_CONTRACT_V1,
-    CAPABILITIES_CONTRACT_V1,
+    DeliveryStatus, PriorityHistoryRequest, PriorityHistoryResponse, PriorityHistoryTriggerRequest,
+    PriorityHistoryTriggerResponse, ReadValueState, RecipeObservation, ServiceVersion,
+    UpstreamCapability, CAPABILITIES_AGGREGATE_CONTRACT_V1, CAPABILITIES_CONTRACT_V1,
 };
 use reqwest::redirect::Policy;
 use reqwest::Client;
@@ -475,6 +475,59 @@ impl CapabilitiesAggregator {
         let response: PriorityHistoryResponse =
             serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
         sanitize_public_priority_history(response, request).map_err(|_| ProxyError::Incompatible)
+    }
+
+    pub async fn proxy_priority_history_trigger(
+        &self,
+        edge_id: &str,
+        request: &PriorityHistoryTriggerRequest,
+    ) -> Result<PriorityHistoryTriggerResponse, ProxyError> {
+        request.validate().map_err(|_| ProxyError::BadRequest)?;
+        let upstream = self
+            .upstreams
+            .iter()
+            .find(|upstream| upstream.edge_id == edge_id)
+            .ok_or(ProxyError::NotConfigured)?;
+        if upstream.tenant_id != request.scope.tenant_id
+            || upstream.building_id != request.scope.building_id
+        {
+            return Err(ProxyError::BadRequest);
+        }
+        if upstream.token.is_none() && !central_bool("OPENFDD_FIELDBUS_UPSTREAM_ALLOW_ANONYMOUS") {
+            return Err(ProxyError::AuthFailure);
+        }
+        let client = self.client.as_ref().ok_or(ProxyError::Incompatible)?;
+        let _probe_permit = timeout(Duration::from_secs(2), self.probe_gate.acquire())
+            .await
+            .map_err(|_| ProxyError::Unreachable)?
+            .map_err(|_| ProxyError::Unreachable)?;
+        let endpoint = endpoint(&upstream.base_url, "api/connector/priority-history/trigger")
+            .map_err(|_| ProxyError::Incompatible)?;
+        let mut outgoing = client.post(endpoint).json(request);
+        if let Some(token) = upstream.token.as_deref() {
+            outgoing = outgoing.bearer_auth(token);
+        }
+        let response = timeout(REQUEST_TIMEOUT, outgoing.send())
+            .await
+            .map_err(|_| ProxyError::Unreachable)?
+            .map_err(|_| ProxyError::Unreachable)?;
+        if response.status() == StatusCode::UNAUTHORIZED
+            || response.status() == StatusCode::FORBIDDEN
+        {
+            return Err(ProxyError::AuthFailure);
+        }
+        if !response.status().is_success() || response.status().is_redirection() {
+            return Err(ProxyError::Incompatible);
+        }
+        let body = bounded_body(response)
+            .await
+            .map_err(|_| ProxyError::Incompatible)?;
+        let response: PriorityHistoryTriggerResponse =
+            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
+        response
+            .validate_for(request)
+            .map_err(|_| ProxyError::Incompatible)?;
+        Ok(response)
     }
 }
 

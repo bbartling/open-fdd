@@ -173,6 +173,17 @@ mod live_routes {
     pub fn connector_priority_history() {}
 
     #[utoipa::path(
+        post, path = "/api/connectors/{edge_id}/priority-history/trigger", tag = "central",
+        params(("edge_id" = String, Path, description = "Configured edge identifier")),
+        request_body = openfdd_contracts::PriorityHistoryTriggerRequest,
+        responses(
+            (status = 200, description = "Operator-triggered bounded priority-array device visit", body = openfdd_contracts::PriorityHistoryTriggerResponse),
+            (status = 403, description = "Operator role or tenant/building/edge scope denied")
+        )
+    )]
+    pub fn connector_priority_history_trigger() {}
+
+    #[utoipa::path(
         get, path = "/api/fdd/results", tag = "fdd",
         params(("building_id" = Option<String>, Query, description = "Scope results to building={id}")),
         responses((status = 200, description = "Site-scoped FDD rule results", body = serde_json::Value))
@@ -371,6 +382,7 @@ mod live_routes {
         live_routes::connector_inventory,
         live_routes::connector_read,
         live_routes::connector_priority_history,
+        live_routes::connector_priority_history_trigger,
         live_routes::fuel_weather_fetch,
         live_routes::fdd_results,
         live_routes::fdd_equipment,

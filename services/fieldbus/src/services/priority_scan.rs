@@ -6,8 +6,10 @@
 //! a cloud hub is not required for local supervision evidence.
 
 use std::fs::{self, File, OpenOptions};
+use std::future::Future;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -32,6 +34,40 @@ const MAX_RECORDS: usize = 100_000;
 const MAX_JOURNAL_BYTES: u64 = 4 * 1024 * 1024;
 const DEFAULT_STORE_FILE: &str = "state/priority-history.json";
 const PRIORITY_SCAN_READ_TIMEOUT: Duration = Duration::from_secs(30);
+
+pub trait PriorityArrayReader: Send + Sync {
+    fn configured_devices(&self) -> Vec<FieldDevice>;
+    fn read_priority_array(
+        &self,
+        device_instance: u32,
+        object_type: &str,
+        object_instance: u32,
+    ) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send + '_>>;
+}
+
+impl PriorityArrayReader for BacnetClientService {
+    fn configured_devices(&self) -> Vec<FieldDevice> {
+        BacnetClientService::configured_devices(self)
+    }
+
+    fn read_priority_array(
+        &self,
+        device_instance: u32,
+        object_type: &str,
+        object_instance: u32,
+    ) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send + '_>> {
+        let object_type = object_type.to_string();
+        Box::pin(async move {
+            BacnetClientService::read_priority_array(
+                self,
+                device_instance,
+                &object_type,
+                object_instance,
+            )
+            .await
+        })
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PersistedHistory {
@@ -426,7 +462,7 @@ struct RuntimeStatus {
 
 /// The edge scanner and its durable history store.
 pub struct PriorityScanService {
-    client: Arc<BacnetClientService>,
+    client: Arc<dyn PriorityArrayReader>,
     store: Arc<PriorityHistoryStore>,
     store_error: Option<String>,
     config: PriorityScanConfig,
@@ -441,6 +477,7 @@ impl PriorityScanService {
         client: Arc<BacnetClientService>,
     ) -> Result<Arc<Self>, String> {
         let config = priority_scan_config_from_env();
+        let client: Arc<dyn PriorityArrayReader> = client;
         let path = priority_history_path_from_env();
         let max_records = priority_history_max_records_from_env();
         let (store, store_error) = match PriorityHistoryStore::open(path.clone(), max_records) {
@@ -471,12 +508,25 @@ impl PriorityScanService {
         client: Arc<BacnetClientService>,
         path: PathBuf,
     ) -> Result<Arc<Self>, String> {
+        Self::for_tests_with_reader(settings, client, path, PriorityScanConfig::default())
+    }
+
+    #[cfg(test)]
+    pub fn for_tests_with_reader<R>(
+        settings: &Settings,
+        client: Arc<R>,
+        path: PathBuf,
+        config: PriorityScanConfig,
+    ) -> Result<Arc<Self>, String>
+    where
+        R: PriorityArrayReader + 'static,
+    {
         let store = PriorityHistoryStore::open(path, 100)?;
         Ok(Arc::new(Self {
             client,
             store,
             store_error: None,
-            config: PriorityScanConfig::default(),
+            config,
             scope: connector_scope(settings),
             runtime: Mutex::new(RuntimeStatus::default()),
             running: AtomicBool::new(false),
@@ -559,6 +609,11 @@ impl PriorityScanService {
         let result = self.run_one_device(scope).await;
         self.running.store(false, Ordering::Release);
         result
+    }
+
+    pub async fn trigger(&self) -> Result<u16, String> {
+        let records = self.run_once().await?;
+        u16::try_from(records).map_err(|_| "priority scan result exceeds response bound".into())
     }
 
     pub fn history(
@@ -1006,5 +1061,207 @@ mod tests {
         assert!(next_device(&devices, None).is_none());
         assert_eq!(PRIORITY_SCAN_MIN_INTERVAL_SECS, 300);
         assert_eq!(PRIORITY_SCAN_MAX_POINTS_PER_DEVICE, 1_000);
+    }
+
+    #[derive(Default)]
+    struct MockPriorityReader {
+        devices: Mutex<Vec<FieldDevice>>,
+        calls: Mutex<Vec<(u32, String, u32)>>,
+        failures: Mutex<std::collections::HashSet<(u32, u32)>>,
+    }
+
+    impl MockPriorityReader {
+        fn set_devices(&self, devices: Vec<FieldDevice>) {
+            *self.devices.lock().unwrap() = devices;
+        }
+
+        fn fail(&self, device_instance: u32, object_instance: u32) {
+            self.failures
+                .lock()
+                .unwrap()
+                .insert((device_instance, object_instance));
+        }
+
+        fn calls(&self) -> Vec<(u32, String, u32)> {
+            self.calls.lock().unwrap().clone()
+        }
+    }
+
+    impl PriorityArrayReader for MockPriorityReader {
+        fn configured_devices(&self) -> Vec<FieldDevice> {
+            self.devices.lock().unwrap().clone()
+        }
+
+        fn read_priority_array(
+            &self,
+            device_instance: u32,
+            object_type: &str,
+            object_instance: u32,
+        ) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send + '_>> {
+            self.calls.lock().unwrap().push((
+                device_instance,
+                object_type.to_string(),
+                object_instance,
+            ));
+            let failed = self
+                .failures
+                .lock()
+                .unwrap()
+                .contains(&(device_instance, object_instance));
+            let object_type = object_type.to_string();
+            Box::pin(async move {
+                if failed {
+                    return Err("mock priority read failed".into());
+                }
+                let slots = (1..=16)
+                    .map(|priority_level| ReadPrioritySlot {
+                        priority_level,
+                        state: ReadValueState::Null,
+                        value_type: "null".into(),
+                        value: None,
+                        error: None,
+                    })
+                    .collect::<Vec<_>>();
+                Ok(serde_json::json!({
+                    "device_instance": device_instance,
+                    "object_identifier": format!("{object_type},{object_instance}"),
+                    "priority_array": slots,
+                    "priority_array_state": "supported"
+                }))
+            })
+        }
+    }
+
+    fn mock_device(device_instance: u32, object_instances: &[u32]) -> FieldDevice {
+        FieldDevice {
+            name: format!("Mock {device_instance}"),
+            enabled: true,
+            device_instance,
+            host: "127.0.0.1".into(),
+            port: 47_808,
+            mstp_network: None,
+            mstp_mac: Vec::new(),
+            rpm_chunk: 1,
+            max_apdu: 1_472,
+            points: object_instances
+                .iter()
+                .map(|object_instance| crate::config::FieldPoint {
+                    object_type: "analog-output".into(),
+                    object_instance: *object_instance,
+                    point_name: format!("AO {object_instance}"),
+                    units: "unknown".into(),
+                })
+                .collect(),
+        }
+    }
+
+    fn scheduler_settings() -> Settings {
+        let mut settings = crate::config::load_settings();
+        settings.connector_tenant_id = Some("tenant-test".into());
+        settings.connector_building_id = Some("building-test".into());
+        settings.connector_edge_id = Some("edge-test".into());
+        settings
+    }
+
+    fn enabled_scheduler_config(max_points_per_device: u16) -> PriorityScanConfig {
+        PriorityScanConfig {
+            enabled: true,
+            interval_secs: PRIORITY_SCAN_MIN_INTERVAL_SECS,
+            max_points_per_device,
+        }
+    }
+
+    #[tokio::test]
+    async fn run_once_rotates_one_device_without_reordering_or_catchup() {
+        let reader = Arc::new(MockPriorityReader::default());
+        reader.set_devices(vec![mock_device(2, &[1, 2]), mock_device(1, &[1, 2])]);
+        let service = PriorityScanService::for_tests_with_reader(
+            &scheduler_settings(),
+            Arc::clone(&reader),
+            temp_path("scheduler-rotation"),
+            enabled_scheduler_config(2),
+        )
+        .unwrap();
+
+        assert_eq!(service.run_once().await.unwrap(), 2);
+        assert_eq!(
+            reader.calls().iter().map(|call| call.0).collect::<Vec<_>>(),
+            vec![1, 1]
+        );
+        reader.set_devices(vec![
+            mock_device(3, &[1, 2]),
+            mock_device(1, &[1, 2]),
+            mock_device(2, &[1, 2]),
+        ]);
+        assert_eq!(service.run_once().await.unwrap(), 2);
+        assert_eq!(
+            reader.calls()[2..]
+                .iter()
+                .map(|call| call.0)
+                .collect::<Vec<_>>(),
+            vec![2, 2]
+        );
+        assert_eq!(service.run_once().await.unwrap(), 2);
+        assert_eq!(
+            reader.calls()[4..]
+                .iter()
+                .map(|call| call.0)
+                .collect::<Vec<_>>(),
+            vec![3, 3]
+        );
+        reader.set_devices(vec![mock_device(2, &[1, 2]), mock_device(1, &[1, 2])]);
+        assert_eq!(service.run_once().await.unwrap(), 2);
+        assert_eq!(
+            reader.calls()[6..]
+                .iter()
+                .map(|call| call.0)
+                .collect::<Vec<_>>(),
+            vec![1, 1]
+        );
+    }
+
+    #[tokio::test]
+    async fn run_once_caps_targets_and_advances_after_failed_reads_without_retry() {
+        let reader = Arc::new(MockPriorityReader::default());
+        reader.set_devices(vec![mock_device(1, &[1, 2, 3]), mock_device(2, &[1])]);
+        reader.fail(1, 1);
+        let service = PriorityScanService::for_tests_with_reader(
+            &scheduler_settings(),
+            Arc::clone(&reader),
+            temp_path("scheduler-failure"),
+            enabled_scheduler_config(2),
+        )
+        .unwrap();
+
+        assert_eq!(service.run_once().await.unwrap(), 2);
+        assert_eq!(reader.calls().len(), 2);
+        assert_eq!(reader.calls()[0].0, 1);
+        assert_eq!(reader.calls()[1].0, 1);
+        assert_eq!(service.run_once().await.unwrap(), 1);
+        assert_eq!(reader.calls().len(), 3);
+        assert_eq!(reader.calls()[2].0, 2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn scheduler_waits_a_full_interval_before_first_visit() {
+        let reader = Arc::new(MockPriorityReader::default());
+        reader.set_devices(vec![mock_device(1, &[1])]);
+        let service = PriorityScanService::for_tests_with_reader(
+            &scheduler_settings(),
+            Arc::clone(&reader),
+            temp_path("scheduler-delay"),
+            enabled_scheduler_config(1),
+        )
+        .unwrap();
+        let task = service.spawn().unwrap();
+        tokio::task::yield_now().await;
+        assert!(reader.calls().is_empty());
+        tokio::time::advance(Duration::from_secs(PRIORITY_SCAN_MIN_INTERVAL_SECS - 1)).await;
+        tokio::task::yield_now().await;
+        assert!(reader.calls().is_empty());
+        tokio::time::advance(Duration::from_secs(1)).await;
+        tokio::task::yield_now().await;
+        assert_eq!(reader.calls().len(), 1);
+        task.abort();
     }
 }

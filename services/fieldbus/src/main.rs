@@ -530,6 +530,30 @@ mod tests {
         assert!(value["records"].as_array().unwrap().is_empty());
         assert_eq!(client.test_ot_call_count(), 0);
 
+        let trigger = app
+            .clone()
+            .oneshot(
+                Request::post("/api/connector/priority-history/trigger")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "schema": openfdd_contracts::PRIORITY_SCAN_TRIGGER_CONTRACT_V1,
+                            "request_id": uuid::Uuid::nil(),
+                            "scope": {
+                                "tenant_id": "tenant-local",
+                                "building_id": "building-local",
+                                "edge_id": "edge-local"
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(trigger.status(), StatusCode::OK);
+        assert_eq!(client.test_ot_call_count(), 0);
+
         let foreign = app
             .oneshot(
                 Request::post("/api/connector/priority-history")

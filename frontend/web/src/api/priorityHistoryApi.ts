@@ -56,6 +56,14 @@ export interface PriorityHistoryResponse {
   scanner: PriorityScanStatus;
 }
 
+export interface PriorityHistoryTriggerResponse {
+  schema: "openfdd.connector.priority_scan.trigger.v1";
+  request_id: string;
+  scope: InventoryScope;
+  records_added: number;
+  scanner: PriorityScanStatus;
+}
+
 export interface PriorityHistoryPageRequest {
   scope: InventoryScope;
   target?: PriorityHistoryTarget;
@@ -241,4 +249,38 @@ export async function fetchPriorityHistoryPage({ scope: requestedScope, target: 
     signal,
   });
   return validateResponse(response, requestId, requestedScope, pageSize, requestedTarget);
+}
+
+export async function triggerPriorityHistoryScan({ scope: requestedScope, signal }: { scope: InventoryScope; signal?: AbortSignal }): Promise<PriorityHistoryTriggerResponse> {
+  const requestId = newRequestId();
+  const response = await apiFetch<unknown>(`/api/connectors/${encodeURIComponent(requestedScope.edge_id)}/priority-history/trigger`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      schema: "openfdd.connector.priority_scan.trigger.v1",
+      request_id: requestId,
+      scope: requestedScope,
+    }),
+    signal,
+  });
+  if (!isRecord(response)
+    || response.schema !== "openfdd.connector.priority_scan.trigger.v1"
+    || response.request_id !== requestId
+    || !sameScope(scope(response.scope), requestedScope)
+    || !Number.isInteger(response.records_added)
+    || (response.records_added as number) < 0
+  ) {
+    throw new PriorityHistoryContractError("priority history trigger response correlation failed");
+  }
+  const scanner = validateStatus(response.scanner, requestedScope);
+  if ((response.records_added as number) > scanner.max_points_per_device) {
+    throw new PriorityHistoryContractError("priority history trigger result exceeds its bound");
+  }
+  return {
+    schema: "openfdd.connector.priority_scan.trigger.v1",
+    request_id: requestId,
+    scope: requestedScope,
+    records_added: response.records_added as number,
+    scanner,
+  };
 }

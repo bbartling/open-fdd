@@ -6,6 +6,7 @@ import {
 } from "../api/connectorReadApi";
 import {
   fetchPriorityHistoryPage,
+  triggerPriorityHistoryScan,
   type PriorityHistoryRecord,
   type PriorityHistoryResponse,
 } from "../api/priorityHistoryApi";
@@ -430,10 +431,12 @@ function PriorityHistoryPanel({
   point,
   scope,
   enabled,
+  triggerEnabled,
 }: {
   point: Extract<InventoryTreeNode["record"], { kind: "point" }> | null;
   scope: InventoryScope;
   enabled: boolean;
+  triggerEnabled: boolean;
 }) {
   const target = point?.reference.kind === "bacnet"
     ? {
@@ -447,7 +450,9 @@ function PriorityHistoryPanel({
   const [response, setResponse] = useState<PriorityHistoryResponse | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
   const generation = useRef(0);
 
@@ -459,7 +464,9 @@ function PriorityHistoryPanel({
     setResponse(null);
     setCursor(null);
     setLoading(false);
+    setTriggering(false);
     setError(null);
+    setTriggerError(null);
     return () => controller.current?.abort();
   }, [scope.building_id, scope.edge_id, scope.tenant_id, targetKey]);
 
@@ -491,12 +498,38 @@ function PriorityHistoryPanel({
     }
   };
 
+  const trigger = async () => {
+    if (loading || triggering) return;
+    const abort = new AbortController();
+    controller.current?.abort();
+    controller.current = abort;
+    setTriggering(true);
+    setTriggerError(null);
+    try {
+      await triggerPriorityHistoryScan({ scope, signal: abort.signal });
+      if (abort.signal.aborted) return;
+      setTriggering(false);
+      controller.current = null;
+      await load();
+    } catch (reason) {
+      if (abort.signal.aborted || (reason instanceof Error && reason.name === "AbortError")) return;
+      setTriggerError(reason instanceof Error ? reason.message : "Priority history trigger failed");
+    } finally {
+      if (!abort.signal.aborted) {
+        setTriggering(false);
+        controller.current = null;
+      }
+    }
+  };
+
   return (
     <section className="inventory-history-panel" aria-labelledby="inventory-history-heading" data-testid="inventory-priority-history">
       <h3 id="inventory-history-heading">Priority history</h3>
       <p className="muted">Durable edge snapshots for this point. History reads do not trigger a BACnet request.</p>
-      <Button id="inventory-priority-history-load" label={loading ? "Loading…" : records.length ? "Refresh history" : "Load history"} loading={loading} onClick={() => void load()} testId="inventory-priority-history-load" />
+      {triggerEnabled ? <Button id="inventory-priority-history-trigger" label={triggering ? "Scanning…" : "Run scan now"} loading={triggering} disabled={loading || triggering} onClick={() => void trigger()} testId="inventory-priority-history-trigger" /> : null}
+      <Button id="inventory-priority-history-load" label={loading ? "Loading…" : records.length ? "Refresh history" : "Load history"} loading={loading} disabled={triggering} onClick={() => void load()} testId="inventory-priority-history-load" />
       {error ? <InlineAlert id="inventory-priority-history-error" variant="danger" testId="inventory-priority-history-error">{error}</InlineAlert> : null}
+      {triggerError ? <InlineAlert id="inventory-priority-history-trigger-error" variant="danger" testId="inventory-priority-history-trigger-error">{triggerError}</InlineAlert> : null}
       {response ? <p className="muted" data-testid="inventory-priority-history-status">Scanner: {response.scanner.enabled ? "enabled" : "disabled"} · interval {response.scanner.interval_secs}s · retained {response.scanner.records_retained}</p> : null}
       {records.length > 0 ? (
         <div className="inventory-history-table-wrap">
@@ -754,10 +787,12 @@ export function ProtocolInventory({
   protocol,
   capabilityEdgeIds = [],
   priorityHistoryCapabilityEdgeIds = [],
+  priorityHistoryTriggerCapabilityEdgeIds = [],
 }: {
   protocol: InventoryProtocol;
   capabilityEdgeIds?: readonly string[];
   priorityHistoryCapabilityEdgeIds?: readonly string[];
+  priorityHistoryTriggerCapabilityEdgeIds?: readonly string[];
 }) {
   const snapshot = useInventoryScope(capabilityEdgeIds);
   const inventory = useConnectorInventory({ scope: snapshot.scope, protocols: [protocol], enabled: Boolean(snapshot.scope) });
@@ -793,6 +828,7 @@ export function ProtocolInventory({
                 point={selectedNode?.record.kind === "point" ? selectedNode.record : null}
                 scope={snapshot.scope}
                 enabled={priorityHistoryCapabilityEdgeIds.includes(snapshot.scope.edge_id)}
+                triggerEnabled={priorityHistoryTriggerCapabilityEdgeIds.includes(snapshot.scope.edge_id)}
               />
             </div>
           </div>
