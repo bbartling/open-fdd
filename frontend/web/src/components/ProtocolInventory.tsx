@@ -397,7 +397,7 @@ function InventoryReadPanel({
       <h3 id="inventory-read-heading">Live read</h3>
       <p className="muted">Runs once when requested. The inventory action and server authorization must both allow it.</p>
       <div className="inventory-read-panel__actions">
-        {canReadPoint ? <Button id="inventory-read-point" label={loading === "point" ? "Reading…" : "Read present value"} loading={loading === "point"} disabled={loading !== null} onClick={() => void run("point")} testId="inventory-read-point" /> : null}
+        {canReadPoint ? <Button id="inventory-read-point" label={loading === "point" ? "Reading…" : "Read point"} loading={loading === "point"} disabled={loading !== null} onClick={() => void run("point")} testId="inventory-read-point" /> : null}
         {canReadPriority ? <Button id="inventory-read-priority" label={loading === "priority" ? "Reading…" : "Read priority array"} loading={loading === "priority"} disabled={loading !== null} onClick={() => void run("priority")} testId="inventory-read-priority" /> : null}
       </div>
       {error ? <InlineAlert id="inventory-read-error" variant="danger" testId="inventory-read-error">{error}</InlineAlert> : null}
@@ -679,7 +679,7 @@ export function ProtocolInventory({
       {snapshot.scope ? (
         <>
           <div className="section-heading-row inventory-toolbar">
-            <p className="muted">Inventory is a configuration projection. Live reads, writes, discovery, and polling are unavailable here.</p>
+            <p className="muted">Inventory is a configuration projection. Select a point to see its advertised read actions.</p>
             <Button id="inventory-refresh" label={inventory.loading ? "Loading…" : "Refresh inventory"} variant="secondary" loading={inventory.loading} onClick={refresh} testId="inventory-refresh" />
           </div>
           {inventory.error ? <InlineAlert id="inventory-error" variant="danger" testId="inventory-error">{inventory.error.message}{inventory.partial ? " Some records remain visible." : ""}</InlineAlert> : null}

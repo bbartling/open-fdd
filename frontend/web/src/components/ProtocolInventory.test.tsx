@@ -184,7 +184,7 @@ describe("ProtocolInventory", () => {
       }
       return {};
     });
-    fireEvent.click(screen.getByRole("button", { name: "Read present value" }));
+    fireEvent.click(screen.getByRole("button", { name: "Read point" }));
     expect((await screen.findByTestId("inventory-read-point-result")).textContent).toContain("71.25");
     expect(apiFetch.mock.calls.filter(([path]) => String(path).includes("/read"))).toHaveLength(1);
   });
@@ -194,7 +194,7 @@ describe("ProtocolInventory", () => {
     const pointItem = await screen.findByTestId("inventory-treeitem-point:opaque-point");
     fireEvent.click(pointItem);
     expect(await screen.findByRole("button", { name: "Read priority array" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Read present value" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Read point" })).toBeNull();
   });
 
   it("submits one live read and blocks every other action while it is pending", async () => {
@@ -211,7 +211,7 @@ describe("ProtocolInventory", () => {
       return {};
     });
     fireEvent.click(pointItem);
-    const readButton = screen.getByRole("button", { name: "Read present value" });
+    const readButton = screen.getByRole("button", { name: "Read point" });
     const priorityButton = screen.getByRole("button", { name: "Read priority array" });
     fireEvent.click(readButton);
     fireEvent.click(readButton);
@@ -241,7 +241,7 @@ describe("ProtocolInventory", () => {
       return {};
     });
     fireEvent.click(firstPoint);
-    fireEvent.click(screen.getByRole("button", { name: "Read present value" }));
+    fireEvent.click(screen.getByRole("button", { name: "Read point" }));
     fireEvent.click(secondPointItem);
     expect(readSignal?.aborted).toBe(true);
     resolveRead?.({
@@ -263,7 +263,7 @@ describe("ProtocolInventory", () => {
       return {};
     });
     fireEvent.click(pointItem);
-    fireEvent.click(screen.getByRole("button", { name: "Read present value" }));
+    fireEvent.click(screen.getByRole("button", { name: "Read point" }));
     expect((await screen.findByTestId("inventory-read-error")).textContent).toContain("not authorized");
     expect(screen.queryByTestId("inventory-read-point-result")).toBeNull();
   });

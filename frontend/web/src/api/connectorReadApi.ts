@@ -58,6 +58,16 @@ export class ConnectorReadContractError extends Error {
   }
 }
 
+export class ConnectorReadError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "ConnectorReadError";
+    this.code = code;
+  }
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -71,6 +81,13 @@ function hasControlCharacter(value: string): boolean {
 
 function text(value: unknown, field: string): string {
   if (typeof value !== "string" || !value.trim() || value.length > 512 || hasControlCharacter(value)) {
+    throw new ConnectorReadContractError(`${field} is invalid`);
+  }
+  return value;
+}
+
+function publicMessage(value: unknown, field: string, max: number): string {
+  if (typeof value !== "string" || value.length > max || hasControlCharacter(value)) {
     throw new ConnectorReadContractError(`${field} is invalid`);
   }
   return value;
@@ -176,7 +193,7 @@ function validatePriority(value: Record<string, unknown>, target: BacnetPriority
       const error = text(raw.error, "priority error");
       if (error.length > 128) throw new ConnectorReadContractError("priority error is invalid");
     }
-    if (raw.state === "value" && raw.value === undefined) throw new ConnectorReadContractError("priority value is missing");
+    if (raw.state === "value" && (raw.value === undefined || raw.error !== undefined)) throw new ConnectorReadContractError("value priority slot is malformed");
     if (raw.state === "null" && (raw.value !== undefined || raw.error !== undefined)) throw new ConnectorReadContractError("NULL priority slot is malformed");
     if (raw.state === "error" && (raw.value !== undefined || raw.error === undefined)) throw new ConnectorReadContractError("error priority slot is malformed");
     if (raw.state === "unknown" && raw.value !== undefined) throw new ConnectorReadContractError("unknown priority slot is malformed");
@@ -195,9 +212,20 @@ export async function readConnectorTarget(scope: InventoryScope, target: Connect
     signal,
   });
   if (!isObject(response) || response.schema !== CONNECTOR_READ_CONTRACT_V1 || response.request_id !== request.request_id ||
-      !sameScope(response.scope, scope) || response.ok !== true || response.capability_contract !== CAPABILITIES_CONTRACT_V1 ||
-      response.error != null || !isObject(response.result)) {
+      !sameScope(response.scope, scope)) {
     throw new ConnectorReadContractError("connector read response correlation failed");
+  }
+  if (response.ok === false) {
+    if (response.capability_contract != null || response.result != null || !isObject(response.error)) {
+      throw new ConnectorReadContractError("connector read failure envelope is malformed");
+    }
+    const code = token(response.error.code, "read error code", 64);
+    const message = publicMessage(response.error.message, "read error message", 128);
+    throw new ConnectorReadError(code, message);
+  }
+  if (response.ok !== true || response.capability_contract !== CAPABILITIES_CONTRACT_V1 ||
+      response.error != null || !isObject(response.result)) {
+    throw new ConnectorReadContractError("connector read response is malformed");
   }
   return target.kind === "bacnet_point"
     ? validatePoint(response.result, target)

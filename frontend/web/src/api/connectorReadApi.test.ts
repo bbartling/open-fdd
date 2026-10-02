@@ -72,6 +72,52 @@ describe("connectorReadApi", () => {
     });
   });
 
+  it("rejects a value priority slot that also carries an error", async () => {
+    const result = priorityResult();
+    Object.assign(result.slots[0], { error: "slot unavailable" });
+    apiFetch.mockResolvedValueOnce(baseResponse(result));
+    await expect(readConnectorTarget(scope, {
+      kind: "bacnet_priority_array",
+      device_instance: 7,
+      object_type: "analog-output",
+      object_instance: 2,
+    })).rejects.toThrow(/value priority slot/);
+  });
+
+  it("surfaces a correlated sanitized failure envelope", async () => {
+    apiFetch.mockResolvedValueOnce({
+      schema: CONNECTOR_READ_CONTRACT_V1,
+      request_id: "request-1",
+      scope,
+      ok: false,
+      error: { code: "upstream_rejected", message: "connector read rejected" },
+    });
+    await expect(readConnectorTarget(scope, target)).rejects.toMatchObject({
+      name: "ConnectorReadError",
+      code: "upstream_rejected",
+      message: "connector read rejected",
+    });
+  });
+
+  it("rejects malformed or mismatched failure envelopes", async () => {
+    apiFetch.mockResolvedValueOnce({
+      schema: CONNECTOR_READ_CONTRACT_V1,
+      request_id: "request-1",
+      scope,
+      ok: false,
+      error: { code: "bad code", message: "rejected" },
+    });
+    await expect(readConnectorTarget(scope, target)).rejects.toThrow();
+    apiFetch.mockResolvedValueOnce({
+      schema: CONNECTOR_READ_CONTRACT_V1,
+      request_id: "request-1",
+      scope: { ...scope, edge_id: "other-edge" },
+      ok: false,
+      error: { code: "upstream_rejected", message: "rejected" },
+    });
+    await expect(readConnectorTarget(scope, target)).rejects.toThrow(/correlation/);
+  });
+
   it.each([
     ["request id", { request_id: "other-request" }],
     ["scope", { scope: { ...scope, building_id: "other-building" } }],
