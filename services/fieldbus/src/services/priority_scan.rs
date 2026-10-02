@@ -5,7 +5,8 @@
 //! a write, release, or remediation request.  History is kept on the edge so
 //! a cloud hub is not required for local supervision evidence.
 
-use std::fs;
+use std::fs::{self, File, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -28,6 +29,7 @@ use crate::services::bacnet_client::BacnetClientService;
 const STORE_VERSION: u8 = 1;
 const DEFAULT_MAX_RECORDS: usize = 10_000;
 const MAX_RECORDS: usize = 100_000;
+const MAX_JOURNAL_BYTES: u64 = 4 * 1024 * 1024;
 const DEFAULT_STORE_FILE: &str = "state/priority-history.json";
 const PRIORITY_SCAN_READ_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -38,6 +40,20 @@ struct PersistedHistory {
     revision: u64,
     last_device_identity: Option<String>,
     records: Vec<PriorityHistoryRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum JournalLine {
+    Checkpoint {
+        state: PersistedHistory,
+    },
+    Append {
+        record: PriorityHistoryRecord,
+    },
+    Cursor {
+        last_device_identity: Option<String>,
+    },
 }
 
 impl Default for PersistedHistory {
@@ -56,52 +72,84 @@ impl Default for PersistedHistory {
 pub struct PriorityHistoryStore {
     path: PathBuf,
     max_records: usize,
+    durable: bool,
+    journal_bytes: Mutex<u64>,
     state: Mutex<PersistedHistory>,
 }
 
 impl PriorityHistoryStore {
     pub fn open(path: PathBuf, max_records: usize) -> Result<Arc<Self>, String> {
         let max_records = max_records.clamp(1, MAX_RECORDS);
-        let state = load_history(&path, max_records)?;
+        let (state, migrate_legacy) = load_history(&path, max_records)?;
+        let journal_bytes = fs::metadata(&path)
+            .map(|metadata| metadata.len())
+            .unwrap_or(0);
         let store = Arc::new(Self {
             path,
             max_records,
+            durable: true,
+            journal_bytes: Mutex::new(journal_bytes),
             state: Mutex::new(state),
         });
         store.ensure_parent()?;
+        if migrate_legacy {
+            let state = store.lock_state()?.clone();
+            store.rewrite_checkpoint(&state)?;
+        }
         Ok(store)
+    }
+
+    fn in_memory(path: PathBuf, max_records: usize) -> Arc<Self> {
+        Arc::new(Self {
+            path,
+            max_records: max_records.clamp(1, MAX_RECORDS),
+            durable: false,
+            journal_bytes: Mutex::new(0),
+            state: Mutex::new(PersistedHistory::default()),
+        })
     }
 
     pub fn append(&self, mut record: PriorityHistoryRecord) -> Result<u64, String> {
         let mut guard = self.lock_state()?;
-        let mut candidate = guard.clone();
-        let sequence = candidate.next_sequence.max(1);
+        let sequence = guard.next_sequence.max(1);
         record.sequence = sequence;
         record.validate()?;
-        candidate.next_sequence = sequence.saturating_add(1);
-        candidate.records.push(record);
-        if candidate.records.len() > self.max_records {
-            let remove = candidate.records.len() - self.max_records;
-            candidate.records.drain(0..remove);
+        if self.durable {
+            let bytes = self.append_line(&JournalLine::Append {
+                record: record.clone(),
+            })?;
+            let mut journal_bytes = self.lock_journal_bytes()?;
+            *journal_bytes = journal_bytes.saturating_add(bytes);
         }
-        candidate.revision = candidate.revision.saturating_add(1).max(1);
-        self.persist(&candidate)?;
-        *guard = candidate;
+        guard.next_sequence = sequence.saturating_add(1);
+        guard.records.push(record);
+        guard.revision = guard.revision.saturating_add(1).max(1);
+        if guard.records.len() > self.max_records {
+            let remove = guard.records.len() - self.max_records;
+            guard.records.drain(0..remove);
+            if self.durable {
+                let snapshot = guard.clone();
+                self.rewrite_checkpoint(&snapshot)?;
+            }
+        }
         Ok(sequence)
     }
 
     pub fn set_last_device_identity(&self, identity: Option<String>) -> Result<(), String> {
-        if identity
-            .as_deref()
-            .is_some_and(|value| value.trim().is_empty() || value.len() > 128)
-        {
-            return Err("priority scan device cursor is invalid".into());
-        }
+        validate_device_identity(identity.as_deref())?;
         let mut guard = self.lock_state()?;
-        let mut candidate = guard.clone();
-        candidate.last_device_identity = identity;
-        self.persist(&candidate)?;
-        *guard = candidate;
+        if self.durable {
+            let bytes = self.append_line(&JournalLine::Cursor {
+                last_device_identity: identity.clone(),
+            })?;
+            let mut journal_bytes = self.lock_journal_bytes()?;
+            *journal_bytes = journal_bytes.saturating_add(bytes);
+        }
+        guard.last_device_identity = identity;
+        if self.durable && *self.lock_journal_bytes()? > MAX_JOURNAL_BYTES {
+            let snapshot = guard.clone();
+            self.rewrite_checkpoint(&snapshot)?;
+        }
         Ok(())
     }
 
@@ -113,8 +161,34 @@ impl PriorityHistoryStore {
         Ok(format!("history-{:016x}", self.lock_state()?.revision))
     }
 
+    #[cfg(test)]
     pub fn records(&self) -> Result<Vec<PriorityHistoryRecord>, String> {
         Ok(self.lock_state()?.records.clone())
+    }
+
+    pub fn page(
+        &self,
+        target: Option<&PriorityScanTarget>,
+        offset: usize,
+        limit: usize,
+    ) -> Result<(String, Vec<PriorityHistoryRecord>, bool), String> {
+        let guard = self.lock_state()?;
+        let mut matching = 0usize;
+        let mut records = Vec::with_capacity(limit);
+        for record in guard.records.iter().rev() {
+            if target.is_some_and(|requested| requested != &record.target) {
+                continue;
+            }
+            if matching >= offset && records.len() < limit {
+                records.push(record.clone());
+            }
+            matching = matching.saturating_add(1);
+        }
+        if offset > matching {
+            return Err("priority history cursor is outside retained history".into());
+        }
+        let has_more = matching > offset.saturating_add(records.len());
+        Ok((revision_string(guard.revision), records, has_more))
     }
 
     pub fn records_retained(&self) -> Result<u64, String> {
@@ -133,16 +207,51 @@ impl PriorityHistoryStore {
         Ok(())
     }
 
-    fn persist(&self, state: &PersistedHistory) -> Result<(), String> {
+    fn append_line(&self, line: &JournalLine) -> Result<u64, String> {
         self.ensure_parent()?;
-        let encoded = serde_json::to_vec_pretty(state)
-            .map_err(|error| format!("serialize priority history: {error}"))?;
+        let existed = self.path.exists();
+        let mut encoded = serde_json::to_vec(line)
+            .map_err(|error| format!("serialize priority history journal: {error}"))?;
+        encoded.push(b'\n');
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+            .map_err(|error| format!("open priority history journal: {error}"))?;
+        file.write_all(&encoded)
+            .map_err(|error| format!("append priority history journal: {error}"))?;
+        file.sync_data()
+            .map_err(|error| format!("sync priority history journal: {error}"))?;
+        if !existed {
+            sync_parent_dir(&self.path)?;
+        }
+        Ok(encoded.len() as u64)
+    }
+
+    fn rewrite_checkpoint(&self, state: &PersistedHistory) -> Result<(), String> {
+        self.ensure_parent()?;
+        let encoded = serde_json::to_vec(&JournalLine::Checkpoint {
+            state: state.clone(),
+        })
+        .map_err(|error| format!("serialize priority history checkpoint: {error}"))?;
         let temporary = self.path.with_extension("json.tmp");
-        fs::write(&temporary, encoded)
-            .map_err(|error| format!("write priority history: {error}"))?;
+        let mut file = File::create(&temporary)
+            .map_err(|error| format!("create priority history checkpoint: {error}"))?;
+        file.write_all(&encoded)
+            .and_then(|_| file.write_all(b"\n"))
+            .and_then(|_| file.sync_all())
+            .map_err(|error| format!("sync priority history checkpoint: {error}"))?;
         fs::rename(&temporary, &self.path)
-            .map_err(|error| format!("replace priority history: {error}"))?;
+            .map_err(|error| format!("replace priority history journal: {error}"))?;
+        sync_parent_dir(&self.path)?;
+        *self.lock_journal_bytes()? = encoded.len() as u64 + 1;
         Ok(())
+    }
+
+    fn lock_journal_bytes(&self) -> Result<std::sync::MutexGuard<'_, u64>, String> {
+        self.journal_bytes
+            .lock()
+            .map_err(|_| "priority history journal size lock poisoned".into())
     }
 
     fn lock_state(&self) -> Result<std::sync::MutexGuard<'_, PersistedHistory>, String> {
@@ -152,18 +261,142 @@ impl PriorityHistoryStore {
     }
 }
 
-fn load_history(path: &Path, max_records: usize) -> Result<PersistedHistory, String> {
+fn sync_parent_dir(path: &Path) -> Result<(), String> {
+    let Some(parent) = path.parent().filter(|path| !path.as_os_str().is_empty()) else {
+        return Ok(());
+    };
+    File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| format!("sync priority history directory: {error}"))
+}
+
+fn validate_device_identity(identity: Option<&str>) -> Result<(), String> {
+    let Some(identity) = identity else {
+        return Ok(());
+    };
+    let valid = identity.len() <= 128
+        && identity.starts_with("bacnet-device:")
+        && identity["bacnet-device:".len()..].parse::<u32>().is_ok()
+        && identity
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | ':'));
+    if valid {
+        Ok(())
+    } else {
+        Err("priority scan device cursor is invalid".into())
+    }
+}
+
+fn revision_string(revision: u64) -> String {
+    format!("history-{revision:016x}")
+}
+
+fn load_history(path: &Path, max_records: usize) -> Result<(PersistedHistory, bool), String> {
     if !path.exists() {
-        return Ok(PersistedHistory::default());
+        return Ok((PersistedHistory::default(), false));
     }
     let encoded = fs::read(path).map_err(|error| format!("read priority history: {error}"))?;
-    let mut state: PersistedHistory = serde_json::from_slice(&encoded)
-        .map_err(|error| format!("decode priority history: {error}"))?;
+    let trimmed = encoded
+        .iter()
+        .copied()
+        .skip_while(u8::is_ascii_whitespace)
+        .collect::<Vec<_>>();
+    if !trimmed.windows(6).any(|window| window == b"\"kind\"") {
+        let state: PersistedHistory = serde_json::from_slice(&encoded)
+            .map_err(|error| format!("decode priority history state: {error}"))?;
+        let state = validate_history_state(state, max_records)?;
+        return Ok((state, true));
+    }
+
+    let mut state = PersistedHistory::default();
+    let mut valid_end = 0usize;
+    for segment in encoded.split_inclusive(|byte| *byte == b'\n') {
+        let is_tail = valid_end + segment.len() == encoded.len();
+        let line = segment.strip_suffix(b"\n").unwrap_or(segment);
+        if line.iter().all(u8::is_ascii_whitespace) {
+            valid_end += segment.len();
+            continue;
+        }
+        let parsed = serde_json::from_slice::<JournalLine>(line);
+        let entry = match parsed {
+            Ok(entry) => entry,
+            Err(error) if is_tail && error.classify() == serde_json::error::Category::Eof => {
+                fs::write(path, &encoded[..valid_end]).map_err(|write_error| {
+                    format!("truncate torn priority history: {write_error}")
+                })?;
+                let file = OpenOptions::new()
+                    .write(true)
+                    .open(path)
+                    .map_err(|open_error| {
+                        format!("open repaired priority history: {open_error}")
+                    })?;
+                file.sync_all().map_err(|sync_error| {
+                    format!("sync repaired priority history: {sync_error}")
+                })?;
+                break;
+            }
+            Err(error) => return Err(format!("decode priority history journal: {error}")),
+        };
+        apply_journal_line(&mut state, entry, max_records)?;
+        valid_end += segment.len();
+    }
+    state = validate_history_state(state, max_records)?;
+    Ok((state, false))
+}
+
+fn apply_journal_line(
+    state: &mut PersistedHistory,
+    line: JournalLine,
+    max_records: usize,
+) -> Result<(), String> {
+    match line {
+        JournalLine::Checkpoint { state: checkpoint } => {
+            *state = validate_history_state(checkpoint, max_records)?;
+        }
+        JournalLine::Append { record } => {
+            record.validate()?;
+            if state
+                .records
+                .iter()
+                .any(|item| item.sequence == record.sequence)
+            {
+                return Err("duplicate priority history sequence".into());
+            }
+            state.next_sequence = state
+                .next_sequence
+                .max(record.sequence.saturating_add(1))
+                .max(1);
+            state.records.push(record);
+            if state.records.len() > max_records {
+                let remove = state.records.len() - max_records;
+                state.records.drain(0..remove);
+            }
+            state.revision = state.revision.saturating_add(1).max(1);
+        }
+        JournalLine::Cursor {
+            last_device_identity,
+        } => {
+            validate_device_identity(last_device_identity.as_deref())?;
+            state.last_device_identity = last_device_identity;
+        }
+    }
+    Ok(())
+}
+
+fn validate_history_state(
+    mut state: PersistedHistory,
+    max_records: usize,
+) -> Result<PersistedHistory, String> {
     if state.version != STORE_VERSION {
         return Err("unsupported priority history store version".into());
     }
+    validate_device_identity(state.last_device_identity.as_deref())?;
+    let mut sequences = std::collections::HashSet::new();
     for record in &state.records {
         record.validate()?;
+        if !sequences.insert(record.sequence) {
+            return Err("duplicate priority history sequence".into());
+        }
     }
     state.records.sort_by_key(|record| record.sequence);
     if state.records.len() > max_records {
@@ -195,6 +428,7 @@ struct RuntimeStatus {
 pub struct PriorityScanService {
     client: Arc<BacnetClientService>,
     store: Arc<PriorityHistoryStore>,
+    store_error: Option<String>,
     config: PriorityScanConfig,
     scope: Option<ConnectorScope>,
     runtime: Mutex<RuntimeStatus>,
@@ -207,14 +441,23 @@ impl PriorityScanService {
         client: Arc<BacnetClientService>,
     ) -> Result<Arc<Self>, String> {
         let config = priority_scan_config_from_env();
-        let store = PriorityHistoryStore::open(
-            priority_history_path_from_env(),
-            priority_history_max_records_from_env(),
-        )?;
+        let path = priority_history_path_from_env();
+        let max_records = priority_history_max_records_from_env();
+        let (store, store_error) = match PriorityHistoryStore::open(path.clone(), max_records) {
+            Ok(store) => (store, None),
+            Err(error) => {
+                tracing::error!(%error, "priority history store unavailable; scanner disabled");
+                (
+                    PriorityHistoryStore::in_memory(path, max_records),
+                    Some(error),
+                )
+            }
+        };
         let scope = connector_scope(settings);
         Ok(Arc::new(Self {
             client,
             store,
+            store_error,
             config,
             scope,
             runtime: Mutex::new(RuntimeStatus::default()),
@@ -232,6 +475,7 @@ impl PriorityScanService {
         Ok(Arc::new(Self {
             client,
             store,
+            store_error: None,
             config: PriorityScanConfig::default(),
             scope: connector_scope(settings),
             runtime: Mutex::new(RuntimeStatus::default()),
@@ -240,10 +484,13 @@ impl PriorityScanService {
     }
 
     pub fn enabled(&self) -> bool {
-        self.config.enabled && self.scope.is_some()
+        self.config.enabled && self.scope.is_some() && self.store_error.is_none()
     }
 
     pub fn status(&self) -> Result<PriorityScanStatus, String> {
+        if let Some(error) = &self.store_error {
+            return Err(format!("priority history store unavailable: {error}"));
+        }
         let scope = self
             .scope
             .clone()
@@ -318,6 +565,9 @@ impl PriorityScanService {
         &self,
         request: &PriorityHistoryRequest,
     ) -> Result<PriorityHistoryResponse, String> {
+        if let Some(error) = &self.store_error {
+            return Err(format!("priority history store unavailable: {error}"));
+        }
         request.validate()?;
         let configured_scope = self
             .scope
@@ -326,28 +576,23 @@ impl PriorityScanService {
         if configured_scope != &request.scope {
             return Err("priority history scope is outside this edge".into());
         }
-        let revision = self.store.revision()?;
-        let records = self.store.records()?;
-        let mut filtered: Vec<_> = records
-            .into_iter()
-            .filter(|record| {
-                request
-                    .target
-                    .as_ref()
-                    .is_none_or(|target| target == &record.target)
-            })
-            .collect();
-        filtered.sort_by_key(|record| std::cmp::Reverse(record.sequence));
-        let offset = request.offset_for_revision(&revision)?;
-        if offset > filtered.len() {
-            return Err("priority history cursor is outside retained history".into());
+        let expected_revision = self.store.revision()?;
+        let requested_offset = request.offset_for_revision(&expected_revision)?;
+        let (revision, page, has_more) = self.store.page(
+            request.target.as_ref(),
+            requested_offset,
+            usize::from(request.page_size),
+        )?;
+        if request.cursor.is_some() && revision != expected_revision {
+            return Err("priority history cursor is stale for this revision".into());
         }
-        let end = offset
-            .saturating_add(usize::from(request.page_size))
-            .min(filtered.len());
-        let page = filtered[offset..end].to_vec();
-        let next_cursor = (end < filtered.len())
-            .then(|| request.cursor_for_revision(&revision, end))
+        let offset = if revision == expected_revision {
+            requested_offset
+        } else {
+            0
+        };
+        let next_cursor = has_more
+            .then(|| request.cursor_for_revision(&revision, offset.saturating_add(page.len())))
             .transpose()?;
         let scanner = self.status()?;
         let response = PriorityHistoryResponse {
@@ -417,12 +662,18 @@ impl PriorityScanService {
                 label,
                 source: "scheduled_scan".into(),
             };
-            self.store.append(record)?;
+            let store = Arc::clone(&self.store);
+            tokio::task::spawn_blocking(move || store.append(record))
+                .await
+                .map_err(|error| format!("priority history append task failed: {error}"))??;
             completed = completed.saturating_add(1);
         }
         // Advance the stable device cursor after the complete bounded visit,
         // including a visit where individual points returned typed errors.
-        self.store.set_last_device_identity(Some(identity))?;
+        let store = Arc::clone(&self.store);
+        tokio::task::spawn_blocking(move || store.set_last_device_identity(Some(identity)))
+            .await
+            .map_err(|error| format!("priority history cursor task failed: {error}"))??;
         let error = first_error;
         self.set_completed(Utc::now(), error.clone());
         if let Some(error) = error {
@@ -688,7 +939,52 @@ mod tests {
             restored.last_device_identity().unwrap().as_deref(),
             Some("bacnet-device:1")
         );
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn store_repairs_a_torn_trailing_journal_line() {
+        let path = temp_path("torn-tail");
+        let store = PriorityHistoryStore::open(path.clone(), 4).unwrap();
+        store.append(record(1, 1)).unwrap();
+        drop(store);
+        let mut file = OpenOptions::new().append(true).open(&path).unwrap();
+        file.write_all(br#"{"kind":"append","record":{"#).unwrap();
+        file.sync_all().unwrap();
+
+        let restored = PriorityHistoryStore::open(path.clone(), 4).unwrap();
+        assert_eq!(restored.records().unwrap().len(), 1);
+        restored.append(record(1, 2)).unwrap();
+        assert_eq!(restored.records().unwrap().len(), 2);
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn store_rejects_corrupt_non_tail_journal_line() {
+        let path = temp_path("corrupt-middle");
+        let store = PriorityHistoryStore::open(path.clone(), 4).unwrap();
+        store.append(record(1, 1)).unwrap();
+        drop(store);
+        let mut file = OpenOptions::new().append(true).open(&path).unwrap();
+        file.write_all(b"{not-json}\n").unwrap();
+        file.write_all(b"{\"kind\":\"cursor\",\"last_device_identity\":null}\n")
+            .unwrap();
+        file.sync_all().unwrap();
+        assert!(PriorityHistoryStore::open(path.clone(), 4).is_err());
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn store_ignores_a_stale_or_corrupt_temp_checkpoint() {
+        let path = temp_path("temp");
+        let store = PriorityHistoryStore::open(path.clone(), 4).unwrap();
+        store.append(record(1, 1)).unwrap();
+        drop(store);
+        fs::write(path.with_extension("json.tmp"), b"{not-json").unwrap();
+        let restored = PriorityHistoryStore::open(path.clone(), 4).unwrap();
+        assert_eq!(restored.records().unwrap().len(), 1);
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(path.with_extension("json.tmp"));
     }
 
     #[test]
