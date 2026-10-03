@@ -44,6 +44,7 @@ These pages are the sidebar children of **Cookbook reference**. The DataFusion S
 |-----|-------------|
 | [Public taxonomy](taxonomy.html) | Equipment classes, rule families, severity |
 | [Rule schema](rule-schema.html) | Declarative metadata — compiles to SQL + Pandas |
+| [Water & chiller FDD priority](../water-chiller-fdd-priority.html) | #1009 — plant/hydronic rule backlog (P0/P1/P2) |
 | [Gap matrix](gap-matrix.html) | Coverage vs ASHRAE GL36, Berkeley, PNNL, NIST |
 | [Parity matrix](parity-matrix.html) | SQL ↔ Pandas audit |
 | [Generated parity report](generated-parity-report.html) | Inventory rendered from `sql_rules/generated/parity_inventory.yaml` |
