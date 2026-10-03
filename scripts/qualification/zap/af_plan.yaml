@@ -1,19 +1,21 @@
-# Authenticated ZAP Automation Framework plan (Wave U U5)
+# Authenticated ZAP Automation Framework plan (Wave U U5 / Astra C-ZAP)
 # Disposable web+central only — OT drivers disabled/unreachable.
 # Do NOT upload JWT files; inject via env at runtime and delete after.
 #
-# Coverage gates (must be asserted by runner):
-# - at least one authenticated request to /api/auth/me
-# - site[] nonempty
+# Coverage gates (must be asserted by run_af_disposable.py):
+# - verified authenticated /api/auth/me (HTTP 200 + JSON role/subject)
+# - site[] nonempty matching ZAP_TARGET_ORIGIN
 # - jobs complete without failOnError=false swallowing errors
+# - High=0 and undispositioned Medium=0
 #
-# Active scan stays Soft-OPEN until runner proves auth coverage on a disposable candidate.
+# Active scan: enable only when OPENFDD_ZAP_AF_ACTIVE=1 on disposable candidate.
 
 env:
   contexts:
     - name: openfdd-disposable
       urls:
-        # Central-only disposable: `/` is 404 (SPA not mounted). Seed a 200 URL.
+        # Prefer SPA root on web+central disposable; health remains a 200 seed.
+        - "${ZAP_TARGET_ORIGIN}/"
         - "${ZAP_TARGET_ORIGIN}/api/health"
       includePaths:
         - "${ZAP_TARGET_ORIGIN}.*"
@@ -36,20 +38,19 @@ jobs:
   - type: spider
     parameters:
       context: openfdd-disposable
-      # Central-only disposable stacks return 404 on `/` (no SPA). Seed a 200
-      # health URL so AF does not exit nonzero on spider warnings alone.
-      url: "${ZAP_TARGET_ORIGIN}/api/health"
+      url: "${ZAP_TARGET_ORIGIN}/"
       maxDuration: 5
 
   # Authenticated /api/auth/me coverage is asserted by run_af_disposable.py
-  # preflight (UA-04). Do not use ZAP job type "request" — older zaproxydocker
-  # digests reject it ("Unrecognised job type: request").
+  # preflight (status + identity schema). Do not use ZAP job type "request" —
+  # older zaproxydocker digests reject it ("Unrecognised job type: request").
+  # Do not treat report URL text containing /api/auth/me as authenticated proof.
 
   - type: passiveScan-wait
     parameters:
       maxDuration: 10
 
-  # Active scan: enable only when OPENFDD_ZAP_AF_ACTIVE=1 on disposable candidate.
+  # Active scan: inserted by run_af_disposable.py when OPENFDD_ZAP_AF_ACTIVE=1.
   # - type: activeScan
   #   parameters:
   #     context: openfdd-disposable
@@ -62,4 +63,4 @@ jobs:
       template: traditional-json
       reportDir: "${ZAP_REPORT_DIR}"
       reportFile: zap-af-report
-      reportTitle: "Open-FDD ZAP AF (disposable)"
+      reportTitle: "Open-FDD ZAP AF (disposable web+central)"

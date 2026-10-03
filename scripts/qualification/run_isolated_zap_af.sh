@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# 3.3.30 — Isolated authenticated ZAP Automation Framework + OpenAPI (disposable stack).
-# Pulls openfdd-central (+ optional web) from GHCR. Pins ZAP scanner digest.
-# Never activeScans live Railway OT. Tears down containers on exit.
+# Astra C-ZAP (A06–A07) — disposable authenticated ZAP AF wrapper.
+#
+# Mints a throwaway web+central candidate from GHCR, then delegates scan
+# evaluation to scripts/qualification/zap/run_af_disposable.py (single
+# evaluator). Compatibility entrypoint for Wave C / gate runners.
+#
+# Never activeScans live Railway OT. Never persists JWT to disk.
+# No fallback crawl or warning soft-pass paths.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -13,14 +18,19 @@ if [[ ! "$TAG" =~ ^sha-[0-9a-f]{7}$ ]]; then
   exit 1
 fi
 
-for cmd in docker curl jq; do
+for cmd in docker curl jq python3; do
   command -v "$cmd" >/dev/null || { echo "missing required command: $cmd" >&2; exit 1; }
 done
 docker info >/dev/null
 
-# Pin scanner (stable as of Wave C authoring). Override with OPENFDD_ZAP_IMAGE if needed.
+# Pin scanner digest (override only with another digest-pinned ref).
 ZAP_IMAGE="${OPENFDD_ZAP_IMAGE:-ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef}"
+if [[ "$ZAP_IMAGE" != *@sha256:* ]]; then
+  echo "FAIL: OPENFDD_ZAP_IMAGE must be digest-pinned (@sha256:…); got: $ZAP_IMAGE" >&2
+  exit 1
+fi
 CENTRAL_IMAGE="ghcr.io/bbartling/openfdd-central:${TAG}"
+WEB_IMAGE="ghcr.io/bbartling/openfdd-web:${TAG}"
 ART="${ARTIFACT_DIR:-$ROOT/reports/waveC_zap_af_$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$ART"
 WRK="$ART/zap_wrk"
@@ -32,14 +42,16 @@ chmod 777 "$WRK"
 cp "$ROOT/docs/openapi.yaml" "$WRK/openapi.yaml"
 
 NET="openfdd-zap-af-${RANDOM}"
-CTR="openfdd-zap-central-${RANDOM}"
-VOL="${CTR}-workspace"
+CTR_CENTRAL="openfdd-zap-central-${RANDOM}"
+CTR_WEB="openfdd-zap-web-${RANDOM}"
+VOL="${CTR_CENTRAL}-workspace"
 ADMIN_PASS="zap-af-admin-${RANDOM}"
 JWT_SECRET="zap-af-jwt-${RANDOM}"
-TARGET_URL="http://central:8080/"
+# A07: scan through nginx+SPA (web), not bare central.
+TARGET_ORIGIN="http://web:8080"
 
 cleanup() {
-  docker rm -f "$CTR" >/dev/null 2>&1 || true
+  docker rm -f "$CTR_WEB" "$CTR_CENTRAL" >/dev/null 2>&1 || true
   docker volume rm -f "$VOL" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
 }
@@ -47,11 +59,13 @@ trap cleanup EXIT
 
 echo "== Pull images =="
 docker pull "$CENTRAL_IMAGE" >/dev/null
+docker pull "$WEB_IMAGE" >/dev/null
 docker pull "$ZAP_IMAGE" >/dev/null
 
 docker network create "$NET" >/dev/null
 docker volume create "$VOL" >/dev/null
-docker run -d --name "$CTR" --network "$NET" --network-alias central \
+
+docker run -d --name "$CTR_CENTRAL" --network "$NET" --network-alias central \
   -e OPENFDD_MQTT_ENABLED=0 \
   -e OPENFDD_WORKSPACE=/workspace \
   -e OPENFDD_STORAGE_URL=file:///workspace/openfdd \
@@ -75,20 +89,26 @@ if [[ "${OPENFDD_MULTI_TENANT:-0}" == "1" || "${OPENFDD_MULTI_TENANT:-0}" == "tr
 EOF'
 fi
 
+docker run -d --name "$CTR_WEB" --network "$NET" --network-alias web \
+  -e OPENFDD_CENTRAL_UPSTREAM=central:8080 \
+  -e OPENFDD_NGINX_RESOLVER=127.0.0.11 \
+  "$WEB_IMAGE" >/dev/null
+
 deadline=$((SECONDS + 120))
 until docker run --rm --network "$NET" curlimages/curl:8.5.0 \
-  -fsS "$TARGET_URL"api/health >/dev/null 2>&1; do
+    -fsS "${TARGET_ORIGIN}/api/health" >/dev/null 2>&1; do
   if (( SECONDS >= deadline )); then
-    echo "FAIL: disposable central never healthy" >&2
-    docker logs "$CTR" >&2 || true
+    echo "FAIL: disposable web+central never healthy" >&2
+    docker logs "$CTR_CENTRAL" >&2 || true
+    docker logs "$CTR_WEB" >&2 || true
     exit 1
   fi
   sleep 2
 done
-echo "OK disposable central"
+echo "OK disposable web+central"
 
 TOKEN="$(docker run --rm --network "$NET" curlimages/curl:8.5.0 -fsS \
-  -X POST "${TARGET_URL}api/auth/login" \
+  -X POST "${TARGET_ORIGIN}/api/auth/login" \
   -H 'Content-Type: application/json' \
   -d "{\"username\":\"admin\",\"password\":\"${ADMIN_PASS}\"}" \
   | jq -r '.token // .access_token // empty')"
@@ -100,157 +120,46 @@ fi
 rm -f "$ART/admin.jwt" "$WRK/admin.jwt" 2>/dev/null || true
 echo "OK admin JWT minted (ephemeral env only)"
 
-# UA-04: authenticated /api/auth/me preflight (never log the token).
-ME_CODE="$(docker run --rm --network "$NET" curlimages/curl:8.5.0 -sS -o /dev/null -w '%{http_code}' \
-  -H "Authorization: Bearer ${TOKEN}" \
-  "${TARGET_URL}api/auth/me" || echo 000)"
-if [[ "$ME_CODE" != "200" ]]; then
-  echo "FAIL: authenticated GET /api/auth/me returned HTTP $ME_CODE" >&2
-  exit 1
-fi
-echo "OK /api/auth/me preflight HTTP 200"
-echo '{"auth_me_preflight":true,"status":200}' >"$ART/auth_me_preflight.json"
+# Copy OpenAPI into work dir for AF openapi job (served via central too).
+# Evaluator owns AF plan materialization + verdict; wrapper only mints candidate.
+export OPENFDD_ZAP_AF_EXECUTE=1
+export OPENFDD_ZAP_IMAGE="$ZAP_IMAGE"
+export OPENFDD_ZAP_REQUIRE_DIGEST=1
+export ZAP_TARGET_ORIGIN="$TARGET_ORIGIN"
+export ZAP_AUTH_HEADER_VALUE="Bearer ${TOKEN}"
+export ZAP_AF_WORK_DIR="$WRK"
+export ZAP_DOCKER_NETWORK="$NET"
+export ZAP_AF_RUN_STARTED_EPOCH="$(date +%s)"
+VERDICT_OUT="$ART/verdict.json"
 
-# Materialize AF plan: expand origin/reportDir only. Authorization stays
-# ${ZAP_AUTH_HEADER_VALUE} and is injected via docker -e (never written to disk).
-sed \
-  -e "s|\${ZAP_TARGET_ORIGIN}|${TARGET_URL%/}|g" \
-  -e "s|\${OPENFDD_ZAP_TARGET}|${TARGET_URL}|g" \
-  -e "s|\${ZAP_REPORT_DIR}|/zap/wrk|g" \
-  "$ROOT/scripts/qualification/zap/af_plan.yaml" >"$WRK/af_plan.yaml"
-if ! grep -qF '${ZAP_AUTH_HEADER_VALUE}' "$WRK/af_plan.yaml"; then
-  echo "FAIL: rendered AF plan lost env auth injection" >&2
-  exit 1
-fi
-if grep -qE 'Bearer[[:space:]]+eyJ' "$WRK/af_plan.yaml"; then
-  echo "FAIL: rendered AF plan contains hardcoded JWT" >&2
-  exit 1
-fi
-cp "$WRK/af_plan.yaml" "$ART/af_plan.rendered.yaml"
-
-echo "== ZAP Automation Framework (OpenAPI + passive) =="
 set +e
-# Run as root so mounted wrk is readable/writable regardless of host uid mapping.
-docker run --rm --user 0:0 --network "$NET" \
-  -v "$WRK:/zap/wrk:rw" \
-  -e ZAP_AUTH_HEADER_VALUE="Bearer ${TOKEN}" \
-  "$ZAP_IMAGE" \
-  zap.sh -cmd -autorun /zap/wrk/af_plan.yaml \
-  >"$ART/zap_af.stdout.log" 2>"$ART/zap_af.stderr.log"
-ZAP_RC=$?
+python3 -B "$ROOT/scripts/qualification/zap/run_af_disposable.py" \
+  --out "$VERDICT_OUT"
+EVAL_RC=$?
 set -e
+
+# Redact any accidental secret leakage from logs copied beside verdict.
 chmod -R u+rwX,g+rwX,o-rwx "$WRK" 2>/dev/null || true
+rm -f "$ART/admin.jwt" "$WRK/admin.jwt" 2>/dev/null || true
 
-# Prefer AF report even when ZAP exits non-zero (warnings / auth soft-fail).
-AF_STATUS="PASS"
-if [[ ! -f "$WRK/zap-af-report.json" ]]; then
-  AF_STATUS="BLOCKED"
-  echo "WARN: ZAP AF exited rc=$ZAP_RC without report — running OpenAPI-aware fallback crawl" | tee "$ART/af_fallback.txt"
-  cat >"$WRK/urls.txt" <<EOF
-${TARGET_URL}api/health
-${TARGET_URL}api/auth/me
-${TARGET_URL}api/datasets
-${TARGET_URL}api/agent/tools
-EOF
-  set +e
-  docker run --rm --user 0:0 --network "$NET" \
-    -v "$WRK:/zap/wrk:rw" \
-    -w /zap/wrk \
-    "$ZAP_IMAGE" \
-    zap-baseline.py -t "$TARGET_URL" -J zap-fallback-report.json -d \
-    -z "-config replacer.full_list(0).description=auth \
-        -config replacer.full_list(0).enabled=true \
-        -config replacer.full_list(0).matchtype=REQ_HEADER \
-        -config replacer.full_list(0).matchstr=Authorization \
-        -config replacer.full_list(0).replacement=\"Bearer ${TOKEN}\"" \
-    >"$ART/zap_fallback.stdout.log" 2>"$ART/zap_fallback.stderr.log"
-  FB_RC=$?
-  set -e
-  echo "fallback_rc=$FB_RC" | tee "$ART/fallback_rc.txt"
-  chmod -R u+rwX,g+rwX,o-rwx "$WRK" 2>/dev/null || true
-  # baseline exits 2 on warnings — still accept JSON report with 0 High
-  if [[ -f "$WRK/zap-fallback-report.json" ]]; then
-    AF_STATUS="FALLBACK"
-  fi
-elif [[ "$ZAP_RC" != "0" ]]; then
-  AF_STATUS="PASS_WITH_WARNINGS"
-  echo "WARN: ZAP AF rc=$ZAP_RC but report present — continuing" | tee "$ART/af_rc_note.txt"
+if [[ ! -f "$VERDICT_OUT" ]]; then
+  echo "FAIL: evaluator wrote no verdict" >&2
+  exit 1
 fi
 
-REPORT=""
-if [[ -f "$WRK/zap-af-report.json" ]]; then
-  REPORT="$WRK/zap-af-report.json"
-  cp "$REPORT" "$ART/zap-af-report.json"
-elif [[ -f "$WRK/zap-fallback-report.json" ]]; then
-  REPORT="$WRK/zap-fallback-report.json"
-  cp "$REPORT" "$ART/zap-fallback-report.json"
-fi
-
-HIGH=0
-MED=0
-if [[ -n "$REPORT" ]]; then
-  read -r HIGH MED <<<"$(python3 - "$REPORT" <<'PY'
+# Surface evaluator summary without secrets.
+python3 -B - "$VERDICT_OUT" <<'PY'
 import json, sys
 from pathlib import Path
-p = Path(sys.argv[1])
-data = json.loads(p.read_text())
-high = med = 0
-
-def bump(risk: str) -> None:
-    global high, med
-    risk = (risk or "").lower()
-    if risk.startswith("high") or risk == "3":
-        high += 1
-    elif risk.startswith("medium") or risk == "2":
-        med += 1
-
-sites = data.get("site") or data.get("sites") or []
-if isinstance(sites, dict):
-    sites = [sites]
-for site in sites:
-    if not isinstance(site, dict):
-        continue
-    for alert in site.get("alerts", []) or []:
-        bump(str(alert.get("riskdesc") or alert.get("risk") or ""))
-for alert in data.get("alerts", []) if isinstance(data.get("alerts"), list) else []:
-    bump(str(alert.get("riskdesc") or alert.get("risk") or ""))
-print(high, med)
+v = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(
+    f"evaluator status={v.get('status')} high={v.get('high_alerts')} "
+    f"medium={v.get('medium_alerts')} notes={v.get('notes')}"
+)
 PY
-)"
-fi
 
-SUITE_PASS=true
-[[ "$HIGH" == "0" ]] || SUITE_PASS=false
-[[ -n "$REPORT" ]] || SUITE_PASS=false
-# UA-04: fallback/warning-only reports cannot satisfy authenticated acceptance.
-if [[ "$AF_STATUS" == "FALLBACK" || "$AF_STATUS" == "BLOCKED" ]]; then
-  SUITE_PASS=false
+if [[ "$EVAL_RC" -ne 0 ]]; then
+  echo "FAIL: isolated ZAP AF suite (evaluator rc=$EVAL_RC)" >&2
+  exit "$EVAL_RC"
 fi
-
-jq -n \
-  --arg tag "$TAG" \
-  --arg zap "$ZAP_IMAGE" \
-  --arg art "$ART" \
-  --arg af "$AF_STATUS" \
-  --argjson high "$HIGH" \
-  --argjson med "$MED" \
-  --argjson pass "$SUITE_PASS" \
-  '{
-    suite: "isolated_zap_af_v1",
-    image_tag: $tag,
-    zap_image: $zap,
-    artifact_dir: $art,
-    af_job_status: $af,
-    high_alerts: $high,
-    medium_alerts: $med,
-    pass: $pass,
-    notes: "Disposable central only; no live OT activeScan. Fallback reports do not satisfy authenticated acceptance."
-  }' | tee "$ART/verdict.json"
-
-if [[ "$SUITE_PASS" != "true" ]]; then
-  echo "FAIL: isolated ZAP AF suite" >&2
-  tail -80 "$ART/zap_af.stderr.log" 2>/dev/null >&2 || true
-  tail -40 "$ART/zap_fallback.stderr.log" 2>/dev/null >&2 || true
-  exit 1
-fi
-echo "PASS: isolated ZAP AF (af_job_status=$AF_STATUS) → $ART"
+echo "PASS: isolated ZAP AF (web+central via run_af_disposable.py) → $ART"

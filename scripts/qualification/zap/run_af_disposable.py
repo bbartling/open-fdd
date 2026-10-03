@@ -37,9 +37,12 @@ except ImportError as e:  # pragma: no cover
 ROOT = Path(__file__).resolve().parents[3]
 PLAN_PATH = Path(__file__).resolve().parent / "af_plan.yaml"
 DEFAULT_VERDICT = ROOT / "reports" / "security" / "zap_af_verdict.json"
-DEFAULT_ZAP_IMAGE = os.environ.get(
-    "OPENFDD_ZAP_IMAGE", "ghcr.io/zaproxy/zaproxy:stable"
+# Qualification default is digest-pinned (A07). Override only with another digest.
+_PINNED_ZAP_DIGEST = (
+    "ghcr.io/zaproxy/zaproxy@sha256:"
+    "781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef"
 )
+DEFAULT_ZAP_IMAGE = os.environ.get("OPENFDD_ZAP_IMAGE", _PINNED_ZAP_DIGEST)
 
 # Hardcoded JWT / Bearer material must never appear in the committed plan.
 _HARDCODED_BEARER = re.compile(
@@ -192,6 +195,7 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
             for u in site.get("urls") or []:
                 url_blob_parts.append(str(u))
     url_blob = "\n".join(url_blob_parts).lower()
+    # Informational only — report URL text is NOT authenticated proof (A06).
     auth_me_hit = "/api/auth/me" in url_blob
     return {
         "site_count": len(sites),
@@ -203,6 +207,55 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
         "medium_alert_names": sorted(set(medium_names)),
         "auth_me_hit": auth_me_hit,
     }
+
+
+def verify_auth_me_response(
+    *,
+    status: int,
+    body: bytes,
+    content_type: str = "",
+) -> dict[str, Any]:
+    """Require HTTP 200 + JSON identity schema (role + subject).
+
+    Report-string matching of /api/auth/me is never sufficient (Astra A06).
+    """
+    result: dict[str, Any] = {
+        "ok": False,
+        "status": int(status),
+        "path": "/api/auth/me",
+        "schema_ok": False,
+    }
+    if status != 200:
+        result["error"] = "non_200"
+        return result
+    ctype = (content_type or "").lower()
+    if ctype and "json" not in ctype and "text/plain" not in ctype:
+        # Allow missing content-type from some stubs; reject explicit HTML.
+        if "html" in ctype:
+            result["error"] = "html_body"
+            return result
+    try:
+        data = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        result["error"] = "non_json"
+        return result
+    if not isinstance(data, dict) or not data:
+        result["error"] = "empty_or_non_object"
+        return result
+    role = str(data.get("role") or "").strip()
+    sub = str(data.get("sub") or data.get("username") or "").strip()
+    if not role or not sub:
+        result["error"] = "missing_role_or_subject"
+        return result
+    result["ok"] = True
+    result["schema_ok"] = True
+    result["role_present"] = True
+    result["subject_present"] = True
+    return result
+
+
+def zap_image_is_digest_pinned(image: str) -> bool:
+    return "@sha256:" in (image or "")
 
 
 def validate_report_sites(data: dict[str, Any], target_origin: str) -> list[str]:
@@ -486,7 +539,8 @@ def run_execute(verdict_path: Path) -> int:
             file=sys.stderr,
         )
 
-    # UA-04: prove authenticated /api/auth/me before ZAP (report URLs alone are unreliable).
+    # A06: prove authenticated /api/auth/me with status + JSON identity schema.
+    # Report URL text alone is never authenticated proof.
     auth_me_preflight: dict[str, Any] = {"ok": False}
     try:
         import urllib.error
@@ -499,23 +553,30 @@ def run_execute(verdict_path: Path) -> int:
             headers={"Authorization": auth, "Accept": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
-            auth_me_preflight = {
-                "ok": int(getattr(resp, "status", None) or resp.getcode()) == 200,
-                "status": int(getattr(resp, "status", None) or resp.getcode()),
-                "path": "/api/auth/me",
-            }
+            status = int(getattr(resp, "status", None) or resp.getcode())
+            body = resp.read(1_048_576)
+            ctype = resp.headers.get("Content-Type", "") if resp.headers else ""
+            auth_me_preflight = verify_auth_me_response(
+                status=status, body=body, content_type=ctype
+            )
     except urllib.error.HTTPError as e:
-        auth_me_preflight = {
-            "ok": False,
-            "status": int(e.code),
-            "path": "/api/auth/me",
-            "error": "http_error",
-        }
+        try:
+            body = e.read(1_048_576)
+        except Exception:  # noqa: BLE001
+            body = b""
+        auth_me_preflight = verify_auth_me_response(
+            status=int(e.code),
+            body=body,
+            content_type=e.headers.get("Content-Type", "") if e.headers else "",
+        )
+        if auth_me_preflight.get("error") == "non_200":
+            auth_me_preflight["error"] = "http_error"
     except Exception as e:  # noqa: BLE001
         auth_me_preflight = {
             "ok": False,
             "path": "/api/auth/me",
             "error": type(e).__name__,
+            "schema_ok": False,
         }
     if not auth_me_preflight.get("ok"):
         v = build_verdict(
@@ -532,7 +593,10 @@ def run_execute(verdict_path: Path) -> int:
             auth_header_configured=True,
             auth_me_hit=False,
             auth_me_preflight=auth_me_preflight,
-            notes="FAIL: authenticated GET /api/auth/me preflight did not return 200",
+            notes=(
+                "FAIL: authenticated GET /api/auth/me preflight missing "
+                "200 + JSON identity (role+subject); report-string auth is not proof"
+            ),
         )
         write_verdict(verdict_path, v)
         print(json.dumps(v, indent=2))
@@ -540,6 +604,34 @@ def run_execute(verdict_path: Path) -> int:
 
     mode, detail = detect_zap()
     active = os.environ.get("OPENFDD_ZAP_AF_ACTIVE", "").strip() in ("1", "true", "yes")
+    require_digest = os.environ.get("OPENFDD_ZAP_REQUIRE_DIGEST", "").strip() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if require_digest and mode == "docker" and not zap_image_is_digest_pinned(detail):
+        v = build_verdict(
+            status="FAIL",
+            mode="execute",
+            plan_hygiene_ok=True,
+            high_alerts=0,
+            medium_alerts=0,
+            site_count=0,
+            zap_available=True,
+            zap_detection=detail,
+            active_scan=active,
+            execute_requested=True,
+            target_origin_configured=True,
+            auth_header_configured=True,
+            auth_me_preflight=auth_me_preflight,
+            notes=(
+                "FAIL: OPENFDD_ZAP_REQUIRE_DIGEST=1 but scanner image is not "
+                "@sha256: digest-pinned"
+            ),
+        )
+        write_verdict(verdict_path, v)
+        print(json.dumps(v, indent=2))
+        return 1
 
     if mode is None:
         v = build_verdict(
@@ -818,7 +910,13 @@ def run_execute(verdict_path: Path) -> int:
         auth_header_configured=True,
         auth_me_hit=True,
         auth_me_preflight=auth_me_preflight,
+        # Informational only — never used as authenticated PASS proof (A06).
         auth_me_in_zap_report=bool(summary.get("auth_me_hit")),
+        auth_proof="preflight_status_identity_schema",
+        zap_image=detail if mode == "docker" else None,
+        zap_image_digest_pinned=(
+            zap_image_is_digest_pinned(detail) if mode == "docker" else None
+        ),
         report_archive=str(archive.relative_to(ROOT)) if archive.is_relative_to(ROOT) else str(archive),
         work_dir=str(work_root),
         notes=notes,

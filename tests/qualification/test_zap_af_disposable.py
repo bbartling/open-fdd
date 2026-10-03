@@ -51,6 +51,59 @@ class ZapAfPlanHygieneTest(unittest.TestCase):
             self.assertTrue(any("Bearer" in e or "JWT" in e for e in errs), errs)
 
 
+class ZapAfAuthMeSchemaTest(unittest.TestCase):
+    def test_requires_role_and_subject(self):
+        ok = af.verify_auth_me_response(
+            status=200,
+            body=b'{"role":"admin","sub":"admin"}',
+            content_type="application/json",
+        )
+        self.assertTrue(ok["ok"])
+        self.assertTrue(ok["schema_ok"])
+
+    def test_rejects_200_without_identity(self):
+        bad = af.verify_auth_me_response(
+            status=200,
+            body=b'{"ok":true}',
+            content_type="application/json",
+        )
+        self.assertFalse(bad["ok"])
+        self.assertEqual(bad.get("error"), "missing_role_or_subject")
+
+    def test_rejects_html_200(self):
+        bad = af.verify_auth_me_response(
+            status=200,
+            body=b"<html>login</html>",
+            content_type="text/html",
+        )
+        self.assertFalse(bad["ok"])
+
+    def test_report_string_auth_me_is_not_proof(self):
+        summary = af.summarize_zap_json(
+            {
+                "site": [
+                    {
+                        "@name": "http://fixture.invalid",
+                        "alerts": [
+                            {
+                                "riskcode": "0",
+                                "name": "info",
+                                "url": "http://fixture.invalid/api/auth/me",
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        self.assertTrue(summary["auth_me_hit"])
+        # Still not a substitute for verify_auth_me_response.
+        self.assertFalse(
+            af.verify_auth_me_response(status=401, body=b"{}", content_type="application/json")[
+                "ok"
+            ]
+        )
+
+
 class ZapAfSelftestTest(unittest.TestCase):
     def test_selftest_exits_blocked_not_pass(self):
         with tempfile.TemporaryDirectory() as td:
@@ -103,10 +156,37 @@ class ZapAfExecuteVerdictTest(unittest.TestCase):
                 "ZAP_AUTH_HEADER_VALUE": "Bearer synthetic",
                 "ZAP_AF_WORK_DIR": str(work),
             }
+            auth_ok = {
+                "ok": True,
+                "status": 200,
+                "path": "/api/auth/me",
+                "schema_ok": True,
+                "role_present": True,
+                "subject_present": True,
+            }
+
+            class _Resp:
+                status = 200
+                headers = {"Content-Type": "application/json"}
+
+                def getcode(self):
+                    return 200
+
+                def read(self, *_a, **_k):
+                    return b'{"role":"admin","sub":"admin"}'
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_a):
+                    return False
+
             with (
                 mock.patch.dict(os.environ, env, clear=True),
                 mock.patch.object(af, "detect_zap", return_value=("zap.sh", "synthetic-zap")),
                 mock.patch.object(af, "_run_zap_sh", return_value=scanner_rc),
+                mock.patch.object(af, "verify_auth_me_response", return_value=auth_ok),
+                mock.patch("urllib.request.urlopen", return_value=_Resp()),
                 contextlib.redirect_stdout(io.StringIO()),
                 contextlib.redirect_stderr(io.StringIO()),
             ):
@@ -158,6 +238,22 @@ class ZapAfExecuteVerdictTest(unittest.TestCase):
                 rc, verdict = self.run_synthetic(report, target=target, stale=stale)
                 self.assertNotEqual(rc, 0)
                 self.assertNotEqual(verdict["status"], "PASS")
+
+    def test_clean_report_passes_with_verified_auth(self):
+        rc, verdict = self.run_synthetic(
+            {"site": [{"@name": "http://fixture.invalid", "alerts": []}]}
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(verdict["status"], "PASS")
+        self.assertEqual(verdict.get("auth_proof"), "preflight_status_identity_schema")
+
+
+class ZapDigestPinTest(unittest.TestCase):
+    def test_default_image_is_digest_pinned(self):
+        self.assertTrue(af.zap_image_is_digest_pinned(af.DEFAULT_ZAP_IMAGE))
+
+    def test_moving_tag_rejected_when_required(self):
+        self.assertFalse(af.zap_image_is_digest_pinned("ghcr.io/zaproxy/zaproxy:stable"))
 
 
 if __name__ == "__main__":
