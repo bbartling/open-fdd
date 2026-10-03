@@ -24,6 +24,7 @@ Screen sensors first, then the two rule catalogs. Everything else in this sectio
 | Guide | Content |
 |-------|---------|
 | [**SQL anomaly detection**](sql-anomaly-detection.html) | First pass: Overview rolling Z-score screen + Lab tuners for `SV-*` / `PID-HUNT-1` / `WX-1` |
+| [Water & chiller FDD priority](water-chiller-fdd-priority.html) | #1009 research backlog — plant rules, roles, P0/P1/P2 gaps |
 | [DataFusion SQL cookbook](cookbook/datafusion-sql-cookbook.html) | Full production SQL catalog |
 | [Pandas cookbook](cookbook/pandas-cookbook.html) | Full pandas catalog, including FCU / `zone_other` |
 | [Cookbook reference](cookbook/) | Taxonomy, schema, matrices, roadmap, macros, benchmarks, doc template, P0 catalog, and [FCU / zone_other](cookbook/fcu-zone-other.html) |
