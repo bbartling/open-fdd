@@ -1,3 +1,12 @@
+## 2026-10-03 — Nessus importer A08 (#1102, Cursor takeover)
+
+- Hardened `scripts/security/nessus/import_nessus_report.py`: DTD/entity rejection,
+  host/item bounds, expectation manifest binding (targets, candidate SHA256, policy,
+  feed, freshness, completion), and scoped Medium dispositions (no blanket accept).
+- Added synthetic fixtures + `tests/security/test_nessus_import.py` regressions.
+  Local: `python3 -B -m pytest tests/security -q` → 100 passed. Licensed Nessus scan
+  evidence remains Soft-OPEN.
+
 ## 2026-10-03 — Post-5D deployment profile/evidence contract (#1102)
 
 - Added the fail-closed `openfdd_security.deployment` validator and
