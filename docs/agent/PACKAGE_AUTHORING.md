@@ -12,7 +12,9 @@ Haystack names in sidecar `points` translate via `haystack_point_to_role` (`disc
 
 Modeling docs for agents: [`docs/modeling/`](../modeling/) — especially
 [package-schema](../modeling/package-schema.md) (compact vs SCAFFOLD evidence),
-[heat-pump buildings](../modeling/heat-pump-buildings.md), and
+[heat-pump buildings](../modeling/heat-pump-buildings.md),
+[Haystack RDF profile](../modeling/haystack-rdf-profile.md) (strict
+`ofdd_haystack_projection_v1` vs native exports), and
 [rule readiness](../modeling/rule-readiness.md). A parseable ZIP is not
 commissioning-grade FDD.
 
