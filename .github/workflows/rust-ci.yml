@@ -81,7 +81,29 @@ jobs:
           cargo clippy -p openfdd-fieldbus --all-targets -- -D warnings
 
       - name: Live process and image isolation gate
+        env:
+          OPENFDD_SPLIT_EVIDENCE_DIR: ${{ runner.temp }}/protocol-connector-split-evidence
         run: bash scripts/gates/protocol_connector_split.sh
+
+      - name: Evaluate immutable image and recipe evidence
+        if: always()
+        run: |
+          test -f "$RUNNER_TEMP/protocol-connector-split-evidence/image_recipe.json"
+          python3 scripts/qualification/protocol_connector_qualification.py \
+            --stage image_recipe \
+            --evidence "$RUNNER_TEMP/protocol-connector-split-evidence/image_recipe.json" \
+            --require-stage image_recipe \
+            --report-dir "$RUNNER_TEMP/protocol-connector-qualification"
+
+      - name: Upload protocol connector qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: protocol-connector-qualification-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/protocol-connector-split-evidence/
+            ${{ runner.temp }}/protocol-connector-qualification/
+          if-no-files-found: error
 
   frontend:
     name: Product UI guards (React)

@@ -1,6 +1,6 @@
 # ADR: Open-FDD protocol connector process split
 
-Status: Phase 5C2 bounded Haystack/catalog/receipt hardening (partial, draft)
+Status: Phase 5D qualification contract and manual Haystack mode (partial, draft)
 
 ## Decision
 
@@ -87,5 +87,10 @@ Central proxy, and receipt-backed local delivery evidence. Image publication,
 authenticated Haystack application qualification, and OT bench qualification
 remain open; live authenticated Haystack remains Soft-OPEN and the legacy
 image is kept until split recipes are qualified on the bench. Remaining Phase
-5C delivery work must preserve these bounds and add evidence before the
-milestone can move beyond PARTIAL.
+5C/5D delivery work must preserve these bounds and add evidence before the
+milestone can move beyond PARTIAL. The Phase 5D evaluator is
+[`scripts/qualification/protocol_connector_qualification.py`](../../scripts/qualification/protocol_connector_qualification.py);
+it treats missing, stale, contradictory, `SKIP`, and `BLOCKED` evidence as
+non-qualifying. The split gate can emit redacted image/recipe evidence through
+`OPENFDD_SPLIT_EVIDENCE_DIR`. The Haystack process remains manual-collection
+only until a separate bounded scheduler contract is implemented and verified.

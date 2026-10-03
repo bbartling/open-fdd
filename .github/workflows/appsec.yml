@@ -104,6 +104,12 @@ jobs:
         run: python3 -B -m unittest discover -s tests/security -v
       - name: Qualification unittests
         run: python3 -B -m unittest discover -s tests/qualification -v
+      - name: Protocol connector evaluator selftest
+        run: |
+          python3 scripts/qualification/protocol_connector_qualification.py --selftest
+          python3 scripts/qualification/protocol_connector_qualification.py \
+            --stage synthetic --require-stage synthetic \
+            --report-dir "$RUNNER_TEMP/protocol-connector-qualification"
       - name: ZAP baseline verdict selftest
         run: python3 scripts/qualification/zap_baseline_verdict.py --selftest
       - name: Nessus importer selftest
