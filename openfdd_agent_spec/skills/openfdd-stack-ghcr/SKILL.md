@@ -32,13 +32,22 @@ and writes web `version.json` `{ version, git, image_tag, service: openfdd-web }
 Optional extra image tag `:3.3.2-n<run_number>` sits **beside** `:nightly` /
 `:sha-*`. UI revision comes from central `/api/health` first.
 
-For Railway, use the same GHCR `openfdd-web` image and set
+**Named recipes (#1107):**
+
+| Recipe | Images | Arch | Broker |
+| --- | --- | --- | --- |
+| **1 — cloud hub** | mqtt + central + web | amd64 | required on hub |
+| **2 — OT edge** | central + web + protocol | amd64 + arm64 | **not** required; optional MQTTS publish off by default |
+
+Compose helpers: `central` ≈ Recipe 1; `csv` / local-fieldbus / `standalone` ≈ Recipe 2. Docs: [`docs/operations/build-recipes.md`](../../../docs/operations/build-recipes.md).
+
+For Railway (Recipe 1), use the same GHCR `openfdd-web` image and set
 `OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080` (assuming the
 central service uses that name). Tip images resolve upstream DNS lazily
 (`OPENFDD_NGINX_RESOLVER=auto`) so nginx does not die when `.railway.internal`
 is not ready at process start. Deploy **central healthy first**, then mqtt (for
-cloud MQTTS hubs), then web. Live OT hubs should include `openfdd-mqtt` by
-default — MQTTS is the cloud transport; fieldbus stays on-prem.
+cloud MQTTS hubs), then web. Recipe 2 OT edges may publish MQTTS into the hub
+optionally — they can also ingest locally without a broker.
 **CLI re-pin** (bensbench): [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md)
 — `railway login` verified; project `gleaming-cooperation` / `production`; use live
 names (`openfdd-central-cQ-F`, …) with

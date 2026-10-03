@@ -57,11 +57,19 @@ Slim Rust image; talks to central via `OPENFDD_API_BASE`. Same channel tags as t
 
 ## Multi-arch
 
-Images publish `linux/amd64` and `linux/arm64`:
+| Image | Platforms |
+|-------|-----------|
+| `openfdd-central` | `linux/amd64`, `linux/arm64` (Recipe 2) |
+| `openfdd-web` | `linux/amd64`, `linux/arm64` (Recipe 2) |
+| protocol / fieldbus / split connectors | `linux/amd64`, `linux/arm64` |
+| `openfdd-mqtt` | **`linux/amd64` only** (Recipe 1 cloud hub) |
 
 ```bash
 docker manifest inspect ghcr.io/bbartling/openfdd-central:nightly
+docker manifest inspect ghcr.io/bbartling/openfdd-web:nightly
 ```
+
+arm64 Pi Recipe 2 remains Soft-OPEN until a tip’s central+web manifests include arm64 and a Pi boots them.
 
 ## OCI labels
 

@@ -34,20 +34,28 @@ image: ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:-nightly}
 `OPENFDD_IMAGE_TAG` applies to every stack image at once. See
 [Release channels](../operations/release-channels.html).
 
-Multi-arch: `linux/amd64` and `linux/arm64`.
+**Arch:** `openfdd-central` + `openfdd-web` (+ protocol/fieldbus) publish `linux/amd64` and `linux/arm64`. Hub `openfdd-mqtt` stays **amd64** (Recipe 1). Confirm before a Pi boot:
 
 ```bash
 docker manifest inspect ghcr.io/bbartling/openfdd-central:nightly
+docker manifest inspect ghcr.io/bbartling/openfdd-web:nightly
 ```
 
 ## Recipes
 
-| Recipe | Command | Services |
-|--------|---------|----------|
-| standalone | `./scripts/openfdd_stack_up.sh standalone` | mqtt + central + ui + fieldbus |
-| central | `./scripts/openfdd_stack_up.sh central` | mqtt + central + ui |
-| edge | `./scripts/openfdd_stack_up.sh edge` | fieldbus only |
-| csv | `./scripts/openfdd_stack_up.sh csv` | central + ui (no MQTT) |
+Named product recipes (see [Build recipes](../operations/build-recipes.md)):
+
+| Named recipe | Compose helpers | Services | Arch |
+|--------------|-----------------|----------|------|
+| **Recipe 1 — cloud hub** | `central`, Railway hub | mqtt + central + web | amd64 |
+| **Recipe 2 — OT edge** | `csv` / `react` + protocol, or `standalone` | central + web + protocol (mqtt optional) | amd64 + arm64 |
+
+| Compose helper | Command | Services |
+|----------------|---------|----------|
+| standalone | `./scripts/openfdd_stack_up.sh standalone` | mqtt + central + ui + fieldbus (OT all-in-one) |
+| central | `./scripts/openfdd_stack_up.sh central` | mqtt + central + ui (**Recipe 1** shape) |
+| edge | `./scripts/openfdd_stack_up.sh edge` | fieldbus only (optional MQTTS to a hub) |
+| csv / react | `./scripts/openfdd_stack_up.sh csv` | central + ui (**Recipe 2** without broker) |
 
 Build locally instead of pulling GHCR:
 

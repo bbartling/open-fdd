@@ -7,7 +7,7 @@ permalink: /quick-start/railway-hub.html
 
 # Railway cloud hub bootstrap
 
-Experimental **central + web + mqtt** hub on Railway private networking. Keep **fieldbus on-prem** (ACME / edge) publishing MQTTS into the hub. Not a claim of public-internet production hardening.
+**Recipe 1 — cloud hub:** experimental **mqtt + central + web** on Railway private networking (**linux/amd64**). Field protocol stays off the cloud host. OT edges may publish MQTTS into this hub **optionally**; Recipe 2 can also run broker-free local ingest. Not a claim of public-internet production hardening.
 
 ## Order
 
