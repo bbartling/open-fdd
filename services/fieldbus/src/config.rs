@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+use openfdd_contracts::HaystackRecordKind;
+
 #[derive(Debug, Clone)]
 pub struct BacnetServerSettings {
     pub device_instance: u32,
@@ -148,7 +150,6 @@ pub struct RestPoint {
     pub point_name: String,
     /// Validated to GET at load time; retained for catalog parity.
     /// Catalog field loaded from rest_points.toml; not yet read on poll path.
-    #[expect(dead_code)]
     pub method: String,
     pub path: String,
     pub select: String,
@@ -225,18 +226,60 @@ pub struct HaystackSettings {
     pub password: String,
     pub auth_mode: HaystackAuthMode,
     pub tls_verify: bool,
+    /// Trusted mapping loaded at process startup. It is never accepted from
+    /// a request and its source refs are never returned by the public API.
+    pub catalog_path: Option<PathBuf>,
 }
 
 impl Default for HaystackSettings {
     fn default() -> Self {
         Self {
-            base_url: "http://127.0.0.1:8081".into(),
-            username: "admin".into(),
-            password: "admin".into(),
+            base_url: String::new(),
+            username: String::new(),
+            password: String::new(),
             auth_mode: HaystackAuthMode::Scram,
             tls_verify: true,
+            catalog_path: None,
         }
     }
+}
+
+impl HaystackSettings {
+    /// Settings used by the BACnet/Modbus profile. Keeping the values empty
+    /// prevents that process from carrying Haystack credentials or an
+    /// endpoint in its in-memory configuration.
+    pub fn unconfigured() -> Self {
+        Self {
+            base_url: String::new(),
+            username: String::new(),
+            password: String::new(),
+            auth_mode: HaystackAuthMode::Scram,
+            tls_verify: true,
+            catalog_path: None,
+        }
+    }
+}
+
+/// One trusted public-key mapping to a private Haystack source reference.
+///
+/// `source_ref` and `nav_ref` are configuration-only values.  They must never
+/// be copied into a connector response or a central proxy request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HaystackCatalogEntry {
+    pub public_key: String,
+    pub kind: HaystackRecordKind,
+    pub display_name: String,
+    pub equipment_key: Option<String>,
+    pub role: Option<String>,
+    pub unit: Option<String>,
+    pub source_ref: String,
+    pub nav_ref: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HaystackCatalog {
+    pub revision: String,
+    pub entries: Vec<HaystackCatalogEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -359,8 +402,8 @@ pub struct Settings {
     /// explicitly supplied; defaults do not advertise an upstream.
     pub modbus_configured: bool,
     pub haystack: HaystackSettings,
-    /// True only when the Haystack section or supported HAYSTACK_* settings
-    /// were explicitly supplied. Defaults must not create a connector.
+    /// True only when an explicit Haystack endpoint was supplied. Credentials
+    /// or auth mode alone must not create a connector.
     pub haystack_configured: bool,
     pub rest: RestSettings,
     pub poll: PollSettings,
@@ -375,6 +418,17 @@ pub struct Settings {
     pub connector_tenant_id: Option<String>,
     pub connector_building_id: Option<String>,
     pub connector_edge_id: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsProfile {
+    /// Historical all-protocol `openfdd-fieldbus` behavior.
+    Legacy,
+    /// BACnet/Modbus only; Haystack settings are not loaded.
+    BacnetModbus,
+    /// Outbound Haystack only; endpoint and Haystack credentials are loaded.
+    Haystack,
 }
 
 impl Default for Settings {
@@ -467,6 +521,26 @@ struct HaystackToml {
     password: Option<String>,
     auth_mode: Option<String>,
     tls_verify: Option<bool>,
+    catalog_path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HaystackCatalogToml {
+    revision: Option<String>,
+    #[serde(default)]
+    records: Vec<HaystackCatalogRecordToml>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HaystackCatalogRecordToml {
+    key: String,
+    kind: String,
+    display_name: String,
+    equipment_key: Option<String>,
+    role: Option<String>,
+    unit: Option<String>,
+    source_ref: String,
+    nav_ref: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -577,6 +651,162 @@ fn parse_haystack_auth_mode(raw: &str) -> HaystackAuthMode {
     }
 }
 
+fn parse_haystack_record_kind(raw: &str) -> Result<HaystackRecordKind, String> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "site" => Ok(HaystackRecordKind::Site),
+        "building" => Ok(HaystackRecordKind::Building),
+        "equipment" | "equip" => Ok(HaystackRecordKind::Equipment),
+        "point" => Ok(HaystackRecordKind::Point),
+        "navigation" | "nav" => Ok(HaystackRecordKind::Navigation),
+        _ => Err("Haystack catalog record kind is unsupported".into()),
+    }
+}
+
+fn validate_catalog_token(value: &str, label: &str, max: usize) -> Result<(), String> {
+    if value.trim().is_empty()
+        || value.len() > max
+        || value.chars().any(char::is_control)
+        || value.contains("//")
+        || value.contains("..")
+        || value.contains('\\')
+    {
+        return Err(format!("Haystack catalog {label} is invalid"));
+    }
+    Ok(())
+}
+
+fn canonical_source_ref(value: &str, label: &str) -> Result<String, String> {
+    let value = value.trim();
+    let bare = value.strip_prefix('@').unwrap_or(value);
+    validate_catalog_token(bare, label, 256)?;
+    if !bare
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, ':' | '_' | '-' | '.' | '~'))
+    {
+        return Err(format!(
+            "Haystack catalog {label} contains an unsafe ref token"
+        ));
+    }
+    Ok(bare.to_string())
+}
+
+/// Load and validate the trusted public-key/source-ref mapping once at startup.
+/// Missing configuration is an honest empty catalog; it never implies a live
+/// Haystack connector is ready.
+pub fn load_haystack_catalog(path: Option<&Path>) -> Result<HaystackCatalog, String> {
+    let Some(path) = path else {
+        return Ok(HaystackCatalog {
+            revision: "catalog-empty".into(),
+            entries: Vec::new(),
+        });
+    };
+    if std::fs::metadata(path)
+        .map(|metadata| metadata.len() > 1024 * 1024)
+        .unwrap_or(true)
+    {
+        return Err("trusted Haystack catalog exceeds its configured byte bound".into());
+    }
+    let text = std::fs::read_to_string(path)
+        .map_err(|_| "trusted Haystack catalog could not be read".to_string())?;
+    let parsed: HaystackCatalogToml =
+        toml::from_str(&text).map_err(|_| "trusted Haystack catalog is invalid".to_string())?;
+    if parsed.records.len() > 10_000 {
+        return Err("trusted Haystack catalog exceeds its configured bound".into());
+    }
+    let mut entries = Vec::with_capacity(parsed.records.len());
+    let mut keys = std::collections::BTreeSet::new();
+    for record in parsed.records {
+        validate_catalog_token(&record.key, "key", 160)?;
+        if record.key.contains('/')
+            || record.key.contains("://")
+            || record.key.contains(' ')
+            || record.key.contains('"')
+            || record.key.contains('\'')
+        {
+            return Err("Haystack catalog key is not a safe public key".into());
+        }
+        if !keys.insert(record.key.clone()) {
+            return Err("trusted Haystack catalog contains duplicate keys".into());
+        }
+        validate_catalog_token(&record.display_name, "display_name", 160)?;
+        let source_ref = canonical_source_ref(&record.source_ref, "source_ref")?;
+        if let Some(value) = record.equipment_key.as_deref() {
+            validate_catalog_token(value, "equipment_key", 160)?;
+        }
+        if let Some(value) = record.role.as_deref() {
+            validate_catalog_token(value, "role", 96)?;
+            if !fdd_core::columns::is_known_cookbook_role(&fdd_core::columns::normalize_role(value))
+            {
+                return Err("trusted Haystack catalog role is not canonical".into());
+            }
+        }
+        if let Some(value) = record.unit.as_deref() {
+            validate_catalog_token(value, "unit", 64)?;
+        }
+        let nav_ref = record
+            .nav_ref
+            .as_deref()
+            .map(|value| canonical_source_ref(value, "nav_ref"))
+            .transpose()?;
+        entries.push(HaystackCatalogEntry {
+            public_key: record.key,
+            kind: parse_haystack_record_kind(&record.kind)?,
+            display_name: record.display_name,
+            equipment_key: record.equipment_key,
+            role: record
+                .role
+                .map(|value| fdd_core::columns::normalize_role(&value)),
+            unit: record.unit,
+            source_ref,
+            nav_ref,
+        });
+    }
+    entries.sort_by(|left, right| left.public_key.cmp(&right.public_key));
+    let revision = parsed
+        .revision
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| catalog_revision(&entries));
+    validate_catalog_token(&revision, "revision", 128)?;
+    Ok(HaystackCatalog { revision, entries })
+}
+
+/// A Haystack endpoint is publicly configured only when its explicit
+/// credentials and trusted catalog are present and valid. URL presence alone
+/// is not an authenticated connector capability.
+pub fn haystack_connector_configured(settings: &Settings) -> bool {
+    settings.haystack_configured
+        && !settings.haystack.username.trim().is_empty()
+        && !settings.haystack.password.trim().is_empty()
+        && settings
+            .haystack
+            .catalog_path
+            .as_deref()
+            .and_then(|path| load_haystack_catalog(Some(path)).ok())
+            .is_some_and(|catalog| !catalog.entries.is_empty())
+}
+
+fn catalog_revision(entries: &[HaystackCatalogEntry]) -> String {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for entry in entries {
+        for byte in format!(
+            "{}|{:?}|{}|{}|{}|{}|{}",
+            entry.public_key,
+            entry.kind,
+            entry.display_name,
+            entry.equipment_key.as_deref().unwrap_or_default(),
+            entry.role.as_deref().unwrap_or_default(),
+            entry.unit.as_deref().unwrap_or_default(),
+            entry.source_ref,
+        )
+        .bytes()
+        {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+    }
+    format!("catalog-{hash:016x}")
+}
+
 fn env_bool(value: Option<&str>, default: bool) -> bool {
     match value {
         None => default,
@@ -609,24 +839,32 @@ fn load_gateway_toml() -> GatewayToml {
     toml::from_str(&text).unwrap_or_default()
 }
 
+#[allow(dead_code)]
 pub fn load_settings() -> Settings {
+    load_settings_for(SettingsProfile::Legacy)
+}
+
+pub fn load_settings_for(profile: SettingsProfile) -> Settings {
     let raw = load_gateway_toml();
-    let haystack_configured = raw.haystack.is_some()
-        || [
-            "HAYSTACK_BASE_URL",
-            "OPENFDD_HAYSTACK_BASE_URL",
-            "HAYSTACK_USER",
-            "OPENFDD_HAYSTACK_USER",
-            "HAYSTACK_PASS",
-            "OPENFDD_HAYSTACK_PASS",
-            "HAYSTACK_AUTH_MODE",
-            "OPENFDD_HAYSTACK_AUTH_MODE",
-        ]
-        .iter()
-        .any(|name| std::env::var(name).is_ok_and(|value| !value.trim().is_empty()));
-    let modbus_configured = raw.modbus.is_some()
-        || std::env::var("MODBUS_DEFAULT_HOST").is_ok_and(|value| !value.trim().is_empty());
+    let load_haystack = !matches!(profile, SettingsProfile::BacnetModbus);
+    let haystack_configured = load_haystack
+        && (raw
+            .haystack
+            .as_ref()
+            .and_then(|settings| settings.base_url.as_deref())
+            .is_some_and(|value| !value.trim().is_empty())
+            || ["HAYSTACK_BASE_URL", "OPENFDD_HAYSTACK_BASE_URL"]
+                .iter()
+                .any(|name| std::env::var(name).is_ok_and(|value| !value.trim().is_empty())));
+    let modbus_configured = !matches!(profile, SettingsProfile::BacnetModbus)
+        && (raw.modbus.is_some()
+            || std::env::var("MODBUS_DEFAULT_HOST").is_ok_and(|value| !value.trim().is_empty()));
     let mut s = Settings {
+        haystack: if load_haystack {
+            HaystackSettings::default()
+        } else {
+            HaystackSettings::unconfigured()
+        },
         haystack_configured,
         modbus_configured,
         connector_tenant_id: env_first(&["OPENFDD_TENANT_ID"]),
@@ -709,21 +947,26 @@ pub fn load_settings() -> Settings {
             s.modbus.default_timeout_secs = v;
         }
     }
-    if let Some(h) = raw.haystack {
-        if let Some(v) = h.base_url {
-            s.haystack.base_url = v;
-        }
-        if let Some(v) = h.username {
-            s.haystack.username = v;
-        }
-        if let Some(v) = h.password {
-            s.haystack.password = v;
-        }
-        if let Some(v) = h.auth_mode {
-            s.haystack.auth_mode = parse_haystack_auth_mode(&v);
-        }
-        if let Some(v) = h.tls_verify {
-            s.haystack.tls_verify = v;
+    if load_haystack {
+        if let Some(h) = raw.haystack {
+            if let Some(v) = h.base_url {
+                s.haystack.base_url = v;
+            }
+            if let Some(v) = h.username {
+                s.haystack.username = v;
+            }
+            if let Some(v) = h.password {
+                s.haystack.password = v;
+            }
+            if let Some(v) = h.auth_mode {
+                s.haystack.auth_mode = parse_haystack_auth_mode(&v);
+            }
+            if let Some(v) = h.tls_verify {
+                s.haystack.tls_verify = v;
+            }
+            if let Some(v) = h.catalog_path {
+                s.haystack.catalog_path = Some(PathBuf::from(v));
+            }
         }
     }
     if let Some(r) = raw.rest {
@@ -807,20 +1050,25 @@ pub fn load_settings() -> Settings {
     // Wave N: ignore OPENFDD_FIELDBUS_POLL_INTERVAL_SECS / TOML overrides — fixed 300s.
     // Health-role subset remains the bandwidth throttle (not a faster poll).
 
-    if let Some(v) = env_first(&["HAYSTACK_BASE_URL", "OPENFDD_HAYSTACK_BASE_URL"]) {
-        s.haystack.base_url = v;
-    }
-    if let Some(v) = env_first(&["HAYSTACK_USER", "OPENFDD_HAYSTACK_USER"]) {
-        s.haystack.username = v;
-    }
-    if let Some(v) = env_first(&["HAYSTACK_PASS", "OPENFDD_HAYSTACK_PASS"]) {
-        s.haystack.password = v;
-    }
-    if let Some(v) = env_first(&["HAYSTACK_AUTH_MODE", "OPENFDD_HAYSTACK_AUTH_MODE"]) {
-        s.haystack.auth_mode = parse_haystack_auth_mode(&v);
-    }
-    if let Some(v) = env_first(&["HAYSTACK_TLS_VERIFY", "OPENFDD_HAYSTACK_TLS_VERIFY"]) {
-        s.haystack.tls_verify = env_bool(Some(&v), s.haystack.tls_verify);
+    if load_haystack {
+        if let Some(v) = env_first(&["HAYSTACK_BASE_URL", "OPENFDD_HAYSTACK_BASE_URL"]) {
+            s.haystack.base_url = v;
+        }
+        if let Some(v) = env_first(&["HAYSTACK_USER", "OPENFDD_HAYSTACK_USER"]) {
+            s.haystack.username = v;
+        }
+        if let Some(v) = env_first(&["HAYSTACK_PASS", "OPENFDD_HAYSTACK_PASS"]) {
+            s.haystack.password = v;
+        }
+        if let Some(v) = env_first(&["HAYSTACK_AUTH_MODE", "OPENFDD_HAYSTACK_AUTH_MODE"]) {
+            s.haystack.auth_mode = parse_haystack_auth_mode(&v);
+        }
+        if let Some(v) = env_first(&["HAYSTACK_TLS_VERIFY", "OPENFDD_HAYSTACK_TLS_VERIFY"]) {
+            s.haystack.tls_verify = env_bool(Some(&v), s.haystack.tls_verify);
+        }
+        if let Some(v) = env_first(&["HAYSTACK_CATALOG_PATH", "OPENFDD_HAYSTACK_CATALOG_PATH"]) {
+            s.haystack.catalog_path = Some(PathBuf::from(v));
+        }
     }
     if let Some(v) = env_first(&["MODBUS_DEFAULT_HOST"]) {
         s.modbus.default_host = v;
@@ -952,14 +1200,18 @@ pub fn load_rest_devices(
                     d.name, p.point_name
                 ));
             }
-            points.push(RestPoint {
+            let point = RestPoint {
                 point_name: p.point_name,
                 method,
                 path: p.path,
                 select: p.select.unwrap_or_default(),
                 units: p.units.unwrap_or_default(),
                 scale: p.scale.unwrap_or(1.0),
-            });
+            };
+            // Keep the validated method in the catalog for compatibility
+            // consumers even though the current poll path is GET-only.
+            let _ = &point.method;
+            points.push(point);
         }
         let mut writes = Vec::new();
         for w in d.writes.unwrap_or_default() {
@@ -1037,6 +1289,26 @@ mod tests {
             .description
             .contains("Open-Meteo"));
         std::env::remove_var("OPENFDD_FIELDBUS_CONFIG_DIR");
+    }
+
+    #[test]
+    fn bacnet_modbus_profile_does_not_load_haystack_credentials() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("OPENFDD_FIELDBUS_CONFIG_DIR", repo_config_dir());
+        std::env::set_var("OPENFDD_HAYSTACK_BASE_URL", "https://secret.example.test");
+        std::env::set_var("OPENFDD_HAYSTACK_USER", "secret-user");
+        std::env::set_var("OPENFDD_HAYSTACK_PASS", "secret-pass");
+
+        let settings = load_settings_for(SettingsProfile::BacnetModbus);
+        assert!(!settings.haystack_configured);
+        assert!(settings.haystack.base_url.is_empty());
+        assert!(settings.haystack.username.is_empty());
+        assert!(settings.haystack.password.is_empty());
+
+        std::env::remove_var("OPENFDD_FIELDBUS_CONFIG_DIR");
+        std::env::remove_var("OPENFDD_HAYSTACK_BASE_URL");
+        std::env::remove_var("OPENFDD_HAYSTACK_USER");
+        std::env::remove_var("OPENFDD_HAYSTACK_PASS");
     }
 
     #[test]
@@ -1208,6 +1480,50 @@ mod tests {
         assert_eq!(parse_haystack_auth_mode("basic"), HaystackAuthMode::Basic);
         assert_eq!(parse_haystack_auth_mode("niagara"), HaystackAuthMode::Basic);
         assert_eq!(parse_haystack_auth_mode("scram"), HaystackAuthMode::Scram);
+    }
+
+    #[test]
+    fn trusted_haystack_catalog_has_immutable_revision_and_rejects_injection() {
+        let path = std::env::temp_dir().join(format!(
+            "openfdd-haystack-catalog-{}-{}.toml",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        std::fs::write(
+            &path,
+            r#"revision = "catalog-test-v1"
+
+[[records]]
+key = "point:ahu-1:sat"
+kind = "point"
+display_name = "Supply air temperature"
+equipment_key = "equipment:ahu-1"
+role = "sat"
+unit = "°F"
+source_ref = "@ahu-1-sat"
+nav_ref = "@ahu-1"
+"#,
+        )
+        .unwrap();
+        let catalog = load_haystack_catalog(Some(&path)).unwrap();
+        assert_eq!(catalog.revision, "catalog-test-v1");
+        assert_eq!(catalog.entries[0].source_ref, "ahu-1-sat");
+        assert_eq!(catalog.entries[0].nav_ref.as_deref(), Some("ahu-1"));
+        let revision = catalog_revision(&catalog.entries);
+        assert_ne!(revision, "catalog-test-v1");
+
+        std::fs::write(
+            &path,
+            r#"[[records]]
+key = "point:bad"
+kind = "point"
+display_name = "Bad"
+source_ref = "@point' or true"
+"#,
+        )
+        .unwrap();
+        assert!(load_haystack_catalog(Some(&path)).is_err());
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

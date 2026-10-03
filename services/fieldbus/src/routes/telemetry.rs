@@ -75,3 +75,12 @@ pub fn router() -> Router<AppState> {
         .route("/telemetry/resume", post(resume))
         .route("/mqtt/publish-ledger", get(publish_ledger))
 }
+
+/// Read-only telemetry status for a split connector process. Suspend/resume
+/// remains available only on the legacy compatibility router.
+#[allow(dead_code)]
+pub fn split_status_router() -> Router<AppState> {
+    Router::new()
+        .route("/telemetry/status", get(get_status))
+        .route("/mqtt/publish-ledger", get(publish_ledger))
+}

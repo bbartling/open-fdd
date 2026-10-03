@@ -125,10 +125,14 @@ mod live_routes {
         post, path = "/api/ingest/local", tag = "central",
         request_body = openfdd_contracts::TelemetryEnvelope,
         responses(
-            (status = 200, description = "Persist one local fieldbus telemetry envelope", body = serde_json::Value),
-            (status = 401, description = "Missing or invalid local ingest bearer"),
-            (status = 403, description = "Tenant or building identity mismatch"),
-            (status = 413, description = "Payload exceeds the local ingest limit")
+            (status = 200, description = "Persist one local fieldbus telemetry envelope", body = openfdd_contracts::LocalIngestReceipt),
+            (status = 202, description = "Receipt is pending durable publication", body = openfdd_contracts::LocalIngestReceipt),
+            (status = 400, description = "Rejected envelope", body = openfdd_contracts::LocalIngestReceipt),
+            (status = 401, description = "Missing or invalid local ingest bearer", body = openfdd_contracts::LocalIngestReceipt),
+            (status = 403, description = "Tenant or building identity mismatch", body = openfdd_contracts::LocalIngestReceipt),
+            (status = 409, description = "Message id payload conflict", body = openfdd_contracts::LocalIngestReceipt),
+            (status = 413, description = "Payload exceeds the local ingest limit", body = openfdd_contracts::LocalIngestReceipt),
+            (status = 503, description = "Retryable local ingest failure", body = openfdd_contracts::LocalIngestReceipt)
         )
     )]
     pub fn local_fieldbus_ingest() {}
@@ -160,6 +164,46 @@ mod live_routes {
         )
     )]
     pub fn connector_read() {}
+
+    #[utoipa::path(
+        post, path = "/api/connectors/{edge_id}/haystack/catalog", tag = "central",
+        params(("edge_id" = String, Path, description = "Configured edge identifier")),
+        request_body = openfdd_contracts::HaystackCatalogRequest,
+        responses((status = 200, description = "Scoped Haystack catalog page", body = openfdd_contracts::HaystackCatalogResponse))
+    )]
+    pub fn connector_haystack_catalog() {}
+
+    #[utoipa::path(
+        post, path = "/api/connectors/{edge_id}/haystack/about", tag = "central",
+        params(("edge_id" = String, Path, description = "Configured edge identifier")),
+        request_body = openfdd_contracts::HaystackAboutRequest,
+        responses((status = 200, description = "Scoped Haystack about response", body = openfdd_contracts::HaystackAboutResponse))
+    )]
+    pub fn connector_haystack_about() {}
+
+    #[utoipa::path(
+        post, path = "/api/connectors/{edge_id}/haystack/read", tag = "central",
+        params(("edge_id" = String, Path, description = "Configured edge identifier")),
+        request_body = openfdd_contracts::HaystackCurrentReadRequest,
+        responses((status = 200, description = "Scoped Haystack current values", body = openfdd_contracts::HaystackCurrentReadResponse))
+    )]
+    pub fn connector_haystack_read() {}
+
+    #[utoipa::path(
+        post, path = "/api/connectors/{edge_id}/haystack/nav", tag = "central",
+        params(("edge_id" = String, Path, description = "Configured edge identifier")),
+        request_body = openfdd_contracts::HaystackNavRequest,
+        responses((status = 200, description = "Scoped Haystack navigation", body = openfdd_contracts::HaystackNavResponse))
+    )]
+    pub fn connector_haystack_nav() {}
+
+    #[utoipa::path(
+        post, path = "/api/connectors/{edge_id}/haystack/his-read", tag = "central",
+        params(("edge_id" = String, Path, description = "Configured edge identifier")),
+        request_body = openfdd_contracts::HaystackHistoryReadRequest,
+        responses((status = 200, description = "Scoped bounded Haystack history", body = openfdd_contracts::HaystackHistoryReadResponse))
+    )]
+    pub fn connector_haystack_history() {}
 
     #[utoipa::path(
         post, path = "/api/connectors/{edge_id}/priority-history", tag = "central",
@@ -381,6 +425,11 @@ mod live_routes {
         live_routes::capabilities,
         live_routes::connector_inventory,
         live_routes::connector_read,
+        live_routes::connector_haystack_catalog,
+        live_routes::connector_haystack_about,
+        live_routes::connector_haystack_read,
+        live_routes::connector_haystack_nav,
+        live_routes::connector_haystack_history,
         live_routes::connector_priority_history,
         live_routes::connector_priority_history_trigger,
         live_routes::fuel_weather_fetch,
@@ -430,6 +479,17 @@ mod live_routes {
         CommandEnvelope,
         CommandAck,
         TelemetryEnvelope,
+        openfdd_contracts::LocalIngestReceipt,
+        openfdd_contracts::HaystackAboutRequest,
+        openfdd_contracts::HaystackAboutResponse,
+        openfdd_contracts::HaystackCatalogRequest,
+        openfdd_contracts::HaystackCatalogResponse,
+        openfdd_contracts::HaystackCurrentReadRequest,
+        openfdd_contracts::HaystackCurrentReadResponse,
+        openfdd_contracts::HaystackHistoryReadRequest,
+        openfdd_contracts::HaystackHistoryReadResponse,
+        openfdd_contracts::HaystackNavRequest,
+        openfdd_contracts::HaystackNavResponse,
         AuthStatusResponse,
         AuthMeResponse,
         AuthLoginRequest,

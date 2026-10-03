@@ -10,4 +10,7 @@ pub use provision::{
     ProvisionResult, EDGE_KIT_ZIP_FORBIDDEN, EDGE_KIT_ZIP_MEMBERS,
 };
 pub use rumqttc::{AsyncClient, Incoming, Publish};
-pub use spool::{SpoolConfig, SpoolRecord, TelemetrySpool};
+pub use spool::{
+    SpoolCompletedRecord, SpoolConfig, SpoolOperationReservation, SpoolRecord, SpoolRetiredRecord,
+    SpoolTerminalStatus, TelemetrySpool,
+};

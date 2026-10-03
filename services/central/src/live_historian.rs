@@ -880,7 +880,7 @@ enum RoleValue {
 }
 
 fn normalized_batches(env: &TelemetryEnvelope) -> Result<NormalizedBatches> {
-    let mut grouped: BTreeMap<EquipmentKey, EquipmentRoles> = BTreeMap::new();
+    let mut grouped: BTreeMap<EquipmentKey, (DateTime<Utc>, EquipmentRoles)> = BTreeMap::new();
     let mut eligible = 0usize;
     let mut skipped = 0usize;
     let mut duplicates = Vec::new();
@@ -894,9 +894,13 @@ fn normalized_batches(env: &TelemetryEnvelope) -> Result<NormalizedBatches> {
             skipped += 1;
             continue;
         };
-        let roles = grouped
+        let observed_at = point.observed_at.unwrap_or(env.observed_at);
+        let (group_timestamp, roles) = grouped
             .entry((building_id.clone(), equipment_id.clone()))
-            .or_default();
+            .or_insert_with(|| (observed_at, BTreeMap::new()));
+        if *group_timestamp != observed_at {
+            bail!("live telemetry equipment group contains mixed source timestamps");
+        }
         if roles.contains_key(&role) {
             duplicates.push(DuplicateRole {
                 building_id,
@@ -910,12 +914,11 @@ fn normalized_batches(env: &TelemetryEnvelope) -> Result<NormalizedBatches> {
         eligible += 1;
     }
 
-    let timestamp = env
-        .observed_at
-        .timestamp_nanos_opt()
-        .ok_or_else(|| anyhow!("live telemetry timestamp is outside Arrow nanosecond range"))?;
     let mut out = BTreeMap::new();
-    for (identity, roles) in grouped {
+    for (identity, (observed_at, roles)) in grouped {
+        let timestamp = observed_at
+            .timestamp_nanos_opt()
+            .ok_or_else(|| anyhow!("live telemetry timestamp is outside Arrow nanosecond range"))?;
         let mut fields = vec![Field::new(
             "timestamp_utc",
             DataType::Timestamp(TimeUnit::Nanosecond, None),
@@ -1091,6 +1094,7 @@ mod tests {
             value,
             unit: None,
             quality: Quality::Good,
+            observed_at: None,
             tags: json!({
                 "building_id": "BUILDING_100",
                 "equipment_id": "AHU_1",
@@ -1125,6 +1129,30 @@ mod tests {
             .schema()
             .index_of("bacnet:5007:analog-input:1")
             .is_err());
+    }
+
+    #[test]
+    fn point_source_timestamp_is_preserved_in_historian_batch() {
+        let mut point = point("sat", json!(55.0));
+        point.observed_at = Some(
+            DateTime::parse_from_rfc3339("2026-10-02T17:15:00Z")
+                .unwrap()
+                .with_timezone(&Utc),
+        );
+        let (groups, _, _, _) = normalized_batches(&envelope(vec![point])).unwrap();
+        let batch = groups.values().next().unwrap();
+        let timestamps = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<TimestampNanosecondArray>()
+            .unwrap();
+        assert_eq!(
+            timestamps.value(0),
+            DateTime::parse_from_rfc3339("2026-10-02T17:15:00Z")
+                .unwrap()
+                .timestamp_nanos_opt()
+                .unwrap()
+        );
     }
 
     #[test]
@@ -1352,6 +1380,7 @@ mod tests {
             value: json!(value),
             unit: None,
             quality: Quality::Good,
+            observed_at: None,
             tags: json!({
                 "building_id": "building-local",
                 "equipment_id": equipment_id,
@@ -1566,6 +1595,7 @@ mod tests {
                 value: json!(55.0),
                 unit: None,
                 quality: Quality::Good,
+                observed_at: None,
                 tags: json!({
                     "building_id": building_id,
                     "equipment_id": equipment_id,

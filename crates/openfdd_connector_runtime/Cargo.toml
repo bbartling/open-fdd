@@ -1,0 +1,24 @@
+[package]
+name = "openfdd_connector_runtime"
+version = "3.5.60"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT"
+description = "Shared runtime, authentication, service identity, and telemetry sink primitives for Open-FDD connectors"
+
+[dependencies]
+axum = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+openfdd_contracts = { path = "../openfdd_contracts" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+subtle = "2"
+thiserror = "2"
+tokio = { version = "1", features = ["net", "sync", "time"] }
+tracing = "0.1"
+url = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = "0.5"

@@ -1,0 +1,76 @@
+# Open-FDD split OT edge: one BACnet/Modbus process and one optional
+# outbound-only Haystack process. The legacy compose.edge.yml remains
+# available during migration.
+
+name: openfdd-edge-split
+
+services:
+  bacnet-modbus:
+    image: ${OPENFDD_BACNET_MODBUS_IMAGE:-ghcr.io/bbartling/openfdd-bacnet-modbus:nightly}
+    build:
+      context: ..
+      dockerfile: services/fieldbus/Dockerfile
+      target: bacnet-modbus
+    entrypoint: ["/usr/local/bin/openfdd-bacnet-modbus"]
+    network_mode: host
+    environment:
+      OPENFDD_FIELDBUS_CONFIG_DIR: /app/config
+      OPENFDD_FIELDBUS_HTTP_HOST: 0.0.0.0
+      OPENFDD_FIELDBUS_HTTP_PORT: "8081"
+      OPENFDD_CONNECTOR_API_KEY: ${OPENFDD_CONNECTOR_API_KEY:?set connector api key}
+      OPENFDD_MQTT_ENABLED: ${OPENFDD_MQTT_ENABLED:-0}
+      OPENFDD_MQTT_HOST: ${OPENFDD_MQTT_HOST:-}
+      OPENFDD_MQTT_PORT: ${OPENFDD_MQTT_PORT:-8883}
+      OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:?set site id}
+      OPENFDD_EDGE_ID: ${OPENFDD_EDGE_ID:-fieldbus-1}
+      OPENFDD_TENANT_ID: ${OPENFDD_TENANT_ID:-}
+      OPENFDD_BUILDING_ID: ${OPENFDD_BUILDING_ID:-}
+      OPENFDD_MQTT_CA_PEM: /mqtt/ca.pem
+      OPENFDD_MQTT_CERT_PEM: /mqtt/edge.cert.pem
+      OPENFDD_MQTT_KEY_PEM: /mqtt/edge.key.pem
+      OPENFDD_EDGE_STORE_DIR: /edge-state
+    volumes:
+      - ../config/fieldbus:/app/config:ro
+      - ${OPENFDD_EDGE_KIT_DIR:?path to provision kit}:/mqtt:ro
+      - split-fieldbus-state:/edge-state
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8081/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+  haystack:
+    profiles: ["haystack"]
+    image: ${OPENFDD_HAYSTACK_IMAGE:-ghcr.io/bbartling/openfdd-haystack:nightly}
+    build:
+      context: ..
+      dockerfile: services/fieldbus/Dockerfile
+      target: haystack
+    entrypoint: ["/usr/local/bin/openfdd-haystack"]
+    environment:
+      OPENFDD_FIELDBUS_CONFIG_DIR: /app/config
+      OPENFDD_FIELDBUS_HTTP_HOST: 0.0.0.0
+      OPENFDD_FIELDBUS_HTTP_PORT: "8082"
+      OPENFDD_CONNECTOR_API_KEY: ${OPENFDD_CONNECTOR_API_KEY:?set connector api key}
+      OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:?set site id}
+      OPENFDD_EDGE_ID: ${OPENFDD_EDGE_ID:-haystack-1}
+      # The process rejects an empty endpoint at startup. Keep interpolation
+      # optional so the disabled profile can be resolved without credentials.
+      OPENFDD_HAYSTACK_BASE_URL: ${OPENFDD_HAYSTACK_BASE_URL:-}
+      OPENFDD_HAYSTACK_USER: ${OPENFDD_HAYSTACK_USER:-}
+      OPENFDD_HAYSTACK_PASS: ${OPENFDD_HAYSTACK_PASS:-}
+      OPENFDD_HAYSTACK_AUTH_MODE: ${OPENFDD_HAYSTACK_AUTH_MODE:-basic}
+    ports:
+      - "127.0.0.1:${OPENFDD_HAYSTACK_HTTP_PORT:-8082}:8082"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8082/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  split-fieldbus-state:

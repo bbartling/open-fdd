@@ -26,6 +26,8 @@ For OT/BACnet deployments, use the additional fieldbus/MQTT recipes only when th
 | `ghcr.io/bbartling/openfdd-central` | API + FDD engine (DataFusion rule registry) |
 | `ghcr.io/bbartling/openfdd-web` | React engineering UI (container port `8080`; local Compose maps host `3000`) |
 | `ghcr.io/bbartling/openfdd-fieldbus` | BACnet/IP poller, publishes over MQTTS |
+| `ghcr.io/bbartling/openfdd-bacnet-modbus` | Split BACnet edge process (`bacnet-modbus` Docker target) |
+| `ghcr.io/bbartling/openfdd-haystack` | Split outbound Haystack HTTP edge process (`haystack` Docker target) |
 | `ghcr.io/bbartling/openfdd-mqtt` | Mosquitto broker (MQTTS on 8883) |
 | `ghcr.io/bbartling/openfdd-mcp` | Slim Rust MCP server (talks to central) |
 
@@ -41,6 +43,25 @@ See [Release channels](release-channels.html) and [GHCR images](ghcr-images.html
 | `standalone` | `docker/compose.standalone.yml` | mqtt + central + web + fieldbus | single OT-connected host |
 | `central` | `docker/compose.central.yml` | mqtt + central + web | hub for remote fieldbus edges |
 | `edge` | `docker/compose.edge.yml` | fieldbus only | remote OT edge |
+| `edge-split` | `docker/compose.edge.split.yml` | BACnet/Modbus + optional Haystack | migrating OT edge |
+
+The `central` and `csv` recipes contain no fieldbus service and never start a
+BACnet/Modbus/Haystack process. Use `edge` or `standalone` when the host is
+deliberately connected to an OT network. This separation is a deployment
+boundary, not a runtime capability flag.
+
+The split migration recipe builds separate final targets from the Rust package:
+`bacnet-modbus` contains only `openfdd-bacnet-modbus`, `haystack` contains only
+`openfdd-haystack`, and the default `compatibility` target contains only the
+legacy `openfdd-fieldbus`. The `bacnet-modbus` service uses host networking for
+BACnet UDP; the optional `haystack` service has no host network, binds
+`0.0.0.0` only inside its container, publishes to a host loopback port, and
+requires both an API key and an explicit outbound HTTP(S) endpoint at startup.
+The inactive profile can resolve without an endpoint, but the Haystack process
+rejects a blank endpoint. Do not
+replace either entrypoint with a runtime profile flag. The recipe is a
+source/build checkpoint; no GHCR publication or live OT qualification is
+claimed here.
 
 The `central` and `csv` recipes contain no fieldbus service and never start a
 BACnet/Modbus/Haystack process. Use `edge` or `standalone` when the host is

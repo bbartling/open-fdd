@@ -93,6 +93,18 @@ fn require_api_key_for_bind(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Keep the compatibility binary linked against the split Haystack manual
+    // delivery seam. The split binary calls these directly; referencing them
+    // here prevents the duplicate binary/module build from treating them as
+    // dead code without weakening the workspace lint policy.
+    let _manual_delivery = mqtt_bridge::send_manual_local;
+    let _manual_resume = mqtt_bridge::lookup_manual_local;
+    let _manual_resume_record = |record: mqtt_bridge::ManualOperationRecord| match record {
+        mqtt_bridge::ManualOperationRecord::Pending(record) => record.seq,
+        mqtt_bridge::ManualOperationRecord::Completed(record) => record.seq,
+        mqtt_bridge::ManualOperationRecord::Expired(record) => record.message_id.as_u128() as u64,
+    };
+    let _envelope_builder = services::haystack::HaystackService::telemetry_envelope_from_current;
     dotenvy::dotenv().ok();
     init_tracing();
 
@@ -162,11 +174,12 @@ async fn run(
         bacnet_client,
         poll_engine,
         weather,
-        haystack,
+        haystack: Some(haystack),
         rest,
         telemetry,
         priority_scan: Arc::clone(&priority_scan),
         publish_ledger,
+        service_identity: None,
     };
 
     info!(
@@ -207,13 +220,15 @@ async fn shutdown_signal(
     weather: Arc<WeatherService>,
     poll_engine: Arc<PollEngine>,
     bacnet_server: Arc<BacnetServerManager>,
-    haystack: Arc<HaystackService>,
+    haystack: Option<Arc<HaystackService>>,
     rest: Arc<RestClientService>,
     priority_scan_task: Option<tokio::task::JoinHandle<()>>,
 ) {
     let _ = tokio::signal::ctrl_c().await;
     info!("Shutting down...");
-    haystack.close().await;
+    if let Some(haystack) = haystack {
+        haystack.close().await;
+    }
     rest.stop().await;
     poll_engine.stop().await;
     if let Some(task) = priority_scan_task {
@@ -282,11 +297,12 @@ mod tests {
             bacnet_client,
             poll_engine,
             weather,
-            haystack,
+            haystack: Some(haystack),
             rest,
             telemetry,
             priority_scan,
             publish_ledger: Arc::new(MqttPublishLedger::default()),
+            service_identity: None,
         }
     }
 

@@ -7,6 +7,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::service::{ConnectorServiceProfile, ServiceIdentity};
+
 /// Stable schema identifier for connector hello/capability responses.
 pub const CAPABILITIES_CONTRACT_V1: &str = "openfdd.connector.capabilities.v1";
 pub const CAPABILITIES_AGGREGATE_CONTRACT_V1: &str = "openfdd.capabilities.aggregate.v1";
@@ -200,6 +202,11 @@ pub struct ConnectorHelloResponse {
     #[serde(default)]
     pub connectors: Vec<ConnectorCapability>,
     pub recipe: RecipeObservation,
+    /// Legacy `openfdd-fieldbus` omits this field. Split connector processes
+    /// populate it so Central can distinguish ownership without treating a
+    /// configured protocol as live or ready.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_identity: Option<ServiceIdentity>,
     pub observed_at: DateTime<Utc>,
 }
 
@@ -250,6 +257,37 @@ impl ConnectorHelloResponse {
         }
         if self.version.service.len() > 128 || self.version.build.len() > 128 {
             return Err("service and build versions are too long".into());
+        }
+        if let Some(identity) = &self.service_identity {
+            identity.validate()?;
+            if self.version.service != identity.service
+                || self.version.service != identity.version.service
+                || self.version.build != identity.version.build
+            {
+                return Err("capability hello does not match service identity".into());
+            }
+            let expected_protocols = match identity.profile {
+                ConnectorServiceProfile::BacnetModbus => {
+                    &[ConnectorProtocol::Bacnet, ConnectorProtocol::Modbus][..]
+                }
+                ConnectorServiceProfile::Haystack => &[ConnectorProtocol::Haystack][..],
+            };
+            if self.compiled_protocols.len() != expected_protocols.len()
+                || !expected_protocols
+                    .iter()
+                    .all(|protocol| self.compiled_protocols.contains(protocol))
+                || self.connectors.len() != expected_protocols.len()
+                || self.connectors.iter().any(|connector| {
+                    !connector.compiled || !expected_protocols.contains(&connector.protocol)
+                })
+                || !expected_protocols.iter().all(|protocol| {
+                    self.connectors
+                        .iter()
+                        .any(|connector| connector.protocol == *protocol)
+                })
+            {
+                return Err("capability protocols do not match service identity profile".into());
+            }
         }
         if !self
             .version
@@ -333,6 +371,7 @@ mod tests {
                 unobserved_services: vec![],
                 reconciliation: "not_declared".into(),
             },
+            service_identity: None,
             observed_at: Utc::now(),
         };
         response.validate().unwrap();
@@ -363,5 +402,145 @@ mod tests {
             let encoded = serde_json::to_string(&state).unwrap();
             assert!(!encoded.is_empty());
         }
+    }
+
+    #[test]
+    fn hello_propagates_split_profile_without_claiming_legacy_ownership() {
+        let legacy = ConnectorHelloResponse {
+            schema: CAPABILITIES_CONTRACT_V1.into(),
+            version: ServiceVersion {
+                service: "openfdd-fieldbus".into(),
+                build: "test".into(),
+                contract: CAPABILITIES_CONTRACT_V1.into(),
+            },
+            compiled_protocols: vec![ConnectorProtocol::Bacnet],
+            connectors: vec![],
+            recipe: RecipeObservation {
+                declared: None,
+                configured_services: vec!["fieldbus".into()],
+                observed_services: vec!["fieldbus".into()],
+                unobserved_services: vec![],
+                reconciliation: "not_declared".into(),
+            },
+            service_identity: None,
+            observed_at: Utc::now(),
+        };
+        legacy.validate().unwrap();
+        assert!(serde_json::to_value(&legacy)
+            .unwrap()
+            .get("service_identity")
+            .is_none());
+
+        let mut split = legacy;
+        split.version.service = "openfdd-bacnet-modbus".into();
+        split.version.build = "3.5.60+test".into();
+        split.compiled_protocols = vec![ConnectorProtocol::Bacnet, ConnectorProtocol::Modbus];
+        split.connectors = vec![
+            ConnectorCapability {
+                protocol: ConnectorProtocol::Bacnet,
+                compiled: true,
+                configured: false,
+                enabled: false,
+                readiness: CapabilityState::NotConfigured,
+                source_health: CapabilityState::NotConfigured,
+                mqtt_connection: DeliveryStatus::Disabled,
+                durable_delivery: DeliveryStatus::Disabled,
+                supported_actions: vec![],
+                detail: None,
+            },
+            ConnectorCapability {
+                protocol: ConnectorProtocol::Modbus,
+                compiled: true,
+                configured: false,
+                enabled: false,
+                readiness: CapabilityState::NotConfigured,
+                source_health: CapabilityState::NotConfigured,
+                mqtt_connection: DeliveryStatus::Disabled,
+                durable_delivery: DeliveryStatus::Disabled,
+                supported_actions: vec![],
+                detail: None,
+            },
+        ];
+        split.service_identity = Some(ServiceIdentity::new(
+            crate::service::ConnectorServiceProfile::BacnetModbus,
+            "3.5.60+test",
+            crate::service::RecipeKind::EdgeBacnetModbus,
+        ));
+        split.validate().unwrap();
+        assert_eq!(
+            serde_json::to_value(split).unwrap()["service_identity"]["profile"],
+            "bacnet_modbus"
+        );
+    }
+
+    fn valid_split_hello() -> ConnectorHelloResponse {
+        let identity = ServiceIdentity::new(
+            ConnectorServiceProfile::Haystack,
+            "3.5.60+test",
+            crate::service::RecipeKind::EdgeHaystack,
+        );
+        ConnectorHelloResponse {
+            schema: CAPABILITIES_CONTRACT_V1.into(),
+            version: ServiceVersion {
+                contract: CAPABILITIES_CONTRACT_V1.into(),
+                ..identity.version.clone()
+            },
+            compiled_protocols: vec![ConnectorProtocol::Haystack],
+            connectors: vec![ConnectorCapability {
+                protocol: ConnectorProtocol::Haystack,
+                compiled: true,
+                configured: false,
+                enabled: false,
+                readiness: CapabilityState::NotConfigured,
+                source_health: CapabilityState::NotConfigured,
+                mqtt_connection: DeliveryStatus::Disabled,
+                durable_delivery: DeliveryStatus::Disabled,
+                supported_actions: vec![],
+                detail: None,
+            }],
+            recipe: RecipeObservation {
+                declared: None,
+                configured_services: vec!["fieldbus".into()],
+                observed_services: vec!["fieldbus".into()],
+                unobserved_services: vec![],
+                reconciliation: "not_declared".into(),
+            },
+            service_identity: Some(identity),
+            observed_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn split_identity_must_match_hello_version_and_profile_protocols() {
+        let hello = valid_split_hello();
+        hello.validate().unwrap();
+
+        let mut hello = valid_split_hello();
+        hello.version.build = "different-build".into();
+        assert_eq!(
+            hello.validate().unwrap_err(),
+            "capability hello does not match service identity"
+        );
+
+        let mut hello = valid_split_hello();
+        hello.version.service = "openfdd-haystack-shadow".into();
+        assert_eq!(
+            hello.validate().unwrap_err(),
+            "capability hello does not match service identity"
+        );
+
+        let mut hello = valid_split_hello();
+        hello.compiled_protocols = vec![ConnectorProtocol::Bacnet];
+        assert_eq!(
+            hello.validate().unwrap_err(),
+            "capability protocols do not match service identity profile"
+        );
+
+        let mut hello = valid_split_hello();
+        hello.connectors[0].protocol = ConnectorProtocol::Bacnet;
+        assert_eq!(
+            hello.validate().unwrap_err(),
+            "capability protocols do not match service identity profile"
+        );
     }
 }

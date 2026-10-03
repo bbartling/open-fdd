@@ -4,17 +4,24 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::{DefaultBodyLimit, Extension, Path, Query, State};
+use axum::extract::{rejection::BytesRejection, DefaultBodyLimit, Extension, Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use bytes::Bytes;
 use chrono::Utc;
-use openfdd_contracts::{CommandEnvelope, Protocol, TelemetryEnvelope, TopicBuilder, TopicKind};
+use openfdd_contracts::{
+    CommandEnvelope, LocalIngestReceipt, LocalIngestStatus, Protocol, TelemetryEnvelope,
+    TopicBuilder, TopicKind, LOCAL_INGEST_RECEIPT_CONTRACT_V1,
+};
 use openfdd_contracts::{
     ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorReadRequest,
-    ConnectorReadResponse, ConnectorScope, PriorityHistoryRequest, PriorityHistoryResponse,
+    ConnectorReadResponse, ConnectorScope, HaystackAboutRequest, HaystackAboutResponse,
+    HaystackCatalogRequest, HaystackCatalogResponse, HaystackCurrentReadRequest,
+    HaystackCurrentReadResponse, HaystackHistoryReadRequest, HaystackHistoryReadResponse,
+    HaystackNavRequest, HaystackNavResponse, PriorityHistoryRequest, PriorityHistoryResponse,
     PriorityHistoryTriggerRequest, PriorityHistoryTriggerResponse,
 };
 use openfdd_mqtt::publish_json;
@@ -115,6 +122,26 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(connector_inventory),
         )
         .route("/api/connectors/{edge_id}/read", post(connector_read))
+        .route(
+            "/api/connectors/{edge_id}/haystack/catalog",
+            post(connector_haystack_catalog),
+        )
+        .route(
+            "/api/connectors/{edge_id}/haystack/about",
+            post(connector_haystack_about),
+        )
+        .route(
+            "/api/connectors/{edge_id}/haystack/read",
+            post(connector_haystack_read),
+        )
+        .route(
+            "/api/connectors/{edge_id}/haystack/nav",
+            post(connector_haystack_nav),
+        )
+        .route(
+            "/api/connectors/{edge_id}/haystack/his-read",
+            post(connector_haystack_history),
+        )
         .route(
             "/api/connectors/{edge_id}/priority-history",
             post(connector_priority_history),
@@ -1266,6 +1293,201 @@ pub async fn connector_read(
     Ok(Json(response))
 }
 
+pub async fn connector_haystack_catalog(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<auth::AuthUser>,
+    Path(edge_id): Path<String>,
+    Json(request): Json<HaystackCatalogRequest>,
+) -> Result<Json<HaystackCatalogResponse>, (StatusCode, Json<Value>)> {
+    if !connector_proxy_role_allowed(user.role) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "connector role is not authorized"})),
+        ));
+    }
+    request.validate().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "invalid Haystack catalog request"})),
+        )
+    })?;
+    if request.scope.edge_id != edge_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "path edge_id and scoped edge_id differ"})),
+        ));
+    }
+    let ctx = resolve_tenant_context_for_user(&user);
+    authorize_connector_scope(&state, &ctx, &edge_id, &request.scope)?;
+    let response = state
+        .capabilities
+        .proxy_haystack_catalog(&edge_id, &request)
+        .await
+        .map_err(|error| {
+            (
+                error.status(),
+                Json(json!({"ok": false, "error": error.message()})),
+            )
+        })?;
+    Ok(Json(response))
+}
+
+pub async fn connector_haystack_about(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<auth::AuthUser>,
+    Path(edge_id): Path<String>,
+    Json(request): Json<HaystackAboutRequest>,
+) -> Result<Json<HaystackAboutResponse>, (StatusCode, Json<Value>)> {
+    if !connector_proxy_role_allowed(user.role) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "connector role is not authorized"})),
+        ));
+    }
+    request.validate().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "invalid Haystack about request"})),
+        )
+    })?;
+    if request.scope.edge_id != edge_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "path edge_id and scoped edge_id differ"})),
+        ));
+    }
+    let ctx = resolve_tenant_context_for_user(&user);
+    authorize_connector_scope(&state, &ctx, &edge_id, &request.scope)?;
+    let response = state
+        .capabilities
+        .proxy_haystack_about(&edge_id, &request)
+        .await
+        .map_err(|error| {
+            (
+                error.status(),
+                Json(json!({"ok": false, "error": error.message()})),
+            )
+        })?;
+    Ok(Json(response))
+}
+
+pub async fn connector_haystack_read(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<auth::AuthUser>,
+    Path(edge_id): Path<String>,
+    Json(request): Json<HaystackCurrentReadRequest>,
+) -> Result<Json<HaystackCurrentReadResponse>, (StatusCode, Json<Value>)> {
+    if !connector_proxy_role_allowed(user.role) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "connector role is not authorized"})),
+        ));
+    }
+    request.validate().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "invalid Haystack current-read request"})),
+        )
+    })?;
+    if request.scope.edge_id != edge_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "path edge_id and scoped edge_id differ"})),
+        ));
+    }
+    let ctx = resolve_tenant_context_for_user(&user);
+    authorize_connector_scope(&state, &ctx, &edge_id, &request.scope)?;
+    let response = state
+        .capabilities
+        .proxy_haystack_current_read(&edge_id, &request)
+        .await
+        .map_err(|error| {
+            (
+                error.status(),
+                Json(json!({"ok": false, "error": error.message()})),
+            )
+        })?;
+    Ok(Json(response))
+}
+
+pub async fn connector_haystack_nav(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<auth::AuthUser>,
+    Path(edge_id): Path<String>,
+    Json(request): Json<HaystackNavRequest>,
+) -> Result<Json<HaystackNavResponse>, (StatusCode, Json<Value>)> {
+    if !connector_proxy_role_allowed(user.role) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "connector role is not authorized"})),
+        ));
+    }
+    request.validate().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "invalid Haystack navigation request"})),
+        )
+    })?;
+    if request.scope.edge_id != edge_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "path edge_id and scoped edge_id differ"})),
+        ));
+    }
+    let ctx = resolve_tenant_context_for_user(&user);
+    authorize_connector_scope(&state, &ctx, &edge_id, &request.scope)?;
+    let response = state
+        .capabilities
+        .proxy_haystack_nav(&edge_id, &request)
+        .await
+        .map_err(|error| {
+            (
+                error.status(),
+                Json(json!({"ok": false, "error": error.message()})),
+            )
+        })?;
+    Ok(Json(response))
+}
+
+pub async fn connector_haystack_history(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<auth::AuthUser>,
+    Path(edge_id): Path<String>,
+    Json(request): Json<HaystackHistoryReadRequest>,
+) -> Result<Json<HaystackHistoryReadResponse>, (StatusCode, Json<Value>)> {
+    if !connector_proxy_role_allowed(user.role) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "connector role is not authorized"})),
+        ));
+    }
+    request.validate().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "invalid Haystack history request"})),
+        )
+    })?;
+    if request.scope.edge_id != edge_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "path edge_id and scoped edge_id differ"})),
+        ));
+    }
+    let ctx = resolve_tenant_context_for_user(&user);
+    authorize_connector_scope(&state, &ctx, &edge_id, &request.scope)?;
+    let response = state
+        .capabilities
+        .proxy_haystack_history(&edge_id, &request)
+        .await
+        .map_err(|error| {
+            (
+                error.status(),
+                Json(json!({"ok": false, "error": error.message()})),
+            )
+        })?;
+    Ok(Json(response))
+}
+
 /// Return a bounded typed inventory page from a configured connector. This
 /// endpoint is authenticated and scope checked exactly like the read seam;
 /// advertised capabilities do not grant access and no central MQTT map is
@@ -1845,34 +2067,119 @@ pub async fn get_edge_metadata(
 /// The envelope is the same `TelemetryEnvelope` used by MQTTS. Message IDs
 /// are reserved before persistence so dual mode is idempotent even when the
 /// local and cloud copies arrive concurrently.
+fn local_receipt(
+    scope: &str,
+    envelope: Option<&TelemetryEnvelope>,
+    status: LocalIngestStatus,
+    duplicate: bool,
+    eligible_points: usize,
+    persisted_rows: usize,
+    error: Option<&str>,
+) -> LocalIngestReceipt {
+    LocalIngestReceipt {
+        schema: LOCAL_INGEST_RECEIPT_CONTRACT_V1.into(),
+        scope: if scope.trim().is_empty() {
+            "unbound".into()
+        } else {
+            scope.to_string()
+        },
+        site_id: envelope
+            .map(|value| value.site_id.clone())
+            .unwrap_or_else(|| "unknown".into()),
+        edge_id: envelope
+            .map(|value| value.edge_id.clone())
+            .unwrap_or_else(|| "unknown".into()),
+        message_id: envelope
+            .map(|value| value.message_id)
+            .unwrap_or_else(uuid::Uuid::nil),
+        status,
+        duplicate,
+        eligible_points,
+        persisted_rows,
+        error: error.map(str::to_string),
+    }
+}
+
+#[derive(Debug)]
+pub struct LocalIngestError {
+    status: StatusCode,
+    receipt: Box<LocalIngestReceipt>,
+}
+
+impl IntoResponse for LocalIngestError {
+    fn into_response(self) -> Response {
+        (self.status, Json(*self.receipt)).into_response()
+    }
+}
+
+fn local_error(
+    status_code: StatusCode,
+    scope: &str,
+    envelope: Option<&TelemetryEnvelope>,
+    status: LocalIngestStatus,
+    error: &'static str,
+) -> Result<(StatusCode, Json<LocalIngestReceipt>), LocalIngestError> {
+    Err(LocalIngestError {
+        status: status_code,
+        receipt: Box::new(local_receipt(
+            scope,
+            envelope,
+            status,
+            false,
+            0,
+            0,
+            Some(error),
+        )),
+    })
+}
+
 pub async fn local_fieldbus_ingest(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    body: Bytes,
-) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
+    body: Result<Bytes, BytesRejection>,
+) -> Result<(StatusCode, Json<LocalIngestReceipt>), LocalIngestError> {
     const MAX_LOCAL_PAYLOAD_BYTES: usize = 1024 * 1024;
 
     state.recover_pending_receipts_once().await;
 
+    let body = match body {
+        Ok(body) => body,
+        Err(_) => {
+            return local_error(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "unbound",
+                None,
+                LocalIngestStatus::Rejected,
+                "local ingest payload exceeds 1 MiB",
+            )
+        }
+    };
+
     if body.len() > MAX_LOCAL_PAYLOAD_BYTES {
-        return Err((
+        return local_error(
             StatusCode::PAYLOAD_TOO_LARGE,
-            Json(json!({"ok": false, "error": "local ingest payload exceeds 1 MiB"})),
-        ));
+            "unbound",
+            None,
+            LocalIngestStatus::Rejected,
+            "local ingest payload exceeds 1 MiB",
+        );
     }
 
-    let expected_token = std::env::var("OPENFDD_LOCAL_INGEST_TOKEN")
+    let expected_token = match std::env::var("OPENFDD_LOCAL_INGEST_TOKEN")
         .ok()
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| {
-            (
+    {
+        Some(token) => token,
+        None => {
+            return local_error(
                 StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({
-                    "ok": false,
-                    "error": "local ingest is not configured"
-                })),
+                "unbound",
+                None,
+                LocalIngestStatus::Retryable,
+                "local ingest is not configured",
             )
-        })?;
+        }
+    };
     let supplied_token = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
@@ -1881,52 +2188,79 @@ pub async fn local_fieldbus_ingest(
         .unwrap_or_default();
     if supplied_token != expected_token {
         tracing::warn!(target: "security_audit", event = "local_ingest_auth_failure", "local ingest bearer rejected");
-        return Err((
+        return local_error(
             StatusCode::UNAUTHORIZED,
-            Json(json!({"ok": false, "error": "local ingest bearer required"})),
-        ));
+            "unbound",
+            None,
+            LocalIngestStatus::Rejected,
+            "local ingest bearer required",
+        );
     }
 
-    let envelope: TelemetryEnvelope = serde_json::from_slice(&body).map_err(|error| {
-        (
+    let envelope: TelemetryEnvelope = match serde_json::from_slice(&body) {
+        Ok(envelope) => envelope,
+        Err(_) => {
+            return local_error(
+                StatusCode::BAD_REQUEST,
+                "unbound",
+                None,
+                LocalIngestStatus::Rejected,
+                "invalid telemetry envelope",
+            )
+        }
+    };
+    if envelope.validate().is_err() {
+        return local_error(
             StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": format!("invalid telemetry envelope: {error}")})),
-        )
-    })?;
-    envelope.validate().map_err(|error| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": error})),
-        )
-    })?;
+            "unbound",
+            Some(&envelope),
+            LocalIngestStatus::Rejected,
+            "telemetry envelope failed validation",
+        );
+    }
 
-    let message_header = headers
+    let message_header = match headers
         .get("x-openfdd-message-id")
         .and_then(|value| value.to_str().ok())
-        .ok_or_else(|| {
-            (
+    {
+        Some(header) => header,
+        None => {
+            return local_error(
                 StatusCode::BAD_REQUEST,
-                Json(json!({"ok": false, "error": "x-openfdd-message-id required"})),
+                "unbound",
+                Some(&envelope),
+                LocalIngestStatus::Rejected,
+                "x-openfdd-message-id required",
             )
-        })?;
+        }
+    };
     if message_header != envelope.message_id.to_string() {
-        return Err((
+        return local_error(
             StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "message id header does not match envelope"})),
-        ));
+            "unbound",
+            Some(&envelope),
+            LocalIngestStatus::Rejected,
+            "message id header does not match envelope",
+        );
     }
 
-    let trusted_building = std::env::var("OPENFDD_BUILDING_ID")
+    let trusted_building = match std::env::var("OPENFDD_BUILDING_ID")
         .ok()
         .or_else(|| std::env::var("OPENFDD_SITE_ID").ok())
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            (
+    {
+        Some(building) => building,
+        None => {
+            return local_error(
                 StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({"ok": false, "error": "local ingest has no trusted building binding"})),
+                "unbound",
+                Some(&envelope),
+                LocalIngestStatus::Retryable,
+                "local ingest has no trusted building binding",
             )
-        })?;
+        }
+    };
     let allowed_buildings = std::env::var("OPENFDD_LOCAL_ALLOWED_BUILDINGS")
         .ok()
         .map(|raw| {
@@ -1939,34 +2273,41 @@ pub async fn local_fieldbus_ingest(
         .as_ref()
         .is_some_and(|allowed| !allowed.contains(&trusted_building))
     {
-        return Err((
+        return local_error(
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(
-                json!({"ok": false, "error": "trusted building is not in the local ingest allowlist"}),
-            ),
-        ));
+            "unbound",
+            Some(&envelope),
+            LocalIngestStatus::Retryable,
+            "trusted building is not in the local ingest allowlist",
+        );
     }
     if envelope.site_id != trusted_building {
-        return Err((
+        return local_error(
             StatusCode::FORBIDDEN,
-            Json(json!({"ok": false, "error": "site/building identity mismatch"})),
-        ));
+            "unbound",
+            Some(&envelope),
+            LocalIngestStatus::Rejected,
+            "site/building identity mismatch",
+        );
     }
     if let Some(supplied_building) = headers
         .get("x-openfdd-building-id")
         .and_then(|value| value.to_str().ok())
     {
         if supplied_building != trusted_building {
-            return Err((
+            return local_error(
                 StatusCode::FORBIDDEN,
-                Json(json!({"ok": false, "error": "caller building is not trusted"})),
-            ));
+                "unbound",
+                Some(&envelope),
+                LocalIngestStatus::Rejected,
+                "caller building is not trusted",
+            );
         }
     }
     let allowed_edges_raw = std::env::var("OPENFDD_LOCAL_ALLOWED_EDGE_IDS")
         .ok()
         .or_else(|| std::env::var("OPENFDD_EDGE_ID").ok());
-    let allowed_edges = allowed_edges_raw
+    let allowed_edges = match allowed_edges_raw
         .map(|raw| {
             raw.split(',')
                 .map(|value| value.trim().to_string())
@@ -1974,39 +2315,59 @@ pub async fn local_fieldbus_ingest(
                 .collect::<Vec<_>>()
         })
         .filter(|values| !values.is_empty())
-        .ok_or_else(|| {
-            (
+    {
+        Some(edges) => edges,
+        None => {
+            return local_error(
                 StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({"ok": false, "error": "local ingest has no trusted edge binding"})),
+                "unbound",
+                Some(&envelope),
+                LocalIngestStatus::Retryable,
+                "local ingest has no trusted edge binding",
             )
-        })?;
+        }
+    };
     if !allowed_edges
         .iter()
         .any(|value| value == "*" || *value == envelope.edge_id)
     {
-        return Err((
+        return local_error(
             StatusCode::FORBIDDEN,
-            Json(json!({"ok": false, "error": "edge is not in the local ingest allowlist"})),
-        ));
+            "unbound",
+            Some(&envelope),
+            LocalIngestStatus::Rejected,
+            "edge is not in the local ingest allowlist",
+        );
     }
 
     if crate::tenant::multi_tenant_enabled() {
-        let expected_tenant = std::env::var("OPENFDD_TENANT_ID")
+        let expected_tenant = match std::env::var("OPENFDD_TENANT_ID")
             .ok()
             .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({"ok": false, "error": "multi-tenant local ingest has no tenant binding"})),
-            ))?;
+        {
+            Some(tenant) => tenant,
+            None => {
+                return local_error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "unbound",
+                    Some(&envelope),
+                    LocalIngestStatus::Retryable,
+                    "multi-tenant local ingest has no tenant binding",
+                )
+            }
+        };
         let supplied_tenant = headers
             .get("x-openfdd-tenant-id")
             .and_then(|value| value.to_str().ok())
             .unwrap_or_default();
         if supplied_tenant != expected_tenant {
-            return Err((
+            return local_error(
                 StatusCode::FORBIDDEN,
-                Json(json!({"ok": false, "error": "tenant identity mismatch"})),
-            ));
+                "unbound",
+                Some(&envelope),
+                LocalIngestStatus::Rejected,
+                "tenant identity mismatch",
+            );
         }
     }
     if envelope.points.iter().any(|point| {
@@ -2016,10 +2377,13 @@ pub async fn local_fieldbus_ingest(
             .and_then(|value| value.as_str())
             .is_some_and(|value| value != trusted_building)
     }) {
-        return Err((
+        return local_error(
             StatusCode::FORBIDDEN,
-            Json(json!({"ok": false, "error": "point building identity mismatch"})),
-        ));
+            "unbound",
+            Some(&envelope),
+            LocalIngestStatus::Rejected,
+            "point building identity mismatch",
+        );
     }
 
     let receipt_scope = format!(
@@ -2028,38 +2392,88 @@ pub async fn local_fieldbus_ingest(
         trusted_building
     );
 
-    if let Some(_status) = state
+    if envelope.points.len() > 5_000 {
+        return local_error(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            &receipt_scope,
+            Some(&envelope),
+            LocalIngestStatus::Rejected,
+            "local ingest exceeds the 5000 point limit",
+        );
+    }
+
+    if let Some(existing_status) = state
         .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
         .await
     {
         *state.ingest_dup.lock().unwrap() += 1;
-        let committed = state
-            .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
+        if state
+            .receipt_payload_matches(
+                &receipt_scope,
+                &envelope.edge_id,
+                envelope.message_id,
+                &envelope,
+            )
             .await
-            == Some(crate::state::IngestReceiptStatus::Committed);
+            != Some(true)
+        {
+            return local_error(
+                StatusCode::CONFLICT,
+                &receipt_scope,
+                Some(&envelope),
+                LocalIngestStatus::Conflict,
+                "message id is already bound to a different payload",
+            );
+        }
         let persisted_rows = state
             .receipt_persisted_rows(&receipt_scope, &envelope.edge_id, envelope.message_id)
             .await
             .unwrap_or_default();
+        let eligible_points = state
+            .receipt_eligible_points(&receipt_scope, &envelope.edge_id, envelope.message_id)
+            .await
+            .unwrap_or_default();
+        let status = match existing_status {
+            crate::state::IngestReceiptStatus::Committed => LocalIngestStatus::Committed,
+            crate::state::IngestReceiptStatus::TerminalZeroEligible => {
+                LocalIngestStatus::TerminalZeroEligible
+            }
+            crate::state::IngestReceiptStatus::Rejected => LocalIngestStatus::Rejected,
+            crate::state::IngestReceiptStatus::Retryable => LocalIngestStatus::Retryable,
+            crate::state::IngestReceiptStatus::Pending => LocalIngestStatus::Pending,
+        };
+        let done = matches!(
+            status,
+            LocalIngestStatus::Committed | LocalIngestStatus::TerminalZeroEligible
+        );
         return Ok((
-            if committed {
+            if done {
                 StatusCode::OK
             } else {
                 StatusCode::ACCEPTED
             },
-            Json(
-                json!({"ok": true, "duplicate": true, "pending": !committed, "persisted_rows": persisted_rows, "eligible_points": 0}),
-            ),
+            Json(local_receipt(
+                &receipt_scope,
+                Some(&envelope),
+                status,
+                true,
+                eligible_points,
+                persisted_rows,
+                None,
+            )),
         ));
     }
-    if let Some(message) =
-        crate::historian_limits::deny_building_over_size(&workspace_path(), &envelope.site_id)
+    if crate::historian_limits::deny_building_over_size(&workspace_path(), &envelope.site_id)
+        .is_some()
     {
         *state.ingest_reject.lock().unwrap() += 1;
-        return Err((
+        return local_error(
             StatusCode::PAYLOAD_TOO_LARGE,
-            Json(json!({"ok": false, "error": message})),
-        ));
+            &receipt_scope,
+            Some(&envelope),
+            LocalIngestStatus::Rejected,
+            "building historian limit rejected the envelope",
+        );
     }
     if !state
         .reserve_receipt_at(&receipt_scope, envelope.clone())
@@ -2070,14 +2484,43 @@ pub async fn local_fieldbus_ingest(
             .await
             .is_none()
         {
-            return Err((
+            return local_error(
                 StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({"ok": false, "error": "local receipt ledger unavailable"})),
-            ));
+                &receipt_scope,
+                Some(&envelope),
+                LocalIngestStatus::Retryable,
+                "local receipt ledger unavailable",
+            );
+        }
+        if state
+            .receipt_payload_matches(
+                &receipt_scope,
+                &envelope.edge_id,
+                envelope.message_id,
+                &envelope,
+            )
+            .await
+            != Some(true)
+        {
+            return local_error(
+                StatusCode::CONFLICT,
+                &receipt_scope,
+                Some(&envelope),
+                LocalIngestStatus::Conflict,
+                "message id is already bound to a different payload",
+            );
         }
         return Ok((
             StatusCode::ACCEPTED,
-            Json(json!({"ok": true, "duplicate": true, "pending": true})),
+            Json(local_receipt(
+                &receipt_scope,
+                Some(&envelope),
+                LocalIngestStatus::Pending,
+                true,
+                0,
+                0,
+                None,
+            )),
         ));
     }
 
@@ -2087,36 +2530,59 @@ pub async fn local_fieldbus_ingest(
             state
                 .release_receipt(&receipt_scope, &envelope.edge_id, envelope.message_id)
                 .await;
-            return Err((
+            let _ = error;
+            return local_error(
                 StatusCode::SERVICE_UNAVAILABLE,
-                Json(
-                    json!({"ok": false, "error": format!("local historian ingest failed: {error}")}),
-                ),
-            ));
+                &receipt_scope,
+                Some(&envelope),
+                LocalIngestStatus::Retryable,
+                "local historian ingest failed",
+            );
         }
     };
+    if report.eligible_points == 0 {
+        let _ = state
+            .mark_zero_eligible(&receipt_scope, &envelope.edge_id, envelope.message_id)
+            .await;
+    }
     // Publish this request before the ACK. The shared row/time threshold is
     // for MQTT micro-batches; a local sample must not sit on HTTP 202 while
     // its rows are only buffered.
-    if let Err(error) = state.publish_pending(&receipt_scope).await {
+    if state.publish_pending(&receipt_scope).await.is_err() {
         return Ok((
             StatusCode::ACCEPTED,
-            Json(
-                json!({"ok": true, "duplicate": false, "pending": true, "eligible_points": report.eligible_points, "persisted_rows": 0, "error": format!("flush pending: {error}")}),
-            ),
+            Json(local_receipt(
+                &receipt_scope,
+                Some(&envelope),
+                LocalIngestStatus::Pending,
+                false,
+                report.eligible_points,
+                0,
+                Some("flush pending"),
+            )),
         ));
     }
-    let committed = state
+    let final_status = state
         .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
-        .await
-        == Some(crate::state::IngestReceiptStatus::Committed);
+        .await;
     let receipt_edge_id = envelope.edge_id.clone();
     let receipt_message_id = envelope.message_id;
     let persisted_rows = state
         .receipt_persisted_rows(&receipt_scope, &receipt_edge_id, receipt_message_id)
         .await
         .unwrap_or(0);
-    let durable = committed && persisted_rows > 0;
+    let status = match final_status {
+        Some(crate::state::IngestReceiptStatus::Committed) if persisted_rows > 0 => {
+            LocalIngestStatus::Committed
+        }
+        Some(crate::state::IngestReceiptStatus::TerminalZeroEligible) => {
+            LocalIngestStatus::TerminalZeroEligible
+        }
+        Some(crate::state::IngestReceiptStatus::Rejected) => LocalIngestStatus::Rejected,
+        Some(crate::state::IngestReceiptStatus::Retryable) => LocalIngestStatus::Retryable,
+        _ => LocalIngestStatus::Pending,
+    };
+    let durable = status == LocalIngestStatus::Committed;
     let entry = state.edges.entry(envelope.edge_id.clone()).or_default();
     let mut shadow = entry.lock().unwrap();
     shadow
@@ -2127,7 +2593,7 @@ pub async fn local_fieldbus_ingest(
         .ok()
         .filter(|tenant| !tenant.trim().is_empty())
         .or_else(|| Some("legacy".into()));
-    shadow.last_telemetry = Some(envelope);
+    shadow.last_telemetry = Some(envelope.clone());
     if durable {
         state.note_ingest_ok();
         state.note_durable_ingest();
@@ -2138,14 +2604,15 @@ pub async fn local_fieldbus_ingest(
         } else {
             StatusCode::ACCEPTED
         },
-        Json(json!({
-            "ok": true,
-            "duplicate": false,
-            "pending": !durable,
-            "persisted_rows": persisted_rows,
-            "eligible_points": report.eligible_points,
-            "skipped_points": report.skipped_points,
-        })),
+        Json(local_receipt(
+            &receipt_scope,
+            Some(&envelope),
+            status,
+            false,
+            report.eligible_points,
+            persisted_rows,
+            None,
+        )),
     ))
 }
 
@@ -5238,25 +5705,33 @@ mod version_tests {
     use super::{
         authorize_connector_scope, authorized_edge_ids, connector_proxy_role_allowed,
         connector_trigger_role_allowed, local_fieldbus_ingest, request_scope_allowed,
-        resolve_build_version,
+        resolve_build_version, router,
     };
     use crate::capabilities::{CapabilitiesAggregator, ConfiguredUpstream};
     use crate::state::AppState;
     use axum::body::Body;
+    use axum::extract::Query;
     use axum::http::{HeaderMap, HeaderValue, Request, StatusCode};
-    use axum::routing::post;
-    use axum::{Json, Router};
+    use axum::response::IntoResponse;
+    use axum::routing::{get, post};
+    use axum::{middleware, Json, Router};
     use bytes::Bytes;
+    use openfdd_connector_runtime::{auth_middleware, AuthState};
     use openfdd_contracts::{
-        ConnectorInventoryRequest, ConnectorInventoryResponse, InventoryProvenance,
-        PriorityHistoryRequest, PriorityHistoryResponse, PriorityHistoryTriggerRequest,
-        PriorityHistoryTriggerResponse, PriorityScanStatus, Protocol, Quality, TelemetryEnvelope,
-        TelemetryPoint, ValueKind, CONNECTOR_INVENTORY_CONTRACT_V1, PRIORITY_SCAN_CONTRACT_V1,
-        PRIORITY_SCAN_TRIGGER_CONTRACT_V1,
+        ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorScope,
+        ConnectorServiceProfile, HaystackCurrentReadRequest, HaystackCurrentReadResponse,
+        HaystackHistoryReadRequest, HaystackHistoryReadResponse, InventoryProvenance,
+        LocalIngestReceipt, LocalIngestStatus, PriorityHistoryRequest, PriorityHistoryResponse,
+        PriorityHistoryTriggerRequest, PriorityHistoryTriggerResponse, PriorityScanStatus,
+        Protocol, Quality, RecipeKind, ServiceIdentity, TelemetryEnvelope, TelemetryPoint,
+        ValueKind, CONNECTOR_INVENTORY_CONTRACT_V1, HAYSTACK_READ_CONTRACT_V1,
+        PRIORITY_SCAN_CONTRACT_V1, PRIORITY_SCAN_TRIGGER_CONTRACT_V1,
     };
     use serde_json::Value;
+    use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
+    use tokio::net::TcpListener;
     use tower::ServiceExt;
     use url::Url;
 
@@ -5272,6 +5747,851 @@ mod version_tests {
         assert!(!connector_trigger_role_allowed(crate::auth::Role::Viewer));
         assert!(connector_trigger_role_allowed(crate::auth::Role::Operator));
         assert!(connector_trigger_role_allowed(crate::auth::Role::Admin));
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize process environment while exercising the HTTP body-limit route"
+    )]
+    async fn local_ingest_router_oversize_returns_typed_receipt() {
+        let _env_lock = crate::test_env_lock::lock_env();
+        std::env::set_var("OPENFDD_LOCAL_INGEST_TOKEN", "oversize-test-token");
+        std::env::set_var("OPENFDD_BUILDING_ID", "oversize-building");
+        std::env::set_var("OPENFDD_LOCAL_ALLOWED_EDGE_IDS", "oversize-edge");
+        let state = Arc::new(AppState::new());
+        let request = Request::post("/api/ingest/local")
+            .header("authorization", "Bearer oversize-test-token")
+            .header("x-openfdd-message-id", uuid::Uuid::new_v4().to_string())
+            .body(Body::from(vec![b'x'; 1024 * 1024 + 1]))
+            .unwrap();
+        let response = router(state).oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let bytes = axum::body::to_bytes(response.into_body(), 2 * 1024 * 1024)
+            .await
+            .unwrap();
+        let receipt: openfdd_contracts::LocalIngestReceipt =
+            serde_json::from_slice(&bytes).unwrap();
+        receipt.validate().unwrap();
+        assert_eq!(receipt.status, LocalIngestStatus::Rejected);
+        assert_eq!(
+            receipt.schema,
+            openfdd_contracts::LOCAL_INGEST_RECEIPT_CONTRACT_V1
+        );
+        for key in [
+            "OPENFDD_LOCAL_INGEST_TOKEN",
+            "OPENFDD_BUILDING_ID",
+            "OPENFDD_LOCAL_ALLOWED_EDGE_IDS",
+        ] {
+            std::env::remove_var(key);
+        }
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize process environment while exercising the loaded Haystack to Central path"
+    )]
+    async fn loaded_haystack_split_to_central_receipt_and_historian_readback() {
+        let _env_lock = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().unwrap();
+        let storage = tempfile::tempdir().unwrap();
+        let catalog_path = workspace.path().join("haystack-catalog.toml");
+        std::fs::write(
+            &catalog_path,
+            "revision = \"e2e-loaded-v1\"\n\n[[records]]\nkey = \"point:ahu-1:sat\"\nkind = \"point\"\ndisplay_name = \"Supply air temperature\"\nequipment_key = \"ahu-1\"\nrole = \"sat\"\nunit = \"°F\"\nsource_ref = \"@ahu-1-sat\"\nnav_ref = \"@ahu-1\"\n",
+        )
+        .unwrap();
+
+        struct EnvSnapshot(Vec<(&'static str, Option<String>)>);
+        impl Drop for EnvSnapshot {
+            fn drop(&mut self) {
+                for (key, value) in self.0.drain(..) {
+                    match value {
+                        Some(value) => std::env::set_var(key, value),
+                        None => std::env::remove_var(key),
+                    }
+                }
+            }
+        }
+        let env_keys = [
+            "OPENFDD_WORKSPACE",
+            "OPENFDD_STORAGE_URL",
+            "OPENFDD_PARQUET_FLUSH_ROWS",
+            "OPENFDD_PARQUET_FLUSH_SECONDS",
+            "OPENFDD_LOCAL_INGEST_TOKEN",
+            "OPENFDD_BUILDING_ID",
+            "OPENFDD_LOCAL_ALLOWED_EDGE_IDS",
+            "OPENFDD_TENANT_ID",
+            "OPENFDD_MULTI_TENANT",
+        ];
+        let _env_snapshot = EnvSnapshot(
+            env_keys
+                .iter()
+                .map(|key| (*key, std::env::var(key).ok()))
+                .collect(),
+        );
+        std::env::set_var("OPENFDD_WORKSPACE", workspace.path());
+        std::env::set_var(
+            "OPENFDD_STORAGE_URL",
+            format!("file://{}", storage.path().display()),
+        );
+        std::env::set_var("OPENFDD_PARQUET_FLUSH_ROWS", "1");
+        std::env::set_var("OPENFDD_PARQUET_FLUSH_SECONDS", "3600");
+        std::env::set_var("OPENFDD_LOCAL_INGEST_TOKEN", "loaded-e2e-token");
+        std::env::set_var("OPENFDD_BUILDING_ID", "building");
+        std::env::set_var("OPENFDD_LOCAL_ALLOWED_EDGE_IDS", "edge");
+        std::env::remove_var("OPENFDD_TENANT_ID");
+        std::env::remove_var("OPENFDD_MULTI_TENANT");
+
+        async fn zinc_read(
+            headers: HeaderMap,
+            Query(query): Query<BTreeMap<String, String>>,
+        ) -> axum::response::Response {
+            if headers
+                .get("authorization")
+                .and_then(|value| value.to_str().ok())
+                != Some("Basic dXNlcjpwYXNz")
+            {
+                return (StatusCode::UNAUTHORIZED, "").into_response();
+            }
+            if query.get("filter").map(String::as_str) != Some("id == @ahu-1-sat") {
+                return (StatusCode::BAD_REQUEST, "unexpected ref filter").into_response();
+            }
+            (
+                StatusCode::OK,
+                "ver:\"3.0\"\nid,curVal,ts\n@ahu-1-sat \"Supply air temperature\",72.5°F,2026-10-02T12:00:00-05:00 New_York\n",
+            )
+                .into_response()
+        }
+
+        async fn zinc_history(
+            headers: HeaderMap,
+            Query(query): Query<BTreeMap<String, String>>,
+        ) -> axum::response::Response {
+            if headers
+                .get("authorization")
+                .and_then(|value| value.to_str().ok())
+                != Some("Basic dXNlcjpwYXNz")
+            {
+                return (StatusCode::UNAUTHORIZED, "").into_response();
+            }
+            if query.get("id").map(String::as_str) != Some("@ahu-1-sat") {
+                return (StatusCode::BAD_REQUEST, "unexpected history ref").into_response();
+            }
+            (
+                StatusCode::OK,
+                "ver:\"3.0\"\nts,val\n2026-10-02T12:00:00-05:00 New_York,72.5°F\n",
+            )
+                .into_response()
+        }
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_address = listener.local_addr().unwrap();
+        let upstream = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new()
+                    .route("/read", get(zinc_read))
+                    .route("/hisRead", get(zinc_history)),
+            )
+            .await
+            .unwrap();
+        });
+
+        let fieldbus_settings = openfdd_fieldbus::Settings {
+            connector_tenant_id: Some("tenant".into()),
+            connector_building_id: Some("building".into()),
+            connector_edge_id: Some("edge".into()),
+            haystack_configured: true,
+            haystack: openfdd_fieldbus::HaystackSettings {
+                base_url: format!("http://{upstream_address}/"),
+                username: "user".into(),
+                password: "pass".into(),
+                auth_mode: openfdd_fieldbus::HaystackAuthMode::Basic,
+                tls_verify: true,
+                catalog_path: Some(catalog_path.clone()),
+            },
+            ..openfdd_fieldbus::Settings::default()
+        };
+        let haystack = Arc::new(openfdd_fieldbus::HaystackService::new(
+            fieldbus_settings.haystack.clone(),
+        ));
+        let split_state = openfdd_fieldbus::HaystackState {
+            settings: Arc::new(fieldbus_settings),
+            api_key: None,
+            haystack,
+            identity: ServiceIdentity::new(
+                ConnectorServiceProfile::Haystack,
+                "fixture",
+                RecipeKind::EdgeHaystack,
+            ),
+            manual_sequence: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            manual_spool: Arc::new(tokio::sync::Mutex::new(None)),
+            manual_gate: Arc::new(tokio::sync::Mutex::new(())),
+            manual_results: Arc::new(tokio::sync::Mutex::new(std::collections::BTreeMap::new())),
+        };
+        let split = openfdd_fieldbus::haystack_router(split_state);
+        let scope = ConnectorScope {
+            tenant_id: "tenant".into(),
+            building_id: "building".into(),
+            edge_id: "edge".into(),
+        };
+        let current_request = HaystackCurrentReadRequest {
+            schema: HAYSTACK_READ_CONTRACT_V1.into(),
+            request_id: uuid::Uuid::new_v4(),
+            scope: scope.clone(),
+            public_keys: vec!["point:ahu-1:sat".into()],
+        };
+        let current_response = split
+            .clone()
+            .oneshot(
+                Request::post("/api/haystack/read")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&current_request).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(current_response.status(), StatusCode::OK);
+        let current: HaystackCurrentReadResponse = serde_json::from_slice(
+            &axum::body::to_bytes(current_response.into_body(), 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(current.values[0].unit.as_deref(), Some("°F"));
+
+        let history_request = HaystackHistoryReadRequest {
+            schema: HAYSTACK_READ_CONTRACT_V1.into(),
+            request_id: uuid::Uuid::new_v4(),
+            scope,
+            public_keys: vec!["point:ahu-1:sat".into()],
+            start: "2026-10-02T17:00:00Z".parse().unwrap(),
+            end: "2026-10-02T18:00:00Z".parse().unwrap(),
+            max_samples: 16,
+        };
+        let history_response = split
+            .oneshot(
+                Request::post("/api/haystack/his-read")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&history_request).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(history_response.status(), StatusCode::OK);
+        let history: HaystackHistoryReadResponse = serde_json::from_slice(
+            &axum::body::to_bytes(history_response.into_body(), 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        let source = history.series[0].values[0].clone();
+        assert_eq!(history.sample_count, 1);
+        assert_eq!(source.value, serde_json::json!(72.5));
+        assert_eq!(source.unit.as_deref(), Some("°F"));
+        let source_observed_at = source.observed_at.unwrap();
+
+        let mut envelope = TelemetryEnvelope::new(
+            "building",
+            "edge",
+            Protocol::Haystack,
+            1,
+            vec![TelemetryPoint {
+                id: current.values[0].key.clone(),
+                display_name: Some("Supply air temperature".into()),
+                kind: Some(source.kind),
+                value: source.value.clone(),
+                unit: source.unit.clone(),
+                quality: source.quality,
+                observed_at: Some(source_observed_at),
+                tags: serde_json::json!({
+                    "building_id": "building",
+                    "equipment_id": "ahu-1",
+                    "role": "sat",
+                })
+                .as_object()
+                .cloned()
+                .unwrap(),
+            }],
+        );
+        envelope.observed_at = source_observed_at;
+        envelope.validate().unwrap();
+        let message_id = envelope.message_id;
+        let body = serde_json::to_vec(&envelope).unwrap();
+        let central_state = Arc::new(AppState::new());
+        let central = router(Arc::clone(&central_state));
+        let ingest_request = || {
+            Request::post("/api/ingest/local")
+                .header("authorization", "Bearer loaded-e2e-token")
+                .header("x-openfdd-message-id", message_id.to_string())
+                .header("content-type", "application/json")
+                .body(Body::from(body.clone()))
+                .unwrap()
+        };
+        let ingest_response = central.clone().oneshot(ingest_request()).await.unwrap();
+        assert_eq!(ingest_response.status(), StatusCode::OK);
+        let receipt: LocalIngestReceipt = serde_json::from_slice(
+            &axum::body::to_bytes(ingest_response.into_body(), 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        receipt.validate().unwrap();
+        assert_eq!(receipt.status, LocalIngestStatus::Committed);
+        assert_eq!(receipt.persisted_rows, 1);
+        assert_eq!(receipt.site_id, "building");
+        assert_eq!(receipt.edge_id, "edge");
+        assert_eq!(receipt.message_id, message_id);
+        assert_eq!(receipt.scope, "tenant=-;building=building");
+
+        let ctx = datafusion::prelude::SessionContext::new();
+        fdd_sql::register_historian_building(&ctx, storage.path(), "building")
+            .await
+            .unwrap();
+        let rows = ctx
+            .sql("SELECT timestamp_utc, sat FROM history")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        let timestamp = rows[0]
+            .column(0)
+            .as_any()
+            .downcast_ref::<datafusion::arrow::array::TimestampNanosecondArray>()
+            .unwrap()
+            .value(0);
+        assert_eq!(timestamp, source_observed_at.timestamp_nanos_opt().unwrap());
+        let value = rows[0]
+            .column(1)
+            .as_any()
+            .downcast_ref::<datafusion::arrow::array::Float64Array>()
+            .unwrap()
+            .value(0);
+        assert_eq!(value, 72.5);
+        let shadow = central_state
+            .edges
+            .get("edge")
+            .unwrap()
+            .lock()
+            .unwrap()
+            .last_telemetry
+            .clone()
+            .unwrap();
+        assert_eq!(shadow.points[0].unit.as_deref(), Some("°F"));
+
+        let replay = central.clone().oneshot(ingest_request()).await.unwrap();
+        assert_eq!(replay.status(), StatusCode::OK);
+        let replay_receipt: LocalIngestReceipt = serde_json::from_slice(
+            &axum::body::to_bytes(replay.into_body(), 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(replay_receipt.duplicate);
+        assert_eq!(replay_receipt.status, LocalIngestStatus::Committed);
+
+        let mut conflict = envelope;
+        conflict.points[0].value = serde_json::json!(73.0);
+        let conflict_response = central
+            .oneshot(
+                Request::post("/api/ingest/local")
+                    .header("authorization", "Bearer loaded-e2e-token")
+                    .header("x-openfdd-message-id", message_id.to_string())
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&conflict).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(conflict_response.status(), StatusCode::CONFLICT);
+        let conflict_receipt: LocalIngestReceipt = serde_json::from_slice(
+            &axum::body::to_bytes(conflict_response.into_body(), 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(conflict_receipt.status, LocalIngestStatus::Conflict);
+        assert_eq!(conflict_receipt.message_id, message_id);
+        upstream.abort();
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize process environment while exercising the complete manual connector path"
+    )]
+    async fn loaded_haystack_manual_route_to_actual_central_is_replay_safe() {
+        let _env_lock = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().unwrap();
+        let storage = tempfile::tempdir().unwrap();
+        let spool = tempfile::tempdir().unwrap();
+        let catalog_path = workspace.path().join("haystack-catalog.toml");
+        std::fs::write(
+            &catalog_path,
+            "revision = \"loaded-manual-v2\"\n\n[[records]]\nkey = \"point:ahu-1:sat\"\nkind = \"point\"\ndisplay_name = \"Supply air temperature\"\nequipment_key = \"ahu-1\"\nrole = \"sat\"\nunit = \"°F\"\nsource_ref = \"@ahu-1-sat\"\nnav_ref = \"@ahu-1\"\n\n[[records]]\nkey = \"point:ahu-1:oat\"\nkind = \"point\"\ndisplay_name = \"Outdoor air temperature\"\nequipment_key = \"ahu-1\"\nrole = \"oat\"\nunit = \"°F\"\nsource_ref = \"@ahu-1-oat\"\nnav_ref = \"@ahu-1\"\n",
+        )
+        .unwrap();
+        let env_keys = [
+            "OPENFDD_WORKSPACE",
+            "OPENFDD_STORAGE_URL",
+            "OPENFDD_PARQUET_FLUSH_ROWS",
+            "OPENFDD_PARQUET_FLUSH_SECONDS",
+            "OPENFDD_LOCAL_CENTRAL_URL",
+            "OPENFDD_LOCAL_INGEST_TOKEN",
+            "OPENFDD_LOCAL_SPOOL_DIR",
+            "OPENFDD_BUILDING_ID",
+            "OPENFDD_LOCAL_ALLOWED_EDGE_IDS",
+            "OPENFDD_TENANT_ID",
+            "OPENFDD_MULTI_TENANT",
+            "OPENFDD_LOCAL_SPOOL_MAX_COMPLETED_RECORDS",
+            "OPENFDD_LOCAL_SPOOL_MAX_RETIRED_RECORDS",
+        ];
+        struct EnvSnapshot(Vec<(&'static str, Option<String>)>);
+        impl Drop for EnvSnapshot {
+            fn drop(&mut self) {
+                for (key, value) in self.0.drain(..) {
+                    match value {
+                        Some(value) => std::env::set_var(key, value),
+                        None => std::env::remove_var(key),
+                    }
+                }
+            }
+        }
+        let _env_snapshot = EnvSnapshot(
+            env_keys
+                .iter()
+                .map(|key| (*key, std::env::var(key).ok()))
+                .collect(),
+        );
+        std::env::set_var("OPENFDD_WORKSPACE", workspace.path());
+        std::env::set_var(
+            "OPENFDD_STORAGE_URL",
+            format!("file://{}", storage.path().display()),
+        );
+        std::env::set_var("OPENFDD_PARQUET_FLUSH_ROWS", "1");
+        std::env::set_var("OPENFDD_PARQUET_FLUSH_SECONDS", "3600");
+        std::env::set_var("OPENFDD_LOCAL_INGEST_TOKEN", "loaded-manual-token");
+        std::env::set_var("OPENFDD_LOCAL_SPOOL_DIR", spool.path());
+        std::env::set_var("OPENFDD_LOCAL_SPOOL_MAX_COMPLETED_RECORDS", "1");
+        std::env::set_var("OPENFDD_LOCAL_SPOOL_MAX_RETIRED_RECORDS", "10");
+        std::env::set_var("OPENFDD_BUILDING_ID", "building");
+        std::env::set_var("OPENFDD_LOCAL_ALLOWED_EDGE_IDS", "edge");
+        std::env::remove_var("OPENFDD_TENANT_ID");
+        std::env::remove_var("OPENFDD_MULTI_TENANT");
+
+        let upstream_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_address = upstream_listener.local_addr().unwrap();
+        let upstream_hits = Arc::new(AtomicUsize::new(0));
+        let start_upstream = |listener: TcpListener| {
+            let upstream_hits = Arc::clone(&upstream_hits);
+            tokio::spawn(async move {
+                axum::serve(
+                    listener,
+                    Router::new().route(
+                        "/read",
+                        get(
+                            move |headers: HeaderMap,
+                                  Query(query): Query<BTreeMap<String, String>>| {
+                                let upstream_hits = Arc::clone(&upstream_hits);
+                                async move {
+                                    if headers
+                                        .get("authorization")
+                                        .and_then(|value| value.to_str().ok())
+                                        != Some("Basic dXNlcjpwYXNz")
+                                        || query.get("filter").map(String::as_str)
+                                            != Some(
+                                                "id == @ahu-1-sat or id == @ahu-1-oat",
+                                            )
+                                    {
+                                        return (StatusCode::UNAUTHORIZED, "").into_response();
+                                    }
+                                    upstream_hits.fetch_add(1, Ordering::SeqCst);
+                                    // Deliberately return only SAT for a two-key
+                                    // request. The typed contract permits a
+                                    // bounded partial response, which must be
+                                    // persisted and replayed byte-for-byte.
+                                    (
+                                        StatusCode::OK,
+                                        "ver:\"3.0\"\nid,curVal,ts\n@ahu-1-sat \"Supply air temperature\",72.5°F,2026-10-02T12:00:00-05:00 New_York\n",
+                                    )
+                                        .into_response()
+                                }
+                            },
+                        ),
+                    ),
+                )
+                .await
+                .unwrap();
+            })
+        };
+        let mut upstream = start_upstream(upstream_listener);
+
+        let pending_body = Arc::new(Mutex::new(None::<Bytes>));
+        let pending_hits = Arc::new(AtomicUsize::new(0));
+        let pending_body_for_route = Arc::clone(&pending_body);
+        let pending_hits_for_route = Arc::clone(&pending_hits);
+        let pending_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let pending_address = pending_listener.local_addr().unwrap();
+        let pending_server = tokio::spawn(async move {
+            let pending = Router::new().route(
+                "/api/ingest/local",
+                post(move |headers: HeaderMap, body: Bytes| {
+                    let pending_body = Arc::clone(&pending_body_for_route);
+                    let pending_hits = Arc::clone(&pending_hits_for_route);
+                    async move {
+                        assert_eq!(
+                            headers
+                                .get("authorization")
+                                .and_then(|value| value.to_str().ok()),
+                            Some("Bearer loaded-manual-token")
+                        );
+                        *pending_body.lock().unwrap() = Some(body.clone());
+                        pending_hits.fetch_add(1, Ordering::SeqCst);
+                        let envelope: TelemetryEnvelope = serde_json::from_slice(&body).unwrap();
+                        (
+                            StatusCode::ACCEPTED,
+                            Json(LocalIngestReceipt {
+                                schema: openfdd_contracts::LOCAL_INGEST_RECEIPT_CONTRACT_V1.into(),
+                                scope: "tenant=-;building=building".into(),
+                                site_id: envelope.site_id,
+                                edge_id: envelope.edge_id,
+                                message_id: envelope.message_id,
+                                status: LocalIngestStatus::Pending,
+                                duplicate: false,
+                                eligible_points: 0,
+                                persisted_rows: 0,
+                                error: Some(
+                                    "synthetic first response; retry through Central".into(),
+                                ),
+                            }),
+                        )
+                    }
+                }),
+            );
+            axum::serve(pending_listener, pending).await.unwrap();
+        });
+
+        let central_state = Arc::new(AppState::new());
+        let central_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let central_address = central_listener.local_addr().unwrap();
+        let central_server = tokio::spawn({
+            let central = router(Arc::clone(&central_state));
+            async move { axum::serve(central_listener, central).await.unwrap() }
+        });
+
+        let haystack_settings = openfdd_fieldbus::HaystackSettings {
+            base_url: format!("http://{upstream_address}/"),
+            username: "user".into(),
+            password: "pass".into(),
+            auth_mode: openfdd_fieldbus::HaystackAuthMode::Basic,
+            tls_verify: true,
+            catalog_path: Some(catalog_path.clone()),
+        };
+        let fieldbus_settings = openfdd_fieldbus::Settings {
+            connector_tenant_id: Some("tenant".into()),
+            connector_building_id: Some("building".into()),
+            connector_edge_id: Some("edge".into()),
+            haystack_configured: true,
+            haystack: haystack_settings.clone(),
+            ..openfdd_fieldbus::Settings::default()
+        };
+        let fieldbus_settings = Arc::new(fieldbus_settings);
+        let split_state = openfdd_fieldbus::HaystackState {
+            settings: Arc::clone(&fieldbus_settings),
+            api_key: Some("management-key".into()),
+            haystack: Arc::new(openfdd_fieldbus::HaystackService::new(
+                haystack_settings.clone(),
+            )),
+            identity: ServiceIdentity::new(
+                ConnectorServiceProfile::Haystack,
+                "fixture",
+                RecipeKind::EdgeHaystack,
+            ),
+            manual_sequence: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            manual_spool: Arc::new(tokio::sync::Mutex::new(None)),
+            manual_gate: Arc::new(tokio::sync::Mutex::new(())),
+            manual_results: Arc::new(tokio::sync::Mutex::new(std::collections::BTreeMap::new())),
+        };
+        let split =
+            openfdd_fieldbus::haystack_router(split_state).layer(middleware::from_fn_with_state(
+                AuthState::new(Some("management-key".into())),
+                auth_middleware,
+            ));
+        std::env::set_var(
+            "OPENFDD_LOCAL_CENTRAL_URL",
+            format!("http://{pending_address}"),
+        );
+        let scope = ConnectorScope {
+            tenant_id: "tenant".into(),
+            building_id: "building".into(),
+            edge_id: "edge".into(),
+        };
+        let request = HaystackCurrentReadRequest {
+            schema: HAYSTACK_READ_CONTRACT_V1.into(),
+            request_id: uuid::Uuid::new_v4(),
+            scope: scope.clone(),
+            public_keys: vec!["point:ahu-1:sat".into(), "point:ahu-1:oat".into()],
+        };
+        let body = serde_json::to_vec(&request).unwrap();
+        let make_request = |body: Vec<u8>, authorization: Option<&str>| {
+            let mut builder =
+                Request::post("/api/haystack/telemetry").header("content-type", "application/json");
+            if let Some(authorization) = authorization {
+                builder = builder.header("authorization", authorization);
+            }
+            builder.body(Body::from(body)).unwrap()
+        };
+        let unauthorized = split
+            .clone()
+            .oneshot(make_request(body.clone(), None))
+            .await
+            .unwrap();
+        assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+        let first = split
+            .clone()
+            .oneshot(make_request(body.clone(), Some("Bearer management-key")))
+            .await
+            .unwrap();
+        let first_status = first.status();
+        let first_bytes = axum::body::to_bytes(first.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
+        assert_eq!(
+            first_status,
+            StatusCode::OK,
+            "{}",
+            String::from_utf8_lossy(&first_bytes)
+        );
+        let first_result: Value = serde_json::from_slice(&first_bytes).unwrap();
+        assert_eq!(first_result["status"], "pending");
+        assert_eq!(pending_hits.load(Ordering::SeqCst), 1);
+        let persisted_body = pending_body.lock().unwrap().clone().unwrap();
+        let persisted_envelope: TelemetryEnvelope =
+            serde_json::from_slice(&persisted_body).unwrap();
+        assert_eq!(request.public_keys.len(), 2);
+        assert_eq!(persisted_envelope.points.len(), 1);
+        assert_eq!(persisted_envelope.points[0].id, "point:ahu-1:sat");
+
+        let mut changed = request.clone();
+        changed.public_keys = vec!["point:ahu-1:other".into()];
+        let changed_response = split
+            .clone()
+            .oneshot(make_request(
+                serde_json::to_vec(&changed).unwrap(),
+                Some("Bearer management-key"),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(changed_response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(pending_hits.load(Ordering::SeqCst), 1);
+
+        // Prove the retry uses the durable pending envelope: stop the
+        // Haystack upstream before retrying, so any upstream reread would
+        // fail instead of being hidden by a still-live fixture.
+        upstream.abort();
+        let _ = (&mut upstream).await;
+        pending_server.abort();
+        std::env::set_var(
+            "OPENFDD_LOCAL_CENTRAL_URL",
+            format!("http://{central_address}"),
+        );
+        let retry = split
+            .clone()
+            .oneshot(make_request(body.clone(), Some("Bearer management-key")))
+            .await
+            .unwrap();
+        assert_eq!(retry.status(), StatusCode::OK);
+        let retry_result: Value = serde_json::from_slice(
+            &axum::body::to_bytes(retry.into_body(), 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(retry_result["status"], "committed");
+        assert_eq!(retry_result["message_id"], request.request_id.to_string());
+        let recorded = central_state
+            .edges
+            .get("edge")
+            .unwrap()
+            .lock()
+            .unwrap()
+            .last_telemetry
+            .clone()
+            .unwrap();
+        assert_eq!(recorded, persisted_envelope);
+
+        // Bring the same bounded upstream endpoint back after the offline
+        // retry. Two distinct operations are submitted concurrently; both
+        // must reserve and write their own pending spool identity.
+        let upstream_listener = TcpListener::bind(upstream_address).await.unwrap();
+        upstream = start_upstream(upstream_listener);
+        let second_request = HaystackCurrentReadRequest {
+            request_id: uuid::Uuid::new_v4(),
+            ..request.clone()
+        };
+        let third_request = HaystackCurrentReadRequest {
+            request_id: uuid::Uuid::new_v4(),
+            ..request.clone()
+        };
+        let second_body = serde_json::to_vec(&second_request).unwrap();
+        let third_body = serde_json::to_vec(&third_request).unwrap();
+        let (second, third) = tokio::join!(
+            split.clone().oneshot(make_request(
+                second_body.clone(),
+                Some("Bearer management-key"),
+            )),
+            split.clone().oneshot(make_request(
+                third_body.clone(),
+                Some("Bearer management-key"),
+            )),
+        );
+        let second = second.unwrap();
+        let third = third.unwrap();
+        assert_eq!(second.status(), StatusCode::OK);
+        assert_eq!(third.status(), StatusCode::OK);
+        let second_result: Value = serde_json::from_slice(
+            &axum::body::to_bytes(second.into_body(), 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        let third_result: Value = serde_json::from_slice(
+            &axum::body::to_bytes(third.into_body(), 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(second_result["status"], "committed");
+        assert_eq!(third_result["status"], "committed");
+
+        // Leave one known completed record after the two concurrent writes so
+        // restart can prove both an expired tombstone and a completed replay.
+        let final_request = HaystackCurrentReadRequest {
+            request_id: uuid::Uuid::new_v4(),
+            ..request.clone()
+        };
+        let final_response = split
+            .clone()
+            .oneshot(make_request(
+                serde_json::to_vec(&final_request).unwrap(),
+                Some("Bearer management-key"),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(final_response.status(), StatusCode::OK);
+        let final_result: Value = serde_json::from_slice(
+            &axum::body::to_bytes(final_response.into_body(), 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(final_result["status"], "committed");
+        assert_eq!(upstream_hits.load(Ordering::SeqCst), 4);
+        assert_eq!(*central_state.ingest_dup.lock().unwrap(), 0);
+
+        upstream.abort();
+        drop(split);
+        let restarted = openfdd_fieldbus::HaystackState {
+            settings: Arc::clone(&fieldbus_settings),
+            api_key: Some("management-key".into()),
+            haystack: Arc::new(openfdd_fieldbus::HaystackService::new(haystack_settings)),
+            identity: ServiceIdentity::new(
+                ConnectorServiceProfile::Haystack,
+                "fixture-restarted",
+                RecipeKind::EdgeHaystack,
+            ),
+            manual_sequence: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            manual_spool: Arc::new(tokio::sync::Mutex::new(None)),
+            manual_gate: Arc::new(tokio::sync::Mutex::new(())),
+            manual_results: Arc::new(tokio::sync::Mutex::new(std::collections::BTreeMap::new())),
+        };
+        let restarted =
+            openfdd_fieldbus::haystack_router(restarted).layer(middleware::from_fn_with_state(
+                AuthState::new(Some("management-key".into())),
+                auth_middleware,
+            ));
+        let replay = restarted
+            .clone()
+            .oneshot(make_request(body, Some("Bearer management-key")))
+            .await
+            .unwrap();
+        assert_eq!(replay.status(), StatusCode::OK);
+        let replay_result: Value = serde_json::from_slice(
+            &axum::body::to_bytes(replay.into_body(), 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(replay_result["status"], "expired");
+        assert_eq!(*central_state.ingest_dup.lock().unwrap(), 0);
+        let expired_changed = restarted
+            .clone()
+            .oneshot(make_request(
+                serde_json::to_vec(&changed).unwrap(),
+                Some("Bearer management-key"),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(expired_changed.status(), StatusCode::OK);
+        let expired_changed_result: Value = serde_json::from_slice(
+            &axum::body::to_bytes(expired_changed.into_body(), 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(expired_changed_result["status"], "expired");
+        let final_replay = restarted
+            .oneshot(make_request(
+                serde_json::to_vec(&final_request).unwrap(),
+                Some("Bearer management-key"),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(final_replay.status(), StatusCode::OK);
+        let final_replay_result: Value = serde_json::from_slice(
+            &axum::body::to_bytes(final_replay.into_body(), 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(final_replay_result["status"], "committed");
+        assert_eq!(
+            final_replay_result["message_id"],
+            final_request.request_id.to_string()
+        );
+        assert_eq!(*central_state.ingest_dup.lock().unwrap(), 0);
+
+        let ctx = datafusion::prelude::SessionContext::new();
+        fdd_sql::register_historian_building(&ctx, storage.path(), "building")
+            .await
+            .unwrap();
+        let rows = ctx
+            .sql("SELECT timestamp_utc, sat FROM history")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 4);
+        let timestamp = rows[0]
+            .column(0)
+            .as_any()
+            .downcast_ref::<datafusion::arrow::array::TimestampNanosecondArray>()
+            .unwrap()
+            .value(0);
+        assert_eq!(timestamp, 1_790_960_400_000_000_000);
+        let value = rows[0]
+            .column(1)
+            .as_any()
+            .downcast_ref::<datafusion::arrow::array::Float64Array>()
+            .unwrap()
+            .value(0);
+        assert_eq!(value, 72.5);
+        central_server.abort();
     }
 
     #[tokio::test]
@@ -5742,6 +7062,7 @@ mod version_tests {
                 value: serde_json::json!(1.0),
                 unit: None,
                 quality: Quality::Good,
+                observed_at: None,
                 tags: serde_json::json!({
                     "building_id": "building-http-test",
                     "equipment_id": "equipment-http-test",
@@ -5766,30 +7087,41 @@ mod version_tests {
             HeaderValue::from_static("building-http-test"),
         );
         let request_body = Bytes::from(serde_json::to_vec(&envelope).unwrap());
-        let (status, Json(body)): (_, Json<Value>) = local_fieldbus_ingest(
+        let (status, Json(body)) = local_fieldbus_ingest(
             axum::extract::State(Arc::clone(&state)),
             headers.clone(),
-            request_body.clone(),
+            Ok(request_body.clone()),
         )
         .await
         .unwrap();
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["ok"], true);
-        assert_eq!(body["pending"], false);
-        assert_eq!(body["duplicate"], false);
-        assert_eq!(body["persisted_rows"], serde_json::json!(1));
+        assert_eq!(body.status, LocalIngestStatus::Committed);
+        assert!(!body.duplicate);
+        assert_eq!(body.persisted_rows, 1);
 
-        let (replay_status, Json(replay)): (_, Json<Value>) = local_fieldbus_ingest(
+        let (replay_status, Json(replay)) = local_fieldbus_ingest(
             axum::extract::State(Arc::clone(&state)),
             headers.clone(),
-            request_body,
+            Ok(request_body),
         )
         .await
         .unwrap();
         assert_eq!(replay_status, StatusCode::OK);
-        assert_eq!(replay["duplicate"], true);
-        assert_eq!(replay["pending"], false);
-        assert_eq!(replay["persisted_rows"], serde_json::json!(1));
+        assert!(replay.duplicate);
+        assert_eq!(replay.status, LocalIngestStatus::Committed);
+        assert_eq!(replay.persisted_rows, 1);
+
+        let mut conflict = envelope.clone();
+        conflict.points[0].value = serde_json::json!(2.0);
+        let conflict = local_fieldbus_ingest(
+            axum::extract::State(Arc::clone(&state)),
+            headers.clone(),
+            Ok(Bytes::from(serde_json::to_vec(&conflict).unwrap())),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(conflict.status, StatusCode::CONFLICT);
+        assert_eq!(conflict.receipt.status, LocalIngestStatus::Conflict);
 
         let mut foreign = envelope;
         foreign.message_id = uuid::Uuid::new_v4();
@@ -5804,10 +7136,10 @@ mod version_tests {
         let result = local_fieldbus_ingest(
             axum::extract::State(state),
             headers,
-            Bytes::from(serde_json::to_vec(&foreign).unwrap()),
+            Ok(Bytes::from(serde_json::to_vec(&foreign).unwrap())),
         )
         .await;
-        assert_eq!(result.unwrap_err().0, StatusCode::FORBIDDEN);
+        assert_eq!(result.unwrap_err().status, StatusCode::FORBIDDEN);
         for key in [
             "OPENFDD_LOCAL_INGEST_TOKEN",
             "OPENFDD_SITE_ID",

@@ -16,12 +16,17 @@ use openfdd_contracts::{
     CapabilitiesAggregateResponse, CapabilityState, ConnectorAction, ConnectorCapability,
     ConnectorHelloResponse, ConnectorInventoryRequest, ConnectorInventoryResponse,
     ConnectorProtocol, ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult,
-    DeliveryStatus, PriorityHistoryRequest, PriorityHistoryResponse, PriorityHistoryTriggerRequest,
-    PriorityHistoryTriggerResponse, ReadValueState, RecipeObservation, ServiceVersion,
-    UpstreamCapability, CAPABILITIES_AGGREGATE_CONTRACT_V1, CAPABILITIES_CONTRACT_V1,
+    ConnectorScope, DeliveryStatus, HaystackAboutRequest, HaystackAboutResponse,
+    HaystackCatalogRequest, HaystackCatalogResponse, HaystackCurrentReadRequest,
+    HaystackCurrentReadResponse, HaystackHistoryReadRequest, HaystackHistoryReadResponse,
+    HaystackNavRequest, HaystackNavResponse, PriorityHistoryRequest, PriorityHistoryResponse,
+    PriorityHistoryTriggerRequest, PriorityHistoryTriggerResponse, ReadValueState,
+    RecipeObservation, ServiceVersion, UpstreamCapability, CAPABILITIES_AGGREGATE_CONTRACT_V1,
+    CAPABILITIES_CONTRACT_V1, HAYSTACK_MAX_BODY_BYTES,
 };
 use reqwest::redirect::Policy;
 use reqwest::Client;
+use serde::Serialize;
 use tokio::sync::{Mutex, Semaphore};
 use tokio::time::timeout;
 use url::Url;
@@ -529,6 +534,144 @@ impl CapabilitiesAggregator {
             .map_err(|_| ProxyError::Incompatible)?;
         Ok(response)
     }
+
+    async fn proxy_haystack_body<T: Serialize>(
+        &self,
+        edge_id: &str,
+        scope: &ConnectorScope,
+        suffix: &'static str,
+        request: &T,
+    ) -> Result<Vec<u8>, ProxyError> {
+        scope.validate().map_err(|_| ProxyError::BadRequest)?;
+        let upstream = self
+            .upstreams
+            .iter()
+            .find(|upstream| upstream.edge_id == edge_id)
+            .ok_or(ProxyError::NotConfigured)?;
+        if upstream.tenant_id != scope.tenant_id
+            || upstream.building_id != scope.building_id
+            || upstream.edge_id != scope.edge_id
+        {
+            return Err(ProxyError::BadRequest);
+        }
+        // Haystack proxying is always authenticated. The anonymous compatibility
+        // switch is intentionally limited to legacy BACnet inventory/read.
+        let token = upstream.token.as_deref().ok_or(ProxyError::AuthFailure)?;
+        let client = self.client.as_ref().ok_or(ProxyError::Incompatible)?;
+        let _permit = timeout(Duration::from_secs(2), self.probe_gate.acquire())
+            .await
+            .map_err(|_| ProxyError::Unreachable)?
+            .map_err(|_| ProxyError::Unreachable)?;
+        let endpoint =
+            endpoint(&upstream.base_url, suffix).map_err(|_| ProxyError::Incompatible)?;
+        let response = timeout(
+            REQUEST_TIMEOUT,
+            client
+                .post(endpoint)
+                .bearer_auth(token)
+                .json(request)
+                .send(),
+        )
+        .await
+        .map_err(|_| ProxyError::Unreachable)?
+        .map_err(|_| ProxyError::Unreachable)?;
+        if response.status() == StatusCode::UNAUTHORIZED
+            || response.status() == StatusCode::FORBIDDEN
+        {
+            return Err(ProxyError::AuthFailure);
+        }
+        if !response.status().is_success() || response.status().is_redirection() {
+            return Err(ProxyError::Incompatible);
+        }
+        bounded_body_limit(response, HAYSTACK_MAX_BODY_BYTES)
+            .await
+            .map_err(|_| ProxyError::Incompatible)
+    }
+
+    pub async fn proxy_haystack_catalog(
+        &self,
+        edge_id: &str,
+        request: &HaystackCatalogRequest,
+    ) -> Result<HaystackCatalogResponse, ProxyError> {
+        request.validate().map_err(|_| ProxyError::BadRequest)?;
+        let body = self
+            .proxy_haystack_body(edge_id, &request.scope, "api/haystack/catalog", request)
+            .await?;
+        let response: HaystackCatalogResponse =
+            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
+        response
+            .validate_for(request)
+            .map_err(|_| ProxyError::Incompatible)?;
+        Ok(response)
+    }
+
+    pub async fn proxy_haystack_about(
+        &self,
+        edge_id: &str,
+        request: &HaystackAboutRequest,
+    ) -> Result<HaystackAboutResponse, ProxyError> {
+        request.validate().map_err(|_| ProxyError::BadRequest)?;
+        let body = self
+            .proxy_haystack_body(edge_id, &request.scope, "api/haystack/about", request)
+            .await?;
+        let response: HaystackAboutResponse =
+            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
+        response
+            .validate_for(request)
+            .map_err(|_| ProxyError::Incompatible)?;
+        Ok(response)
+    }
+
+    pub async fn proxy_haystack_current_read(
+        &self,
+        edge_id: &str,
+        request: &HaystackCurrentReadRequest,
+    ) -> Result<HaystackCurrentReadResponse, ProxyError> {
+        request.validate().map_err(|_| ProxyError::BadRequest)?;
+        let body = self
+            .proxy_haystack_body(edge_id, &request.scope, "api/haystack/read", request)
+            .await?;
+        let response: HaystackCurrentReadResponse =
+            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
+        response
+            .validate_for(request)
+            .map_err(|_| ProxyError::Incompatible)?;
+        Ok(response)
+    }
+
+    pub async fn proxy_haystack_nav(
+        &self,
+        edge_id: &str,
+        request: &HaystackNavRequest,
+    ) -> Result<HaystackNavResponse, ProxyError> {
+        request.validate().map_err(|_| ProxyError::BadRequest)?;
+        let body = self
+            .proxy_haystack_body(edge_id, &request.scope, "api/haystack/nav", request)
+            .await?;
+        let response: HaystackNavResponse =
+            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
+        response
+            .validate_for(request)
+            .map_err(|_| ProxyError::Incompatible)?;
+        Ok(response)
+    }
+
+    pub async fn proxy_haystack_history(
+        &self,
+        edge_id: &str,
+        request: &HaystackHistoryReadRequest,
+    ) -> Result<HaystackHistoryReadResponse, ProxyError> {
+        request.validate().map_err(|_| ProxyError::BadRequest)?;
+        let body = self
+            .proxy_haystack_body(edge_id, &request.scope, "api/haystack/his-read", request)
+            .await?;
+        let response: HaystackHistoryReadResponse =
+            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
+        response
+            .validate_for(request)
+            .map_err(|_| ProxyError::Incompatible)?;
+        Ok(response)
+    }
 }
 
 /// Validate and reduce every connector read to the public DTO surface.  The
@@ -547,7 +690,7 @@ fn sanitize_public_read_response(
     if response.ok {
         match response.result.as_mut() {
             Some(ConnectorReadResult::Metadata { hello }) => {
-                *hello = sanitize_hello(hello.clone())?;
+                **hello = sanitize_hello((**hello).clone())?;
             }
             Some(ConnectorReadResult::PriorityArray(array)) => {
                 for slot in &mut array.slots {
@@ -597,9 +740,13 @@ fn sanitize_public_priority_history(
 }
 
 async fn bounded_body(response: reqwest::Response) -> Result<Vec<u8>, ()> {
+    bounded_body_limit(response, MAX_BODY_BYTES).await
+}
+
+async fn bounded_body_limit(response: reqwest::Response, max_bytes: usize) -> Result<Vec<u8>, ()> {
     if response
         .content_length()
-        .is_some_and(|length| length > MAX_BODY_BYTES as u64)
+        .is_some_and(|length| length > max_bytes as u64)
     {
         return Err(());
     }
@@ -610,7 +757,7 @@ async fn bounded_body(response: reqwest::Response) -> Result<Vec<u8>, ()> {
         .map_err(|_| ())?
     {
         let chunk = chunk.map_err(|_| ())?;
-        if body.len().saturating_add(chunk.len()) > MAX_BODY_BYTES {
+        if body.len().saturating_add(chunk.len()) > max_bytes {
             return Err(());
         }
         body.extend_from_slice(&chunk);
@@ -803,7 +950,10 @@ pub fn restrict_to_edges(
 fn sanitize_hello(mut hello: ConnectorHelloResponse) -> Result<ConnectorHelloResponse, ()> {
     if hello.schema != CAPABILITIES_CONTRACT_V1
         || hello.version.contract != CAPABILITIES_CONTRACT_V1
-        || hello.version.service != "openfdd-fieldbus"
+        || !matches!(
+            hello.version.service.as_str(),
+            "openfdd-fieldbus" | "openfdd-bacnet-modbus" | "openfdd-haystack"
+        )
     {
         return Err(());
     }
@@ -859,6 +1009,7 @@ fn empty_report(error: Option<String>) -> CapabilitiesAggregateResponse {
             unobserved_services: vec![],
             reconciliation: "not_declared".into(),
         },
+        service_identity: None,
         observed_at: Utc::now(),
     };
     let report = aggregate_report(central.clone(), Vec::new());
@@ -1001,6 +1152,7 @@ pub fn central_hello(state: &AppState) -> ConnectorHelloResponse {
             unobserved_services,
             reconciliation: reconciliation.into(),
         },
+        service_identity: None,
         observed_at: Utc::now(),
     }
 }
@@ -1190,6 +1342,7 @@ mod tests {
                 unobserved_services: vec![],
                 reconciliation: "not_declared".into(),
             },
+            service_identity: None,
             observed_at: Utc::now(),
         }
     }
@@ -1374,6 +1527,71 @@ mod tests {
         assert!(!serde_json::to_string(&sanitized)
             .unwrap()
             .contains("internal"));
+    }
+
+    #[test]
+    fn public_hello_sanitizer_accepts_profile_bound_split_identities() {
+        for (profile, service, protocols) in [
+            (
+                openfdd_contracts::ConnectorServiceProfile::BacnetModbus,
+                "openfdd-bacnet-modbus",
+                vec![ConnectorProtocol::Bacnet, ConnectorProtocol::Modbus],
+            ),
+            (
+                openfdd_contracts::ConnectorServiceProfile::Haystack,
+                "openfdd-haystack",
+                vec![ConnectorProtocol::Haystack],
+            ),
+        ] {
+            let connectors = protocols
+                .iter()
+                .copied()
+                .map(|protocol| ConnectorCapability {
+                    protocol,
+                    compiled: true,
+                    configured: false,
+                    enabled: false,
+                    readiness: CapabilityState::NotConfigured,
+                    source_health: CapabilityState::NotConfigured,
+                    mqtt_connection: DeliveryStatus::Disabled,
+                    durable_delivery: DeliveryStatus::Disabled,
+                    supported_actions: vec![],
+                    detail: None,
+                })
+                .collect();
+            let identity = openfdd_contracts::ServiceIdentity::new(
+                profile,
+                "3.5.60+test",
+                match profile {
+                    openfdd_contracts::ConnectorServiceProfile::BacnetModbus => {
+                        openfdd_contracts::RecipeKind::EdgeBacnetModbus
+                    }
+                    openfdd_contracts::ConnectorServiceProfile::Haystack => {
+                        openfdd_contracts::RecipeKind::EdgeHaystack
+                    }
+                },
+            );
+            let hello = ConnectorHelloResponse {
+                schema: CAPABILITIES_CONTRACT_V1.into(),
+                version: ServiceVersion {
+                    service: service.into(),
+                    build: "3.5.60+test".into(),
+                    contract: CAPABILITIES_CONTRACT_V1.into(),
+                },
+                compiled_protocols: protocols,
+                connectors,
+                recipe: RecipeObservation {
+                    declared: None,
+                    configured_services: vec!["fieldbus".into()],
+                    observed_services: vec!["fieldbus".into()],
+                    unobserved_services: vec![],
+                    reconciliation: "not_declared".into(),
+                },
+                service_identity: Some(identity),
+                observed_at: Utc::now(),
+            };
+            assert!(sanitize_hello(hello).is_ok(), "{service} must be accepted");
+        }
     }
 
     #[test]
@@ -1714,6 +1932,59 @@ mod tests {
         let value = serde_json::to_value(request).unwrap();
         assert!(value.get("url").is_none());
         assert!(value.get("host").is_none());
+    }
+
+    #[tokio::test]
+    async fn haystack_proxy_is_fixed_path_authenticated_and_correlated() {
+        let calls = StdArc::new(AtomicUsize::new(0));
+        let calls_for_handler = StdArc::clone(&calls);
+        let app = Router::new().route(
+            "/api/haystack/catalog",
+            post(
+                move |request: axum::extract::Json<openfdd_contracts::HaystackCatalogRequest>| {
+                    calls_for_handler.fetch_add(1, Ordering::Relaxed);
+                    async move {
+                        axum::Json(openfdd_contracts::HaystackCatalogResponse {
+                            schema: openfdd_contracts::HAYSTACK_CATALOG_CONTRACT_V1.into(),
+                            request_id: request.0.request_id,
+                            scope: request.0.scope,
+                            revision: "catalog-v1".into(),
+                            records: Vec::new(),
+                            next_cursor: None,
+                        })
+                    }
+                },
+            ),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let aggregator = CapabilitiesAggregator::for_tests(vec![ConfiguredUpstream {
+            tenant_id: "tenant-a".into(),
+            building_id: "building-a".into(),
+            edge_id: "edge-a".into(),
+            base_url: Url::parse(&format!("http://{addr}")).unwrap(),
+            token: Some("test-token".into()),
+        }]);
+        let request = openfdd_contracts::HaystackCatalogRequest {
+            schema: openfdd_contracts::HAYSTACK_CATALOG_CONTRACT_V1.into(),
+            request_id: uuid::Uuid::from_u128(1),
+            scope: ConnectorScope {
+                tenant_id: "tenant-a".into(),
+                building_id: "building-a".into(),
+                edge_id: "edge-a".into(),
+            },
+            page_size: 1,
+            cursor: None,
+        };
+        let response = aggregator
+            .proxy_haystack_catalog("edge-a", &request)
+            .await
+            .unwrap();
+        assert_eq!(response.revision, "catalog-v1");
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
     }
 
     #[tokio::test]
