@@ -889,12 +889,13 @@ pub async fn admin_delete_user(
     let ws = workspace_path();
     let mut store = crate::user_store::UserStore::load_or_empty(&ws);
     let plane = crate::tenant::ControlPlane::load_or_legacy(&ws);
-    let plan = crate::admin_cp::plan_user_cascade_delete(&store, &plane, &username).map_err(|e| {
-        (
-            StatusCode::NOT_FOUND,
-            Json(json!({"ok": false, "error": e})),
-        )
-    })?;
+    let plan =
+        crate::admin_cp::plan_user_cascade_delete(&store, &plane, &username).map_err(|e| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({"ok": false, "error": e})),
+            )
+        })?;
     if q.dry_run || !q.confirm {
         return Ok(Json(json!({
             "ok": true,
