@@ -614,7 +614,11 @@ mod tests {
         assert_eq!(parts.len(), 3);
         let mut payload_chars: Vec<u8> = parts[1].as_bytes().to_vec();
         let mid = payload_chars.len() / 2;
-        payload_chars[mid] = if payload_chars[mid] == b'A' { b'B' } else { b'A' };
+        payload_chars[mid] = if payload_chars[mid] == b'A' {
+            b'B'
+        } else {
+            b'A'
+        };
         let tampered = format!(
             "{}.{}.{}",
             parts[0],
