@@ -46,29 +46,48 @@ if [[ ! -f "$REPORT" ]]; then
 fi
 
 # Subset suites → full_profile=false → not fully_qualified; postcheck still must not FAIL.
-# Reject empty checks, all-BLOCKED, and fabricated counts (E02/E03).
+# Reject empty checks, any BLOCKED, fabricated counts, and child_rc contradictions (R01/R02).
 python3 - <<PY
 import json, sys
 from pathlib import Path
 sys.path.insert(0, "$ROOT/scripts/security")
-from openfdd_security.evidence import validate_report_for_qualification
+from openfdd_security.evidence import reconcile_child_rc, validate_report_for_qualification
+from openfdd_security.profiles import required_check_ids
 report = Path("$REPORT")
+child_rc = int("$rc")
+req = required_check_ids("$PROFILE", ["X", "Y"])
 ok, reason = validate_report_for_qualification(
     report,
     expected_profile="$PROFILE",
     require_full_profile=False,
     postcheck=True,
+    required_check_ids=req,
+    child_rc=child_rc,
 )
 data = json.loads(report.read_text())
-status = data.get("overall_status")
+ok2, status, reason2 = reconcile_child_rc(
+    report_ok=ok,
+    report_status=str(data.get("overall_status") or ("PASS" if ok else "FAIL")),
+    child_rc=child_rc,
+)
+final_ok = ok and ok2
+if ok and not ok2:
+    final_status, final_reason = status, reason2
+elif not ok:
+    final_status = "FAIL" if data.get("overall_status") == "FAIL" else "BLOCKED"
+    final_reason = reason
+else:
+    final_status, final_reason = "PASS", reason
 verdict = {
-    "ok": ok,
-    "status": "PASS" if ok else ("FAIL" if status == "FAIL" else "BLOCKED"),
-    "reason": reason,
+    "ok": final_ok,
+    "status": final_status,
+    "reason": final_reason,
     "note": "postcheck is suite subset; does not erase precheck failure",
     "report": str(report),
+    "child_rc": child_rc,
+    "required_check_count": len(req),
 }
 Path("$ART/security_gate_verdict.json").write_text(json.dumps(verdict, indent=2) + "\n")
 print(json.dumps(verdict))
-sys.exit(0 if ok else (1 if status == "FAIL" else 2))
+sys.exit(0 if final_ok else (1 if final_status == "FAIL" else 2))
 PY

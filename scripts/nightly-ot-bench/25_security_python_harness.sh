@@ -68,24 +68,48 @@ if [[ "${OPENFDD_SECURITY_EXECUTE:-0}" != "1" ]]; then
   exit 2
 fi
 
-# Validate structured result (not exit-code alone)
+# Validate structured result AND child process rc (contradictory pairs → ERROR).
 python3 - <<PY
 import json, sys
 from pathlib import Path
 sys.path.insert(0, "$ROOT/scripts/security")
-from openfdd_security.evidence import validate_report_for_qualification
+from openfdd_security.evidence import reconcile_child_rc, validate_report_for_qualification
+from openfdd_security.profiles import required_check_ids
 report = Path("$REPORT")
 meta_path = report.parent / "security_report.sha256"
 expected = None
 if meta_path.is_file():
     expected = json.loads(meta_path.read_text()).get("sha256")
+child_rc = int("$rc")
+req = required_check_ids("$PROFILE", ["X", "Y", "Z"])
 ok, reason = validate_report_for_qualification(
     report,
     expected_profile="$PROFILE",
     expected_sha256=expected,
+    required_check_ids=req,
+    child_rc=child_rc,
 )
-verdict = {"ok": ok, "status": "PASS" if ok else "FAIL", "reason": reason, "report": str(report)}
+data = json.loads(report.read_text())
+ok2, status, reason2 = reconcile_child_rc(
+    report_ok=ok,
+    report_status=str(data.get("overall_status") or ("PASS" if ok else "FAIL")),
+    child_rc=child_rc,
+)
+# Prefer reconcile when child_rc contradicts a soft-ok path.
+final_ok = ok and ok2
+final_status = "PASS" if final_ok else (status if not ok2 else ("FAIL" if not ok else "ERROR"))
+final_reason = reason if ok else reason
+if ok and not ok2:
+    final_reason = reason2
+verdict = {
+    "ok": final_ok,
+    "status": final_status,
+    "reason": final_reason,
+    "report": str(report),
+    "child_rc": child_rc,
+    "required_check_count": len(req),
+}
 Path("$ART/security_gate_verdict.json").write_text(json.dumps(verdict, indent=2) + "\n")
 print(json.dumps(verdict))
-sys.exit(0 if ok else 1)
+sys.exit(0 if final_ok else (1 if final_status == "FAIL" else 2))
 PY

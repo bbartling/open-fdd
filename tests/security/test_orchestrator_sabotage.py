@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "scripts/qualification"))
 from openfdd_security.evidence import (  # noqa: E402
     CheckResult,
     SecurityReport,
+    reconcile_child_rc,
     validate_report_for_qualification,
     write_report,
 )
@@ -221,6 +222,203 @@ class OrchestratorSabotageTest(unittest.TestCase):
                 expected_profile="isolated_full",
             )
             self.assertFalse(ok)
+
+    def test_r01_string_bool_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = _valid_report(Path(td))
+            data = json.loads(p.read_text())
+            data["executed"] = "true"
+            data["dry_run"] = "false"
+            p.write_text(json.dumps(data))
+            ok, reason = validate_report_for_qualification(
+                p, expected_profile="isolated_full"
+            )
+            self.assertFalse(ok)
+            self.assertIn("boolean", reason)
+
+    def test_r01_contradictory_counts_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = _valid_report(Path(td))
+            data = json.loads(p.read_text())
+            data["counts"] = {
+                "planned": 2,
+                "pass": 99,
+                "fail": 0,
+                "error": 0,
+                "blocked": 0,
+                "skipped": 0,
+                "not_applicable": 0,
+            }
+            p.write_text(json.dumps(data))
+            ok, reason = validate_report_for_qualification(
+                p, expected_profile="isolated_full"
+            )
+            self.assertFalse(ok)
+            self.assertIn("counts", reason)
+
+    def test_r01_invented_pass_missing_required_ids(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = _valid_report(Path(td))
+            ok, reason = validate_report_for_qualification(
+                p,
+                expected_profile="isolated_full",
+                required_check_ids=["z.auth.admin_login", "z.auth.operator_login"],
+            )
+            self.assertFalse(ok)
+            self.assertIn("missing required", reason)
+
+    def test_r01_pass_plus_skipped_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            report = SecurityReport(
+                profile="isolated_full",
+                executed=True,
+                dry_run=False,
+                full_profile=True,
+            )
+            report.add(CheckResult(check_id="a", suite="X", title="a", status="PASS"))
+            report.add(CheckResult(check_id="b", suite="Y", title="b", status="SKIPPED"))
+            write_report(report, Path(td))
+            ok, reason = validate_report_for_qualification(
+                Path(td) / "security_report.json",
+                expected_profile="isolated_full",
+            )
+            self.assertFalse(ok)
+            self.assertIn("skipped", reason.lower())
+
+    def test_r01_candidate_sha_mismatch(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = _valid_report(Path(td))
+            data = json.loads(p.read_text())
+            data["candidate"] = {"sha": "abc123"}
+            p.write_text(json.dumps(data))
+            ok, reason = validate_report_for_qualification(
+                p,
+                expected_profile="isolated_full",
+                expected_candidate_sha="deadbeef",
+            )
+            self.assertFalse(ok)
+            self.assertIn("candidate", reason)
+
+    def test_r02_mixed_pass_blocked_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "security_report.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "openfdd_security_report_v1",
+                        "profile": "live_readonly",
+                        "executed": True,
+                        "dry_run": False,
+                        "full_profile": False,
+                        "overall_status": "BLOCKED",
+                        "fully_qualified": False,
+                        "counts": {
+                            "planned": 2,
+                            "pass": 1,
+                            "fail": 0,
+                            "error": 0,
+                            "blocked": 1,
+                            "skipped": 0,
+                            "not_applicable": 0,
+                        },
+                        "checks": [
+                            {
+                                "check_id": "a",
+                                "suite": "X",
+                                "status": "PASS",
+                                "title": "a",
+                            },
+                            {
+                                "check_id": "b",
+                                "suite": "Y",
+                                "status": "BLOCKED",
+                                "title": "b",
+                            },
+                        ],
+                    }
+                )
+            )
+            ok, reason = validate_report_for_qualification(
+                path,
+                expected_profile="live_readonly",
+                require_full_profile=False,
+                postcheck=True,
+            )
+            self.assertFalse(ok)
+            self.assertIn("blocked", reason.lower())
+
+    def test_r02_child_rc_contradicts_report_ok(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = _valid_report(Path(td))
+            ok, reason = validate_report_for_qualification(
+                p,
+                expected_profile="isolated_full",
+                child_rc=1,
+            )
+            self.assertFalse(ok)
+            self.assertIn("child_rc", reason)
+            ok2, status, _ = reconcile_child_rc(
+                report_ok=True, report_status="PASS", child_rc=5
+            )
+            self.assertFalse(ok2)
+            self.assertEqual(status, "ERROR")
+
+    def test_r02_gate25_wrapper_rejects_stale_pass_with_failed_rc(self):
+        """Stub gate 25 validator path: report PASS + child_rc!=0 → ERROR."""
+        with tempfile.TemporaryDirectory() as td:
+            art = Path(td)
+            report_dir = art / "python_harness"
+            report_dir.mkdir()
+            p = _valid_report(report_dir)
+            # Minimal reproduction of gate 25 reconcile predicate.
+            ok, reason = validate_report_for_qualification(
+                p,
+                expected_profile="isolated_full",
+                child_rc=5,
+            )
+            self.assertFalse(ok)
+            ok2, status, reason2 = reconcile_child_rc(
+                report_ok=True, report_status="PASS", child_rc=5
+            )
+            self.assertFalse(ok2)
+            self.assertEqual(status, "ERROR")
+            self.assertIn("contradictory", reason2)
+
+    def test_r02_mqtt_gate26_prefers_child_rc(self):
+        """Gate 26 must ERROR when observer JSON says PASS but process rc!=0."""
+        with tempfile.TemporaryDirectory() as td:
+            art = Path(td)
+            verdict = art / "mqtt_acl_verdict.json"
+            verdict.write_text(json.dumps({"ok": True, "status": "PASS"}))
+            gate = art / "gate26_stub.sh"
+            gate.write_text(
+                """#!/usr/bin/env bash
+set -euo pipefail
+ART="$1"
+rc=5
+obs_status=$(jq -r '.status // empty' "$ART/mqtt_acl_verdict.json")
+obs_ok_bool=$(jq -r 'if .ok == true then "true" else "false" end' "$ART/mqtt_acl_verdict.json")
+if [[ "$obs_ok_bool" == "true" && "$obs_status" == "PASS" && "$rc" -eq 0 ]]; then
+  exit 0
+fi
+if [[ "$obs_ok_bool" == "true" && "$obs_status" == "PASS" && "$rc" -ne 0 ]]; then
+  echo '{"ok":false,"status":"ERROR","reason":"observer PASS but child_rc!=0 (contradictory)"}' \
+    >"$ART/security_gate_verdict.json"
+  exit 2
+fi
+exit "$rc"
+"""
+            )
+            gate.chmod(0o755)
+            completed = subprocess.run(
+                ["bash", str(gate), str(art)],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 2)
+            out = json.loads((art / "security_gate_verdict.json").read_text())
+            self.assertEqual(out["status"], "ERROR")
+            self.assertFalse(out["ok"])
 
 
 if __name__ == "__main__":
