@@ -21,30 +21,27 @@ nav_order: 6
 Open-FDD uses the same logical historian on a small local Docker/VM host and on object storage:
 
 ```text
-BACnet / Modbus / MQTT / CSV / API
-                |
-                v
-          Open-FDD ingest
-                |
-          Arrow RecordBatches
-                |
-       micro-batch + validate
-                |
-                v
-      immutable Parquet parts
-                |
-      partition + compact
-                |
-       Storage abstraction
-          /           \
-     file://          s3://
-       |                |
-Docker/VM disk      S3-compatible
-          \           /
-            DataFusion
-                |
-             FDD SQL
+BACnet / Modbus OT ──MQTTS──┐
+CSV / package ZIP ──────────┼──► openfdd-central ingest ──► Arrow batches
+Haystack hisRead (HTTPS) ───┘         │
+                              micro-batch + validate
+                                      │
+                              immutable Parquet parts
+                                      │
+                               partition + compact
+                                      │
+                               Storage abstraction
+                                  /           \
+                            file://          s3://
+                               |                |
+                        Docker/VM disk      S3-compatible
+                                  \           /
+                                    DataFusion
+                                        │
+                                     FDD SQL
 ```
+
+**Path split (#1017):** OT collectors publish MQTTS; Haystack history uses outbound HTTPS `hisRead` into the same central writer (MQTT optional). See [ADR historian ingest path split](adr-historian-ingest-path-split-1017.md). Do not run Haystack HTTP credentials inside the BACnet/Modbus process.
 
 Railway is a deployment target for the generic S3-compatible backend; it is not a storage-engine special case.
 
