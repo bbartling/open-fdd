@@ -35,6 +35,8 @@ jobs:
   - type: openapi
     parameters:
       apiFile: "/zap/wrk/openapi.json"
+      # targetUrl supplements specs that omit servers[] (also injected at stage).
+      targetUrl: "${ZAP_TARGET_ORIGIN}"
       context: openfdd-disposable
 
   - type: spider

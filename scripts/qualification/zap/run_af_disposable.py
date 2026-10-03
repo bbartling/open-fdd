@@ -471,6 +471,8 @@ def stage_openapi_spec(*, work_dir: Path, origin: str) -> tuple[bool, str]:
         try:
             parsed = json.loads(dest.read_text(encoding="utf-8"))
             if isinstance(parsed, dict) and (parsed.get("openapi") or parsed.get("swagger")):
+                parsed["servers"] = [{"url": origin.rstrip("/")}]
+                dest.write_text(json.dumps(parsed), encoding="utf-8")
                 return True, f"reused staged openapi.json ({dest.stat().st_size} bytes)"
         except Exception:  # noqa: BLE001
             pass
@@ -541,9 +543,14 @@ def stage_openapi_spec(*, work_dir: Path, origin: str) -> tuple[bool, str]:
             parsed.get("openapi") or parsed.get("swagger")
         ):
             return False, "OpenAPI JSON missing openapi/swagger field"
+        # ZAP OpenAPI AF requires a resolvable server URL; central's shipped
+        # spec often omits servers[]. Bind the disposable scan origin.
+        parsed["servers"] = [{"url": origin.rstrip("/")}]
         dest.write_text(json.dumps(parsed), encoding="utf-8")
     else:
         dest.write_bytes(body)
+        # YAML specs without servers still break ZAP — require JSON path above
+        # for disposable qualification.
 
     if dest.stat().st_size < 32:
         return False, "OpenAPI staged file too small"
@@ -571,6 +578,7 @@ def materialize_plan(
             params["apiFile"] = "/zap/wrk/openapi.json" if report_dir.startswith("/zap/") else str(
                 Path(report_dir) / "openapi.json"
             )
+            params["targetUrl"] = origin.rstrip("/")
             params.setdefault("context", "openfdd-disposable")
     if active:
         jobs = list(data.get("jobs") or [])
