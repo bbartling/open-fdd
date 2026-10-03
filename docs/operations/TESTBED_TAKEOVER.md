@@ -85,7 +85,7 @@ Update [`BUG_REPORT_WAVE_P.md`](BUG_REPORT_WAVE_P.md) + `SESSION_LOG` + ops pin 
 | **ZAP baseline** in hub stress | Passive public URL High=0; Medium via `zap_risk_dispositions.json` only | Authenticated active scan (Kali Soft-OPEN `kali-zap-af`) |
 | **Burp Suite / human AF** | Exploratory, novel payloads, UI-driven flows, AF when Soft-OPEN Kali window opens | Nightly regression (use harness for that) |
 
-**Target for our product:** the Python suite must **outperform a human Burp session on multi-tenant isolation and JWT/role matrices** — more routes, more A/B canaries, deterministic detectors, CI + FQ gates, no click fatigue. It must **not** claim “better than Burp at everything”; ZAP/Burp/Kali still own active-scan breadth until Soft-OPEN AF lands.
+**Target for our product:** the Python suite must stay the **repeatable** owner of multi-tenant isolation and JWT/role matrices — more routes, more A/B canaries, deterministic detectors, CI gates, no click fatigue. It must **not** claim universal superiority over Burp/ZAP/Kali; those tools still own active-scan breadth and exploratory AF until Soft-OPEN windows land.
 
 Inventory honesty today (~138 routes): only a minority are `IMPLEMENTED` with suite emission — rest `PLANNED` / `BLOCKED_POLICY`. Wave U **U2** expands IMPLEMENTED on high-value authenticated GETs + foreign deny (session-config / mapping / datasets / analytics) without marking PLANNED as tested.
 

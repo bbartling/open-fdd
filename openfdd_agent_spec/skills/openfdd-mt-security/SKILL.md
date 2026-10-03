@@ -62,9 +62,16 @@ Example ACL comments: [`deploy/mqtt/acl.example`](../../../deploy/mqtt/acl.examp
 Tenant A may pub telemetry/status under `openfdd/v1/tenants/{tid}/buildings/{bid}/…`
 and sub commands for that edge only — **deny** Tenant B topics and `#` wildcards
 across tenants. Production mounts generated `mosquitto.acl` at broker `acl_file`;
-rotate/revoke compromised edge creds. Keep central, MCP, mqtt **private** on
-Railway; expose **web only**. Broker-side proof = Kali staging pentest (Mint does
-not ActiveScan OT).
+rotate/revoke compromised edge creds.
+
+**MQTT ingress (Astra A11):** on Railway keep central + MCP private and expose
+**web only**. Remote on-prem edges need an **explicit** MQTTS path — either the
+private-network broker plus approved edge identity, or a deliberately provisioned
+**mTLS broker proxy / private tunnel**. Do not describe “all MQTT is private”
+while also advertising a public broker endpoint without that explicit ingress
+design. Continuity ≠ ACL. Broker-side proof = Kali/Grok staging pentest (Mint
+does not ActiveScan OT). Policy:
+[`docs/operations/SECURITY_QUALIFICATION_POLICY.md`](../../../docs/operations/SECURITY_QUALIFICATION_POLICY.md).
 
 ## Security tooling assurance (3.5.29+) — who does what
 
