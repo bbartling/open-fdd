@@ -34,6 +34,9 @@ in the package**, not a broken engine. See
 | [Haystack model](haystack-model.html) | Sites, equipment, points, RDF APIs |
 | [Engineering quantities](engineering-quantities.html) | EQ-VOCAB capacities for ECM adapters |
 | [RDF vocabulary notes](rdf-vocabulary.html) | DM-10 projection honesty (no false markers) |
+| [**Haystack RDF profile**](haystack-rdf-profile.html) | `ofdd_haystack_projection_v1` strict interchange (C1 spec) |
+| [JSON / RDF crosswalk](data-model-json-rdf-crosswalk.html) | `openfdd_data_model_v1` ↔ native TTL ↔ strict Haystack |
+| [Haystack RDF evidence matrix (C1)](haystack-rdf-evidence-matrix.html) | HR/S5 reconciliation; Soft-OPEN rows stay open |
 | [Assignments](assignments.html) | Bind drivers → Haystack → FDD |
 
 ## SQL FDD ↔ data model

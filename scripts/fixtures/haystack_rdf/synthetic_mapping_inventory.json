@@ -1,0 +1,92 @@
+{
+  "ok": true,
+  "building_id": "OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1",
+  "unit_system": "imperial",
+  "validation": {
+    "blocker_count": 1,
+    "warning_count": 2,
+    "equipment_count": 3
+  },
+  "warnings": [
+    "VAV_CASE_1: role sat_sp assigned to multiple columns (see ambiguous_roles)"
+  ],
+  "equipment": [
+    {
+      "equipment_id": "AHU_CASE_1",
+      "equipment_type": "ahu",
+      "equipment_type_raw": "ahu",
+      "equipment_type_source": "package",
+      "parent_ahu": null,
+      "parent_ahu_source": null,
+      "ok": true,
+      "roles": {
+        "SAT": "sat",
+        "RAT": "rat",
+        "SF_SPD": "fan_cmd"
+      },
+      "columns": [
+        { "column": "SAT", "role": "sat", "status": "mapped" },
+        { "column": "RAT", "role": "rat", "status": "mapped" },
+        { "column": "SF_SPD", "role": "fan_cmd", "status": "mapped" },
+        { "column": "VENDOR_ONLY_TAG", "role": "", "status": "unmapped" }
+      ],
+      "unmapped_columns": ["VENDOR_ONLY_TAG"],
+      "ambiguous_roles": {},
+      "blockers": [],
+      "warnings": []
+    },
+    {
+      "equipment_id": "VAV_CASE_1",
+      "equipment_type": "vav",
+      "equipment_type_raw": "vav",
+      "equipment_type_source": "package",
+      "parent_ahu": null,
+      "parent_ahu_source": null,
+      "ok": false,
+      "roles": {
+        "CLG_VLV_CMD": "sat_sp",
+        "EFFECTIVE_SAT_SP": "sat_sp",
+        "ZN_T": "zone_air_temp"
+      },
+      "columns": [
+        { "column": "CLG_VLV_CMD", "role": "sat_sp", "status": "ambiguous" },
+        { "column": "EFFECTIVE_SAT_SP", "role": "sat_sp", "status": "ambiguous" },
+        { "column": "ZN_T", "role": "zone_air_temp", "status": "mapped" }
+      ],
+      "unmapped_columns": [],
+      "ambiguous_roles": {
+        "sat_sp": ["CLG_VLV_CMD", "EFFECTIVE_SAT_SP"]
+      },
+      "blockers": [
+        "role sat_sp mapped to multiple columns: CLG_VLV_CMD, EFFECTIVE_SAT_SP"
+      ],
+      "warnings": ["missing parent_ahu for stamped vav equipment"]
+    },
+    {
+      "equipment_id": "VAV_EXCLUDED_1",
+      "equipment_type": "vav",
+      "equipment_type_raw": "vav",
+      "equipment_type_source": "package",
+      "parent_ahu": "AHU_CASE_1",
+      "parent_ahu_source": "package",
+      "ok": true,
+      "roles": {
+        "ZN_T": "zone_air_temp"
+      },
+      "columns": [
+        { "column": "ZN_T", "role": "zone_air_temp", "status": "mapped" },
+        {
+          "column": "INTENTIONALLY_EXCLUDED_AUX",
+          "role": "",
+          "status": "unmapped"
+        }
+      ],
+      "unmapped_columns": ["INTENTIONALLY_EXCLUDED_AUX"],
+      "ambiguous_roles": {},
+      "blockers": [],
+      "warnings": [
+        "INTENTIONALLY_EXCLUDED_AUX excluded from FDD by operator policy (not a mapping defect)"
+      ]
+    }
+  ]
+}

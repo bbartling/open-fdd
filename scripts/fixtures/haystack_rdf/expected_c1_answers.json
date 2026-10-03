@@ -1,0 +1,75 @@
+{
+  "schema": "haystack_rdf_c1_expected_answers_v1",
+  "fixture_building_id": "OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1",
+  "profile": "ofdd_haystack_projection_v1",
+  "inventory": {
+    "equipment_count": 3,
+    "equipment_ids": ["AHU_CASE_1", "VAV_CASE_1", "VAV_EXCLUDED_1"],
+    "stamped_ahu_count": 1,
+    "stamped_vav_count": 2,
+    "blocker_count": 1,
+    "ambiguous_role_keys": [
+      {
+        "equipment_id": "VAV_CASE_1",
+        "role": "sat_sp",
+        "columns": ["CLG_VLV_CMD", "EFFECTIVE_SAT_SP"]
+      }
+    ],
+    "missing_parent_ahu_equipment_ids": ["VAV_CASE_1"],
+    "confirmed_parent_edges": [
+      {
+        "child": "VAV_EXCLUDED_1",
+        "parent": "AHU_CASE_1",
+        "source": "package"
+      }
+    ],
+    "intentional_exclusions": [
+      {
+        "equipment_id": "VAV_EXCLUDED_1",
+        "column": "INTENTIONALLY_EXCLUDED_AUX",
+        "reason": "operator_policy_not_fdd_input"
+      }
+    ],
+    "unknown_unit_points": [
+      {
+        "equipment_id": "AHU_CASE_1",
+        "column": "MYSTERY_FLOW",
+        "unit_status": "unknown"
+      }
+    ]
+  },
+  "native_openfdd_data_model_v1": {
+    "must_include_fields": [
+      "ambiguous_roles",
+      "blockers",
+      "parent_ahu_source",
+      "unmapped_columns",
+      "warnings"
+    ],
+    "diagnostics_must_survive_export": true
+  },
+  "native_openfdd_data_model_v2_ttl": {
+    "namespace": "urn:openfdd:ns#",
+    "declares_hs_prefix_but_no_haystack_triples": true,
+    "must_emit_role_bindings_for_resolved_roles": true,
+    "must_emit_unmapped_columns": true,
+    "must_omit_inferred_parent_ahu": true,
+    "must_omit_from_ttl": [
+      "ambiguous_roles",
+      "blockers",
+      "validation.blocker_count",
+      "equipment.warnings"
+    ]
+  },
+  "strict_haystack_projection_v1": {
+    "shipped_in_c1": false,
+    "c3_delivery": true,
+    "unknown_tags_policy": "omit_from_strict_with_projection_report",
+    "unknown_unit_policy": "retain_in_native_metadata_not_strict_literal",
+    "ambiguous_role_policy": "no_single_column_promotion_without_selection_evidence"
+  },
+  "hr_mapping": {
+    "HR-05": "ambiguous_roles and missing parent remain explicit in JSON; TTL omits quality diagnostics today",
+    "HR-03": "strict Haystack TTL validation applies only after C3 projection — not package TTL"
+  }
+}

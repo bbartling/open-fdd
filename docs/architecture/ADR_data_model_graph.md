@@ -10,6 +10,8 @@ nav_order: 12
 - **Context tip:** product hub **3.5.31** / Wave S1 OPS PINNED; graph fixes continue on S5
 - **Handoff:** [`.cursor/plans/wave_s_data_model_graph_review_handoff.md`](../../.cursor/plans/wave_s_data_model_graph_review_handoff.md)
 - **Route matrix:** [`../modeling/consumer-route-matrix.md`](../modeling/consumer-route-matrix.md)
+- **Haystack strict profile (C1):** [`../modeling/haystack-rdf-profile.md`](../modeling/haystack-rdf-profile.md)
+- **JSON/RDF crosswalk:** [`../modeling/data-model-json-rdf-crosswalk.md`](../modeling/data-model-json-rdf-crosswalk.md)
 
 ## Context
 
@@ -54,6 +56,21 @@ Two namespaces already exist in-tree (`urn:openfdd:ns#` for package TTL;
    product UI.
 9. **M&V product UI:** charts live on **Metering** (or a dedicated radio) — not
    Overview Plotly (Wave S4).
+10. **Haystack RDF track (2026 — wave C1+):** Name the strict interchange profile
+    **`ofdd_haystack_projection_v1`** ([profile doc](../modeling/haystack-rdf-profile.md)).
+    **Native** exports remain `openfdd_data_model_v1` JSON and `openfdd_data_model_v2`
+    Turtle (`urn:openfdd:ns#`). Strict Haystack TTL/JSON is a **derived projection**
+    from the authoritative native revision — not a second writable SoT. Unknown tags
+    without pinned defs are omitted from strict output with an explicit projection
+    report; native metadata retains source facts. Open-FDD extensions stay in
+    `urn:openfdd:ns#`; never mint inside Haystack/Brick IRIs.
+11. **Identity (DM-01/02):** Export IRIs use reversible `enc_<utf8-hex>` segments
+    for unsafe labels; building/equipment tuple subjects use `ofdd:eq_<b>__<e>`.
+    Tenant scope is server-derived — a named graph or client-supplied tenant id is
+    not authorization (unchanged).
+12. **Central SPARQL:** Product central does **not** expose package-graph SPARQL
+    until wave **C4** lands with authenticated queries and HR-10 fixtures. Until
+    then, MCP and docs report **unavailable** (404), not empty success.
 
 ## Consequences
 
