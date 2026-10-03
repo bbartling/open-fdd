@@ -617,6 +617,13 @@ def run_suite_y(ctx: SuiteContext) -> None:
         tok_b = ctx.tokens.get("operator_b")
 
     if not tok_a:
+        # Credentials present but no token ⇒ auth collapsed (always-401), not missing fixtures.
+        ident_a = ctx.cfg.identities.get("operator_a")
+        creds_present = bool(
+            ident_a
+            and resolve_password(ident_a)
+            and resolve_username(ident_a, "acme-ops")
+        )
         for cid in (
             "y.authz.a_own_building_control",
             "y.authz.a_foreign_building_denied",
@@ -629,7 +636,23 @@ def run_suite_y(ctx: SuiteContext) -> None:
             "y.detector.html_200_not_deny",
             "y.detector.foreign_canary_leak",
         ):
-            ctx.check(cid, "Y", cid, "BLOCKED", detail="no operator_a token (admin fallback removed)")
+            if cid == "y.detector.always_401_invalidates_authz" and creds_present:
+                ctx.check(
+                    cid,
+                    "Y",
+                    "detector: always-401",
+                    "FAIL",
+                    detail="credentials present but auth/login collapsed to no usable token",
+                    detector_id="always_401",
+                )
+            else:
+                ctx.check(
+                    cid,
+                    "Y",
+                    cid,
+                    "BLOCKED",
+                    detail="no operator_a token (admin fallback removed)",
+                )
         return
 
     # Positive own control for A
