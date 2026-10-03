@@ -121,8 +121,9 @@ python3 -B scripts/qualification/write_manifest.py selftest
 | `auth_role_matrix.sh` | anon/admin/operator(/viewer) REST checks |
 | `railway_mcp_accuracy.sh` | MCP↔REST on Railway HTTPS; no local central fallback |
 | `run_wave_c_isolated.sh` | Wave C entry: MQTTS isolation + restore-to-empty + ZAP AF |
-| `run_isolated_zap_af.sh` | Disposable authenticated ZAP AF + OpenAPI (pinned digest). Default `OPENFDD_MULTI_TENANT=0`. Wave N: `OPENFDD_MULTI_TENANT=1` seeds acme/building_100/lakeside_sd tenants on the disposable volume. **Never** activeScan live Railway OT. |
-| `zap/run_af_disposable.sh` | Wave U U5 Soft-OPEN closer: validate `af_plan.yaml`, optional AF scan when `OPENFDD_ZAP_AF_EXECUTE=1` + env JWT; `--selftest` → **BLOCKED** (never fake High=0). Verdict: `reports/security/zap_af_verdict.json`. |
+| `run_isolated_zap_af.sh` | Astra C-ZAP wrapper: mint disposable **web+central** from GHCR, then call `zap/run_af_disposable.py` (single evaluator). Digest-pinned ZAP. Default `OPENFDD_MULTI_TENANT=0`. **Never** activeScan live Railway OT; no fallback crawl. |
+| `zap/run_af_disposable.py` | Single ZAP AF evaluator (A06–A07): plan hygiene, verified `/api/auth/me` (status+identity schema), digest pin gate, High/Medium verdict. `--selftest` → **BLOCKED**. Execute via `OPENFDD_ZAP_AF_EXECUTE=1`. |
+| `zap/run_af_disposable.sh` | Thin shell alias to `run_af_disposable.py`. |
 | `wave_l_ab_isolation_harness.sh` | Tier-2 synthetic Tenant A↔B path + MQTT namespace self-test (no live OT) |
 | `wave_l_tip_digest_scan.sh` | Same-sha tip completeness (+ python-absence) |
 | `../ops/wave_l_legacy_migrate_dry_run.sh` | L7 legacy-tenant inventory dry-run (refuses APPLY on HTTPS) |

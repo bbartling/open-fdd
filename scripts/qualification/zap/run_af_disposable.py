@@ -37,9 +37,12 @@ except ImportError as e:  # pragma: no cover
 ROOT = Path(__file__).resolve().parents[3]
 PLAN_PATH = Path(__file__).resolve().parent / "af_plan.yaml"
 DEFAULT_VERDICT = ROOT / "reports" / "security" / "zap_af_verdict.json"
-DEFAULT_ZAP_IMAGE = os.environ.get(
-    "OPENFDD_ZAP_IMAGE", "ghcr.io/zaproxy/zaproxy:stable"
+# Qualification default is digest-pinned (A07). Override only with another digest.
+_PINNED_ZAP_DIGEST = (
+    "ghcr.io/zaproxy/zaproxy@sha256:"
+    "781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef"
 )
+DEFAULT_ZAP_IMAGE = os.environ.get("OPENFDD_ZAP_IMAGE", _PINNED_ZAP_DIGEST)
 
 # Hardcoded JWT / Bearer material must never appear in the committed plan.
 _HARDCODED_BEARER = re.compile(
@@ -160,6 +163,7 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
     by_risk = {"High": 0, "Medium": 0, "Low": 0, "Informational": 0, "other": 0}
     high_names: list[str] = []
     medium_names: list[str] = []
+    medium_plugins: list[str] = []
     url_blob_parts: list[str] = []
     for a in alerts:
         risk = str(a.get("riskdesc") or a.get("risk") or "").split(" ", 1)[0]
@@ -174,6 +178,9 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
             high_names.append(label)
         if risk == "Medium":
             medium_names.append(label)
+            plugin = str(a.get("pluginid") or a.get("alertRef") or "").strip()
+            if plugin:
+                medium_plugins.append(plugin)
         for key in ("url", "uri", "instance", "param"):
             val = a.get(key)
             if isinstance(val, str):
@@ -192,6 +199,7 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
             for u in site.get("urls") or []:
                 url_blob_parts.append(str(u))
     url_blob = "\n".join(url_blob_parts).lower()
+    # Informational only — report URL text is NOT authenticated proof (A06).
     auth_me_hit = "/api/auth/me" in url_blob
     return {
         "site_count": len(sites),
@@ -201,8 +209,258 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
         "by_risk": by_risk,
         "high_alert_names": sorted(set(high_names)),
         "medium_alert_names": sorted(set(medium_names)),
+        "medium_plugin_ids": sorted(set(medium_plugins)),
         "auth_me_hit": auth_me_hit,
     }
+
+
+DISPOSITION_PATH = Path(__file__).resolve().parent / "medium_dispositions.json"
+_REQUIRED_DISP_FIELDS = (
+    "plugin_id",
+    "alert_name",
+    "component",
+    "owner",
+    "rationale",
+    "expiry",
+    "retest",
+    "candidate_binding",
+)
+
+
+def load_medium_dispositions(path: Path | None = None) -> list[dict[str, Any]]:
+    """Load typed Medium dispositions (exact plugin scope; no blanket accept)."""
+    p = path or DISPOSITION_PATH
+    if not p.is_file():
+        return []
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    items = raw.get("dispositions") if isinstance(raw, dict) else raw
+    if not isinstance(items, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in items:
+        if isinstance(item, dict):
+            out.append(item)
+    return out
+
+
+def disposition_medium_alerts(
+    *,
+    medium_plugin_ids: list[str],
+    medium_alert_names: list[str],
+    dispositions: list[dict[str, Any]],
+    today: str | None = None,
+) -> tuple[list[str], list[str]]:
+    """Return (covered_plugin_ids, errors).
+
+    Every Medium plugin id must match exactly one disposition with required
+    fields and a non-expired expiry (YYYY-MM-DD). Extra dispositions are OK.
+    """
+    from datetime import date
+
+    day = today or date.today().isoformat()
+    by_plugin: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
+    for d in dispositions:
+        missing = [k for k in _REQUIRED_DISP_FIELDS if not str(d.get(k) or "").strip()]
+        if missing:
+            errors.append(f"disposition missing fields {missing}")
+            continue
+        pid = str(d["plugin_id"]).strip()
+        exp = str(d["expiry"]).strip()
+        if exp < day:
+            errors.append(f"disposition plugin {pid} expired {exp}")
+            continue
+        by_plugin[pid] = d
+    covered: list[str] = []
+    for pid in medium_plugin_ids:
+        if pid in by_plugin:
+            covered.append(pid)
+        else:
+            errors.append(f"undispositioned Medium plugin_id={pid}")
+    # Name-only Mediums (no plugin id) cannot be dispositioned silently.
+    if not medium_plugin_ids and medium_alert_names:
+        errors.append(
+            "Medium alerts lack plugin_id — cannot bind typed dispositions: "
+            + ", ".join(medium_alert_names[:6])
+        )
+    return covered, errors
+
+
+def verify_auth_me_response(
+    *,
+    status: int,
+    body: bytes,
+    content_type: str = "",
+) -> dict[str, Any]:
+    """Require HTTP 200 + JSON identity schema (role + subject).
+
+    Report-string matching of /api/auth/me is never sufficient (Astra A06).
+    """
+    result: dict[str, Any] = {
+        "ok": False,
+        "status": int(status),
+        "path": "/api/auth/me",
+        "schema_ok": False,
+    }
+    if status != 200:
+        result["error"] = "non_200"
+        return result
+    ctype = (content_type or "").lower()
+    if ctype and "json" not in ctype and "text/plain" not in ctype:
+        # Allow missing content-type from some stubs; reject explicit HTML.
+        if "html" in ctype:
+            result["error"] = "html_body"
+            return result
+    try:
+        data = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        result["error"] = "non_json"
+        return result
+    if not isinstance(data, dict) or not data:
+        result["error"] = "empty_or_non_object"
+        return result
+    role = str(data.get("role") or "").strip()
+    sub = str(data.get("sub") or data.get("username") or "").strip()
+    if not role or not sub:
+        result["error"] = "missing_role_or_subject"
+        return result
+    result["ok"] = True
+    result["schema_ok"] = True
+    result["role_present"] = True
+    result["subject_present"] = True
+    return result
+
+
+def zap_image_is_digest_pinned(image: str) -> bool:
+    return "@sha256:" in (image or "")
+
+
+def fetch_auth_me_preflight(*, origin: str, auth_header: str) -> dict[str, Any]:
+    """GET /api/auth/me with verified identity schema.
+
+    When ``ZAP_DOCKER_NETWORK`` is set (disposable web+central), use
+    ``docker run --network`` so Docker DNS names like ``web`` resolve.
+    Never logs the Authorization value.
+    """
+    me_url = origin.rstrip("/") + "/api/auth/me"
+    network = (os.environ.get("ZAP_DOCKER_NETWORK") or "").strip()
+    if network:
+        if not shutil.which("docker"):
+            return {
+                "ok": False,
+                "path": "/api/auth/me",
+                "error": "docker_missing_for_network_preflight",
+                "schema_ok": False,
+            }
+        # Write body to a temp file inside a throwaway container mount is heavy;
+        # capture stdout JSON via curl -w for status.
+        try:
+            proc = subprocess.run(
+                [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "--network",
+                    network,
+                    "curlimages/curl:8.5.0",
+                    "-sS",
+                    "-D",
+                    "-",
+                    "-o",
+                    "-",
+                    "-H",
+                    f"Authorization: {auth_header}",
+                    "-H",
+                    "Accept: application/json",
+                    me_url,
+                ],
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return {
+                "ok": False,
+                "path": "/api/auth/me",
+                "error": type(e).__name__,
+                "schema_ok": False,
+                "via": "docker_network",
+            }
+        raw = proc.stdout or b""
+        # Split headers/body on first blank line.
+        sep = raw.find(b"\r\n\r\n")
+        if sep < 0:
+            sep = raw.find(b"\n\n")
+        if sep < 0:
+            return {
+                "ok": False,
+                "path": "/api/auth/me",
+                "error": "docker_curl_malformed",
+                "schema_ok": False,
+                "via": "docker_network",
+                "rc": proc.returncode,
+            }
+        header_blob = raw[:sep].decode("utf-8", errors="replace")
+        body = raw[sep:].lstrip(b"\r\n")
+        status = 0
+        ctype = ""
+        for line in header_blob.splitlines():
+            if line.upper().startswith("HTTP/"):
+                parts = line.split()
+                if len(parts) >= 2 and parts[1].isdigit():
+                    status = int(parts[1])
+            elif line.lower().startswith("content-type:"):
+                ctype = line.split(":", 1)[1].strip()
+        result = verify_auth_me_response(
+            status=status, body=body, content_type=ctype
+        )
+        result["via"] = "docker_network"
+        if proc.returncode != 0 and not result.get("ok"):
+            result["error"] = result.get("error") or f"docker_curl_rc_{proc.returncode}"
+        return result
+
+    try:
+        import urllib.error
+        import urllib.request
+
+        req = urllib.request.Request(
+            me_url,
+            method="GET",
+            headers={"Authorization": auth_header, "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            status = int(getattr(resp, "status", None) or resp.getcode())
+            body = resp.read(1_048_576)
+            ctype = resp.headers.get("Content-Type", "") if resp.headers else ""
+            result = verify_auth_me_response(
+                status=status, body=body, content_type=ctype
+            )
+            result["via"] = "urllib"
+            return result
+    except Exception as e:  # noqa: BLE001 — map to structured preflight failure
+        import urllib.error
+
+        if isinstance(e, urllib.error.HTTPError):
+            try:
+                body = e.read(1_048_576)
+            except Exception:  # noqa: BLE001
+                body = b""
+            result = verify_auth_me_response(
+                status=int(e.code),
+                body=body,
+                content_type=e.headers.get("Content-Type", "") if e.headers else "",
+            )
+            if result.get("error") == "non_200":
+                result["error"] = "http_error"
+            result["via"] = "urllib"
+            return result
+        return {
+            "ok": False,
+            "path": "/api/auth/me",
+            "error": type(e).__name__,
+            "schema_ok": False,
+            "via": "urllib",
+        }
 
 
 def validate_report_sites(data: dict[str, Any], target_origin: str) -> list[str]:
@@ -276,6 +534,106 @@ def build_verdict(**kwargs: Any) -> dict[str, Any]:
     return json.loads(redact(json.dumps(base)))
 
 
+def stage_openapi_spec(*, work_dir: Path, origin: str) -> tuple[bool, str]:
+    """Fetch a real OpenAPI document into work_dir/openapi.json.
+
+    SPA/nginx often returns HTML for ``/openapi.json``. Prefer the central
+    service on the disposable Docker network, then an explicit override URL.
+    Returns (ok, detail) without logging secrets.
+    """
+    work_dir.mkdir(parents=True, exist_ok=True)
+    dest = work_dir / "openapi.json"
+    # Honor a pre-staged fixture (unit tests / offline CI helpers).
+    if dest.is_file() and dest.stat().st_size >= 32:
+        try:
+            parsed = json.loads(dest.read_text(encoding="utf-8"))
+            if isinstance(parsed, dict) and (parsed.get("openapi") or parsed.get("swagger")):
+                parsed["servers"] = [{"url": origin.rstrip("/")}]
+                dest.write_text(json.dumps(parsed), encoding="utf-8")
+                return True, f"reused staged openapi.json ({dest.stat().st_size} bytes)"
+        except Exception:  # noqa: BLE001
+            pass
+    override = os.environ.get("OPENFDD_ZAP_OPENAPI_URL", "").strip()
+    network = os.environ.get("ZAP_DOCKER_NETWORK", "").strip()
+    candidates: list[str] = []
+    if override:
+        candidates.append(override)
+    if network:
+        candidates.append("http://central:8080/openapi.json")
+    # Last resort: origin path (may be HTML through nginx — validated below).
+    candidates.append(origin.rstrip("/") + "/openapi.json")
+
+    body: bytes | None = None
+    used = ""
+    for url in candidates:
+        try:
+            if network and ("central:" in url or "web:" in url):
+                proc = subprocess.run(
+                    [
+                        "docker",
+                        "run",
+                        "--rm",
+                        "--network",
+                        network,
+                        "curlimages/curl:8.5.0",
+                        "-fsS",
+                        "--max-time",
+                        "20",
+                        url,
+                    ],
+                    capture_output=True,
+                    timeout=60,
+                )
+                if proc.returncode != 0:
+                    continue
+                body = proc.stdout or b""
+            else:
+                # Host-side fetch; disable env proxies/redirects for hygiene.
+                import urllib.request
+
+                req = urllib.request.Request(url, method="GET")
+                opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+                with opener.open(req, timeout=20) as resp:  # noqa: S310 — controlled URL list
+                    body = resp.read(2_000_000)
+            used = url
+            break
+        except Exception:  # noqa: BLE001 — try next candidate
+            body = None
+            continue
+
+    if not body:
+        return False, "could not fetch OpenAPI from central/override/origin"
+
+    text = body.lstrip()
+    if text[:1] not in (b"{", b"[") and not text.startswith(b"openapi:") and not text.startswith(
+        b"swagger:"
+    ):
+        return False, f"OpenAPI body is not JSON/YAML (source={used.split('/')[2] if '://' in used else 'local'})"
+
+    # Prefer JSON parse when it looks like JSON.
+    if text[:1] == b"{":
+        try:
+            parsed = json.loads(body.decode("utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            return False, f"OpenAPI JSON parse failed: {type(exc).__name__}"
+        if not isinstance(parsed, dict) or not (
+            parsed.get("openapi") or parsed.get("swagger")
+        ):
+            return False, "OpenAPI JSON missing openapi/swagger field"
+        # ZAP OpenAPI AF requires a resolvable server URL; central's shipped
+        # spec often omits servers[]. Bind the disposable scan origin.
+        parsed["servers"] = [{"url": origin.rstrip("/")}]
+        dest.write_text(json.dumps(parsed), encoding="utf-8")
+    else:
+        dest.write_bytes(body)
+        # YAML specs without servers still break ZAP — require JSON path above
+        # for disposable qualification.
+
+    if dest.stat().st_size < 32:
+        return False, "OpenAPI staged file too small"
+    return True, f"staged openapi.json ({dest.stat().st_size} bytes)"
+
+
 def materialize_plan(
     *,
     origin: str,
@@ -289,6 +647,16 @@ def materialize_plan(
     rendered = raw.replace("${ZAP_TARGET_ORIGIN}", origin.rstrip("/"))
     rendered = rendered.replace("${ZAP_REPORT_DIR}", report_dir)
     data = yaml.safe_load(rendered)
+    # Force file-based OpenAPI so SPA HTML cannot poison the AF openapi job.
+    for j in data.get("jobs") or []:
+        if isinstance(j, dict) and j.get("type") == "openapi":
+            params = j.setdefault("parameters", {})
+            params.pop("apiUrl", None)
+            params["apiFile"] = "/zap/wrk/openapi.json" if report_dir.startswith("/zap/") else str(
+                Path(report_dir) / "openapi.json"
+            )
+            params["targetUrl"] = origin.rstrip("/")
+            params.setdefault("context", "openfdd-disposable")
     if active:
         jobs = list(data.get("jobs") or [])
         # Insert activeScan before the report job.
@@ -486,37 +854,11 @@ def run_execute(verdict_path: Path) -> int:
             file=sys.stderr,
         )
 
-    # UA-04: prove authenticated /api/auth/me before ZAP (report URLs alone are unreliable).
-    auth_me_preflight: dict[str, Any] = {"ok": False}
-    try:
-        import urllib.error
-        import urllib.request
-
-        me_url = origin.rstrip("/") + "/api/auth/me"
-        req = urllib.request.Request(
-            me_url,
-            method="GET",
-            headers={"Authorization": auth, "Accept": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            auth_me_preflight = {
-                "ok": int(getattr(resp, "status", None) or resp.getcode()) == 200,
-                "status": int(getattr(resp, "status", None) or resp.getcode()),
-                "path": "/api/auth/me",
-            }
-    except urllib.error.HTTPError as e:
-        auth_me_preflight = {
-            "ok": False,
-            "status": int(e.code),
-            "path": "/api/auth/me",
-            "error": "http_error",
-        }
-    except Exception as e:  # noqa: BLE001
-        auth_me_preflight = {
-            "ok": False,
-            "path": "/api/auth/me",
-            "error": type(e).__name__,
-        }
+    # A06: prove authenticated /api/auth/me with status + JSON identity schema.
+    # Report URL text alone is never authenticated proof.
+    # Disposable stacks use Docker DNS names (web/central); when
+    # ZAP_DOCKER_NETWORK is set, fetch via that network (host urllib cannot).
+    auth_me_preflight = fetch_auth_me_preflight(origin=origin, auth_header=auth)
     if not auth_me_preflight.get("ok"):
         v = build_verdict(
             status="FAIL",
@@ -532,7 +874,10 @@ def run_execute(verdict_path: Path) -> int:
             auth_header_configured=True,
             auth_me_hit=False,
             auth_me_preflight=auth_me_preflight,
-            notes="FAIL: authenticated GET /api/auth/me preflight did not return 200",
+            notes=(
+                "FAIL: authenticated GET /api/auth/me preflight missing "
+                "200 + JSON identity (role+subject); report-string auth is not proof"
+            ),
         )
         write_verdict(verdict_path, v)
         print(json.dumps(v, indent=2))
@@ -540,6 +885,34 @@ def run_execute(verdict_path: Path) -> int:
 
     mode, detail = detect_zap()
     active = os.environ.get("OPENFDD_ZAP_AF_ACTIVE", "").strip() in ("1", "true", "yes")
+    require_digest = os.environ.get("OPENFDD_ZAP_REQUIRE_DIGEST", "").strip() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if require_digest and mode == "docker" and not zap_image_is_digest_pinned(detail):
+        v = build_verdict(
+            status="FAIL",
+            mode="execute",
+            plan_hygiene_ok=True,
+            high_alerts=0,
+            medium_alerts=0,
+            site_count=0,
+            zap_available=True,
+            zap_detection=detail,
+            active_scan=active,
+            execute_requested=True,
+            target_origin_configured=True,
+            auth_header_configured=True,
+            auth_me_preflight=auth_me_preflight,
+            notes=(
+                "FAIL: OPENFDD_ZAP_REQUIRE_DIGEST=1 but scanner image is not "
+                "@sha256: digest-pinned"
+            ),
+        )
+        write_verdict(verdict_path, v)
+        print(json.dumps(v, indent=2))
+        return 1
 
     if mode is None:
         v = build_verdict(
@@ -569,6 +942,27 @@ def run_execute(verdict_path: Path) -> int:
         or tempfile.mkdtemp(prefix="openfdd_zap_af_")
     )
     work_root.mkdir(parents=True, exist_ok=True)
+    staged_ok, staged_detail = stage_openapi_spec(work_dir=work_root, origin=origin)
+    if not staged_ok:
+        v = build_verdict(
+            status="FAIL",
+            mode="execute",
+            plan_hygiene_ok=True,
+            high_alerts=0,
+            medium_alerts=0,
+            site_count=0,
+            zap_available=True,
+            zap_detection=mode,
+            active_scan=active,
+            execute_requested=True,
+            target_origin_configured=True,
+            auth_header_configured=True,
+            auth_me_preflight=auth_me_preflight,
+            notes=f"FAIL: OpenAPI staging failed ({staged_detail})",
+        )
+        write_verdict(verdict_path, v)
+        print(json.dumps(v, indent=2))
+        return 1
     # Docker mounts work_root at /zap/wrk
     report_dir_in_plan = "/zap/wrk" if mode == "docker" else str(work_root)
     plan_dest = work_root / "af_plan.yaml"
@@ -764,6 +1158,12 @@ def run_execute(verdict_path: Path) -> int:
     archive = verdict_path.parent / "zap_af_report.json"
     archive.write_text(redact(report_path.read_text(encoding="utf-8")), encoding="utf-8")
 
+    medium_observed = med
+    medium_covered: list[str] = []
+    status = "PASS"
+    notes = ""
+    exit_code = 0
+
     if rc != 0:
         status = "FAIL"
         notes = f"FAIL: ZAP scanner exit rc={rc} (report present is not a PASS)"
@@ -789,23 +1189,58 @@ def run_execute(verdict_path: Path) -> int:
         notes = f"FAIL: High={high} ({', '.join(summary['high_alert_names'][:8])})"
         exit_code = 1
     elif med > 0:
-        status = "FAIL"
-        notes = f"FAIL: Medium={med} without dispositions"
-        exit_code = 1
-    else:
-        status = "PASS"
-        notes = (
-            f"PASS: disposable AF High=0 Medium=0 site_count={sites} "
-            f"auth_me_preflight=true active_scan={active} zap_rc={rc}"
+        dispositions = load_medium_dispositions()
+        medium_covered, disp_errors = disposition_medium_alerts(
+            medium_plugin_ids=list(summary.get("medium_plugin_ids") or []),
+            medium_alert_names=list(summary.get("medium_alert_names") or []),
+            dispositions=dispositions,
         )
-        exit_code = 0
+        if disp_errors:
+            status = "FAIL"
+            notes = (
+                f"FAIL: Medium={med} without complete typed dispositions "
+                f"({'; '.join(disp_errors[:6])})"
+            )
+            exit_code = 1
+        else:
+            # Exact plugin dispositions applied — not a blanket Medium accept.
+            med = 0
+
+    if exit_code == 0 and not auth_me_preflight.get("ok"):
+        status = "FAIL"
+        notes = "FAIL: authenticated /api/auth/me preflight schema failed"
+        exit_code = 1
+    elif exit_code == 0 and active and not bool(summary.get("auth_me_hit")):
+        # Preflight proves credentials work; authenticated AF still requires
+        # scanner-origin /api/auth/me traffic in the ZAP report (A06).
+        status = "FAIL"
+        notes = (
+            "FAIL: active AF missing scanner-origin /api/auth/me in ZAP report "
+            "(preflight alone is not authenticated coverage)"
+        )
+        exit_code = 1
+    elif exit_code == 0:
+        status = "PASS"
+        disp_note = (
+            f" medium_dispositioned={medium_covered}"
+            if medium_covered
+            else ""
+        )
+        notes = (
+            f"PASS: disposable AF High=0 Medium_undispositioned=0 "
+            f"Medium_observed={medium_observed} site_count={sites} "
+            f"auth_me_preflight=true auth_me_in_report={bool(summary.get('auth_me_hit'))} "
+            f"active_scan={active} zap_rc={rc}{disp_note}"
+        )
 
     v = build_verdict(
         status=status,
         mode="execute",
         plan_hygiene_ok=True,
         high_alerts=high,
-        medium_alerts=med,
+        medium_alerts=medium_observed,
+        medium_undispositioned=med,
+        medium_dispositions_applied=medium_covered,
         site_count=sites,
         alert_count=summary["alert_count"],
         high_alert_names=summary["high_alert_names"],
@@ -816,9 +1251,19 @@ def run_execute(verdict_path: Path) -> int:
         execute_requested=True,
         target_origin_configured=True,
         auth_header_configured=True,
-        auth_me_hit=True,
+        auth_me_hit=bool(auth_me_preflight.get("ok")),
         auth_me_preflight=auth_me_preflight,
+        # Scanner report URL text is coverage evidence for AF, not sole proof.
         auth_me_in_zap_report=bool(summary.get("auth_me_hit")),
+        auth_proof=(
+            "preflight_schema+scanner_auth_me"
+            if active
+            else "preflight_status_identity_schema"
+        ),
+        zap_image=detail if mode == "docker" else None,
+        zap_image_digest_pinned=(
+            zap_image_is_digest_pinned(detail) if mode == "docker" else None
+        ),
         report_archive=str(archive.relative_to(ROOT)) if archive.is_relative_to(ROOT) else str(archive),
         work_dir=str(work_root),
         notes=notes,
