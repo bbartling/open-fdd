@@ -1,11 +1,20 @@
-# Open-FDD split OT edge: one BACnet/Modbus process and one optional
-# outbound-only Haystack process. The legacy compose.edge.yml remains
-# available during migration.
+# Open-FDD split OT edge (Astra A01): mutually selected connector profiles.
+# Default profile: bacnet_modbus only. Haystack is opt-in via --profile haystack
+# and must not be combined with bacnet_modbus without an explicit combined recipe.
+# Legacy compose.edge.yml remains compatibility-only during migration.
+#
+#   docker compose -f docker/compose.edge.split.yml --profile bacnet_modbus up -d
+#   docker compose -f docker/compose.edge.split.yml --profile haystack up -d
+#
+# Prefer broker-free product recipes:
+#   docker/compose.ot_local_bacnet_modbus.yml
+#   docker/compose.ot_local_haystack.yml
 
 name: openfdd-edge-split
 
 services:
   bacnet-modbus:
+    profiles: ["bacnet_modbus"]
     image: ${OPENFDD_BACNET_MODBUS_IMAGE:-ghcr.io/bbartling/openfdd-bacnet-modbus:nightly}
     build:
       context: ..
@@ -15,12 +24,15 @@ services:
     network_mode: host
     environment:
       OPENFDD_FIELDBUS_CONFIG_DIR: /app/config
-      OPENFDD_FIELDBUS_HTTP_HOST: 0.0.0.0
+      OPENFDD_FIELDBUS_HTTP_HOST: 127.0.0.1
       OPENFDD_FIELDBUS_HTTP_PORT: "8081"
       OPENFDD_CONNECTOR_API_KEY: ${OPENFDD_CONNECTOR_API_KEY:?set connector api key}
       OPENFDD_MQTT_ENABLED: ${OPENFDD_MQTT_ENABLED:-0}
       OPENFDD_MQTT_HOST: ${OPENFDD_MQTT_HOST:-}
       OPENFDD_MQTT_PORT: ${OPENFDD_MQTT_PORT:-8883}
+      OPENFDD_INGEST_MODE: ${OPENFDD_INGEST_MODE:-local_fieldbus}
+      OPENFDD_LOCAL_CENTRAL_URL: ${OPENFDD_LOCAL_CENTRAL_URL:-}
+      OPENFDD_LOCAL_INGEST_TOKEN: ${OPENFDD_LOCAL_INGEST_TOKEN:-}
       OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:?set site id}
       OPENFDD_EDGE_ID: ${OPENFDD_EDGE_ID:-fieldbus-1}
       OPENFDD_TENANT_ID: ${OPENFDD_TENANT_ID:-}
@@ -31,7 +43,7 @@ services:
       OPENFDD_EDGE_STORE_DIR: /edge-state
     volumes:
       - ../config/fieldbus:/app/config:ro
-      - ${OPENFDD_EDGE_KIT_DIR:?path to provision kit}:/mqtt:ro
+      - ${OPENFDD_EDGE_KIT_DIR:-/dev/null}:/mqtt:ro
       - split-fieldbus-state:/edge-state
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8081/health"]
@@ -51,11 +63,14 @@ services:
     entrypoint: ["/usr/local/bin/openfdd-haystack"]
     environment:
       OPENFDD_FIELDBUS_CONFIG_DIR: /app/config
-      OPENFDD_FIELDBUS_HTTP_HOST: 0.0.0.0
+      OPENFDD_FIELDBUS_HTTP_HOST: 127.0.0.1
       OPENFDD_FIELDBUS_HTTP_PORT: "8082"
       OPENFDD_CONNECTOR_API_KEY: ${OPENFDD_CONNECTOR_API_KEY:?set connector api key}
       OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:?set site id}
       OPENFDD_EDGE_ID: ${OPENFDD_EDGE_ID:-haystack-1}
+      OPENFDD_INGEST_MODE: ${OPENFDD_INGEST_MODE:-local_fieldbus}
+      OPENFDD_LOCAL_CENTRAL_URL: ${OPENFDD_LOCAL_CENTRAL_URL:-}
+      OPENFDD_LOCAL_INGEST_TOKEN: ${OPENFDD_LOCAL_INGEST_TOKEN:-}
       # The process rejects an empty endpoint at startup. Keep interpolation
       # optional so the disabled profile can be resolved without credentials.
       OPENFDD_HAYSTACK_BASE_URL: ${OPENFDD_HAYSTACK_BASE_URL:-}

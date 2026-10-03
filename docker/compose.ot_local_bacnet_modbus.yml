@@ -1,0 +1,75 @@
+# Astra A01/A02 — OT local BACnet/Modbus: web + central + selected connector.
+# Broker-free by default (local ingest). No Haystack process. No local MQTT.
+# Compatibility: legacy compose.local-fieldbus.yml / compose.edge.split.yml remain.
+#
+# Usage (GHCR tip images; no local heavy builds):
+#   export OPENFDD_JWT_SECRET=… OPENFDD_ADMIN_PASSWORD=… OPENFDD_LOCAL_INGEST_TOKEN=…
+#   export OPENFDD_CONNECTOR_API_KEY=… OPENFDD_SITE_ID=…
+#   docker compose -f docker/compose.ot_local_bacnet_modbus.yml config >/dev/null
+#   docker compose -f docker/compose.ot_local_bacnet_modbus.yml up -d
+#
+# Soft-OPEN: live BACnet socket / receipt evidence is separate (Track H / Grok).
+
+name: openfdd-ot-local-bacnet-modbus
+
+services:
+  central:
+    image: ${OPENFDD_CENTRAL_IMAGE:-ghcr.io/bbartling/openfdd-central:nightly}
+    environment:
+      OPENFDD_MQTT_ENABLED: "0"
+      OPENFDD_INGEST_MODE: ${OPENFDD_INGEST_MODE:-local_fieldbus}
+      OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:?set site id}
+      OPENFDD_BUILDING_ID: ${OPENFDD_BUILDING_ID:-${OPENFDD_SITE_ID}}
+      OPENFDD_EDGE_ID: ${OPENFDD_EDGE_ID:-bacnet-modbus-1}
+      OPENFDD_LOCAL_ALLOWED_EDGE_IDS: ${OPENFDD_LOCAL_ALLOWED_EDGE_IDS:-bacnet-modbus-1}
+      OPENFDD_LOCAL_INGEST_TOKEN: ${OPENFDD_LOCAL_INGEST_TOKEN:?set local ingest token}
+      OPENFDD_WORKSPACE: /workspace
+      OPENFDD_STORAGE_URL: file:///workspace/openfdd
+      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:?set jwt secret}
+      OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:?set admin password}
+      OPENFDD_REACT_UI: "1"
+    ports:
+      - "${OPENFDD_CENTRAL_BIND:-127.0.0.1}:8080:8080"
+    volumes:
+      - ../workspace:/workspace
+    restart: unless-stopped
+
+  web:
+    image: ${OPENFDD_WEB_IMAGE:-ghcr.io/bbartling/openfdd-web:nightly}
+    environment:
+      OPENFDD_CENTRAL_UPSTREAM: central:8080
+      OPENFDD_NGINX_RESOLVER: ${OPENFDD_NGINX_RESOLVER:-auto}
+    ports:
+      - "${OPENFDD_WEB_BIND:-127.0.0.1}:3000:8080"
+    depends_on:
+      - central
+    restart: unless-stopped
+
+  bacnet-modbus:
+    image: ${OPENFDD_BACNET_MODBUS_IMAGE:-ghcr.io/bbartling/openfdd-bacnet-modbus:nightly}
+    network_mode: host
+    environment:
+      OPENFDD_FIELDBUS_CONFIG_DIR: /app/config
+      OPENFDD_FIELDBUS_HTTP_HOST: 127.0.0.1
+      OPENFDD_FIELDBUS_HTTP_PORT: "8081"
+      OPENFDD_CONNECTOR_API_KEY: ${OPENFDD_CONNECTOR_API_KEY:?set connector api key}
+      OPENFDD_MQTT_ENABLED: "0"
+      OPENFDD_INGEST_MODE: local_fieldbus
+      OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:?set site id}
+      OPENFDD_BUILDING_ID: ${OPENFDD_BUILDING_ID:-${OPENFDD_SITE_ID}}
+      OPENFDD_EDGE_ID: ${OPENFDD_EDGE_ID:-bacnet-modbus-1}
+      OPENFDD_LOCAL_CENTRAL_URL: ${OPENFDD_LOCAL_CENTRAL_URL:-http://127.0.0.1:8080}
+      OPENFDD_LOCAL_INGEST_TOKEN: ${OPENFDD_LOCAL_INGEST_TOKEN:?set local ingest token}
+      OPENFDD_LOCAL_SPOOL_DIR: /local-spool
+      OPENFDD_EDGE_STORE_DIR: /edge-state
+    volumes:
+      - ../config/fieldbus:/app/config:ro
+      - ot-bacnet-spool:/local-spool
+      - ot-bacnet-state:/edge-state
+    depends_on:
+      - central
+    restart: unless-stopped
+
+volumes:
+  ot-bacnet-spool:
+  ot-bacnet-state:

@@ -45,7 +45,9 @@ See [Release channels](release-channels.html) and [GHCR images](ghcr-images.html
 | `standalone` | **Recipe 2** (+ optional local mqtt) | `docker/compose.standalone.yml` | mqtt + central + web + fieldbus | single OT-connected host |
 | `central` | **Recipe 1** shape | `docker/compose.central.yml` | mqtt + central + web | hub for remote edges |
 | `edge` | optional WAN path | `docker/compose.edge.yml` | fieldbus only | remote OT publisher → Recipe 1 |
-| `edge-split` | optional WAN path | `docker/compose.edge.split.yml` | BACnet/Modbus + optional Haystack | migrating OT edge |
+| `edge-split` | optional WAN path | `docker/compose.edge.split.yml` | profile `bacnet_modbus` **or** `haystack` (mutually selected) | migrating OT edge |
+| `ot_local_bacnet_modbus` | **Recipe 2** selected connector | `docker/compose.ot_local_bacnet_modbus.yml` | web + central + BACnet/Modbus, MQTT off | Astra A01/A02 broker-free OT |
+| `ot_local_haystack` | **Recipe 2** selected connector | `docker/compose.ot_local_haystack.yml` | web + central + Haystack, MQTT off | Astra A01/A02 broker-free OT |
 
 The `central` and `csv` helpers contain no fieldbus service and never start a
 BACnet/Modbus/Haystack process. Use `edge` or `standalone` when the host is
