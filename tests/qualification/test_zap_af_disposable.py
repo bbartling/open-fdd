@@ -143,6 +143,16 @@ class ZapAfExecuteVerdictTest(unittest.TestCase):
     def run_synthetic(self, report, *, scanner_rc=0, target="http://fixture.invalid", stale=False):
         with tempfile.TemporaryDirectory() as td:
             work = Path(td)
+            (work / "openapi.json").write_text(
+                json.dumps(
+                    {
+                        "openapi": "3.0.3",
+                        "info": {"title": "fixture", "version": "0"},
+                        "paths": {"/api/health": {"get": {"responses": {"200": {"description": "ok"}}}}},
+                    }
+                ),
+                encoding="utf-8",
+            )
             report_path = work / "zap-af-report.json"
             report_path.write_text(json.dumps(report), encoding="utf-8")
             if stale:
@@ -260,6 +270,16 @@ class ZapAfExecuteVerdictTest(unittest.TestCase):
         """Active AF cannot PASS on preflight alone (A06)."""
         with tempfile.TemporaryDirectory() as td:
             work = Path(td)
+            (work / "openapi.json").write_text(
+                json.dumps(
+                    {
+                        "openapi": "3.0.3",
+                        "info": {"title": "fixture", "version": "0"},
+                        "paths": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
             report_path = work / "zap-af-report.json"
             report_path.write_text(
                 json.dumps(

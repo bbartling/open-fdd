@@ -30,9 +30,11 @@ env:
       users: []
 
 jobs:
+  # Prefer a staged OpenAPI file. nginx SPA may serve HTML for /openapi.json;
+  # run_af_disposable.py fetches the central spec into /zap/wrk before AF runs.
   - type: openapi
     parameters:
-      apiUrl: "${ZAP_TARGET_ORIGIN}/openapi.json"
+      apiFile: "/zap/wrk/openapi.json"
       context: openfdd-disposable
 
   - type: spider

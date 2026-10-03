@@ -457,6 +457,99 @@ def build_verdict(**kwargs: Any) -> dict[str, Any]:
     return json.loads(redact(json.dumps(base)))
 
 
+def stage_openapi_spec(*, work_dir: Path, origin: str) -> tuple[bool, str]:
+    """Fetch a real OpenAPI document into work_dir/openapi.json.
+
+    SPA/nginx often returns HTML for ``/openapi.json``. Prefer the central
+    service on the disposable Docker network, then an explicit override URL.
+    Returns (ok, detail) without logging secrets.
+    """
+    work_dir.mkdir(parents=True, exist_ok=True)
+    dest = work_dir / "openapi.json"
+    # Honor a pre-staged fixture (unit tests / offline CI helpers).
+    if dest.is_file() and dest.stat().st_size >= 32:
+        try:
+            parsed = json.loads(dest.read_text(encoding="utf-8"))
+            if isinstance(parsed, dict) and (parsed.get("openapi") or parsed.get("swagger")):
+                return True, f"reused staged openapi.json ({dest.stat().st_size} bytes)"
+        except Exception:  # noqa: BLE001
+            pass
+    override = os.environ.get("OPENFDD_ZAP_OPENAPI_URL", "").strip()
+    network = os.environ.get("ZAP_DOCKER_NETWORK", "").strip()
+    candidates: list[str] = []
+    if override:
+        candidates.append(override)
+    if network:
+        candidates.append("http://central:8080/openapi.json")
+    # Last resort: origin path (may be HTML through nginx — validated below).
+    candidates.append(origin.rstrip("/") + "/openapi.json")
+
+    body: bytes | None = None
+    used = ""
+    for url in candidates:
+        try:
+            if network and ("central:" in url or "web:" in url):
+                proc = subprocess.run(
+                    [
+                        "docker",
+                        "run",
+                        "--rm",
+                        "--network",
+                        network,
+                        "curlimages/curl:8.5.0",
+                        "-fsS",
+                        "--max-time",
+                        "20",
+                        url,
+                    ],
+                    capture_output=True,
+                    timeout=60,
+                )
+                if proc.returncode != 0:
+                    continue
+                body = proc.stdout or b""
+            else:
+                # Host-side fetch; disable env proxies/redirects for hygiene.
+                import urllib.request
+
+                req = urllib.request.Request(url, method="GET")
+                opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+                with opener.open(req, timeout=20) as resp:  # noqa: S310 — controlled URL list
+                    body = resp.read(2_000_000)
+            used = url
+            break
+        except Exception:  # noqa: BLE001 — try next candidate
+            body = None
+            continue
+
+    if not body:
+        return False, "could not fetch OpenAPI from central/override/origin"
+
+    text = body.lstrip()
+    if text[:1] not in (b"{", b"[") and not text.startswith(b"openapi:") and not text.startswith(
+        b"swagger:"
+    ):
+        return False, f"OpenAPI body is not JSON/YAML (source={used.split('/')[2] if '://' in used else 'local'})"
+
+    # Prefer JSON parse when it looks like JSON.
+    if text[:1] == b"{":
+        try:
+            parsed = json.loads(body.decode("utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            return False, f"OpenAPI JSON parse failed: {type(exc).__name__}"
+        if not isinstance(parsed, dict) or not (
+            parsed.get("openapi") or parsed.get("swagger")
+        ):
+            return False, "OpenAPI JSON missing openapi/swagger field"
+        dest.write_text(json.dumps(parsed), encoding="utf-8")
+    else:
+        dest.write_bytes(body)
+
+    if dest.stat().st_size < 32:
+        return False, "OpenAPI staged file too small"
+    return True, f"staged openapi.json ({dest.stat().st_size} bytes)"
+
+
 def materialize_plan(
     *,
     origin: str,
@@ -470,6 +563,15 @@ def materialize_plan(
     rendered = raw.replace("${ZAP_TARGET_ORIGIN}", origin.rstrip("/"))
     rendered = rendered.replace("${ZAP_REPORT_DIR}", report_dir)
     data = yaml.safe_load(rendered)
+    # Force file-based OpenAPI so SPA HTML cannot poison the AF openapi job.
+    for j in data.get("jobs") or []:
+        if isinstance(j, dict) and j.get("type") == "openapi":
+            params = j.setdefault("parameters", {})
+            params.pop("apiUrl", None)
+            params["apiFile"] = "/zap/wrk/openapi.json" if report_dir.startswith("/zap/") else str(
+                Path(report_dir) / "openapi.json"
+            )
+            params.setdefault("context", "openfdd-disposable")
     if active:
         jobs = list(data.get("jobs") or [])
         # Insert activeScan before the report job.
@@ -755,6 +857,27 @@ def run_execute(verdict_path: Path) -> int:
         or tempfile.mkdtemp(prefix="openfdd_zap_af_")
     )
     work_root.mkdir(parents=True, exist_ok=True)
+    staged_ok, staged_detail = stage_openapi_spec(work_dir=work_root, origin=origin)
+    if not staged_ok:
+        v = build_verdict(
+            status="FAIL",
+            mode="execute",
+            plan_hygiene_ok=True,
+            high_alerts=0,
+            medium_alerts=0,
+            site_count=0,
+            zap_available=True,
+            zap_detection=mode,
+            active_scan=active,
+            execute_requested=True,
+            target_origin_configured=True,
+            auth_header_configured=True,
+            auth_me_preflight=auth_me_preflight,
+            notes=f"FAIL: OpenAPI staging failed ({staged_detail})",
+        )
+        write_verdict(verdict_path, v)
+        print(json.dumps(v, indent=2))
+        return 1
     # Docker mounts work_root at /zap/wrk
     report_dir_in_plan = "/zap/wrk" if mode == "docker" else str(work_root)
     plan_dest = work_root / "af_plan.yaml"
