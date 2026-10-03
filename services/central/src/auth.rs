@@ -512,4 +512,119 @@ mod tests {
         assert!(cfg.authenticate_password("agent", "anything").is_err());
         assert!(cfg.authenticate_password("viewer", "anything").is_err());
     }
+
+    /// Phase 3 — ephemeral harness key through the real product verifier.
+    /// Audience validation stays off (current auth contract); document gaps rather
+    /// than inventing unsupported issuer/JWK behavior.
+    fn harness_auth() -> AuthConfig {
+        AuthConfig {
+            secret: Some("harness-isolated-ephemeral-key-32b!!".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: vec![],
+        }
+    }
+
+    fn mint_with(
+        secret: &str,
+        sub: &str,
+        role: &str,
+        exp: i64,
+        iat: i64,
+        tenant_ids: Vec<String>,
+    ) -> String {
+        let claims = JwtClaims {
+            sub: sub.into(),
+            role: role.into(),
+            exp,
+            iat,
+            tenant_ids,
+        };
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(secret.as_bytes()),
+        )
+        .expect("mint")
+    }
+
+    #[test]
+    fn phase3_accepts_ephemeral_valid_token() {
+        let cfg = harness_auth();
+        let now = chrono::Utc::now().timestamp();
+        let token = mint_with(
+            cfg.secret.as_ref().unwrap(),
+            "harness-user",
+            "operator",
+            now + 600,
+            now,
+            vec!["tenant-a".into()],
+        );
+        let user = cfg.verify_bearer(&token).expect("valid token");
+        assert_eq!(user.sub, "harness-user");
+        assert_eq!(user.role, Role::Operator);
+        assert_eq!(user.tenant_ids, vec!["tenant-a".to_string()]);
+    }
+
+    #[test]
+    fn phase3_rejects_identical_claims_with_past_exp() {
+        let cfg = harness_auth();
+        let now = chrono::Utc::now().timestamp();
+        let secret = cfg.secret.as_ref().unwrap();
+        let good = mint_with(secret, "harness-user", "operator", now + 600, now, vec![]);
+        let expired = mint_with(
+            secret,
+            "harness-user",
+            "operator",
+            now - 120,
+            now - 3600,
+            vec![],
+        );
+        assert!(cfg.verify_bearer(&good).is_ok());
+        assert!(cfg.verify_bearer(&expired).is_err());
+    }
+
+    #[test]
+    fn phase3_rejects_wrong_key_alg_none_and_tampered_payload() {
+        let cfg = harness_auth();
+        let now = chrono::Utc::now().timestamp();
+        let secret = cfg.secret.as_ref().unwrap();
+        let good = mint_with(secret, "harness-user", "viewer", now + 600, now, vec![]);
+
+        let other = AuthConfig {
+            secret: Some("different-ephemeral-harness-key-32b!".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: vec![],
+        };
+        assert!(other.verify_bearer(&good).is_err(), "wrong key must reject");
+
+        // alg=none with empty signature — HS256-only validator must reject.
+        // Fixed fixture token (header.alg=none, role=admin, far-future exp).
+        let alg_none = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJoYXJuZXNzLXVzZXIiLCJyb2xlIjoiYWRtaW4iLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6OTk5OTk5OTk5OX0.";
+        assert!(
+            cfg.verify_bearer(alg_none).is_err(),
+            "alg=none must not authenticate"
+        );
+
+        // Mutate payload segment without re-signing → signature fails.
+        let parts: Vec<&str> = good.split('.').collect();
+        assert_eq!(parts.len(), 3);
+        let mut payload_chars: Vec<u8> = parts[1].as_bytes().to_vec();
+        let mid = payload_chars.len() / 2;
+        payload_chars[mid] = if payload_chars[mid] == b'A' { b'B' } else { b'A' };
+        let tampered = format!(
+            "{}.{}.{}",
+            parts[0],
+            std::str::from_utf8(&payload_chars).expect("b64url ascii"),
+            parts[2]
+        );
+        assert_ne!(good, tampered, "tamper must change token bytes");
+        assert!(
+            cfg.verify_bearer(&tampered).is_err(),
+            "tampered payload must not authenticate"
+        );
+    }
 }
