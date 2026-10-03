@@ -12,7 +12,10 @@ use axum::{Json, Router};
 use bytes::Bytes;
 use chrono::Utc;
 use openfdd_contracts::{CommandEnvelope, Protocol, TelemetryEnvelope, TopicBuilder, TopicKind};
-use openfdd_contracts::{ConnectorReadRequest, ConnectorReadResponse, ConnectorScope};
+use openfdd_contracts::{
+    ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorReadRequest,
+    ConnectorReadResponse, ConnectorScope,
+};
 use openfdd_mqtt::publish_json;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -106,6 +109,10 @@ pub fn router(state: Arc<AppState>) -> Router {
     let protected = Router::new()
         // Kali O2c / Wave P2c: was public; leaks plane + topology when unauthenticated.
         .route("/api/capabilities", get(capabilities))
+        .route(
+            "/api/connectors/{edge_id}/inventory",
+            post(connector_inventory),
+        )
         .route("/api/connectors/{edge_id}/read", post(connector_read))
         .route("/api/health/stack", get(health_stack))
         .route("/api/building/snapshot", get(building_snapshot))
@@ -631,33 +638,57 @@ fn resolve_tenant_context(state: &AppState, headers: &HeaderMap) -> crate::tenan
 }
 
 fn authorized_edge_ids(state: &AppState, ctx: &crate::tenant::TenantContext) -> HashSet<String> {
-    let configured_ids = state.capabilities.authorized_edge_ids(ctx);
-    state
-        .edges
-        .iter()
-        .filter_map(|entry| {
-            let configured_scope = state.capabilities.configured_scope(entry.key());
-            if configured_scope.is_some() && !configured_ids.contains(entry.key()) {
-                return None;
-            }
+    let mut authorized = HashSet::new();
+
+    // A trusted configured upstream is sufficient for capability visibility
+    // during broker-free commissioning. A telemetry shadow is an additional
+    // consistency check, never the source of tenant/building identity.
+    for edge_id in state.capabilities.authorized_edge_ids(ctx) {
+        let shadow_matches = state.edges.get(&edge_id).is_none_or(|entry| {
             let shadow = entry
                 .value()
                 .lock()
                 .unwrap_or_else(|poison| poison.into_inner());
-            let known_site = shadow.known_site_id()?;
-            let known_tenant = shadow.known_tenant_id().unwrap_or_else(|| "legacy".into());
-            let scope_matches = configured_scope.is_none_or(|(tenant_id, building_id)| {
-                building_id == known_site
-                    && ctx.allow_building(building_id)
-                    && (ctx.hub_admin || ctx.tenant_id.as_deref() == Some(tenant_id))
-                    && (known_tenant == "legacy" || known_tenant == tenant_id)
+            let known_site_matches = shadow.known_site_id().is_none_or(|site| {
+                state
+                    .capabilities
+                    .configured_scope(&edge_id)
+                    .is_some_and(|(_, building)| building == site)
             });
-            (scope_matches
-                && ctx.allow_building(&known_site)
-                && (ctx.hub_admin || ctx.tenant_id.as_deref() == Some(known_tenant.as_str())))
-            .then(|| entry.key().clone())
-        })
-        .collect()
+            let known_tenant_matches = shadow.known_tenant_id().is_none_or(|tenant| {
+                state
+                    .capabilities
+                    .configured_scope(&edge_id)
+                    .is_some_and(|(configured_tenant, _)| configured_tenant == tenant)
+            });
+            known_site_matches && known_tenant_matches
+        });
+        if shadow_matches {
+            authorized.insert(edge_id);
+        }
+    }
+
+    // Legacy telemetry-only edges remain visible only when their registered
+    // shadow carries a complete authenticated scope.
+    for entry in &state.edges {
+        if state.capabilities.configured_scope(entry.key()).is_some() {
+            continue;
+        }
+        let shadow = entry
+            .value()
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let Some(known_site) = shadow.known_site_id() else {
+            continue;
+        };
+        let known_tenant = shadow.known_tenant_id().unwrap_or_else(|| "legacy".into());
+        if ctx.allow_building(&known_site)
+            && (ctx.hub_admin || ctx.tenant_id.as_deref() == Some(known_tenant.as_str()))
+        {
+            authorized.insert(entry.key().clone());
+        }
+    }
+    authorized
 }
 
 /// Tenant id for dual-read. The active session tenant is used when the newer
@@ -1103,12 +1134,97 @@ pub async fn capabilities(
 
 /// Forward an explicitly requested, scoped read to a configured fieldbus
 /// edge. Advertised capabilities never substitute for JWT and tenant checks.
+fn authorize_connector_scope(
+    state: &Arc<AppState>,
+    ctx: &crate::tenant::TenantContext,
+    edge_id: &str,
+    scope: &ConnectorScope,
+) -> Result<(), (StatusCode, Json<Value>)> {
+    if !request_scope_allowed(ctx, scope) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "building is outside the authenticated tenant scope"
+            })),
+        ));
+    }
+    if let Some((configured_tenant, configured_building)) =
+        state.capabilities.configured_scope(edge_id)
+    {
+        if configured_building != scope.building_id || configured_tenant != scope.tenant_id {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "ok": false,
+                    "error": "edge is outside the trusted connector scope"
+                })),
+            ));
+        }
+        if let Some(edge) = state.edges.get(edge_id) {
+            let edge_shadow = edge.lock().unwrap_or_else(|poison| poison.into_inner());
+            if edge_shadow
+                .known_site_id()
+                .is_some_and(|known_site| known_site != scope.building_id)
+                || edge_shadow
+                    .known_tenant_id()
+                    .is_some_and(|known_tenant| known_tenant != scope.tenant_id)
+            {
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    Json(json!({
+                        "ok": false,
+                        "error": "edge telemetry identity conflicts with trusted connector scope"
+                    })),
+                ));
+            }
+        }
+        return Ok(());
+    }
+
+    let edge = state.edges.get(edge_id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"ok": false, "error": "edge is not registered"})),
+        )
+    })?;
+    let edge_shadow = edge.lock().unwrap_or_else(|poison| poison.into_inner());
+    if edge_shadow.known_site_id().as_deref() != Some(scope.building_id.as_str()) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "edge is not registered for the requested building"
+            })),
+        ));
+    }
+    let known_tenant = edge_shadow
+        .known_tenant_id()
+        .unwrap_or_else(|| "legacy".into());
+    if !ctx.hub_admin && known_tenant != scope.tenant_id {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "edge is not registered for the authenticated tenant"
+            })),
+        ));
+    }
+    Ok(())
+}
+
 pub async fn connector_read(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<auth::AuthUser>,
     Path(edge_id): Path<String>,
     Json(request): Json<ConnectorReadRequest>,
 ) -> Result<Json<ConnectorReadResponse>, (StatusCode, Json<Value>)> {
+    if !connector_proxy_role_allowed(user.role) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "connector role is not authorized"})),
+        ));
+    }
     request.validate().map_err(|error| {
         (
             StatusCode::BAD_REQUEST,
@@ -1122,62 +1238,7 @@ pub async fn connector_read(
         ));
     }
     let ctx = resolve_tenant_context_for_user(&user);
-    if !request_scope_allowed(&ctx, &request.scope) {
-        return Err((
-            StatusCode::FORBIDDEN,
-            Json(
-                json!({"ok": false, "error": "building is outside the authenticated tenant scope"}),
-            ),
-        ));
-    }
-    let edge = state.edges.get(&edge_id).ok_or_else(|| {
-        (
-            StatusCode::NOT_FOUND,
-            Json(json!({"ok": false, "error": "edge is not registered"})),
-        )
-    })?;
-    let known_site = edge
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner())
-        .known_site_id();
-    if known_site.as_deref() != Some(request.scope.building_id.as_str()) {
-        return Err((
-            StatusCode::FORBIDDEN,
-            Json(
-                json!({"ok": false, "error": "edge is not registered for the requested building"}),
-            ),
-        ));
-    }
-    let known_tenant = edge
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner())
-        .known_tenant_id()
-        .unwrap_or_else(|| "legacy".into());
-    if !ctx.hub_admin && known_tenant != request.scope.tenant_id {
-        return Err((
-            StatusCode::FORBIDDEN,
-            Json(json!({
-                "ok": false,
-                "error": "edge is not registered for the authenticated tenant"
-            })),
-        ));
-    }
-    if let Some((configured_tenant, configured_building)) =
-        state.capabilities.configured_scope(&edge_id)
-    {
-        if configured_building != request.scope.building_id
-            || (!ctx.hub_admin && configured_tenant != request.scope.tenant_id)
-        {
-            return Err((
-                StatusCode::FORBIDDEN,
-                Json(json!({
-                    "ok": false,
-                    "error": "edge is outside the trusted connector scope"
-                })),
-            ));
-        }
-    }
-    drop(edge);
+    authorize_connector_scope(&state, &ctx, &edge_id, &request.scope)?;
     // Keep the authenticated user in the handler signature so the route's
     // JWT middleware cannot be accidentally removed without a compile-time
     // use-site change. Authorization is represented by the tenant check and
@@ -1196,9 +1257,64 @@ pub async fn connector_read(
     Ok(Json(response))
 }
 
+/// Return a bounded typed inventory page from a configured connector. This
+/// endpoint is authenticated and scope checked exactly like the read seam;
+/// advertised capabilities do not grant access and no central MQTT map is
+/// used as an inventory source.
+pub async fn connector_inventory(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<auth::AuthUser>,
+    Path(edge_id): Path<String>,
+    Json(request): Json<ConnectorInventoryRequest>,
+) -> Result<Json<ConnectorInventoryResponse>, (StatusCode, Json<Value>)> {
+    if !connector_proxy_role_allowed(user.role) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "connector role is not authorized"})),
+        ));
+    }
+    request.validate().map_err(|error| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": error})),
+        )
+    })?;
+    if request.scope.edge_id != edge_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "path edge_id and scoped edge_id differ"})),
+        ));
+    }
+    let ctx = resolve_tenant_context_for_user(&user);
+    authorize_connector_scope(&state, &ctx, &edge_id, &request.scope)?;
+    let _subject = user.sub;
+    let response = state
+        .capabilities
+        .proxy_inventory(&edge_id, &request)
+        .await
+        .map_err(|error| {
+            (
+                error.status(),
+                Json(json!({"ok": false, "error": error.message()})),
+            )
+        })?;
+    Ok(Json(response))
+}
+
 fn request_scope_allowed(ctx: &crate::tenant::TenantContext, scope: &ConnectorScope) -> bool {
     ctx.allow_building(&scope.building_id)
         && (ctx.hub_admin || ctx.tenant_id.as_deref() == Some(scope.tenant_id.as_str()))
+}
+
+/// Connector inventory is available to every authenticated connector role
+/// after tenant/building/edge authorization. Live reads remain read-only; the
+/// deployment policy recommends operator/admin for them, but this route does
+/// not invent a second role gate that could diverge from the auth middleware.
+fn connector_proxy_role_allowed(role: auth::Role) -> bool {
+    matches!(
+        role,
+        auth::Role::Viewer | auth::Role::Operator | auth::Role::Admin
+    )
 }
 
 #[utoipa::path(
@@ -5023,15 +5139,175 @@ pub async fn fuel_campus_weather_fetch(Json(body): Json<FuelWeatherFetchBody>) -
 #[cfg(test)]
 mod version_tests {
     use super::{
-        authorized_edge_ids, local_fieldbus_ingest, request_scope_allowed, resolve_build_version,
+        authorize_connector_scope, authorized_edge_ids, connector_proxy_role_allowed,
+        local_fieldbus_ingest, request_scope_allowed, resolve_build_version,
     };
+    use crate::capabilities::{CapabilitiesAggregator, ConfiguredUpstream};
     use crate::state::AppState;
-    use axum::http::{HeaderMap, HeaderValue, StatusCode};
-    use axum::Json;
+    use axum::body::Body;
+    use axum::http::{HeaderMap, HeaderValue, Request, StatusCode};
+    use axum::routing::post;
+    use axum::{Json, Router};
     use bytes::Bytes;
-    use openfdd_contracts::{Protocol, Quality, TelemetryEnvelope, TelemetryPoint, ValueKind};
+    use openfdd_contracts::{
+        ConnectorInventoryRequest, ConnectorInventoryResponse, InventoryProvenance, Protocol,
+        Quality, TelemetryEnvelope, TelemetryPoint, ValueKind, CONNECTOR_INVENTORY_CONTRACT_V1,
+    };
     use serde_json::Value;
     use std::sync::Arc;
+    use tower::ServiceExt;
+    use url::Url;
+
+    #[test]
+    fn connector_proxy_role_policy_is_explicit_for_inventory_and_reads() {
+        assert!(connector_proxy_role_allowed(crate::auth::Role::Viewer));
+        assert!(connector_proxy_role_allowed(crate::auth::Role::Operator));
+        assert!(connector_proxy_role_allowed(crate::auth::Role::Admin));
+    }
+
+    #[tokio::test]
+    async fn connector_inventory_http_enforces_jwt_roles_and_scope() {
+        async fn inventory_upstream(
+            Json(request): Json<ConnectorInventoryRequest>,
+        ) -> Json<ConnectorInventoryResponse> {
+            Json(ConnectorInventoryResponse {
+                schema: CONNECTOR_INVENTORY_CONTRACT_V1.into(),
+                request_id: request.request_id,
+                scope: request.scope,
+                protocols: Vec::new(),
+                revision: "config-http-test".into(),
+                captured_at: chrono::Utc::now(),
+                provenance: InventoryProvenance::TrustedConfiguration,
+                records: Vec::new(),
+                next_cursor: None,
+            })
+        }
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let upstream = Router::new().route("/api/connector/inventory", post(inventory_upstream));
+        let server = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+
+        let secret = "connector-http-role-policy-test-secret".to_string();
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some(secret),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        state.capabilities = CapabilitiesAggregator::for_tests(vec![ConfiguredUpstream {
+            tenant_id: "legacy".into(),
+            building_id: "building-a".into(),
+            edge_id: "edge-a".into(),
+            base_url: Url::parse(&format!("http://{address}/")).unwrap(),
+            token: Some("synthetic-upstream-token".into()),
+        }]);
+        let state = Arc::new(state);
+        let app = super::router(Arc::clone(&state));
+        let body = |tenant_id: &str| {
+            serde_json::json!({
+                "schema": CONNECTOR_INVENTORY_CONTRACT_V1,
+                "request_id": uuid::Uuid::nil(),
+                "scope": {
+                    "tenant_id": tenant_id,
+                    "building_id": "building-a",
+                    "edge_id": "edge-a"
+                },
+                "protocols": ["bacnet"],
+                "page_size": 10
+            })
+            .to_string()
+        };
+        let request = |token: Option<&str>, tenant_id: &str| {
+            let mut builder = Request::post("/api/connectors/edge-a/inventory")
+                .header("content-type", "application/json");
+            if let Some(token) = token {
+                builder = builder.header("authorization", format!("Bearer {token}"));
+            }
+            builder.body(Body::from(body(tenant_id))).unwrap()
+        };
+
+        let anonymous = app.clone().oneshot(request(None, "legacy")).await.unwrap();
+        assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+
+        for role in [
+            crate::auth::Role::Viewer,
+            crate::auth::Role::Operator,
+            crate::auth::Role::Admin,
+        ] {
+            let token = state
+                .auth
+                .issue_token_with_tenants("connector-test", role, 60, &[])
+                .unwrap();
+            let allowed = app
+                .clone()
+                .oneshot(request(Some(&token), "legacy"))
+                .await
+                .unwrap();
+            assert_eq!(allowed.status(), StatusCode::OK, "role {role}");
+        }
+
+        let viewer = state
+            .auth
+            .issue_token_with_tenants("connector-test", crate::auth::Role::Viewer, 60, &[])
+            .unwrap();
+        let foreign = app
+            .oneshot(request(Some(&viewer), "tenant-foreign"))
+            .await
+            .unwrap();
+        assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
+        server.abort();
+    }
+
+    #[test]
+    fn configured_connector_scope_authorizes_without_telemetry_shadow_and_rejects_conflict() {
+        let mut state = AppState::new();
+        state.capabilities = CapabilitiesAggregator::for_tests(vec![ConfiguredUpstream {
+            tenant_id: "tenant-a".into(),
+            building_id: "building-a".into(),
+            edge_id: "edge-a".into(),
+            base_url: Url::parse("http://127.0.0.1:9").unwrap(),
+            token: None,
+        }]);
+        let state = Arc::new(state);
+        let tenant_a = crate::tenant::TenantContext {
+            tenant_id: Some("tenant-a".into()),
+            building_ids: vec!["building-a".into()],
+            hub_admin: false,
+            multi_tenant: true,
+        };
+        let scope = openfdd_contracts::ConnectorScope {
+            tenant_id: "tenant-a".into(),
+            building_id: "building-a".into(),
+            edge_id: "edge-a".into(),
+        };
+        assert!(authorized_edge_ids(&state, &tenant_a).contains("edge-a"));
+        assert!(authorize_connector_scope(&state, &tenant_a, "edge-a", &scope).is_ok());
+
+        let mut foreign = scope.clone();
+        foreign.tenant_id = "tenant-b".into();
+        assert_eq!(
+            authorize_connector_scope(&state, &tenant_a, "edge-a", &foreign)
+                .unwrap_err()
+                .0,
+            StatusCode::FORBIDDEN
+        );
+
+        let entry = state.edges.entry("edge-a".into()).or_default();
+        let mut shadow = entry.lock().unwrap();
+        shadow.registered_site_id = Some("building-foreign".into());
+        shadow.registered_tenant_id = Some("tenant-a".into());
+        drop(shadow);
+        drop(entry);
+        assert_eq!(
+            authorize_connector_scope(&state, &tenant_a, "edge-a", &scope)
+                .unwrap_err()
+                .0,
+            StatusCode::FORBIDDEN
+        );
+    }
 
     #[test]
     fn connector_proxy_denies_cross_tenant_scope_even_when_building_is_allowed() {
@@ -5047,6 +5323,47 @@ mod version_tests {
             edge_id: "edge-a".into(),
         };
         assert!(!request_scope_allowed(&ctx, &scope));
+    }
+
+    #[test]
+    fn connector_inventory_scope_requires_registered_tenant_and_building() {
+        let state = Arc::new(AppState::new());
+        let entry = state.edges.entry("edge-a".into()).or_default();
+        let mut shadow = entry.lock().unwrap();
+        shadow.registered_site_id = Some("shared-building".into());
+        shadow.registered_tenant_id = Some("tenant-a".into());
+        drop(shadow);
+        drop(entry);
+
+        let tenant_a = crate::tenant::TenantContext {
+            tenant_id: Some("tenant-a".into()),
+            building_ids: vec!["shared-building".into()],
+            hub_admin: false,
+            multi_tenant: true,
+        };
+        let allowed = openfdd_contracts::ConnectorScope {
+            tenant_id: "tenant-a".into(),
+            building_id: "shared-building".into(),
+            edge_id: "edge-a".into(),
+        };
+        assert!(authorize_connector_scope(&state, &tenant_a, "edge-a", &allowed).is_ok());
+
+        let mut foreign = allowed.clone();
+        foreign.tenant_id = "tenant-b".into();
+        assert_eq!(
+            authorize_connector_scope(&state, &tenant_a, "edge-a", &foreign)
+                .unwrap_err()
+                .0,
+            StatusCode::FORBIDDEN
+        );
+        let mut wrong_building = allowed;
+        wrong_building.building_id = "other-building".into();
+        assert_eq!(
+            authorize_connector_scope(&state, &tenant_a, "edge-a", &wrong_building)
+                .unwrap_err()
+                .0,
+            StatusCode::FORBIDDEN
+        );
     }
 
     #[test]

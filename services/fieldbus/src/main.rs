@@ -241,7 +241,10 @@ mod tests {
             Arc::clone(&bacnet_server),
         ));
         let haystack = Arc::new(HaystackService::new(settings.haystack.clone()));
-        let rest_devices = config::load_rest_devices(None, &settings.rest).unwrap();
+        let rest_config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../config/fieldbus/rest_devices.toml");
+        let rest_devices =
+            config::load_rest_devices(Some(&rest_config_path), &settings.rest).unwrap();
         let rest =
             Arc::new(RestClientService::from_config(settings.rest.clone(), rest_devices).unwrap());
         let telemetry = Arc::new(TelemetryControl::new(
@@ -264,11 +267,23 @@ mod tests {
     }
 
     fn test_state() -> AppState {
-        std::env::set_var(
-            "OPENFDD_FIELDBUS_CONFIG_DIR",
-            format!("{}/../../config/fieldbus", env!("CARGO_MANIFEST_DIR")),
-        );
-        state_for_settings(load_settings())
+        let mut settings = load_settings();
+        settings.field_devices_toml = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../config/fieldbus/field_devices.toml");
+        settings.connector_tenant_id = None;
+        settings.connector_building_id = None;
+        settings.connector_edge_id = None;
+        state_for_settings(settings)
+    }
+
+    fn test_state_for_scope(tenant: &str, building: &str, edge: &str) -> AppState {
+        let mut settings = load_settings();
+        settings.field_devices_toml = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../config/fieldbus/field_devices.toml");
+        settings.connector_tenant_id = Some(tenant.into());
+        settings.connector_building_id = Some(building.into());
+        settings.connector_edge_id = Some(edge.into());
+        state_for_settings(settings)
     }
 
     #[tokio::test]
@@ -352,6 +367,159 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn connector_inventory_is_bounded_scoped_and_broker_free() {
+        let state = test_state_for_scope("tenant-local", "building-local", "edge-local");
+        let client = state.bacnet_client.clone();
+        let app = routes::api_routes(state);
+        let request = serde_json::json!({
+            "schema": openfdd_contracts::CONNECTOR_INVENTORY_CONTRACT_V1,
+            "request_id": uuid::Uuid::nil(),
+            "scope": {
+                "tenant_id": "tenant-local",
+                "building_id": "building-local",
+                "edge_id": "edge-local"
+            },
+            "protocols": ["bacnet"],
+            "page_size": 2
+        });
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/api/connector/inventory")
+                    .header("content-type", "application/json")
+                    .body(Body::from(request.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            value["schema"],
+            openfdd_contracts::CONNECTOR_INVENTORY_CONTRACT_V1
+        );
+        assert_eq!(value["provenance"], "trusted_configuration");
+        assert_eq!(value["records"].as_array().unwrap().len(), 2);
+        assert!(value["next_cursor"].as_str().is_some());
+        let serialized = value.to_string();
+        assert!(!serialized.contains("127.0.0.1"));
+        assert!(!serialized.contains("47808"));
+        assert_eq!(client.test_ot_call_count(), 0);
+
+        let mut cursor = value["next_cursor"].clone();
+        let mut all_records = value["records"].as_array().unwrap().clone();
+        while let Some(cursor_value) = cursor.as_str() {
+            let mut page_request = request.clone();
+            page_request["cursor"] = serde_json::json!(cursor_value);
+            let page_response = app
+                .clone()
+                .oneshot(
+                    Request::post("/api/connector/inventory")
+                        .header("content-type", "application/json")
+                        .body(Body::from(page_request.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(page_response.status(), StatusCode::OK);
+            let page_body = page_response
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes();
+            let page: serde_json::Value = serde_json::from_slice(&page_body).unwrap();
+            assert_eq!(page["revision"], value["revision"]);
+            assert!(page["records"].as_array().unwrap().len() <= 2);
+            all_records.extend(page["records"].as_array().unwrap().iter().cloned());
+            cursor = page["next_cursor"].clone();
+        }
+        assert!(all_records.iter().any(|record| record["kind"] == "point"));
+        assert_eq!(client.test_ot_call_count(), 0);
+
+        let mut foreign_request = request.clone();
+        foreign_request["scope"]["tenant_id"] = serde_json::json!("foreign-tenant");
+        let foreign_response = app
+            .clone()
+            .oneshot(
+                Request::post("/api/connector/inventory")
+                    .header("content-type", "application/json")
+                    .body(Body::from(foreign_request.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(foreign_response.status(), StatusCode::FORBIDDEN);
+
+        let mut invalid_page = request;
+        invalid_page["page_size"] = serde_json::json!(101);
+        let invalid_response = app
+            .oneshot(
+                Request::post("/api/connector/inventory")
+                    .header("content-type", "application/json")
+                    .body(Body::from(invalid_page.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(invalid_response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(client.test_ot_call_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn connector_inventory_projects_network_labels_to_safe_fallbacks() {
+        let path = std::env::temp_dir().join(format!(
+            "openfdd-connector-label-{}-{}.toml",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(
+            &path,
+            "[[devices]]\nname=\"Gateway at 192.0.2.10:47808\"\nenabled=true\ndevice_instance=6010\nhost=\"192.0.2.10\"\nport=47808\npoints=[]\n",
+        )
+        .unwrap();
+        let mut settings = config::Settings {
+            field_devices_toml: path.clone(),
+            connector_tenant_id: Some("tenant-a".into()),
+            connector_building_id: Some("building-a".into()),
+            connector_edge_id: Some("edge-a".into()),
+            ..config::Settings::default()
+        };
+        settings.bacnet_client.interface = Ipv4Addr::LOCALHOST;
+        let state = state_for_settings(settings);
+        let client = state.bacnet_client.clone();
+        let response = routes::api_routes(state)
+            .oneshot(
+                Request::post("/api/connector/inventory")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "schema": openfdd_contracts::CONNECTOR_INVENTORY_CONTRACT_V1,
+                            "request_id": uuid::Uuid::nil(),
+                            "scope": {"tenant_id":"tenant-a","building_id":"building-a","edge_id":"edge-a"},
+                            "protocols": ["bacnet"],
+                            "page_size": 10
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["records"][0]["display_name"], "BACnet device 6010");
+        assert!(!value.to_string().contains("192.0.2.10"));
+        assert_eq!(client.test_ot_call_count(), 0);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
     async fn connector_read_rejects_untrusted_scope_before_ot_access() {
         let state = test_state();
         let app = routes::api_routes(state.clone());
@@ -388,29 +556,8 @@ mod tests {
 
     #[tokio::test]
     async fn connector_scope_identity_matrix_counts_only_authorized_ot_reads() {
-        let original_edge = std::env::var("OPENFDD_EDGE_ID").ok();
-        let original_building = std::env::var("OPENFDD_BUILDING_ID").ok();
-        let original_tenant = std::env::var("OPENFDD_TENANT_ID").ok();
-        let restore = || {
-            match original_edge.as_deref() {
-                Some(value) => std::env::set_var("OPENFDD_EDGE_ID", value),
-                None => std::env::remove_var("OPENFDD_EDGE_ID"),
-            }
-            match original_building.as_deref() {
-                Some(value) => std::env::set_var("OPENFDD_BUILDING_ID", value),
-                None => std::env::remove_var("OPENFDD_BUILDING_ID"),
-            }
-            match original_tenant.as_deref() {
-                Some(value) => std::env::set_var("OPENFDD_TENANT_ID", value),
-                None => std::env::remove_var("OPENFDD_TENANT_ID"),
-            }
-        };
-
         // Missing local identity fails before inventory lookup or a BACnet
         // client operation.
-        std::env::remove_var("OPENFDD_EDGE_ID");
-        std::env::remove_var("OPENFDD_BUILDING_ID");
-        std::env::remove_var("OPENFDD_TENANT_ID");
         let missing_state = test_state();
         let missing_client = missing_state.bacnet_client.clone();
         let missing_response = routes::api_routes(missing_state)
@@ -435,10 +582,7 @@ mod tests {
 
         // A foreign tenant is rejected even when the building and edge names
         // are otherwise plausible.
-        std::env::set_var("OPENFDD_EDGE_ID", "edge-a");
-        std::env::set_var("OPENFDD_BUILDING_ID", "building-a");
-        std::env::set_var("OPENFDD_TENANT_ID", "tenant-a");
-        let foreign_state = test_state();
+        let foreign_state = test_state_for_scope("tenant-a", "building-a", "edge-a");
         let foreign_client = foreign_state.bacnet_client.clone();
         let foreign_response = routes::api_routes(foreign_state)
             .oneshot(
@@ -482,6 +626,9 @@ mod tests {
         .unwrap();
         let mut settings = config::Settings {
             field_devices_toml: path.clone(),
+            connector_tenant_id: Some("tenant-a".into()),
+            connector_building_id: Some("building-a".into()),
+            connector_edge_id: Some("edge-a".into()),
             ..config::Settings::default()
         };
         settings.bacnet_client.interface = Ipv4Addr::LOCALHOST;
@@ -514,7 +661,6 @@ mod tests {
             StatusCode::BAD_GATEWAY | StatusCode::INTERNAL_SERVER_ERROR
         ));
         let _ = std::fs::remove_file(path);
-        restore();
     }
 
     #[tokio::test]

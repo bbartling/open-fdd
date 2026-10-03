@@ -221,6 +221,13 @@ impl BacnetClientService {
         self.field_devices.len()
     }
 
+    /// Return the trusted field-device catalog without opening a BACnet
+    /// socket. Connector inventory routes use this snapshot so they cannot
+    /// accidentally turn a metadata request into discovery or a read.
+    pub fn configured_devices(&self) -> Vec<FieldDevice> {
+        self.field_devices.clone()
+    }
+
     pub fn enabled_device_count(&self) -> usize {
         self.field_devices
             .iter()

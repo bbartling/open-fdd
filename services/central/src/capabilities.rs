@@ -14,9 +14,10 @@ use chrono::Utc;
 use futures_util::StreamExt;
 use openfdd_contracts::{
     CapabilitiesAggregateResponse, CapabilityState, ConnectorAction, ConnectorCapability,
-    ConnectorHelloResponse, ConnectorProtocol, ConnectorReadRequest, ConnectorReadResponse,
-    ConnectorReadResult, DeliveryStatus, ReadValueState, RecipeObservation, ServiceVersion,
-    UpstreamCapability, CAPABILITIES_AGGREGATE_CONTRACT_V1, CAPABILITIES_CONTRACT_V1,
+    ConnectorHelloResponse, ConnectorInventoryRequest, ConnectorInventoryResponse,
+    ConnectorProtocol, ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult,
+    DeliveryStatus, ReadValueState, RecipeObservation, ServiceVersion, UpstreamCapability,
+    CAPABILITIES_AGGREGATE_CONTRACT_V1, CAPABILITIES_CONTRACT_V1,
 };
 use reqwest::redirect::Policy;
 use reqwest::Client;
@@ -34,14 +35,14 @@ const MAX_UPSTREAMS: usize = 32;
 const MAX_CONCURRENT_PROBES: usize = 4;
 
 #[derive(Clone)]
-struct ConfiguredUpstream {
+pub(crate) struct ConfiguredUpstream {
     /// Scope is part of the server-side configuration. It is never accepted
     /// from the browser or copied from an untrusted upstream response.
-    tenant_id: String,
-    building_id: String,
-    edge_id: String,
-    base_url: Url,
-    token: Option<String>,
+    pub(crate) tenant_id: String,
+    pub(crate) building_id: String,
+    pub(crate) edge_id: String,
+    pub(crate) base_url: Url,
+    pub(crate) token: Option<String>,
 }
 
 struct CacheState {
@@ -116,7 +117,7 @@ impl CapabilitiesAggregator {
     }
 
     #[cfg(test)]
-    fn for_tests(upstreams: Vec<ConfiguredUpstream>) -> Arc<Self> {
+    pub(crate) fn for_tests(upstreams: Vec<ConfiguredUpstream>) -> Arc<Self> {
         Arc::new(Self {
             client: Client::builder()
                 .redirect(Policy::none())
@@ -363,6 +364,62 @@ impl CapabilitiesAggregator {
         if !result.ok {
             return Err(ProxyError::Rejected);
         }
+        Ok(result)
+    }
+
+    /// Forward one explicitly requested inventory page through a configured
+    /// edge. Inventory is a trusted configuration projection; the central
+    /// service never supplies a URL or asks the edge to discover OT devices.
+    pub async fn proxy_inventory(
+        &self,
+        edge_id: &str,
+        request: &ConnectorInventoryRequest,
+    ) -> Result<ConnectorInventoryResponse, ProxyError> {
+        request.validate().map_err(|_| ProxyError::BadRequest)?;
+        let upstream = self
+            .upstreams
+            .iter()
+            .find(|upstream| upstream.edge_id == edge_id)
+            .ok_or(ProxyError::NotConfigured)?;
+        if upstream.tenant_id != request.scope.tenant_id
+            || upstream.building_id != request.scope.building_id
+        {
+            return Err(ProxyError::BadRequest);
+        }
+        if upstream.token.is_none() && !central_bool("OPENFDD_FIELDBUS_UPSTREAM_ALLOW_ANONYMOUS") {
+            return Err(ProxyError::AuthFailure);
+        }
+        let client = self.client.as_ref().ok_or(ProxyError::Incompatible)?;
+        let _probe_permit = timeout(Duration::from_secs(2), self.probe_gate.acquire())
+            .await
+            .map_err(|_| ProxyError::Unreachable)?
+            .map_err(|_| ProxyError::Unreachable)?;
+        let endpoint = endpoint(&upstream.base_url, "api/connector/inventory")
+            .map_err(|_| ProxyError::Incompatible)?;
+        let mut outgoing = client.post(endpoint).json(request);
+        if let Some(token) = upstream.token.as_deref() {
+            outgoing = outgoing.bearer_auth(token);
+        }
+        let response = timeout(REQUEST_TIMEOUT, outgoing.send())
+            .await
+            .map_err(|_| ProxyError::Unreachable)?
+            .map_err(|_| ProxyError::Unreachable)?;
+        if response.status() == StatusCode::UNAUTHORIZED
+            || response.status() == StatusCode::FORBIDDEN
+        {
+            return Err(ProxyError::AuthFailure);
+        }
+        if !response.status().is_success() || response.status().is_redirection() {
+            return Err(ProxyError::Incompatible);
+        }
+        let body = bounded_body(response)
+            .await
+            .map_err(|_| ProxyError::Incompatible)?;
+        let result: ConnectorInventoryResponse =
+            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
+        result
+            .validate_for(request)
+            .map_err(|_| ProxyError::Incompatible)?;
         Ok(result)
     }
 }
@@ -973,13 +1030,15 @@ mod tests {
     use axum::{
         body::Body,
         response::{Redirect, Response},
-        routing::get,
+        routing::{get, post},
         Json, Router,
     };
     use bytes::Bytes;
     use openfdd_contracts::{
-        ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult, ConnectorScope,
-        ReadPriorityArrayResult, ReadPrioritySlot, ReadTarget, ReadValueState,
+        ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorReadRequest,
+        ConnectorReadResponse, ConnectorReadResult, ConnectorScope, InventoryAvailability,
+        InventoryCommandability, InventoryProvenance, InventoryRecord, ReadPriorityArrayResult,
+        ReadPrioritySlot, ReadTarget, ReadValueState, CONNECTOR_INVENTORY_CONTRACT_V1,
         READ_PROXY_CONTRACT_V1,
     };
     use std::convert::Infallible;
@@ -1233,6 +1292,7 @@ mod tests {
                     object_instance: 4,
                     slots,
                     state: "supported".into(),
+                    observed_at: Utc::now(),
                 }),
             )
         };
@@ -1438,5 +1498,128 @@ mod tests {
         let value = serde_json::to_value(request).unwrap();
         assert!(value.get("url").is_none());
         assert!(value.get("host").is_none());
+    }
+
+    #[tokio::test]
+    async fn inventory_proxy_is_typed_correlated_and_scope_bound() {
+        let calls = StdArc::new(AtomicUsize::new(0));
+        let calls_for_handler = StdArc::clone(&calls);
+        let app = Router::new().route(
+            "/api/connector/inventory",
+            post(move |Json(request): Json<ConnectorInventoryRequest>| {
+                let call = calls_for_handler.fetch_add(1, Ordering::Relaxed);
+                async move {
+                    let request_id = if call == 0 {
+                        request.request_id
+                    } else {
+                        uuid::Uuid::new_v4()
+                    };
+                    if call == 2 {
+                        return Json(ConnectorInventoryResponse {
+                            schema: CONNECTOR_INVENTORY_CONTRACT_V1.into(),
+                            request_id: request.request_id,
+                            scope: request.scope.clone(),
+                            protocols: Vec::new(),
+                            revision: "config-test".into(),
+                            captured_at: Utc::now(),
+                            provenance: InventoryProvenance::TrustedConfiguration,
+                            records: Vec::new(),
+                            next_cursor: Some(
+                                request.cursor_for_revision("config-test", 1).unwrap(),
+                            ),
+                        });
+                    }
+                    if call == 3 {
+                        return Json(ConnectorInventoryResponse {
+                            schema: CONNECTOR_INVENTORY_CONTRACT_V1.into(),
+                            request_id: request.request_id,
+                            scope: request.scope,
+                            protocols: vec![ConnectorProtocol::Bacnet],
+                            revision: "config-test".into(),
+                            captured_at: Utc::now(),
+                            provenance: InventoryProvenance::TrustedConfiguration,
+                            records: vec![InventoryRecord::Device {
+                                device_id: "192.0.2.10:47808".into(),
+                                protocol: ConnectorProtocol::Bacnet,
+                                display_name: "Configured BACnet device".into(),
+                                availability: InventoryAvailability::Configured,
+                                commandability: InventoryCommandability::Unknown,
+                                actions: vec![ConnectorAction::MetadataRead],
+                            }],
+                            next_cursor: None,
+                        });
+                    }
+                    Json(ConnectorInventoryResponse {
+                        schema: CONNECTOR_INVENTORY_CONTRACT_V1.into(),
+                        request_id,
+                        scope: request.scope,
+                        protocols: vec![ConnectorProtocol::Bacnet],
+                        revision: "config-test".into(),
+                        captured_at: Utc::now(),
+                        provenance: InventoryProvenance::TrustedConfiguration,
+                        records: vec![InventoryRecord::Device {
+                            device_id: "bacnet:device:7".into(),
+                            protocol: ConnectorProtocol::Bacnet,
+                            display_name: "Configured BACnet device".into(),
+                            availability: InventoryAvailability::Configured,
+                            commandability: InventoryCommandability::Unknown,
+                            actions: vec![ConnectorAction::MetadataRead],
+                        }],
+                        next_cursor: None,
+                    })
+                }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let aggregator = CapabilitiesAggregator::for_tests(vec![ConfiguredUpstream {
+            tenant_id: "tenant-a".into(),
+            building_id: "building-a".into(),
+            edge_id: "edge-a".into(),
+            base_url: Url::parse(&format!("http://{addr}")).unwrap(),
+            token: Some("test-token".into()),
+        }]);
+        let request = ConnectorInventoryRequest {
+            schema: CONNECTOR_INVENTORY_CONTRACT_V1.into(),
+            request_id: uuid::Uuid::nil(),
+            scope: ConnectorScope {
+                tenant_id: "tenant-a".into(),
+                building_id: "building-a".into(),
+                edge_id: "edge-a".into(),
+            },
+            protocols: vec![ConnectorProtocol::Bacnet],
+            page_size: 10,
+            cursor: None,
+        };
+        let response = aggregator
+            .proxy_inventory("edge-a", &request)
+            .await
+            .unwrap();
+        response.validate_for(&request).unwrap();
+        assert_eq!(response.records.len(), 1);
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+
+        let mismatch = aggregator.proxy_inventory("edge-a", &request).await;
+        assert_eq!(mismatch, Err(ProxyError::Incompatible));
+        let mut foreign = request.clone();
+        foreign.scope.tenant_id = "tenant-b".into();
+        assert_eq!(
+            aggregator.proxy_inventory("edge-a", &foreign).await,
+            Err(ProxyError::BadRequest)
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 2);
+        assert_eq!(
+            aggregator.proxy_inventory("edge-a", &request).await,
+            Err(ProxyError::Incompatible)
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 3);
+        assert_eq!(
+            aggregator.proxy_inventory("edge-a", &request).await,
+            Err(ProxyError::Incompatible)
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 4);
     }
 }

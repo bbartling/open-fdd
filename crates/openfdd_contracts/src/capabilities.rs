@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 pub const CAPABILITIES_CONTRACT_V1: &str = "openfdd.connector.capabilities.v1";
 pub const CAPABILITIES_AGGREGATE_CONTRACT_V1: &str = "openfdd.capabilities.aggregate.v1";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectorProtocol {
@@ -38,7 +38,7 @@ pub enum CapabilityState {
     Unknown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectorAction {

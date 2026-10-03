@@ -307,8 +307,7 @@ pub struct FieldPoint {
     pub object_type: String,
     pub object_instance: u32,
     pub point_name: String,
-    /// Loaded from field_devices.toml units column; display/export TBD.
-    #[expect(dead_code)]
+    /// Loaded from field_devices.toml and exposed as a typed inventory unit.
     pub units: String,
 }
 
@@ -371,6 +370,11 @@ pub struct Settings {
     pub field_devices_toml: PathBuf,
     pub openapi_enabled: bool,
     pub swagger_servers_url: Option<String>,
+    /// Trusted connector identity loaded once at startup. Route handlers use
+    /// this snapshot instead of reading process environment per request.
+    pub connector_tenant_id: Option<String>,
+    pub connector_building_id: Option<String>,
+    pub connector_edge_id: Option<String>,
 }
 
 impl Default for Settings {
@@ -392,6 +396,9 @@ impl Default for Settings {
             field_devices_toml: config_dir.join("field_devices.toml"),
             openapi_enabled: true,
             swagger_servers_url: None,
+            connector_tenant_id: None,
+            connector_building_id: None,
+            connector_edge_id: None,
         }
     }
 }
@@ -622,6 +629,9 @@ pub fn load_settings() -> Settings {
     let mut s = Settings {
         haystack_configured,
         modbus_configured,
+        connector_tenant_id: env_first(&["OPENFDD_TENANT_ID"]),
+        connector_building_id: env_first(&["OPENFDD_BUILDING_ID", "OPENFDD_SITE_ID"]),
+        connector_edge_id: env_first(&["OPENFDD_EDGE_ID", "RUSTY_GATEWAY_EDGE_ID"]),
         ..Settings::default()
     };
 

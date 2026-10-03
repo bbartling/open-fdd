@@ -3,7 +3,10 @@
 #![expect(dead_code)]
 
 use crate::models::*;
-use openfdd_contracts::{ConnectorReadRequest, ConnectorReadResponse};
+use openfdd_contracts::{
+    ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorReadRequest,
+    ConnectorReadResponse,
+};
 
 /// Service index and quick links.
 #[utoipa::path(
@@ -41,6 +44,20 @@ pub(crate) fn doc_api_health() {}
     responses((status = 200, description = "Versioned connector capability snapshot", body = openfdd_contracts::ConnectorHelloResponse))
 )]
 pub(crate) fn doc_connector_hello() {}
+
+/// Authenticated scoped inventory projection from trusted connector config.
+#[utoipa::path(
+    post,
+    path = "/api/connector/inventory",
+    tag = "Open-FDD compat",
+    request_body = ConnectorInventoryRequest,
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Bounded typed connector inventory page", body = ConnectorInventoryResponse),
+        (status = 403, description = "Scope or connector identity denial")
+    )
+)]
+pub(crate) fn doc_connector_inventory() {}
 
 /// Authenticated scoped read-only connector proxy.
 #[utoipa::path(

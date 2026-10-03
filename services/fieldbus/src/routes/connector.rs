@@ -12,10 +12,13 @@ use axum::{
 };
 use chrono::Utc;
 use openfdd_contracts::{
-    CapabilityState, ConnectorAction, ConnectorCapability, ConnectorHelloResponse,
+    sanitize_inventory_label, CapabilityState, ConnectorAction, ConnectorCapability,
+    ConnectorHelloResponse, ConnectorInventoryRequest, ConnectorInventoryResponse,
     ConnectorProtocol, ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult,
-    DeliveryStatus, ReadPointResult, ReadPriorityArrayResult, ReadPrioritySlot, ReadValueState,
-    RecipeObservation, ServiceVersion, CAPABILITIES_CONTRACT_V1,
+    DeliveryStatus, InventoryAvailability, InventoryCommandability, InventoryPointReference,
+    InventoryProvenance, InventoryRecord, ReadPointResult, ReadPriorityArrayResult,
+    ReadPrioritySlot, ReadValueState, RecipeObservation, ServiceVersion, CAPABILITIES_CONTRACT_V1,
+    CONNECTOR_INVENTORY_CONTRACT_V1,
 };
 use serde_json::Value;
 
@@ -292,25 +295,37 @@ pub fn hello_response(state: &AppState) -> ConnectorHelloResponse {
     }
 }
 
-fn local_scope_matches(scope: &openfdd_contracts::ConnectorScope) -> Result<(), ApiError> {
-    let expected_edge = std::env::var("OPENFDD_EDGE_ID")
-        .or_else(|_| std::env::var("RUSTY_GATEWAY_EDGE_ID"))
-        .map_err(|_| ApiError::Forbidden("fieldbus edge identity is not configured".into()))?;
+fn local_scope_matches(
+    settings: &crate::config::Settings,
+    scope: &openfdd_contracts::ConnectorScope,
+) -> Result<(), ApiError> {
+    let expected_edge = settings
+        .connector_edge_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| ApiError::Forbidden("fieldbus edge identity is not configured".into()))?;
     if expected_edge.trim() != scope.edge_id {
         return Err(ApiError::Forbidden(
             "edge is outside this fieldbus scope".into(),
         ));
     }
-    let expected_building = std::env::var("OPENFDD_BUILDING_ID")
-        .or_else(|_| std::env::var("OPENFDD_SITE_ID"))
-        .map_err(|_| ApiError::Forbidden("fieldbus building identity is not configured".into()))?;
+    let expected_building = settings
+        .connector_building_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            ApiError::Forbidden("fieldbus building identity is not configured".into())
+        })?;
     if expected_building.trim() != scope.building_id {
         return Err(ApiError::Forbidden(
             "building is outside this fieldbus scope".into(),
         ));
     }
-    let expected_tenant = std::env::var("OPENFDD_TENANT_ID")
-        .map_err(|_| ApiError::Forbidden("fieldbus tenant identity is not configured".into()))?;
+    let expected_tenant = settings
+        .connector_tenant_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| ApiError::Forbidden("fieldbus tenant identity is not configured".into()))?;
     if expected_tenant.trim() != scope.tenant_id {
         return Err(ApiError::Forbidden(
             "tenant is outside this fieldbus scope".into(),
@@ -323,12 +338,224 @@ async fn connector_hello(State(state): State<AppState>) -> Json<ConnectorHelloRe
     Json(hello_response(&state))
 }
 
+fn safe_component(value: &str, fallback: &str) -> String {
+    let mut component = String::new();
+    for ch in value.trim().chars() {
+        if component.len() >= 64 {
+            break;
+        }
+        if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.') {
+            component.push(ch.to_ascii_lowercase());
+        } else if !component.ends_with('_') {
+            component.push('_');
+        }
+    }
+    let component = component.trim_matches('_').to_string();
+    if component.is_empty() {
+        fallback.into()
+    } else {
+        component
+    }
+}
+
+fn inventory_units(value: &str) -> Option<String> {
+    let mut cleaned = String::new();
+    for ch in value.trim().chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | ':' | '/') {
+            cleaned.push(ch);
+        } else if !cleaned.ends_with('_') {
+            cleaned.push('_');
+        }
+        if cleaned.len() >= 64 {
+            break;
+        }
+    }
+    let cleaned = cleaned.trim_matches('_').to_string();
+    (!cleaned.is_empty()).then_some(cleaned)
+}
+
+fn inventory_records(state: &AppState) -> Vec<InventoryRecord> {
+    let mut records = Vec::new();
+    for device in state.bacnet_client.configured_devices() {
+        // BACnet instance/object identity is stable when a human label is
+        // edited; labels are presentation only.
+        let device_id = format!("bacnet:device:{}", device.device_instance);
+        let availability = if device.enabled {
+            InventoryAvailability::Configured
+        } else {
+            InventoryAvailability::Disabled
+        };
+        let actions = if device.enabled {
+            vec![ConnectorAction::MetadataRead]
+        } else {
+            Vec::new()
+        };
+        records.push(InventoryRecord::Device {
+            device_id: device_id.clone(),
+            protocol: ConnectorProtocol::Bacnet,
+            display_name: sanitize_inventory_label(
+                &device.name,
+                &format!("BACnet device {}", device.device_instance),
+            ),
+            availability: availability.clone(),
+            commandability: InventoryCommandability::Unknown,
+            actions,
+        });
+
+        let mut object_types = std::collections::BTreeSet::new();
+        for point in &device.points {
+            object_types.insert(point.object_type.to_ascii_lowercase());
+        }
+        for object_type in object_types {
+            let object_component = safe_component(&object_type, "object");
+            let group_id = format!("{device_id}:object-type:{object_component}");
+            records.push(InventoryRecord::Group {
+                group_id,
+                device_id: device_id.clone(),
+                protocol: ConnectorProtocol::Bacnet,
+                display_name: sanitize_inventory_label(&object_type, "BACnet object type"),
+                availability: availability.clone(),
+                commandability: InventoryCommandability::Unknown,
+                actions: if device.enabled {
+                    vec![ConnectorAction::MetadataRead]
+                } else {
+                    Vec::new()
+                },
+            });
+        }
+        for point in device.points {
+            let object_type = point.object_type.to_ascii_lowercase();
+            let object_component = safe_component(&object_type, "object");
+            let group_id = format!("{device_id}:object-type:{object_component}");
+            let point_id = format!(
+                "{device_id}:{object_component}:{}:present-value",
+                point.object_instance
+            );
+            records.push(InventoryRecord::Point {
+                point_id,
+                device_id: device_id.clone(),
+                group_id: Some(group_id),
+                protocol: ConnectorProtocol::Bacnet,
+                display_name: sanitize_inventory_label(
+                    &point.point_name,
+                    &format!("{object_type} {}", point.object_instance),
+                ),
+                units: inventory_units(&point.units),
+                availability: availability.clone(),
+                // Configured object type does not prove commandability. The
+                // typed read seam determines this from an actual PA result.
+                commandability: InventoryCommandability::Unknown,
+                actions: if device.enabled {
+                    vec![
+                        ConnectorAction::PointRead,
+                        ConnectorAction::PriorityArrayRead,
+                    ]
+                } else {
+                    Vec::new()
+                },
+                reference: InventoryPointReference::Bacnet {
+                    device_instance: device.device_instance,
+                    object_type,
+                    object_instance: point.object_instance,
+                    property_id: "present-value".into(),
+                },
+            });
+        }
+    }
+    if state.settings.modbus_configured {
+        records.push(InventoryRecord::Device {
+            device_id: "modbus:configured".into(),
+            protocol: ConnectorProtocol::Modbus,
+            display_name: "Configured Modbus connector".into(),
+            availability: InventoryAvailability::Unavailable,
+            commandability: InventoryCommandability::Unknown,
+            actions: Vec::new(),
+        });
+    }
+    if state.settings.haystack_configured {
+        records.push(InventoryRecord::Device {
+            device_id: "haystack:configured".into(),
+            protocol: ConnectorProtocol::Haystack,
+            display_name: "Configured Haystack connector".into(),
+            availability: InventoryAvailability::Unavailable,
+            commandability: InventoryCommandability::Unknown,
+            actions: Vec::new(),
+        });
+    }
+    records.sort_by(|left, right| left.key_for_order().cmp(&right.key_for_order()));
+    records
+}
+
+fn inventory_revision(records: &[InventoryRecord]) -> String {
+    let bytes = match serde_json::to_vec(records) {
+        Ok(bytes) => bytes,
+        Err(_) => return "config-invalid".into(),
+    };
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in bytes {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("config-{hash:016x}")
+}
+
+fn build_inventory(
+    state: &AppState,
+    request: &ConnectorInventoryRequest,
+) -> Result<ConnectorInventoryResponse, ApiError> {
+    let all_records = inventory_records(state);
+    let revision = inventory_revision(&all_records);
+    let protocols = &request.protocols;
+    let filtered: Vec<_> = all_records
+        .into_iter()
+        .filter(|record| protocols.is_empty() || protocols.contains(&record.protocol()))
+        .collect();
+    let offset = request
+        .offset_for_revision(&revision)
+        .map_err(|_| ApiError::BadRequest("inventory cursor is invalid or stale".into()))?;
+    if offset > filtered.len() {
+        return Err(ApiError::BadRequest(
+            "inventory cursor is invalid or stale".into(),
+        ));
+    }
+    let end = offset
+        .saturating_add(usize::from(request.page_size))
+        .min(filtered.len());
+    let page = filtered[offset..end].to_vec();
+    let mut page_protocols = page
+        .iter()
+        .map(InventoryRecord::protocol)
+        .collect::<Vec<_>>();
+    page_protocols.sort_by_key(|protocol| *protocol as u8);
+    page_protocols.dedup();
+    let response = ConnectorInventoryResponse {
+        schema: CONNECTOR_INVENTORY_CONTRACT_V1.into(),
+        request_id: request.request_id,
+        scope: request.scope.clone(),
+        protocols: page_protocols,
+        revision: revision.clone(),
+        captured_at: Utc::now(),
+        provenance: InventoryProvenance::TrustedConfiguration,
+        records: page,
+        next_cursor: (end < filtered.len())
+            .then(|| request.cursor_for_revision(&revision, end))
+            .transpose()
+            .map_err(|_| {
+                ApiError::Internal("connector returned an invalid inventory cursor".into())
+            })?,
+    };
+    response
+        .validate_for(request)
+        .map_err(|_| ApiError::Internal("connector returned an invalid inventory page".into()))?;
+    Ok(response)
+}
+
 async fn connector_read(
     State(state): State<AppState>,
     Json(request): Json<ConnectorReadRequest>,
 ) -> ApiResult<Json<ConnectorReadResponse>> {
     request.validate().map_err(ApiError::BadRequest)?;
-    local_scope_matches(&request.scope)?;
+    local_scope_matches(&state.settings, &request.scope)?;
     let response = match &request.target {
         openfdd_contracts::ReadTarget::ConnectorMetadata => ConnectorReadResponse::success(
             &request,
@@ -398,6 +625,15 @@ async fn connector_read(
     Ok(Json(response))
 }
 
+async fn connector_inventory(
+    State(state): State<AppState>,
+    Json(request): Json<ConnectorInventoryRequest>,
+) -> ApiResult<Json<ConnectorInventoryResponse>> {
+    request.validate().map_err(ApiError::BadRequest)?;
+    local_scope_matches(&state.settings, &request.scope)?;
+    Ok(Json(build_inventory(&state, &request)?))
+}
+
 fn point_result(
     value: Value,
     device_instance: u32,
@@ -443,6 +679,7 @@ fn point_result(
         value_type: value_type.into(),
         value: object.get("value").cloned().unwrap_or(Value::Null),
         quality: quality.into(),
+        observed_at: Utc::now(),
     }))
 }
 
@@ -476,14 +713,32 @@ fn priority_array_result(
     for raw in raw_slots {
         let mut slot: ReadPrioritySlot = serde_json::from_value(raw.clone())
             .map_err(|_| ApiError::Internal("connector returned malformed priority slot".into()))?;
-        if matches!(slot.state, ReadValueState::Null) {
-            slot.value = None;
-            slot.error = None;
-        } else if matches!(slot.state, ReadValueState::Error | ReadValueState::Unknown) {
-            slot.value = None;
-            slot.error = Some("priority slot unavailable".into());
-        } else {
-            slot.error = None;
+        match slot.state {
+            ReadValueState::Null if slot.value.is_some() || slot.error.is_some() => {
+                return Err(ApiError::Internal(
+                    "connector returned contradictory null priority slot".into(),
+                ));
+            }
+            ReadValueState::Value if slot.value.is_none() || slot.error.is_some() => {
+                return Err(ApiError::Internal(
+                    "connector returned contradictory value priority slot".into(),
+                ));
+            }
+            ReadValueState::Error if slot.value.is_some() => {
+                return Err(ApiError::Internal(
+                    "connector returned contradictory error priority slot".into(),
+                ));
+            }
+            ReadValueState::Error => slot.error = Some("priority slot unavailable".into()),
+            ReadValueState::Unknown if slot.value.is_some() => {
+                return Err(ApiError::Internal(
+                    "connector returned contradictory unknown priority slot".into(),
+                ));
+            }
+            ReadValueState::Unknown => {
+                slot.error = slot.error.map(|_| "priority slot unavailable".into());
+            }
+            ReadValueState::Null | ReadValueState::Value => {}
         }
         slots.push(slot);
     }
@@ -499,6 +754,7 @@ fn priority_array_result(
             object_instance,
             slots,
             state: state.into(),
+            observed_at: Utc::now(),
         },
     ))
 }
@@ -506,6 +762,7 @@ fn priority_array_result(
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/connector/hello", get(connector_hello))
+        .route("/api/connector/inventory", post(connector_inventory))
         .route("/api/connector/read", post(connector_read))
 }
 
