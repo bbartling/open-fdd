@@ -1,0 +1,14 @@
+<?xml version="1.0" ?>
+<NessusClientData_v2>
+  <Report name="openfdd-synthetic-medium">
+    <ReportHost name="192.0.2.12">
+      <HostProperties>
+        <tag name="host-ip">192.0.2.12</tag>
+      </HostProperties>
+      <ReportItem port="8080" protocol="tcp" severity="2" pluginID="88888" pluginName="Synthetic Medium Finding"/>
+      <ReportItem port="0" protocol="tcp" severity="0" pluginID="19506" pluginName="Nessus Scan Information">
+        <plugin_output>Credentialed checks : yes</plugin_output>
+      </ReportItem>
+    </ReportHost>
+  </Report>
+</NessusClientData_v2>
