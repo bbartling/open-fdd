@@ -18,6 +18,7 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::auth::AuthConfig;
+use crate::capabilities::CapabilitiesAggregator;
 use crate::live_historian::{LiveHistorianIngest, LiveWriter, PersistedMessageGroup};
 use crate::tenant_budget::TenantBudgetTracker;
 
@@ -103,6 +104,10 @@ pub struct EdgeShadow {
     /// Site/building from MQTT topic path (status/metadata/discovery/telemetry).
     /// Retained when `last_telemetry` is absent so `/api/edges` still attributes site.
     pub registered_site_id: Option<String>,
+    /// Tenant from the tenant-scoped topic or trusted local ingest binding.
+    /// Kept with the edge shadow so overlapping building ids cannot authorize
+    /// an edge from another tenant.
+    pub registered_tenant_id: Option<String>,
     /// protocol slug → last metadata payload
     pub last_metadata: HashMap<String, serde_json::Value>,
     /// protocol slug → last discovery payload
@@ -118,6 +123,12 @@ impl EdgeShadow {
             .map(|t| t.site_id.clone())
             .filter(|s| !s.is_empty())
             .or_else(|| self.registered_site_id.clone().filter(|s| !s.is_empty()))
+    }
+
+    pub fn known_tenant_id(&self) -> Option<String> {
+        self.registered_tenant_id
+            .clone()
+            .filter(|tenant| !tenant.is_empty())
     }
 }
 
@@ -178,6 +189,8 @@ pub struct MqttMonitorSnapshot {
 
 pub struct AppState {
     pub auth: AuthConfig,
+    /// Explicit capability probes and scoped read proxy. Health never probes.
+    pub capabilities: std::sync::Arc<CapabilitiesAggregator>,
     /// (edge_id, message_id) → observed
     pub seen_messages: DashMap<(String, Uuid), ()>,
     pub edges: DashMap<String, Mutex<EdgeShadow>>,
@@ -193,6 +206,10 @@ pub struct AppState {
     pub started_at: DateTime<Utc>,
     /// Last successful ingest accept this process (MQTT/CSV paths that bump `ingest_ok`).
     pub last_ingest_at: Mutex<Option<DateTime<Utc>>>,
+    /// Last receipt-backed, persisted row observed by this process. This is
+    /// the only signal used for durable delivery capability; accepts alone do
+    /// not establish persistence.
+    pub last_durable_at: Mutex<Option<DateTime<Utc>>>,
     pub mqtt_publisher: Mutex<Option<AsyncClient>>,
     mqtt_monitor: Mutex<MqttMonitorState>,
     /// Login failures keyed by ip+username (generic throttle; no secrets).
@@ -212,6 +229,7 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             auth: AuthConfig::load(),
+            capabilities: CapabilitiesAggregator::from_env(),
             seen_messages: DashMap::new(),
             edges: DashMap::new(),
             command_acks: DashMap::new(),
@@ -223,6 +241,7 @@ impl AppState {
             ingest_reject_buckets: Mutex::new(std::collections::BTreeMap::new()),
             started_at: Utc::now(),
             last_ingest_at: Mutex::new(None),
+            last_durable_at: Mutex::new(None),
             mqtt_publisher: Mutex::new(None),
             mqtt_monitor: Mutex::new(MqttMonitorState::default()),
             login_failures: Mutex::new(HashMap::new()),
@@ -367,6 +386,11 @@ impl AppState {
         .await
         {
             maybe_compact_receipt_journal(&self.ingest_receipts_path, &receipts).await;
+            let durable = persisted_rows.is_some_and(|rows| rows > 0);
+            drop(receipts);
+            if durable {
+                self.note_durable_ingest();
+            }
             true
         } else {
             receipts.insert(key, previous);
@@ -403,9 +427,9 @@ impl AppState {
                     .is_subset(&updated.persisted_equipment)
             {
                 updated.status = IngestReceiptStatus::Committed;
-                committed += 1;
             }
             updated.updated_at = Utc::now();
+            let became_committed = updated.status == IngestReceiptStatus::Committed;
             let event = Some(updated.clone());
             if append_receipt_event(
                 &self.ingest_receipts_path,
@@ -418,6 +442,14 @@ impl AppState {
             {
                 receipts.insert(key, updated);
                 maybe_compact_receipt_journal(&self.ingest_receipts_path, &receipts).await;
+                if became_committed {
+                    committed += 1;
+                }
+                let durable = became_committed && group.rows > 0;
+                drop(receipts);
+                if durable {
+                    self.note_durable_ingest();
+                }
             }
         }
         committed
@@ -525,6 +557,10 @@ impl AppState {
     pub fn note_ingest_ok(&self) {
         *self.ingest_ok.lock().unwrap() += 1;
         *self.last_ingest_at.lock().unwrap() = Some(Utc::now());
+    }
+
+    pub fn note_durable_ingest(&self) {
+        *self.last_durable_at.lock().unwrap() = Some(Utc::now());
     }
 
     pub fn set_mqtt_publisher(&self, client: AsyncClient) {
@@ -1018,6 +1054,7 @@ mod tests {
                 .await,
             Some(IngestReceiptStatus::Pending)
         );
+        assert!(state.last_durable_at.lock().unwrap().is_none());
         let second = PersistedMessageGroup {
             equipment_id: "equipment-b".into(),
             ..first
@@ -1038,6 +1075,7 @@ mod tests {
                 .await,
             Some(2)
         );
+        assert!(state.last_durable_at.lock().unwrap().is_some());
     }
 
     fn local_envelope(edge_id: &str, equipment_id: &str) -> TelemetryEnvelope {

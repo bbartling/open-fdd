@@ -245,29 +245,47 @@ async fn handle_payload(state: &AppState, topic: &str, payload: &[u8]) {
         TopicKind::Telemetry => handle_telemetry(state, &parsed, payload).await,
         TopicKind::Metadata => {
             if let Ok(value) = serde_json::from_slice(payload) {
-                store_shadow_payload(state, &parsed.edge_id, parsed.site_id(), |shadow| {
-                    let key = parsed.protocol.as_deref().unwrap_or("mixed");
-                    shadow.last_metadata.insert(key.to_string(), value);
-                });
+                store_shadow_payload(
+                    state,
+                    &parsed.edge_id,
+                    parsed.site_id(),
+                    parsed.tenant_id.as_deref(),
+                    |shadow| {
+                        let key = parsed.protocol.as_deref().unwrap_or("mixed");
+                        shadow.last_metadata.insert(key.to_string(), value);
+                    },
+                );
             } else {
                 record_reject(state, payload, "metadata decode failed");
             }
         }
         TopicKind::Discovery => {
             if let Ok(value) = serde_json::from_slice(payload) {
-                store_shadow_payload(state, &parsed.edge_id, parsed.site_id(), |shadow| {
-                    let key = parsed.protocol.as_deref().unwrap_or("mixed");
-                    shadow.last_discovery.insert(key.to_string(), value);
-                });
+                store_shadow_payload(
+                    state,
+                    &parsed.edge_id,
+                    parsed.site_id(),
+                    parsed.tenant_id.as_deref(),
+                    |shadow| {
+                        let key = parsed.protocol.as_deref().unwrap_or("mixed");
+                        shadow.last_discovery.insert(key.to_string(), value);
+                    },
+                );
             } else {
                 record_reject(state, payload, "discovery decode failed");
             }
         }
         TopicKind::Status => {
             if let Ok(value) = serde_json::from_slice(payload) {
-                store_shadow_payload(state, &parsed.edge_id, parsed.site_id(), |shadow| {
-                    shadow.last_status = Some(value);
-                });
+                store_shadow_payload(
+                    state,
+                    &parsed.edge_id,
+                    parsed.site_id(),
+                    parsed.tenant_id.as_deref(),
+                    |shadow| {
+                        shadow.last_status = Some(value);
+                    },
+                );
             } else {
                 record_reject(state, payload, "status decode failed");
             }
@@ -281,6 +299,7 @@ fn store_shadow_payload(
     state: &AppState,
     edge_id: &str,
     site_id: &str,
+    tenant_id: Option<&str>,
     update: impl FnOnce(&mut crate::state::EdgeShadow),
 ) {
     let entry = state.edges.entry(edge_id.to_string()).or_default();
@@ -288,6 +307,7 @@ fn store_shadow_payload(
     if !site_id.is_empty() {
         guard.registered_site_id = Some(site_id.to_string());
     }
+    guard.registered_tenant_id = tenant_id.map(str::to_string);
     update(&mut guard);
 }
 
@@ -344,7 +364,7 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
                 return;
             }
 
-            match state.ingest_live(&scope, &env).await {
+            let _persisted_rows = match state.ingest_live(&scope, &env).await {
                 Ok(report) => {
                     for duplicate in &report.duplicate_roles {
                         warn!(
@@ -378,6 +398,7 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
                             "telemetry has no explicit canonical historian identity"
                         );
                     }
+                    report.persisted_rows
                 }
                 Err(err) => {
                     record_reject(
@@ -391,7 +412,7 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
                         .await;
                     return;
                 }
-            }
+            };
 
             let entry = state.edges.entry(env.edge_id.clone()).or_default();
             let mut shadow = entry.lock().unwrap();
@@ -401,6 +422,7 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
             if !env.site_id.is_empty() {
                 shadow.registered_site_id = Some(env.site_id.clone());
             }
+            shadow.registered_tenant_id = topic.tenant_id.clone();
             shadow.last_telemetry = Some(env);
             state.note_ingest_ok();
         }

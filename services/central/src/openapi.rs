@@ -134,6 +134,23 @@ mod live_routes {
     pub fn local_fieldbus_ingest() {}
 
     #[utoipa::path(
+        get, path = "/api/capabilities", tag = "central",
+        responses((status = 200, description = "Authenticated central and configured connector capabilities", body = serde_json::Value))
+    )]
+    pub fn capabilities() {}
+
+    #[utoipa::path(
+        post, path = "/api/connectors/{edge_id}/read", tag = "central",
+        params(("edge_id" = String, Path, description = "Configured edge identifier")),
+        request_body = openfdd_contracts::ConnectorReadRequest,
+        responses(
+            (status = 200, description = "Scoped read-only connector response", body = openfdd_contracts::ConnectorReadResponse),
+            (status = 403, description = "Authenticated tenant or edge scope denied")
+        )
+    )]
+    pub fn connector_read() {}
+
+    #[utoipa::path(
         get, path = "/api/fdd/results", tag = "fdd",
         params(("building_id" = Option<String>, Query, description = "Scope results to building={id}")),
         responses((status = 200, description = "Site-scoped FDD rule results", body = serde_json::Value))
@@ -328,6 +345,8 @@ mod live_routes {
         live_routes::datasets_list,
         live_routes::datasets_delete,
         live_routes::local_fieldbus_ingest,
+        live_routes::capabilities,
+        live_routes::connector_read,
         live_routes::fuel_weather_fetch,
         live_routes::fdd_results,
         live_routes::fdd_equipment,

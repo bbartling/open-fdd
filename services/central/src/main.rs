@@ -7,6 +7,7 @@ mod analytics;
 mod auth;
 mod building_sessions;
 mod canonical_state;
+mod capabilities;
 mod contract;
 mod csv_site_export;
 mod cutover;

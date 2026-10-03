@@ -995,6 +995,49 @@
       "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
     },
     {
+      "method": "POST",
+      "path": "/api/connectors/{edge_id}/read",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_edge_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_connectors_edge_read_401",
+        "y.authz.post_api_connectors_edge_id_read"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon_connectors_edge_read_401",
+        "y.authz.post_api_connectors_edge_id_read"
+      ],
+      "request_schema": {
+        "type": "openfdd.connector.read.v1",
+        "status": "defined"
+      },
+      "response_schema": {
+        "type": "openfdd.connector.read.v1",
+        "status": "defined"
+      },
+      "selectors": [
+        "edge_id",
+        "tenant_id",
+        "building_id"
+      ],
+      "side_effects": "read_only_upstream_proxy",
+      "fixture_needs": [
+        "identity",
+        "configured_edge"
+      ],
+      "notes": "Authenticated, tenant/building/edge-scoped connector metadata or BACnet point/priority read; no writes or discovery"
+    },
+    {
       "method": "GET",
       "path": "/api/building/snapshot",
       "section": "protected",

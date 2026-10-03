@@ -323,6 +323,201 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn connector_hello_is_versioned_and_side_effect_free() {
+        let state = test_state();
+        let app = routes::api_routes(state.clone());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/connector/hello")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["schema"], openfdd_contracts::CAPABILITIES_CONTRACT_V1);
+        assert_eq!(value["version"]["service"], "openfdd-fieldbus");
+        assert!(value["connectors"].is_array());
+        // No handler in this route reaches BacnetClientService; this request
+        // has no OT target and therefore cannot initiate discovery or a read.
+        assert!(value["connectors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|connector| connector["protocol"] != "write"));
+        assert_eq!(state.bacnet_client.test_ot_call_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn connector_read_rejects_untrusted_scope_before_ot_access() {
+        let state = test_state();
+        let app = routes::api_routes(state.clone());
+        let request = serde_json::json!({
+            "schema": openfdd_contracts::READ_PROXY_CONTRACT_V1,
+            "request_id": uuid::Uuid::nil(),
+            "scope": {
+                "tenant_id": "configured-tenant",
+                "building_id": "other-building",
+                "edge_id": "configured-edge"
+            },
+            "target": {
+                "kind": "bacnet_point",
+                "device_instance": 5007,
+                "object_type": "analog-value",
+                "object_instance": 1,
+                "property_id": "present-value"
+            }
+        });
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/connector/read")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&request).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(state.bacnet_client.test_ot_call_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn connector_scope_identity_matrix_counts_only_authorized_ot_reads() {
+        let original_edge = std::env::var("OPENFDD_EDGE_ID").ok();
+        let original_building = std::env::var("OPENFDD_BUILDING_ID").ok();
+        let original_tenant = std::env::var("OPENFDD_TENANT_ID").ok();
+        let restore = || {
+            match original_edge.as_deref() {
+                Some(value) => std::env::set_var("OPENFDD_EDGE_ID", value),
+                None => std::env::remove_var("OPENFDD_EDGE_ID"),
+            }
+            match original_building.as_deref() {
+                Some(value) => std::env::set_var("OPENFDD_BUILDING_ID", value),
+                None => std::env::remove_var("OPENFDD_BUILDING_ID"),
+            }
+            match original_tenant.as_deref() {
+                Some(value) => std::env::set_var("OPENFDD_TENANT_ID", value),
+                None => std::env::remove_var("OPENFDD_TENANT_ID"),
+            }
+        };
+
+        // Missing local identity fails before inventory lookup or a BACnet
+        // client operation.
+        std::env::remove_var("OPENFDD_EDGE_ID");
+        std::env::remove_var("OPENFDD_BUILDING_ID");
+        std::env::remove_var("OPENFDD_TENANT_ID");
+        let missing_state = test_state();
+        let missing_client = missing_state.bacnet_client.clone();
+        let missing_response = routes::api_routes(missing_state)
+            .oneshot(
+                Request::post("/api/connector/read")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "schema": openfdd_contracts::READ_PROXY_CONTRACT_V1,
+                            "request_id": uuid::Uuid::nil(),
+                            "scope": {"tenant_id":"tenant-a","building_id":"building-a","edge_id":"edge-a"},
+                            "target": {"kind":"bacnet_point","device_instance":599999,"object_type":"analog-value","object_instance":9101,"property_id":"present-value"}
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(missing_response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(missing_client.test_ot_call_count(), 0);
+
+        // A foreign tenant is rejected even when the building and edge names
+        // are otherwise plausible.
+        std::env::set_var("OPENFDD_EDGE_ID", "edge-a");
+        std::env::set_var("OPENFDD_BUILDING_ID", "building-a");
+        std::env::set_var("OPENFDD_TENANT_ID", "tenant-a");
+        let foreign_state = test_state();
+        let foreign_client = foreign_state.bacnet_client.clone();
+        let foreign_response = routes::api_routes(foreign_state)
+            .oneshot(
+                Request::post("/api/connector/read")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "schema": openfdd_contracts::READ_PROXY_CONTRACT_V1,
+                            "request_id": uuid::Uuid::nil(),
+                            "scope": {"tenant_id":"tenant-b","building_id":"building-a","edge_id":"edge-a"},
+                            "target": {"kind":"bacnet_point","device_instance":599999,"object_type":"analog-value","object_instance":9101,"property_id":"present-value"}
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(foreign_response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(foreign_client.test_ot_call_count(), 0);
+
+        // A correctly scoped, inventory-listed point is the only matrix entry
+        // allowed to enter the BACnet client.  The loopback target is a read
+        // fixture; no live equipment is contacted by this test.
+        let receiver = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let port = receiver.local_addr().unwrap().port();
+        let path = std::env::temp_dir().join(format!(
+            "openfdd-connector-scope-{}-{}.toml",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(
+            &path,
+            format!(
+                "[[devices]]\nname=\"connector-scope-test\"\nenabled=true\ndevice_instance=599999\nhost=\"127.0.0.1\"\nport={port}\npoints=[{{object_type=\"analog-value\",object_instance=9101,point_name=\"zone-air-temp\",units=\"F\"}}]\n"
+            ),
+        )
+        .unwrap();
+        let mut settings = config::Settings {
+            field_devices_toml: path.clone(),
+            ..config::Settings::default()
+        };
+        settings.bacnet_client.interface = Ipv4Addr::LOCALHOST;
+        settings.bacnet_client.broadcast = Ipv4Addr::LOCALHOST;
+        settings.bacnet_client.apdu_timeout_ms = 20;
+        let authorized_state = state_for_settings(settings);
+        let authorized_client = authorized_state.bacnet_client.clone();
+        let authorized_request = Request::post("/api/connector/read")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "schema": openfdd_contracts::READ_PROXY_CONTRACT_V1,
+                    "request_id": uuid::Uuid::nil(),
+                    "scope": {"tenant_id":"tenant-a","building_id":"building-a","edge_id":"edge-a"},
+                    "target": {"kind":"bacnet_point","device_instance":599999,"object_type":"analog-value","object_instance":9101,"property_id":"present-value"}
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let authorized_response = timeout(
+            Duration::from_secs(3),
+            routes::api_routes(authorized_state).oneshot(authorized_request),
+        )
+        .await
+        .expect("authorized connector read should be bounded")
+        .unwrap();
+        assert_eq!(authorized_client.test_ot_call_count(), 1);
+        assert!(matches!(
+            authorized_response.status(),
+            StatusCode::BAD_GATEWAY | StatusCode::INTERNAL_SERVER_ERROR
+        ));
+        let _ = std::fs::remove_file(path);
+        restore();
+    }
+
+    #[tokio::test]
     async fn bacnet_write_approval_gate_keeps_omitted_and_false_requests_off_wire() {
         let receiver = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
             .await

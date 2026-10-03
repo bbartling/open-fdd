@@ -23,6 +23,8 @@ use crate::openapi_paths::*;
         doc_root,
         doc_health,
         doc_api_health,
+        doc_connector_hello,
+        doc_connector_read,
         doc_bacnet_read,
         doc_bacnet_write,
         doc_bacnet_write_dry_run,
@@ -71,6 +73,9 @@ use crate::openapi_paths::*;
         RestWriteRequest,
         WeatherResponse,
         OkResponse,
+        openfdd_contracts::ConnectorHelloResponse,
+        openfdd_contracts::ConnectorReadRequest,
+        openfdd_contracts::ConnectorReadResponse,
     )),
     modifiers(&SecurityAddon, &SwaggerExamplesAddon),
     tags(
