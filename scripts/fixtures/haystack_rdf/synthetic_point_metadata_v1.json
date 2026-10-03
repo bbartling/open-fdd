@@ -1,7 +1,7 @@
 {
-  "schema": "openfdd_point_metadata_v1_sketch",
+  "schema": "openfdd_semantic_meta_v1",
   "building_id": "OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1",
-  "note": "C2 persistence sketch — not consumed by product importers in C1.",
+  "note": "C2 native persistence fixture — Haystack tags/units preferred; unknown unit retained. Not a cookbook rewrite.",
   "points": [
     {
       "equipment_id": "AHU_CASE_1",
@@ -17,6 +17,13 @@
       "unit": "???",
       "unit_source": "vendor_export",
       "unit_status": "unknown"
+    }
+  ],
+  "equipment": [
+    {
+      "equipment_id": "AHU_CASE_1",
+      "display_name": "AHU Case 1",
+      "haystack_tags": ["ahu", "equip"]
     }
   ]
 }
