@@ -120,10 +120,52 @@ class NessusImporterHardeningTest(unittest.TestCase):
                     "owner": "security",
                     "rationale": "lab-only synthetic acceptance",
                     "expires_at": "2030-01-01T00:00:00Z",
+                    "retest_after": "2030-01-15T00:00:00Z",
                 }
             ],
         )
         self.assertTrue(ok, reason)
+
+    def test_medium_disposition_omitting_host_or_port_rejected(self) -> None:
+        measured = nessus.parse_nessus(FIXTURES / "medium_synthetic.nessus")
+        ok, reason = nessus.evaluate(
+            measured,
+            require_credentialed=False,
+            allow_medium=True,
+            medium_dispositions=[
+                {
+                    "plugin_id": "88888",
+                    "owner": "security",
+                    "rationale": "too broad",
+                    "expires_at": "2030-01-01T00:00:00Z",
+                    "retest_after": "2030-01-15T00:00:00Z",
+                }
+            ],
+        )
+        self.assertFalse(ok)
+        self.assertTrue("unmatched" in reason or "missing" in reason)
+
+    def test_invalid_candidate_sha_errors_not_skipped(self) -> None:
+        measured = nessus.parse_nessus(FIXTURES / "expectation_bound_synthetic.nessus")
+        now = dt.datetime(2026, 10, 3, 14, 0, tzinfo=dt.timezone.utc)
+        expectation = {
+            "schema_version": nessus.EXPECTATION_SCHEMA_VERSION,
+            "expected_targets": ["192.0.2.20"],
+            "candidate_sha256": "invalid",
+            "policy_name": "openfdd-ot-lab",
+            "feed_version": "202610030001",
+            "max_age_seconds": 6 * 60 * 60,
+            "require_scan_complete": True,
+        }
+        ok, reason = nessus.evaluate(
+            measured,
+            require_credentialed=True,
+            allow_medium=False,
+            expectation=expectation,
+            now=now,
+        )
+        self.assertFalse(ok)
+        self.assertIn("invalid candidate_sha256", reason)
 
     def test_expectation_manifest_binds_targets_and_freshness(self) -> None:
         measured = nessus.parse_nessus(FIXTURES / "expectation_bound_synthetic.nessus")

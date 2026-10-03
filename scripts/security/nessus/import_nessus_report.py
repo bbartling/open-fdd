@@ -93,13 +93,26 @@ def parse_nessus(path: Path) -> dict[str, Any]:
         items = []
         credentialed_checks: bool | None = None
         aliases = {name} if name else set()
+        # Only allowlisted host-identity tags become aliases (R04).
+        _ALIAS_TAGS = {
+            "host-ip",
+            "host_ip",
+            "hostname",
+            "netbios-name",
+            "netbios_name",
+            "dns-name",
+            "dns_name",
+            "host-fqdn",
+            "host_fqdn",
+        }
         host_properties = report_host.find("HostProperties")
         if host_properties is not None:
             for tag in host_properties.findall("tag"):
                 tag_name = str(tag.get("name") or "").strip().lower()
                 tag_value = (tag.text or "").strip()
                 if tag_name and tag_value:
-                    aliases.add(tag_value)
+                    if tag_name in _ALIAS_TAGS:
+                        aliases.add(tag_value)
                     normalized = tag_name.replace("-", "_")
                     if normalized in {
                         "openfdd_candidate_sha",
@@ -216,11 +229,17 @@ def _completion_ok(value: str | None) -> bool:
 
 
 def _normalize_sha256(value: str | None) -> str | None:
-    if not value:
+    """Return normalized digest, or None when absent.
+
+    Invalid non-empty values raise ValueError (callers must not skip-compare).
+    """
+    if value is None:
         return None
     text = str(value).strip().lower()
-    if not SHA256_RE.fullmatch(text):
+    if not text:
         return None
+    if not SHA256_RE.fullmatch(text):
+        raise ValueError(f"invalid candidate_sha256 (want 64 hex): {text[:24]!r}")
     return text
 
 
@@ -243,11 +262,20 @@ def _disposition_matches(
 ) -> bool:
     if str(disposition.get("plugin_id") or "") != str(item.get("plugin_id") or ""):
         return False
-    disp_host = disposition.get("host")
-    if disp_host is not None and str(disp_host) != host_name:
+    # Exact scope: host + port required (omission must not widen the match).
+    if "host" not in disposition or not str(disposition.get("host") or "").strip():
         return False
-    disp_port = disposition.get("port")
-    if disp_port is not None and str(disp_port) != str(item.get("port") or ""):
+    if "port" not in disposition or disposition.get("port") in (None, ""):
+        return False
+    if str(disposition.get("host")) != host_name:
+        return False
+    if str(disposition.get("port")) != str(item.get("port") or ""):
+        return False
+    protocol = disposition.get("protocol")
+    if protocol is not None and str(protocol) != str(item.get("protocol") or ""):
+        return False
+    component = disposition.get("component")
+    if component is not None and str(component) != str(item.get("component") or ""):
         return False
     return True
 
@@ -280,9 +308,26 @@ def _validate_medium_dispositions(
                 f"host={host_name or '<unnamed>'} port={item.get('port')}"
             )
         disposition = medium_dispositions[match_index]
-        for field in ("owner", "rationale", "expires_at"):
-            if not str(disposition.get(field) or "").strip():
-                return f"medium disposition missing {field} for plugin_id={item.get('plugin_id')}"
+        for field in (
+            "owner",
+            "rationale",
+            "expires_at",
+            "host",
+            "port",
+            "plugin_id",
+            "retest_after",
+        ):
+            if field in ("host", "port", "plugin_id"):
+                if disposition.get(field) in (None, ""):
+                    return (
+                        f"medium disposition missing {field} for "
+                        f"plugin_id={item.get('plugin_id')}"
+                    )
+            elif not str(disposition.get(field) or "").strip():
+                return (
+                    f"medium disposition missing {field} for "
+                    f"plugin_id={item.get('plugin_id')}"
+                )
         expires = _parse_scan_time(str(disposition.get("expires_at")))
         if expires is None:
             return f"medium disposition has invalid expires_at for plugin_id={item.get('plugin_id')}"
@@ -317,21 +362,32 @@ def _evaluate_expectation(
             host_name = str(host.get("name") or "").strip()
             if host_name and host_name not in expected_set:
                 return f"foreign ReportHost not in expectation: {host_name}"
-    expected_candidate = _normalize_sha256(expectation.get("candidate_sha256"))
-    if expected_candidate is not None:
+    # Strict qualification: complete typed expectation — invalid hash errors,
+    # empty/missing candidate/policy/feed cannot silently skip binding (R04).
+    try:
+        expected_candidate = _normalize_sha256(expectation.get("candidate_sha256"))
+    except ValueError as exc:
+        return str(exc)
+    if expected_candidate is None:
+        return "expectation missing candidate_sha256"
+    try:
         measured_candidate = _normalize_sha256(measured.get("candidate_sha256"))
-        if measured_candidate != expected_candidate:
-            return "candidate_sha256 mismatch"
+    except ValueError as exc:
+        return f"measured {exc}"
+    if measured_candidate != expected_candidate:
+        return "candidate_sha256 mismatch"
     expected_policy = str(expectation.get("policy_name") or "").strip()
-    if expected_policy:
-        measured_policy = str(measured.get("policy_name") or "").strip()
-        if measured_policy != expected_policy:
-            return "policy_name mismatch"
+    if not expected_policy:
+        return "expectation missing policy_name"
+    measured_policy = str(measured.get("policy_name") or "").strip()
+    if measured_policy != expected_policy:
+        return "policy_name mismatch"
     expected_feed = str(expectation.get("feed_version") or "").strip()
-    if expected_feed:
-        measured_feed = str(measured.get("feed_version") or "").strip()
-        if measured_feed != expected_feed:
-            return "feed_version mismatch"
+    if not expected_feed:
+        return "expectation missing feed_version"
+    measured_feed = str(measured.get("feed_version") or "").strip()
+    if measured_feed != expected_feed:
+        return "feed_version mismatch"
     expected_reports = expectation.get("report_names")
     if expected_reports is not None:
         if not isinstance(expected_reports, list) or not expected_reports:
