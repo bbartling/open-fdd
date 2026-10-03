@@ -67,7 +67,10 @@ pub fn bacnet_write_bench() -> Value {
 }
 
 /// OpenAPI bench fixture for BACnet write dry-run; retained for utoipa example expansion.
-#[expect(dead_code)]
+#[expect(
+    dead_code,
+    reason = "fixture is retained for external OpenAPI examples"
+)]
 pub fn bacnet_write_dry_run_bench() -> Value {
     json!({
         "device_instance": 5007,
@@ -117,19 +120,50 @@ pub fn modbus_read_bench() -> Value {
     })
 }
 
-pub fn haystack_read_bench() -> Value {
-    json!({ "filter": "point and temp" })
+pub fn haystack_catalog_bench() -> Value {
+    json!({
+        "schema": "openfdd.connector.haystack.catalog.v1",
+        "request_id": "00000000-0000-4000-8000-000000000001",
+        "scope": {"tenant_id": "tenant-demo", "building_id": "building-demo", "edge_id": "edge-demo"},
+        "page_size": 100
+    })
+}
+
+pub fn haystack_about_bench() -> Value {
+    json!({
+        "schema": "openfdd.connector.haystack.read.v1",
+        "request_id": "00000000-0000-4000-8000-000000000001",
+        "scope": {"tenant_id": "tenant-demo", "building_id": "building-demo", "edge_id": "edge-demo"}
+    })
+}
+
+pub fn haystack_current_read_bench() -> Value {
+    json!({
+        "schema": "openfdd.connector.haystack.read.v1",
+        "request_id": "00000000-0000-4000-8000-000000000001",
+        "scope": {"tenant_id": "tenant-demo", "building_id": "building-demo", "edge_id": "edge-demo"},
+        "keys": ["point:demo:temperature"]
+    })
 }
 
 pub fn haystack_nav_bench() -> Value {
-    json!({ "nav_id": null })
+    json!({
+        "schema": "openfdd.connector.haystack.read.v1",
+        "request_id": "00000000-0000-4000-8000-000000000001",
+        "scope": {"tenant_id": "tenant-demo", "building_id": "building-demo", "edge_id": "edge-demo"},
+        "parent_key": null
+    })
 }
 
 pub fn haystack_his_read_bench() -> Value {
     json!({
-        "ids": ["@demo:point"],
-        "range_start": "yesterday",
-        "range_end": "today"
+        "schema": "openfdd.connector.haystack.read.v1",
+        "request_id": "00000000-0000-4000-8000-000000000001",
+        "scope": {"tenant_id": "tenant-demo", "building_id": "building-demo", "edge_id": "edge-demo"},
+        "keys": ["point:demo:temperature"],
+        "start": "2026-01-01T00:00:00Z",
+        "end": "2026-01-01T01:00:00Z",
+        "max_samples": 5000
     })
 }
 
@@ -207,19 +241,50 @@ pub fn modbus_read_generic() -> Value {
     })
 }
 
-pub fn haystack_read_generic() -> Value {
-    json!({ "filter": "point" })
+pub fn haystack_catalog_generic() -> Value {
+    json!({
+        "schema": "openfdd.connector.haystack.catalog.v1",
+        "request_id": "00000000-0000-4000-8000-000000000001",
+        "scope": {"tenant_id": "tenant-example", "building_id": "building-example", "edge_id": "edge-example"},
+        "page_size": 100
+    })
+}
+
+pub fn haystack_about_generic() -> Value {
+    json!({
+        "schema": "openfdd.connector.haystack.read.v1",
+        "request_id": "00000000-0000-4000-8000-000000000001",
+        "scope": {"tenant_id": "tenant-example", "building_id": "building-example", "edge_id": "edge-example"}
+    })
+}
+
+pub fn haystack_current_read_generic() -> Value {
+    json!({
+        "schema": "openfdd.connector.haystack.read.v1",
+        "request_id": "00000000-0000-4000-8000-000000000001",
+        "scope": {"tenant_id": "tenant-example", "building_id": "building-example", "edge_id": "edge-example"},
+        "keys": ["point:example:temperature"]
+    })
 }
 
 pub fn haystack_nav_generic() -> Value {
-    json!({ "nav_id": null })
+    json!({
+        "schema": "openfdd.connector.haystack.read.v1",
+        "request_id": "00000000-0000-4000-8000-000000000001",
+        "scope": {"tenant_id": "tenant-example", "building_id": "building-example", "edge_id": "edge-example"},
+        "parent_key": null
+    })
 }
 
 pub fn haystack_his_read_generic() -> Value {
     json!({
-        "ids": ["@pointRef"],
-        "range_start": "yesterday",
-        "range_end": "today"
+        "schema": "openfdd.connector.haystack.read.v1",
+        "request_id": "00000000-0000-4000-8000-000000000001",
+        "scope": {"tenant_id": "tenant-example", "building_id": "building-example", "edge_id": "edge-example"},
+        "keys": ["point:example:temperature"],
+        "start": "2026-01-01T00:00:00Z",
+        "end": "2026-01-01T01:00:00Z",
+        "max_samples": 5000
     })
 }
 
@@ -237,36 +302,53 @@ fn apply_examples(openapi: &mut OpenApi, bench: bool) {
         return;
     };
 
-    let (read, rpm, whois, write, prio, discover, server_upd, modbus, hs_read, hs_nav, hs_his) =
-        if bench {
-            (
-                bacnet_read_bench(),
-                bacnet_rpm_bench(),
-                bacnet_whois_bench(),
-                bacnet_write_bench(),
-                bacnet_priority_array_bench(),
-                bacnet_discover_bench(),
-                bacnet_server_update_bench(),
-                modbus_read_bench(),
-                haystack_read_bench(),
-                haystack_nav_bench(),
-                haystack_his_read_bench(),
-            )
-        } else {
-            (
-                bacnet_read_generic(),
-                bacnet_rpm_generic(),
-                bacnet_whois_generic(),
-                bacnet_write_generic(),
-                bacnet_priority_array_generic(),
-                bacnet_discover_generic(),
-                bacnet_server_update_generic(),
-                modbus_read_generic(),
-                haystack_read_generic(),
-                haystack_nav_generic(),
-                haystack_his_read_generic(),
-            )
-        };
+    let (
+        read,
+        rpm,
+        whois,
+        write,
+        prio,
+        discover,
+        server_upd,
+        modbus,
+        hs_catalog,
+        hs_about,
+        hs_current,
+        hs_nav,
+        hs_his,
+    ) = if bench {
+        (
+            bacnet_read_bench(),
+            bacnet_rpm_bench(),
+            bacnet_whois_bench(),
+            bacnet_write_bench(),
+            bacnet_priority_array_bench(),
+            bacnet_discover_bench(),
+            bacnet_server_update_bench(),
+            modbus_read_bench(),
+            haystack_catalog_bench(),
+            haystack_about_bench(),
+            haystack_current_read_bench(),
+            haystack_nav_bench(),
+            haystack_his_read_bench(),
+        )
+    } else {
+        (
+            bacnet_read_generic(),
+            bacnet_rpm_generic(),
+            bacnet_whois_generic(),
+            bacnet_write_generic(),
+            bacnet_priority_array_generic(),
+            bacnet_discover_generic(),
+            bacnet_server_update_generic(),
+            modbus_read_generic(),
+            haystack_catalog_generic(),
+            haystack_about_generic(),
+            haystack_current_read_generic(),
+            haystack_nav_generic(),
+            haystack_his_read_generic(),
+        )
+    };
 
     set_schema_example(&mut components.schemas, "BacnetReadRequest", read);
     set_schema_example(&mut components.schemas, "BacnetRpmRequest", rpm);
@@ -280,9 +362,23 @@ fn apply_examples(openapi: &mut OpenApi, bench: bool) {
         server_upd,
     );
     set_schema_example(&mut components.schemas, "ModbusReadRequest", modbus);
-    set_schema_example(&mut components.schemas, "HaystackReadRequest", hs_read);
+    set_schema_example(
+        &mut components.schemas,
+        "HaystackCatalogRequest",
+        hs_catalog,
+    );
+    set_schema_example(&mut components.schemas, "HaystackAboutRequest", hs_about);
+    set_schema_example(
+        &mut components.schemas,
+        "HaystackCurrentReadRequest",
+        hs_current,
+    );
     set_schema_example(&mut components.schemas, "HaystackNavRequest", hs_nav);
-    set_schema_example(&mut components.schemas, "HaystackHisReadRequest", hs_his);
+    set_schema_example(
+        &mut components.schemas,
+        "HaystackHistoryReadRequest",
+        hs_his,
+    );
 }
 
 fn set_schema_example(schemas: &mut BTreeMap<String, RefOr<Schema>>, name: &str, example: Value) {

@@ -50,6 +50,8 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 
 [dev-dependencies]
 base64 = "0.22"
+openfdd-fieldbus = { path = "../fieldbus" }
+openfdd_connector_runtime = { path = "../../crates/openfdd_connector_runtime" }
 jsonwebtoken = { version = "10", default-features = false, features = ["aws_lc_rs"] }
 serde_json = "1"
 tempfile = "3"

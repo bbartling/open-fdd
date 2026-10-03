@@ -5,7 +5,10 @@
 use crate::models::*;
 use openfdd_contracts::{
     ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorReadRequest,
-    ConnectorReadResponse, PriorityHistoryRequest, PriorityHistoryResponse,
+    ConnectorReadResponse, HaystackAboutRequest, HaystackAboutResponse, HaystackCatalogRequest,
+    HaystackCatalogResponse, HaystackCurrentReadRequest, HaystackCurrentReadResponse,
+    HaystackHistoryReadRequest, HaystackHistoryReadResponse, HaystackNavRequest,
+    HaystackNavResponse, PriorityHistoryRequest, PriorityHistoryResponse,
 };
 
 /// Service index and quick links.
@@ -300,24 +303,36 @@ pub(crate) fn doc_weather_refresh() {}
 )]
 pub(crate) fn doc_modbus_read() {}
 
+/// Bounded trusted Haystack catalog page.
+#[utoipa::path(
+    post,
+    path = "/haystack/catalog",
+    tag = "Haystack",
+    request_body = HaystackCatalogRequest,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Catalog page", body = HaystackCatalogResponse))
+)]
+pub(crate) fn doc_haystack_catalog() {}
+
 /// Haystack server metadata.
 #[utoipa::path(
-    get,
+    post,
     path = "/haystack/about",
     tag = "Haystack",
+    request_body = HaystackAboutRequest,
     security(("BearerAuth" = [])),
-    responses((status = 200, description = "Haystack about"))
+    responses((status = 200, description = "Haystack about", body = HaystackAboutResponse))
 )]
 pub(crate) fn doc_haystack_about() {}
 
-/// Haystack read by filter.
+/// Haystack current values by trusted public catalog key.
 #[utoipa::path(
     post,
     path = "/haystack/read",
     tag = "Haystack",
-    request_body = HaystackReadRequest,
+    request_body = HaystackCurrentReadRequest,
     security(("BearerAuth" = [])),
-    responses((status = 200, description = "Haystack grid"))
+    responses((status = 200, description = "Typed current values", body = HaystackCurrentReadResponse))
 )]
 pub(crate) fn doc_haystack_read() {}
 
@@ -328,7 +343,7 @@ pub(crate) fn doc_haystack_read() {}
     tag = "Haystack",
     request_body = HaystackNavRequest,
     security(("BearerAuth" = [])),
-    responses((status = 200, description = "Nav nodes"))
+    responses((status = 200, description = "Typed navigation nodes", body = HaystackNavResponse))
 )]
 pub(crate) fn doc_haystack_nav() {}
 
@@ -337,9 +352,9 @@ pub(crate) fn doc_haystack_nav() {}
     post,
     path = "/haystack/his-read",
     tag = "Haystack",
-    request_body = HaystackHisReadRequest,
+    request_body = HaystackHistoryReadRequest,
     security(("BearerAuth" = [])),
-    responses((status = 200, description = "History grid"))
+    responses((status = 200, description = "Bounded typed history", body = HaystackHistoryReadResponse))
 )]
 pub(crate) fn doc_haystack_his_read() {}
 

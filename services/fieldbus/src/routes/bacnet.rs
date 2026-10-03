@@ -258,3 +258,18 @@ pub fn router() -> Router<AppState> {
         .route("/bacnet/server/commandable", get(list_server_commandable))
         .route("/bacnet/server/update", post(update_server_points))
 }
+
+/// Read/status surface for the profile-bound BACnet process.
+///
+/// The compatibility router above intentionally keeps the historical
+/// commissioning and write routes. The split process uses this explicit
+/// allowlist so writes, discovery, Who-Is, router discovery, and hosted
+/// server mutation cannot be reached through an accidental merge.
+#[allow(dead_code)]
+pub fn split_read_router() -> Router<AppState> {
+    Router::new()
+        .route("/bacnet/read", post(bacnet_read))
+        .route("/bacnet/poll/status", get(bacnet_poll_status))
+        .route("/bacnet/rpm", post(bacnet_rpm))
+        .route("/bacnet/priority-array", post(bacnet_priority_array))
+}

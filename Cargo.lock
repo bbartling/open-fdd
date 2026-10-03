@@ -3265,6 +3265,8 @@ dependencies = [
  "jsonwebtoken",
  "object_store",
  "open_fdd_edge_prototype",
+ "openfdd-fieldbus",
+ "openfdd_connector_runtime",
  "openfdd_contracts",
  "openfdd_mqtt",
  "reqwest 0.12.28",
@@ -3297,12 +3299,15 @@ dependencies = [
  "bacnet-services",
  "bacnet-transport",
  "bacnet-types",
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "csv",
  "dotenvy",
  "fdd_core",
+ "futures-util",
  "http-body-util",
+ "openfdd_connector_runtime",
  "openfdd_contracts",
  "openfdd_mqtt",
  "reqwest 0.12.28",
@@ -3321,6 +3326,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "url",
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
@@ -3335,6 +3341,25 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "openfdd_connector_runtime"
+version = "3.5.60"
+dependencies = [
+ "axum",
+ "chrono",
+ "http-body-util",
+ "openfdd_contracts",
+ "serde",
+ "serde_json",
+ "subtle",
+ "thiserror 2.0.20",
+ "tokio",
+ "tower",
+ "tracing",
+ "url",
+ "uuid",
 ]
 
 [[package]]

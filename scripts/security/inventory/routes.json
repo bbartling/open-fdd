@@ -3,10 +3,10 @@
   "source_commit_hint": "4a5c11e50b921df83f2ca3a59c52d4e99908157f",
   "source_file": "services/central/src/routes.rs",
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission.",
-  "route_count": 150,
+  "route_count": 156,
   "disposition_counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 91,
+    "PLANNED": 97,
     "BLOCKED_POLICY": 29,
     "EXCLUDED": 0
   },
@@ -1036,6 +1036,221 @@
         "configured_edge"
       ],
       "notes": "Authenticated, tenant/building/edge-scoped connector metadata or BACnet point/priority read; no writes or discovery"
+    },
+    {
+      "method": "POST",
+      "path": "/api/connectors/{edge_id}/haystack/catalog",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_edge_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_connectors_edge_haystack_catalog_401",
+        "y.authz.post_api_connectors_edge_id_haystack_catalog"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon_connectors_edge_haystack_catalog_401",
+        "y.authz.post_api_connectors_edge_id_haystack_catalog"
+      ],
+      "request_schema": {
+        "type": "openfdd.connector.haystack.catalog.v1",
+        "status": "defined"
+      },
+      "response_schema": {
+        "type": "openfdd.connector.haystack.catalog.v1",
+        "status": "defined"
+      },
+      "selectors": [
+        "edge_id",
+        "tenant_id",
+        "building_id"
+      ],
+      "side_effects": "read_only_upstream_proxy",
+      "fixture_needs": [
+        "identity",
+        "configured_edge"
+      ],
+      "notes": "Authenticated typed Haystack catalog proxy; trusted revision and public keys only"
+    },
+    {
+      "method": "POST",
+      "path": "/api/connectors/{edge_id}/haystack/about",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_edge_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_connectors_edge_haystack_about_401",
+        "y.authz.post_api_connectors_edge_id_haystack_about"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon_connectors_edge_haystack_about_401",
+        "y.authz.post_api_connectors_edge_id_haystack_about"
+      ],
+      "request_schema": {
+        "type": "openfdd.connector.haystack.read.v1",
+        "status": "defined"
+      },
+      "response_schema": {
+        "type": "openfdd.connector.haystack.read.v1",
+        "status": "defined"
+      },
+      "selectors": [
+        "edge_id",
+        "tenant_id",
+        "building_id"
+      ],
+      "side_effects": "read_only_upstream_proxy",
+      "fixture_needs": [
+        "identity",
+        "configured_edge"
+      ],
+      "notes": "Authenticated typed Haystack about proxy; configured upstream only"
+    },
+    {
+      "method": "POST",
+      "path": "/api/connectors/{edge_id}/haystack/read",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_edge_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_connectors_edge_haystack_read_401",
+        "y.authz.post_api_connectors_edge_id_haystack_read"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon_connectors_edge_haystack_read_401",
+        "y.authz.post_api_connectors_edge_id_haystack_read"
+      ],
+      "request_schema": {
+        "type": "openfdd.connector.haystack.read.v1",
+        "status": "defined"
+      },
+      "response_schema": {
+        "type": "openfdd.connector.haystack.read.v1",
+        "status": "defined"
+      },
+      "selectors": [
+        "edge_id",
+        "tenant_id",
+        "building_id"
+      ],
+      "side_effects": "read_only_upstream_proxy",
+      "fixture_needs": [
+        "identity",
+        "configured_edge"
+      ],
+      "notes": "Authenticated typed Haystack current-read proxy; trusted public keys only"
+    },
+    {
+      "method": "POST",
+      "path": "/api/connectors/{edge_id}/haystack/nav",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_edge_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_connectors_edge_haystack_nav_401",
+        "y.authz.post_api_connectors_edge_id_haystack_nav"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon_connectors_edge_haystack_nav_401",
+        "y.authz.post_api_connectors_edge_id_haystack_nav"
+      ],
+      "request_schema": {
+        "type": "openfdd.connector.haystack.read.v1",
+        "status": "defined"
+      },
+      "response_schema": {
+        "type": "openfdd.connector.haystack.read.v1",
+        "status": "defined"
+      },
+      "selectors": [
+        "edge_id",
+        "tenant_id",
+        "building_id"
+      ],
+      "side_effects": "read_only_upstream_proxy",
+      "fixture_needs": [
+        "identity",
+        "configured_edge"
+      ],
+      "notes": "Authenticated typed Haystack navigation proxy; catalog keys only"
+    },
+    {
+      "method": "POST",
+      "path": "/api/connectors/{edge_id}/haystack/his-read",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_edge_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_connectors_edge_haystack_his_read_401",
+        "y.authz.post_api_connectors_edge_id_haystack_his_read"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon_connectors_edge_haystack_his_read_401",
+        "y.authz.post_api_connectors_edge_id_haystack_his_read"
+      ],
+      "request_schema": {
+        "type": "openfdd.connector.haystack.read.v1",
+        "status": "defined"
+      },
+      "response_schema": {
+        "type": "openfdd.connector.haystack.read.v1",
+        "status": "defined"
+      },
+      "selectors": [
+        "edge_id",
+        "tenant_id",
+        "building_id"
+      ],
+      "side_effects": "read_only_upstream_proxy",
+      "fixture_needs": [
+        "identity",
+        "configured_edge"
+      ],
+      "notes": "Authenticated bounded Haystack history proxy; explicit UTC window and sample bound"
     },
     {
       "method": "POST",

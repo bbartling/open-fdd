@@ -15,11 +15,11 @@ use openfdd_contracts::{
     sanitize_inventory_label, CapabilityState, ConnectorAction, ConnectorCapability,
     ConnectorHelloResponse, ConnectorInventoryRequest, ConnectorInventoryResponse,
     ConnectorProtocol, ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult,
-    DeliveryStatus, InventoryAvailability, InventoryCommandability, InventoryPointReference,
-    InventoryProvenance, InventoryRecord, PriorityHistoryRequest, PriorityHistoryResponse,
-    PriorityHistoryTriggerRequest, PriorityHistoryTriggerResponse, ReadPointResult,
-    ReadPriorityArrayResult, ReadPrioritySlot, ReadValueState, RecipeObservation, ServiceVersion,
-    CAPABILITIES_CONTRACT_V1, CONNECTOR_INVENTORY_CONTRACT_V1,
+    ConnectorServiceProfile, DeliveryStatus, InventoryAvailability, InventoryCommandability,
+    InventoryPointReference, InventoryProvenance, InventoryRecord, PriorityHistoryRequest,
+    PriorityHistoryResponse, PriorityHistoryTriggerRequest, PriorityHistoryTriggerResponse,
+    ReadPointResult, ReadPriorityArrayResult, ReadPrioritySlot, ReadValueState, RecipeObservation,
+    ServiceIdentity, ServiceVersion, CAPABILITIES_CONTRACT_V1, CONNECTOR_INVENTORY_CONTRACT_V1,
 };
 use serde_json::Value;
 
@@ -192,6 +192,9 @@ fn capability(
 }
 
 pub fn hello_response(state: &AppState) -> ConnectorHelloResponse {
+    if let Some(identity) = state.service_identity.as_ref() {
+        return split_hello_response(state, identity);
+    }
     let (mqtt, durable) = delivery_states(state);
     let bacnet_devices = state.bacnet_client.configured_device_count();
     let bacnet_enabled =
@@ -210,7 +213,7 @@ pub fn hello_response(state: &AppState) -> ConnectorHelloResponse {
     // Haystack is configured through the loaded Settings/TOML mechanism. It
     // is intentionally not advertised as an isolated capability in phase 2;
     // the default settings must never create a fake upstream.
-    let haystack_configured = state.settings.haystack_configured;
+    let haystack_configured = crate::config::haystack_connector_configured(&state.settings);
     let modbus_configured = state.settings.modbus_configured;
     let mqtt_configured = mqtt_enabled()
         && std::env::var("OPENFDD_MQTT_HOST")
@@ -269,10 +272,10 @@ pub fn hello_response(state: &AppState) -> ConnectorHelloResponse {
             ConnectorProtocol::Haystack,
             haystack_configured,
             false,
-            Vec::new(),
+            vec![ConnectorAction::MetadataRead, ConnectorAction::PointRead],
             mqtt,
             durable,
-            Some("Haystack capability advertisement is reserved for a later phase".into()),
+            Some("typed trusted-catalog reads are available; readiness requires an explicit authenticated probe".into()),
         ),
         capability(
             ConnectorProtocol::Rest,
@@ -317,6 +320,105 @@ pub fn hello_response(state: &AppState) -> ConnectorHelloResponse {
             mqtt,
         ),
         connectors,
+        // The legacy compatibility process owns multiple protocols and must
+        // not claim either split-service profile.
+        service_identity: None,
+        observed_at: Utc::now(),
+    }
+}
+
+/// Build the profile-bound hello for the BACnet/Modbus split process.  The
+/// legacy compatibility response above intentionally remains multi-protocol;
+/// this branch is selected only when the process startup installed a signed
+/// split identity in `AppState`.
+fn split_hello_response(state: &AppState, identity: &ServiceIdentity) -> ConnectorHelloResponse {
+    let (mqtt, durable) = delivery_states(state);
+    let bacnet_devices = state.bacnet_client.configured_device_count();
+    let bacnet_enabled =
+        state.bacnet_client.enabled_device_count() > 0 && state.settings.poll.enabled;
+    let bacnet_detail = if bacnet_devices == 0 {
+        "field-device inventory is empty or unavailable".to_string()
+    } else {
+        format!(
+            "{} enabled configured device(s), {} configured point(s)",
+            state.bacnet_client.enabled_device_count(),
+            state.bacnet_client.configured_point_count()
+        )
+    };
+    let priority_scan_status = state.priority_scan.status().ok();
+    let priority_history_detail = priority_scan_status
+        .as_ref()
+        .map(|status| {
+            format!(
+                "read-only priority history; scheduler enabled={} interval_secs={} records_retained={}",
+                status.enabled, status.interval_secs, status.records_retained
+            )
+        })
+        .unwrap_or_else(|| "read-only priority history scope is not configured".into());
+    let mut bacnet_actions = vec![
+        ConnectorAction::MetadataRead,
+        ConnectorAction::PointRead,
+        ConnectorAction::PriorityArrayRead,
+    ];
+    if priority_scan_status.is_some() {
+        bacnet_actions.push(ConnectorAction::PriorityHistoryRead);
+    }
+    if priority_scan_status
+        .as_ref()
+        .is_some_and(|status| status.enabled)
+    {
+        bacnet_actions.push(ConnectorAction::PriorityHistoryTrigger);
+    }
+    let bacnet = capability(
+        ConnectorProtocol::Bacnet,
+        bacnet_devices > 0,
+        bacnet_enabled,
+        bacnet_actions,
+        mqtt,
+        durable,
+        Some(format!("{bacnet_detail}; {priority_history_detail}")),
+    );
+    // A host/port setting is not a trusted register inventory.  Keep Modbus
+    // explicitly not_configured until a later contract supplies typed,
+    // bounded register definitions.
+    let modbus = capability(
+        ConnectorProtocol::Modbus,
+        false,
+        false,
+        vec![ConnectorAction::MetadataRead],
+        mqtt,
+        durable,
+        Some("no trusted Modbus register inventory contract is configured".into()),
+    );
+    let compiled_protocols = match identity.profile {
+        ConnectorServiceProfile::BacnetModbus => {
+            vec![ConnectorProtocol::Bacnet, ConnectorProtocol::Modbus]
+        }
+        ConnectorServiceProfile::Haystack => vec![ConnectorProtocol::Haystack],
+    };
+    let connectors = match identity.profile {
+        ConnectorServiceProfile::BacnetModbus => vec![bacnet, modbus],
+        // A Haystack identity cannot be produced from this BACnet state. Keep
+        // the branch fail-closed if a caller constructs an invalid state.
+        ConnectorServiceProfile::Haystack => Vec::new(),
+    };
+    ConnectorHelloResponse {
+        schema: CAPABILITIES_CONTRACT_V1.into(),
+        version: ServiceVersion {
+            service: identity.service.clone(),
+            build: identity.version.build.clone(),
+            contract: CAPABILITIES_CONTRACT_V1.into(),
+        },
+        compiled_protocols,
+        connectors,
+        recipe: RecipeObservation {
+            declared: None,
+            configured_services: vec!["fieldbus".into()],
+            observed_services: vec!["fieldbus".into()],
+            unobserved_services: vec![],
+            reconciliation: "not_declared".into(),
+        },
+        service_identity: Some(identity.clone()),
         observed_at: Utc::now(),
     }
 }
@@ -503,7 +605,7 @@ fn inventory_records(state: &AppState) -> Vec<InventoryRecord> {
             actions: Vec::new(),
         });
     }
-    if state.settings.haystack_configured {
+    if crate::config::haystack_connector_configured(&state.settings) {
         records.push(InventoryRecord::Device {
             device_id: "haystack:configured".into(),
             protocol: ConnectorProtocol::Haystack,
@@ -591,7 +693,7 @@ async fn connector_read(
         openfdd_contracts::ReadTarget::ConnectorMetadata => ConnectorReadResponse::success(
             &request,
             ConnectorReadResult::Metadata {
-                hello: hello_response(&state),
+                hello: Box::new(hello_response(&state)),
             },
         ),
         openfdd_contracts::ReadTarget::BacnetPoint {

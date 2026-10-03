@@ -71,6 +71,10 @@ pub struct TelemetryPoint {
     pub unit: Option<String>,
     #[serde(default)]
     pub quality: Quality,
+    /// Timestamp observed at the source. `None` is retained when a source
+    /// cannot provide one; history reads must always provide this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed_at: Option<DateTime<Utc>>,
     /// Extensible Haystack-style marker/reference tags.
     #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
     #[cfg_attr(feature = "openapi", schema(value_type = Object))]
@@ -151,6 +155,7 @@ mod tests {
                 value: serde_json::json!(72.5),
                 unit: Some("°F".into()),
                 quality: Quality::Good,
+                observed_at: None,
                 tags: serde_json::json!({"sensor": true, "air": true})
                     .as_object()
                     .cloned()

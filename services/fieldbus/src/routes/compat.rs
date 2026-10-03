@@ -13,9 +13,14 @@ use crate::state::AppState;
 async fn api_health(State(state): State<AppState>) -> Json<Value> {
     let poll = state.poll_engine.status().await;
     let ledger = state.publish_ledger.snapshot();
+    let service = state
+        .service_identity
+        .as_ref()
+        .map(|identity| identity.service.as_str())
+        .unwrap_or("openfdd-fieldbus");
     Json(json!({
         "ok": true,
-        "service": "openfdd-fieldbus",
+        "service": service,
         "version": env!("CARGO_PKG_VERSION"),
         "git_sha": git_sha(),
         "poll_running": poll["running"].as_bool().unwrap_or(false),

@@ -139,7 +139,7 @@ pub struct ReadPriorityArrayResult {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ConnectorReadResult {
-    Metadata { hello: ConnectorHelloResponse },
+    Metadata { hello: Box<ConnectorHelloResponse> },
     Point(ReadPointResult),
     PriorityArray(ReadPriorityArrayResult),
 }
@@ -423,6 +423,7 @@ mod tests {
                     unobserved_services: vec![],
                     reconciliation: "not_declared".into(),
                 },
+                service_identity: None,
                 observed_at: chrono::Utc::now(),
             }
         }
@@ -462,7 +463,9 @@ mod tests {
         let metadata_req = request(ReadTarget::ConnectorMetadata);
         ConnectorReadResponse::success(
             &metadata_req,
-            ConnectorReadResult::Metadata { hello: hello() },
+            ConnectorReadResult::Metadata {
+                hello: Box::new(hello()),
+            },
         )
         .validate_for(&metadata_req)
         .unwrap();

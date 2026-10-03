@@ -7,13 +7,14 @@ use std::time::Duration;
 
 use chrono::Utc;
 use fdd_core::columns::haystack_point_to_role;
+use futures_util::StreamExt;
 use openfdd_contracts::{
-    CommandAck, CommandEnvelope, CommandStatus, Protocol, Quality, TelemetryEnvelope,
-    TelemetryPoint, TopicBuilder, TopicKind, ValueKind,
+    CommandAck, CommandEnvelope, CommandStatus, LocalIngestReceipt, LocalIngestStatus, Protocol,
+    Quality, TelemetryEnvelope, TelemetryPoint, TopicBuilder, TopicKind, ValueKind,
 };
 use openfdd_mqtt::{
-    publish_json, AsyncClient, Incoming, MqttConfig, MqttHandle, Publish, SpoolConfig, SpoolRecord,
-    TelemetrySpool,
+    publish_json, AsyncClient, Incoming, MqttConfig, MqttHandle, Publish, SpoolCompletedRecord,
+    SpoolConfig, SpoolRecord, SpoolRetiredRecord, SpoolTerminalStatus, TelemetrySpool,
 };
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
@@ -147,31 +148,49 @@ fn ingest_mode() -> Result<IngestMode, String> {
 struct LocalIngestClient {
     client: reqwest::Client,
     endpoint: String,
-    token: Option<String>,
+    token: String,
     tenant_id: Option<String>,
     building_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LocalDeliveryOutcome {
+    Durable,
+    Quarantined(&'static str),
+    Pending,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum ManualOperationRecord {
+    Pending(SpoolRecord),
+    Completed(SpoolCompletedRecord),
+    Expired(SpoolRetiredRecord),
 }
 
 impl LocalIngestClient {
     fn from_env(site_id: &str) -> Result<Self, String> {
         let base = std::env::var("OPENFDD_LOCAL_CENTRAL_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:8080".into());
-        let endpoint = format!("{}/api/ingest/local", base.trim_end_matches('/'));
+            .map_err(|_| "OPENFDD_LOCAL_CENTRAL_URL is required for local ingest".to_string())?;
+        let endpoint = validate_local_central_url(&base)?;
+        let token = std::env::var("OPENFDD_LOCAL_INGEST_TOKEN")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| "OPENFDD_LOCAL_INGEST_TOKEN is required for local ingest".to_string())?;
         let timeout_secs = std::env::var("OPENFDD_LOCAL_INGEST_TIMEOUT_SECS")
             .ok()
             .and_then(|raw| raw.parse::<u64>().ok())
             .unwrap_or(10)
             .clamp(1, 60);
         let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(Duration::from_secs(2))
             .timeout(Duration::from_secs(timeout_secs))
             .build()
-            .map_err(|error| format!("local ingest HTTP client: {error}"))?;
+            .map_err(|_| "local ingest HTTP client could not be constructed".to_string())?;
         Ok(Self {
             client,
-            endpoint,
-            token: std::env::var("OPENFDD_LOCAL_INGEST_TOKEN")
-                .ok()
-                .filter(|value| !value.trim().is_empty()),
+            endpoint: endpoint.to_string(),
+            token,
             tenant_id: std::env::var("OPENFDD_TENANT_ID")
                 .ok()
                 .filter(|value| !value.trim().is_empty()),
@@ -182,17 +201,21 @@ impl LocalIngestClient {
         })
     }
 
-    async fn send(&self, envelope: &TelemetryEnvelope) -> Result<(), String> {
+    async fn send(&self, envelope: &TelemetryEnvelope) -> Result<LocalDeliveryOutcome, String> {
+        const MAX_LOCAL_PAYLOAD_BYTES: usize = 1024 * 1024;
+        let payload = serde_json::to_vec(envelope)
+            .map_err(|_| "local ingest envelope could not be encoded".to_string())?;
+        if payload.len() > MAX_LOCAL_PAYLOAD_BYTES {
+            return Err("local ingest envelope exceeds 1 MiB".into());
+        }
         let mut request = self
             .client
             .post(&self.endpoint)
             .header("content-type", "application/json")
             .header("x-openfdd-message-id", envelope.message_id.to_string())
             .header("x-openfdd-sequence", envelope.sequence.to_string())
-            .json(envelope);
-        if let Some(token) = &self.token {
-            request = request.bearer_auth(token);
-        }
+            .body(payload);
+        request = request.bearer_auth(&self.token);
         if let Some(tenant_id) = &self.tenant_id {
             request = request.header("x-openfdd-tenant-id", tenant_id);
         }
@@ -202,40 +225,273 @@ impl LocalIngestClient {
         let response = request
             .send()
             .await
-            .map_err(|error| format!("local ingest request: {error}"))?;
+            .map_err(|_| "local ingest request failed".to_string())?;
         let status = response.status();
-        let body: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|error| format!("local ingest response: {error}"))?;
-        if !durable_local_ack(status, &body) {
-            let pending = body
-                .get("pending")
-                .cloned()
-                .unwrap_or(serde_json::Value::Null);
-            let rows = body
-                .get("persisted_rows")
-                .cloned()
-                .unwrap_or(serde_json::Value::Null);
-            return Err(format!(
-                "local ingest not durable: HTTP {status} pending={pending} persisted_rows={rows}"
-            ));
+        let mut body = Vec::new();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|_| "local ingest response body failed".to_string())?;
+            if body.len().saturating_add(chunk.len()) > MAX_LOCAL_PAYLOAD_BYTES {
+                return Err("local ingest response exceeds 1 MiB".into());
+            }
+            body.extend_from_slice(&chunk);
         }
-        Ok(())
+        let receipt: LocalIngestReceipt = serde_json::from_slice(&body)
+            .map_err(|_| "local ingest response was not a typed receipt".to_string())?;
+        receipt
+            .validate()
+            .map_err(|_| "local ingest receipt failed validation".to_string())?;
+        validate_receipt_for_envelope(self, envelope, &receipt)?;
+        match receipt.status {
+            LocalIngestStatus::Committed if durable_local_ack(status, &receipt) => {
+                Ok(LocalDeliveryOutcome::Durable)
+            }
+            LocalIngestStatus::TerminalZeroEligible => {
+                Ok(LocalDeliveryOutcome::Quarantined("zero_eligible"))
+            }
+            LocalIngestStatus::Rejected => Ok(LocalDeliveryOutcome::Quarantined("rejected")),
+            LocalIngestStatus::Conflict => Ok(LocalDeliveryOutcome::Quarantined("conflict")),
+            LocalIngestStatus::Retryable | LocalIngestStatus::Pending => {
+                Ok(LocalDeliveryOutcome::Pending)
+            }
+            LocalIngestStatus::Committed => Err("local ingest response was not durable".into()),
+        }
     }
+}
+
+/// Admit a manual operation before the Haystack upstream read. The durable
+/// reservation keeps the validated request signature bound even when the
+/// upstream is slow or unavailable and prevents a full identity ledger from
+/// doing an unretained read.
+#[allow(dead_code)]
+pub(crate) async fn reserve_manual_local(
+    edge_id: &str,
+    message_id: uuid::Uuid,
+    operation_signature: &str,
+    shared_spool: &Mutex<Option<TelemetrySpool>>,
+) -> Result<(), String> {
+    let mut guard = shared_spool.lock().await;
+    if guard.is_none() {
+        *guard = Some(
+            TelemetrySpool::open(
+                SpoolConfig::new(local_spool_dir(edge_id))
+                    .with_max_records(local_spool_max_records())
+                    .with_max_quarantine_records(local_spool_max_quarantine_records())
+                    .with_max_completed_records(local_spool_max_completed_records())
+                    .with_max_retired_records(local_spool_max_retired_records()),
+            )
+            .await
+            .map_err(|_| "manual local spool could not be opened".to_string())?,
+        );
+    }
+    guard
+        .as_ref()
+        .expect("manual spool initialized")
+        .reserve_terminal_operation(message_id, operation_signature)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) async fn send_manual_local(
+    site_id: &str,
+    envelope: &TelemetryEnvelope,
+    operation_signature: &str,
+    shared_spool: &Mutex<Option<TelemetrySpool>>,
+) -> Result<LocalDeliveryOutcome, String> {
+    let client = LocalIngestClient::from_env(site_id)?;
+    let mut guard = shared_spool.lock().await;
+    if guard.is_none() {
+        *guard = Some(
+            TelemetrySpool::open(
+                SpoolConfig::new(local_spool_dir(&envelope.edge_id))
+                    .with_max_records(local_spool_max_records())
+                    .with_max_quarantine_records(local_spool_max_quarantine_records())
+                    .with_max_completed_records(local_spool_max_completed_records())
+                    .with_max_retired_records(local_spool_max_retired_records()),
+            )
+            .await
+            .map_err(|_| "manual local spool could not be opened".to_string())?,
+        );
+    }
+    let spool = guard.as_mut().expect("manual spool initialized");
+
+    // A repeated operation reuses the exact previously persisted envelope.
+    // This preserves the message UUID and payload across pending responses,
+    // timeouts, and uncertain commits instead of rereading into a new message.
+    let existing = spool
+        .list_pending()
+        .await
+        .map_err(|_| "manual local spool could not be read".to_string())?
+        .into_iter()
+        .find(|record| record.envelope.message_id == envelope.message_id);
+    let record = if let Some(record) = existing {
+        if record.operation_signature.as_deref() != Some(operation_signature) {
+            return Err("request_id is already bound to different parameters".into());
+        }
+        record
+    } else {
+        spool
+            .reserve_terminal_operation(envelope.message_id, operation_signature)
+            .await
+            .map_err(|error| error.to_string())?;
+        let seq = spool
+            .enqueue_with_signature(
+                "local-manual",
+                envelope.clone(),
+                Some(operation_signature.to_string()),
+            )
+            .await
+            .map_err(|_| "manual local envelope could not be persisted".to_string())?;
+        SpoolRecord {
+            seq,
+            topic: "local-manual".into(),
+            envelope: envelope.clone(),
+            operation_signature: Some(operation_signature.to_string()),
+        }
+    };
+    // The durable pending record now carries the validated signature; the
+    // reservation has served its admission purpose. This is also safe for a
+    // retry that found a record left by a crash between enqueue and release.
+    spool
+        .release_terminal_operation(envelope.message_id)
+        .await
+        .map_err(|_| "manual local operation reservation could not be released".to_string())?;
+
+    let outcome = match client.send(&record.envelope).await {
+        Ok(outcome) => outcome,
+        Err(_) => return Ok(LocalDeliveryOutcome::Pending),
+    };
+    match outcome {
+        LocalDeliveryOutcome::Durable => spool
+            .complete(record.seq, SpoolTerminalStatus::Committed, None)
+            .await
+            .map_err(|_| "manual local completion record failed".to_string())?,
+        LocalDeliveryOutcome::Quarantined(reason) => spool
+            .complete(record.seq, SpoolTerminalStatus::Terminal, Some(reason))
+            .await
+            .map_err(|_| "manual local terminal record failed".to_string())?,
+        LocalDeliveryOutcome::Pending => {}
+    }
+    Ok(outcome)
+}
+
+pub(crate) async fn lookup_manual_local(
+    edge_id: &str,
+    message_id: uuid::Uuid,
+    site_id: &str,
+    operation_signature: &str,
+    shared_spool: &Mutex<Option<TelemetrySpool>>,
+) -> Result<Option<ManualOperationRecord>, String> {
+    let mut guard = shared_spool.lock().await;
+    if guard.is_none() {
+        *guard = Some(
+            TelemetrySpool::open(
+                SpoolConfig::new(local_spool_dir(edge_id))
+                    .with_max_records(local_spool_max_records())
+                    .with_max_quarantine_records(local_spool_max_quarantine_records())
+                    .with_max_completed_records(local_spool_max_completed_records())
+                    .with_max_retired_records(local_spool_max_retired_records()),
+            )
+            .await
+            .map_err(|_| "manual local spool could not be opened".to_string())?,
+        );
+    }
+    let spool = guard.as_ref().expect("manual spool initialized");
+    if let Some(record) = spool
+        .find_completed(message_id)
+        .await
+        .map_err(|_| "manual local completed journal could not be read".to_string())?
+    {
+        if record.operation_signature.as_deref() != Some(operation_signature) {
+            return Err("request_id is already bound to different parameters".into());
+        }
+        if record.envelope.site_id != site_id || record.envelope.edge_id != edge_id {
+            return Err("request_id is already bound to different parameters".into());
+        }
+        return Ok(Some(ManualOperationRecord::Completed(record)));
+    }
+    if let Some(record) = spool
+        .find_retired(message_id)
+        .await
+        .map_err(|_| "manual local retired journal could not be read".to_string())?
+    {
+        return Ok(Some(ManualOperationRecord::Expired(record)));
+    }
+    let record = spool
+        .list_pending()
+        .await
+        .map_err(|_| "manual local spool could not be read".to_string())?
+        .into_iter()
+        .find(|record| record.envelope.message_id == message_id);
+    let Some(record) = record else {
+        return Ok(None);
+    };
+    // The request signature is persisted with the original validated request;
+    // returned point rows are intentionally not used for identity because an
+    // upstream can return a partial response while a retry is offline.
+    if record.operation_signature.as_deref() != Some(operation_signature)
+        || record.envelope.site_id != site_id
+        || record.envelope.edge_id != edge_id
+    {
+        return Err("request_id is already bound to different parameters".into());
+    }
+    Ok(Some(ManualOperationRecord::Pending(record)))
+}
+
+fn validate_receipt_for_envelope(
+    client: &LocalIngestClient,
+    envelope: &TelemetryEnvelope,
+    receipt: &LocalIngestReceipt,
+) -> Result<(), String> {
+    let expected_building = client
+        .building_id
+        .as_deref()
+        .unwrap_or(envelope.site_id.as_str());
+    let expected_scope = format!(
+        "tenant={};building={}",
+        client.tenant_id.as_deref().unwrap_or("-"),
+        expected_building
+    );
+    if receipt.scope != expected_scope
+        || receipt.site_id != envelope.site_id
+        || receipt.edge_id != envelope.edge_id
+        || receipt.message_id != envelope.message_id
+    {
+        return Err("local ingest receipt correlation failed".into());
+    }
+    if receipt.eligible_points > envelope.points.len()
+        || receipt.persisted_rows > receipt.eligible_points
+    {
+        return Err("local ingest receipt counts exceed the submitted envelope".into());
+    }
+    Ok(())
+}
+
+fn validate_local_central_url(raw: &str) -> Result<url::Url, String> {
+    let base =
+        url::Url::parse(raw.trim()).map_err(|_| "local central URL is invalid".to_string())?;
+    if !matches!(base.scheme(), "http" | "https")
+        || base.host_str().is_none()
+        || base.username() != ""
+        || base.password().is_some()
+        || base.query().is_some()
+        || base.fragment().is_some()
+        || (base.path() != "" && base.path() != "/")
+    {
+        return Err(
+            "local central URL must be an http(s) authority without credentials or path".into(),
+        );
+    }
+    base.join("api/ingest/local")
+        .map_err(|_| "local ingest endpoint path is invalid".to_string())
 }
 
 /// 200 is success only when this message's rows are already committed.
 /// 202 means the sample is still pending, so the spool must keep it.
-fn durable_local_ack(status: reqwest::StatusCode, body: &serde_json::Value) -> bool {
+fn durable_local_ack(status: reqwest::StatusCode, receipt: &LocalIngestReceipt) -> bool {
     status == reqwest::StatusCode::OK
-        && body.get("ok").and_then(|value| value.as_bool()) == Some(true)
-        && body.get("pending").and_then(|value| value.as_bool()) == Some(false)
-        && body
-            .get("persisted_rows")
-            .and_then(|value| value.as_u64())
-            .unwrap_or(0)
-            > 0
+        && receipt.status == LocalIngestStatus::Committed
+        && receipt.persisted_rows > 0
 }
 
 fn local_spool_dir(edge_id: &str) -> PathBuf {
@@ -251,6 +507,30 @@ fn local_spool_max_records() -> usize {
         .and_then(|raw| raw.parse::<usize>().ok())
         .unwrap_or(50_000)
         .clamp(1, 50_000)
+}
+
+fn local_spool_max_quarantine_records() -> usize {
+    std::env::var("OPENFDD_LOCAL_SPOOL_MAX_QUARANTINE_RECORDS")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .unwrap_or(10_000)
+        .clamp(1, 10_000)
+}
+
+pub(crate) fn local_spool_max_completed_records() -> usize {
+    std::env::var("OPENFDD_LOCAL_SPOOL_MAX_COMPLETED_RECORDS")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .unwrap_or(1_024)
+        .clamp(1, 10_000)
+}
+
+pub(crate) fn local_spool_max_retired_records() -> usize {
+    std::env::var("OPENFDD_LOCAL_SPOOL_MAX_RETIRED_RECORDS")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .unwrap_or(10_000)
+        .clamp(1, 100_000)
 }
 
 fn mqtt_config(site_id: &str, edge_id: &str, port: u16) -> MqttConfig {
@@ -653,11 +933,18 @@ async fn drain_local_spool(client: &LocalIngestClient, spool: &Mutex<TelemetrySp
     }
     for rec in pending {
         match client.send(&rec.envelope).await {
-            Ok(()) => {
+            Ok(LocalDeliveryOutcome::Durable) => {
                 if let Err(err) = spool.lock().await.ack(rec.seq).await {
                     warn!(%err, "local spool ack failed");
                 }
             }
+            Ok(LocalDeliveryOutcome::Quarantined(reason)) => {
+                if let Err(err) = spool.lock().await.quarantine(rec.seq, reason).await {
+                    warn!(%err, "local spool quarantine failed");
+                    return DrainPace::Blocked;
+                }
+            }
+            Ok(LocalDeliveryOutcome::Pending) => return DrainPace::Blocked,
             Err(err) => {
                 warn!(%err, "local central delivery failed; local spool will retry");
                 return DrainPace::Blocked;
@@ -761,6 +1048,7 @@ fn rest_telemetry_points(
                     .filter(|u| !u.is_empty())
                     .map(str::to_string),
                 quality,
+                observed_at: None,
                 tags,
             })
         })
@@ -860,7 +1148,8 @@ pub async fn spawn_if_configured(
         let local_tx = if let Some(client) = local_client {
             match TelemetrySpool::open(
                 SpoolConfig::new(local_spool_dir(&edge_id))
-                    .with_max_records(local_spool_max_records()),
+                    .with_max_records(local_spool_max_records())
+                    .with_max_quarantine_records(local_spool_max_quarantine_records()),
             )
             .await
             {
@@ -1010,6 +1299,7 @@ pub async fn spawn_if_configured(
                         value,
                         unit: v.get("units").and_then(|x| x.as_str()).map(str::to_string),
                         quality,
+                        observed_at: None,
                         tags,
                     })
                 })
@@ -1114,6 +1404,11 @@ fn equipment_ids_in(env: &TelemetryEnvelope) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::http::HeaderMap;
+    use axum::routing::post;
+    use axum::{Json, Router};
+    use openfdd_contracts::LOCAL_INGEST_RECEIPT_CONTRACT_V1;
+    use tokio::net::TcpListener;
 
     #[test]
     fn mqtt_publish_interval_fixed_300() {
@@ -1137,6 +1432,24 @@ mod tests {
         assert!(IngestMode::Dual.uses_mqtt());
         assert!(IngestMode::Dual.uses_local());
         assert!(IngestMode::parse("mqtt").is_err());
+    }
+
+    #[test]
+    fn local_sink_url_is_fixed_and_credential_free() {
+        assert_eq!(
+            validate_local_central_url("https://central.example.test")
+                .unwrap()
+                .path(),
+            "/api/ingest/local"
+        );
+        for raw in [
+            "ftp://central.example.test",
+            "https://user:pass@central.example.test",
+            "https://central.example.test/other",
+            "https://central.example.test?next=/evil",
+        ] {
+            assert!(validate_local_central_url(raw).is_err(), "{raw}");
+        }
     }
 
     #[test]
@@ -1169,6 +1482,7 @@ mod tests {
                 value: serde_json::json!(1.0),
                 unit: None,
                 quality: Quality::Good,
+                observed_at: None,
                 tags,
             }
         };
@@ -1308,34 +1622,207 @@ mod tests {
 
     #[test]
     fn local_ack_requires_committed_rows() {
-        let durable = serde_json::json!({
-            "ok": true,
-            "duplicate": false,
-            "pending": false,
-            "persisted_rows": 1
-        });
+        let durable = LocalIngestReceipt {
+            schema: openfdd_contracts::LOCAL_INGEST_RECEIPT_CONTRACT_V1.into(),
+            scope: "tenant=t;building=b".into(),
+            site_id: "site".into(),
+            edge_id: "edge".into(),
+            message_id: uuid::Uuid::new_v4(),
+            status: LocalIngestStatus::Committed,
+            duplicate: false,
+            eligible_points: 1,
+            persisted_rows: 1,
+            error: None,
+        };
         assert!(durable_local_ack(reqwest::StatusCode::OK, &durable));
-        let replay = serde_json::json!({
-            "ok": true,
-            "duplicate": true,
-            "pending": false,
-            "persisted_rows": 1
-        });
+        let mut replay = durable.clone();
+        replay.duplicate = true;
         assert!(durable_local_ack(reqwest::StatusCode::OK, &replay));
-        let pending = serde_json::json!({
-            "ok": true,
-            "duplicate": false,
-            "pending": true,
-            "persisted_rows": 0
-        });
+        let mut pending = durable.clone();
+        pending.status = LocalIngestStatus::Pending;
+        pending.persisted_rows = 0;
         assert!(!durable_local_ack(reqwest::StatusCode::ACCEPTED, &pending));
         assert!(!durable_local_ack(reqwest::StatusCode::OK, &pending));
-        let empty = serde_json::json!({
-            "ok": true,
-            "pending": false,
-            "persisted_rows": 0
-        });
+        let mut empty = durable;
+        empty.persisted_rows = 0;
         assert!(!durable_local_ack(reqwest::StatusCode::OK, &empty));
+    }
+
+    #[test]
+    fn local_receipt_must_match_envelope_scope_identity_and_counts() {
+        let envelope = TelemetryEnvelope::new(
+            "site",
+            "edge",
+            Protocol::Bacnet,
+            1,
+            vec![TelemetryPoint {
+                id: "p".into(),
+                display_name: None,
+                kind: Some(ValueKind::Number),
+                value: serde_json::json!(1.0),
+                unit: None,
+                quality: Quality::Good,
+                observed_at: None,
+                tags: Default::default(),
+            }],
+        );
+        let client = LocalIngestClient {
+            client: reqwest::Client::new(),
+            endpoint: "http://127.0.0.1/api/ingest/local".into(),
+            token: "token".into(),
+            tenant_id: Some("tenant".into()),
+            building_id: Some("site".into()),
+        };
+        let receipt = LocalIngestReceipt {
+            schema: openfdd_contracts::LOCAL_INGEST_RECEIPT_CONTRACT_V1.into(),
+            scope: "tenant=tenant;building=site".into(),
+            site_id: "site".into(),
+            edge_id: "edge".into(),
+            message_id: envelope.message_id,
+            status: LocalIngestStatus::Committed,
+            duplicate: false,
+            eligible_points: 1,
+            persisted_rows: 1,
+            error: None,
+        };
+        validate_receipt_for_envelope(&client, &envelope, &receipt).unwrap();
+        let mut foreign = receipt.clone();
+        foreign.edge_id = "other-edge".into();
+        assert!(validate_receipt_for_envelope(&client, &envelope, &foreign).is_err());
+        foreign = receipt;
+        foreign.eligible_points = 2;
+        assert!(validate_receipt_for_envelope(&client, &envelope, &foreign).is_err());
+    }
+
+    #[tokio::test]
+    async fn terminal_zero_receipt_is_consumed_for_spool_quarantine() {
+        async fn ingest() -> Json<LocalIngestReceipt> {
+            Json(LocalIngestReceipt {
+                schema: LOCAL_INGEST_RECEIPT_CONTRACT_V1.into(),
+                scope: "tenant=-;building=site".into(),
+                site_id: "site".into(),
+                edge_id: "edge".into(),
+                message_id: uuid::Uuid::nil(),
+                status: LocalIngestStatus::TerminalZeroEligible,
+                duplicate: false,
+                eligible_points: 0,
+                persisted_rows: 0,
+                error: None,
+            })
+        }
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route("/api/ingest/local", post(ingest)),
+            )
+            .await
+            .unwrap();
+        });
+        // The fixture route uses a nil UUID so the test can verify terminal
+        // consumption without a second retry request.
+        let client = LocalIngestClient {
+            client: reqwest::Client::new(),
+            endpoint: format!("http://{address}/api/ingest/local"),
+            token: "token".into(),
+            tenant_id: None,
+            building_id: Some("site".into()),
+        };
+        let envelope = TelemetryEnvelope {
+            message_id: uuid::Uuid::nil(),
+            ..TelemetryEnvelope::new("site", "edge", Protocol::Bacnet, 1, Vec::new())
+        };
+        assert_eq!(
+            client.send(&envelope).await.unwrap(),
+            LocalDeliveryOutcome::Quarantined("zero_eligible")
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn terminal_first_then_valid_next_spool_record_progresses() {
+        async fn ingest(headers: HeaderMap) -> Json<LocalIngestReceipt> {
+            let message_id = headers
+                .get("x-openfdd-message-id")
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| uuid::Uuid::parse_str(value).ok())
+                .unwrap_or_else(uuid::Uuid::nil);
+            let terminal = message_id == uuid::Uuid::nil();
+            Json(LocalIngestReceipt {
+                schema: LOCAL_INGEST_RECEIPT_CONTRACT_V1.into(),
+                scope: "tenant=-;building=site".into(),
+                site_id: "site".into(),
+                edge_id: "edge".into(),
+                message_id,
+                status: if terminal {
+                    LocalIngestStatus::TerminalZeroEligible
+                } else {
+                    LocalIngestStatus::Committed
+                },
+                duplicate: false,
+                eligible_points: usize::from(!terminal),
+                persisted_rows: usize::from(!terminal),
+                error: None,
+            })
+        }
+
+        let dir = std::env::temp_dir().join(format!(
+            "ofdd-spool-terminal-first-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+        let mut spool = TelemetrySpool::open(SpoolConfig::new(&dir)).await.unwrap();
+        let terminal = TelemetryEnvelope {
+            message_id: uuid::Uuid::nil(),
+            ..TelemetryEnvelope::new("site", "edge", Protocol::Bacnet, 1, Vec::new())
+        };
+        let valid = TelemetryEnvelope::new(
+            "site",
+            "edge",
+            Protocol::Bacnet,
+            2,
+            vec![TelemetryPoint {
+                id: "point-1".into(),
+                display_name: Some("SAT".into()),
+                kind: Some(ValueKind::Number),
+                value: serde_json::json!(72.5),
+                unit: Some("°F".into()),
+                quality: Quality::Good,
+                observed_at: None,
+                tags: Default::default(),
+            }],
+        );
+        spool.enqueue("local", terminal).await.unwrap();
+        spool.enqueue("local", valid).await.unwrap();
+        let spool = Mutex::new(spool);
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route("/api/ingest/local", post(ingest)),
+            )
+            .await
+            .unwrap();
+        });
+        let client = LocalIngestClient {
+            client: reqwest::Client::new(),
+            endpoint: format!("http://{address}/api/ingest/local"),
+            token: "token".into(),
+            tenant_id: None,
+            building_id: Some("site".into()),
+        };
+        assert!(matches!(
+            drain_local_spool(&client, &spool).await,
+            DrainPace::Progress
+        ));
+        assert!(spool.lock().await.list_pending().await.unwrap().is_empty());
+        let mut quarantined = tokio::fs::read_dir(dir.join("quarantine")).await.unwrap();
+        assert!(quarantined.next_entry().await.unwrap().is_some());
+        server.abort();
+        let _ = tokio::fs::remove_dir_all(&dir).await;
     }
 
     #[tokio::test]
@@ -1378,6 +1865,7 @@ mod tests {
                 value: serde_json::json!(1),
                 unit: None,
                 quality: Quality::Good,
+                observed_at: None,
                 tags: Default::default(),
             }],
         );

@@ -163,29 +163,6 @@ pub struct ModbusReadRequest {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema, Validate)]
-pub struct HaystackReadRequest {
-    #[serde(default = "default_site_filter")]
-    pub filter: String,
-}
-
-fn default_site_filter() -> String {
-    "site".into()
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
-pub struct HaystackNavRequest {
-    pub nav_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, ToSchema, Validate)]
-pub struct HaystackHisReadRequest {
-    #[validate(length(min = 1, max = 64))]
-    pub ids: Vec<String>,
-    pub range_start: Option<String>,
-    pub range_end: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, ToSchema, Validate)]
 pub struct RestReadRequest {
     /// Configured device name from `rest_devices.toml` (no free-form URLs).
     #[validate(length(min = 1, max = 128))]

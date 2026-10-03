@@ -1235,3 +1235,72 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 - The live reachability gate was required to halt on failure and passed. A narrowed Who-Is returned exactly BACnet device **5007** through its routed network. The existing healthy bench container remained running and unchanged.
 - A separate Phase 4 binary used alternate local HTTP and hosted BACnet ports, MQTT disabled, a temporary edge store, and one configured AO target. The first explicit trigger added exactly one 16-slot record. After a clean process restart, sequence 1 and the device cursor were restored before any new scan. A second explicit trigger added one record and produced sequences 1 and 2. Responses remained read-only with discovery and writes disabled. No WriteProperty or release endpoint was called.
 - The Haystack bench host answered reachability preflight; authenticated Haystack application testing was outside this BACnet-history phase. GitHub Actions remained in progress at the time of this addendum, so PR #1099 stayed draft and unmerged with no GHCR or FQ claim.
+### Phase 5A protocol connector split contract
+
+- Started draft PR #1100 from the accepted Phase 4 head `52378c0119ff623999fabe884b7dd8b5aeaefa79`.
+- Added `openfdd_connector_runtime` with versioned service identity/profile and recipe vocabulary, fail-closed API-key middleware, and bounded telemetry sink configuration. The shared crate does not own a protocol client or historian writer.
+- The intended process boundary is explicit: `openfdd-bacnet-modbus` owns BACnet/Modbus and the priority scanner; `openfdd-haystack` owns outbound Haystack HTTP only. Modbus remains unavailable until a trusted register catalog and typed bounded read contract exist. Live BACnet/Haystack testing is deferred until the synthetic isolation tests and Astra review pass.
+
+### Phase 5B protocol connector process split (draft PR #1100)
+
+- Continued from accepted exact source SHA `94dfcc6e` on `feat/protocol-connectors-phase5`. Added real Rust binaries `openfdd-bacnet-modbus` and `openfdd-haystack` backed by separate startup graphs and process PIDs. The compatibility `openfdd-fieldbus` binary remains available and retains its historical all-protocol routes.
+- The BACnet/Modbus graph owns the hosted BACnet UDP server, configured BACnet client/poll engine, read-only priority scanner, and bounded Modbus route. It never constructs `HaystackService`; its router has no Haystack paths. The Haystack graph constructs only `HaystackService` plus the TCP management listener; it never starts BACnet/Modbus services, binds UDP, or exposes BACnet/Modbus routes.
+- Split hello identities are profile-bound (`openfdd-bacnet-modbus` / `openfdd-haystack`). Modbus is compiled but stays `not_configured` and disabled because no trusted typed register inventory contract exists. Haystack reports `checking` while configured and `not_configured` otherwise; neither state claims durable historian delivery. Central accepts and sanitizes both split identities.
+- Added `docker/compose.edge.split.yml`, which assigns explicit binary entrypoints and keeps Haystack off host networking. Cloud `central` and `csv` recipes remain free of OT images/processes; `scripts/gates/protocol_connector_split.sh` checks route isolation, cloud negatives, and actual process-owned sockets (BACnet/Modbus has UDP; Haystack has none).
+- Focused evidence: `cargo test -p openfdd-fieldbus --lib split::tests` (4/4), warnings-denied Clippy for both split binaries, `cargo check -p openfdd-fieldbus --bins`, and `cargo fmt --all` pass. No local Docker build, GHCR publication, live BACnet/Haystack probe, discovery, WriteProperty/release, deployment, merge, or FQ claim was performed. Remaining Soft-OPEN: image publishing/compose qualification, authenticated Haystack application test, live OT bench, and Astra review.
+
+### Phase 5B process hardening after Astra feedback (draft PR #1100)
+
+- Replaced the split BACnet router merges with a dedicated allowlist: BACnet read/RPM/priority-array/status, read-only telemetry status, connector inventory/read, and priority scanner history. The split process has no root, `/api` BACnet aliases, writes, Who-Is/router discovery, point discovery, weather controls, telemetry suspend/resume, compat aliases, or arbitrary Modbus route. Legacy `openfdd-fieldbus` retains its historical router.
+- Added profile-specific settings loading. The BACnet/Modbus profile never loads Haystack endpoint/user/password values and keeps Modbus unconfigured until the typed inventory contract exists. Haystack startup requires a non-empty `OPENFDD_CONNECTOR_API_KEY` and explicit HTTP(S) endpoint.
+- Split the Dockerfile into `bacnet-modbus`, `haystack`, and default `compatibility` final targets. Each target copies only its intended Rust executable, has profile-specific defaults/healthcheck/ports, and Haystack has no UDP exposure. Compose makes Haystack an optional profile requiring endpoint/key, binds `0.0.0.0` internally, and publishes only on host loopback.
+- Strengthened `scripts/gates/protocol_connector_split.sh` with an isolated synthetic config, live health and hello identity/PID checks, HTTP negative checks against both processes, process-owned UDP checks, resolved cloud Compose negatives, and Docker target filesystem/metadata checks. Wired the gate into GitHub Actions. No live bench, discovery, write/release, GHCR publication, merge, or FQ claim.
+- Focused evidence after this correction: split tests **5/5**, profile loader test **1/1**, live process/cloud/image gate PASS, warnings-denied Clippy for all three fieldbus binaries, format, and bin check. Remaining Soft-OPENs: GHCR publication, authenticated Haystack application qualification, live OT bench, and Astra re-review.
+
+### Phase 5B exact review correction (2026-10-02)
+
+- Fixed the workspace `clippy --workspace --all-targets -- -D warnings` failure by using compatibility-only `allow(dead_code)` annotations for OpenAPI and Swagger bench modules; the full workspace Clippy check now passes.
+- Haystack Compose endpoint interpolation is blank-safe when the optional profile is disabled. The Rust `run_haystack` startup validation still rejects a missing or non-HTTP(S) endpoint, and the default-profile gate explicitly resolves with `OPENFDD_HAYSTACK_BASE_URL` unset.
+- The Compose gate now consumes `docker compose config --format json` and asserts structured loopback host IP, target/published port, protocol, internal bind, profile, and healthcheck fields. The complete split gate passed: 5/5 route tests, cloud negatives, real health/PID/socket checks, all three Docker target content/metadata checks, and default/profile Compose resolution.
+
+### Phase 5C1 bounded Haystack slice (2026-10-02, draft PR #1100)
+
+- Continued from accepted Phase 5B SHA `b842f606`. Added the versioned typed Haystack catalog/read contracts and bounded trusted catalog loader. The public requests carry exact tenant/building/edge scope and public keys only; callers cannot supply URLs, Zinc filters, private refs, credentials, or navigation paths. Catalog page size is capped at 100, history at 16 keys and 5,000 samples, and each history window is explicit, finite UTC and at most 24 hours. The catalog revision is immutable for the service lifetime.
+- Replaced the Haystack transport with a read-only bounded Basic/SCRAM client. Credentials are explicit, redirects are disabled, TLS verification is enabled by default, operation paths are allowlisted, connect/request deadlines are bounded, and response bodies are streamed with a 1 MiB cap. Typed current/history normalization preserves units, quality, scalar kind, and genuine source timestamps; missing history timestamps and unknown catalog mappings fail closed.
+- Added typed Central Haystack proxy routes using the existing authenticated configured-upstream scope, bearer token, redirect policy, timeout/body bounds, and response correlation validators. Added typed OpenAPI examples and removed the legacy raw filter/nav/range request models from the product surface.
+- Extended `TelemetryPoint` with optional source `observed_at`. Hardened the local fieldbus sink to require an explicit authority/token, fixed `/api/ingest/local`, no redirects, bounded streaming body handling, and typed receipt validation. Central receipts persist an envelope digest and distinguish pending, committed positive, terminal zero-eligible, rejected, retryable, and conflicting message-id outcomes while retaining exact scope/site/edge/message correlation and sole historian ownership.
+- Evidence in this checkpoint is synthetic Rust only. `cargo fmt`, focused workspace checks, contract tests, and fieldbus/central all-target checks were run during implementation. Live authenticated Haystack application probing, image/GHCR publication, deployment, merge, live OT bench, writes/releases, UDP from the Haystack process, direct Parquet/second DB, and FQ remain unperformed. Live authenticated Haystack remains **Soft-OPEN**; this is a Phase 5C1 partial checkpoint and makes no delivery claim.
+
+### Phase 5C2 bounded transport and receipt hardening (2026-10-02, draft PR #1100)
+
+- Corrected Zinc normalization to use `Number.val`/`Number.unit`, canonical `HRef.val`, and timezone-aware `HDateTime.dt`. Trusted read filters now use real Haystack ref literals (`id == @ref`). Added synthetic authenticated Basic and SCRAM Zinc server fixtures for current/about/history reads, labeled refs, units, source timestamps, redirects, and chunked 1 MiB response rejection.
+- Read response validators now require exact request scope correlation, scalar/unit validation, history timestamps inside the requested UTC window, and an exact recomputed `sample_count`. The local sink correlates receipt scope/site/edge/message identity and eligible/persisted counts before acknowledging; terminal zero-eligible, rejected, and conflict outcomes are quarantined from retry spools while pending/retryable outcomes remain queued.
+- The Central local ingest Axum body-limit rejection now returns the typed receipt contract through the actual router. `TelemetryPoint.observed_at` is carried into canonical historian batches when an equipment group has one source timestamp; mixed timestamps fail closed. Security route inventory now covers all five Central Haystack proxy paths.
+- Synthetic evidence remains bounded and local. The Haystack process still exposes only its typed read endpoint and does not start a telemetry producer; the local delivery sink is owned by the BACnet/Modbus fieldbus process. Full cross-process Zinc → envelope → authenticated Central → canonical historian readback, live vendor qualification, image/GHCR publication, deployment, merge, writes/releases, UDP from Haystack, and FQ remain Soft-OPEN.
+
+### Phase 5C2 closure checkpoint (2026-10-02)
+
+- Corrected trusted catalog loading so documented `@ref` TOML values are
+  validated once and stored as one canonical bare `HRef.val`. Current,
+  history, navigation, and response lookup use that representation while
+  outbound Zinc filters and ids are rendered as real `@ref` literals. A loaded
+  TOML catalog is exercised against an authenticated HTTP Zinc fixture with
+  `@ahu-1-sat`, unit-bearing values, and timezone source timestamps.
+- Quarantine filenames now include the immutable envelope UUID as well as the
+  sequence and retain a bounded operator-visible set across restart. Synthetic
+  restart coverage retains two terminal records that each reused sequence 1;
+  terminal-first spool draining quarantines the first record and advances to a
+  valid next record.
+- Added the explicit authenticated `POST /api/haystack/telemetry` manual path:
+  one bounded current read becomes a typed Haystack envelope and is sent to
+  fixed Central `/api/ingest/local`, with receipt correlation before reporting
+  committed or terminal. Automatic Haystack polling, live vendor/GHCR
+  qualification, deployment, merge, writes/releases, UDP from Haystack, and FQ
+  remain Soft-OPEN. Synthetic loaded-catalog current/history → typed envelope
+  → Central receipt → historian readback covers source timestamp, value, unit,
+  replay/conflict, and scope/count bounds.
+- The manual path now persists before delivery and binds the envelope UUID to
+  the caller request UUID. Pending/retryable/network-uncertain delivery stays
+  in the bounded spool; repeating the request resumes the identical envelope.
+  The synthetic route test enforces the split management bearer and Central
+  ingest bearer, returns pending first, then commits the same message/payload.

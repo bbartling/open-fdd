@@ -10,8 +10,17 @@ license = "MIT"
 name = "openfdd-fieldbus"
 path = "src/main.rs"
 
+[[bin]]
+name = "openfdd-bacnet-modbus"
+path = "src/bin/openfdd-bacnet-modbus.rs"
+
+[[bin]]
+name = "openfdd-haystack"
+path = "src/bin/openfdd-haystack.rs"
+
 [dependencies]
 openfdd_contracts = { path = "../../crates/openfdd_contracts", features = ["openapi"] }
+openfdd_connector_runtime = { path = "../../crates/openfdd_connector_runtime" }
 openfdd_mqtt = { path = "../../crates/openfdd_mqtt" }
 fdd_core = { path = "../../crates/fdd_core" }
 
@@ -33,7 +42,10 @@ subtle = "2"
 dotenvy = "0.15"
 toml = "0.8"
 csv = "1"
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"], default-features = false }
+futures-util = "0.3"
+base64 = "0.22"
+url = "2"
 
 bacnet-types = "0.11"
 bacnet-encoding = "0.11"

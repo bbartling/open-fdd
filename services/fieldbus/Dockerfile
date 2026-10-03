@@ -12,16 +12,40 @@ COPY edge ./edge
 COPY mcp ./mcp
 COPY services ./services
 COPY config ./config
-RUN cargo build --release -p openfdd-fieldbus
+RUN cargo build --release -p openfdd-fieldbus --bins
 
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl iproute2 libssl3 \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=builder /src/target/release/openfdd-fieldbus /usr/local/bin/openfdd-fieldbus
-COPY config/fieldbus /app/config
 ENV OPENFDD_FIELDBUS_CONFIG_DIR=/app/config
+
+# Split images deliberately copy one executable each. The compatibility
+# target remains the Dockerfile default for existing compose/release callers.
+FROM runtime AS bacnet-modbus
+COPY config/fieldbus /app/config
+COPY --from=builder /src/target/release/openfdd-bacnet-modbus /usr/local/bin/openfdd-bacnet-modbus
+ENV OPENFDD_FIELDBUS_HTTP_HOST=0.0.0.0
+ENV OPENFDD_FIELDBUS_HTTP_PORT=8081
+EXPOSE 8081/tcp
+EXPOSE 47808/udp
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:8081/health || exit 1
+ENTRYPOINT ["/usr/local/bin/openfdd-bacnet-modbus"]
+
+FROM runtime AS haystack
+COPY --from=builder /src/target/release/openfdd-haystack /usr/local/bin/openfdd-haystack
+ENV OPENFDD_FIELDBUS_HTTP_HOST=0.0.0.0
+ENV OPENFDD_FIELDBUS_HTTP_PORT=8082
+EXPOSE 8082/tcp
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:8082/health || exit 1
+ENTRYPOINT ["/usr/local/bin/openfdd-haystack"]
+
+FROM runtime AS compatibility
+COPY config/fieldbus /app/config
+COPY --from=builder /src/target/release/openfdd-fieldbus /usr/local/bin/openfdd-fieldbus
 ENV OPENFDD_FIELDBUS_HTTP_HOST=127.0.0.1
 ENV OPENFDD_FIELDBUS_HTTP_PORT=8081
 EXPOSE 8081/tcp

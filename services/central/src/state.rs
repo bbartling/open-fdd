@@ -13,6 +13,7 @@ use openfdd_contracts::{CommandAck, CommandEnvelope, TelemetryEnvelope};
 use openfdd_mqtt::AsyncClient;
 use serde::Deserialize;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 use uuid::Uuid;
@@ -65,10 +66,41 @@ fn eligible_equipment_keys(envelope: &TelemetryEnvelope) -> BTreeSet<String> {
         .collect()
 }
 
+fn eligible_point_count(envelope: &TelemetryEnvelope) -> usize {
+    envelope
+        .points
+        .iter()
+        .filter(|point| {
+            let building = point.tags.get("building_id").and_then(|v| v.as_str());
+            let equipment = point.tags.get("equipment_id").and_then(|v| v.as_str());
+            let role = point.tags.get("role").and_then(|v| v.as_str());
+            let scalar =
+                point.value.is_number() || point.value.is_boolean() || point.value.is_string();
+            let quality_ok = matches!(
+                point.quality,
+                openfdd_contracts::Quality::Good | openfdd_contracts::Quality::Uncertain
+            ) || (point
+                .tags
+                .get("non_finite_quality")
+                .and_then(|v| v.as_bool())
+                == Some(true)
+                && point.value.is_number());
+            scalar
+                && quality_ok
+                && building.is_some_and(|value| !value.is_empty())
+                && equipment.is_some_and(|value| !value.is_empty())
+                && role.is_some_and(|value| !value.is_empty())
+        })
+        .count()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IngestReceiptStatus {
     Pending,
     Committed,
+    TerminalZeroEligible,
+    Rejected,
+    Retryable,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +119,12 @@ pub struct IngestReceipt {
     #[serde(default = "default_receipt_observed_at")]
     pub observed_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// SHA-256 of the complete envelope. A message id may be retried only
+    /// with the exact same payload.
+    #[serde(default)]
+    pub payload_digest: String,
+    #[serde(default)]
+    pub eligible_points: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -258,6 +296,8 @@ impl AppState {
         let message_id = envelope.message_id;
         let observed_at = envelope.observed_at;
         let expected_equipment = eligible_equipment_keys(&envelope);
+        let eligible_points = eligible_point_count(&envelope);
+        let payload_digest = envelope_digest(&envelope);
         let key = (scope.to_string(), edge_id.clone(), message_id);
         let mut receipts = self.ingest_receipts.lock().await;
         if receipts.contains_key(&key) {
@@ -285,6 +325,8 @@ impl AppState {
                 expected_equipment,
                 persisted_equipment: BTreeSet::new(),
                 updated_at: Utc::now(),
+                payload_digest,
+                eligible_points,
             },
         );
         let receipt = receipts
@@ -306,6 +348,23 @@ impl AppState {
             receipts.remove(&(scope.to_string(), edge_id, message_id));
             false
         }
+    }
+
+    /// Return whether an existing receipt has the same immutable payload.
+    /// `None` means there is no receipt for this identity yet.
+    pub async fn receipt_payload_matches(
+        &self,
+        scope: &str,
+        edge_id: &str,
+        message_id: Uuid,
+        envelope: &TelemetryEnvelope,
+    ) -> Option<bool> {
+        let digest = envelope_digest(envelope);
+        self.ingest_receipts
+            .lock()
+            .await
+            .get(&(scope.to_string(), edge_id.to_string(), message_id))
+            .map(|receipt| receipt.payload_digest == digest)
     }
 
     /// Recover durable pending envelopes once after process start. Normal
@@ -398,6 +457,38 @@ impl AppState {
         }
     }
 
+    /// Persist a terminal receipt when the envelope contained no eligible
+    /// historian points. This makes the zero-row outcome replay safe without
+    /// pretending a row was durable.
+    pub async fn mark_zero_eligible(&self, scope: &str, edge_id: &str, message_id: Uuid) -> bool {
+        let mut receipts = self.ingest_receipts.lock().await;
+        let key = (scope.to_string(), edge_id.to_string(), message_id);
+        let Some(previous) = receipts.get(&key).cloned() else {
+            return false;
+        };
+        if previous.status != IngestReceiptStatus::Pending {
+            return previous.status == IngestReceiptStatus::TerminalZeroEligible;
+        }
+        let mut updated = previous.clone();
+        updated.status = IngestReceiptStatus::TerminalZeroEligible;
+        updated.updated_at = Utc::now();
+        if append_receipt_event(
+            &self.ingest_receipts_path,
+            scope,
+            edge_id,
+            message_id,
+            Some(&updated),
+        )
+        .await
+        {
+            receipts.insert(key, updated);
+            maybe_compact_receipt_journal(&self.ingest_receipts_path, &receipts).await;
+            true
+        } else {
+            false
+        }
+    }
+
     /// Apply published row provenance to one tenant/building and edge scope.
     /// A receipt is committed only after all eligible equipment groups arrive.
     pub async fn commit_persisted_receipts_for(
@@ -413,7 +504,10 @@ impl AppState {
             let Some(previous) = receipts.get(&key).cloned() else {
                 continue;
             };
-            if previous.status == IngestReceiptStatus::Committed {
+            if matches!(
+                previous.status,
+                IngestReceiptStatus::Committed | IngestReceiptStatus::TerminalZeroEligible
+            ) {
                 continue;
             }
             let mut updated = previous.clone();
@@ -421,8 +515,8 @@ impl AppState {
             updated
                 .persisted_equipment
                 .insert(equipment_key(&group.building_id, &group.equipment_id));
-            if updated.expected_equipment.is_empty()
-                || updated
+            if !updated.expected_equipment.is_empty()
+                && updated
                     .expected_equipment
                     .is_subset(&updated.persisted_equipment)
             {
@@ -551,6 +645,19 @@ impl AppState {
             .await
             .get(&(scope.to_string(), edge_id.to_string(), message_id))
             .map(|receipt| receipt.persisted_rows)
+    }
+
+    pub async fn receipt_eligible_points(
+        &self,
+        scope: &str,
+        edge_id: &str,
+        message_id: Uuid,
+    ) -> Option<usize> {
+        self.ingest_receipts
+            .lock()
+            .await
+            .get(&(scope.to_string(), edge_id.to_string(), message_id))
+            .map(|receipt| receipt.eligible_points)
     }
 
     /// Record a successful ingest accept (bumps counter + last_ingest_at).
@@ -713,6 +820,10 @@ fn load_receipts_at(
             .map_err(|error| format!("decode receipt journal entry: {error}"))?;
         let key = (event.scope, event.edge_id, event.message_id);
         if let Some(receipt) = event.receipt {
+            let mut receipt = receipt;
+            if receipt.payload_digest.is_empty() {
+                receipt.payload_digest = envelope_digest(&receipt.envelope);
+            }
             receipts.insert(key, receipt);
         } else {
             receipts.remove(&key);
@@ -835,10 +946,18 @@ fn snapshot_entries(
 
 fn compacted_receipt(receipt: &IngestReceipt) -> IngestReceipt {
     let mut tombstone = receipt.clone();
-    if tombstone.status == IngestReceiptStatus::Committed {
+    if matches!(
+        tombstone.status,
+        IngestReceiptStatus::Committed | IngestReceiptStatus::TerminalZeroEligible
+    ) {
         tombstone.envelope.points.clear();
     }
     tombstone
+}
+
+fn envelope_digest(envelope: &TelemetryEnvelope) -> String {
+    let bytes = serde_json::to_vec(envelope).expect("TelemetryEnvelope is serializable");
+    hex::encode(Sha256::digest(bytes))
 }
 
 fn compact_receipt_snapshot(
@@ -895,6 +1014,7 @@ mod tests {
                 value: serde_json::json!(1),
                 unit: None,
                 quality: openfdd_contracts::Quality::Good,
+                observed_at: None,
                 tags: serde_json::json!({"building_id":"building-local", "equipment_id":"equipment-local", "role":"sample"}).as_object().unwrap().clone(),
             }],
         );
@@ -994,6 +1114,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn zero_eligible_receipt_is_terminal_and_replay_safe() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = AppState::new();
+        state.ingest_receipts_path = temp.path().join("receipts.jsonl");
+        let envelope = TelemetryEnvelope::new(
+            "building-local",
+            "edge-local",
+            openfdd_contracts::Protocol::Haystack,
+            1,
+            vec![openfdd_contracts::TelemetryPoint {
+                id: "unmapped".into(),
+                display_name: None,
+                kind: Some(openfdd_contracts::ValueKind::String),
+                value: serde_json::json!("raw"),
+                unit: None,
+                quality: openfdd_contracts::Quality::Bad,
+                observed_at: None,
+                tags: Default::default(),
+            }],
+        );
+        let message_id = envelope.message_id;
+        assert!(
+            state
+                .reserve_receipt_at("tenant-a/building-local", envelope)
+                .await
+        );
+        assert!(
+            state
+                .mark_zero_eligible("tenant-a/building-local", "edge-local", message_id)
+                .await
+        );
+        assert_eq!(
+            state
+                .receipt_status("tenant-a/building-local", "edge-local", message_id)
+                .await,
+            Some(IngestReceiptStatus::TerminalZeroEligible)
+        );
+        assert!(
+            state
+                .mark_zero_eligible("tenant-a/building-local", "edge-local", message_id)
+                .await
+        );
+    }
+
+    #[tokio::test]
     async fn scoped_receipt_waits_for_every_equipment_group() {
         let temp = tempfile::tempdir().unwrap();
         let mut state = AppState::new();
@@ -1014,6 +1179,7 @@ mod tests {
                 value: serde_json::json!(1),
                 unit: None,
                 quality: openfdd_contracts::Quality::Good,
+                observed_at: None,
                 tags: serde_json::json!({
                     "building_id": "building-local",
                     "equipment_id": equipment,
@@ -1091,6 +1257,7 @@ mod tests {
                 value: serde_json::json!(70.0),
                 unit: None,
                 quality: openfdd_contracts::Quality::Good,
+                observed_at: None,
                 tags: serde_json::json!({
                     "building_id": "building-local",
                     "equipment_id": equipment_id,

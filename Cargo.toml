@@ -11,6 +11,7 @@ members = [
     "crates/fdd_bench",
     "crates/fdd_cli",
     "crates/openfdd_contracts",
+    "crates/openfdd_connector_runtime",
     "crates/openfdd_mqtt",
     "services/fieldbus",
     "services/central",

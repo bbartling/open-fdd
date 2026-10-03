@@ -13,6 +13,89 @@ This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER
 
 A merged PR, a passing unit suite, a completed scan, and a verified deployment are different achievements. Record them separately. No milestone becomes VERIFIED from an old pin, skipped test, changed threshold or unreviewed exception. Actual licensed Nessus results are separate from readiness work that needs no license.
 
+## Protocol connector split — Phase 5B draft / process hardening checkpoint
+
+The draft stacked PR [#1100](https://github.com/bbartling/open-fdd/pull/1100)
+starts from accepted source SHA `94dfcc6e` and defines the process boundary for
+`openfdd-bacnet-modbus` and `openfdd-haystack`. Phase 5A added shared identity,
+recipe, authentication, and bounded telemetry-sink contracts in
+`openfdd_connector_runtime`. Phase 5B adds the two separate Rust binaries,
+profile-specific route surfaces, a split edge Compose example, and
+process/cloud-negative tests. The split BACnet HTTP surface is an explicit
+read/status/connector/scanner allowlist; writes, discovery, Who-Is/router,
+compatibility aliases, and arbitrary Modbus reads are absent. The Haystack
+profile requires an API key and configured endpoint. Separate Docker targets
+contain one intended executable each, while the compatibility target remains
+legacy-only. The gate starts both local binaries, awaits real health, checks
+distinct hello identities/PIDs and live prohibited routes, inspects their
+process-owned descriptors, resolves cloud Compose, and inspects built target
+metadata. The legacy `openfdd-fieldbus` binary remains compatible. No GHCR
+refresh, image publication, live bench, discovery, write/release, or merge
+claim is made by this checkpoint.
+
+## Protocol connector Haystack slice — Phase 5C1 partial / draft PR #1100
+
+The branch now contains the bounded Rust Phase 5C1 contract and transport
+slice from accepted Phase 5B SHA `b842f606`: a startup loaded trusted Haystack
+catalog with immutable revision, typed about/catalog/navigation/current-read/
+finite-history requests, private source-ref mapping, explicit scope binding,
+and Basic/SCRAM HTTP with redirects disabled, explicit credentials, bounded
+timeouts and streaming bodies. History values preserve genuine source
+timestamps; the public contract does not accept URLs, Zinc filters, refs,
+credentials, or navigation paths. Central exposes the same operations through
+its authenticated configured-upstream proxy.
+
+The BACnet/Modbus process local sink posts only to fixed authenticated
+`/api/ingest/local`, parses one typed receipt shape, rejects missing tokens,
+redirects, oversized bodies, and message-id payload conflicts, and keeps
+Central as the sole historian writer. The standalone Haystack process has no
+automatic polling producer; it validates `local_fieldbus` as a startup policy
+and exposes a manually triggered current-read to authenticated local-ingest
+route alongside the typed read surface. Receipts now distinguish
+pending, committed positive, terminal zero-eligible, rejected, retryable, and
+conflict outcomes, with a persisted envelope digest and exact scope/site/edge/
+message correlation. `TelemetryPoint.observed_at` is optional for normal
+telemetry and required in typed Haystack history values.
+
+This is **PARTIAL**, not a delivery claim. Focused Rust checks are still being
+completed; live authenticated Haystack application qualification, image/GHCR
+publication, live OT bench work, deployment, merge, and FQ remain Soft-OPEN.
+No direct Parquet/second database, UDP, write/release, caller-controlled
+upstream, or Haystack MQTTS/dual activation was added.
+
+## Protocol connector Haystack slice — Phase 5C2 hardening partial / draft PR #1100
+
+The follow-up hardens the C1 boundary with real Zinc scalar normalization:
+`Number.val`/`Number.unit`, canonical `HRef.val`, timezone-aware
+`HDateTime.dt`, and `id == @ref` filters. Synthetic authenticated Basic and
+SCRAM Zinc fixtures cover current/about/history reads, labels, units, source
+timestamps, redirects, and chunked body limits. Response validators enforce
+exact scope, scalar/unit safety, in-window history timestamps, and exact
+sample counts.
+
+The local sink now validates receipt scope/site/edge/message identity and
+eligible/persisted counts before acknowledging. Terminal zero-eligible,
+rejected, and conflict outcomes leave the retry queue through quarantine;
+pending and retryable outcomes remain queued. Central oversize Axum extraction
+returns a typed receipt, and point source timestamps reach the canonical
+historian batch. The security route inventory covers all five Central
+Haystack proxy paths.
+
+This remains **PARTIAL**. The standalone Haystack process exposes its typed
+read API and a manually triggered local-ingest path; automatic polling and
+live vendor qualification remain Soft-OPEN. A loaded-catalog Zinc to typed
+envelope to authenticated Central receipt and historian readback is covered
+by synthetic bounded tests. Image or GHCR publication, deployment, merge, and
+FQ remain Soft-OPEN.
+
+The manual path persists each envelope before delivery and uses the caller's
+request UUID as the durable message identity. Pending, retryable, timeout, and
+uncertain responses retain the original payload in the bounded spool; a retry
+of the same request resumes that payload and cannot mint a second message.
+Synthetic HTTP coverage exercises the real split management bearer, Haystack
+Basic bearer, Central ingest bearer, typed pending receipt, retry with the same
+message/payload, committed receipt, and canonical historian readback.
+
 ## Operations protocol workspace Phase 4 — draft / source and read-only bench verified
 
 **Owner path:** draft PR [#1099](https://github.com/bbartling/open-fdd/pull/1099),

@@ -3,9 +3,12 @@
 pub mod capabilities;
 pub mod command;
 pub mod envelope;
+pub mod haystack;
+pub mod ingest;
 pub mod inventory;
 pub mod priority_scan;
 pub mod proxy;
+pub mod service;
 pub mod topics;
 
 pub use capabilities::{
@@ -17,6 +20,16 @@ pub use command::{CommandAck, CommandEnvelope, CommandStatus};
 pub use envelope::{
     Protocol, Quality, SchemaVersion, TelemetryEnvelope, TelemetryPoint, ValueKind,
 };
+pub use haystack::{
+    HaystackAboutRequest, HaystackAboutResponse, HaystackCatalogRecord, HaystackCatalogRequest,
+    HaystackCatalogResponse, HaystackCurrentReadRequest, HaystackCurrentReadResponse,
+    HaystackHistoryReadRequest, HaystackHistoryReadResponse, HaystackHistorySeries,
+    HaystackNavRequest, HaystackNavResponse, HaystackOperation, HaystackRecordKind, HaystackValue,
+    HAYSTACK_CATALOG_CONTRACT_V1, HAYSTACK_MAX_BODY_BYTES, HAYSTACK_MAX_CURSOR_LENGTH,
+    HAYSTACK_MAX_HISTORY_POINTS, HAYSTACK_MAX_HISTORY_SAMPLES, HAYSTACK_MAX_PAGE_SIZE,
+    HAYSTACK_MAX_RANGE_HOURS, HAYSTACK_READ_CONTRACT_V1,
+};
+pub use ingest::{LocalIngestReceipt, LocalIngestStatus, LOCAL_INGEST_RECEIPT_CONTRACT_V1};
 pub use inventory::{
     sanitize_inventory_label, ConnectorInventoryRequest, ConnectorInventoryResponse,
     InventoryAvailability, InventoryCommandability, InventoryPointReference, InventoryProvenance,
@@ -36,6 +49,9 @@ pub use proxy::{
     ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult, ConnectorScope, ReadError,
     ReadPointResult, ReadPriorityArrayResult, ReadPrioritySlot, ReadTarget, ReadValueState,
     READ_PROXY_CONTRACT_V1,
+};
+pub use service::{
+    ConnectorServiceProfile, RecipeKind, ServiceIdentity, SERVICE_IDENTITY_CONTRACT_V1,
 };
 pub use topics::{parse_topic, payload_matches_topic, TopicBuilder, TopicIdentity, TopicKind};
 

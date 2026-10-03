@@ -2,6 +2,7 @@ target
 edge/target
 .git
 **/node_modules
+**/target
 workspace/dashboard/node_modules
 frontend/assets
 workspace/backups
