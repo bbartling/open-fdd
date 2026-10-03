@@ -1084,9 +1084,7 @@ fn deny_edge_out_of_scope(
     if ctx.hub_admin {
         return None;
     }
-    let Some(entry) = state.edges.get(edge_id) else {
-        return None;
-    };
+    let entry = state.edges.get(edge_id)?;
     let site = entry.lock().unwrap().known_site_id();
     match site.as_deref() {
         Some(s) if ctx.allow_building(s) => None,
