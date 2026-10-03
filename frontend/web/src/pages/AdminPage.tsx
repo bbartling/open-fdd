@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router";
 import { AppShell } from "../components/AppShell";
 import { Button, ConfirmModal, InlineAlert } from "../components/widgets";
 import { getAuthMe, type AuthMe } from "../api/authApi";
@@ -15,6 +16,7 @@ import {
   upsertAdminUser,
   type AdminTenant,
   type AdminUser,
+  type UserCascadePlan,
 } from "../api/adminApi";
 
 /**
@@ -31,7 +33,7 @@ export function AdminPage() {
 
   const [uName, setUName] = useState("");
   const [uRole, setURole] = useState("operator");
-  const [uTenants, setUTenants] = useState("");
+  const [uTenantIds, setUTenantIds] = useState<string[]>([]);
   const [uPass, setUPass] = useState("");
   const [uPassEnv, setUPassEnv] = useState("");
 
@@ -43,6 +45,7 @@ export function AdminPage() {
   const [sizeGib, setSizeGib] = useState("5");
 
   const [deleteUser, setDeleteUser] = useState<string | null>(null);
+  const [deleteUserPlan, setDeleteUserPlan] = useState<UserCascadePlan | null>(null);
   const [deleteTenant, setDeleteTenant] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -76,18 +79,38 @@ export function AdminPage() {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!deleteUser) {
+      setDeleteUserPlan(null);
+      return;
+    }
+    let cancelled = false;
+    void deleteAdminUser(deleteUser, { dryRun: true })
+      .then((res) => {
+        if (!cancelled) setDeleteUserPlan(res.plan ?? null);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : String(e));
+          setDeleteUser(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [deleteUser]);
+
   const onSaveUser = async () => {
     setError(null);
     setBusy(true);
     try {
-      const tenant_ids = uTenants
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
+      if (uTenantIds.length === 0) {
+        throw new Error("select at least one tenant");
+      }
       await upsertAdminUser({
         username: uName.trim(),
         role: uRole,
-        tenant_ids,
+        tenant_ids: uTenantIds,
         password: uPass.trim() || undefined,
         password_env: uPassEnv.trim() || undefined,
         disabled: false,
@@ -95,13 +118,21 @@ export function AdminPage() {
       setUName("");
       setUPass("");
       setUPassEnv("");
-      setUTenants("");
+      setUTenantIds([]);
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
+  };
+
+  const toggleUserTenant = (tenantId: string) => {
+    setUTenantIds((prev) =>
+      prev.includes(tenantId)
+        ? prev.filter((id) => id !== tenantId)
+        : [...prev, tenantId],
+    );
   };
 
   const onSaveTenant = async () => {
@@ -240,12 +271,34 @@ export function AdminPage() {
             <option value="operator">operator</option>
             <option value="viewer">viewer</option>
           </select>
-          <input
-            placeholder="tenant ids (comma-separated)"
-            value={uTenants}
-            onChange={(e) => setUTenants(e.target.value)}
+          <fieldset
+            style={{ border: "1px solid var(--border, #ccc)", padding: "0.5rem" }}
             data-testid="admin-user-tenants"
-          />
+          >
+            <legend>Tenants</legend>
+            {tenants.length === 0 ? (
+              <p style={{ margin: 0, opacity: 0.8 }}>
+                Create a tenant below first, then assign it here.
+              </p>
+            ) : (
+              tenants.map((t) => (
+                <label
+                  key={t.id}
+                  style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={uTenantIds.includes(t.id)}
+                    onChange={() => toggleUserTenant(t.id)}
+                    data-testid={`admin-user-tenant-${t.id}`}
+                  />
+                  <span>
+                    {t.name || t.id} <code>({t.id})</code>
+                  </span>
+                </label>
+              ))
+            )}
+          </fieldset>
           <input
             placeholder="password (lab) or leave blank"
             type="password"
@@ -260,7 +313,7 @@ export function AdminPage() {
           <Button
             id="admin-user-save"
             label="Save user"
-            disabled={busy || !uName.trim()}
+            disabled={busy || !uName.trim() || uTenantIds.length === 0}
             onClick={() => void onSaveUser()}
             testId="admin-user-save"
           />
@@ -372,24 +425,39 @@ export function AdminPage() {
         <h2>Site data</h2>
         <p>
           Purge package/historian sites from{" "}
-          <a href="/operations?view=sites">Operations → Sites</a>.
+          <Link to="/operations?view=sites" data-testid="admin-link-operations-sites">
+            Operations → Sites
+          </Link>
+          .
         </p>
       </section>
 
       <ConfirmModal
         id="admin-delete-user"
         open={deleteUser != null}
-        title="Delete user"
-        message={deleteUser ? `Remove ${deleteUser}?` : ""}
-        confirmLabel="Delete"
+        title="Delete user + cascade"
+        message={
+          deleteUser
+            ? [
+                `Remove ${deleteUser} and purge owned CSV sites?`,
+                deleteUserPlan
+                  ? `Purge: ${(deleteUserPlan.buildings_to_purge ?? []).join(", ") || "(none)"}. Shared skipped: ${(deleteUserPlan.buildings_shared_skipped ?? []).join(", ") || "(none)"}.`
+                  : "Loading cascade plan…",
+              ].join(" ")
+            : ""
+        }
+        confirmLabel="Delete + purge"
         onCancel={() => setDeleteUser(null)}
         onConfirm={() => {
           const name = deleteUser;
           setDeleteUser(null);
           if (!name) return;
           setBusy(true);
-          void deleteAdminUser(name)
-            .then(refresh)
+          void deleteAdminUser(name, { confirm: true })
+            .then((res) => {
+              if (res.ok === false) throw new Error(res.error || "delete failed");
+              return refresh();
+            })
             .catch((e) => setError(String(e)))
             .finally(() => setBusy(false));
         }}
