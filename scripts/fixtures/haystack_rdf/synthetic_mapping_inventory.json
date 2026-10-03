@@ -25,12 +25,30 @@
         "SF_SPD": "fan_cmd"
       },
       "columns": [
-        { "column": "SAT", "role": "sat", "status": "mapped" },
-        { "column": "RAT", "role": "rat", "status": "mapped" },
-        { "column": "SF_SPD", "role": "fan_cmd", "status": "mapped" },
-        { "column": "VENDOR_ONLY_TAG", "role": "", "status": "unmapped" }
+        {
+          "column": "SAT",
+          "role": "sat",
+          "status": "mapped"
+        },
+        {
+          "column": "RAT",
+          "role": "rat",
+          "status": "mapped"
+        },
+        {
+          "column": "SF_SPD",
+          "role": "fan_cmd",
+          "status": "mapped"
+        },
+        {
+          "column": "VENDOR_ONLY_TAG",
+          "role": "",
+          "status": "unmapped"
+        }
       ],
-      "unmapped_columns": ["VENDOR_ONLY_TAG"],
+      "unmapped_columns": [
+        "VENDOR_ONLY_TAG"
+      ],
       "ambiguous_roles": {},
       "blockers": [],
       "warnings": []
@@ -49,18 +67,35 @@
         "ZN_T": "zone_air_temp"
       },
       "columns": [
-        { "column": "CLG_VLV_CMD", "role": "sat_sp", "status": "ambiguous" },
-        { "column": "EFFECTIVE_SAT_SP", "role": "sat_sp", "status": "ambiguous" },
-        { "column": "ZN_T", "role": "zone_air_temp", "status": "mapped" }
+        {
+          "column": "CLG_VLV_CMD",
+          "role": "sat_sp",
+          "status": "ambiguous"
+        },
+        {
+          "column": "EFFECTIVE_SAT_SP",
+          "role": "sat_sp",
+          "status": "ambiguous"
+        },
+        {
+          "column": "ZN_T",
+          "role": "zone_air_temp",
+          "status": "mapped"
+        }
       ],
       "unmapped_columns": [],
       "ambiguous_roles": {
-        "sat_sp": ["CLG_VLV_CMD", "EFFECTIVE_SAT_SP"]
+        "sat_sp": [
+          "CLG_VLV_CMD",
+          "EFFECTIVE_SAT_SP"
+        ]
       },
       "blockers": [
         "role sat_sp mapped to multiple columns: CLG_VLV_CMD, EFFECTIVE_SAT_SP"
       ],
-      "warnings": ["missing parent_ahu for stamped vav equipment"]
+      "warnings": [
+        "missing parent_ahu for stamped vav equipment"
+      ]
     },
     {
       "equipment_id": "VAV_EXCLUDED_1",
@@ -74,14 +109,21 @@
         "ZN_T": "zone_air_temp"
       },
       "columns": [
-        { "column": "ZN_T", "role": "zone_air_temp", "status": "mapped" },
+        {
+          "column": "ZN_T",
+          "role": "zone_air_temp",
+          "status": "mapped"
+        },
         {
           "column": "INTENTIONALLY_EXCLUDED_AUX",
           "role": "",
-          "status": "unmapped"
+          "status": "excluded",
+          "exclusion_reason": "operator_policy_not_fdd_input"
         }
       ],
-      "unmapped_columns": ["INTENTIONALLY_EXCLUDED_AUX"],
+      "unmapped_columns": [
+        "INTENTIONALLY_EXCLUDED_AUX"
+      ],
       "ambiguous_roles": {},
       "blockers": [],
       "warnings": [

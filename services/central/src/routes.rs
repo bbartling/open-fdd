@@ -85,6 +85,18 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(csv_import_package_mapping_ttl),
         )
         .route(
+            "/api/csv/import/package/mapping/haystack.ttl",
+            get(csv_import_package_mapping_haystack_ttl),
+        )
+        .route(
+            "/api/csv/import/package/mapping/haystack-projection",
+            get(csv_import_package_mapping_haystack_projection),
+        )
+        .route(
+            "/api/csv/import/package/mapping/semantic-meta",
+            get(csv_import_package_mapping_semantic_meta),
+        )
+        .route(
             "/api/csv/import/package/buildings",
             get(csv_import_package_buildings),
         )
@@ -3919,6 +3931,209 @@ pub async fn csv_import_package_mapping_ttl(
         ttl,
     )
         .into_response())
+}
+
+/// Native `openfdd_semantic_meta_v1` JSON export (C3). Empty when no sidecar persisted.
+pub async fn csv_import_package_mapping_semantic_meta(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<PackageMappingQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let Some(building_id) = q
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id query parameter required",
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let result = tokio::task::spawn_blocking(move || {
+        let root = open_fdd_edge_prototype::historian::store::workspace_dir()
+            .join("data")
+            .join("csv_buildings")
+            .join(&building_id);
+        match open_fdd_edge_prototype::csv_ingest::semantic_meta::load_persisted(&root) {
+            Ok(Some(meta)) => json!({
+                "ok": true,
+                "present": true,
+                "schema": open_fdd_edge_prototype::csv_ingest::semantic_meta::SCHEMA,
+                "meta": meta,
+            }),
+            Ok(None) => json!({
+                "ok": true,
+                "present": false,
+                "schema": open_fdd_edge_prototype::csv_ingest::semantic_meta::SCHEMA,
+                "building_id": building_id,
+            }),
+            Err(e) => json!({"ok": false, "error": e}),
+        }
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("semantic-meta task: {e}")}));
+    if result.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+        return Err((StatusCode::BAD_REQUEST, Json(result)));
+    }
+    Ok(Json(result))
+}
+
+fn project_haystack_for_building(
+    building_id: String,
+    equipment_id: Option<String>,
+    preferred: Option<String>,
+) -> Value {
+    let root = open_fdd_edge_prototype::historian::store::workspace_dir()
+        .join("data")
+        .join("csv_buildings")
+        .join(&building_id);
+    let meta = match open_fdd_edge_prototype::csv_ingest::semantic_meta::load_persisted(&root) {
+        Ok(Some(m)) => m,
+        Ok(None) => {
+            return json!({
+                "ok": false,
+                "error": "semantic_meta.json not present for building — strict Haystack projection requires native metadata (C2)",
+                "present": false,
+                "profile": open_fdd_edge_prototype::csv_ingest::haystack_projection::PROFILE,
+            });
+        }
+        Err(e) => return json!({"ok": false, "error": e}),
+    };
+    let inventory =
+        open_fdd_edge_prototype::csv_ingest::package::get_package_mapping_handler_scoped(
+            &building_id,
+            equipment_id.as_deref(),
+            preferred.as_deref(),
+        );
+    let inv_ref = if inventory.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+        None
+    } else {
+        Some(&inventory)
+    };
+    open_fdd_edge_prototype::csv_ingest::haystack_projection::project_strict_json(&meta, inv_ref)
+}
+
+/// Strict Haystack Turtle (`ofdd_haystack_projection_v1`) from native semantic meta.
+pub async fn csv_import_package_mapping_haystack_ttl(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<PackageMappingQuery>,
+) -> Result<axum::response::Response, (StatusCode, Json<Value>)> {
+    use axum::response::IntoResponse;
+
+    let Some(building_id) = q
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id query parameter required",
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let equipment_id = q
+        .equipment_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, Some(&building_id));
+    let projected = tokio::task::spawn_blocking(move || {
+        project_haystack_for_building(building_id, equipment_id, preferred)
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("haystack projection task: {e}")}));
+
+    if projected.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        let status = if projected.get("present") == Some(&json!(false)) {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::BAD_REQUEST
+        };
+        return Err((status, Json(projected)));
+    }
+    let ttl = projected
+        .get("turtle")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    Ok((
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                "text/turtle; charset=utf-8",
+            ),
+            (axum::http::header::CACHE_CONTROL, "no-store"),
+        ],
+        ttl,
+    )
+        .into_response())
+}
+
+/// Strict Haystack projection JSON envelope (Turtle + omission report).
+pub async fn csv_import_package_mapping_haystack_projection(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<PackageMappingQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let Some(building_id) = q
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id query parameter required",
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let equipment_id = q
+        .equipment_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, Some(&building_id));
+    let projected = tokio::task::spawn_blocking(move || {
+        project_haystack_for_building(building_id, equipment_id, preferred)
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("haystack projection task: {e}")}));
+
+    if projected.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        let status = if projected.get("present") == Some(&json!(false)) {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::BAD_REQUEST
+        };
+        return Err((status, Json(projected)));
+    }
+    Ok(Json(projected))
 }
 
 #[derive(Debug, Deserialize)]

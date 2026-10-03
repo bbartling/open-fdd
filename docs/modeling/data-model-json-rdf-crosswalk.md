@@ -46,12 +46,14 @@ reports unify both views.
 
 ## Strict Haystack omissions (intentional)
 
-Until C3 implements projection with pinned defs:
+C3 `ofdd_haystack_projection_v1` (from native `openfdd_semantic_meta_v1` only):
 
-- No `ph:Equip` / `ph:Point` instances from SQL roles alone.
-- No marker tags inferred from role names (`sat` ≠ `hs:sensor`).
-- Unknown vendor tags without defs → excluded + reported.
-- Ambiguous roles → no single Haystack point until operator/agent selection.
+- No `ph:equip` / `ph:point` instances from SQL roles alone.
+- No marker tags inferred from role names (`sat` ≠ `ph:sensor`).
+- Unknown vendor tags without defs → excluded + projection report.
+- Ambiguous roles / intentional exclusions → omitted + reported.
+- False/null/empty marker strings never become `ph:hasTag`.
+- Unknown units stay in native metadata; strict graph omits typed unit literals.
 
 ## Import / export directions
 
@@ -60,12 +62,13 @@ Until C3 implements projection with pinned defs:
 | ZIP compact map → SQL roles | **Yes** (existing ingest) | HR-01 package tests |
 | Inventory → native JSON download | **Yes** | Vitest `mappingApi` |
 | Inventory → native TTL (SPA + `GET …/mapping/ttl`) | **Yes** | Vitest + Rust `data_model_ttl` |
-| Native JSON → strict Haystack TTL | **No** (C3) | HR-04 projection fixtures |
-| Strict Haystack TTL → native revision | **No** (C3; not lossless) | HR-04 |
-| Haystack JSON grid → product ingest | **No** (not advertised) | C3 if scoped |
-| ZIP → strict Haystack without native sidecar | **No** | C2 metadata first |
+| Native semantic meta → JSON | **Yes** (`GET …/mapping/semantic-meta`) | C3 HR-04 |
+| Native semantic meta → strict Haystack TTL | **Yes** (`GET …/mapping/haystack.ttl` + `…/haystack-projection`) | C3 HR-03/04 Rust + RDFLib |
+| Strict Haystack TTL → native revision | **No** (not lossless; not advertised) | — |
+| Haystack JSON grid → product ingest | **No** (not advertised) | — |
+| ZIP → strict Haystack without native sidecar | **No** | Requires C2 `semantic_meta.json` |
 
-Do not describe native TTL as “Haystack RDF export” in UI or docs.
+Do not describe native TTL as “Haystack RDF export” in UI or docs. Strict Haystack uses profile `ofdd_haystack_projection_v1` with defs pin `ph-markers-allowlist-v1`.
 
 ## Code pointers
 
@@ -73,7 +76,9 @@ Do not describe native TTL as “Haystack RDF export” in UI or docs.
 | --- | --- |
 | JSON manifest | `frontend/web/src/api/mappingApi.ts` |
 | Browser TTL | `frontend/web/src/api/dataModelTurtle.ts` |
-| Central TTL | `edge/src/csv_ingest/data_model_ttl.rs` |
+| Central native TTL | `edge/src/csv_ingest/data_model_ttl.rs` |
+| Strict Haystack projection | `edge/src/csv_ingest/haystack_projection.rs` |
+| Native semantic meta | `edge/src/csv_ingest/semantic_meta.rs` |
 | Inventory SoT | `edge/src/csv_ingest/package.rs` |
 
 Synthetic crosswalk fixtures: `scripts/fixtures/haystack_rdf/`.

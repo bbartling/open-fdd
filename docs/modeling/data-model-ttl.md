@@ -17,6 +17,8 @@ Open-FDD can export the **package Mapping inventory** as RDF Turtle. This is a
 | Mapping JSON export | Same inventory as JSON |
 | Mapping **Export TTL** / **View TTL as text** | Same inventory as compact Turtle (`text/turtle`) |
 | `GET /api/csv/import/package/mapping/ttl?building_id=…` | JWT + building ACL; agents/MCP can fetch without SPA |
+| `GET …/mapping/haystack.ttl` / `…/haystack-projection` | **Strict** Haystack (`ofdd_haystack_projection_v1`) from native semantic meta — not this native TTL |
+| `GET …/mapping/semantic-meta` | Native `openfdd_semantic_meta_v1` JSON |
 
 Turtle subjects use safe IRI segments; opaque names become reversible
 `enc_<utf8-hex>` (SPA and central must stay UTF-8 parity — not FNV/UTF-16).
@@ -28,6 +30,8 @@ Turtle subjects use safe IRI segments; opaque names become reversible
 - Do not treat downloaded `.ttl` as an ingest or authoring format.
 - Do not claim lossless JSON↔TTL (legacy Haystack projection declares
   `ofdd:claimsLosslessJson false` — see [RDF vocabulary notes](rdf-vocabulary.html)).
+- Native package TTL (`openfdd_data_model_v2`) is **not** strict Haystack —
+  see [JSON/RDF crosswalk](data-model-json-rdf-crosswalk.html).
 
 See also: [`docs/agent/PACKAGE_AUTHORING.md`](../agent/PACKAGE_AUTHORING.md),
 [Engineering quantities](engineering-quantities.html),

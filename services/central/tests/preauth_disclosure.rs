@@ -361,6 +361,9 @@ fn mt_isolation_matrix_select_and_datapath() {
     let foreign_gets = [
         "/api/csv/import/package/mapping?building_id=BLDG_B_ONLY",
         "/api/csv/import/package/mapping/ttl?building_id=BLDG_B_ONLY",
+        "/api/csv/import/package/mapping/haystack.ttl?building_id=BLDG_B_ONLY",
+        "/api/csv/import/package/mapping/haystack-projection?building_id=BLDG_B_ONLY",
+        "/api/csv/import/package/mapping/semantic-meta?building_id=BLDG_B_ONLY",
         "/api/fdd/series?building_id=BLDG_B_ONLY&equipment_id=AHU_1&rule_id=FC1",
         "/api/fdd/equipment?building_id=BLDG_B_ONLY",
     ];
