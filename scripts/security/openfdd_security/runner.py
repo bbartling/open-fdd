@@ -1,6 +1,7 @@
 """Probe orchestration: dry-run plan vs execute."""
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from . import __version__
@@ -16,6 +17,47 @@ from .inventory import inventory_summary, load_inventory
 from .profiles import required_check_ids
 from .suites import SUITE_RUNNERS, SuiteContext
 from .transport import Budget, SafeHttpClient
+
+# Hard per-mode ceilings (overrides may tighten, never exceed).
+_BUDGET_CEILINGS = {
+    "live_readonly": {"max_requests": 160, "deadline_s": 300.0, "timeout_s": 10.0},
+    "isolated_full": {"max_requests": 200, "deadline_s": 300.0, "timeout_s": 10.0},
+    "local_open": {"max_requests": 40, "deadline_s": 180.0, "timeout_s": 10.0},
+}
+
+
+def _validate_budget_finite(bud: dict, *, profile: str) -> None:
+    """Reject NaN/inf/negative/nonfinite budget overrides before networking."""
+    for key in ("max_requests", "cleanup_reserved"):
+        val = bud.get(key)
+        if val is None:
+            continue
+        if not isinstance(val, int) or isinstance(val, bool) or val < 0:
+            raise ConfigError(f"budget.{key} must be a non-negative int")
+    for key in ("timeout_s", "deadline_s", "rate_rps"):
+        val = bud.get(key)
+        if val is None:
+            continue
+        try:
+            fval = float(val)
+        except (TypeError, ValueError) as exc:
+            raise ConfigError(f"budget.{key} must be finite float") from exc
+        if not math.isfinite(fval) or fval < 0:
+            raise ConfigError(f"budget.{key} must be finite and non-negative")
+        bud[key] = fval
+    body = bud.get("max_body_bytes")
+    if body is not None and (not isinstance(body, int) or isinstance(body, bool) or body <= 0):
+        raise ConfigError("budget.max_body_bytes must be a positive int")
+    ceiling = _BUDGET_CEILINGS.get(profile)
+    if ceiling:
+        if int(bud.get("max_requests") or 0) > ceiling["max_requests"]:
+            raise ConfigError(
+                f"budget.max_requests exceeds {profile} ceiling {ceiling['max_requests']}"
+            )
+        if float(bud.get("deadline_s") or 0) > ceiling["deadline_s"]:
+            raise ConfigError(
+                f"budget.deadline_s exceeds {profile} ceiling {ceiling['deadline_s']}"
+            )
 
 
 def list_suites() -> dict[str, str]:
@@ -67,6 +109,7 @@ def run_probe(
         bud["deadline_s"] = deadline
     if rate is not None:
         bud["rate_rps"] = rate
+    _validate_budget_finite(bud, profile=profile)
 
     if allow_fixture_writes and profile == "live_readonly":
         raise ConfigError("live_readonly forbids --allow-fixture-writes")

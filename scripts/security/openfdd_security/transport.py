@@ -62,14 +62,26 @@ class Budget:
                 raise TransportError("request budget exhausted (cleanup reserved)")
         if self.request_count >= self.max_requests:
             raise TransportError("request budget exhausted")
-        # Rate limit
+        # Rate limit — recheck wall deadline after sleep (R06).
         if self.rate_rps > 0 and self._last_request_at:
             min_gap = 1.0 / self.rate_rps
             wait = min_gap - (time.monotonic() - self._last_request_at)
             if wait > 0:
-                time.sleep(wait)
+                # Cap sleep by remaining deadline so rate waits cannot overshoot.
+                remaining_deadline = self.deadline_s - (time.monotonic() - self.started_at)
+                if remaining_deadline <= 0:
+                    raise TransportError("run deadline exceeded")
+                time.sleep(min(wait, remaining_deadline))
+                self.check_deadline()
         self.request_count += 1
         self._last_request_at = time.monotonic()
+
+    def request_timeout_s(self) -> float:
+        """Per-request timeout capped by remaining wall deadline."""
+        remaining = self.deadline_s - (time.monotonic() - self.started_at)
+        if remaining <= 0:
+            raise TransportError("run deadline exceeded")
+        return max(0.001, min(float(self.timeout_s), remaining))
 
 
 class SafeHttpClient:
@@ -134,26 +146,28 @@ class SafeHttpClient:
         url = f"{self.base_url}{path}"
         t0 = time.monotonic()
         try:
+            req_timeout = self.budget.request_timeout_s()
             if self._scheme == "https":
                 conn: http.client.HTTPConnection = http.client.HTTPSConnection(
                     self._host,
                     self._port,
-                    timeout=self.budget.timeout_s,
+                    timeout=req_timeout,
                     context=self._ssl_context(),
                 )
             else:
                 conn = http.client.HTTPConnection(
-                    self._host, self._port, timeout=self.budget.timeout_s
+                    self._host, self._port, timeout=req_timeout
                 )
             conn.request(method.upper(), path, body=raw, headers=hdrs)
             resp = conn.getresponse()
             # Do not follow redirects automatically
             loc = resp.getheader("Location")
             status = resp.status
-            # Read with body cap
+            # Read with body cap; recheck wall deadline between chunks (R06).
             chunks: list[bytes] = []
             total = 0
             while True:
+                self.budget.check_deadline()
                 chunk = resp.read(65536)
                 if not chunk:
                     break

@@ -42,30 +42,59 @@ def _looks_html(body: bytes) -> bool:
 
 
 def _nonempty_own_control(body: bytes, canary: str = "") -> bool:
-    """Positive own-object control: nonempty schema, not {} / [] / HTML."""
+    """Positive own-object control: known content, not error/empty/HTML.
+
+    Error objects (ok:false / error keys) never count as ownership proof even
+    when nonempty. When a canary is supplied it must appear in the body.
+    Empty lists are not authorization proof (separate empty-site UX checks).
+    """
     if not body or body.strip() in (b"", b"[]", b"{}"):
         return False
     if _looks_html(body):
         return False
-    if canary and canary.encode() in body:
-        return True
     try:
         data = json.loads(body.decode("utf-8"))
     except Exception:
         return False
+    if isinstance(data, dict):
+        if data.get("ok") is False:
+            return False
+        if any(k in data for k in ("error", "errors", "detail")) and not canary:
+            # Unstructured error/detail without fixture canary is not own success.
+            if data.get("ok") is not True and not any(
+                isinstance(data.get(k), (list, dict)) and data.get(k)
+                for k in ("equipment", "items", "buildings", "data", "rows", "result")
+            ):
+                return False
+    if canary:
+        return canary.encode() in body
     if isinstance(data, list):
         return len(data) > 0
     if isinstance(data, dict):
         if not data:
             return False
-        for key in ("equipment", "items", "buildings", "data", "rows"):
+        for key in ("equipment", "items", "buildings", "data", "rows", "result"):
             val = data.get(key)
             if isinstance(val, list) and len(val) > 0:
                 return True
             if isinstance(val, dict) and val:
                 return True
+        # Bare status/ack objects are not object ownership proof.
+        if set(data.keys()) <= {"ok", "status", "message", "error", "errors", "detail"}:
+            return False
         return any(v not in (None, "", [], {}) for v in data.values())
     return False
+
+
+def _structured_deny(status: int, body: bytes, *, foreign_canary: str = "") -> bool:
+    """Authorization denial: 403/404 JSON deny envelope, no foreign canary/HTML."""
+    if status not in (403, 404):
+        return False
+    if _looks_html(body):
+        return False
+    if foreign_canary and foreign_canary.encode() in body:
+        return False
+    return _deny_envelope(body)
 
 
 class SuiteContext:
@@ -392,24 +421,42 @@ def _login_me(
         return
     password = resolve_password(ident)
     username = resolve_username(ident, default_user)
-    # Prefer pre-minted admin bearer after stress floods (avoids login 429).
+    # Prefer pre-minted admin bearer only after full identity confirmation.
     if alias == "admin":
         preexisting = (os.environ.get("OPENFDD_ADMIN_TOKEN") or "").strip()
         if preexisting:
             try:
                 me = ctx.client.request("GET", "/api/auth/me", token=preexisting)
                 if me.status == 200 and _is_json_object(me.body):
-                    ctx.tokens[alias] = preexisting
-                    role = (me.json() or {}).get("role")
+                    me_data = me.json() or {}
+                    role = str(me_data.get("role") or "").lower()
+                    sub = str(me_data.get("sub") or me_data.get("username") or "")
+                    expected_role = (ident.role or "admin").lower()
+                    identity_ok = (
+                        role == expected_role
+                        and bool(sub)
+                        and (
+                            not username
+                            or sub == username
+                            or sub.lower() == username.lower()
+                        )
+                    )
+                    if identity_ok:
+                        ctx.tokens[alias] = preexisting
                     ctx.check(
                         check_id,
                         "X",
                         f"login/me {alias}",
-                        "PASS" if role == "admin" else "FAIL",
+                        "PASS" if identity_ok else "FAIL",
                         expected="200+token",
                         observed=_status_of(me),
                         identity_alias=alias,
-                        detail="reused OPENFDD_ADMIN_TOKEN",
+                        detail=(
+                            "reused OPENFDD_ADMIN_TOKEN"
+                            if identity_ok
+                            else "pre-minted token failed identity/schema check"
+                        ),
+                        detector_id=None if identity_ok else "wrong_identity",
                     )
                     return
             except TransportError:
@@ -425,18 +472,12 @@ def _login_me(
         )
         return
     try:
-        r = None
-        for attempt in range(6):
-            r = ctx.client.request(
-                "POST",
-                "/api/auth/login",
-                json_body={"username": username, "password": password},
-            )
-            if r.status != 429:
-                break
-            # Post-stress / gate 23 AFDD flood can trip login rate limits — wait and retry.
-            time.sleep(min(5 * (2**attempt), 45))
-        assert r is not None
+        # No automatic login retries — 429/5xx are FAIL/ERROR, not soft-pass.
+        r = ctx.client.request(
+            "POST",
+            "/api/auth/login",
+            json_body={"username": username, "password": password},
+        )
         if r.status != 200 or not _is_json_object(r.body):
             ctx.check(
                 check_id,
@@ -446,7 +487,7 @@ def _login_me(
                 expected="200+token",
                 observed=_status_of(r),
                 identity_alias=alias,
-                detail="login rate-limited (429) after retries" if r.status == 429 else None,
+                detail="login rate-limited (429)" if r.status == 429 else None,
             )
             return
         data = r.json()
@@ -461,7 +502,7 @@ def _login_me(
                 identity_alias=alias,
             )
             return
-        ctx.tokens[alias] = token
+        # Confirm /api/auth/me before caching the token.
         me = ctx.client.request("GET", "/api/auth/me", token=token)
         if me.status != 200 or not _is_json_object(me.body):
             ctx.check(
@@ -546,6 +587,7 @@ def _login_me(
                     detector_id="wrong_identity",
                 )
                 return
+        ctx.tokens[alias] = token
         ctx.check(
             check_id,
             "X",
@@ -921,7 +963,16 @@ def run_suite_y(ctx: SuiteContext) -> None:
                 )
             else:
                 role = str((me.json() or {}).get("role") or "").lower()
-                if role and role not in ("viewer", "read", "readonly"):
+                if not role:
+                    ctx.check(
+                        "y.authz.viewer_mutation_denied",
+                        "Y",
+                        "viewer cannot mint agent-token",
+                        "FAIL",
+                        detail="viewer /api/auth/me missing role",
+                        detector_id="wrong_identity",
+                    )
+                elif role not in ("viewer", "read", "readonly"):
                     ctx.check(
                         "y.authz.viewer_mutation_denied",
                         "Y",
@@ -1074,8 +1125,7 @@ def run_suite_y(ctx: SuiteContext) -> None:
             detail=str(exc),
         )
 
-    # Datasets + package mapping: foreign building deny (Wave S1 expand).
-    # Own-building 200 is not required for PASS — missing fixtures stay out of FQ.
+    # Datasets + package mapping/TTL: own positive control before foreign deny.
     for path, foreign_cid in (
         ("/api/datasets", "y.authz.a_foreign_datasets_denied"),
         (
@@ -1088,16 +1138,34 @@ def run_suite_y(ctx: SuiteContext) -> None:
         ),
     ):
         try:
+            own_cid = foreign_cid.replace("_foreign_", "_own_").replace("_denied", "")
+            q_own = urlencode({"building_id": fx.building_a})
+            r_own = ctx.client.request("GET", f"{path}?{q_own}", token=tok_a)
+            if r_own.status == 401:
+                own_st = "ERROR"
+            elif r_own.status == 200 and _nonempty_own_control(r_own.body, fx.canary_a):
+                own_st = "PASS"
+            elif r_own.status == 200:
+                own_st = "BLOCKED"
+            else:
+                own_st = "BLOCKED" if r_own.status in (403, 404) else "FAIL"
+            ctx.check(
+                own_cid,
+                "Y",
+                f"A own {path}",
+                own_st,
+                observed=_status_of(r_own),
+                path_template=path,
+                detail=None if own_st == "PASS" else "missing populated own-object control",
+            )
             q_b = urlencode({"building_id": fx.building_b})
             r_f = ctx.client.request("GET", f"{path}?{q_b}", token=tok_a)
             leak = fx.canary_b.encode() in r_f.body
             if r_f.status == 401:
                 deny_st = "ERROR"
-            elif r_f.status in (403, 404) and not leak:
+            elif _structured_deny(r_f.status, r_f.body, foreign_canary=fx.canary_b):
                 deny_st = "PASS"
-            elif r_f.status == 200 and leak:
-                deny_st = "FAIL"
-            elif r_f.status == 200:
+            elif r_f.status == 200 or leak:
                 deny_st = "FAIL"
             else:
                 deny_st = "FAIL"
@@ -1106,7 +1174,7 @@ def run_suite_y(ctx: SuiteContext) -> None:
                 "Y",
                 f"A denied foreign {path}",
                 deny_st,
-                expected="403/404",
+                expected="403/404+deny",
                 observed=_status_of(r_f),
                 detail="foreign canary leak" if leak else None,
                 path_template=path,
@@ -1134,17 +1202,8 @@ def run_suite_y(ctx: SuiteContext) -> None:
             elif r_own.status == 200 and _nonempty_own_control(r_own.body, fx.canary_a):
                 own_st = "PASS"
             elif r_own.status == 200:
-                # Empty list can be a healthy empty building; {} is not.
-                try:
-                    data = json.loads(r_own.body.decode())
-                    if isinstance(data, list):
-                        own_st = "PASS"
-                    elif isinstance(data, dict) and data:
-                        own_st = "PASS"
-                    else:
-                        own_st = "BLOCKED"
-                except Exception:
-                    own_st = "BLOCKED"
+                # Empty list/soft 200 is not authorization proof (empty-site UX separate).
+                own_st = "BLOCKED"
             else:
                 own_st = "BLOCKED" if r_own.status in (403, 404) else "FAIL"
             ctx.check(
@@ -1154,13 +1213,14 @@ def run_suite_y(ctx: SuiteContext) -> None:
                 own_st,
                 observed=_status_of(r_own),
                 path_template=path,
+                detail=None if own_st == "PASS" else "empty/soft 200 is not positive own-object control",
             )
             q_b = urlencode({"building_id": fx.building_b})
             r_f = ctx.client.request("GET", f"{path}?{q_b}", token=tok_a)
             leak = fx.canary_b.encode() in r_f.body
             if r_f.status == 401:
                 deny_st = "ERROR"
-            elif r_f.status in (403, 404) and not leak:
+            elif _structured_deny(r_f.status, r_f.body, foreign_canary=fx.canary_b):
                 deny_st = "PASS"
             else:
                 deny_st = "FAIL"
@@ -1211,11 +1271,11 @@ def run_suite_y(ctx: SuiteContext) -> None:
             own_cid = foreign_cid.replace("_foreign_", "_own_").replace("_denied", "")
             if r_own.status == 401:
                 own_st = "ERROR"
-            elif r_own.status in (200, 204):
+            elif r_own.status == 200 and _nonempty_own_control(r_own.body, fx.canary_a):
                 own_st = "PASS"
-            elif r_own.status in (400, 422):
-                # Authz passed; payload/schema rejected — still own-path success for MT.
-                own_st = "PASS"
+            elif r_own.status in (200, 204, 400, 422):
+                # Status-only / empty / schema-reject is not populated analytics proof.
+                own_st = "BLOCKED"
             else:
                 own_st = "BLOCKED" if r_own.status in (403, 404) else "FAIL"
             ctx.check(
@@ -1225,13 +1285,16 @@ def run_suite_y(ctx: SuiteContext) -> None:
                 own_st,
                 observed=_status_of(r_own),
                 path_template=path,
+                detail=None
+                if own_st == "PASS"
+                else "analytics own success requires nonempty fixture content",
             )
             body_b = {"building_id": fx.building_b}
             r_f = ctx.client.request("POST", path, token=tok_a, json_body=body_b)
             leak = fx.canary_b.encode() in r_f.body
             if r_f.status == 401:
                 deny_st = "ERROR"
-            elif r_f.status in (403, 404) and not leak:
+            elif _structured_deny(r_f.status, r_f.body, foreign_canary=fx.canary_b):
                 deny_st = "PASS"
             else:
                 deny_st = "FAIL"
