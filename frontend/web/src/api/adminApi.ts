@@ -48,10 +48,35 @@ export async function setAdminUserDisabled(username: string, disabled: boolean):
   });
 }
 
-export async function deleteAdminUser(username: string): Promise<void> {
-  await apiFetch(`/api/admin/users/${encodeURIComponent(username)}`, {
-    method: "DELETE",
-  });
+export type UserCascadePlan = {
+  username: string;
+  tenant_ids: string[];
+  buildings_to_purge: string[];
+  buildings_shared_skipped: string[];
+};
+
+export type DeleteAdminUserResult = {
+  ok?: boolean;
+  dry_run?: boolean;
+  requires_confirm?: boolean;
+  plan?: UserCascadePlan;
+  purged?: Array<{ building_id: string; jobs_deleted: number }>;
+  error?: string;
+};
+
+/** Dry-run cascade plan (default). Pass `confirm: true` to purge owned sites + remove user. */
+export async function deleteAdminUser(
+  username: string,
+  opts?: { confirm?: boolean; dryRun?: boolean },
+): Promise<DeleteAdminUserResult> {
+  const params = new URLSearchParams();
+  if (opts?.confirm) params.set("confirm", "true");
+  if (opts?.dryRun ?? !opts?.confirm) params.set("dry_run", "true");
+  const qs = params.toString();
+  return apiFetch<DeleteAdminUserResult>(
+    `/api/admin/users/${encodeURIComponent(username)}${qs ? `?${qs}` : ""}`,
+    { method: "DELETE" },
+  );
 }
 
 export async function listAdminTenants(): Promise<AdminTenant[]> {

@@ -139,6 +139,71 @@ impl UserStore {
         }
         Ok(())
     }
+
+    pub fn get(&self, username: &str) -> Option<&UserRecord> {
+        self.users
+            .iter()
+            .find(|u| u.username.eq_ignore_ascii_case(username.trim()))
+    }
+}
+
+/// Buildings this user may cascade-delete without touching another account.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UserCascadePlan {
+    pub username: String,
+    pub tenant_ids: Vec<String>,
+    pub buildings_to_purge: Vec<String>,
+    pub buildings_shared_skipped: Vec<String>,
+}
+
+/// Plan cascade delete for a control-plane user.
+///
+/// A building is purged only when **no other remaining user** has any tenant that
+/// lists it. Shared buildings are skipped (fail-closed for foreign tenant data).
+pub fn plan_user_cascade_delete(
+    store: &UserStore,
+    plane: &ControlPlane,
+    username: &str,
+) -> Result<UserCascadePlan, String> {
+    let rec = store
+        .get(username)
+        .ok_or_else(|| "user not found".to_string())?;
+    let tenant_ids = rec.tenant_ids.clone();
+    let mut owned: Vec<String> = Vec::new();
+    for tid in &tenant_ids {
+        owned.extend(plane.buildings_for_tenant(tid));
+    }
+    owned.sort();
+    owned.dedup();
+
+    let uname = rec.username.clone();
+    let mut other_buildings = std::collections::HashSet::new();
+    for other in &store.users {
+        if other.username.eq_ignore_ascii_case(&uname) {
+            continue;
+        }
+        for tid in &other.tenant_ids {
+            for bid in plane.buildings_for_tenant(tid) {
+                other_buildings.insert(bid);
+            }
+        }
+    }
+
+    let mut buildings_to_purge = Vec::new();
+    let mut buildings_shared_skipped = Vec::new();
+    for bid in owned {
+        if other_buildings.contains(&bid) {
+            buildings_shared_skipped.push(bid);
+        } else {
+            buildings_to_purge.push(bid);
+        }
+    }
+    Ok(UserCascadePlan {
+        username: uname,
+        tenant_ids,
+        buildings_to_purge,
+        buildings_shared_skipped,
+    })
 }
 
 impl ControlPlane {
@@ -291,5 +356,51 @@ mod tests {
         plane.remove_tenant("acme").unwrap();
         plane.save(dir.path()).unwrap();
         assert!(ControlPlane::load_or_legacy(dir.path()).tenants.is_empty());
+    }
+
+    #[test]
+    fn cascade_plan_skips_buildings_shared_with_other_users() {
+        let mut plane = ControlPlane::default();
+        plane
+            .upsert_tenant(TenantRecord {
+                id: "solo".into(),
+                name: "Solo".into(),
+                building_ids: vec!["SOLO_SITE".into()],
+            })
+            .unwrap();
+        plane
+            .upsert_tenant(TenantRecord {
+                id: "shared".into(),
+                name: "Shared".into(),
+                building_ids: vec!["SHARED_SITE".into()],
+            })
+            .unwrap();
+        let mut store = UserStore::default();
+        store
+            .upsert(UserRecord {
+                username: "alice".into(),
+                role: "operator".into(),
+                tenant_ids: vec!["solo".into(), "shared".into()],
+                password_env: None,
+                password: Some("a".into()),
+                disabled: false,
+            })
+            .unwrap();
+        store
+            .upsert(UserRecord {
+                username: "bob".into(),
+                role: "operator".into(),
+                tenant_ids: vec!["shared".into()],
+                password_env: None,
+                password: Some("b".into()),
+                disabled: false,
+            })
+            .unwrap();
+        let plan = plan_user_cascade_delete(&store, &plane, "alice").unwrap();
+        assert_eq!(plan.buildings_to_purge, vec!["SOLO_SITE".to_string()]);
+        assert_eq!(
+            plan.buildings_shared_skipped,
+            vec!["SHARED_SITE".to_string()]
+        );
     }
 }
