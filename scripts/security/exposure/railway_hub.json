@@ -1,6 +1,17 @@
 {
   "schema_version": "openfdd_exposure_manifest_v1",
   "profile": "railway_hub",
+  "deployment_profile": "cloud_mqtt_hub",
+  "required_images": [
+    "openfdd-web",
+    "openfdd-central",
+    "openfdd-mqtt"
+  ],
+  "forbidden_images": [
+    "openfdd-fieldbus",
+    "openfdd-bacnet-modbus",
+    "openfdd-haystack"
+  ],
   "note": "Public origin is HTTPS web only. Central/MCP private. Fieldbus never on Railway.",
   "services": [
     {

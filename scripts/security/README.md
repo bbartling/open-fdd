@@ -49,6 +49,13 @@ OT request, or a Nessus pass. Start with
 [`docs/operations/SECURITY_QUALIFICATION_POLICY.md`](../../docs/operations/SECURITY_QUALIFICATION_POLICY.md)
 for the staged acceptance sequence.
 
+The final-image Trivy helper includes both split connector images:
+`trivy_ghcr_digests.sh <sha-tag> all` scans `openfdd-bacnet-modbus` and
+`openfdd-haystack` alongside central, web, MQTT, the compatibility fieldbus,
+MCP, and Caddy. Each output directory records the exact reference in a `.ref`
+sidecar; digest-bound candidate evidence still comes from the deployment
+profile contract.
+
 ## CLI
 
 ```bash
