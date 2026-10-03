@@ -6,6 +6,56 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 echo "== gate: protocol connector split =="
+
+# Optional machine-readable evidence for the Phase 5D evaluator. The normal
+# gate output is unchanged when this is unset. Only image IDs and typed gate
+# facts are written; no environment values, credentials, or process logs are
+# copied into the evidence artifact.
+SPLIT_EVIDENCE_DIR="${OPENFDD_SPLIT_EVIDENCE_DIR:-}"
+SPLIT_GATE_STATUS="BLOCKED"
+SPLIT_SOURCE_SHA="$(git rev-parse HEAD 2>/dev/null || printf '%s' unknown)"
+SPLIT_IMAGE_IDS=()
+
+write_split_evidence() {
+  [[ -n "$SPLIT_EVIDENCE_DIR" ]] || return 0
+  mkdir -p "$SPLIT_EVIDENCE_DIR"
+  local image_ids='[]'
+  if ((${#SPLIT_IMAGE_IDS[@]} > 0)); then
+    image_ids="$(printf '%s\n' "${SPLIT_IMAGE_IDS[@]}" | jq -R . | jq -s .)"
+  fi
+  local status="$SPLIT_GATE_STATUS"
+  local detail="split gate did not reach its PASS sentinel"
+  [[ "$status" == "PASS" ]] && detail="process, route, image, and Compose checks passed"
+  local checks
+  checks="$(jq -cn \
+    --arg status "$status" \
+    --arg detail "$detail" \
+    --arg source_sha "$SPLIT_SOURCE_SHA" \
+    --argjson image_ids "$image_ids" \
+    '[
+      {check_id:"immutable_source", status:$status, detail:$detail,
+       evidence:{source_sha:$source_sha}},
+      {check_id:"image_digests", status:$status, detail:$detail,
+       evidence:{image_ids:$image_ids, digest_kind:"local_image_id"}},
+      {check_id:"image_content_isolation", status:$status, detail:$detail,
+       evidence:{targets:["bacnet-modbus","haystack","compatibility"]}},
+      {check_id:"image_runtime_metadata", status:$status, detail:$detail,
+       evidence:{healthchecks:true, non_root_runtime_checked:true}},
+      {check_id:"cloud_zero_ot", status:$status, detail:$detail,
+       evidence:{recipes:["docker/compose.central.yml","docker/compose.csv.yml"]}},
+      {check_id:"edge_selected_connector", status:$status, detail:$detail,
+       evidence:{recipe:"docker/compose.edge.split.yml"}},
+      {check_id:"compose_runtime", status:$status, detail:$detail,
+       evidence:{default_profile:true, haystack_profile:true}}
+    ]')"
+  jq -n \
+    --arg stage image_recipe \
+    --arg observed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --argjson checks "$checks" \
+    '{schema_version:"openfdd.protocol_connector_qualification.v1",
+      stage:$stage, observed_at:$observed_at, max_age_seconds:86400, checks:$checks}' \
+    >"$SPLIT_EVIDENCE_DIR/image_recipe.json"
+}
 cargo test -p openfdd-fieldbus --lib split::tests
 
 SPLIT_TMP_DIR="${TMPDIR:-/tmp}/openfdd-protocol-split-$$"
@@ -127,7 +177,7 @@ cleanup_images() {
   done
 }
 SPLIT_IMAGES=()
-trap cleanup_images EXIT
+trap 'write_split_evidence; cleanup_images' EXIT
 
 wait_for_health() {
   local pid="$1"
@@ -245,6 +295,7 @@ for target in bacnet-modbus haystack compatibility; do
   image="openfdd-protocol-split-gate:${target}-$$"
   docker build --quiet --target "$target" -t "$image" -f services/fieldbus/Dockerfile . >/dev/null
   SPLIT_IMAGES+=("$image")
+  SPLIT_IMAGE_IDS+=("$(docker image inspect -f '{{.Id}}' "$image")")
   case "$target" in
     bacnet-modbus)
       docker run --rm --entrypoint /bin/sh "$image" -ec \
@@ -310,4 +361,5 @@ jq -e '
 ' "$profile_compose" >/dev/null
 echo "OK compose-config: docker/compose.edge.split.yml (default + haystack profile)"
 
+SPLIT_GATE_STATUS="PASS"
 echo "PASS: protocol connector split"

@@ -13,6 +13,67 @@ This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER
 
 A merged PR, a passing unit suite, a completed scan, and a verified deployment are different achievements. Record them separately. No milestone becomes VERIFIED from an old pin, skipped test, changed threshold or unreviewed exception. Actual licensed Nessus results are separate from readiness work that needs no license.
 
+## Protocol connector qualification — Phase 5D draft PR #1101
+
+Phase 5D is the closeout and evidence track stacked on the Phase 5C head. The
+implementation branch is `feat/protocol-connectors-phase5d`; its source plan is
+[`protocol_connector_phase5d_closeout.plan.md`](.cursor/plans/protocol_connector_phase5d_closeout.plan.md).
+It carries the protocol restoration acceptance for [issue #781](https://github.com/bbartling/open-fdd/issues/781)
+and the Phase 5C draft [PR #1100](https://github.com/bbartling/open-fdd/pull/1100).
+The draft PR is intentionally kept separate from Phase 5C so a local Cursor
+session can continue from the exact pushed SHA if the coding-agent usage
+window expires. No merge, deployment, GHCR re-pin, or issue closure is
+authorized by this milestone.
+
+### Current implementation checkpoint
+
+- [x] Added the fail-closed evaluator at
+  `scripts/qualification/protocol_connector_qualification.py` with fixed
+  `synthetic`, `image_recipe`, `bacnet_live`, and `haystack_live` stages.
+- [x] Added offline negatives for empty, partial, stale, contradictory,
+  forged-top-level, receipt-mismatch, historian-mismatch, prohibited-surface,
+  observed-BACnet-write, and leaked-secret evidence.
+- [x] Wired the existing split process/image/Compose gate to emit a bounded,
+  redacted `image_recipe.json` when
+  `OPENFDD_SPLIT_EVIDENCE_DIR` is set. The recorded local image IDs are not a
+  GHCR manifest digest claim.
+- [x] Added AppSec and Rust CI evaluator hooks, capability-ledger entry,
+  runtime/ADR documentation, and this handoff record.
+- [x] Local evidence on source `69350919`: evaluator selftest and eight
+  qualification unit tests pass; the complete qualification unittest suite,
+  capability ledger validation, shell syntax, and diff checks pass. Live PASS
+  claims now require check-specific device/read-only/typed/restart/replay
+  evidence; missing command, authentication, process-ownership, and historian
+  prerequisites are explicitly fail-closed.
+
+### Remaining acceptance gates
+
+- [ ] Exact Phase 5C parent head is green and accepted by Astra; record its
+  full SHA in the PR body before calling Phase 5D ready.
+- [ ] CI split gate passes on the exact PR head and uploads/retains the
+  machine-readable image/recipe evidence. GHCR image publication, SBOM,
+  provenance, signing, and vulnerability results remain separate evidence.
+- [ ] The cloud recipes remain zero-OT and the selected edge recipe starts
+  only its selected connector, with live process/PID/socket checks.
+- [ ] Read-only BACnet bench evidence for the configured device instance 5007
+  is captured, or the stage is explicitly `BLOCKED` because the device was not
+  reachable. No write, release, or unbounded discovery is allowed.
+- [ ] Authenticated Haystack evidence is captured only from a verified secure
+  local configuration (endpoint, catalog, and Basic/SCRAM mode). The possible
+  Pi address is not assumed. Missing configuration remains `BLOCKED`.
+- [ ] Haystack-to-Central committed receipt, canonical historian readback,
+  replay/conflict, and restart-resume evidence are captured without secrets.
+- [ ] Capability, operations, ADR, session log, and PR summary agree that the
+  Haystack profile is manual-only; no automatic collection claim is made.
+- [ ] All required Actions are green on the exact head and the PR is
+  mergeable; Phase 5C/5D remain unmerged until the operator reviews the
+  evidence.
+
+The closeout verdict is **PARTIAL / Soft-OPEN** until the operational stages
+are proven. Synthetic PASS is necessary but cannot substitute for image/recipe,
+BACnet, or authenticated Haystack evidence. A `SKIP` or `BLOCKED` stage is
+never a qualification pass.
+
 ## Protocol connector split — Phase 5B draft / process hardening checkpoint
 
 The draft stacked PR [#1100](https://github.com/bbartling/open-fdd/pull/1100)

@@ -82,3 +82,39 @@ tenant/building/edge scope checks, and bounded upstream body handling.
 
 The existing `TelemetryEnvelope` remains the wire payload. Connector services
 never open a DataFusion session or write Parquet directly.
+
+## Phase 5D qualification contract
+
+The closeout entry point is
+`scripts/qualification/protocol_connector_qualification.py`. It evaluates four
+bounded stages: `synthetic`, `image_recipe`, `bacnet_live`, and
+`haystack_live`. Each stage has a fixed check list and produces a typed JSON
+result plus `SUMMARY.md`. The evaluator recomputes the verdict from the
+checks; a caller-supplied `PASS` or `fully_qualified` flag cannot override a
+missing, stale, contradictory, or failed check.
+
+`SKIP` and `BLOCKED` are never accepted as `PASS`. Receipt scope/message/count
+mismatches, historian readback mismatches, prohibited listeners/routes, stale
+timestamps, and observed BACnet writes fail closed. The evaluator bounds
+checks, detail text, and report size, and redacts common bearer/password/token,
+credentialed-URL, JWT, and long-secret forms. It does not copy raw network
+bodies or credential files into an artifact.
+
+The existing `scripts/gates/protocol_connector_split.sh` remains the executable
+process/image/Compose gate. When `OPENFDD_SPLIT_EVIDENCE_DIR` is set, it emits
+`image_recipe.json` containing the source SHA, local image IDs, selected target
+metadata, cloud-zero-OT checks, and resolved edge recipe checks. A local image
+ID is immutable evidence for that CI build; it is not a GHCR manifest digest.
+GHCR publication, SBOM/provenance/signing, vulnerability scanning, and a
+licensed Nessus assessment remain separate release evidence.
+
+The Haystack profile is explicitly **manual collection only** in this phase.
+No automatic scheduler or continuous Haystack delivery is advertised. A
+future scheduler must be catalog-driven, non-overlapping, bounded, durable
+across restart, and tested with clock-controlled backoff before the capability
+ledger may claim it. The BACnet live stage is read-only and must stop when the
+operator cannot verify device reachability; no synthetic result substitutes for
+that operational evidence. The Haystack live stage requires a verified secure
+endpoint/catalog/auth configuration and a committed Central receipt plus
+canonical historian readback. The possible lab host address is not a product
+default and is never assumed by the evaluator.

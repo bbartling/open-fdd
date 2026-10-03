@@ -63,11 +63,6 @@ replace either entrypoint with a runtime profile flag. The recipe is a
 source/build checkpoint; no GHCR publication or live OT qualification is
 claimed here.
 
-The `central` and `csv` recipes contain no fieldbus service and never start a
-BACnet/Modbus/Haystack process. Use `edge` or `standalone` when the host is
-deliberately connected to an OT network. This separation is a deployment
-boundary, not a runtime capability flag.
-
 ## Bring a recipe up
 
 `openfdd_stack_up.sh` pulls the GHCR images for the recipe (unless

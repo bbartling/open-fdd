@@ -296,3 +296,34 @@ capabilities:
         - services/central/src/routes.rs
     limitations:
       - React does not yet consume dashboard/summary in Overview UI.
+
+  - id: CAP-PROTOCOL-CONNECTORS
+    user_story: Model-driven BACnet/Modbus and Haystack edge connector profiles
+    react_route: null
+    react_owner: null
+    central_apis:
+      - /api/connector/hello
+      - /api/connector/read
+      - /api/haystack/catalog
+      - /api/haystack/about
+      - /api/haystack/read
+      - /api/haystack/nav
+      - /api/haystack/his-read
+      - /api/haystack/telemetry
+    computation_owner: fieldbus.protocol_connectors
+    status: IMPLEMENTED
+    evidence:
+      unit:
+        - services/fieldbus/src/split.rs
+        - tests/qualification/test_protocol_connector_qualification.py
+      gates:
+        - scripts/gates/protocol_connector_split.sh
+        - scripts/qualification/protocol_connector_qualification.py
+      docs:
+        - docs/operations/protocol-connector-runtime.md
+        - docs/architecture/ADR_protocol_connector_process_split.md
+        - docs/operations/build-recipes.md
+    limitations:
+      - Live BACnet device and authenticated Haystack vendor qualification remain operational Soft-OPEN until redacted bench evidence is captured.
+      - The Haystack profile is manual collection only; no automatic scheduler is claimed.
+      - GHCR manifest digest, SBOM, provenance, signing, and licensed Nessus evidence are external release gates.

@@ -1304,3 +1304,28 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
   in the bounded spool; repeating the request resumes the identical envelope.
   The synthetic route test enforces the split management bearer and Central
   ingest bearer, returns pending first, then commits the same message/payload.
+
+### Phase 5D qualification closeout (2026-10-03, draft PR #1101)
+
+- Added `scripts/qualification/protocol_connector_qualification.py`, a
+  fail-closed machine-readable evaluator with fixed synthetic, image/recipe,
+  read-only BACnet, and authenticated Haystack stages. It recomputes status
+  from required checks and rejects missing, stale, partial, contradictory,
+  receipt-mismatched, historian-missing, prohibited-surface, `SKIP`, and
+  `BLOCKED` evidence. It bounds artifacts and redacts common credentials,
+  tokens, JWTs, and credentialed URLs without copying raw network bodies.
+- Added offline negative coverage under
+  `tests/qualification/test_protocol_connector_qualification.py` plus CI
+  selftests. The existing split image/process/Compose gate emits a redacted
+  `image_recipe.json` when `OPENFDD_SPLIT_EVIDENCE_DIR` is set; it records the
+  source SHA and local image IDs without claiming GHCR manifest publication.
+- Capability ledger, runtime guide, process-split ADR, qualification README,
+  and `MILESTONES.md` now state that Phase 5D is PARTIAL/Soft-OPEN, Haystack
+  collection is manual-only, and live BACnet/Haystack evidence must be
+  captured or explicitly BLOCKED. No live OT operation, credentials, image
+  publication, deployment, merge, or FQ claim was performed.
+- Local evidence on source `69350919`: evaluator selftest, eight qualification
+  unit tests, capability-ledger validation, shell syntax, and diff checks pass;
+  each live PASS now requires check-specific device/read-only/typed/restart/
+  replay evidence, while missing command, authentication, process-ownership,
+  and historian prerequisites remain explicitly fail-closed.
