@@ -74,12 +74,15 @@ def lint_compose(text: str) -> list[str]:
 
 def lint_caddyfile(text: str) -> list[str]:
     errs: list[str] = []
-    if "tls " not in text and "tls\n" not in text:
+    # provided/lab: tls /path; local_ca: tls internal
+    if not re.search(r"(?m)^\s*tls\s+", text):
         errs.append("Caddyfile must enable tls")
     if "reverse_proxy" not in text:
         errs.append("Caddyfile must reverse_proxy to web")
     if "Strict-Transport-Security" not in text:
         errs.append("Caddyfile should set Strict-Transport-Security")
+    if "OPENFDD_PUBLIC_HOST" not in text:
+        errs.append("Caddyfile must use OPENFDD_PUBLIC_HOST authority (no silent default host)")
     if not re.search(r"(?m)^http://", text):
         errs.append("Caddyfile must declare http:// redirect site (no plaintext login)")
     if "redir" not in text.lower():

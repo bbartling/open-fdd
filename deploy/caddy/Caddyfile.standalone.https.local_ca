@@ -1,0 +1,22 @@
+# Astra A03 mode: local_ca — Caddy managed local CA (`tls internal`).
+# Operator must deliberately distribute/trust the local CA; containers do not
+# install trust on remote browsers. Production readiness Soft-OPEN until then.
+# Set OPENFDD_PUBLIC_HOST to the canonical authority hostname.
+
+http://{$OPENFDD_PUBLIC_HOST} {
+	redir https://{host}{uri} permanent
+}
+
+{$OPENFDD_PUBLIC_HOST} {
+	encode gzip
+	tls internal
+
+	reverse_proxy web:8080
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+}
