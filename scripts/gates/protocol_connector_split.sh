@@ -96,8 +96,10 @@ EOF
 
 # Cloud recipes are intentionally IT-only. Check both source and resolved
 # Compose so interpolation cannot reintroduce an OT image/process.
+# Use grep -E (not rg) so GitHub-hosted runners without ripgrep stay honest.
+_ot_pattern='openfdd-(fieldbus|bacnet-modbus|haystack)|bacnet|modbus|haystack|47808|network_mode:[[:space:]]*host'
 for recipe in docker/compose.central.yml docker/compose.csv.yml; do
-  if rg -ni 'openfdd-(fieldbus|bacnet-modbus|haystack)|bacnet|modbus|haystack|47808|network_mode:[[:space:]]*host' "$recipe"; then
+  if grep -Eni "$_ot_pattern" "$recipe" >/dev/null; then
     echo "FAIL: cloud recipe contains an OT connector or BACnet socket: $recipe" >&2
     exit 1
   fi
@@ -111,7 +113,7 @@ for recipe in docker/compose.central.yml docker/compose.csv.yml; do
   OPENFDD_JWT_SECRET=split-test-jwt \
   OPENFDD_ADMIN_PASSWORD=split-test-admin \
     docker compose -f "$recipe" config >"$resolved"
-  if rg -ni 'openfdd-(fieldbus|bacnet-modbus|haystack)|bacnet|modbus|haystack|47808|network_mode:[[:space:]]*host' "$resolved"; then
+  if grep -Eni "$_ot_pattern" "$resolved" >/dev/null; then
     echo "FAIL: resolved cloud recipe contains an OT connector or BACnet socket: $recipe" >&2
     exit 1
   fi
@@ -330,26 +332,32 @@ for target in bacnet-modbus haystack compatibility; do
   echo "OK image-target: $target"
 done
 
-# Resolve the edge recipe both with and without the optional Haystack profile.
-# Use Compose's structured JSON output because the port mapping is represented
-# as host_ip/target/published/protocol fields rather than a compact string.
-default_compose="$SPLIT_TMP_DIR/edge.default.resolved.json"
-profile_compose="$SPLIT_TMP_DIR/edge.haystack.resolved.json"
+# Resolve the edge recipe with mutually exclusive connector profiles.
+# Astra A01: bacnet_modbus and haystack are opt-in profiles; management binds
+# loopback (127.0.0.1), not 0.0.0.0. Use Compose structured JSON for ports.
+bacnet_compose="$SPLIT_TMP_DIR/edge.bacnet_modbus.resolved.json"
+haystack_compose="$SPLIT_TMP_DIR/edge.haystack.resolved.json"
 env -u OPENFDD_HAYSTACK_BASE_URL \
   OPENFDD_SITE_ID=split-test \
   OPENFDD_EDGE_KIT_DIR="$SPLIT_TMP_DIR/kit" \
   OPENFDD_CONNECTOR_API_KEY=split-test-key \
-  docker compose -f docker/compose.edge.split.yml config --format json >"$default_compose"
+  docker compose --profile bacnet_modbus -f docker/compose.edge.split.yml \
+    config --format json >"$bacnet_compose"
 OPENFDD_SITE_ID=split-test \
 OPENFDD_EDGE_KIT_DIR="$SPLIT_TMP_DIR/kit" \
 OPENFDD_CONNECTOR_API_KEY=split-test-key \
 OPENFDD_HAYSTACK_BASE_URL=https://example.invalid \
-  docker compose --profile haystack -f docker/compose.edge.split.yml config --format json >"$profile_compose"
-jq -e '(.services | has("haystack") | not) and (.services["bacnet-modbus"].environment.OPENFDD_FIELDBUS_HTTP_HOST == "0.0.0.0")' \
-  "$default_compose" >/dev/null
+  docker compose --profile haystack -f docker/compose.edge.split.yml \
+    config --format json >"$haystack_compose"
 jq -e '
+  (.services | has("haystack") | not) and
+  (.services["bacnet-modbus"].profiles == ["bacnet_modbus"]) and
+  (.services["bacnet-modbus"].environment.OPENFDD_FIELDBUS_HTTP_HOST == "127.0.0.1")
+' "$bacnet_compose" >/dev/null
+jq -e '
+  (.services | has("bacnet-modbus") | not) and
   .services.haystack.profiles == ["haystack"] and
-  .services.haystack.environment.OPENFDD_FIELDBUS_HTTP_HOST == "0.0.0.0" and
+  .services.haystack.environment.OPENFDD_FIELDBUS_HTTP_HOST == "127.0.0.1" and
   .services.haystack.environment.OPENFDD_HAYSTACK_BASE_URL == "https://example.invalid" and
   (.services.haystack.ports | any(.[];
     .host_ip == "127.0.0.1" and
@@ -358,8 +366,8 @@ jq -e '
     .protocol == "tcp"
   )) and
   ((.services.haystack.healthcheck.test | join(" ")) | contains("8082/health"))
-' "$profile_compose" >/dev/null
-echo "OK compose-config: docker/compose.edge.split.yml (default + haystack profile)"
+' "$haystack_compose" >/dev/null
+echo "OK compose-config: docker/compose.edge.split.yml (bacnet_modbus + haystack profiles)"
 
 SPLIT_GATE_STATUS="PASS"
 echo "PASS: protocol connector split"
