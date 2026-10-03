@@ -6,6 +6,7 @@ pub mod package;
 pub mod parquet_bridge;
 pub mod parse;
 pub mod plan;
+pub mod semantic_meta;
 pub mod session;
 pub mod timestamp;
 mod upload;

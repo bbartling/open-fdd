@@ -800,6 +800,15 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         }
     }
 
+    // Haystack RDF C2 (#1000): optional versioned semantic metadata. Absent on
+    // old ZIPs — never fabricate. Invalid sidecar keeps any prior revision.
+    let semantic_meta_result = crate::csv_ingest::semantic_meta::import_from_package_map(
+        &building_root,
+        &building_id,
+        &in_building,
+        &mut warnings,
+    );
+
     let known_ids: std::collections::BTreeSet<&str> =
         plans.iter().map(|p| p.equipment_id.as_str()).collect();
     let mut parents_out: BTreeMap<String, String> = BTreeMap::new();
@@ -908,6 +917,7 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
                 "package_root": building_root.display().to_string(),
                 "session_config": session_config,
                 "utilities_written": utilities_written,
+                "semantic_meta": semantic_meta_result,
                 "warnings": warnings,
             })
         }
@@ -916,6 +926,7 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
             "error": format!("parquet ingest failed: {e:#}"),
             "equipment": equipment_report,
             "warnings": warnings,
+            "semantic_meta": semantic_meta_result,
             "package_root": building_root.display().to_string(),
         }),
     }

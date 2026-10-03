@@ -8,6 +8,8 @@ If Overview tables, RCx plots, Inspect traces, or health matrices are empty, the
 
 **UI export is not SoT:** Mapping → Export site data model (JSON) / Export TTL (Turtle) are **derived views** of the same package inventory. Agents and FDD still author and resolve roles via zip maps → `columns.csv` → DataFusion SQL. Do not replace package authoring with Brick/SPARQL or treat downloaded `.ttl` as the ingest contract. Detail: [`docs/modeling/data-model-ttl.md`](../modeling/data-model-ttl.md).
 
+**Optional C2 semantic metadata:** building-root `semantic_meta.json` (`openfdd_semantic_meta_v1`) may carry Haystack tags, units, refs, and provenance. Old ZIPs without it stay valid — never fabricate tags. Schema: [`package-schema.md`](../modeling/package-schema.md).
+
 Haystack names in sidecar `points` translate via `haystack_point_to_role` (`discharge-air-temp` → `sat`). Do not invent a second vocabulary. Alias table: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](../migration/vibe19/ROLE_MAPPING_PARITY.md). Ingest shapes: [`docs/RUST_DATAFUSION_ENGINE.md`](../RUST_DATAFUSION_ENGINE.md).
 
 Modeling docs for agents: [`docs/modeling/`](../modeling/) — especially

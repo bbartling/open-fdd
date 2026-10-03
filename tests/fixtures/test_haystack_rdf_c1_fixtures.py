@@ -37,6 +37,10 @@ def test_expected_answers_match_inventory() -> None:
 
 def test_unknown_unit_sidecar_documented() -> None:
     meta = json.loads((FIX / "synthetic_point_metadata_v1.json").read_text())
+    assert meta["schema"] in (
+        "openfdd_semantic_meta_v1",
+        "openfdd_point_metadata_v1_sketch",
+    )
     unknown = [p for p in meta["points"] if p.get("unit_status") == "unknown"]
     assert len(unknown) == 1
     exp = json.loads((FIX / "expected_c1_answers.json").read_text())
