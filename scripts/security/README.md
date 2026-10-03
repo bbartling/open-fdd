@@ -13,7 +13,9 @@ Tip evidence matrix: [`docs/operations/SECURITY_HARNESS_EVIDENCE_3.5.30.md`](../
 | --- | --- |
 | `openfdd_security/` | Library (stdlib-first) |
 | `openfdd_security_probe.py` | CLI |
-| `inventory/routes.json` | Route/method inventory + policy disposition |
+| `inventory/routes.json` | Route/method inventory + policy disposition (**policy SoT**) |
+| `inventory/profile_required_v1.json` | Profile→suite required check IDs (not duplicated in Python) |
+| `inventory/cross_cutting_checks.json` | Non-route check IDs allowed in profile required lists |
 | `config/example_security_fixtures.json` | Nonsecret example (env refs only) |
 | `schemas/` | Report + profile registry versions |
 | `fixtures/broken_http.py` | Deliberately broken local HTTP modes for detectors |

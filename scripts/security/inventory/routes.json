@@ -1,8 +1,9 @@
 {
   "schema_version": "openfdd_route_inventory_v2",
+  "policy_source": "scripts/security/inventory/",
   "source_commit_hint": "4a5c11e50b921df83f2ca3a59c52d4e99908157f",
   "source_file": "services/central/src/routes.rs",
-  "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission.",
+  "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission. Single policy source with profile_required_v1.json + cross_cutting_checks.json (Astra A05).",
   "route_count": 156,
   "disposition_counts": {
     "IMPLEMENTED": 30,
