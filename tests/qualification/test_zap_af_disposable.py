@@ -222,13 +222,33 @@ class ZapAfExecuteVerdictTest(unittest.TestCase):
                 "site": [
                     {
                         "@name": "http://fixture.invalid",
-                        "alerts": [{"riskcode": "2", "alert": "synthetic-medium"}],
+                        "alerts": [
+                            {
+                                "riskcode": "2",
+                                "alert": "synthetic-medium",
+                                "pluginid": "99999",
+                            }
+                        ],
                     }
                 ]
             }
         )
         self.assertNotEqual(rc, 0)
         self.assertEqual(verdict["status"], "FAIL")
+        self.assertIn("undispositioned", verdict.get("notes", ""))
+
+    def test_typed_medium_disposition_allows_pass(self):
+        covered, errs = af.disposition_medium_alerts(
+            medium_plugin_ids=["10055", "90003"],
+            medium_alert_names=[
+                "CSP: style-src unsafe-inline",
+                "Sub Resource Integrity Attribute Missing",
+            ],
+            dispositions=af.load_medium_dispositions(),
+            today="2026-10-03",
+        )
+        self.assertEqual(errs, [])
+        self.assertEqual(sorted(covered), ["10055", "90003"])
 
     def test_stale_or_wrong_target_report_is_rejected(self):
         cases = (

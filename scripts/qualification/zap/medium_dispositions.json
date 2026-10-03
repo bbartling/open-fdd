@@ -1,0 +1,27 @@
+{
+  "schema_version": "openfdd.zap_medium_disposition.v1",
+  "dispositions": [
+    {
+      "plugin_id": "10055",
+      "alert_name": "CSP: style-src unsafe-inline",
+      "component": "openfdd-web",
+      "host_scope": "disposable_web_central",
+      "owner": "cursor-astra-c-zap",
+      "rationale": "Product nginx CSP intentionally allows style-src 'unsafe-inline' for React/Vite inline styles. Not a blanket Medium accept — exact plugin 10055 only.",
+      "expiry": "2026-12-31",
+      "retest": "Replace unsafe-inline with style hashes/nonces after SPA stylesheet extraction",
+      "candidate_binding": "ghcr_web_disposable_af"
+    },
+    {
+      "plugin_id": "90003",
+      "alert_name": "Sub Resource Integrity Attribute Missing",
+      "component": "openfdd-web",
+      "host_scope": "disposable_web_central",
+      "owner": "cursor-astra-c-zap",
+      "rationale": "Google Fonts CSS loaded without SRI (dynamic stylesheet). Self-host Soft-OPEN; exact plugin 90003 only.",
+      "expiry": "2026-12-31",
+      "retest": "Self-host Source Sans 3 with integrity hashes on link tags",
+      "candidate_binding": "ghcr_web_disposable_af"
+    }
+  ]
+}

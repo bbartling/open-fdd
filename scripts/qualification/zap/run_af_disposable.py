@@ -163,6 +163,7 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
     by_risk = {"High": 0, "Medium": 0, "Low": 0, "Informational": 0, "other": 0}
     high_names: list[str] = []
     medium_names: list[str] = []
+    medium_plugins: list[str] = []
     url_blob_parts: list[str] = []
     for a in alerts:
         risk = str(a.get("riskdesc") or a.get("risk") or "").split(" ", 1)[0]
@@ -177,6 +178,9 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
             high_names.append(label)
         if risk == "Medium":
             medium_names.append(label)
+            plugin = str(a.get("pluginid") or a.get("alertRef") or "").strip()
+            if plugin:
+                medium_plugins.append(plugin)
         for key in ("url", "uri", "instance", "param"):
             val = a.get(key)
             if isinstance(val, str):
@@ -205,8 +209,81 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
         "by_risk": by_risk,
         "high_alert_names": sorted(set(high_names)),
         "medium_alert_names": sorted(set(medium_names)),
+        "medium_plugin_ids": sorted(set(medium_plugins)),
         "auth_me_hit": auth_me_hit,
     }
+
+
+DISPOSITION_PATH = Path(__file__).resolve().parent / "medium_dispositions.json"
+_REQUIRED_DISP_FIELDS = (
+    "plugin_id",
+    "alert_name",
+    "component",
+    "owner",
+    "rationale",
+    "expiry",
+    "retest",
+    "candidate_binding",
+)
+
+
+def load_medium_dispositions(path: Path | None = None) -> list[dict[str, Any]]:
+    """Load typed Medium dispositions (exact plugin scope; no blanket accept)."""
+    p = path or DISPOSITION_PATH
+    if not p.is_file():
+        return []
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    items = raw.get("dispositions") if isinstance(raw, dict) else raw
+    if not isinstance(items, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in items:
+        if isinstance(item, dict):
+            out.append(item)
+    return out
+
+
+def disposition_medium_alerts(
+    *,
+    medium_plugin_ids: list[str],
+    medium_alert_names: list[str],
+    dispositions: list[dict[str, Any]],
+    today: str | None = None,
+) -> tuple[list[str], list[str]]:
+    """Return (covered_plugin_ids, errors).
+
+    Every Medium plugin id must match exactly one disposition with required
+    fields and a non-expired expiry (YYYY-MM-DD). Extra dispositions are OK.
+    """
+    from datetime import date
+
+    day = today or date.today().isoformat()
+    by_plugin: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
+    for d in dispositions:
+        missing = [k for k in _REQUIRED_DISP_FIELDS if not str(d.get(k) or "").strip()]
+        if missing:
+            errors.append(f"disposition missing fields {missing}")
+            continue
+        pid = str(d["plugin_id"]).strip()
+        exp = str(d["expiry"]).strip()
+        if exp < day:
+            errors.append(f"disposition plugin {pid} expired {exp}")
+            continue
+        by_plugin[pid] = d
+    covered: list[str] = []
+    for pid in medium_plugin_ids:
+        if pid in by_plugin:
+            covered.append(pid)
+        else:
+            errors.append(f"undispositioned Medium plugin_id={pid}")
+    # Name-only Mediums (no plugin id) cannot be dispositioned silently.
+    if not medium_plugin_ids and medium_alert_names:
+        errors.append(
+            "Medium alerts lack plugin_id — cannot bind typed dispositions: "
+            + ", ".join(medium_alert_names[:6])
+        )
+    return covered, errors
 
 
 def verify_auth_me_response(
@@ -1081,6 +1158,12 @@ def run_execute(verdict_path: Path) -> int:
     archive = verdict_path.parent / "zap_af_report.json"
     archive.write_text(redact(report_path.read_text(encoding="utf-8")), encoding="utf-8")
 
+    medium_observed = med
+    medium_covered: list[str] = []
+    status = "PASS"
+    notes = ""
+    exit_code = 0
+
     if rc != 0:
         status = "FAIL"
         notes = f"FAIL: ZAP scanner exit rc={rc} (report present is not a PASS)"
@@ -1106,14 +1189,28 @@ def run_execute(verdict_path: Path) -> int:
         notes = f"FAIL: High={high} ({', '.join(summary['high_alert_names'][:8])})"
         exit_code = 1
     elif med > 0:
-        status = "FAIL"
-        notes = f"FAIL: Medium={med} without dispositions"
-        exit_code = 1
-    elif not auth_me_preflight.get("ok"):
+        dispositions = load_medium_dispositions()
+        medium_covered, disp_errors = disposition_medium_alerts(
+            medium_plugin_ids=list(summary.get("medium_plugin_ids") or []),
+            medium_alert_names=list(summary.get("medium_alert_names") or []),
+            dispositions=dispositions,
+        )
+        if disp_errors:
+            status = "FAIL"
+            notes = (
+                f"FAIL: Medium={med} without complete typed dispositions "
+                f"({'; '.join(disp_errors[:6])})"
+            )
+            exit_code = 1
+        else:
+            # Exact plugin dispositions applied — not a blanket Medium accept.
+            med = 0
+
+    if exit_code == 0 and not auth_me_preflight.get("ok"):
         status = "FAIL"
         notes = "FAIL: authenticated /api/auth/me preflight schema failed"
         exit_code = 1
-    elif active and not bool(summary.get("auth_me_hit")):
+    elif exit_code == 0 and active and not bool(summary.get("auth_me_hit")):
         # Preflight proves credentials work; authenticated AF still requires
         # scanner-origin /api/auth/me traffic in the ZAP report (A06).
         status = "FAIL"
@@ -1122,21 +1219,28 @@ def run_execute(verdict_path: Path) -> int:
             "(preflight alone is not authenticated coverage)"
         )
         exit_code = 1
-    else:
+    elif exit_code == 0:
         status = "PASS"
-        notes = (
-            f"PASS: disposable AF High=0 Medium=0 site_count={sites} "
-            f"auth_me_preflight=true auth_me_in_report={bool(summary.get('auth_me_hit'))} "
-            f"active_scan={active} zap_rc={rc}"
+        disp_note = (
+            f" medium_dispositioned={medium_covered}"
+            if medium_covered
+            else ""
         )
-        exit_code = 0
+        notes = (
+            f"PASS: disposable AF High=0 Medium_undispositioned=0 "
+            f"Medium_observed={medium_observed} site_count={sites} "
+            f"auth_me_preflight=true auth_me_in_report={bool(summary.get('auth_me_hit'))} "
+            f"active_scan={active} zap_rc={rc}{disp_note}"
+        )
 
     v = build_verdict(
         status=status,
         mode="execute",
         plan_hygiene_ok=True,
         high_alerts=high,
-        medium_alerts=med,
+        medium_alerts=medium_observed,
+        medium_undispositioned=med,
+        medium_dispositions_applied=medium_covered,
         site_count=sites,
         alert_count=summary["alert_count"],
         high_alert_names=summary["high_alert_names"],
