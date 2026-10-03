@@ -28,13 +28,30 @@ docs/openfdd-agent-spec   # docs-only OK
 4. **Bound the PR** — in-scope / out-of-scope / acceptance / tests / docs.
 5. **Branch** — `git switch -c milestone-a/<work>`.
 6. **Test-first migration** — inventory → characterize → implement shared → parity → cutover → delete twin → regression → docs.
-7. **Validate locally** — smallest tests, then affected suite; clean venv wheel install for packaging.
+7. **Validate locally (hard gate before push)** — catch easy failures **before** GitHub Actions:
+   - Rust product change: `cargo fmt --check`, `cargo clippy -p <crate> -- -D warnings`, `cargo test -p <crate>` (plus `--test preauth_disclosure` when MT/auth touched).
+   - SPA change: `cd frontend/web && npm test -- --run` (and `npm run typecheck` when types changed).
+   - Security/qualification Python: `python3 -B -m pytest tests/security -q` and/or `tests/qualification` as touched.
+   - Docs-only: link/path sanity; no need for full cargo.
+   - Do **not** open or undraft a PR until local targeted tests are green. Actions are the second line, not the first.
 8. **Commit intentionally** — focused messages (`feat`, `fix`, `test`, `docs`, `refactor`).
-9. **Draft PR** — `gh pr create --draft` with body template below.
-10. **Watch Actions** — `gh pr checks --watch`; classify failures; fix code-owned issues.
+9. **Draft PR** — `gh pr create --draft` with body template below. Include the **local verify commands + results** in the Tests section.
+10. **Watch Actions** — `gh pr checks --watch`; classify failures; fix code-owned issues. Prefer cheapest watch model; escalate design failures to a stronger model.
 11. **CodeRabbit** — classify comments; fix actionable; reply; do not violate architecture.
 12. **Ready + merge** — `gh pr ready`; prefer squash unless repo policy differs; delete branch.
 13. **Refresh dependents** — bump playground pins; separate playground PR; GHCR refresh per [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md).
+
+---
+
+## Agent takeover (single IDE)
+
+When another agent (Codex, cloud worker, etc.) is **out of API budget**, stalled, or the operator asks for one IDE to own the train:
+
+1. **Take over** the open branch/PR — do **not** leave it excluded forever and do **not** open a competing parallel PR on the same files.
+2. Prefer the existing worktree (e.g. `.worktrees/<name>/`) or `git fetch` + checkout of the PR head.
+3. Finish remaining commits with the same PR purpose; undraft when local verify + Actions are green.
+4. Record the takeover in `SESSION_LOG.md` and the PR body (“Cursor took over from …”).
+5. Soft-OPEN external blockers (e.g. Nessus license) stay Soft-OPEN — still merge tooling that is complete.
 
 ---
 
@@ -61,6 +78,12 @@ Full gate matrix: [`scripts/nightly-ot-bench/README.md`](../scripts/nightly-ot-b
 ## Changes
 
 ## Tests
+
+Local (must be green before push/undraft):
+```
+<exact commands run>
+```
+Result: PASS / FAIL (fix before open)
 
 ## Cookbook impact
 

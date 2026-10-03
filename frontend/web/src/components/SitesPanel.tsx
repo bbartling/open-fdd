@@ -81,12 +81,24 @@ export function SitesPanel() {
       }
       setMqttSites(mqtt);
       setOverrides(loadIngestOverrides());
+      // Auto-select the only visible site so first paint is not an empty ?site=.
+      if (!activeSite && ids.length === 1) {
+        setQuery({ siteId: ids[0] }, true);
+      }
     } catch (err) {
-      setError(formatErr(err));
+      // Prefer a calm empty state over raw MT JSON for scoped users.
+      const msg = formatErr(err);
+      if (/building_id required/i.test(msg)) {
+        setSites([]);
+        setError(null);
+        setNotice("No sites loaded yet. Upload a CSV/ZIP package or ask an admin to bind a building.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeSite, setQuery]);
 
   useEffect(() => {
     void refresh();

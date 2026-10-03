@@ -1071,6 +1071,57 @@ fn deny_if_building_out_of_scope(
     }
 }
 
+/// MT: deny edge detail when known site is outside tenant allowlist.
+fn deny_edge_out_of_scope(
+    state: &AppState,
+    headers: &HeaderMap,
+    edge_id: &str,
+) -> Option<(StatusCode, Json<Value>)> {
+    if !crate::tenant::multi_tenant_enabled() {
+        return None;
+    }
+    let ctx = resolve_tenant_context(state, headers);
+    if ctx.hub_admin {
+        return None;
+    }
+    let Some(entry) = state.edges.get(edge_id) else {
+        return None;
+    };
+    let site = entry.lock().unwrap().known_site_id();
+    match site.as_deref() {
+        Some(s) if ctx.allow_building(s) => None,
+        Some(s) => {
+            open_fdd_edge_prototype::auth::audit::log_event(
+                "tenant_edge_denied",
+                json!({
+                    "edge_id": edge_id,
+                    "site_id": s,
+                    "active_tenant_id": ctx.tenant_id,
+                }),
+            );
+            Some((
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "ok": false,
+                    "error": "edge not in tenant scope",
+                    "edge_id": edge_id,
+                })),
+            ))
+        }
+        None => {
+            // Unknown site under MT: fail closed for non-hub-admin.
+            Some((
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "ok": false,
+                    "error": "edge not in tenant scope",
+                    "edge_id": edge_id,
+                })),
+            ))
+        }
+    }
+}
+
 fn resolve_request_tenant(
     state: &AppState,
     headers: &HeaderMap,
@@ -1967,26 +2018,30 @@ pub async fn list_edges(
 )]
 pub async fn get_edge(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Path(edge_id): Path<String>,
-) -> Json<EdgeDetailResponse> {
+) -> Result<Json<EdgeDetailResponse>, (StatusCode, Json<Value>)> {
+    if let Some(deny) = deny_edge_out_of_scope(&state, &headers, &edge_id) {
+        return Err(deny);
+    }
     match state.edges.get(&edge_id) {
         Some(e) => {
             let g = e.lock().unwrap();
-            Json(EdgeDetailResponse {
+            Ok(Json(EdgeDetailResponse {
                 ok: true,
                 edge_id,
                 last_telemetry: g.last_telemetry.clone(),
                 sequences: g.sequences.clone(),
                 error: None,
-            })
+            }))
         }
-        None => Json(EdgeDetailResponse {
+        None => Ok(Json(EdgeDetailResponse {
             ok: false,
             edge_id,
             last_telemetry: None,
             sequences: Default::default(),
             error: Some("edge not found".into()),
-        }),
+        })),
     }
 }
 
@@ -2000,8 +2055,12 @@ pub async fn get_edge(
 )]
 pub async fn get_edge_discovery(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Path(edge_id): Path<String>,
-) -> Json<EdgePayloadResponse> {
+) -> Result<Json<EdgePayloadResponse>, (StatusCode, Json<Value>)> {
+    if let Some(deny) = deny_edge_out_of_scope(&state, &headers, &edge_id) {
+        return Err(deny);
+    }
     match state.edges.get(&edge_id) {
         Some(e) => {
             let g = e.lock().unwrap();
@@ -2010,19 +2069,19 @@ pub async fn get_edge_discovery(
             } else {
                 Some(json!(g.last_discovery))
             };
-            Json(EdgePayloadResponse {
+            Ok(Json(EdgePayloadResponse {
                 ok: true,
                 edge_id,
                 payload,
                 error: None,
-            })
+            }))
         }
-        None => Json(EdgePayloadResponse {
+        None => Ok(Json(EdgePayloadResponse {
             ok: false,
             edge_id,
             payload: None,
             error: Some("edge not found".into()),
-        }),
+        })),
     }
 }
 
@@ -2036,8 +2095,12 @@ pub async fn get_edge_discovery(
 )]
 pub async fn get_edge_metadata(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Path(edge_id): Path<String>,
-) -> Json<EdgePayloadResponse> {
+) -> Result<Json<EdgePayloadResponse>, (StatusCode, Json<Value>)> {
+    if let Some(deny) = deny_edge_out_of_scope(&state, &headers, &edge_id) {
+        return Err(deny);
+    }
     match state.edges.get(&edge_id) {
         Some(e) => {
             let g = e.lock().unwrap();
@@ -2046,19 +2109,19 @@ pub async fn get_edge_metadata(
             } else {
                 Some(json!(g.last_metadata))
             };
-            Json(EdgePayloadResponse {
+            Ok(Json(EdgePayloadResponse {
                 ok: true,
                 edge_id,
                 payload,
                 error: None,
-            })
+            }))
         }
-        None => Json(EdgePayloadResponse {
+        None => Ok(Json(EdgePayloadResponse {
             ok: false,
             edge_id,
             payload: None,
             error: Some("edge not found".into()),
-        }),
+        })),
     }
 }
 
@@ -3794,14 +3857,24 @@ pub struct PackageBuildingsQuery {
 }
 
 /// List ingested package buildings under workspace csv_buildings.
-/// Multi-tenant: optional `building_id` must be in scope (foreign → 403).
+/// Multi-tenant: listing without `building_id` is allowed and filtered to scope.
+/// Optional `building_id` must be in scope (foreign → 403); response still filtered.
 pub async fn csv_import_package_buildings(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Query(q): Query<PackageBuildingsQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
-        return Err(deny);
+    // List endpoint: only deny when a concrete foreign building_id is supplied.
+    // Missing building_id must not 403 — Sites picker has no pre-selected site.
+    let bid = q
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    if let Some(b) = bid {
+        if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(b)) {
+            return Err(deny);
+        }
     }
     let result = tokio::task::spawn_blocking(
         open_fdd_edge_prototype::csv_ingest::package::list_package_buildings_handler,
@@ -3814,14 +3887,7 @@ pub async fn csv_import_package_buildings(
     let ctx = resolve_tenant_context(&state, &headers);
     let mut filtered = result;
     if let Some(arr) = filtered.get_mut("buildings").and_then(|v| v.as_array_mut()) {
-        arr.retain(|b| {
-            let id = b
-                .get("building_id")
-                .or_else(|| b.get("id"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            id.is_empty() || ctx.allow_building(id)
-        });
+        ctx.retain_allowed_package_buildings(arr);
     }
     Ok(Json(filtered))
 }

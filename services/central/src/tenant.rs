@@ -107,6 +107,35 @@ impl TenantContext {
         self.building_ids.iter().any(|b| b == building_id)
     }
 
+    /// Extract a building id from a package/buildings list element.
+    ///
+    /// The list handler returns plain JSON strings; older shapes may use objects.
+    /// Unparseable / empty ids return `None` so callers can **fail closed**.
+    pub fn package_building_list_id(value: &serde_json::Value) -> Option<&str> {
+        if let Some(s) = value.as_str() {
+            let t = s.trim();
+            return (!t.is_empty()).then_some(t);
+        }
+        value
+            .get("building_id")
+            .or_else(|| value.get("id"))
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    }
+
+    /// Retain only allowlisted package building entries (string or object).
+    pub fn retain_allowed_package_buildings(&self, buildings: &mut Vec<serde_json::Value>) {
+        if !self.multi_tenant || self.hub_admin {
+            return;
+        }
+        buildings.retain(|b| {
+            Self::package_building_list_id(b)
+                .map(|id| self.allow_building(id))
+                .unwrap_or(false)
+        });
+    }
+
     /// Resolve Parquet historian root for this context.
     ///
     /// Mode OFF: `base` unchanged (today's single-hub layout).
@@ -496,6 +525,55 @@ mod tests {
         assert!(admin.allow_building("ACME"));
         assert!(admin.allow_building("BUILDING_100"));
         assert!(admin.allow_building("LAKESIDE_ES"));
+        std::env::remove_var("OPENFDD_MULTI_TENANT");
+    }
+
+    #[test]
+    fn package_building_list_id_string_and_object() {
+        use serde_json::json;
+        assert_eq!(
+            TenantContext::package_building_list_id(&json!("BUILDING_50")),
+            Some("BUILDING_50")
+        );
+        assert_eq!(
+            TenantContext::package_building_list_id(&json!({"building_id": "ACME"})),
+            Some("ACME")
+        );
+        assert_eq!(
+            TenantContext::package_building_list_id(&json!({"id": "X"})),
+            Some("X")
+        );
+        assert_eq!(TenantContext::package_building_list_id(&json!("")), None);
+        assert_eq!(TenantContext::package_building_list_id(&json!({})), None);
+        assert_eq!(TenantContext::package_building_list_id(&json!(1)), None);
+    }
+
+    #[test]
+    fn retain_allowed_package_buildings_drops_foreign_strings() {
+        let _g = lock_env();
+        std::env::set_var("OPENFDD_MULTI_TENANT", "1");
+        let plane = ControlPlane {
+            tenants: vec![TenantRecord {
+                id: "joels_space".into(),
+                name: "Joel".into(),
+                building_ids: vec!["BUILDING_50".into()],
+            }],
+        };
+        let user = AuthUser {
+            sub: "joel_demo".into(),
+            role: Role::Operator,
+            tenant_ids: vec!["joels_space".into()],
+        };
+        let ctx = TenantContext::resolve(&user, &plane).expect("joel");
+        let mut buildings = vec![
+            serde_json::json!("ACME"),
+            serde_json::json!("BUILDING_50"),
+            serde_json::json!("BUILDING_100"),
+            serde_json::json!({"building_id": "LAKESIDE_ES"}),
+            serde_json::json!(""),
+        ];
+        ctx.retain_allowed_package_buildings(&mut buildings);
+        assert_eq!(buildings, vec![serde_json::json!("BUILDING_50")]);
         std::env::remove_var("OPENFDD_MULTI_TENANT");
     }
 

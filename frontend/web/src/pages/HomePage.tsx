@@ -68,18 +68,25 @@ export function HomePage() {
             buildings: [] as string[],
           }),
         ),
-        listFddEquipment(buildingId || undefined).then(
-          (eq) => ({ ok: true as const, equipment: eq }),
-          (err) => ({
-            ok: false as const,
-            error: err instanceof Error ? err.message : String(err),
-            equipment: [] as FddEquipmentItem[],
-          }),
-        ),
+        // Skip equipment until a site is selected — MT requires building_id.
+        buildingId
+          ? listFddEquipment(buildingId).then(
+              (eq) => ({ ok: true as const, equipment: eq }),
+              (err) => ({
+                ok: false as const,
+                error: err instanceof Error ? err.message : String(err),
+                equipment: [] as FddEquipmentItem[],
+              }),
+            )
+          : Promise.resolve({
+              ok: true as const,
+              equipment: [] as FddEquipmentItem[],
+            }),
       ]);
       const inventoryErrors: string[] = [];
       if (!blds.ok) inventoryErrors.push(`buildings: ${blds.error}`);
-      if (!eq.ok) inventoryErrors.push(`equipment: ${eq.error}`);
+      // Only surface equipment errors when a site was requested.
+      if (buildingId && !eq.ok) inventoryErrors.push(`equipment: ${eq.error}`);
       if (inventoryErrors.length) {
         setError(inventoryErrors.join("; "));
       }

@@ -7,6 +7,31 @@ vi.mock("../api/client", () => ({
   apiFetch: vi.fn(),
 }));
 
+const { emptyHealth } = vi.hoisted(() => {
+  const emptyHealth = async () => ({
+    schema_version: "1",
+    query_version: "health-test",
+    generated_at: "",
+    engine: "datafusion",
+    warnings: [],
+    rows: [],
+    equipment: [],
+    points: [],
+    skipped: [],
+  });
+  return { emptyHealth };
+});
+
+vi.mock("../api/overviewHealthApi", () => ({
+  postAhuTemperatureHealth: vi.fn(emptyHealth),
+  postAhuPressureHealth: vi.fn(emptyHealth),
+  postAhuEconomizerHealth: vi.fn(emptyHealth),
+  postCoolingTowerHealth: vi.fn(emptyHealth),
+  postPidHunting: vi.fn(emptyHealth),
+  postSensorFaults: vi.fn(emptyHealth),
+  postZoneOtherHealth: vi.fn(emptyHealth),
+}));
+
 vi.mock("../api/mappingApi", () => ({
   listPackageBuildings: vi.fn(async () => ["B1"]),
   getPackageMapping: vi.fn(async () => ({
@@ -111,6 +136,24 @@ vi.mock("../api/analyticsApi", () => ({
     points: [],
     skipped: [],
   })),
+  postVavHealth: vi.fn(async () => ({
+    schema_version: "1",
+    query_version: "vav-health-v1",
+    generated_at: "",
+    engine: "datafusion",
+    warnings: [],
+    rows: [],
+    equipment: [],
+    points: [],
+    skipped: [],
+  })),
+  postAhuHealth: vi.fn(emptyHealth),
+  postChillerHealth: vi.fn(emptyHealth),
+  postBoilerHealth: vi.fn(emptyHealth),
+  postHpHealth: vi.fn(emptyHealth),
+  postSqlAnomaly: vi.fn(emptyHealth),
+  postPlantHealth: vi.fn(emptyHealth),
+  postAnalytics: vi.fn(emptyHealth),
 }));
 
 vi.mock("../api/csvDownload", () => ({

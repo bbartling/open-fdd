@@ -27,7 +27,7 @@ Plans: [`.cursor/plans/wave_o_known_bugs_patch_ce235993.plan.md`](../../../.curs
 | `/api/health`, `/api/auth/status`, `/api/auth/login` | OK (lean) | OK | OK |
 | `/api/tenants`, select, budgets | **401** | own membership only | all |
 | capabilities / stack / snapshot / summary | **401** | full | full |
-| edges, commands, CSV, FDD, analytics, jobs, export, MQTT kits, agent tools | **401** | **403/404** on foreign ids | cross-tenant OK |
+| edges, commands, CSV, FDD, analytics, jobs, export, MQTT kits, agent tools | **401** | **403/404** on foreign ids; **package/buildings list** without `building_id` → filtered allowlist (not 403); `GET /api/edges/{id}` site-scoped | cross-tenant OK |
 | `/api/admin/*` | **401** | **403** | OK |
 | Agent token | n/a | least-privilege, short TTL, tenant-scoped; no admin mint for self | mint via admin path only |
 
@@ -66,10 +66,17 @@ rotate/revoke compromised edge creds. Keep central, MCP, mqtt **private** on
 Railway; expose **web only**. Broker-side proof = Kali staging pentest (Mint does
 not ActiveScan OT).
 
-## Security tooling assurance (3.5.29+)
+## Security tooling assurance (3.5.29+) — who does what
+
+| Role | Owns |
+| --- | --- |
+| **Cursor / Codex / Mint** | Implement policy docs, profile schemas, Nessus/ZAP importers, offline fixtures, `pytest tests/security`, dry-run paths. Local compile/test before PR. Take over abandoned security PRs (e.g. #1102) when asked. |
+| **Grok bot** | **Primary consumer** of the security qualification policy + pen-test Python scripts after tip/GHCR. Runs live gates **25** / **25b** / **26**, authorized `OPENFDD_SECURITY_EXECUTE=1` windows, optional licensed Nessus, and closes Soft-OPEN evidence comments. |
+| **Kali** | Staging ActiveScan / OT pentest when scheduled — Mint does not ActiveScan OT. |
 
 Brief: `.cursor/agents/openfdd-security-python-harness.md`;
 contract: `.cursor/plans/security_stress_integration_audit.md`.
+Policy tip: `docs/operations/SECURITY_QUALIFICATION_POLICY.md` (PR #1102 family).
 CLI: `scripts/security/openfdd_security_probe.py`. Stress gates **25** / **25b** /
 **26** (`OPENFDD_SECURITY_EXECUTE=1` for live; gate **26** uses
 `OPENFDD_MQTT_ACL_EXECUTE=1` and candidate runtime broker evidence in the Wave U
@@ -88,6 +95,7 @@ that profile: `.cursor/plans/wave_u_independent_acceptance_audit.plan.md`.
 - Validate the actual `/api/auth/me` `tenant_ids` schema and positive object
   controls. The Wave U acceptance audit and root `MILESTONES.md` govern reopened
   qualification scope; component/source-string checks do not close runtime claims.
+- **Never claim “Grok pen-test PASS” from Cursor unit tests alone.**
 
 ### Deployment profile contract (post-5D)
 
