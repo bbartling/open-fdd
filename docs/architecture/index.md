@@ -28,6 +28,7 @@ Product FDD and Overview analytics are **DataFusion SQL only**. PyPI `open-fdd` 
 | [Data flow](data-flow.html) | Drivers → model → historian → FDD → UI |
 | [Storage & DataFusion](storage-and-datafusion.html) | Parquet historian and SQL rules |
 | [Historian architecture](historian.html) | Hive layout, compaction, scale honesty |
+| [DataFrame API migration inventory](dataframe-api-migration-inventory.html) | SQL-string density for #1078 runtime migration |
 | [DataFusion-first](datafusion-first.html) | Computation boundary |
 | [Job workspaces](job-workspaces.html) | Durable Jobs under `workspace/jobs/` |
 | [Analytics boundary](analytics-boundary.html) | Typed DF analytics vs React |
