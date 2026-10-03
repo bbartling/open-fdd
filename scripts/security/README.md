@@ -97,6 +97,20 @@ password arguments and never secrets in fixture JSON.
 - **Z** — security.txt, CSP, CORS, redirect credential policy, body caps
 - **mqtt_acl** — generated tenant ACL fixture + observer (not MQTT continuity); live broker when `OPENFDD_MQTT_ACL_EXECUTE=1`
 
+## Host runtime probe (Astra A10)
+
+Readiness-only (not Nessus). Selftest covers deployment-contract profiles
+(`cloud_mqtt_hub`, `ot_local_bacnet_modbus`, `ot_local_haystack`, plus legacy
+`standalone_https` / `field_only_ot`). Probe mode inspects listen bind
+addresses (loopback vs wildcard), effective SSH `PermitRootLogin` across
+`Include` files, and Docker publish-path hints.
+
+```bash
+python3 scripts/security/host_runtime_probe.py --selftest
+OPENFDD_HOST_RUNTIME_PROBE=1 python3 scripts/security/host_runtime_probe.py \
+  --profile ot_local_haystack --out reports/security/host_runtime_probe.json
+```
+
 ## Standalone HTTPS bootstrap (U3)
 
 ```bash
