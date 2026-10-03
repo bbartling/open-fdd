@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Scan final GHCR image digests with Trivy (Wave U U6 / UA-05). Not a Nessus substitute.
-# Prefer digest refs when RepoDigests are known; tag scans must still record digests.
+# Scan final GHCR image digests with Trivy (Wave U U6 / UA-05 / Astra A09).
+# Not a Nessus substitute. Prefer digest refs when RepoDigests are known;
+# tag scans must still record digests. Profile-bound digest/SBOM/provenance
+# evaluation is scripts/security/profile_image_scan.py (fail-closed; does not
+# infer signing from workflow YAML presence).
 set -euo pipefail
 TAG="${1:?usage: $0 sha-<7> [central|web|mqtt|fieldbus|bacnet-modbus|haystack|mcp|caddy|all]}"
 SCOPE="${2:-all}"

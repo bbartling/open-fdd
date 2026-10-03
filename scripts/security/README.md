@@ -58,6 +58,21 @@ MCP, and Caddy. Each output directory records the exact reference in a `.ref`
 sidecar; digest-bound candidate evidence still comes from the deployment
 profile contract.
 
+**Astra A09 (profile-bound digests / SBOM / provenance):** evaluate a redacted
+evidence JSON against a deployment profile without pulling images:
+
+```bash
+python3 scripts/security/profile_image_scan.py --selftest
+python3 scripts/security/profile_image_scan.py --list-profiles
+python3 scripts/security/profile_image_scan.py \
+  --profile cloud_mqtt_hub \
+  --evidence /secure/evidence/profile_image_scan.json
+```
+
+Missing Critical/High, tag-only refs, or “verified because workflow YAML exists”
+fail closed. Honest `sbom`/`provenance` ABSENT/NOT_RUN yields **BLOCKED**
+(Soft-OPEN), never a fake PASS or signing claim.
+
 ## CLI
 
 ```bash
