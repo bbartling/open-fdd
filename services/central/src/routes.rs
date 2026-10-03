@@ -869,14 +869,79 @@ pub async fn admin_set_user_disabled(
     Ok(Json(json!({"ok": true, "users": store.public_list()})))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct AdminDeleteUserQuery {
+    /// When true, return cascade plan only (no deletes).
+    #[serde(default)]
+    pub dry_run: bool,
+    /// Required for actual delete + cascade purge (`confirm=true`).
+    #[serde(default)]
+    pub confirm: bool,
+}
+
 pub async fn admin_delete_user(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(username): Path<String>,
+    Query(q): Query<AdminDeleteUserQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let admin = require_hub_admin(&state, &headers)?;
     let ws = workspace_path();
     let mut store = crate::user_store::UserStore::load_or_empty(&ws);
+    let plane = crate::tenant::ControlPlane::load_or_legacy(&ws);
+    let plan = crate::admin_cp::plan_user_cascade_delete(&store, &plane, &username).map_err(|e| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    if q.dry_run || !q.confirm {
+        return Ok(Json(json!({
+            "ok": true,
+            "dry_run": true,
+            "requires_confirm": !q.confirm,
+            "plan": plan,
+            "users": store.public_list(),
+        })));
+    }
+
+    let mut purged = Vec::new();
+    let mut purge_errors = Vec::new();
+    for bid in &plan.buildings_to_purge {
+        let id_for_task = bid.clone();
+        let outcome = tokio::task::spawn_blocking(move || {
+            open_fdd_edge_prototype::csv_ingest::delete_dataset(&id_for_task)
+        })
+        .await
+        .unwrap_or_else(|e| Err(format!("dataset delete task failed: {e}")));
+        match outcome {
+            Ok(()) => {
+                let (n, errs) = crate::jobs::delete_jobs_for_site(bid);
+                if !errs.is_empty() {
+                    purge_errors.push(format!(
+                        "{bid}: jobs partial ({n} deleted): {}",
+                        errs.join("; ")
+                    ));
+                } else {
+                    purged.push(json!({ "building_id": bid, "jobs_deleted": n }));
+                }
+            }
+            Err(e) => purge_errors.push(format!("{bid}: {e}")),
+        }
+    }
+    if !purge_errors.is_empty() {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "ok": false,
+                "error": "cascade purge failed; user not removed",
+                "plan": plan,
+                "purged": purged,
+                "purge_errors": purge_errors,
+            })),
+        ));
+    }
+
     store.remove(&username).map_err(|e| {
         (
             StatusCode::NOT_FOUND,
@@ -894,9 +959,16 @@ pub async fn admin_delete_user(
         event = "admin_user_delete",
         actor = %admin.sub,
         username = %username,
-        "control-plane user deleted"
+        purged = purged.len(),
+        skipped_shared = plan.buildings_shared_skipped.len(),
+        "control-plane user deleted with cascade"
     );
-    Ok(Json(json!({"ok": true, "users": store.public_list()})))
+    Ok(Json(json!({
+        "ok": true,
+        "plan": plan,
+        "purged": purged,
+        "users": store.public_list(),
+    })))
 }
 
 pub async fn admin_list_tenants_cp(
