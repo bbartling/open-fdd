@@ -16,10 +16,38 @@ pub const DEFS_PIN: &str = "ph-markers-allowlist-v1";
 
 /// Marker tags accepted in strict projection (Project Haystack 4.x common markers).
 const PINNED_MARKERS: &[&str] = &[
-    "site", "equip", "point", "sensor", "cmd", "sp", "air", "water", "steam", "elec",
-    "temp", "pressure", "flow", "humidity", "co2", "speed", "damper", "valve", "fan",
-    "pump", "ahu", "vav", "chiller", "boiler", "supply", "return", "discharge",
-    "outside", "zone", "leaving", "entering", "mixed",
+    "site",
+    "equip",
+    "point",
+    "sensor",
+    "cmd",
+    "sp",
+    "air",
+    "water",
+    "steam",
+    "elec",
+    "temp",
+    "pressure",
+    "flow",
+    "humidity",
+    "co2",
+    "speed",
+    "damper",
+    "valve",
+    "fan",
+    "pump",
+    "ahu",
+    "vav",
+    "chiller",
+    "boiler",
+    "supply",
+    "return",
+    "discharge",
+    "outside",
+    "zone",
+    "leaving",
+    "entering",
+    "mixed",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -123,7 +151,12 @@ fn normalize_marker(tag: &str) -> String {
 }
 
 /// Filter tags: drop false/null/empty; split pinned vs unknown.
-fn classify_tags(raw: &[String], omitted: &mut Vec<ProjectionOmission>, equipment_id: &str, column: Option<&str>) -> Vec<String> {
+fn classify_tags(
+    raw: &[String],
+    omitted: &mut Vec<ProjectionOmission>,
+    equipment_id: &str,
+    column: Option<&str>,
+) -> Vec<String> {
     let mut out = Vec::new();
     for tag in raw {
         if is_false_marker(tag) {
@@ -312,7 +345,12 @@ fn project_equipment(
         format!("ph:siteRef {site}"),
         format!("ofdd:equipmentId \"{}\"", turtle_escape(eid)),
     ];
-    if let Some(name) = eq.display_name.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(name) = eq
+        .display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         extras.push(format!("ofdd:displayName \"{}\"", turtle_escape(name)));
     }
     if let Some(parent) = eq
@@ -444,37 +482,14 @@ pub fn project_strict(meta: &SemanticMetaV1, inventory: Option<&Value>) -> Proje
     let ambiguous = ambiguous_columns(inventory);
     let missing_parents = missing_parent_equipment(inventory);
 
-    // Never invent tags from inventory SQL roles.
-    if let Some(inv) = inventory {
-        if let Some(equipment) = inv.get("equipment").and_then(|v| v.as_array()) {
-            for eq in equipment {
-                let eid = eq
-                    .get("equipment_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default();
-                if let Some(roles) = eq.get("roles").and_then(|v| v.as_object()) {
-                    for (column, _role) in roles {
-                        let in_meta = meta.points.iter().any(|p| {
-                            p.equipment_id == eid && p.column == *column
-                        });
-                        if !in_meta {
-                            // Silent: roles without native tags are not Haystack points.
-                            let _ = column;
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // Inventory SQL roles never become Haystack tags — only native meta points emit.
 
     let site = site_subject(building_id);
     let mut turtle = String::new();
     turtle.push_str("@prefix ph: <https://project-haystack.org/def/ph#> .\n");
     turtle.push_str("@prefix ofdd: <urn:openfdd:ns#> .\n");
     turtle.push_str("@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n");
-    turtle.push_str(&format!(
-        "# profile={PROFILE} defs_pin={DEFS_PIN}\n\n"
-    ));
+    turtle.push_str(&format!("# profile={PROFILE} defs_pin={DEFS_PIN}\n\n"));
 
     let site_tags = vec!["site".to_string()];
     emit_resource(
