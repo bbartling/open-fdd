@@ -549,7 +549,7 @@ async fn execute_bacnet_command(
         )
         .map_err(|e| e.to_string())?;
 
-    bacnet
+    let result = bacnet
         .write_property(
             device,
             &object_type,
@@ -561,6 +561,15 @@ async fn execute_bacnet_command(
         )
         .await
         .map_err(|e| e.to_string())?;
+    if result["ok"] != serde_json::Value::Bool(true)
+        || result["status"].as_str() != Some("success")
+        || result["outcome"].as_str() != Some("acknowledged")
+    {
+        return Err(format!(
+            "bacnet write outcome was not acknowledged: {}",
+            result
+        ));
+    }
 
     Ok(format!(
         "bacnet write executed for {} (approved by {})",

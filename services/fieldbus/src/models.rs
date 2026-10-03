@@ -5,6 +5,8 @@ use serde_json::Value;
 use utoipa::ToSchema;
 use validator::{Validate, ValidationError};
 
+use crate::services::bacnet_write::normalize_bacnet_write;
+
 pub type DecodeLiteral = String;
 pub type FunctionLiteral = String;
 pub type ValueTypeLiteral = String;
@@ -76,27 +78,18 @@ pub struct BacnetWriteRequest {
     #[validate(range(min = 1, max = 16))]
     pub priority: Option<u8>,
     pub value_type: Option<ValueTypeLiteral>,
-    #[serde(default = "default_true")]
+    /// Explicit operator approval is required for a live WriteProperty.
+    ///
+    /// An omitted approval is fail-closed as `false`, so it can only select
+    /// the dry-run path and can never become a live write.
+    #[serde(default)]
     pub approved: bool,
 }
 
-fn default_true() -> bool {
-    true
-}
-
 fn validate_bacnet_write(req: &BacnetWriteRequest) -> Result<(), ValidationError> {
-    let is_release = match &req.value {
-        None => true,
-        Some(Value::Null) => true,
-        Some(Value::String(s)) => s.trim().eq_ignore_ascii_case("null"),
-        _ => false,
-    };
-    if is_release && req.priority.is_none() {
-        return Err(ValidationError::new(
-            "Releasing (null) requires a priority (1-16)",
-        ));
-    }
-    Ok(())
+    normalize_bacnet_write(req.value.as_ref(), req.priority, req.value_type.as_deref())
+        .map(|_| ())
+        .map_err(|error| ValidationError::new("invalid_bacnet_write").with_message(error.into()))
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema, Validate)]
@@ -295,5 +288,18 @@ mod tests {
             ..req
         };
         assert!(!unapproved.approved);
+    }
+
+    #[test]
+    fn write_approval_is_fail_closed_when_omitted() {
+        let body = serde_json::json!({
+            "device_instance": 5007,
+            "object_type": "analog-output",
+            "object_instance": 2466,
+            "value": 42.0,
+            "priority": 10
+        });
+        let request = serde_json::from_value::<BacnetWriteRequest>(body).expect("request parses");
+        assert!(!request.approved);
     }
 }

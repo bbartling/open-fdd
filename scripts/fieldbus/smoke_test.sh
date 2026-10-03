@@ -141,13 +141,13 @@ else bad "POST /bacnet/supervisory"; fi
 
 # ---- WriteProperty (safe, low priority) + Null release ---------------------
 hdr "WriteProperty + Null release (safe P${WRITE_PRIORITY})"
-WBODY="{\"device_instance\":$DEV,\"object_type\":\"$OVR_TYPE\",\"object_instance\":$OVR_INST,\"value\":42.0,\"priority\":$WRITE_PRIORITY}"
+WBODY="{\"device_instance\":$DEV,\"object_type\":\"$OVR_TYPE\",\"object_instance\":$OVR_INST,\"value\":42.0,\"priority\":$WRITE_PRIORITY,\"approved\":true}"
 if WR=$(api -X POST "$BASE/bacnet/write" -d "$WBODY"); then
-  jq_ok "write 42.0 @ P${WRITE_PRIORITY}" "$WR" '.status=="success"'
+  jq_ok "write 42.0 @ P${WRITE_PRIORITY}" "$WR" '.ok==true and .status=="success" and .outcome=="acknowledged" and .verified==true and .verification=="readback" and .readback.selected_priority==42 and .readback.selected_priority_tag=="real" and .readback.property_tag=="real"'
 else bad "POST /bacnet/write"; fi
-RELBODY="{\"device_instance\":$DEV,\"object_type\":\"$OVR_TYPE\",\"object_instance\":$OVR_INST,\"value\":null,\"priority\":$WRITE_PRIORITY}"
+RELBODY="{\"device_instance\":$DEV,\"object_type\":\"$OVR_TYPE\",\"object_instance\":$OVR_INST,\"value\":null,\"priority\":$WRITE_PRIORITY,\"approved\":true}"
 if RL=$(api -X POST "$BASE/bacnet/write" -d "$RELBODY"); then
-  jq_ok "release null @ P${WRITE_PRIORITY}" "$RL" '.released==true'
+  jq_ok "release null @ P${WRITE_PRIORITY}" "$RL" '.ok==true and .status=="success" and .outcome=="acknowledged" and .released==true and .verified==true and .verification=="readback" and (.readback|has("selected_priority")) and .readback.selected_priority==null and .readback.selected_priority_tag=="null"'
 else bad "POST /bacnet/write (release)"; fi
 # Confirm the P8 operator override survived our P10 write/release.
 if PA2=$(api -X POST "$BASE/bacnet/priority-array" -d "{\"device_instance\":$DEV,\"object_type\":\"$OVR_TYPE\",\"object_instance\":$OVR_INST}"); then

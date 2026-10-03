@@ -45,7 +45,12 @@ pub(crate) fn doc_api_health() {}
 )]
 pub(crate) fn doc_bacnet_read() {}
 
-/// WriteProperty with optional dry-run when `approved` is false.
+/// WriteProperty; explicit `approved:true` is required for a live write and
+/// omitted/false approval selects the dry-run response. A live response keeps
+/// `verified:false` until the selected priority slot is read back; when the
+/// slot is verified, `readback.selected_priority` contains the typed slot
+/// value (JSON `null` for a release), while `effective_present_value` and
+/// `masked` describe a higher-priority value when it can be determined.
 #[utoipa::path(
     post,
     path = "/bacnet/write",

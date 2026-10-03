@@ -147,12 +147,12 @@ Set **`OPENFDD_FIELDBUS_BACNET_PORT`** when the building uses a non-default BACn
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/bacnet/read` | ReadProperty on a field device |
-| POST | `/bacnet/write` | WriteProperty (priority + Null release; `approved:false` ⇒ dry-run) |
+| POST | `/bacnet/write` | WriteProperty (priority + Null release; explicit `approved:true` required; omitted/`false` ⇒ dry-run; ambiguous transport outcomes are returned as `status:unknown` without resend) |
 | POST | `/bacnet/write-dry-run` | Validate + encode a write without touching the bus |
 | POST | `/bacnet/rpm` | ReadPropertyMultiple |
 | POST | `/bacnet/whois` | Who-Is range scan |
 | POST | `/bacnet/whois-router` | Who-Is router-to-network (routed networks) |
-| POST | `/api/bacnet/point-discovery` | Point discovery (object-list + commandable scan) |
+| POST | `/api/bacnet/point-discovery` | Point discovery (validated object-list repair + `commandability`: supported/unsupported/unknown) |
 | POST | `/bacnet/priority-array` | Read a priority array (16 slots) |
 | POST | `/bacnet/supervisory` | Supervisory override audit |
 | GET | `/bacnet/poll/status` | Background poll engine status + last values |

@@ -46,6 +46,7 @@ async fn bacnet_write(
             )
             .map_err(ApiError::BadRequest)?;
         let mut v = merge_ok(result);
+        v["outcome"] = json!("dry_run");
         v["skipped"] = json!("not approved");
         return Ok(Json(v));
     }
@@ -88,7 +89,9 @@ async fn bacnet_write_dry_run(
             body.value_type.as_deref(),
         )
         .map_err(ApiError::BadRequest)?;
-    Ok(Json(merge_ok(result)))
+    let mut response = merge_ok(result);
+    response["outcome"] = json!("dry_run");
+    Ok(Json(response))
 }
 
 async fn bacnet_poll_status(State(state): State<AppState>) -> Json<Value> {
