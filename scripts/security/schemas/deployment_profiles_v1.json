@@ -1,0 +1,356 @@
+{
+  "schema_version": "openfdd_deployment_profiles_v1",
+  "notes": [
+    "Deployment profiles are topology policy, not permission to run an active scan.",
+    "Every evidence record must observe required and forbidden services explicitly.",
+    "Image digests are supplied by the candidate evidence record, never by a moving tag."
+  ],
+  "profiles": {
+    "cloud_mqtt_hub": {
+      "profile_version": 1,
+      "deployment": "railway",
+      "selected_capabilities": ["web", "central", "mqtt"],
+      "selected_connector": "none",
+      "required_services": ["openfdd-web", "openfdd-central", "openfdd-mqtt"],
+      "optional_services": ["openfdd-mcp"],
+      "forbidden_services": ["openfdd-fieldbus", "openfdd-bacnet-modbus", "openfdd-haystack"],
+      "required_images": ["openfdd-web", "openfdd-central", "openfdd-mqtt"],
+      "required_execution_suites": ["X", "Y", "Z", "mqtt_acl"],
+      "required_checks": [
+        "deployment.services.web",
+        "deployment.services.central",
+        "deployment.services.mqtt",
+        "deployment.cloud.zero_ot",
+        "deployment.images.immutable",
+        "deployment.exposure.listeners"
+      ],
+      "origin": {
+        "required_scheme": "https",
+        "resolved_exposure": "railway_public_web"
+      },
+      "certificate": {
+        "modes": ["provider_managed"],
+        "trusted_issuer_policy": "provider_chain",
+        "secret_references_only": true
+      },
+      "test_mode": "live_readonly",
+      "budgets": {
+        "max_requests": 200,
+        "timeout_s": 10.0,
+        "deadline_s": 300.0,
+        "cleanup_reserved": 10,
+        "max_body_bytes": 1048576
+      },
+      "prohibited_side_effects": [
+        "ot_protocol_requests",
+        "bas_writes",
+        "broker_acl_mutation",
+        "credential_rotation"
+      ],
+      "listeners": [
+        {
+          "service": "openfdd-web",
+          "network_namespace": "railway_public_ingress",
+          "host_ipv4": "provider_public",
+          "host_ipv6": "provider_public",
+          "port": 443,
+          "protocol": "tcp",
+          "authenticated_transport": "tls+jwt",
+          "source_network_aliases": ["internet_client"],
+          "egress_aliases": ["openfdd-central"],
+          "expected_denied_paths": ["public_central", "public_ot_listener", "plaintext_login"]
+        },
+        {
+          "service": "openfdd-central",
+          "network_namespace": "railway_private",
+          "host_ipv4": "private_only",
+          "host_ipv6": "private_only",
+          "port": 8080,
+          "protocol": "tcp",
+          "authenticated_transport": "jwt_private",
+          "source_network_aliases": ["openfdd-web", "openfdd-mqtt"],
+          "egress_aliases": ["workspace"],
+          "expected_denied_paths": ["public_bind", "unauthenticated_rest"]
+        },
+        {
+          "service": "openfdd-mqtt",
+          "network_namespace": "railway_private_or_broker_proxy",
+          "host_ipv4": "private_or_explicit_proxy",
+          "host_ipv6": "private_or_explicit_proxy",
+          "port": 8883,
+          "protocol": "tcp",
+          "authenticated_transport": "mtls+tenant_acl",
+          "source_network_aliases": ["approved_edge"],
+          "egress_aliases": ["openfdd-central"],
+          "expected_denied_paths": ["anonymous_publish", "wildcard_cross_tenant", "public_central"]
+        }
+      ],
+      "evidence_max_age_seconds": 86400,
+      "source_recipes": ["docker/compose.central.yml", "docker/compose.csv.yml"],
+      "notes": "Railway cloud hub requires web, private central, and MQTT. Fieldbus and split OT images stay off Railway."
+    },
+    "ot_local_bacnet_modbus": {
+      "profile_version": 1,
+      "deployment": "local_ot_lan",
+      "selected_capabilities": ["web", "central", "bacnet_modbus"],
+      "selected_connector": "bacnet_modbus",
+      "required_services": ["caddy", "openfdd-web", "openfdd-central", "openfdd-bacnet-modbus"],
+      "optional_services": ["openfdd-mcp"],
+      "forbidden_services": ["openfdd-fieldbus", "openfdd-haystack", "openfdd-mqtt"],
+      "required_images": ["caddy", "openfdd-web", "openfdd-central", "openfdd-bacnet-modbus"],
+      "required_execution_suites": ["X", "Y", "Z"],
+      "required_checks": [
+        "deployment.services.web",
+        "deployment.services.central",
+        "deployment.connector.bacnet_modbus",
+        "deployment.connector.unselected_absent",
+        "deployment.exposure.listeners",
+        "deployment.images.immutable"
+      ],
+      "origin": {
+        "required_scheme": "https",
+        "resolved_exposure": "ot_lan_https"
+      },
+      "certificate": {
+        "modes": ["operator_ca", "managed_local_ca", "lab_self_signed"],
+        "trusted_issuer_policy": "operator_selected_ca_and_hostname",
+        "secret_references_only": true
+      },
+      "test_mode": "isolated_full",
+      "budgets": {
+        "max_requests": 200,
+        "timeout_s": 10.0,
+        "deadline_s": 300.0,
+        "cleanup_reserved": 10,
+        "max_body_bytes": 1048576
+      },
+      "prohibited_side_effects": [
+        "bas_writes",
+        "bacnet_discovery_unless_explicitly_scoped",
+        "broker_acl_mutation",
+        "credential_rotation",
+        "public_management_bind"
+      ],
+      "listeners": [
+        {
+          "service": "caddy",
+          "network_namespace": "host_lan",
+          "host_ipv4": "0.0.0.0",
+          "host_ipv6": "::",
+          "port": 443,
+          "protocol": "tcp",
+          "authenticated_transport": "tls+jwt",
+          "source_network_aliases": ["ot_lan", "vpn"],
+          "egress_aliases": ["openfdd-web"],
+          "expected_denied_paths": ["plaintext_login", "public_central", "public_management"]
+        },
+        {
+          "service": "openfdd-web",
+          "network_namespace": "container_private",
+          "host_ipv4": "private_only",
+          "host_ipv6": "private_only",
+          "port": 8080,
+          "protocol": "tcp",
+          "authenticated_transport": "internal_http",
+          "source_network_aliases": ["caddy"],
+          "egress_aliases": ["openfdd-central"],
+          "expected_denied_paths": ["host_plaintext_publish"]
+        },
+        {
+          "service": "openfdd-central",
+          "network_namespace": "container_private",
+          "host_ipv4": "private_only",
+          "host_ipv6": "private_only",
+          "port": 8080,
+          "protocol": "tcp",
+          "authenticated_transport": "jwt_internal",
+          "source_network_aliases": ["openfdd-web", "openfdd-bacnet-modbus"],
+          "egress_aliases": ["workspace"],
+          "expected_denied_paths": ["public_bind", "unauthenticated_rest"]
+        },
+        {
+          "service": "openfdd-bacnet-modbus",
+          "network_namespace": "host_ot_lan",
+          "host_ipv4": "127.0.0.1",
+          "host_ipv6": "::1",
+          "port": 8081,
+          "protocol": "tcp",
+          "authenticated_transport": "api_key_or_loopback",
+          "source_network_aliases": ["caddy", "openfdd-central"],
+          "egress_aliases": ["ot_bacnet_modbus_peer", "approved_mqtt_egress"],
+          "expected_denied_paths": ["public_management", "haystack_route", "anonymous_connector"]
+        },
+        {
+          "service": "openfdd-bacnet-modbus",
+          "network_namespace": "host_ot_lan",
+          "host_ipv4": "ot_lan_bind",
+          "host_ipv6": "ot_lan_bind",
+          "port": 47808,
+          "protocol": "udp",
+          "authenticated_transport": "bacnet_peer_allowlist",
+          "source_network_aliases": ["approved_ot_peer"],
+          "egress_aliases": ["approved_ot_peer"],
+          "expected_denied_paths": ["internet_bacnet", "unselected_modbus_process"]
+        }
+      ],
+      "evidence_max_age_seconds": 86400,
+      "source_recipes": ["docker/compose.edge.split.yml", "docker/compose.csv.yml"],
+      "notes": "The selected connector is the only OT protocol process. MQTTS may be a separately qualified egress, but a local broker is not required."
+    },
+    "ot_local_haystack": {
+      "profile_version": 1,
+      "deployment": "local_ot_lan",
+      "selected_capabilities": ["web", "central", "haystack"],
+      "selected_connector": "haystack",
+      "required_services": ["caddy", "openfdd-web", "openfdd-central", "openfdd-haystack"],
+      "optional_services": ["openfdd-mcp"],
+      "forbidden_services": ["openfdd-fieldbus", "openfdd-bacnet-modbus", "openfdd-mqtt"],
+      "required_images": ["caddy", "openfdd-web", "openfdd-central", "openfdd-haystack"],
+      "required_execution_suites": ["X", "Y", "Z"],
+      "required_checks": [
+        "deployment.services.web",
+        "deployment.services.central",
+        "deployment.connector.haystack",
+        "deployment.connector.unselected_absent",
+        "deployment.exposure.listeners",
+        "deployment.images.immutable"
+      ],
+      "origin": {
+        "required_scheme": "https",
+        "resolved_exposure": "ot_lan_https"
+      },
+      "certificate": {
+        "modes": ["operator_ca", "managed_local_ca", "lab_self_signed"],
+        "trusted_issuer_policy": "operator_selected_ca_and_hostname",
+        "secret_references_only": true
+      },
+      "test_mode": "isolated_full",
+      "budgets": {
+        "max_requests": 200,
+        "timeout_s": 10.0,
+        "deadline_s": 300.0,
+        "cleanup_reserved": 10,
+        "max_body_bytes": 1048576
+      },
+      "prohibited_side_effects": [
+        "bas_writes",
+        "bacnet_discovery",
+        "broker_acl_mutation",
+        "credential_rotation",
+        "public_management_bind"
+      ],
+      "listeners": [
+        {
+          "service": "caddy",
+          "network_namespace": "host_lan",
+          "host_ipv4": "0.0.0.0",
+          "host_ipv6": "::",
+          "port": 443,
+          "protocol": "tcp",
+          "authenticated_transport": "tls+jwt",
+          "source_network_aliases": ["ot_lan", "vpn"],
+          "egress_aliases": ["openfdd-web"],
+          "expected_denied_paths": ["plaintext_login", "public_central", "public_management"]
+        },
+        {
+          "service": "openfdd-web",
+          "network_namespace": "container_private",
+          "host_ipv4": "private_only",
+          "host_ipv6": "private_only",
+          "port": 8080,
+          "protocol": "tcp",
+          "authenticated_transport": "internal_http",
+          "source_network_aliases": ["caddy"],
+          "egress_aliases": ["openfdd-central"],
+          "expected_denied_paths": ["host_plaintext_publish"]
+        },
+        {
+          "service": "openfdd-central",
+          "network_namespace": "container_private",
+          "host_ipv4": "private_only",
+          "host_ipv6": "private_only",
+          "port": 8080,
+          "protocol": "tcp",
+          "authenticated_transport": "jwt_internal",
+          "source_network_aliases": ["openfdd-web", "openfdd-haystack"],
+          "egress_aliases": ["workspace"],
+          "expected_denied_paths": ["public_bind", "unauthenticated_rest"]
+        },
+        {
+          "service": "openfdd-haystack",
+          "network_namespace": "container_private",
+          "host_ipv4": "127.0.0.1",
+          "host_ipv6": "::1",
+          "port": 8082,
+          "protocol": "tcp",
+          "authenticated_transport": "api_key_or_loopback",
+          "source_network_aliases": ["caddy", "openfdd-central"],
+          "egress_aliases": ["approved_haystack_https_peer"],
+          "expected_denied_paths": ["public_management", "bacnet_route", "anonymous_connector"]
+        }
+      ],
+      "evidence_max_age_seconds": 86400,
+      "source_recipes": ["docker/compose.edge.split.yml", "docker/compose.csv.yml"],
+      "notes": "Haystack is the selected manual outbound connector. The profile proves no BACnet/Modbus process or local broker is present."
+    },
+    "local_development": {
+      "profile_version": 1,
+      "deployment": "loopback_development",
+      "selected_capabilities": ["web", "central"],
+      "selected_connector": "none",
+      "required_services": ["openfdd-web", "openfdd-central"],
+      "optional_services": [],
+      "forbidden_services": ["openfdd-mqtt", "openfdd-fieldbus", "openfdd-bacnet-modbus", "openfdd-haystack"],
+      "required_images": ["openfdd-web", "openfdd-central"],
+      "required_execution_suites": ["Z"],
+      "required_checks": ["deployment.services.web", "deployment.services.central", "deployment.loopback_only"],
+      "origin": {
+        "required_scheme": "http",
+        "resolved_exposure": "loopback_only"
+      },
+      "certificate": {
+        "modes": ["disposable_self_signed"],
+        "trusted_issuer_policy": "explicit_lab_trust_only",
+        "secret_references_only": true
+      },
+      "test_mode": "local_open",
+      "budgets": {
+        "max_requests": 40,
+        "timeout_s": 10.0,
+        "deadline_s": 180.0,
+        "cleanup_reserved": 10,
+        "max_body_bytes": 1048576
+      },
+      "prohibited_side_effects": ["production_qualification", "bas_writes", "credential_rotation"],
+      "listeners": [
+        {
+          "service": "openfdd-web",
+          "network_namespace": "loopback",
+          "host_ipv4": "127.0.0.1",
+          "host_ipv6": "::1",
+          "port": 3000,
+          "protocol": "tcp",
+          "authenticated_transport": "development_http",
+          "source_network_aliases": ["loopback"],
+          "egress_aliases": ["openfdd-central"],
+          "expected_denied_paths": ["lan_peer", "public_bind"]
+        },
+        {
+          "service": "openfdd-central",
+          "network_namespace": "loopback",
+          "host_ipv4": "127.0.0.1",
+          "host_ipv6": "::1",
+          "port": 8080,
+          "protocol": "tcp",
+          "authenticated_transport": "development_http",
+          "source_network_aliases": ["openfdd-web", "loopback"],
+          "egress_aliases": ["workspace"],
+          "expected_denied_paths": ["lan_peer", "public_bind"]
+        }
+      ],
+      "evidence_max_age_seconds": 3600,
+      "source_recipes": ["docker/compose.csv.yml"],
+      "notes": "Development is loopback-only and cannot close production or Nessus readiness."
+    }
+  }
+}

@@ -18,6 +18,37 @@ Tip evidence matrix: [`docs/operations/SECURITY_HARNESS_EVIDENCE_3.5.30.md`](../
 | `schemas/` | Report + profile registry versions |
 | `fixtures/broken_http.py` | Deliberately broken local HTTP modes for detectors |
 
+## Deployment profiles and exposure evidence
+
+Deployment topology is a separate policy axis from the execution profiles
+(`live_readonly`, `isolated_full`, and `local_open`). The canonical contract is
+[`schemas/deployment_profiles_v1.json`](schemas/deployment_profiles_v1.json),
+and the fail-closed evaluator is
+[`openfdd_security/deployment.py`](openfdd_security/deployment.py). It requires
+sanitized evidence to bind the source/config/fixture hashes, immutable image
+digests, origin, listeners, required services, and explicitly absent services.
+
+The supported topology IDs are `cloud_mqtt_hub`, `ot_local_bacnet_modbus`,
+`ot_local_haystack`, and `local_development`. The cloud profile requires
+`openfdd-web` + `openfdd-central` + `openfdd-mqtt` and records all OT images as
+forbidden. Each OT profile requires Caddy + web + central + exactly one selected
+split connector and does not require a local MQTT broker.
+
+Evaluate an operator or CI evidence file without contacting a deployment:
+
+```bash
+python3 scripts/security/deployment_profile_qualification.py --list-profiles
+python3 scripts/security/deployment_profile_qualification.py \
+  --profile cloud_mqtt_hub \
+  --evidence /secure/evidence/deployment.json
+```
+
+This tool reports `BLOCKED` for missing, stale, contradictory, path-escaping,
+or tampered evidence. It does not authorize active scanning, a Railway scan, an
+OT request, or a Nessus pass. Start with
+[`docs/operations/SECURITY_QUALIFICATION_POLICY.md`](../../docs/operations/SECURITY_QUALIFICATION_POLICY.md)
+for the staged acceptance sequence.
+
 ## CLI
 
 ```bash
