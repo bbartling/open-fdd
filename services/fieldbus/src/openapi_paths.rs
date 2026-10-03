@@ -5,7 +5,7 @@
 use crate::models::*;
 use openfdd_contracts::{
     ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorReadRequest,
-    ConnectorReadResponse,
+    ConnectorReadResponse, PriorityHistoryRequest, PriorityHistoryResponse,
 };
 
 /// Service index and quick links.
@@ -72,6 +72,20 @@ pub(crate) fn doc_connector_inventory() {}
     )
 )]
 pub(crate) fn doc_connector_read() {}
+
+/// Authenticated bounded priority-array history from the opt-in edge scanner.
+#[utoipa::path(
+    post,
+    path = "/api/connector/priority-history",
+    tag = "Open-FDD compat",
+    request_body = PriorityHistoryRequest,
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Read-only priority-array history page", body = PriorityHistoryResponse),
+        (status = 403, description = "Scope or scanner identity denial")
+    )
+)]
+pub(crate) fn doc_connector_priority_history() {}
 
 /// ReadProperty on a field device (bench/low-level).
 #[utoipa::path(

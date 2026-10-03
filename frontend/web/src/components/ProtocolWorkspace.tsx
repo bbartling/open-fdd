@@ -138,6 +138,26 @@ export function ProtocolWorkspace({ protocol, onProtocolChange }: ProtocolWorksp
       .filter(Boolean))],
     [aggregate],
   );
+  const priorityHistoryCapabilityEdgeIds = useMemo(
+    () => [...new Set((aggregate?.upstreams ?? [])
+      .filter((upstream) => upstream.hello?.connectors?.some((connector) =>
+        connector.protocol === "bacnet"
+        && connector.supported_actions?.includes("priority_history_read"),
+      ))
+      .map((upstream) => upstream.edge_id?.trim() ?? "")
+      .filter(Boolean))],
+    [aggregate],
+  );
+  const priorityHistoryTriggerCapabilityEdgeIds = useMemo(
+    () => [...new Set((aggregate?.upstreams ?? [])
+      .filter((upstream) => upstream.hello?.connectors?.some((connector) =>
+        connector.protocol === "bacnet"
+        && connector.supported_actions?.includes("priority_history_trigger"),
+      ))
+      .map((upstream) => upstream.edge_id?.trim() ?? "")
+      .filter(Boolean))],
+    [aggregate],
+  );
 
   return (
     <section
@@ -218,7 +238,14 @@ export function ProtocolWorkspace({ protocol, onProtocolChange }: ProtocolWorksp
         error={error}
         status={activeStatus}
       />
-      {!loading && !error ? <ProtocolInventory protocol={protocol} capabilityEdgeIds={capabilityEdgeIds} /> : null}
+      {!loading && !error ? (
+        <ProtocolInventory
+          protocol={protocol}
+          capabilityEdgeIds={capabilityEdgeIds}
+          priorityHistoryCapabilityEdgeIds={priorityHistoryCapabilityEdgeIds}
+          priorityHistoryTriggerCapabilityEdgeIds={priorityHistoryTriggerCapabilityEdgeIds}
+        />
+      ) : null}
     </section>
   );
 }

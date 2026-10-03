@@ -528,7 +528,13 @@ fn validate_actions_for_record(
             (_, false, _) => false,
             (ConnectorProtocol::Bacnet, true, _) => true,
             (_, true, ConnectorAction::MetadataRead | ConnectorAction::PointRead) => true,
-            (_, true, ConnectorAction::PriorityArrayRead) => false,
+            (
+                _,
+                true,
+                ConnectorAction::PriorityArrayRead
+                | ConnectorAction::PriorityHistoryRead
+                | ConnectorAction::PriorityHistoryTrigger,
+            ) => false,
         };
         if !allowed {
             return Err("inventory action is unsupported for this record".into());

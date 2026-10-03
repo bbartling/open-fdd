@@ -38,6 +38,43 @@ Scan and export priority-array overrides:
 - `GET /api/bacnet/overrides/summary`
 - `POST /api/bacnet/overrides/scan-once`
 
+### Durable priority history
+
+The connector capability and inventory surfaces expose a separate read-only
+history action when the fieldbus has a trusted tenant/building/edge scope.
+`POST /api/connector/priority-history` returns bounded, versioned snapshots
+containing exactly P1–P16 for a selected configured object. The central route
+`POST /api/connectors/{edge_id}/priority-history` forwards that same scoped
+history only after authenticated tenant, building, and edge checks.
+
+Operators and admins can request one bounded visit with the typed trigger
+`POST /api/connectors/{edge_id}/priority-history/trigger`; viewers receive
+403 before central contacts the edge. The edge trigger is protected by its
+fieldbus API key and shares the scheduler's non-overlap guard. The trigger
+does not bypass the explicit scanner enable flag.
+
+The scheduler is disabled unless `OPENFDD_PRIORITY_SCAN_ENABLED=1`. When
+enabled it visits one configured device after a delay following each completed
+device visit (default 3600 seconds, minimum 300), persists a stable device
+cursor and bounded records on the edge, and advances the cursor after a
+complete device visit. It has no catch-up burst and does not discover devices,
+write values, release priorities, or remediate equipment. A read failure
+remains a typed error snapshot so the history cannot silently turn a failed
+read into NULL data.
+
+The edge store appends fsynced JSONL records and cursor entries, periodically
+compacts them into a bounded checkpoint, and fsyncs the containing directory
+after replacement. A torn trailing line is truncated during recovery. A
+corrupt non-tail entry makes history unavailable while the core BACnet polling
+service continues; no whole-history rewrite is used for each observation.
+History cursors are bounded to the retained 100,000-record window, and a page
+probes at most `offset + page_size + 1` matching records to determine whether
+continuation exists.
+
+The cloud-only `central` and Railway recipes intentionally have no fieldbus
+scanner or BACnet socket. MQTT history synchronization is not part of this
+contract; use a separately versioned transport contract if that is added later.
+
 ## Dashboard
 
 **BACnet** tab (`/bacnet`) — scan, add devices, set poll rates, browse points.

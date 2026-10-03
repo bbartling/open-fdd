@@ -13,6 +13,57 @@ This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER
 
 A merged PR, a passing unit suite, a completed scan, and a verified deployment are different achievements. Record them separately. No milestone becomes VERIFIED from an old pin, skipped test, changed threshold or unreviewed exception. Actual licensed Nessus results are separate from readiness work that needs no license.
 
+## Operations protocol workspace Phase 4 — draft / source and read-only bench verified
+
+**Owner path:** draft PR [#1099](https://github.com/bbartling/open-fdd/pull/1099),
+branch `feat/protocol-workspace-phase4`, stacked on Phase 3D. The implementation
+accepted source head is `79f157c916a9743b24d847c23ab2d3ea927ae617`.
+
+### Landed in the draft branch
+
+- Versioned bounded priority-history contract with exact P1–P16 snapshots,
+  scope and request correlation, opaque cursor binding, and safe typed errors.
+- Edge-local durable history store and opt-in scheduler. It visits one trusted
+  configured device after each completed interval (default 3600 seconds,
+  minimum 300), has no catch-up burst, and performs no discovery, write,
+  release, or remediation action. History uses an append-only JSONL journal,
+  periodic bounded checkpoints, file and parent-directory sync, and recovery
+  tests for torn tails, corrupt non-tail entries, stale temporary files, and
+  restart/cursor retention. Store failure disables history fail-closed without
+  taking down core BACnet polling.
+- Authenticated fieldbus and central history routes, capability/inventory
+  advertisement, OpenAPI declarations, and a React panel that loads history
+  only after an explicit capability-backed user action. An explicitly typed
+  operator/admin trigger runs one bounded visit through the same non-overlap
+  guard; viewers receive 403 before any upstream proxy or OT call.
+- OT recipes persist `/edge-state`; `central` and `csv` remain cloud-only and
+  contain no fieldbus/scanner service. MQTT history synchronization is deferred
+  to a separately versioned future transport contract.
+
+### Evidence and remaining acceptance
+
+- Astra accepted exact SHA `79f157c916a9743b24d847c23ab2d3ea927ae617`.
+  Rust format and warnings-denied Clippy passed, along with contract priority
+  tests **7/7**, fieldbus priority tests **12/12**, and focused frontend tests
+  **21/21**. Central route/auth, security inventory, Compose, and topology
+  gates also passed locally.
+- Frontend lint still reports pre-existing repository warnings when run with
+  `--max-warnings=0`; this is a CI hygiene item, not silently treated as pass.
+- Read-only BACnet bench qualification passed without replacing or restarting
+  the existing healthy fieldbus container. A narrowed Who-Is found exactly
+  device **5007** on its routed network. A separate Phase 4 binary used
+  alternate local HTTP and hosted BACnet ports, MQTT disabled, a temporary
+  edge store, and one configured AO target. Its first explicit trigger added
+  exactly one record containing **16** priority slots. After a clean process
+  restart, sequence 1 and the durable device cursor were restored before any
+  new scan; a second trigger added one record and advanced history to sequences
+  1 and 2. Responses reported read-only operation with discovery and writes
+  disabled. No WriteProperty or release endpoint was called.
+- GitHub Actions remain in progress, so draft PR #1099 is not yet fully green.
+  No GHCR refresh, deployment, merge, or FQ claim occurred. The Haystack bench
+  host answered reachability preflight, but authenticated Haystack application
+  testing remains a later protocol-container qualification item.
+
 ## Wave U outcomes — acceptance snapshot 2026-09-20
 
 The independent audit reopened acceptance checks. Statuses below do not erase earlier test runs or imply that existing improvements were absent. The snapshot covered #959/#960 merged and #961 in flight; consult GitHub and BUG_REPORT for later changes.

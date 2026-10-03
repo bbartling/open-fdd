@@ -4,7 +4,12 @@ import { MemoryRouter } from "react-router";
 import { ProtocolInventory } from "./ProtocolInventory";
 import type { ConnectorInventoryResponse, InventoryRecord } from "../api/inventoryApi";
 
-const { apiFetch, fetchPage } = vi.hoisted(() => ({ apiFetch: vi.fn(), fetchPage: vi.fn() }));
+const { apiFetch, fetchPage, fetchHistory, triggerHistory } = vi.hoisted(() => ({
+  apiFetch: vi.fn(),
+  fetchPage: vi.fn(),
+  fetchHistory: vi.fn(),
+  triggerHistory: vi.fn(),
+}));
 
 vi.mock("../api/client", () => ({ apiFetch }));
 vi.mock("../api/inventoryApi", async () => {
@@ -13,6 +18,10 @@ vi.mock("../api/inventoryApi", async () => {
 });
 vi.mock("../api/authApi", () => ({ getStoredToken: vi.fn(() => "authenticated") }));
 vi.mock("../api/tenantApi", () => ({ getStoredActiveTenant: vi.fn(() => null) }));
+vi.mock("../api/priorityHistoryApi", async () => {
+  const actual = await vi.importActual<typeof import("../api/priorityHistoryApi")>("../api/priorityHistoryApi");
+  return { ...actual, fetchPriorityHistoryPage: fetchHistory, triggerPriorityHistoryScan: triggerHistory };
+});
 
 const scope = { tenant_id: "tenant-a", building_id: "building-a", edge_id: "edge-a" };
 const device: InventoryRecord = {
@@ -80,7 +89,58 @@ function page(records: InventoryRecord[]): ConnectorInventoryResponse {
   };
 }
 
-function renderInventory(capabilityEdgeIds: readonly string[] = [], records: InventoryRecord[] = [device, group, point]) {
+function historyPage() {
+  const target = { device_instance: 7, object_type: "analog-value", object_instance: 1 };
+  return {
+    schema: "openfdd.connector.priority_scan.v1" as const,
+    request_id: "request-1",
+    scope,
+    revision: "history-1",
+    captured_at: "2026-10-01T00:00:00Z",
+    records: [{
+      sequence: 1,
+      target,
+      label: "Supply command",
+      snapshot: {
+        ...target,
+        slots: Array.from({ length: 16 }, (_, index) => ({
+          priority_level: index + 1,
+          state: index === 0 ? "value" as const : "null" as const,
+          type: index === 0 ? "real" : "null",
+          ...(index === 0 ? { value: 71.5 } : {}),
+        })),
+        state: "supported" as const,
+        observed_at: "2026-10-01T00:00:00Z",
+      },
+      source: "scheduled_scan" as const,
+    }],
+    next_cursor: null,
+    scanner: {
+      schema: "openfdd.connector.priority_scan.v1" as const,
+      scope,
+      enabled: false,
+      interval_secs: 3600,
+      max_points_per_device: 100,
+      catch_up: false as const,
+      read_only: true as const,
+      discovery_enabled: false as const,
+      writes_enabled: false as const,
+      last_started_at: null,
+      last_completed_at: null,
+      next_due_at: null,
+      last_device_identity: null,
+      last_error: null,
+      records_retained: 1,
+    },
+  };
+}
+
+function renderInventory(
+  capabilityEdgeIds: readonly string[] = [],
+  records: InventoryRecord[] = [device, group, point],
+  priorityHistoryCapabilityEdgeIds: readonly string[] = [],
+  priorityHistoryTriggerCapabilityEdgeIds: readonly string[] = [],
+) {
   apiFetch.mockImplementation(async (path: string) => {
     if (path === "/api/tenants") {
       return {
@@ -96,7 +156,12 @@ function renderInventory(capabilityEdgeIds: readonly string[] = [], records: Inv
   fetchPage.mockResolvedValue(page(records));
   return render(
     <MemoryRouter initialEntries={["/operations?site=building-a&edge=edge-a"]}>
-      <ProtocolInventory protocol="bacnet" capabilityEdgeIds={capabilityEdgeIds} />
+      <ProtocolInventory
+        protocol="bacnet"
+        capabilityEdgeIds={capabilityEdgeIds}
+        priorityHistoryCapabilityEdgeIds={priorityHistoryCapabilityEdgeIds}
+        priorityHistoryTriggerCapabilityEdgeIds={priorityHistoryTriggerCapabilityEdgeIds}
+      />
     </MemoryRouter>,
   );
 }
@@ -105,6 +170,8 @@ describe("ProtocolInventory", () => {
   beforeEach(() => {
     apiFetch.mockReset();
     fetchPage.mockReset();
+    fetchHistory.mockReset();
+    triggerHistory.mockReset();
     Object.assign(navigator, { clipboard: { writeText: vi.fn() } });
   });
 
@@ -195,6 +262,47 @@ describe("ProtocolInventory", () => {
     fireEvent.click(pointItem);
     expect(await screen.findByRole("button", { name: "Read priority array" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Read point" })).toBeNull();
+  });
+
+  it("loads durable priority history only after explicit user action", async () => {
+    fetchHistory.mockResolvedValue(historyPage());
+    renderInventory([], [device, group, { ...point, availability: "configured", actions: [] }], ["edge-a"]);
+    const pointItem = await screen.findByTestId("inventory-treeitem-point:opaque-point");
+    fireEvent.click(pointItem);
+    const panel = await screen.findByTestId("inventory-priority-history");
+    expect(fetchHistory).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Load history" }));
+    await screen.findByTestId("inventory-priority-history-table");
+    expect(fetchHistory).toHaveBeenCalledWith(expect.objectContaining({
+      scope,
+      target: { device_instance: 7, object_type: "analog-value", object_instance: 1 },
+    }));
+    expect(panel.textContent).toContain("P1");
+    expect(panel.textContent).toContain("Supply command");
+    expect(apiFetch.mock.calls.some(([path]) => String(path).includes("priority-history"))).toBe(false);
+  });
+
+  it("gates durable history on the connector capability, independently of point actions", async () => {
+    fetchHistory.mockResolvedValue(historyPage());
+    renderInventory([], [device, group, { ...point, availability: "configured", actions: [] }], ["edge-a"]);
+    fireEvent.click(await screen.findByTestId("inventory-treeitem-point:opaque-point"));
+    expect(await screen.findByTestId("inventory-priority-history")).toBeTruthy();
+  });
+
+  it("does not infer durable history capability from a point read action", async () => {
+    renderInventory([], [device, group, { ...point, availability: "configured", actions: ["priority_array_read"] }]);
+    fireEvent.click(await screen.findByTestId("inventory-treeitem-point:opaque-point"));
+    expect(screen.queryByTestId("inventory-priority-history")).toBeNull();
+  });
+
+  it("exposes the manual trigger only when the connector advertises it", async () => {
+    triggerHistory.mockResolvedValue({ scanner: historyPage().scanner, records_added: 1 });
+    fetchHistory.mockResolvedValue(historyPage());
+    renderInventory([], [device, group, { ...point, availability: "configured", actions: [] }], ["edge-a"], ["edge-a"]);
+    fireEvent.click(await screen.findByTestId("inventory-treeitem-point:opaque-point"));
+    fireEvent.click(await screen.findByRole("button", { name: "Run scan now" }));
+    await waitFor(() => expect(triggerHistory).toHaveBeenCalledWith(expect.objectContaining({ scope })));
+    expect(fetchHistory).toHaveBeenCalled();
   });
 
   it("submits one live read and blocks every other action while it is pending", async () => {

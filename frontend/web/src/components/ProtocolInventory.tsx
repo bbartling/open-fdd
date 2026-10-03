@@ -4,6 +4,12 @@ import {
   readConnectorTarget,
   type ConnectorReadResult,
 } from "../api/connectorReadApi";
+import {
+  fetchPriorityHistoryPage,
+  triggerPriorityHistoryScan,
+  type PriorityHistoryRecord,
+  type PriorityHistoryResponse,
+} from "../api/priorityHistoryApi";
 import { getStoredActiveTenant } from "../api/tenantApi";
 import {
   type ConnectorInventoryResponse,
@@ -421,6 +427,125 @@ function InventoryReadPanel({
   );
 }
 
+function PriorityHistoryPanel({
+  point,
+  scope,
+  enabled,
+  triggerEnabled,
+}: {
+  point: Extract<InventoryTreeNode["record"], { kind: "point" }> | null;
+  scope: InventoryScope;
+  enabled: boolean;
+  triggerEnabled: boolean;
+}) {
+  const target = point?.reference.kind === "bacnet"
+    ? {
+        device_instance: point.reference.device_instance,
+        object_type: point.reference.object_type,
+        object_instance: point.reference.object_instance,
+      }
+    : null;
+  const targetKey = target ? `${target.device_instance}:${target.object_type}:${target.object_instance}` : "";
+  const [records, setRecords] = useState<PriorityHistoryRecord[]>([]);
+  const [response, setResponse] = useState<PriorityHistoryResponse | null>(null);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [triggering, setTriggering] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
+  const controller = useRef<AbortController | null>(null);
+  const generation = useRef(0);
+
+  useEffect(() => {
+    controller.current?.abort();
+    controller.current = null;
+    generation.current += 1;
+    setRecords([]);
+    setResponse(null);
+    setCursor(null);
+    setLoading(false);
+    setTriggering(false);
+    setError(null);
+    setTriggerError(null);
+    return () => controller.current?.abort();
+  }, [scope.building_id, scope.edge_id, scope.tenant_id, targetKey]);
+
+  if (!point || !target || !enabled) return null;
+
+  const load = async (nextCursor: string | null = null) => {
+    if (loading) return;
+    controller.current?.abort();
+    const abort = new AbortController();
+    controller.current = abort;
+    const requestGeneration = ++generation.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const page = await fetchPriorityHistoryPage({ scope, target, cursor: nextCursor ?? undefined, signal: abort.signal });
+      if (abort.signal.aborted || generation.current !== requestGeneration) return;
+      setResponse(page);
+      setRecords((previous) => nextCursor ? [...previous, ...page.records] : page.records);
+      setCursor(page.next_cursor ?? null);
+    } catch (reason) {
+      if (abort.signal.aborted || (reason instanceof Error && reason.name === "AbortError")) return;
+      if (generation.current !== requestGeneration) return;
+      setError(reason instanceof Error ? reason.message : "Priority history request failed");
+    } finally {
+      if (generation.current === requestGeneration) {
+        setLoading(false);
+        controller.current = null;
+      }
+    }
+  };
+
+  const trigger = async () => {
+    if (loading || triggering) return;
+    const abort = new AbortController();
+    controller.current?.abort();
+    controller.current = abort;
+    setTriggering(true);
+    setTriggerError(null);
+    try {
+      await triggerPriorityHistoryScan({ scope, signal: abort.signal });
+      if (abort.signal.aborted) return;
+      setTriggering(false);
+      controller.current = null;
+      await load();
+    } catch (reason) {
+      if (abort.signal.aborted || (reason instanceof Error && reason.name === "AbortError")) return;
+      setTriggerError(reason instanceof Error ? reason.message : "Priority history trigger failed");
+    } finally {
+      if (!abort.signal.aborted) {
+        setTriggering(false);
+        controller.current = null;
+      }
+    }
+  };
+
+  return (
+    <section className="inventory-history-panel" aria-labelledby="inventory-history-heading" data-testid="inventory-priority-history">
+      <h3 id="inventory-history-heading">Priority history</h3>
+      <p className="muted">Durable edge snapshots for this point. History reads do not trigger a BACnet request.</p>
+      {triggerEnabled ? <Button id="inventory-priority-history-trigger" label={triggering ? "Scanning…" : "Run scan now"} loading={triggering} disabled={loading || triggering} onClick={() => void trigger()} testId="inventory-priority-history-trigger" /> : null}
+      <Button id="inventory-priority-history-load" label={loading ? "Loading…" : records.length ? "Refresh history" : "Load history"} loading={loading} disabled={triggering} onClick={() => void load()} testId="inventory-priority-history-load" />
+      {error ? <InlineAlert id="inventory-priority-history-error" variant="danger" testId="inventory-priority-history-error">{error}</InlineAlert> : null}
+      {triggerError ? <InlineAlert id="inventory-priority-history-trigger-error" variant="danger" testId="inventory-priority-history-trigger-error">{triggerError}</InlineAlert> : null}
+      {response ? <p className="muted" data-testid="inventory-priority-history-status">Scanner: {response.scanner.enabled ? "enabled" : "disabled"} · interval {response.scanner.interval_secs}s · retained {response.scanner.records_retained}</p> : null}
+      {records.length > 0 ? (
+        <div className="inventory-history-table-wrap">
+          <table data-testid="inventory-priority-history-table"><caption>Recorded P1–P16 snapshots</caption><thead><tr><th scope="col">Label</th><th scope="col">Sequence</th><th scope="col">Observed</th><th scope="col">State</th><th scope="col">Active priorities</th></tr></thead><tbody>
+            {records.map((record) => {
+              const active = record.snapshot.slots.filter((slot) => slot.state === "value").map((slot) => `P${slot.priority_level}`).join(", ") || "none";
+              return <tr key={record.sequence}><td>{record.label ?? "(unlabeled)"}</td><td>{record.sequence}</td><td>{record.snapshot.observed_at}</td><td>{record.snapshot.state}</td><td>{active}</td></tr>;
+            })}
+          </tbody></table>
+        </div>
+      ) : response && !loading ? <p className="muted" data-testid="inventory-priority-history-empty">No retained snapshots for this point.</p> : null}
+      {cursor ? <Button id="inventory-priority-history-more" label="Load more" variant="secondary" onClick={() => void load(cursor)} testId="inventory-priority-history-more" /> : null}
+    </section>
+  );
+}
+
 interface InventoryContextMenuProps {
   node: InventoryTreeNode;
   expanded: boolean;
@@ -661,9 +786,13 @@ function InventoryTreeView({
 export function ProtocolInventory({
   protocol,
   capabilityEdgeIds = [],
+  priorityHistoryCapabilityEdgeIds = [],
+  priorityHistoryTriggerCapabilityEdgeIds = [],
 }: {
   protocol: InventoryProtocol;
   capabilityEdgeIds?: readonly string[];
+  priorityHistoryCapabilityEdgeIds?: readonly string[];
+  priorityHistoryTriggerCapabilityEdgeIds?: readonly string[];
 }) {
   const snapshot = useInventoryScope(capabilityEdgeIds);
   const inventory = useConnectorInventory({ scope: snapshot.scope, protocols: [protocol], enabled: Boolean(snapshot.scope) });
@@ -695,6 +824,12 @@ export function ProtocolInventory({
             <div>
               <InventoryDetails node={selectedNode} provenance={inventory.provenance} capturedAt={inventory.capturedAt} />
               <InventoryReadPanel node={selectedNode} scope={snapshot.scope} />
+              <PriorityHistoryPanel
+                point={selectedNode?.record.kind === "point" ? selectedNode.record : null}
+                scope={snapshot.scope}
+                enabled={priorityHistoryCapabilityEdgeIds.includes(snapshot.scope.edge_id)}
+                triggerEnabled={priorityHistoryTriggerCapabilityEdgeIds.includes(snapshot.scope.edge_id)}
+              />
             </div>
           </div>
         </>

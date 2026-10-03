@@ -4,6 +4,7 @@ pub mod capabilities;
 pub mod command;
 pub mod envelope;
 pub mod inventory;
+pub mod priority_scan;
 pub mod proxy;
 pub mod topics;
 
@@ -21,6 +22,15 @@ pub use inventory::{
     InventoryAvailability, InventoryCommandability, InventoryPointReference, InventoryProvenance,
     InventoryRecord, CONNECTOR_INVENTORY_CONTRACT_V1, INVENTORY_MAX_CURSOR_LENGTH,
     INVENTORY_MAX_PAGE_SIZE,
+};
+pub use priority_scan::{
+    PriorityHistoryRecord, PriorityHistoryRequest, PriorityHistoryResponse,
+    PriorityHistoryTriggerRequest, PriorityHistoryTriggerResponse, PriorityScanConfig,
+    PriorityScanStatus, PriorityScanTarget, BACNET_MAX_INSTANCE, PRIORITY_SCAN_CONTRACT_V1,
+    PRIORITY_SCAN_DEFAULT_INTERVAL_SECS, PRIORITY_SCAN_DEFAULT_MAX_POINTS_PER_DEVICE,
+    PRIORITY_SCAN_MAX_CURSOR_OFFSET, PRIORITY_SCAN_MAX_INTERVAL_SECS, PRIORITY_SCAN_MAX_PAGE_SIZE,
+    PRIORITY_SCAN_MAX_POINTS_PER_DEVICE, PRIORITY_SCAN_MIN_INTERVAL_SECS,
+    PRIORITY_SCAN_TRIGGER_CONTRACT_V1,
 };
 pub use proxy::{
     ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult, ConnectorScope, ReadError,

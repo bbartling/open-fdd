@@ -33,6 +33,10 @@ services:
       OPENFDD_LOCAL_INGEST_TOKEN: ${OPENFDD_LOCAL_INGEST_TOKEN:-}
       OPENFDD_LOCAL_SPOOL_DIR: /local-spool
       OPENFDD_LOCAL_SPOOL_MAX_RECORDS: ${OPENFDD_LOCAL_SPOOL_MAX_RECORDS:-50000}
+      OPENFDD_PRIORITY_SCAN_ENABLED: ${OPENFDD_PRIORITY_SCAN_ENABLED:-0}
+      OPENFDD_PRIORITY_SCAN_INTERVAL_SECS: ${OPENFDD_PRIORITY_SCAN_INTERVAL_SECS:-3600}
+      OPENFDD_PRIORITY_SCAN_MAX_POINTS_PER_DEVICE: ${OPENFDD_PRIORITY_SCAN_MAX_POINTS_PER_DEVICE:-100}
+      OPENFDD_EDGE_STORE_DIR: /edge-state
       OPENFDD_FIELDBUS_API_KEY: ${OPENFDD_FIELDBUS_API_KEY:-}
       OPENFDD_LOG_FORMAT: ${OPENFDD_LOG_FORMAT:-json}
     volumes:
@@ -40,6 +44,7 @@ services:
       - ../deploy/mqtt/kits/${OPENFDD_SITE_ID:-local}__${OPENFDD_EDGE_ID:-fieldbus-1}:/mqtt:ro
       - fieldbus-spool:/spool
       - fieldbus-local-spool:/local-spool
+      - fieldbus-state:/edge-state
     logging:
       driver: json-file
       options:
@@ -50,3 +55,4 @@ services:
 volumes:
   fieldbus-spool:
   fieldbus-local-spool:
+  fieldbus-state:

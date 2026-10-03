@@ -45,6 +45,8 @@ pub enum ConnectorAction {
     MetadataRead,
     PointRead,
     PriorityArrayRead,
+    PriorityHistoryRead,
+    PriorityHistoryTrigger,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
