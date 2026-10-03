@@ -105,12 +105,26 @@ Profiles: `live_readonly`, `isolated_full`, `local_open`.
 Credentials use environment variable references from config — never CLI
 password arguments and never secrets in fixture JSON.
 
+## Bounded matrix (Astra C-PY)
+
+Offline planner for authz / IDOR / SSRF / MQTT suite ownership:
+
+```bash
+python3 scripts/security/bounded_matrix.py --selftest
+python3 scripts/security/bounded_matrix.py --plan --profile isolated_full
+```
+
+IDOR is covered by suite **Y** foreign-deny rows. SSRF never probes cloud
+metadata; live canary hit-counts use `OPENFDD_SSRF_CANARY_EVIDENCE_JSON` from an
+isolated canary server only.
+
 ## Suites
 
 - **X** — preauth, login/me, JWT integrity/alg/expiry
-- **Y** — A/B own+foreign, viewer/admin differences, detector controls
+- **Y** — A/B own+foreign (IDOR), viewer/admin differences, detector controls
 - **Z** — security.txt, CSP, CORS, redirect credential policy, body caps
 - **mqtt_acl** — generated tenant ACL fixture + observer (not MQTT continuity); live broker when `OPENFDD_MQTT_ACL_EXECUTE=1`
+- **ssrf** — URL fetch policy + isolated canary evidence (optional; never metadata probes)
 
 ## Host runtime probe (Astra A10)
 

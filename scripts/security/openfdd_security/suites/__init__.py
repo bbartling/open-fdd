@@ -42,30 +42,59 @@ def _looks_html(body: bytes) -> bool:
 
 
 def _nonempty_own_control(body: bytes, canary: str = "") -> bool:
-    """Positive own-object control: nonempty schema, not {} / [] / HTML."""
+    """Positive own-object control: known content, not error/empty/HTML.
+
+    Error objects (ok:false / error keys) never count as ownership proof even
+    when nonempty. When a canary is supplied it must appear in the body.
+    Empty lists are not authorization proof (separate empty-site UX checks).
+    """
     if not body or body.strip() in (b"", b"[]", b"{}"):
         return False
     if _looks_html(body):
         return False
-    if canary and canary.encode() in body:
-        return True
     try:
         data = json.loads(body.decode("utf-8"))
     except Exception:
         return False
+    if isinstance(data, dict):
+        if data.get("ok") is False:
+            return False
+        if any(k in data for k in ("error", "errors", "detail")) and not canary:
+            # Unstructured error/detail without fixture canary is not own success.
+            if data.get("ok") is not True and not any(
+                isinstance(data.get(k), (list, dict)) and data.get(k)
+                for k in ("equipment", "items", "buildings", "data", "rows", "result")
+            ):
+                return False
+    if canary:
+        return canary.encode() in body
     if isinstance(data, list):
         return len(data) > 0
     if isinstance(data, dict):
         if not data:
             return False
-        for key in ("equipment", "items", "buildings", "data", "rows"):
+        for key in ("equipment", "items", "buildings", "data", "rows", "result"):
             val = data.get(key)
             if isinstance(val, list) and len(val) > 0:
                 return True
             if isinstance(val, dict) and val:
                 return True
+        # Bare status/ack objects are not object ownership proof.
+        if set(data.keys()) <= {"ok", "status", "message", "error", "errors", "detail"}:
+            return False
         return any(v not in (None, "", [], {}) for v in data.values())
     return False
+
+
+def _structured_deny(status: int, body: bytes, *, foreign_canary: str = "") -> bool:
+    """Authorization denial: 403/404 JSON deny envelope, no foreign canary/HTML."""
+    if status not in (403, 404):
+        return False
+    if _looks_html(body):
+        return False
+    if foreign_canary and foreign_canary.encode() in body:
+        return False
+    return _deny_envelope(body)
 
 
 class SuiteContext:
@@ -392,24 +421,42 @@ def _login_me(
         return
     password = resolve_password(ident)
     username = resolve_username(ident, default_user)
-    # Prefer pre-minted admin bearer after stress floods (avoids login 429).
+    # Prefer pre-minted admin bearer only after full identity confirmation.
     if alias == "admin":
         preexisting = (os.environ.get("OPENFDD_ADMIN_TOKEN") or "").strip()
         if preexisting:
             try:
                 me = ctx.client.request("GET", "/api/auth/me", token=preexisting)
                 if me.status == 200 and _is_json_object(me.body):
-                    ctx.tokens[alias] = preexisting
-                    role = (me.json() or {}).get("role")
+                    me_data = me.json() or {}
+                    role = str(me_data.get("role") or "").lower()
+                    sub = str(me_data.get("sub") or me_data.get("username") or "")
+                    expected_role = (ident.role or "admin").lower()
+                    identity_ok = (
+                        role == expected_role
+                        and bool(sub)
+                        and (
+                            not username
+                            or sub == username
+                            or sub.lower() == username.lower()
+                        )
+                    )
+                    if identity_ok:
+                        ctx.tokens[alias] = preexisting
                     ctx.check(
                         check_id,
                         "X",
                         f"login/me {alias}",
-                        "PASS" if role == "admin" else "FAIL",
+                        "PASS" if identity_ok else "FAIL",
                         expected="200+token",
                         observed=_status_of(me),
                         identity_alias=alias,
-                        detail="reused OPENFDD_ADMIN_TOKEN",
+                        detail=(
+                            "reused OPENFDD_ADMIN_TOKEN"
+                            if identity_ok
+                            else "pre-minted token failed identity/schema check"
+                        ),
+                        detector_id=None if identity_ok else "wrong_identity",
                     )
                     return
             except TransportError:
@@ -425,18 +472,12 @@ def _login_me(
         )
         return
     try:
-        r = None
-        for attempt in range(6):
-            r = ctx.client.request(
-                "POST",
-                "/api/auth/login",
-                json_body={"username": username, "password": password},
-            )
-            if r.status != 429:
-                break
-            # Post-stress / gate 23 AFDD flood can trip login rate limits — wait and retry.
-            time.sleep(min(5 * (2**attempt), 45))
-        assert r is not None
+        # No automatic login retries — 429/5xx are FAIL/ERROR, not soft-pass.
+        r = ctx.client.request(
+            "POST",
+            "/api/auth/login",
+            json_body={"username": username, "password": password},
+        )
         if r.status != 200 or not _is_json_object(r.body):
             ctx.check(
                 check_id,
@@ -446,7 +487,7 @@ def _login_me(
                 expected="200+token",
                 observed=_status_of(r),
                 identity_alias=alias,
-                detail="login rate-limited (429) after retries" if r.status == 429 else None,
+                detail="login rate-limited (429)" if r.status == 429 else None,
             )
             return
         data = r.json()
@@ -461,7 +502,7 @@ def _login_me(
                 identity_alias=alias,
             )
             return
-        ctx.tokens[alias] = token
+        # Confirm /api/auth/me before caching the token.
         me = ctx.client.request("GET", "/api/auth/me", token=token)
         if me.status != 200 or not _is_json_object(me.body):
             ctx.check(
@@ -546,6 +587,7 @@ def _login_me(
                     detector_id="wrong_identity",
                 )
                 return
+        ctx.tokens[alias] = token
         ctx.check(
             check_id,
             "X",
@@ -575,6 +617,13 @@ def run_suite_y(ctx: SuiteContext) -> None:
         tok_b = ctx.tokens.get("operator_b")
 
     if not tok_a:
+        # Credentials present but no token ⇒ auth collapsed (always-401), not missing fixtures.
+        ident_a = ctx.cfg.identities.get("operator_a")
+        creds_present = bool(
+            ident_a
+            and resolve_password(ident_a)
+            and resolve_username(ident_a, "acme-ops")
+        )
         for cid in (
             "y.authz.a_own_building_control",
             "y.authz.a_foreign_building_denied",
@@ -587,7 +636,23 @@ def run_suite_y(ctx: SuiteContext) -> None:
             "y.detector.html_200_not_deny",
             "y.detector.foreign_canary_leak",
         ):
-            ctx.check(cid, "Y", cid, "BLOCKED", detail="no operator_a token (admin fallback removed)")
+            if cid == "y.detector.always_401_invalidates_authz" and creds_present:
+                ctx.check(
+                    cid,
+                    "Y",
+                    "detector: always-401",
+                    "FAIL",
+                    detail="credentials present but auth/login collapsed to no usable token",
+                    detector_id="always_401",
+                )
+            else:
+                ctx.check(
+                    cid,
+                    "Y",
+                    cid,
+                    "BLOCKED",
+                    detail="no operator_a token (admin fallback removed)",
+                )
         return
 
     # Positive own control for A
@@ -921,7 +986,16 @@ def run_suite_y(ctx: SuiteContext) -> None:
                 )
             else:
                 role = str((me.json() or {}).get("role") or "").lower()
-                if role and role not in ("viewer", "read", "readonly"):
+                if not role:
+                    ctx.check(
+                        "y.authz.viewer_mutation_denied",
+                        "Y",
+                        "viewer cannot mint agent-token",
+                        "FAIL",
+                        detail="viewer /api/auth/me missing role",
+                        detector_id="wrong_identity",
+                    )
+                elif role not in ("viewer", "read", "readonly"):
                     ctx.check(
                         "y.authz.viewer_mutation_denied",
                         "Y",
@@ -1074,8 +1148,7 @@ def run_suite_y(ctx: SuiteContext) -> None:
             detail=str(exc),
         )
 
-    # Datasets + package mapping: foreign building deny (Wave S1 expand).
-    # Own-building 200 is not required for PASS — missing fixtures stay out of FQ.
+    # Datasets + package mapping/TTL: own positive control before foreign deny.
     for path, foreign_cid in (
         ("/api/datasets", "y.authz.a_foreign_datasets_denied"),
         (
@@ -1088,16 +1161,34 @@ def run_suite_y(ctx: SuiteContext) -> None:
         ),
     ):
         try:
+            own_cid = foreign_cid.replace("_foreign_", "_own_").replace("_denied", "")
+            q_own = urlencode({"building_id": fx.building_a})
+            r_own = ctx.client.request("GET", f"{path}?{q_own}", token=tok_a)
+            if r_own.status == 401:
+                own_st = "ERROR"
+            elif r_own.status == 200 and _nonempty_own_control(r_own.body, fx.canary_a):
+                own_st = "PASS"
+            elif r_own.status == 200:
+                own_st = "BLOCKED"
+            else:
+                own_st = "BLOCKED" if r_own.status in (403, 404) else "FAIL"
+            ctx.check(
+                own_cid,
+                "Y",
+                f"A own {path}",
+                own_st,
+                observed=_status_of(r_own),
+                path_template=path,
+                detail=None if own_st == "PASS" else "missing populated own-object control",
+            )
             q_b = urlencode({"building_id": fx.building_b})
             r_f = ctx.client.request("GET", f"{path}?{q_b}", token=tok_a)
             leak = fx.canary_b.encode() in r_f.body
             if r_f.status == 401:
                 deny_st = "ERROR"
-            elif r_f.status in (403, 404) and not leak:
+            elif _structured_deny(r_f.status, r_f.body, foreign_canary=fx.canary_b):
                 deny_st = "PASS"
-            elif r_f.status == 200 and leak:
-                deny_st = "FAIL"
-            elif r_f.status == 200:
+            elif r_f.status == 200 or leak:
                 deny_st = "FAIL"
             else:
                 deny_st = "FAIL"
@@ -1106,7 +1197,7 @@ def run_suite_y(ctx: SuiteContext) -> None:
                 "Y",
                 f"A denied foreign {path}",
                 deny_st,
-                expected="403/404",
+                expected="403/404+deny",
                 observed=_status_of(r_f),
                 detail="foreign canary leak" if leak else None,
                 path_template=path,
@@ -1134,17 +1225,8 @@ def run_suite_y(ctx: SuiteContext) -> None:
             elif r_own.status == 200 and _nonempty_own_control(r_own.body, fx.canary_a):
                 own_st = "PASS"
             elif r_own.status == 200:
-                # Empty list can be a healthy empty building; {} is not.
-                try:
-                    data = json.loads(r_own.body.decode())
-                    if isinstance(data, list):
-                        own_st = "PASS"
-                    elif isinstance(data, dict) and data:
-                        own_st = "PASS"
-                    else:
-                        own_st = "BLOCKED"
-                except Exception:
-                    own_st = "BLOCKED"
+                # Empty list/soft 200 is not authorization proof (empty-site UX separate).
+                own_st = "BLOCKED"
             else:
                 own_st = "BLOCKED" if r_own.status in (403, 404) else "FAIL"
             ctx.check(
@@ -1154,13 +1236,14 @@ def run_suite_y(ctx: SuiteContext) -> None:
                 own_st,
                 observed=_status_of(r_own),
                 path_template=path,
+                detail=None if own_st == "PASS" else "empty/soft 200 is not positive own-object control",
             )
             q_b = urlencode({"building_id": fx.building_b})
             r_f = ctx.client.request("GET", f"{path}?{q_b}", token=tok_a)
             leak = fx.canary_b.encode() in r_f.body
             if r_f.status == 401:
                 deny_st = "ERROR"
-            elif r_f.status in (403, 404) and not leak:
+            elif _structured_deny(r_f.status, r_f.body, foreign_canary=fx.canary_b):
                 deny_st = "PASS"
             else:
                 deny_st = "FAIL"
@@ -1211,11 +1294,11 @@ def run_suite_y(ctx: SuiteContext) -> None:
             own_cid = foreign_cid.replace("_foreign_", "_own_").replace("_denied", "")
             if r_own.status == 401:
                 own_st = "ERROR"
-            elif r_own.status in (200, 204):
+            elif r_own.status == 200 and _nonempty_own_control(r_own.body, fx.canary_a):
                 own_st = "PASS"
-            elif r_own.status in (400, 422):
-                # Authz passed; payload/schema rejected — still own-path success for MT.
-                own_st = "PASS"
+            elif r_own.status in (200, 204, 400, 422):
+                # Status-only / empty / schema-reject is not populated analytics proof.
+                own_st = "BLOCKED"
             else:
                 own_st = "BLOCKED" if r_own.status in (403, 404) else "FAIL"
             ctx.check(
@@ -1225,13 +1308,16 @@ def run_suite_y(ctx: SuiteContext) -> None:
                 own_st,
                 observed=_status_of(r_own),
                 path_template=path,
+                detail=None
+                if own_st == "PASS"
+                else "analytics own success requires nonempty fixture content",
             )
             body_b = {"building_id": fx.building_b}
             r_f = ctx.client.request("POST", path, token=tok_a, json_body=body_b)
             leak = fx.canary_b.encode() in r_f.body
             if r_f.status == 401:
                 deny_st = "ERROR"
-            elif r_f.status in (403, 404) and not leak:
+            elif _structured_deny(r_f.status, r_f.body, foreign_canary=fx.canary_b):
                 deny_st = "PASS"
             else:
                 deny_st = "FAIL"
@@ -1605,9 +1691,202 @@ def run_suite_mqtt_acl(ctx: SuiteContext) -> None:
     )
 
 
+def run_suite_ssrf(ctx: SuiteContext) -> None:
+    """SSRF policy + optional isolated canary evidence (Astra C-PY).
+
+    Never probes cloud metadata. Forbidden-destination denial is offline policy;
+    live canary hit-counts require OPENFDD_SSRF_CANARY_EVIDENCE_JSON or execute
+    against a disposable canary (not Railway metadata).
+    """
+    from ..ssrf_policy import classify_url, forbidden_urls
+
+    # Offline policy: metadata / link-local must be forbidden.
+    all_forbidden_ok = True
+    for idx, url in enumerate(forbidden_urls()):
+        result = classify_url(url)
+        ok = result.get("class") == "forbidden" and result.get("ok") is False
+        all_forbidden_ok = all_forbidden_ok and ok
+        host = url.split("/")[2] if "://" in url else url
+        ctx.check(
+            f"ssrf.policy.forbid_{idx}",
+            "ssrf",
+            f"policy forbids {host}",
+            "PASS" if ok else "FAIL",
+            detail=str(result),
+            detector_id="ssrf_forbidden_dest",
+        )
+    ctx.check(
+        "ssrf.policy.metadata_batch",
+        "ssrf",
+        "cloud metadata / link-local batch forbidden",
+        "PASS" if all_forbidden_ok else "FAIL",
+        detector_id="ssrf_metadata_batch",
+    )
+
+    # Approved loopback canary class (isolated only).
+    canary = classify_url("http://127.0.0.1:9/canary")
+    ctx.check(
+        "ssrf.policy.loopback_canary_class",
+        "ssrf",
+        "loopback classified as canary-only",
+        "PASS" if canary.get("class") == "canary" else "FAIL",
+        detail=str(canary),
+    )
+
+    evidence = os.environ.get("OPENFDD_SSRF_CANARY_EVIDENCE_JSON", "").strip()
+    execute = os.environ.get("OPENFDD_SSRF_CANARY_EXECUTE", "0") == "1"
+    # Product Rust fetch path (open-meteo / future URL sink) is not this Python classifier.
+    ctx.check(
+        "ssrf.product_rust_path.bound",
+        "ssrf",
+        "evidence bound to candidate Rust fetch path (not Python classifier)",
+        "BLOCKED",
+        detail=(
+            "require correlated central fetch (method/route/candidate/config) through "
+            "the product Rust client; local classify_url is policy scaffolding only"
+        ),
+        detector_id="ssrf_product_path",
+    )
+    if evidence and Path(evidence).is_file():
+        try:
+            report = json.loads(Path(evidence).read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            report = {"ok": False, "status": "ERROR", "detail": str(exc)}
+        required = (
+            "run_id",
+            "candidate_sha",
+            "method",
+            "route",
+            "started_at",
+            "finished_at",
+            "observer_alive",
+            "forbidden_hits",
+            "approved_hits",
+        )
+        missing = [k for k in required if k not in report]
+        if missing:
+            detail = f"incomplete SSRF evidence missing={missing[:8]}"
+            ctx.check(
+                "ssrf.canary.forbidden_zero_hits",
+                "ssrf",
+                "forbidden URL produced zero canary hits",
+                "BLOCKED",
+                detail=detail,
+                detector_id="ssrf_canary_forbidden",
+            )
+            ctx.check(
+                "ssrf.canary.approved_positive",
+                "ssrf",
+                "approved canary URL produced ≥1 hit",
+                "BLOCKED",
+                detail=detail,
+                detector_id="ssrf_canary_approved",
+            )
+            return
+        if report.get("observer_alive") is not True:
+            ctx.check(
+                "ssrf.canary.forbidden_zero_hits",
+                "ssrf",
+                "forbidden URL produced zero canary hits",
+                "BLOCKED",
+                detail="observer_alive must be boolean true",
+                detector_id="ssrf_canary_forbidden",
+            )
+            ctx.check(
+                "ssrf.canary.approved_positive",
+                "ssrf",
+                "approved canary URL produced ≥1 hit",
+                "BLOCKED",
+                detail="observer_alive must be boolean true",
+                detector_id="ssrf_canary_approved",
+            )
+            return
+        try:
+            forbidden_hits = int(report["forbidden_hits"])
+            approved_hits = int(report["approved_hits"])
+        except (TypeError, ValueError, KeyError):
+            ctx.check(
+                "ssrf.canary.forbidden_zero_hits",
+                "ssrf",
+                "forbidden URL produced zero canary hits",
+                "ERROR",
+                detail="forbidden_hits/approved_hits must be integers",
+                detector_id="ssrf_canary_forbidden",
+            )
+            ctx.check(
+                "ssrf.canary.approved_positive",
+                "ssrf",
+                "approved canary URL produced ≥1 hit",
+                "ERROR",
+                detail="forbidden_hits/approved_hits must be integers",
+                detector_id="ssrf_canary_approved",
+            )
+            return
+        # Trust hit counts + correlated identity fields; ignore self-declared ok/status.
+        forbid_st = "PASS" if forbidden_hits == 0 else "FAIL"
+        approve_st = "PASS" if approved_hits >= 1 else "FAIL"
+        ctx.check(
+            "ssrf.canary.forbidden_zero_hits",
+            "ssrf",
+            "forbidden URL produced zero canary hits",
+            forbid_st,
+            detail=(
+                f"forbidden_hits={forbidden_hits} run={report.get('run_id')} "
+                f"candidate={report.get('candidate_sha')} "
+                f"{report.get('method')} {report.get('route')}"
+            ),
+            detector_id="ssrf_canary_forbidden",
+        )
+        ctx.check(
+            "ssrf.canary.approved_positive",
+            "ssrf",
+            "approved canary URL produced ≥1 hit",
+            approve_st,
+            detail=f"approved_hits={approved_hits} route={report.get('route')}",
+            detector_id="ssrf_canary_approved",
+        )
+        return
+
+    if execute:
+        ctx.check(
+            "ssrf.canary.forbidden_zero_hits",
+            "ssrf",
+            "forbidden URL produced zero canary hits",
+            "BLOCKED",
+            detail="OPENFDD_SSRF_CANARY_EXECUTE=1 requires complete evidence JSON path",
+        )
+        ctx.check(
+            "ssrf.canary.approved_positive",
+            "ssrf",
+            "approved canary URL produced ≥1 hit",
+            "BLOCKED",
+            detail="set OPENFDD_SSRF_CANARY_EVIDENCE_JSON from isolated Rust-path canary run",
+        )
+        return
+
+    ctx.check(
+        "ssrf.canary.forbidden_zero_hits",
+        "ssrf",
+        "forbidden URL produced zero canary hits",
+        "BLOCKED",
+        detail=(
+            "set OPENFDD_SSRF_CANARY_EVIDENCE_JSON with run/candidate/route/hits; "
+            "never probe cloud metadata; Python classifier is not product defense"
+        ),
+    )
+    ctx.check(
+        "ssrf.canary.approved_positive",
+        "ssrf",
+        "approved canary URL produced ≥1 hit",
+        "BLOCKED",
+        detail="set complete OPENFDD_SSRF_CANARY_EVIDENCE_JSON from isolated canary",
+    )
+
+
 SUITE_RUNNERS = {
     "X": run_suite_x,
     "Y": run_suite_y,
     "Z": run_suite_z,
     "mqtt_acl": run_suite_mqtt_acl,
+    "ssrf": run_suite_ssrf,
 }

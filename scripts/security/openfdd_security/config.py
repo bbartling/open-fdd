@@ -248,10 +248,14 @@ def validate_profile_suite(profile: str, suites: list[str] | None) -> list[str]:
         return ["X", "Y", "Z"]
     out = []
     for s in suites:
-        su = s.upper() if s.lower() != "mqtt_acl" else "mqtt_acl"
+        lower = s.lower()
+        if lower in {"mqtt_acl", "ssrf"}:
+            su = lower
+        else:
+            su = s.upper()
         if su not in SUITES and su not in {"X", "Y", "Z"}:
             raise ConfigError(f"unknown suite: {s}")
-        out.append(su if su != "mqtt_acl" else "mqtt_acl")
+        out.append(su)
     return out
 
 

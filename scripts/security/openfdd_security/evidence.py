@@ -266,6 +266,48 @@ def render_markdown(report: SecurityReport) -> str:
     return "\n".join(lines)
 
 
+def _require_bool(data: dict[str, Any], key: str) -> str | None:
+    if key not in data:
+        return None
+    if not isinstance(data[key], bool):
+        return f"{key} must be boolean (got {type(data[key]).__name__})"
+    return None
+
+
+def reconcile_child_rc(
+    *,
+    report_ok: bool,
+    report_status: str | None,
+    child_rc: int | None,
+) -> tuple[bool, str, str]:
+    """Combine report validation with process exit.
+
+    Contradictory ok/status/rc → ERROR (never silent green).
+    Returns (ok, status, reason).
+    """
+    status = (report_status or "").upper()
+    if child_rc is None:
+        return False, "ERROR", "missing child process rc"
+    if report_ok and child_rc == 0:
+        return True, "PASS", "ok"
+    if report_ok and child_rc != 0:
+        return (
+            False,
+            "ERROR",
+            f"report ok but child_rc={child_rc} (contradictory)",
+        )
+    if not report_ok and child_rc == 0:
+        return (
+            False,
+            "ERROR" if status in ("", "PASS") else status or "FAIL",
+            f"child_rc=0 but report not ok (status={status or 'unknown'})",
+        )
+    # Both failed — prefer report status when present.
+    if status in ("FAIL", "ERROR", "BLOCKED"):
+        return False, status, f"report not ok; child_rc={child_rc}"
+    return False, "FAIL", f"report not ok; child_rc={child_rc}"
+
+
 def validate_report_for_qualification(
     report_path: Path,
     *,
@@ -274,11 +316,17 @@ def validate_report_for_qualification(
     expected_sha256: str | None = None,
     require_full_profile: bool = True,
     postcheck: bool = False,
+    required_check_ids: list[str] | None = None,
+    expected_candidate_sha: str | None = None,
+    child_rc: int | None = None,
 ) -> tuple[bool, str]:
-    """Return (ok, reason). Used by gate 25b and sabotage tests.
+    """Return (ok, reason). Used by gate 25/25b and sabotage tests.
 
     Never trust a report's self-declared ``fully_qualified`` or ``counts``
     alone — recompute from ``checks[]``. Empty checks cannot qualify.
+    When ``required_check_ids`` is provided, every ID must be present with
+    PASS (NOT_APPLICABLE allowed only when explicitly listed status).
+    When ``child_rc`` is provided, contradictory process/report pairs ERROR.
     """
     if not report_path.is_file():
         return False, "missing security_report.json"
@@ -290,14 +338,30 @@ def validate_report_for_qualification(
         data = json.loads(raw)
     except json.JSONDecodeError:
         return False, "report is not valid JSON"
+    if not isinstance(data, dict):
+        return False, "report root must be object"
     if data.get("schema_version") != SCHEMA_VERSION:
         return False, "unsupported schema_version"
     if data.get("profile") != expected_profile:
         return False, "profile mismatch"
+
+    for key in ("executed", "dry_run", "full_profile", "fully_qualified"):
+        err = _require_bool(data, key)
+        if err:
+            return False, err
+
     if require_executed and (data.get("dry_run") or not data.get("executed")):
         return False, "dry-run artifact cannot qualify"
     if require_full_profile and not postcheck and not data.get("full_profile", True):
         return False, "suite subset cannot claim full-profile qualification"
+
+    if expected_candidate_sha:
+        cand = data.get("candidate") or {}
+        if not isinstance(cand, dict):
+            return False, "candidate must be object"
+        got = str(cand.get("sha") or cand.get("source_sha") or cand.get("digest") or "")
+        if got != expected_candidate_sha:
+            return False, "candidate sha mismatch or missing"
 
     checks = data.get("checks")
     if not isinstance(checks, list) or len(checks) == 0:
@@ -312,14 +376,18 @@ def validate_report_for_qualification(
         "not_applicable": 0,
     }
     ids: set[str] = set()
+    by_id: dict[str, dict[str, Any]] = {}
     for c in checks:
         if not isinstance(c, dict):
             return False, "check entry is not an object"
         cid = c.get("check_id")
-        if not cid or cid in ids:
+        if not cid or not isinstance(cid, str) or cid in ids:
             return False, f"missing or duplicate check_id {cid!r}"
-        ids.add(str(cid))
-        st = str(c.get("status") or "")
+        ids.add(cid)
+        by_id[cid] = c
+        st = c.get("status")
+        if not isinstance(st, str):
+            return False, f"check {cid} status must be string"
         key = {
             "PASS": "pass",
             "FAIL": "fail",
@@ -332,6 +400,29 @@ def validate_report_for_qualification(
             return False, f"invalid check status {st!r}"
         recomputed[key] += 1
 
+    declared = data.get("counts")
+    if declared is not None:
+        if not isinstance(declared, dict):
+            return False, "counts must be object"
+        for k, v in recomputed.items():
+            if k in declared and declared[k] != v:
+                return False, f"counts.{k} contradicts recomputed ({declared[k]}!={v})"
+
+    if required_check_ids:
+        missing = [cid for cid in required_check_ids if cid not in by_id]
+        if missing:
+            return False, f"missing required check_ids: {missing[:8]}"
+        for cid in required_check_ids:
+            st = by_id[cid].get("status")
+            if st == "SKIPPED":
+                return False, f"required check {cid} is SKIPPED"
+            if st == "BLOCKED":
+                return False, f"required check {cid} is BLOCKED"
+            if st in ("FAIL", "ERROR"):
+                return False, f"required check {cid} is {st}"
+            if st not in ("PASS", "NOT_APPLICABLE"):
+                return False, f"required check {cid} status {st!r}"
+
     if recomputed["fail"]:
         return False, f"{recomputed['fail']} check(s) FAIL"
     if recomputed["error"]:
@@ -339,26 +430,46 @@ def validate_report_for_qualification(
     if recomputed["pass"] == 0:
         return False, "zero PASS checks after recompute"
 
-    if postcheck:
-        if recomputed["blocked"] == recomputed["planned"]:
-            return False, "all checks BLOCKED"
-        if data.get("overall_status") in ("FAIL", "ERROR"):
-            return False, f"overall_status={data.get('overall_status')}"
-    else:
-        if recomputed["blocked"]:
-            return False, "blocked checks remain"
+    # R02: mixed PASS+BLOCKED cannot qualify (precheck or postcheck).
+    if recomputed["blocked"]:
+        return False, "blocked checks remain"
+    if recomputed["skipped"] and not postcheck:
         if recomputed["skipped"] == recomputed["planned"]:
             return False, "all checks SKIPPED"
-        if data.get("overall_status") in ("FAIL", "ERROR"):
-            return False, f"overall_status={data.get('overall_status')}"
-        if not data.get("fully_qualified"):
-            return False, data.get("reason") or "not fully_qualified"
+        # Partial SKIPPED on non-required IDs still blocks full qualification.
+        if require_full_profile and not postcheck:
+            return False, "skipped checks remain under full-profile qualification"
+
+    if data.get("overall_status") in ("FAIL", "ERROR"):
+        return False, f"overall_status={data.get('overall_status')}"
+    if not postcheck and not data.get("fully_qualified"):
+        return False, data.get("reason") or "not fully_qualified"
+    # Contradictory: overall PASS/fully_qualified while recomputed has failures already handled.
+    if data.get("overall_status") == "PASS" and (
+        recomputed["fail"] or recomputed["error"] or recomputed["blocked"]
+    ):
+        return False, "overall_status PASS contradicts recomputed failures"
+    if data.get("fully_qualified") is True and (
+        recomputed["fail"] or recomputed["error"] or recomputed["blocked"]
+    ):
+        return False, "fully_qualified true contradicts recomputed failures"
 
     meta_path = report_path.parent / "security_report.sha256"
     if meta_path.is_file():
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         if meta.get("sha256") and meta["sha256"] != digest:
             return False, "sidecar hash disagrees with report bytes"
+
+    if child_rc is not None:
+        ok_rc, st_rc, reason_rc = reconcile_child_rc(
+            report_ok=True,
+            report_status=str(data.get("overall_status") or "PASS"),
+            child_rc=child_rc,
+        )
+        if not ok_rc:
+            return False, reason_rc
+        _ = st_rc
+
     return True, "ok"
 
 

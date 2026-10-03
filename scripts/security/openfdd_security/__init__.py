@@ -12,4 +12,4 @@ STATUSES = frozenset(
     {"PASS", "FAIL", "ERROR", "BLOCKED", "SKIPPED", "NOT_APPLICABLE"}
 )
 PROFILES = frozenset({"live_readonly", "isolated_full", "local_open"})
-SUITES = frozenset({"X", "Y", "Z", "mqtt_acl"})
+SUITES = frozenset({"X", "Y", "Z", "mqtt_acl", "ssrf"})

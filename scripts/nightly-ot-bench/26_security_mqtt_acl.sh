@@ -112,11 +112,20 @@ if [[ "$ut_rc" -ne 0 ]]; then
   exit 1
 fi
 
-# Prefer structured PASS over observer process exit (cleanup/docker can be non-zero
-# after a truthful mqtt_acl_observer.json PASS — MEGA 20260921T204702Z exit=5 flake).
-obs_ok=$(jq -r '(.ok == true) or (.status == "PASS")' "$ART/mqtt_acl_verdict.json" 2>/dev/null || echo false)
-write_structured_verdict "$ART/mqtt_acl_verdict.json" 0
-if [[ "$obs_ok" == "true" ]]; then
+# R02: never prefer report PASS over a failed observer process.
+# Contradictory ok/status/rc → ERROR (cleanup flakes must not mint false green).
+obs_status=$(jq -r '.status // empty' "$ART/mqtt_acl_verdict.json" 2>/dev/null || true)
+obs_ok_bool=$(jq -r 'if .ok == true then "true" elif .ok == false then "false" else "null" end' \
+  "$ART/mqtt_acl_verdict.json" 2>/dev/null || echo null)
+write_structured_verdict "$ART/mqtt_acl_verdict.json" "$rc"
+if [[ "$obs_ok_bool" == "true" && "$obs_status" == "PASS" && "$rc" -eq 0 ]]; then
   exit 0
+fi
+if [[ "$obs_ok_bool" == "true" && "$obs_status" == "PASS" && "$rc" -ne 0 ]]; then
+  jq --argjson ut "$rc" \
+    '.ok=false | .status="ERROR" | .reason="observer PASS but child_rc!=0 (contradictory)" | .unittest_rc=$ut' \
+    "$ART/security_gate_verdict.json" >"$ART/security_gate_verdict.json.tmp"
+  mv "$ART/security_gate_verdict.json.tmp" "$ART/security_gate_verdict.json"
+  exit 2
 fi
 exit "$rc"

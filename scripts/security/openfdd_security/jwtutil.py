@@ -46,8 +46,9 @@ def make_valid_token(
     role: str = "operator",
     ttl_s: int = 600,
     tenant_ids: list[str] | None = None,
+    now_s: int | None = None,
 ) -> str:
-    now = int(time.time())
+    now = int(time.time() if now_s is None else now_s)
     payload = {
         "sub": sub,
         "role": role,
@@ -64,8 +65,9 @@ def make_expired_token(
     sub: str = "harness-user",
     role: str = "operator",
     tenant_ids: list[str] | None = None,
+    now_s: int | None = None,
 ) -> str:
-    now = int(time.time())
+    now = int(time.time() if now_s is None else now_s)
     payload = {
         "sub": sub,
         "role": role,
@@ -80,8 +82,9 @@ def make_alg_none_token(
     *,
     sub: str = "harness-user",
     role: str = "admin",
+    now_s: int | None = None,
 ) -> str:
-    now = int(time.time())
+    now = int(time.time() if now_s is None else now_s)
     payload = {
         "sub": sub,
         "role": role,
