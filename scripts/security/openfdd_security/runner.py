@@ -21,9 +21,10 @@ from .transport import Budget, SafeHttpClient
 def list_suites() -> dict[str, str]:
     return {
         "X": "authentication / JWT / preauth",
-        "Y": "authorization A/B + roles",
+        "Y": "authorization A/B + roles (includes IDOR foreign deny)",
         "Z": "deployment headers / CORS / abuse bounds",
         "mqtt_acl": "optional isolated broker ACL (distinct from continuity)",
+        "ssrf": "URL fetch policy + isolated canary (no cloud metadata probes)",
     }
 
 

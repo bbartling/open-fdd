@@ -1605,9 +1605,122 @@ def run_suite_mqtt_acl(ctx: SuiteContext) -> None:
     )
 
 
+def run_suite_ssrf(ctx: SuiteContext) -> None:
+    """SSRF policy + optional isolated canary evidence (Astra C-PY).
+
+    Never probes cloud metadata. Forbidden-destination denial is offline policy;
+    live canary hit-counts require OPENFDD_SSRF_CANARY_EVIDENCE_JSON or execute
+    against a disposable canary (not Railway metadata).
+    """
+    from ..ssrf_policy import classify_url, forbidden_urls
+
+    # Offline policy: metadata / link-local must be forbidden.
+    all_forbidden_ok = True
+    for idx, url in enumerate(forbidden_urls()):
+        result = classify_url(url)
+        ok = result.get("class") == "forbidden" and result.get("ok") is False
+        all_forbidden_ok = all_forbidden_ok and ok
+        host = url.split("/")[2] if "://" in url else url
+        ctx.check(
+            f"ssrf.policy.forbid_{idx}",
+            "ssrf",
+            f"policy forbids {host}",
+            "PASS" if ok else "FAIL",
+            detail=str(result),
+            detector_id="ssrf_forbidden_dest",
+        )
+    ctx.check(
+        "ssrf.policy.metadata_batch",
+        "ssrf",
+        "cloud metadata / link-local batch forbidden",
+        "PASS" if all_forbidden_ok else "FAIL",
+        detector_id="ssrf_metadata_batch",
+    )
+
+    # Approved loopback canary class (isolated only).
+    canary = classify_url("http://127.0.0.1:9/canary")
+    ctx.check(
+        "ssrf.policy.loopback_canary_class",
+        "ssrf",
+        "loopback classified as canary-only",
+        "PASS" if canary.get("class") == "canary" else "FAIL",
+        detail=str(canary),
+    )
+
+    evidence = os.environ.get("OPENFDD_SSRF_CANARY_EVIDENCE_JSON", "").strip()
+    execute = os.environ.get("OPENFDD_SSRF_CANARY_EXECUTE", "0") == "1"
+    if evidence and Path(evidence).is_file():
+        try:
+            report = json.loads(Path(evidence).read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            report = {"ok": False, "status": "ERROR", "detail": str(exc)}
+        forbidden_hits = int(report.get("forbidden_hits") or 0)
+        approved_hits = int(report.get("approved_hits") or 0)
+        st = report.get("status") or ("PASS" if report.get("ok") else "FAIL")
+        if forbidden_hits != 0:
+            st = "FAIL"
+        elif approved_hits < 1 and st == "PASS":
+            st = "FAIL"
+        if st not in ("PASS", "FAIL", "BLOCKED", "ERROR", "SKIPPED"):
+            st = "FAIL"
+        ctx.check(
+            "ssrf.canary.forbidden_zero_hits",
+            "ssrf",
+            "forbidden URL produced zero canary hits",
+            st if st != "PASS" else ("PASS" if forbidden_hits == 0 else "FAIL"),
+            detail=f"forbidden_hits={forbidden_hits}",
+            detector_id="ssrf_canary_forbidden",
+        )
+        ctx.check(
+            "ssrf.canary.approved_positive",
+            "ssrf",
+            "approved canary URL produced ≥1 hit",
+            "PASS" if approved_hits >= 1 else "FAIL",
+            detail=f"approved_hits={approved_hits}",
+            detector_id="ssrf_canary_approved",
+        )
+        return
+
+    if execute:
+        ctx.check(
+            "ssrf.canary.forbidden_zero_hits",
+            "ssrf",
+            "forbidden URL produced zero canary hits",
+            "BLOCKED",
+            detail="OPENFDD_SSRF_CANARY_EXECUTE=1 requires evidence JSON path",
+        )
+        ctx.check(
+            "ssrf.canary.approved_positive",
+            "ssrf",
+            "approved canary URL produced ≥1 hit",
+            "BLOCKED",
+            detail="set OPENFDD_SSRF_CANARY_EVIDENCE_JSON from isolated canary run",
+        )
+        return
+
+    ctx.check(
+        "ssrf.canary.forbidden_zero_hits",
+        "ssrf",
+        "forbidden URL produced zero canary hits",
+        "BLOCKED",
+        detail=(
+            "set OPENFDD_SSRF_CANARY_EVIDENCE_JSON from isolated canary; "
+            "never probe cloud metadata"
+        ),
+    )
+    ctx.check(
+        "ssrf.canary.approved_positive",
+        "ssrf",
+        "approved canary URL produced ≥1 hit",
+        "BLOCKED",
+        detail="set OPENFDD_SSRF_CANARY_EVIDENCE_JSON from isolated canary",
+    )
+
+
 SUITE_RUNNERS = {
     "X": run_suite_x,
     "Y": run_suite_y,
     "Z": run_suite_z,
     "mqtt_acl": run_suite_mqtt_acl,
+    "ssrf": run_suite_ssrf,
 }
