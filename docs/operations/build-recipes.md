@@ -8,16 +8,18 @@ nav_exclude: true
 
 # Build recipes
 
-Open-FDD uses the same GHCR images for both cloud-lab and self-hosted deployments. For most users there are two recommended deployment paths:
+Open-FDD ships two **named** product recipes. Compose helpers below map onto them.
 
-| Deployment | Best for | Services | Guide |
-| --- | --- | --- | --- |
-| **Railway cloud lab** | demos, CSV/package evaluation, temporary cloud access | `openfdd-central` + `openfdd-web` | [Railway deployment](RAILWAY_DEPLOYMENT.md) |
-| **Behind-firewall VM** | IT-managed dashboard on LAN/VPN | `openfdd-central` + `openfdd-web` via Compose `csv` | [VM deployment](VM_DEPLOYMENT.md) |
+| Named recipe | Best for | Services | Arch | Guide |
+| --- | --- | --- | --- | --- |
+| **Recipe 1 — cloud hub** | Railway / cloud MQTTS hub | `openfdd-mqtt` + `openfdd-central` + `openfdd-web` | **linux/amd64 only** | [Railway hub](../quick-start/railway-hub.md) · [Railway deployment](RAILWAY_DEPLOYMENT.md) |
+| **Recipe 2 — OT edge** | LAN/VPN OT host with local DataFusion | `openfdd-central` + `openfdd-web` + protocol (fieldbus/…) | **amd64 + arm64** | [Local stack](../quick-start/local-stack.md) · [VM deployment](VM_DEPLOYMENT.md) |
 
-Both paths consume the same container artifacts. `nightly` is the floating green-master channel; `sha-<7>` is the preferred reproducible deployment pin.
+**Ingest on Recipe 2:** protocol scrape → on-box central / Parquet / DataFusion (broker **not** required). Optional MQTTS publish to a Recipe 1 hub is **off by default**.
 
-For OT/BACnet deployments, use the additional fieldbus/MQTT recipes only when the host/network topology deliberately provides OT access.
+CSV-only dashboard (`csv` compose) is Recipe 2 without a protocol container. `nightly` is the floating green-master channel; `sha-<7>` (newest-by-created) is the preferred reproducible pin.
+
+Do **not** treat “fieldbus-only on-prem + hub-only in cloud” as the only topology — that is the optional WAN path, not Recipe 2.
 
 ## Images
 
@@ -35,17 +37,17 @@ All release images are intended to be publicly pullable from GHCR so an IT depar
 
 See [Release channels](release-channels.html) and [GHCR images](ghcr-images.html).
 
-## Local Compose recipes at a glance
+## Local Compose helpers at a glance
 
-| Recipe | Compose file | Services | Use |
-|--------|--------------|----------|-----|
-| `csv` | `docker/compose.csv.yml` | central + web (`OPENFDD_MQTT_ENABLED=0`) | **Recommended IT dashboard / CSV-package deployment** |
-| `standalone` | `docker/compose.standalone.yml` | mqtt + central + web + fieldbus | single OT-connected host |
-| `central` | `docker/compose.central.yml` | mqtt + central + web | hub for remote fieldbus edges |
-| `edge` | `docker/compose.edge.yml` | fieldbus only | remote OT edge |
-| `edge-split` | `docker/compose.edge.split.yml` | BACnet/Modbus + optional Haystack | migrating OT edge |
+| Helper | Named recipe | Compose file | Services | Use |
+|--------|--------------|--------------|----------|-----|
+| `csv` | **Recipe 2** (no protocol) | `docker/compose.csv.yml` | central + web (`OPENFDD_MQTT_ENABLED=0`) | IT dashboard / CSV-package / broker-free edge |
+| `standalone` | **Recipe 2** (+ optional local mqtt) | `docker/compose.standalone.yml` | mqtt + central + web + fieldbus | single OT-connected host |
+| `central` | **Recipe 1** shape | `docker/compose.central.yml` | mqtt + central + web | hub for remote edges |
+| `edge` | optional WAN path | `docker/compose.edge.yml` | fieldbus only | remote OT publisher → Recipe 1 |
+| `edge-split` | optional WAN path | `docker/compose.edge.split.yml` | BACnet/Modbus + optional Haystack | migrating OT edge |
 
-The `central` and `csv` recipes contain no fieldbus service and never start a
+The `central` and `csv` helpers contain no fieldbus service and never start a
 BACnet/Modbus/Haystack process. Use `edge` or `standalone` when the host is
 deliberately connected to an OT network. This separation is a deployment
 boundary, not a runtime capability flag.

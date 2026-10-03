@@ -23,11 +23,13 @@ If a customer needs HTTPS on-prem, that is an **ops add-on** (reverse proxy / Ca
 
 ## Recipes
 
-| Recipe | Compose | Use |
-|--------|---------|-----|
-| **`edge` + `compose.edge.railway.yml`** | fieldbus only → Railway MQTTS | **Patch-cycle default** — `./scripts/openfdd_fieldbus_railway_up.sh sha-*` |
-| `react` | web + central (+ optional) | Optional local CSV lab UI (not closeout) |
-| `react-ot` | + fieldbus + mqtt | Optional local OT lab (not closeout; no Pis) |
+Named product recipes: **Recipe 1** cloud hub (mqtt+central+web, amd64) · **Recipe 2** OT edge (central+web+protocol, broker optional). See [build-recipes.md](build-recipes.md).
+
+| Helper | Named recipe | Compose | Use |
+|--------|--------------|---------|-----|
+| **`edge` + `compose.edge.railway.yml`** | optional WAN → Recipe 1 | fieldbus only → Railway MQTTS | **Patch-cycle default** — `./scripts/openfdd_fieldbus_railway_up.sh sha-*` |
+| `csv` / `react` | **Recipe 2** (no/optional protocol) | web + central | Local CSV / broker-free edge lab |
+| `react-ot` / `standalone` | **Recipe 2** (+ local mqtt optional) | + fieldbus (+ mqtt) | Optional local OT lab (not closeout; no Pis) |
 
 Docs: [build-recipes.md](build-recipes.md) · agent: [`CONTAINER_AGENT.md`](../../openfdd_agent_spec/CONTAINER_AGENT.md) · skill [`openfdd-stack-ghcr`](../../openfdd_agent_spec/skills/openfdd-stack-ghcr/SKILL.md).
 

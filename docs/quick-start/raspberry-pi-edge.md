@@ -6,33 +6,36 @@ nav_order: 2
 
 # Raspberry Pi edge
 
-Open-FDD publishes **linux/arm64** images suitable for Raspberry Pi 4/5 with a 64-bit OS.
+**Recipe 2 on arm64.** Protocol images already publish `linux/arm64`. Central + web multi-arch is in flight — treat a full Pi Recipe 2 boot as **Soft-OPEN** until `docker manifest inspect` shows both arches for the tip you pin and a Pi boots central+web+protocol without a local broker.
 
 ## Requirements
 
-- Raspberry Pi 4 or 5, 4 GB+ RAM recommended
+- Raspberry Pi 4 or 5, 4 GB+ RAM recommended (Pi 3 is fieldbus-only / not a full soak host)
 - 64-bit Raspberry Pi OS or Ubuntu Server
 - Docker Engine + Compose plugin
 
 ## Install
 
-Clone the repo and bring up a recipe. The `fieldbus` service uses host
-networking for BACnet/IP, so run the `standalone` recipe for an all-on-Pi edge:
+Prefer broker-free Recipe 2 (`csv` / local-fieldbus) when the tip has arm64 central+web. `standalone` still works for all-in-one OT when you want a local broker:
 
 ```bash
 git clone https://github.com/bbartling/open-fdd.git
 cd open-fdd
+# Confirm tip arches first:
+docker manifest inspect ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:-nightly}
+./scripts/openfdd_stack_up.sh csv          # Recipe 2 shape (no mqtt)
+# or protocol on-box:
 ./scripts/openfdd_stack_up.sh standalone
 ```
 
-Pin a release tag:
+Pin a reproducible tip:
 
 ```bash
-OPENFDD_IMAGE_TAG=3.3.0 ./scripts/openfdd_stack_up.sh standalone
+OPENFDD_IMAGE_TAG=sha-<7> ./scripts/openfdd_stack_up.sh csv
 ```
 
-To attach the Pi as a remote fieldbus edge to a central hub instead, use the
-`edge` recipe (see [Build recipes](../operations/build-recipes.md)).
+Optional: attach the Pi as a remote fieldbus publisher to a Recipe 1 hub with the
+`edge` recipe (see [Build recipes](../operations/build-recipes.md)). MQTTS publish is optional and off by default.
 
 ## BACnet on Pi
 

@@ -8,7 +8,7 @@ nav_exclude: true
 
 # Fieldbus edge → MQTTS cloud hub (generic pattern)
 
-This is the **public** pattern for on-prem `openfdd-fieldbus` publishing into a Railway (or LAN) MQTTS hub. It does **not** include private site kits, IPs, or credentials.
+This is the **optional WAN** pattern: on-prem protocol publishes into a **Recipe 1** MQTTS hub (Railway or LAN). It is **not** the only OT topology — **Recipe 2** can scrape → on-box central/DataFusion with **no** broker. It does **not** include private site kits, IPs, or credentials.
 
 ## Topology
 
@@ -19,6 +19,7 @@ This is the **public** pattern for on-prem `openfdd-fieldbus` publishing into a 
 - **Never** run `openfdd-fieldbus` on Railway / public internet.
 - Poll + publish = **fixed 300 s** (Wave N). Health-role subset (~30%) throttles MS/TP load.
 - Multi-tenant hubs use topics: `openfdd/v1/tenants/{tid}/buildings/{bid}/edges/{eid}/telemetry/...`
+- Broker-free Recipe 2 (local direct ingest) is documented in [build-recipes.md](build-recipes.md).
 
 ## Operator steps (generic)
 

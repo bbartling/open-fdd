@@ -10,7 +10,7 @@ Trust **tested current code**. Update this file when code truth changes.
 
 | Surface | Role | Must not |
 | --- | --- | --- |
-| **Open-FDD product** (GHCR stack) | Rust central (DataFusion SQL FDD + `/api/analytics/*`), React SPA (`openfdd-web`), fieldbus, mqtt | Python/pandas in the product request path; FDD math in TypeScript |
+| **Open-FDD product** (GHCR stack) | Rust central (DataFusion SQL FDD + `/api/analytics/*`), React SPA (`openfdd-web`), fieldbus, mqtt. Deploy as **Recipe 1** cloud hub (mqtt+central+web, amd64) or **Recipe 2** OT edge (central+web+protocol; broker optional) — see [`docs/operations/build-recipes.md`](../docs/operations/build-recipes.md) | Python/pandas in the product request path; FDD math in TypeScript; treat fieldbus→hub MQTTS as the only OT story |
 | **React SPA** | Sole product UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)); internet-facing hygiene (no bench credential hints on login) | Secret/path handoffs in product UI; BACnet wire ownership in the browser |
 | **Historian** | **Parquet durable history**, Arrow in-memory batches, DataFusion SQL; provider-neutral `file://` / `s3://` storage contract ([historian lock](docs/HISTORIAN_ARCHITECTURE.md)) | Treat Feather/IPC as canonical durability; one file per telemetry sample; hard-code Railway; introduce a traditional DB as historian |
 | **Open-FDD PyPI** (`open-fdd`) | Third-party libraries: `ecm_engineering`, `rules`, `analytics`, `reporting` — runs **outside** the product app | Be mistaken for the product FDD runtime |

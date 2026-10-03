@@ -7,12 +7,18 @@ permalink: /quick-start/local-stack.html
 
 # Local stack bootstrap
 
-Run the product on a LAN / VPN host with GHCR images (no local Rust image builds on low-RAM machines).
+**Recipe 2 — OT edge / LAN:** run central + web + site protocol on a host with OT access. A Mosquitto broker is **not** required for local DataFusion / Parquet readback. Optional MQTTS publish to a Recipe 1 hub stays off by default.
+
+Use GHCR images (no local Rust image builds on low-RAM machines).
 
 ```bash
 git clone https://github.com/bbartling/open-fdd.git
 cd open-fdd
-./scripts/openfdd_stack_pull.sh react-ot   # or: react / csv
+# Recipe 2 shapes:
+./scripts/openfdd_stack_pull.sh csv        # central + web, no broker
+./scripts/openfdd_stack_up.sh csv --no-pull
+# or OT with protocol on the same host:
+./scripts/openfdd_stack_pull.sh react-ot   # or: standalone
 ./scripts/openfdd_stack_up.sh react-ot --no-pull
 ```
 
