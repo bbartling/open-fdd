@@ -1557,6 +1557,305 @@ body {
   font-size: var(--font-size-sm);
 }
 
+/* Operations protocol workspace. Native radios retain arrow-key navigation;
+   the label owns the visible focus treatment so the control stays discoverable
+   when the radio is visually compact. */
+.protocol-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0 0 var(--space-md);
+  padding: 0.5rem 0;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.protocol-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.protocol-tab:hover {
+  color: var(--color-text);
+  background: var(--color-secondary-bg);
+}
+
+.protocol-tab input {
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.protocol-tab:focus-within {
+  box-shadow: var(--focus-ring);
+}
+
+.protocol-tab--active {
+  color: var(--color-text);
+  font-weight: 600;
+  border-color: var(--color-border);
+  background: var(--color-widget-bg);
+}
+
+.protocol-workspace {
+  margin-bottom: var(--space-lg);
+}
+
+.protocol-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--space-sm);
+  margin: var(--space-sm) 0 var(--space-md);
+}
+
+.protocol-status-card {
+  min-width: 0;
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-widget-bg);
+}
+
+.protocol-status-card h3 {
+  margin: 0 0 0.35rem;
+  font-size: var(--font-size-md);
+}
+
+.protocol-status-card__state {
+  margin: 0;
+  font-weight: 600;
+}
+
+.protocol-status-card__state--ready {
+  color: var(--color-success, #166534);
+}
+
+.protocol-status-card__state--degraded,
+.protocol-status-card__state--checking,
+.protocol-status-card__state--stale {
+  color: var(--color-warning, #92400e);
+}
+
+.protocol-status-card__state--unreachable,
+.protocol-status-card__state--auth_failure,
+.protocol-status-card__state--incompatible {
+  color: var(--color-danger, #991b1b);
+}
+
+.protocol-status-card__facts {
+  display: flex;
+  gap: var(--space-md);
+  margin: var(--space-sm) 0 0;
+}
+
+.protocol-status-card__facts div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.protocol-status-card__facts dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs, 0.75rem);
+}
+
+.protocol-status-card__facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.protocol-workspace__active {
+  margin: var(--space-sm) 0 var(--space-md);
+  padding: var(--space-md);
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-secondary-bg);
+}
+
+.protocol-workspace__active h2 {
+  margin-top: 0;
+}
+
+.protocol-inventory {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.protocol-inventory h3,
+.inventory-scope h3,
+.inventory-details h3 {
+  margin-top: 0;
+}
+
+.inventory-scope {
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-secondary-bg);
+}
+
+.inventory-scope__controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem var(--space-sm);
+  align-items: center;
+}
+
+.inventory-scope__controls label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.inventory-scope__controls select {
+  min-width: 0;
+  width: 100%;
+}
+
+.inventory-toolbar {
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.inventory-toolbar .muted {
+  margin: 0;
+}
+
+.inventory-layout {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.9fr) minmax(18rem, 1.1fr);
+  gap: var(--space-md);
+  align-items: start;
+}
+
+.inventory-tree-wrap,
+.inventory-details {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-widget-bg);
+}
+
+.inventory-tree-wrap {
+  position: relative;
+}
+
+.inventory-tree {
+  min-height: 8rem;
+  padding: 0.35rem;
+}
+
+.inventory-treeitem {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  outline: none;
+}
+
+.inventory-treeitem:hover,
+.inventory-treeitem:focus-visible,
+.inventory-treeitem.is-selected {
+  background: var(--color-secondary-bg);
+  box-shadow: var(--focus-ring);
+}
+
+.inventory-treeitem__marker {
+  width: 1rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.inventory-treeitem__availability {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs, 0.75rem);
+  white-space: nowrap;
+}
+
+.inventory-treeitem__availability--configured {
+  color: var(--color-success, #166534);
+}
+
+.inventory-treeitem__availability--disabled,
+.inventory-treeitem__availability--unavailable {
+  color: var(--color-warning, #92400e);
+}
+
+.inventory-treeitem__availability--unknown {
+  color: var(--color-text-muted);
+}
+
+.inventory-details {
+  padding: var(--space-md);
+}
+
+.inventory-details dl {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.inventory-details dl div {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.6fr) minmax(0, 1.4fr);
+  gap: var(--space-sm);
+}
+
+.inventory-details dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.inventory-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.inventory-context-menu {
+  display: grid;
+  position: absolute;
+  z-index: 20;
+  min-width: 11rem;
+  margin: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-widget-bg);
+  box-shadow: var(--shadow-md, 0 0.3rem 1rem rgba(0, 0, 0, 0.15));
+}
+
+.inventory-context-menu button {
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.inventory-context-menu button:hover,
+.inventory-context-menu button:focus-visible {
+  background: var(--color-secondary-bg);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+@media (max-width: 760px) {
+  .inventory-scope__controls,
+  .inventory-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .inline-alert {
   margin: var(--space-sm) 0;
   padding: 0.65rem 0.85rem;
