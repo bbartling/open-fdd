@@ -18,6 +18,14 @@ open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile
 pip install open-fdd                 # ECM engineering + Excel workbooks
 ```
 
+## Community review — help wanted
+
+We welcome technical review of workbook formulas, Python referee calculators, and M&V helpers. **[GitHub issue #985](https://github.com/bbartling/open-fdd/issues/985)** tracks feedback (`help wanted` / `good first issue`) and **remains open** as a standing invitation — even as docs improve.
+
+- **Scope:** [Engineering calcs](engineering-calcs.html) (full module catalog), [Install & overview](overview.html) (minimal PyPI check commands), [IPMVP change-point & G14](ipmvp-changepoint.html).
+- **Quick check:** `pip install open-fdd` → `open-fdd-ecm demo --out ./Demo_ECMs.xlsx` → review one sheet you know.
+- **Feedback:** comment on [#985](https://github.com/bbartling/open-fdd/issues/985), or open a PR with fixes/tests. No confidential site data in public threads.
+
 ## Start here
 
 1. [Purpose: Excel + EnergyPlus](purpose-excel-energyplus.html) — workflow story  

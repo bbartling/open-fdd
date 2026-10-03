@@ -28,6 +28,30 @@ It does not replace the visible spreadsheet calculations.
 
 **Build handoff / golden example:** [OPENFDD_AGENT_ECM_HANDOFF](OPENFDD_AGENT_ECM_HANDOFF.html) · packaged workbook in-repo under `open_fdd/ecm_engineering/examples/liberty_dual_ahu/ECM_FULL_PARITY.xlsx`.
 
+## Community review — help wanted
+
+Field engineers and M&V reviewers: please help validate the ECM catalog. Full module list: [Engineering calcs](engineering-calcs.html). Ongoing coordination: **[GitHub #985](https://github.com/bbartling/open-fdd/issues/985)** (`help wanted`). Docs-only updates do **not** close #985 — it stays the community call-for-review.
+
+Review formula accuracy, units, assumptions, workbook clarity, and whether screening methods are labeled appropriately. Even one module or `list_calculators()` entry helps.
+
+### Minimal check
+
+```bash
+pip install open-fdd
+open-fdd-ecm calculators
+open-fdd-ecm demo --out ./Demo_ECMs.xlsx
+```
+
+From a repo clone: `pip install -e .` then `pytest tests/ecm/ -q --tb=no`.
+
+### Feedback
+
+- Comment on [#985](https://github.com/bbartling/open-fdd/issues/985) (module name, issue, reference or fix).
+- Open a PR for formula, doc, test, or workbook changes.
+- Share anonymized inputs + expected results for regression tests.
+
+Do not include confidential client or building information in GitHub threads.
+
 ## Install
 
 ```bash

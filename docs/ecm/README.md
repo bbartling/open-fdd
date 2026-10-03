@@ -29,6 +29,53 @@ It does not replace the visible spreadsheet calculations.
 
 **Build handoff / golden example:** [OPENFDD_AGENT_ECM_HANDOFF.md](OPENFDD_AGENT_ECM_HANDOFF.md) · packaged workbook [`examples/liberty_dual_ahu/ECM_FULL_PARITY.xlsx`](../../open_fdd/ecm_engineering/examples/liberty_dual_ahu/ECM_FULL_PARITY.xlsx).
 
+## Community review — help wanted
+
+Energy engineers, mechanical engineers, RCx/commissioning practitioners, and M&V professionals: we need your eyes on the ECM catalog. Reviewing **one module or calculator** is enough to help.
+
+**Tracking issue (stays open):** [GitHub #985 — Community review requested](https://github.com/bbartling/open-fdd/issues/985) (`help wanted`, `good first issue`). Documentation improvements do not close that issue; it remains the standing invitation.
+
+### What to review
+
+| Area | Where |
+| --- | --- |
+| 40 workbook ECM modules (live Excel formulas) | [engineering-calcs.md](engineering-calcs.md) · `list_ecm_modules()` |
+| 9 independent Python referee calculators | same doc · `list_calculators()` · `job.calc(...)` |
+| Finance, EUI, payback / NPV | [engineering-calcs.md](engineering-calcs.md) · `ECMJob.set_global(...)` |
+| IPMVP change-point & ASHRAE Guideline 14 | [ipmvp-changepoint.md](ipmvp-changepoint.md) |
+| Optional EnergyPlus honesty / twin compare | [purpose-excel-energyplus.md](purpose-excel-energyplus.md) · handoff doc above |
+
+Please check anything you know well for formula accuracy, units and sign conventions, reasonable assumptions and boundaries, clarity of inputs/outputs in the generated workbook, alignment with typical RCx/M&V/rebate workflows, missing edge cases or warnings, and places a **screening** method should be labeled more clearly.
+
+Agents may populate inputs; a qualified person should still review assumptions and results before client or utility submission. Do not post confidential client or building data in issues or PRs.
+
+### Minimal check (PyPI only)
+
+```bash
+pip install open-fdd
+open-fdd-ecm calculators
+open-fdd-ecm demo --out ./Demo_ECMs.xlsx
+```
+
+Open `Demo_ECMs.xlsx` and spot-check one sheet or compare one `job.calc(...)` result to your own method.
+
+### Minimal check (git clone)
+
+```bash
+pip install -e .
+pytest tests/ecm/ -q --tb=no
+```
+
+Optional golden workbook parity: `pytest tests/ecm/test_liberty_example.py -q`.
+
+### Where to leave feedback
+
+1. **Comment on [#985](https://github.com/bbartling/open-fdd/issues/985)** — module or calculator name, concern, suggested correction or reference.
+2. **Open a pull request** — formula, documentation, test, or workbook template fixes.
+3. **Share anonymized example inputs and expected results** — candidates for regression tests.
+
+Agent-oriented rules: [AGENTS_ECM_ENGINEERING.md](AGENTS_ECM_ENGINEERING.md).
+
 ## Install
 
 ```bash
