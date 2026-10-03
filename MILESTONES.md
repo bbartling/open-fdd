@@ -1,6 +1,6 @@
 # Open-FDD milestones
 
-This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER.md) owns the current execution order; [BUG_REPORT_WAVE_P](docs/operations/BUG_REPORT_WAVE_P.md) owns bugs, operational history and evidence. Historical migration milestones remain under `docs/migration/` and `openfdd_agent_spec/`.
+This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER.md) owns historical FQ/ops pins; [BUG_REPORT_WAVE_P](docs/operations/BUG_REPORT_WAVE_P.md) owns bugs and evidence. **Active product patch train (2026-10-03):** [`.cursor/plans/patch_all_open_issues_master.plan.md`](.cursor/plans/patch_all_open_issues_master.plan.md). Historical migration milestones remain under `docs/migration/` and `openfdd_agent_spec/`.
 
 ## Status rules
 
@@ -11,21 +11,94 @@ This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER
 - **RELEASED:** verified candidate published/deployed as applicable, with rollback and handoff recorded.
 - **DEFERRED:** explicitly agreed scope/date/owner. Never use cancellation to hide an unmet requirement.
 
-A merged PR, a passing unit suite, a completed scan, and a verified deployment are different achievements. Record them separately. No milestone becomes VERIFIED from an old pin, skipped test, changed threshold or unreviewed exception. Actual licensed Nessus results are separate from readiness work that needs no license.
+A merged PR, a passing unit suite, a completed scan, and a verified deployment are different achievements. Record them separately. No milestone becomes VERIFIED from an old pin, skipped test, changed threshold or unreviewed exception. Actual licensed Nessus results are separate from readiness work that needs no license. Cursor/Codex local `pytest` is not a Grok live security PASS.
 
-## Protocol connector qualification — Phase 5D draft PR #1101
+## Mega patch train — all open issues (2026-10-03) — IN PROGRESS
 
-Phase 5D is the closeout and evidence track stacked on the Phase 5C head. The
-implementation branch is `feat/protocol-connectors-phase5d`; its source plan is
-[`protocol_connector_phase5d_closeout.plan.md`](.cursor/plans/protocol_connector_phase5d_closeout.plan.md).
-It carries the protocol restoration acceptance for [issue #781](https://github.com/bbartling/open-fdd/issues/781)
-and the Phase 5C draft [PR #1100](https://github.com/bbartling/open-fdd/pull/1100).
-The draft PR is intentionally kept separate from Phase 5C so a local Cursor
-session can continue from the exact pushed SHA if the coding-agent usage
-window expires. No merge, deployment, GHCR re-pin, or issue closure is
-authorized by this milestone.
+**Plan:** [`.cursor/plans/patch_all_open_issues_master.plan.md`](.cursor/plans/patch_all_open_issues_master.plan.md)  
+**Spec:** [`openfdd_agent_spec/PR_PROTOCOL.md`](openfdd_agent_spec/PR_PROTOCOL.md) (local compile before push; agent takeover) · [`openfdd_agent_spec/AGENTS.md`](openfdd_agent_spec/AGENTS.md) rules **0b** / **0c** / **60** / **60d** · skill [`openfdd-mt-security`](openfdd_agent_spec/skills/openfdd-mt-security/SKILL.md)  
+**Tip (MT branch, not OPS pin):** **3.5.61** on `fix/mt-isolation-csv-sites-1088-1090`  
+**Operator intent:** one IDE owns the entire train (Codex out of API budget). Finish former Codex security draft [#1102](https://github.com/bbartling/open-fdd/pull/1102) instead of excluding it. Local `cargo`/`npm`/`pytest` before Actions. Final GHCR refresh, then **Grok bot** owns live stress + security pen-test of the policy/harness and issue closeout comments. **No FQ / OPS pin from mid-wave tips.**
 
-### Current implementation checkpoint
+### Ownership split
+
+| Actor | Owns |
+| --- | --- |
+| **Cursor (this IDE)** | Implement + local verify + merge all open-issue PRs including #1102 takeover; mid-wave smoke only |
+| **Grok bot** | After GHCR tip: OT MEGA / hub stress, gates **25**/**25b**/**26**, live security qualification policy + pen-test Python scripts, evidence comments / issue closes |
+| **Kali** | Staging ActiveScan / OT when scheduled (Mint does not ActiveScan OT) |
+| **External** | Licensed Nessus assessment (**U-H**) — BLOCKED without license; Soft-OPEN, not a tooling merge blocker |
+
+### Wave / issue tracker (18 open issues at train start)
+
+| Wave | Issues | Vehicle | Status |
+| --- | --- | --- | --- |
+| **A — MT isolation** | #1088 #1089 #1090 → then #1087 | **PR-01** `fix/mt-isolation-csv-sites-1088-1090` (tip **3.5.61**) — local cargo/vitest green; opening for Actions; **PR-05** after PR-01 | **IN PROGRESS** — list allowlist leak + Sites chicken-egg + `get_edge` ACL |
+| **B — docs / research** | #998 #985 #1009 | [#1105](https://github.com/bbartling/open-fdd/pull/1105) C1/#998 · [#1103](https://github.com/bbartling/open-fdd/pull/1103) ECM/#985 (keep issue open help-wanted) · [#1104](https://github.com/bbartling/open-fdd/pull/1104) water/#1009 | **IN PROGRESS** — PRs open (ready); Actions queued / not yet green |
+| **C — security tooling** | #999 | [#1102](https://github.com/bbartling/open-fdd/pull/1102) Cursor takeover · undrafted · branch `security/post5d-profile-qualification` · local `pytest tests/security` passed | **IN PROGRESS** — Actions queued; **Grok** live pen-test after GHCR |
+| **D — Haystack RDF** | #997 #1000–#1004 | **PR-07…11** = C2→C6 after [#1105](https://github.com/bbartling/open-fdd/pull/1105) merges; #997 last; HR-10 Option B (honest UNAVAILABLE) | **PLANNED** |
+| **E — DataFrame + agent rules** | #1078 #1010 | **PR-12** (may stack I1/I2/I3) | **PLANNED** |
+| **F — historian / hisRead** | #1017 | **PR-13** L1 ADR → L2 replay → L3 hisRead + 7d bench writeup | **PLANNED** (Phase 5D split already landed; durability remains) |
+| **G — MQTTS field prove** | #1070 | **PR-14** ≥24h window `reports/gate39_window_20261003/`; code only if tip defect | **IN PROGRESS** (wall-clock) |
+| **Final** | — | Merge train → GHCR newest-by-created → Grok MEGA / closeouts | **PLANNED** |
+
+### Issue → PR map (all 18)
+
+| Issue | PR / vehicle | Track | Notes |
+| --- | --- | --- | --- |
+| #1088 #1089 #1090 | **PR-01** | A | Tip **3.5.61**; local verify green; PR for Actions (do not merge until CI green) |
+| #1087 | **PR-05** | A | After PR-01 |
+| #998 | [#1105](https://github.com/bbartling/open-fdd/pull/1105) (PR-02 / C1) | B | Haystack C1 baseline |
+| #985 | [#1103](https://github.com/bbartling/open-fdd/pull/1103) (PR-03) | B | ECM docs; **keep issue open** help-wanted |
+| #1009 | [#1104](https://github.com/bbartling/open-fdd/pull/1104) (PR-04) | B | Water/chiller FDD research |
+| #999 | [#1102](https://github.com/bbartling/open-fdd/pull/1102) (PR-06) | C | Cursor takeover; undrafted; Actions queued |
+| #1000–#1004 + #997 | **PR-07…11** | D | Haystack C2–C6; #997 last |
+| #1078 + #1010 | **PR-12** | E | DataFrame + agent custom rules |
+| #1017 | **PR-13** | F | Historian + hisRead |
+| #1070 | **PR-14** | G | ≥24h MQTTS prove; window open |
+
+### Wall-clock waves
+
+```text
+Wave 1: PR-01 + #1105/#1103/#1104 + finish/merge #1102 ; #1070 window open
+Wave 2: PR-05 + HR C2 + PR-12 start + historian L1
+Wave 3–5: HR C3–C6, DF, historian L2/L3, gate39 evidence
+Final: GHCR refresh → Grok MEGA
+```
+
+### Subplans (`.cursor/plans/`)
+
+- Master: [`patch_all_open_issues_master.plan.md`](.cursor/plans/patch_all_open_issues_master.plan.md)
+- PR-01 MT: [`pr01_mt_isolation_1088_1089_1090.plan.md`](.cursor/plans/pr01_mt_isolation_1088_1089_1090.plan.md)
+- PR-03 ECM: [`pr03_community_ecm_985.plan.md`](.cursor/plans/pr03_community_ecm_985.plan.md)
+- PR-04 water: [`pr04_water_fdd_research_1009.plan.md`](.cursor/plans/pr04_water_fdd_research_1009.plan.md)
+- PR-05 CSV UX: [`pr05_csv_tenant_ux_1087.plan.md`](.cursor/plans/pr05_csv_tenant_ux_1087.plan.md)
+- PR-06 / #999: [`pr06_security_scan_tooling_999.plan.md`](.cursor/plans/pr06_security_scan_tooling_999.plan.md)
+- PR-12 DF/rules: [`pr12_dataframe_agent_rules_1078_1010.plan.md`](.cursor/plans/pr12_dataframe_agent_rules_1078_1010.plan.md)
+- PR-13 historian: [`pr13_historian_haystack_1017.plan.md`](.cursor/plans/pr13_historian_haystack_1017.plan.md)
+- PR-14 gate39: [`pr14_gate39_mqtts_prove_1070.plan.md`](.cursor/plans/pr14_gate39_mqtts_prove_1070.plan.md)
+- Final GHCR→Grok: [`pr_final_ghcr_grok_handoff.plan.md`](.cursor/plans/pr_final_ghcr_grok_handoff.plan.md)
+- Haystack wrapper: [`pr_haystack_rdf_track_wrapper.plan.md`](.cursor/plans/pr_haystack_rdf_track_wrapper.plan.md) · C1–C6: [`wave_haystack_rdf_c1_baseline_profile.plan.md`](.cursor/plans/wave_haystack_rdf_c1_baseline_profile.plan.md) … [`wave_haystack_rdf_c6_candidate_rollout.plan.md`](.cursor/plans/wave_haystack_rdf_c6_candidate_rollout.plan.md)
+
+### Exit criteria (train-level)
+
+- [ ] All 18 issues closed **or** Soft-OPEN with linked evidence / standing invitation (#985 help-wanted may stay open by design).
+- [ ] #1102 merged (tooling); Soft-OPEN licensed Nessus remains under U-H.
+- [ ] Local verify green on each product tip before push (rule **0b**).
+- [ ] `master` Actions green; #1102 no longer draft/open after merge.
+- [ ] GHCR tip refreshed via `./scripts/ghcr_newest_by_created.py` (not tag-name sort).
+- [ ] Grok handoff packet recorded; no `fully_qualified=true` / OPS pin claim unless a real MEGA says so.
+- [ ] Spec/SESSION_LOG/skills updated for MT ACL list semantics and Grok security ownership.
+
+### Soft-OPEN (do not greenwash)
+
+- Licensed Nessus (U-H) · full Haystack RDF HR-01–HR-12 evidence · DataFrame parity gate · historian 7-day hot-tier decision · ACME gate39 ≥24h non-empty RTU/VAV ledger · any mid-wave tip without MEGA.
+
+## Protocol connector qualification — Phase 5D — MERGED (2026-10-03 source)
+
+Phase 5D closeout PR [#1101](https://github.com/bbartling/open-fdd/pull/1101) and Phase 5C [#1100](https://github.com/bbartling/open-fdd/pull/1100) **merged** to `master` (`db1a53b9` tip family). Residual live BACnet/Haystack qualification Soft-OPEN continues under the mega patch train (Wave F/G + OT bench) and U-B/U-C — not as an unmerged Phase 5D draft. Historical checkpoint text below is retained for evidence archaeology.
+
+### Historical implementation checkpoint (pre-merge)
 
 - [x] Added the fail-closed evaluator at
   `scripts/qualification/protocol_connector_qualification.py` with fixed
@@ -359,4 +432,4 @@ This list is for Ben. It does **not** close any GitHub issue. A merged PR is not
 | #1069 | OPEN | Wave I/K now split `oa_t` and `web_oa_t` (and Wave K `zone_t` vs `oa_t`). Absent column = field-catalog Soft-OPEN and still fails the gate. Present column with no values = product FAIL. A zone value is not hidden inside an oa_t Soft-OPEN. | Tip+field: product_fail=0 only when the columns that exist have values; Soft-OPEN clears only when the missing AV columns are actually in the catalog. Not a product PASS. |
 | #1070 | OPEN | Gate 39 `probes` names the publish-ledger read. Truncated equipment ids are INCONCLUSIVE, not EDGE. `rows=[]` stays `instrumentation_complete=false` (exit 2 BLOCKED). | OptiPlex `OPENFDD_EDGE_BASE` plus hub inventory so the scorecard has rows. Trailing window still needs non-empty RTU and VAV series. Do not close on an empty snapshot. |
 
-Parked and not touched: Codex **#1067**, **#1075**, **#1080**.
+Parked historically in the 2026-10-01 note: older Codex drafts. **2026-10-03 mega train:** Cursor **takes over** security draft [#1102](https://github.com/bbartling/open-fdd/pull/1102) / #999 (not left alone). See **Mega patch train** section above.

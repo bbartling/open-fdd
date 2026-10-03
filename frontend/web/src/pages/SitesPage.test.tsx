@@ -112,4 +112,31 @@ describe("Operations Sites panel", () => {
       );
     });
   });
+
+  it("auto-selects the sole visible site when none is active", async () => {
+    vi.mocked(listPackageBuildings).mockResolvedValue(["BUILDING_50"]);
+    renderSites("/operations?view=sites");
+    await waitFor(() => {
+      expect(screen.getByTestId("sites-active-hint").textContent).toMatch(
+        /Active site:\s*BUILDING_50/,
+      );
+    });
+    expect(screen.getByTestId("sites-active-BUILDING_50").textContent).toMatch(
+      /yes/,
+    );
+  });
+
+  it("shows a calm empty notice instead of building_id required", async () => {
+    vi.mocked(listPackageBuildings).mockRejectedValue(
+      new Error('{"error":"building_id required"}'),
+    );
+    renderSites("/operations?view=sites");
+    await waitFor(() => {
+      expect(screen.getByTestId("sites-notice").textContent).toMatch(
+        /No sites loaded yet/,
+      );
+    });
+    expect(screen.queryByTestId("sites-error")).toBeNull();
+    expect(screen.queryByText(/building_id required/i)).toBeNull();
+  });
 });

@@ -21,6 +21,14 @@
   contradictory counts, stale/unknown evidence, and artifact path escapes.
   No Railway/OT scan, BAS write, secret access, or product runtime change.
 
+## 2026-10-03 — Single-IDE patch train + spec enhance (in progress)
+
+- Operator: run all open-issue patches from one IDE; **take over** Codex draft [#1102](https://github.com/bbartling/open-fdd/pull/1102) / #999 (Codex out of API budget) instead of excluding it.
+- Spec: [`PR_PROTOCOL.md`](PR_PROTOCOL.md) local-compile-before-push + agent takeover; [`AGENTS.md`](AGENTS.md) rules **0b** / **0c** / **60d** (Grok owns live security/pen-test of policy+harness); MT rule **60** list-endpoint allowlist + `get_edge` ACL; skill [`openfdd-mt-security`](skills/openfdd-mt-security/SKILL.md) who-does-what table; **[`MILESTONES.md`](../MILESTONES.md)** mega patch train section.
+- **Grok bot** is the primary consumer of security qualification policy + pen-test Python scripts after tip/GHCR — Cursor ships tooling + offline tests only.
+- Wave 1: #1102/#1103 merged; #1104/#1105/#1106 in flight. Gate39 ≥24h window under `reports/gate39_window_20261003/`.
+- No FQ claim. No Railway re-pin in this note.
+
 ## 2026-10-01 — Operations protocol workspace Phase 3B (in progress)
 
 - Added an authenticated capability-driven Operations protocol shell with nested MQTT troubleshooting, BACnet, Modbus and Haystack radios. Existing Sites, MQTT and AFDD query views remain intact; this phase performs no connector inventory, protocol reads or writes.
