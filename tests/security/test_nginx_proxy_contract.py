@@ -21,8 +21,20 @@ class NginxProxyContractTest(unittest.TestCase):
 
     def test_hsts_map_uses_forwarded_https(self) -> None:
         text = NGINX.read_text(encoding="utf-8")
-        self.assertIn("map $http_x_forwarded_proto $openfdd_hsts", text)
-        self.assertIn('https "max-age=31536000; includeSubDomains"', text)
+        self.assertIn(
+            "map $openfdd_xfp_trusted$http_x_forwarded_proto $openfdd_hsts",
+            text,
+        )
+        self.assertIn('1https      "max-age=31536000; includeSubDomains"', text)
+
+    def test_xfp_requires_trusted_hop(self) -> None:
+        text = NGINX.read_text(encoding="utf-8")
+        self.assertIn("map $remote_addr $openfdd_xfp_trusted", text)
+        self.assertIn("~^10\\.", text)
+        self.assertIn(
+            "map $openfdd_xfp_trusted$http_x_forwarded_proto $openfdd_forwarded_proto",
+            text,
+        )
 
     def test_no_raw_scheme_forward_to_central(self) -> None:
         text = NGINX.read_text(encoding="utf-8")

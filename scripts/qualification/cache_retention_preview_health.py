@@ -91,8 +91,10 @@ def check_nginx(text: str) -> list[str]:
     # Astra A04: forward edge HTTPS scheme; do not hard-wire $scheme to central.
     if "X-Forwarded-Proto $scheme" in text:
         errors.append("X-Forwarded-Proto must use $openfdd_forwarded_proto map, not $scheme")
-    if "map $http_x_forwarded_proto $openfdd_forwarded_proto" not in text:
-        errors.append("missing $openfdd_forwarded_proto trust map")
+    if "map $openfdd_xfp_trusted$http_x_forwarded_proto $openfdd_forwarded_proto" not in text:
+        errors.append("missing $openfdd_forwarded_proto trust map (trusted-hop XFP)")
+    if "map $remote_addr $openfdd_xfp_trusted" not in text:
+        errors.append("missing $openfdd_xfp_trusted remote_addr map")
     if "location /api/csv/" not in text:
         errors.append("missing /api/csv/ location with 128m/600s limits")
     if "location /api/analytics/" not in text:
