@@ -258,6 +258,134 @@ def zap_image_is_digest_pinned(image: str) -> bool:
     return "@sha256:" in (image or "")
 
 
+def fetch_auth_me_preflight(*, origin: str, auth_header: str) -> dict[str, Any]:
+    """GET /api/auth/me with verified identity schema.
+
+    When ``ZAP_DOCKER_NETWORK`` is set (disposable web+central), use
+    ``docker run --network`` so Docker DNS names like ``web`` resolve.
+    Never logs the Authorization value.
+    """
+    me_url = origin.rstrip("/") + "/api/auth/me"
+    network = (os.environ.get("ZAP_DOCKER_NETWORK") or "").strip()
+    if network:
+        if not shutil.which("docker"):
+            return {
+                "ok": False,
+                "path": "/api/auth/me",
+                "error": "docker_missing_for_network_preflight",
+                "schema_ok": False,
+            }
+        # Write body to a temp file inside a throwaway container mount is heavy;
+        # capture stdout JSON via curl -w for status.
+        try:
+            proc = subprocess.run(
+                [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "--network",
+                    network,
+                    "curlimages/curl:8.5.0",
+                    "-sS",
+                    "-D",
+                    "-",
+                    "-o",
+                    "-",
+                    "-H",
+                    f"Authorization: {auth_header}",
+                    "-H",
+                    "Accept: application/json",
+                    me_url,
+                ],
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return {
+                "ok": False,
+                "path": "/api/auth/me",
+                "error": type(e).__name__,
+                "schema_ok": False,
+                "via": "docker_network",
+            }
+        raw = proc.stdout or b""
+        # Split headers/body on first blank line.
+        sep = raw.find(b"\r\n\r\n")
+        if sep < 0:
+            sep = raw.find(b"\n\n")
+        if sep < 0:
+            return {
+                "ok": False,
+                "path": "/api/auth/me",
+                "error": "docker_curl_malformed",
+                "schema_ok": False,
+                "via": "docker_network",
+                "rc": proc.returncode,
+            }
+        header_blob = raw[:sep].decode("utf-8", errors="replace")
+        body = raw[sep:].lstrip(b"\r\n")
+        status = 0
+        ctype = ""
+        for line in header_blob.splitlines():
+            if line.upper().startswith("HTTP/"):
+                parts = line.split()
+                if len(parts) >= 2 and parts[1].isdigit():
+                    status = int(parts[1])
+            elif line.lower().startswith("content-type:"):
+                ctype = line.split(":", 1)[1].strip()
+        result = verify_auth_me_response(
+            status=status, body=body, content_type=ctype
+        )
+        result["via"] = "docker_network"
+        if proc.returncode != 0 and not result.get("ok"):
+            result["error"] = result.get("error") or f"docker_curl_rc_{proc.returncode}"
+        return result
+
+    try:
+        import urllib.error
+        import urllib.request
+
+        req = urllib.request.Request(
+            me_url,
+            method="GET",
+            headers={"Authorization": auth_header, "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            status = int(getattr(resp, "status", None) or resp.getcode())
+            body = resp.read(1_048_576)
+            ctype = resp.headers.get("Content-Type", "") if resp.headers else ""
+            result = verify_auth_me_response(
+                status=status, body=body, content_type=ctype
+            )
+            result["via"] = "urllib"
+            return result
+    except Exception as e:  # noqa: BLE001 — map to structured preflight failure
+        import urllib.error
+
+        if isinstance(e, urllib.error.HTTPError):
+            try:
+                body = e.read(1_048_576)
+            except Exception:  # noqa: BLE001
+                body = b""
+            result = verify_auth_me_response(
+                status=int(e.code),
+                body=body,
+                content_type=e.headers.get("Content-Type", "") if e.headers else "",
+            )
+            if result.get("error") == "non_200":
+                result["error"] = "http_error"
+            result["via"] = "urllib"
+            return result
+        return {
+            "ok": False,
+            "path": "/api/auth/me",
+            "error": type(e).__name__,
+            "schema_ok": False,
+            "via": "urllib",
+        }
+
+
 def validate_report_sites(data: dict[str, Any], target_origin: str) -> list[str]:
     """Require nonempty site objects belonging to the configured target."""
     sites = data.get("site") or data.get("sites") or []
@@ -541,43 +669,9 @@ def run_execute(verdict_path: Path) -> int:
 
     # A06: prove authenticated /api/auth/me with status + JSON identity schema.
     # Report URL text alone is never authenticated proof.
-    auth_me_preflight: dict[str, Any] = {"ok": False}
-    try:
-        import urllib.error
-        import urllib.request
-
-        me_url = origin.rstrip("/") + "/api/auth/me"
-        req = urllib.request.Request(
-            me_url,
-            method="GET",
-            headers={"Authorization": auth, "Accept": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            status = int(getattr(resp, "status", None) or resp.getcode())
-            body = resp.read(1_048_576)
-            ctype = resp.headers.get("Content-Type", "") if resp.headers else ""
-            auth_me_preflight = verify_auth_me_response(
-                status=status, body=body, content_type=ctype
-            )
-    except urllib.error.HTTPError as e:
-        try:
-            body = e.read(1_048_576)
-        except Exception:  # noqa: BLE001
-            body = b""
-        auth_me_preflight = verify_auth_me_response(
-            status=int(e.code),
-            body=body,
-            content_type=e.headers.get("Content-Type", "") if e.headers else "",
-        )
-        if auth_me_preflight.get("error") == "non_200":
-            auth_me_preflight["error"] = "http_error"
-    except Exception as e:  # noqa: BLE001
-        auth_me_preflight = {
-            "ok": False,
-            "path": "/api/auth/me",
-            "error": type(e).__name__,
-            "schema_ok": False,
-        }
+    # Disposable stacks use Docker DNS names (web/central); when
+    # ZAP_DOCKER_NETWORK is set, fetch via that network (host urllib cannot).
+    auth_me_preflight = fetch_auth_me_preflight(origin=origin, auth_header=auth)
     if not auth_me_preflight.get("ok"):
         v = build_verdict(
             status="FAIL",
