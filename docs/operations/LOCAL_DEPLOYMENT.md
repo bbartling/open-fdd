@@ -19,7 +19,12 @@ Open-FDD is **local-first**. The typical bench path is a GHCR-pulled Compose sta
 | Railway vs local | Railway public **web** may terminate TLS at the edge; local stack does **not** mirror that. Private Railway mesh to central is also plain HTTP on `*.railway.internal`. |
 | Auth still required | Admin / agent JWT on central even over HTTP — never skip auth “because it’s local.” |
 
-If a customer needs HTTPS on-prem, that is an **ops add-on** (reverse proxy / Caddy with certs in front of Compose) — not the default `react-ot` recipe today. Do not claim local TLS is shipped.
+If a customer needs HTTPS on-prem, use the supported **Caddy standalone HTTPS**
+paths (operator-provided cert, managed local CA, or explicit lab self-signed) —
+see [`SECURITY_QUALIFICATION_POLICY.md`](SECURITY_QUALIFICATION_POLICY.md) and
+`deploy/caddy/Caddyfile.standalone.https*`. Default `react-ot` / `csv` Compose
+helpers remain plain HTTP behind a firewall. Do not claim production TLS or a
+Nessus trust closeout from lab self-signed alone.
 
 ## Recipes
 
@@ -74,6 +79,6 @@ Closeout: [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) / `./scripts/nightly-ot-ben
 ## Anti-patterns
 
 - Pasting a public URL for a local-only HTTP stack.
-- Claiming “local has TLS” without an explicit fronting proxy.
+- Claiming “local has TLS” without an explicit Caddy/standalone HTTPS mode (or ops proxy).
 - Building central/web images locally on bensbench.
 - Pointing bosspi at local mqtt during Railway parity stress.

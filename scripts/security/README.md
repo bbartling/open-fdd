@@ -179,4 +179,8 @@ Never use COVERED. See `inventory/implemented_checks.json` and
 | Passive URL crawl / High finding baseline | ZAP in `run_railway_hub_stress.sh` |
 | Authenticated active scan, novel payloads, UI-driven AF | Soft-OPEN Kali / Burp (`kali-zap-af`) — not replaced by this probe |
 
-Do not claim the probe “replaces Burp.” Claim: for Open-FDD multi-tenant authz/authn evidence in FQ, Python must dominate. Operator path: [`docs/operations/TESTBED_TAKEOVER.md`](../../docs/operations/TESTBED_TAKEOVER.md).
+Do not claim the probe “replaces Burp” or that Python is universally superior.
+Honest division: this harness owns **repeatable** multi-tenant authz/authn /
+JWT / role matrices for CI and Soft-OPEN gates; ZAP/Burp/Kali still own
+active-scan breadth and exploratory AF. Operator path:
+[`docs/operations/TESTBED_TAKEOVER.md`](../../docs/operations/TESTBED_TAKEOVER.md).
