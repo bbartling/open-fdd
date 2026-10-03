@@ -978,11 +978,25 @@ def run_execute(verdict_path: Path) -> int:
         status = "FAIL"
         notes = f"FAIL: Medium={med} without dispositions"
         exit_code = 1
+    elif not auth_me_preflight.get("ok"):
+        status = "FAIL"
+        notes = "FAIL: authenticated /api/auth/me preflight schema failed"
+        exit_code = 1
+    elif active and not bool(summary.get("auth_me_hit")):
+        # Preflight proves credentials work; authenticated AF still requires
+        # scanner-origin /api/auth/me traffic in the ZAP report (A06).
+        status = "FAIL"
+        notes = (
+            "FAIL: active AF missing scanner-origin /api/auth/me in ZAP report "
+            "(preflight alone is not authenticated coverage)"
+        )
+        exit_code = 1
     else:
         status = "PASS"
         notes = (
             f"PASS: disposable AF High=0 Medium=0 site_count={sites} "
-            f"auth_me_preflight=true active_scan={active} zap_rc={rc}"
+            f"auth_me_preflight=true auth_me_in_report={bool(summary.get('auth_me_hit'))} "
+            f"active_scan={active} zap_rc={rc}"
         )
         exit_code = 0
 
@@ -1002,11 +1016,15 @@ def run_execute(verdict_path: Path) -> int:
         execute_requested=True,
         target_origin_configured=True,
         auth_header_configured=True,
-        auth_me_hit=True,
+        auth_me_hit=bool(auth_me_preflight.get("ok")),
         auth_me_preflight=auth_me_preflight,
-        # Informational only — never used as authenticated PASS proof (A06).
+        # Scanner report URL text is coverage evidence for AF, not sole proof.
         auth_me_in_zap_report=bool(summary.get("auth_me_hit")),
-        auth_proof="preflight_status_identity_schema",
+        auth_proof=(
+            "preflight_schema+scanner_auth_me"
+            if active
+            else "preflight_status_identity_schema"
+        ),
         zap_image=detail if mode == "docker" else None,
         zap_image_digest_pinned=(
             zap_image_is_digest_pinned(detail) if mode == "docker" else None

@@ -241,11 +241,80 @@ class ZapAfExecuteVerdictTest(unittest.TestCase):
 
     def test_clean_report_passes_with_verified_auth(self):
         rc, verdict = self.run_synthetic(
-            {"site": [{"@name": "http://fixture.invalid", "alerts": []}]}
+            {
+                "site": [
+                    {
+                        "@name": "http://fixture.invalid",
+                        "urls": ["http://fixture.invalid/api/auth/me"],
+                        "alerts": [],
+                    }
+                ]
+            }
         )
         self.assertEqual(rc, 0)
         self.assertEqual(verdict["status"], "PASS")
-        self.assertEqual(verdict.get("auth_proof"), "preflight_status_identity_schema")
+        self.assertTrue(verdict.get("auth_me_hit"))
+        self.assertTrue(verdict.get("auth_me_in_zap_report"))
+
+    def test_active_without_scanner_auth_me_fails(self):
+        """Active AF cannot PASS on preflight alone (A06)."""
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td)
+            report_path = work / "zap-af-report.json"
+            report_path.write_text(
+                json.dumps(
+                    {"site": [{"@name": "http://fixture.invalid", "alerts": []}]}
+                ),
+                encoding="utf-8",
+            )
+            future = time.time() + 5
+            os.utime(report_path, (future, future))
+            out = work / "verdict.json"
+            env = {
+                "ZAP_TARGET_ORIGIN": "http://fixture.invalid",
+                "ZAP_AUTH_HEADER_VALUE": "Bearer synthetic",
+                "ZAP_AF_WORK_DIR": str(work),
+                "OPENFDD_ZAP_AF_ACTIVE": "1",
+            }
+            auth_ok = {
+                "ok": True,
+                "status": 200,
+                "path": "/api/auth/me",
+                "schema_ok": True,
+                "role_present": True,
+                "subject_present": True,
+            }
+
+            class _Resp:
+                status = 200
+                headers = {"Content-Type": "application/json"}
+
+                def getcode(self):
+                    return 200
+
+                def read(self, *_a, **_k):
+                    return b'{"role":"admin","sub":"admin"}'
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_a):
+                    return False
+
+            with (
+                mock.patch.dict(os.environ, env, clear=True),
+                mock.patch.object(af, "detect_zap", return_value=("zap.sh", "synthetic-zap")),
+                mock.patch.object(af, "_run_zap_sh", return_value=0),
+                mock.patch.object(af, "verify_auth_me_response", return_value=auth_ok),
+                mock.patch("urllib.request.urlopen", return_value=_Resp()),
+                contextlib.redirect_stdout(io.StringIO()),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                rc = af.run_execute(out)
+            verdict = json.loads(out.read_text(encoding="utf-8"))
+            self.assertNotEqual(rc, 0)
+            self.assertEqual(verdict["status"], "FAIL")
+            self.assertIn("scanner-origin", verdict.get("notes", ""))
 
 
 class ZapDigestPinTest(unittest.TestCase):
