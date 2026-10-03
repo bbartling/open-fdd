@@ -88,6 +88,19 @@ def check_nginx(text: str) -> list[str]:
         errors.append("@central_unavailable must return 503 JSON central_unavailable")
     if "proxy_read_timeout 600s" not in text:
         errors.append("analytics /api/ read timeout 600s is missing")
+    # Astra A04: forward edge HTTPS scheme; do not hard-wire $scheme to central.
+    if "X-Forwarded-Proto $scheme" in text:
+        errors.append("X-Forwarded-Proto must use $openfdd_forwarded_proto map, not $scheme")
+    if "map $openfdd_xfp_trusted$http_x_forwarded_proto $openfdd_forwarded_proto" not in text:
+        errors.append("missing $openfdd_forwarded_proto trust map (trusted-hop XFP)")
+    if "map $remote_addr $openfdd_xfp_trusted" not in text:
+        errors.append("missing $openfdd_xfp_trusted remote_addr map")
+    if "location /api/csv/" not in text:
+        errors.append("missing /api/csv/ location with 128m/600s limits")
+    if "location /api/analytics/" not in text:
+        errors.append("missing /api/analytics/ location with 600s read timeout")
+    if "proxy_read_timeout 120s" not in text:
+        errors.append("default /api/ read timeout 120s is missing")
     return errors
 
 
