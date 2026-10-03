@@ -1735,34 +1735,114 @@ def run_suite_ssrf(ctx: SuiteContext) -> None:
 
     evidence = os.environ.get("OPENFDD_SSRF_CANARY_EVIDENCE_JSON", "").strip()
     execute = os.environ.get("OPENFDD_SSRF_CANARY_EXECUTE", "0") == "1"
+    # Product Rust fetch path (open-meteo / future URL sink) is not this Python classifier.
+    ctx.check(
+        "ssrf.product_rust_path.bound",
+        "ssrf",
+        "evidence bound to candidate Rust fetch path (not Python classifier)",
+        "BLOCKED",
+        detail=(
+            "require correlated central fetch (method/route/candidate/config) through "
+            "the product Rust client; local classify_url is policy scaffolding only"
+        ),
+        detector_id="ssrf_product_path",
+    )
     if evidence and Path(evidence).is_file():
         try:
             report = json.loads(Path(evidence).read_text(encoding="utf-8"))
         except Exception as exc:  # noqa: BLE001
             report = {"ok": False, "status": "ERROR", "detail": str(exc)}
-        forbidden_hits = int(report.get("forbidden_hits") or 0)
-        approved_hits = int(report.get("approved_hits") or 0)
-        st = report.get("status") or ("PASS" if report.get("ok") else "FAIL")
-        if forbidden_hits != 0:
-            st = "FAIL"
-        elif approved_hits < 1 and st == "PASS":
-            st = "FAIL"
-        if st not in ("PASS", "FAIL", "BLOCKED", "ERROR", "SKIPPED"):
-            st = "FAIL"
+        required = (
+            "run_id",
+            "candidate_sha",
+            "method",
+            "route",
+            "started_at",
+            "finished_at",
+            "observer_alive",
+            "forbidden_hits",
+            "approved_hits",
+        )
+        missing = [k for k in required if k not in report]
+        if missing:
+            detail = f"incomplete SSRF evidence missing={missing[:8]}"
+            ctx.check(
+                "ssrf.canary.forbidden_zero_hits",
+                "ssrf",
+                "forbidden URL produced zero canary hits",
+                "BLOCKED",
+                detail=detail,
+                detector_id="ssrf_canary_forbidden",
+            )
+            ctx.check(
+                "ssrf.canary.approved_positive",
+                "ssrf",
+                "approved canary URL produced ≥1 hit",
+                "BLOCKED",
+                detail=detail,
+                detector_id="ssrf_canary_approved",
+            )
+            return
+        if report.get("observer_alive") is not True:
+            ctx.check(
+                "ssrf.canary.forbidden_zero_hits",
+                "ssrf",
+                "forbidden URL produced zero canary hits",
+                "BLOCKED",
+                detail="observer_alive must be boolean true",
+                detector_id="ssrf_canary_forbidden",
+            )
+            ctx.check(
+                "ssrf.canary.approved_positive",
+                "ssrf",
+                "approved canary URL produced ≥1 hit",
+                "BLOCKED",
+                detail="observer_alive must be boolean true",
+                detector_id="ssrf_canary_approved",
+            )
+            return
+        try:
+            forbidden_hits = int(report["forbidden_hits"])
+            approved_hits = int(report["approved_hits"])
+        except (TypeError, ValueError, KeyError):
+            ctx.check(
+                "ssrf.canary.forbidden_zero_hits",
+                "ssrf",
+                "forbidden URL produced zero canary hits",
+                "ERROR",
+                detail="forbidden_hits/approved_hits must be integers",
+                detector_id="ssrf_canary_forbidden",
+            )
+            ctx.check(
+                "ssrf.canary.approved_positive",
+                "ssrf",
+                "approved canary URL produced ≥1 hit",
+                "ERROR",
+                detail="forbidden_hits/approved_hits must be integers",
+                detector_id="ssrf_canary_approved",
+            )
+            return
+        # Trust hit counts + correlated identity fields; ignore self-declared ok/status.
+        forbid_st = "PASS" if forbidden_hits == 0 else "FAIL"
+        approve_st = "PASS" if approved_hits >= 1 else "FAIL"
         ctx.check(
             "ssrf.canary.forbidden_zero_hits",
             "ssrf",
             "forbidden URL produced zero canary hits",
-            st if st != "PASS" else ("PASS" if forbidden_hits == 0 else "FAIL"),
-            detail=f"forbidden_hits={forbidden_hits}",
+            forbid_st,
+            detail=(
+                f"forbidden_hits={forbidden_hits} run={report.get('run_id')} "
+                f"candidate={report.get('candidate_sha')} "
+                f"{report.get('method')} {report.get('route')}"
+            ),
             detector_id="ssrf_canary_forbidden",
         )
         ctx.check(
             "ssrf.canary.approved_positive",
             "ssrf",
             "approved canary URL produced ≥1 hit",
-            "PASS" if approved_hits >= 1 else "FAIL",
-            detail=f"approved_hits={approved_hits}",
+            approve_st,
+            detail=f"approved_hits={approved_hits} route={report.get('route')}",
             detector_id="ssrf_canary_approved",
         )
         return
@@ -1773,14 +1853,14 @@ def run_suite_ssrf(ctx: SuiteContext) -> None:
             "ssrf",
             "forbidden URL produced zero canary hits",
             "BLOCKED",
-            detail="OPENFDD_SSRF_CANARY_EXECUTE=1 requires evidence JSON path",
+            detail="OPENFDD_SSRF_CANARY_EXECUTE=1 requires complete evidence JSON path",
         )
         ctx.check(
             "ssrf.canary.approved_positive",
             "ssrf",
             "approved canary URL produced ≥1 hit",
             "BLOCKED",
-            detail="set OPENFDD_SSRF_CANARY_EVIDENCE_JSON from isolated canary run",
+            detail="set OPENFDD_SSRF_CANARY_EVIDENCE_JSON from isolated Rust-path canary run",
         )
         return
 
@@ -1790,8 +1870,8 @@ def run_suite_ssrf(ctx: SuiteContext) -> None:
         "forbidden URL produced zero canary hits",
         "BLOCKED",
         detail=(
-            "set OPENFDD_SSRF_CANARY_EVIDENCE_JSON from isolated canary; "
-            "never probe cloud metadata"
+            "set OPENFDD_SSRF_CANARY_EVIDENCE_JSON with run/candidate/route/hits; "
+            "never probe cloud metadata; Python classifier is not product defense"
         ),
     )
     ctx.check(
@@ -1799,7 +1879,7 @@ def run_suite_ssrf(ctx: SuiteContext) -> None:
         "ssrf",
         "approved canary URL produced ≥1 hit",
         "BLOCKED",
-        detail="set OPENFDD_SSRF_CANARY_EVIDENCE_JSON from isolated canary",
+        detail="set complete OPENFDD_SSRF_CANARY_EVIDENCE_JSON from isolated canary",
     )
 
 
