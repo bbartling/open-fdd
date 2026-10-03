@@ -1,6 +1,6 @@
-# Astra A03 mode: provided — operator-supplied leaf + key under /certs.
-# Set OPENFDD_PUBLIC_HOST to the canonical authority hostname clients use.
-# Port 80 is redirect-only — never reverse_proxy login over plaintext.
+# Astra A03 mode: lab — disposable self-signed leaf under /certs (lab only).
+# Explicit trust required; cannot close production or Nessus certificate acceptance.
+# Set OPENFDD_PUBLIC_HOST; never disable TLS verification to obtain a pass.
 
 http://{$OPENFDD_PUBLIC_HOST} {
 	redir https://{host}{uri} permanent
@@ -8,7 +8,7 @@ http://{$OPENFDD_PUBLIC_HOST} {
 
 {$OPENFDD_PUBLIC_HOST} {
 	encode gzip
-	tls /certs/server.crt /certs/server.key
+	tls /certs/lab.crt /certs/lab.key
 
 	reverse_proxy web:8080
 

@@ -7,7 +7,12 @@
 #
 # Secure recipe: Caddy owns LAN entry (80/443). Web and central are not published
 # on the LAN; MQTT binds loopback unless OPENFDD_MQTT_BIND is set for edge clients.
-# Requires deploy/caddy/Caddyfile.standalone.https + certs under deploy/caddy/certs/
+# Astra A03 TLS modes (pick one Caddyfile via OPENFDD_CADDY_TLS_MODE):
+#   provided  → Caddyfile.standalone.https          (+ /certs/server.crt|key)
+#   local_ca  → Caddyfile.standalone.https.local_ca (tls internal)
+#   lab       → Caddyfile.standalone.https.lab      (+ /certs/lab.crt|key)
+# Set OPENFDD_PUBLIC_HOST to the canonical client authority (no silent localhost
+# fallback in rendered config — default below is for compose config lint only).
 
 services:
   caddy:
@@ -15,8 +20,11 @@ services:
     ports:
       - "443:443"
       - "80:80"
+    environment:
+      OPENFDD_PUBLIC_HOST: ${OPENFDD_PUBLIC_HOST:-localhost}
+      OPENFDD_CADDY_TLS_MODE: ${OPENFDD_CADDY_TLS_MODE:-provided}
     volumes:
-      - ../deploy/caddy/Caddyfile.standalone.https:/etc/caddy/Caddyfile:ro
+      - ../deploy/caddy/Caddyfile.standalone.https${OPENFDD_CADDYFILE_SUFFIX:-}:/etc/caddy/Caddyfile:ro
       - ../deploy/caddy/certs:/certs:ro
       - caddy-data:/data
     restart: unless-stopped
