@@ -1,0 +1,71 @@
+# Astra A01/A02 — OT local Haystack: web + central + selected Haystack connector.
+# Broker-free by default (local ingest). No BACnet/Modbus process or UDP ownership.
+#
+# Usage:
+#   export OPENFDD_JWT_SECRET=… OPENFDD_ADMIN_PASSWORD=… OPENFDD_LOCAL_INGEST_TOKEN=…
+#   export OPENFDD_CONNECTOR_API_KEY=… OPENFDD_SITE_ID=…
+#   export OPENFDD_HAYSTACK_BASE_URL=… OPENFDD_HAYSTACK_USER=… OPENFDD_HAYSTACK_PASS=…
+#   docker compose -f docker/compose.ot_local_haystack.yml config >/dev/null
+#
+# Soft-OPEN: live authenticated Haystack remains separate evidence.
+
+name: openfdd-ot-local-haystack
+
+services:
+  central:
+    image: ${OPENFDD_CENTRAL_IMAGE:-ghcr.io/bbartling/openfdd-central:nightly}
+    environment:
+      OPENFDD_MQTT_ENABLED: "0"
+      OPENFDD_INGEST_MODE: ${OPENFDD_INGEST_MODE:-local_fieldbus}
+      OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:?set site id}
+      OPENFDD_BUILDING_ID: ${OPENFDD_BUILDING_ID:-${OPENFDD_SITE_ID}}
+      OPENFDD_EDGE_ID: ${OPENFDD_EDGE_ID:-haystack-1}
+      OPENFDD_LOCAL_ALLOWED_EDGE_IDS: ${OPENFDD_LOCAL_ALLOWED_EDGE_IDS:-haystack-1}
+      OPENFDD_LOCAL_INGEST_TOKEN: ${OPENFDD_LOCAL_INGEST_TOKEN:?set local ingest token}
+      OPENFDD_WORKSPACE: /workspace
+      OPENFDD_STORAGE_URL: file:///workspace/openfdd
+      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:?set jwt secret}
+      OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:?set admin password}
+      OPENFDD_REACT_UI: "1"
+    ports:
+      - "${OPENFDD_CENTRAL_BIND:-127.0.0.1}:8080:8080"
+    volumes:
+      - ../workspace:/workspace
+    restart: unless-stopped
+
+  web:
+    image: ${OPENFDD_WEB_IMAGE:-ghcr.io/bbartling/openfdd-web:nightly}
+    environment:
+      OPENFDD_CENTRAL_UPSTREAM: central:8080
+      OPENFDD_NGINX_RESOLVER: ${OPENFDD_NGINX_RESOLVER:-auto}
+    ports:
+      - "${OPENFDD_WEB_BIND:-127.0.0.1}:3000:8080"
+    depends_on:
+      - central
+    restart: unless-stopped
+
+  haystack:
+    image: ${OPENFDD_HAYSTACK_IMAGE:-ghcr.io/bbartling/openfdd-haystack:nightly}
+    environment:
+      OPENFDD_FIELDBUS_CONFIG_DIR: /app/config
+      OPENFDD_FIELDBUS_HTTP_HOST: 127.0.0.1
+      OPENFDD_FIELDBUS_HTTP_PORT: "8082"
+      OPENFDD_CONNECTOR_API_KEY: ${OPENFDD_CONNECTOR_API_KEY:?set connector api key}
+      OPENFDD_MQTT_ENABLED: "0"
+      OPENFDD_INGEST_MODE: local_fieldbus
+      OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:?set site id}
+      OPENFDD_BUILDING_ID: ${OPENFDD_BUILDING_ID:-${OPENFDD_SITE_ID}}
+      OPENFDD_EDGE_ID: ${OPENFDD_EDGE_ID:-haystack-1}
+      OPENFDD_LOCAL_CENTRAL_URL: http://central:8080
+      OPENFDD_LOCAL_INGEST_TOKEN: ${OPENFDD_LOCAL_INGEST_TOKEN:?set local ingest token}
+      OPENFDD_HAYSTACK_BASE_URL: ${OPENFDD_HAYSTACK_BASE_URL:?set haystack base url}
+      OPENFDD_HAYSTACK_USER: ${OPENFDD_HAYSTACK_USER:-}
+      OPENFDD_HAYSTACK_PASS: ${OPENFDD_HAYSTACK_PASS:-}
+      OPENFDD_HAYSTACK_AUTH_MODE: ${OPENFDD_HAYSTACK_AUTH_MODE:-basic}
+    ports:
+      - "127.0.0.1:${OPENFDD_HAYSTACK_HTTP_PORT:-8082}:8082"
+    volumes:
+      - ../config/fieldbus:/app/config:ro
+    depends_on:
+      - central
+    restart: unless-stopped
