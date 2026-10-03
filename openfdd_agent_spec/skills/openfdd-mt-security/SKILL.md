@@ -89,6 +89,23 @@ that profile: `.cursor/plans/wave_u_independent_acceptance_audit.plan.md`.
   controls. The Wave U acceptance audit and root `MILESTONES.md` govern reopened
   qualification scope; component/source-string checks do not close runtime claims.
 
+### Deployment profile contract (post-5D)
+
+Use the canonical policy at
+[`docs/operations/SECURITY_QUALIFICATION_POLICY.md`](../../../docs/operations/SECURITY_QUALIFICATION_POLICY.md)
+and the machine-readable registry at
+[`scripts/security/schemas/deployment_profiles_v1.json`](../../../scripts/security/schemas/deployment_profiles_v1.json).
+Evaluate sanitized topology evidence with
+`python3 scripts/security/deployment_profile_qualification.py`; the shared
+validator is `scripts/security/openfdd_security/deployment.py`.
+
+The `cloud_mqtt_hub` profile requires web + central + MQTT and explicitly
+observes every forbidden OT service/image. `ot_local_bacnet_modbus` and
+`ot_local_haystack` require Caddy + web + central + exactly one selected split
+connector, with no mandatory local broker. These profile IDs describe topology;
+they never authorize a live Railway scan, OT request, BAS write, or Nessus claim.
+Evidence must stay sanitized and bind candidate, config, and fixture hashes.
+
 ## Never
 
 - Fall back to `AuthUser::dev_anonymous()` Admin for tenant/topology list handlers

@@ -1,3 +1,26 @@
+## 2026-10-03 — Nessus importer A08 (#1102, Cursor takeover)
+
+- Hardened `scripts/security/nessus/import_nessus_report.py`: DTD/entity rejection,
+  host/item bounds, expectation manifest binding (targets, candidate SHA256, policy,
+  feed, freshness, completion), and scoped Medium dispositions (no blanket accept).
+- Added synthetic fixtures + `tests/security/test_nessus_import.py` regressions.
+  Local: `python3 -B -m pytest tests/security -q` → 100 passed. Licensed Nessus scan
+  evidence remains Soft-OPEN.
+
+## 2026-10-03 — Post-5D deployment profile/evidence contract (#1102)
+
+- Added the fail-closed `openfdd_security.deployment` validator and
+  `deployment_profiles_v1.json` for cloud MQTT hub, selected BACnet/Modbus OT,
+  selected Haystack OT, and loopback development topologies.
+- Cloud evidence requires web + central + MQTT and explicit absence of every OT
+  service; each OT profile requires Caddy + web + central + exactly one split
+  connector with no mandatory local broker. Evidence binds immutable image
+  digests, source/config/fixture hashes, listeners, budgets, cleanup, and
+  sanitized artifacts.
+- Offline negative tests cover omitted forbidden services, changed bindings,
+  contradictory counts, stale/unknown evidence, and artifact path escapes.
+  No Railway/OT scan, BAS write, secret access, or product runtime change.
+
 ## 2026-10-01 — Operations protocol workspace Phase 3B (in progress)
 
 - Added an authenticated capability-driven Operations protocol shell with nested MQTT troubleshooting, BACnet, Modbus and Haystack radios. Existing Sites, MQTT and AFDD query views remain intact; this phase performs no connector inventory, protocol reads or writes.

@@ -2,7 +2,7 @@
 # Scan final GHCR image digests with Trivy (Wave U U6 / UA-05). Not a Nessus substitute.
 # Prefer digest refs when RepoDigests are known; tag scans must still record digests.
 set -euo pipefail
-TAG="${1:?usage: $0 sha-<7> [central|web|mqtt|fieldbus|mcp|caddy|all]}"
+TAG="${1:?usage: $0 sha-<7> [central|web|mqtt|fieldbus|bacnet-modbus|haystack|mcp|caddy|all]}"
 SCOPE="${2:-all}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # Absolute out dir — docker-run Trivy mounts fail on relative ARTIFACT_DIR.
@@ -17,8 +17,8 @@ mkdir -p "$OUT"
 
 images=()
 case "$SCOPE" in
-  all) images=(central web mqtt fieldbus mcp caddy) ;;
-  central|web|mqtt|fieldbus|mcp|caddy) images=("$SCOPE") ;;
+  all) images=(central web mqtt fieldbus bacnet-modbus haystack mcp caddy) ;;
+  central|web|mqtt|fieldbus|bacnet-modbus|haystack|mcp|caddy) images=("$SCOPE") ;;
   *) echo "unknown scope $SCOPE" >&2; exit 2 ;;
 esac
 
@@ -46,6 +46,10 @@ for name in "${images[@]}"; do
     ref="ghcr.io/bbartling/openfdd-${name}:${TAG}"
   fi
   echo "==> trivy image $ref"
+  # Keep the exact candidate reference beside the scanner output.  A moving
+  # tag is still allowed for the operator's explicit request, but it cannot be
+  # mistaken for a digest-bound qualification record.
+  printf '%s\n' "$ref" >"$OUT/${name}.ref"
   if ! trivy_cmd image --exit-code 1 --severity HIGH,CRITICAL \
     --format json --output "$OUT/${name}.json" "$ref"; then
     # Distinguish pull/missing from findings: empty/missing report → missing.

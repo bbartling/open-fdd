@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<NessusClientData_v2>
+  <Report name="openfdd-synthetic-bound">
+    <ReportHost name="192.0.2.20">
+      <HostProperties>
+        <tag name="host-ip">192.0.2.20</tag>
+        <tag name="openfdd-candidate-sha">aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa</tag>
+        <tag name="openfdd-policy">openfdd-ot-lab</tag>
+        <tag name="openfdd-feed-version">202610030001</tag>
+        <tag name="openfdd-scan-complete">yes</tag>
+        <tag name="scan-started-at">2026-10-03T12:00:00Z</tag>
+        <tag name="scan-ended-at">2026-10-03T12:30:00Z</tag>
+      </HostProperties>
+      <ReportItem port="0" protocol="tcp" severity="0" pluginID="19506" pluginName="Nessus Scan Information">
+        <plugin_output>Credentialed checks : yes</plugin_output>
+      </ReportItem>
+    </ReportHost>
+  </Report>
+</NessusClientData_v2>

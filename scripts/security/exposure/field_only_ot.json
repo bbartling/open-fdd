@@ -1,6 +1,14 @@
 {
   "schema_version": "openfdd_exposure_manifest_v1",
   "profile": "field_only_ot",
+  "deployment_profiles": [
+    "ot_local_bacnet_modbus",
+    "ot_local_haystack"
+  ],
+  "split_connector_images": [
+    "openfdd-bacnet-modbus",
+    "openfdd-haystack"
+  ],
   "note": "Expected exposure for docker/compose.edge.yml (+ optional compose.edge.railway.yml) — fieldbus only, no local central/web/broker. Not a live scan.",
   "compose": [
     "docker/compose.edge.yml"
