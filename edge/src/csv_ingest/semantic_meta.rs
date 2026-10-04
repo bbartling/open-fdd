@@ -6,9 +6,13 @@
 //! Custom Open-FDD fields stay engineering-only — Haystack tags are preferred.
 
 use std::collections::BTreeMap;
-use std::fs;
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -18,6 +22,8 @@ pub const SCHEMA: &str = "openfdd_semantic_meta_v1";
 pub const SKETCH_SCHEMA: &str = "openfdd_point_metadata_v1_sketch";
 pub const SEMANTIC_META_FILE: &str = "semantic_meta.json";
 pub const SEMANTIC_META_REVISION_FILE: &str = "semantic_meta.revision.json";
+pub const SEMANTIC_META_LOCK_FILE: &str = "semantic_meta.lock";
+pub const SEMANTIC_META_REVISIONS_DIR: &str = "semantic_meta_revisions";
 /// Package path aliases (building-root relative).
 pub const PACKAGE_CANDIDATES: &[&str] = &[
     "semantic_meta.json",
@@ -25,6 +31,14 @@ pub const PACKAGE_CANDIDATES: &[&str] = &[
     "point_metadata.json",
     "openfdd_point_metadata_v1.json",
 ];
+
+// Test-only: fail after durable immutable revision write, before head publication.
+#[cfg(test)]
+thread_local! {
+    static FAIL_BEFORE_HEAD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+static TMP_SEQ: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SemanticMetaV1 {
@@ -118,26 +132,116 @@ pub struct SemanticMetaRevision {
     pub content_sha256: String,
 }
 
-fn atomic_write(path: &Path, body: &str) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
-    }
-    let tmp = path.with_extension("json.tmp");
-    {
-        let mut f = fs::File::create(&tmp).map_err(|e| format!("create tmp: {e}"))?;
-        f.write_all(body.as_bytes())
-            .map_err(|e| format!("write tmp: {e}"))?;
-        f.sync_all().map_err(|e| format!("sync tmp: {e}"))?;
-    }
-    fs::rename(&tmp, path).map_err(|e| format!("rename {}: {e}", path.display()))?;
-    Ok(())
-}
-
 fn sha256_hex(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     let mut h = Sha256::new();
     h.update(bytes);
     format!("{:x}", h.finalize())
+}
+
+fn unique_tmp_path(path: &Path) -> PathBuf {
+    let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("semantic_meta.json");
+    path.with_file_name(format!(".{name}.tmp.{nanos}.{seq}"))
+}
+
+fn atomic_write(path: &Path, body: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+    }
+    let tmp = unique_tmp_path(path);
+    {
+        let mut f = File::create(&tmp).map_err(|e| format!("create tmp: {e}"))?;
+        f.write_all(body.as_bytes())
+            .map_err(|e| format!("write tmp: {e}"))?;
+        f.sync_all().map_err(|e| format!("sync tmp: {e}"))?;
+    }
+    fs::rename(&tmp, path).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        format!("rename {}: {e}", path.display())
+    })?;
+    Ok(())
+}
+
+struct SiteLock {
+    _file: File,
+}
+
+impl SiteLock {
+    fn acquire(building_root: &Path) -> Result<Self, String> {
+        fs::create_dir_all(building_root)
+            .map_err(|e| format!("mkdir {}: {e}", building_root.display()))?;
+        let lock_path = building_root.join(SEMANTIC_META_LOCK_FILE);
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&lock_path)
+            .map_err(|e| format!("open lock {}: {e}", lock_path.display()))?;
+        #[cfg(unix)]
+        {
+            let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
+            if rc != 0 {
+                return Err(format!(
+                    "flock {}: {}",
+                    lock_path.display(),
+                    std::io::Error::last_os_error()
+                ));
+            }
+        }
+        Ok(Self { _file: file })
+    }
+}
+
+impl Drop for SiteLock {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        {
+            let _ = unsafe { libc::flock(self._file.as_raw_fd(), libc::LOCK_UN) };
+        }
+    }
+}
+
+fn revisions_dir(building_root: &Path) -> PathBuf {
+    building_root.join(SEMANTIC_META_REVISIONS_DIR)
+}
+
+fn revision_object_path(building_root: &Path, revision: &str) -> PathBuf {
+    revisions_dir(building_root).join(format!("{revision}.json"))
+}
+
+fn read_head(building_root: &Path) -> Result<Option<SemanticMetaRevision>, String> {
+    let rev_path = building_revision_path(building_root);
+    if !rev_path.is_file() {
+        return Ok(None);
+    }
+    let cur = fs::read_to_string(&rev_path).map_err(|e| format!("read revision: {e}"))?;
+    let cur_rev: SemanticMetaRevision =
+        serde_json::from_str(&cur).map_err(|e| format!("parse revision: {e}"))?;
+    Ok(Some(cur_rev))
+}
+
+fn encode_meta_body(meta: &SemanticMetaV1) -> Result<String, String> {
+    let body = serde_json::to_string_pretty(meta).map_err(|e| e.to_string())?;
+    Ok(format!("{body}\n"))
+}
+
+fn next_revision_id(content_sha256: &str) -> String {
+    let ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let prefix: String = content_sha256.chars().take(12).collect();
+    format!("r{ms}-{seq:x}-{prefix}")
 }
 
 /// Parse + validate. Upgrades C1 sketch schema to `openfdd_semantic_meta_v1`.
@@ -344,73 +448,240 @@ pub fn building_revision_path(building_root: &Path) -> PathBuf {
     building_root.join(SEMANTIC_META_REVISION_FILE)
 }
 
+/// Load tip meta and verify companion head hash (HR-07 recovery).
 pub fn load_persisted(building_root: &Path) -> Result<Option<SemanticMetaV1>, String> {
+    let _lock = SiteLock::acquire(building_root)?;
+    load_persisted_locked(building_root)
+}
+
+fn load_persisted_locked(building_root: &Path) -> Result<Option<SemanticMetaV1>, String> {
+    let head = read_head(building_root)?;
     let path = building_meta_path(building_root);
     if !path.is_file() {
+        if head.is_some() {
+            return Err("semantic meta head present but tip semantic_meta.json missing".into());
+        }
         return Ok(None);
     }
     let body = fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    let raw: Value =
-        serde_json::from_str(&body).map_err(|e| format!("parse {}: {e}", path.display()))?;
-    Ok(Some(parse_semantic_meta(&raw)?))
+    let digest = sha256_hex(body.as_bytes());
+    let parsed = serde_json::from_str::<Value>(&body)
+        .map_err(|e| format!("parse {}: {e}", path.display()))
+        .and_then(|raw| parse_semantic_meta(&raw));
+    match (head, parsed) {
+        (None, Ok(meta)) => Ok(Some(meta)),
+        (None, Err(e)) => Err(e),
+        (Some(h), Ok(meta)) => {
+            if meta.revision.as_deref() != Some(h.revision.as_str()) || digest != h.content_sha256 {
+                return recover_tip_from_revision(building_root, &path, &h);
+            }
+            Ok(Some(meta))
+        }
+        (Some(h), Err(_)) => recover_tip_from_revision(building_root, &path, &h),
+    }
 }
 
-/// Atomically persist meta + revision. On conflict (`expected_revision` set and
-/// mismatches disk), returns Err without writing (HR-07).
+fn recover_tip_from_revision(
+    building_root: &Path,
+    tip_path: &Path,
+    head: &SemanticMetaRevision,
+) -> Result<Option<SemanticMetaV1>, String> {
+    let recovered = load_revision_object(building_root, &head.revision)?;
+    let recovered_body = encode_meta_body(&recovered)?;
+    if sha256_hex(recovered_body.as_bytes()) != head.content_sha256 {
+        return Err(format!(
+            "semantic meta immutable revision {} hash mismatch versus head",
+            head.revision
+        ));
+    }
+    atomic_write(tip_path, &recovered_body)?;
+    Ok(Some(recovered))
+}
+
+fn load_revision_object(building_root: &Path, revision: &str) -> Result<SemanticMetaV1, String> {
+    let path = revision_object_path(building_root, revision);
+    let body = fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let raw: Value =
+        serde_json::from_str(&body).map_err(|e| format!("parse {}: {e}", path.display()))?;
+    parse_semantic_meta(&raw)
+}
+
+/// Transactional persist: immutable revision object + atomic head CAS (HR-07 / #1123 F7).
+///
+/// Publication order under a per-site lock:
+/// 1. validate + CAS expected head
+/// 2. write immutable `semantic_meta_revisions/{rev}.json`
+/// 3. write tip `semantic_meta.json`
+/// 4. write head `semantic_meta.revision.json` (**commit point**)
+///
+/// Identical content to the current head is idempotent (returns existing head).
 pub fn persist_atomic(
     building_root: &Path,
     mut meta: SemanticMetaV1,
     expected_revision: Option<&str>,
 ) -> Result<SemanticMetaRevision, String> {
-    let rev_path = building_revision_path(building_root);
+    let _lock = SiteLock::acquire(building_root)?;
+    let current = read_head(building_root)?;
     if let Some(want) = expected_revision {
-        if rev_path.is_file() {
-            let cur = fs::read_to_string(&rev_path).map_err(|e| format!("read revision: {e}"))?;
-            let cur_rev: SemanticMetaRevision =
-                serde_json::from_str(&cur).map_err(|e| format!("parse revision: {e}"))?;
-            if cur_rev.revision != want {
+        match &current {
+            Some(cur) if cur.revision == want => {}
+            Some(cur) => {
                 return Err(format!(
                     "semantic meta revision conflict: expected {want}, have {}",
-                    cur_rev.revision
+                    cur.revision
                 ));
             }
-        } else if !want.is_empty() {
-            return Err(format!(
-                "semantic meta revision conflict: expected {want}, have none"
-            ));
+            None if want.is_empty() => {}
+            None => {
+                return Err(format!(
+                    "semantic meta revision conflict: expected {want}, have none"
+                ));
+            }
         }
     }
 
-    let next_rev = format!("r{}", chrono_lite_now_ms());
+    // Provisional encode without revision for content-addressed idempotence.
+    meta.revision = None;
+    let provisional = encode_meta_body(&meta)?;
+    let provisional_digest = sha256_hex(provisional.as_bytes());
+    if let Some(cur) = &current {
+        // Compare against stored tip bytes if available.
+        if let Ok(Some(existing)) = load_persisted_locked(building_root) {
+            let mut existing_cmp = existing.clone();
+            existing_cmp.revision = None;
+            if let Ok(ex_body) = encode_meta_body(&existing_cmp) {
+                if sha256_hex(ex_body.as_bytes()) == provisional_digest {
+                    return Ok(cur.clone());
+                }
+            }
+        }
+    }
+
+    let next_rev = next_revision_id(&provisional_digest);
     meta.revision = Some(next_rev.clone());
-    let body = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
-    let body = format!("{body}\n");
+    let body = encode_meta_body(&meta)?;
     let digest = sha256_hex(body.as_bytes());
     let rev = SemanticMetaRevision {
         schema: SCHEMA.to_string(),
         building_id: meta.building_id.clone(),
-        revision: next_rev,
+        revision: next_rev.clone(),
         content_sha256: digest,
     };
     let rev_body = serde_json::to_string_pretty(&rev).map_err(|e| e.to_string())?;
     let rev_body = format!("{rev_body}\n");
 
-    // Write meta first to tmp+rename, then revision — if revision fails, meta tip
-    // still has embedded revision field matching intended next_rev.
+    // 1) Immutable revision object (never overwritten).
+    atomic_write(&revision_object_path(building_root, &next_rev), &body)?;
+
+    #[cfg(test)]
+    {
+        if FAIL_BEFORE_HEAD.with(|c| c.get()) {
+            return Err("injected failure before head publication".into());
+        }
+    }
+
+    // 2) Tip convenience file, then 3) head commit.
     atomic_write(&building_meta_path(building_root), &body)?;
-    atomic_write(&rev_path, &rev_body)?;
+    atomic_write(&building_revision_path(building_root), &rev_body)?;
     Ok(rev)
 }
 
-fn chrono_lite_now_ms() -> u128 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0)
+/// Roll tip/head back to a previously published immutable revision (HR-07).
+pub fn rollback_to(
+    building_root: &Path,
+    target_revision: &str,
+    expected_revision: Option<&str>,
+) -> Result<SemanticMetaRevision, String> {
+    let meta = {
+        let _lock = SiteLock::acquire(building_root)?;
+        if let Some(want) = expected_revision {
+            match read_head(building_root)? {
+                Some(cur) if cur.revision == want => {}
+                Some(cur) => {
+                    return Err(format!(
+                        "semantic meta revision conflict: expected {want}, have {}",
+                        cur.revision
+                    ));
+                }
+                None => {
+                    return Err(format!(
+                        "semantic meta revision conflict: expected {want}, have none"
+                    ));
+                }
+            }
+        }
+        load_revision_object(building_root, target_revision)?
+    };
+    // Re-publish the historical body as a new head via normal CAS path would mint a
+    // new revision id; for rollback we restore the exact historical revision/hash.
+    let _lock = SiteLock::acquire(building_root)?;
+    if let Some(want) = expected_revision {
+        match read_head(building_root)? {
+            Some(cur) if cur.revision == want => {}
+            Some(cur) => {
+                return Err(format!(
+                    "semantic meta revision conflict: expected {want}, have {}",
+                    cur.revision
+                ));
+            }
+            None => {
+                return Err(format!(
+                    "semantic meta revision conflict: expected {want}, have none"
+                ));
+            }
+        }
+    }
+    let body = encode_meta_body(&meta)?;
+    let digest = sha256_hex(body.as_bytes());
+    let rev = SemanticMetaRevision {
+        schema: SCHEMA.to_string(),
+        building_id: meta.building_id.clone(),
+        revision: target_revision.to_string(),
+        content_sha256: digest,
+    };
+    let rev_body = serde_json::to_string_pretty(&rev).map_err(|e| e.to_string())?;
+    let rev_body = format!("{rev_body}\n");
+    atomic_write(&building_meta_path(building_root), &body)?;
+    atomic_write(&building_revision_path(building_root), &rev_body)?;
+    Ok(rev)
+}
+
+/// Delete tip+head after CAS. Immutable revision objects are retained.
+pub fn delete_persisted(
+    building_root: &Path,
+    expected_revision: Option<&str>,
+) -> Result<(), String> {
+    let _lock = SiteLock::acquire(building_root)?;
+    if let Some(want) = expected_revision {
+        match read_head(building_root)? {
+            Some(cur) if cur.revision == want => {}
+            Some(cur) => {
+                return Err(format!(
+                    "semantic meta revision conflict: expected {want}, have {}",
+                    cur.revision
+                ));
+            }
+            None if want.is_empty() => {}
+            None => {
+                return Err(format!(
+                    "semantic meta revision conflict: expected {want}, have none"
+                ));
+            }
+        }
+    }
+    let tip = building_meta_path(building_root);
+    let head = building_revision_path(building_root);
+    if tip.is_file() {
+        fs::remove_file(&tip).map_err(|e| format!("remove tip: {e}"))?;
+    }
+    if head.is_file() {
+        fs::remove_file(&head).map_err(|e| format!("remove head: {e}"))?;
+    }
+    Ok(())
 }
 
 /// Import helper: persist package sidecar or leave prior revision intact on error.
+/// Uses CAS against the current head when one exists (HR-07).
 pub fn import_from_package_map(
     building_root: &Path,
     building_id: &str,
@@ -442,7 +713,7 @@ pub fn import_from_package_map(
                 ));
                 meta.building_id = building_id.to_string();
             }
-            match persist_atomic(building_root, meta, None) {
+            match persist_replace_current(building_root, meta) {
                 Ok(rev) => json!({
                     "ok": true,
                     "present": true,
@@ -452,16 +723,35 @@ pub fn import_from_package_map(
                 }),
                 Err(e) => {
                     warnings.push(format!("semantic_meta persist failed: {e}"));
-                    json!({"ok": false, "present": true, "error": e})
+                    json!({
+                        "ok": false,
+                        "present": true,
+                        "error": e,
+                        "prior_intact": building_meta_path(building_root).is_file(),
+                    })
                 }
             }
         }
     }
 }
 
+/// Package-import CAS: lock, read current head, publish against that expected revision.
+pub fn persist_replace_current(
+    building_root: &Path,
+    meta: SemanticMetaV1,
+) -> Result<SemanticMetaRevision, String> {
+    let expected = {
+        let _lock = SiteLock::acquire(building_root)?;
+        read_head(building_root)?.map(|h| h.revision)
+    };
+    persist_atomic(building_root, meta, expected.as_deref())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
     use tempfile::tempdir;
 
     fn sample_raw() -> Value {
@@ -483,9 +773,13 @@ mod tests {
         })
     }
 
+    fn sample_meta() -> SemanticMetaV1 {
+        parse_semantic_meta(&sample_raw()).unwrap()
+    }
+
     #[test]
     fn upgrades_c1_sketch_and_roundtrips() {
-        let meta = parse_semantic_meta(&sample_raw()).unwrap();
+        let meta = sample_meta();
         assert_eq!(meta.schema, SCHEMA);
         assert_eq!(meta.points.len(), 1);
         let dir = tempdir().unwrap();
@@ -494,18 +788,18 @@ mod tests {
         assert_eq!(loaded.schema, SCHEMA);
         assert_eq!(loaded.points[0].column, "SAT");
         assert_eq!(loaded.revision.as_deref(), Some(rev.revision.as_str()));
+        assert!(revision_object_path(dir.path(), &rev.revision).is_file());
     }
 
     #[test]
     fn invalid_meta_leaves_prior_intact() {
         let dir = tempdir().unwrap();
-        let meta = parse_semantic_meta(&sample_raw()).unwrap();
+        let meta = sample_meta();
         persist_atomic(dir.path(), meta, None).unwrap();
         let prior = fs::read_to_string(building_meta_path(dir.path())).unwrap();
 
         let bad = json!({"schema": "not_a_schema", "building_id": "SITE_A"});
         assert!(parse_semantic_meta(&bad).is_err());
-        // Simulate import reject: do not call persist
         let after = fs::read_to_string(building_meta_path(dir.path())).unwrap();
         assert_eq!(prior, after);
     }
@@ -513,7 +807,7 @@ mod tests {
     #[test]
     fn revision_conflict_is_explicit() {
         let dir = tempdir().unwrap();
-        let meta = parse_semantic_meta(&sample_raw()).unwrap();
+        let meta = sample_meta();
         let rev = persist_atomic(dir.path(), meta.clone(), None).unwrap();
         let err = persist_atomic(dir.path(), meta, Some("wrong-rev")).unwrap_err();
         assert!(err.contains("conflict"), "{err}");
@@ -528,5 +822,99 @@ mod tests {
             "points": [{"equipment_id": "", "column": "SAT"}]
         });
         assert!(parse_semantic_meta(&raw).is_err());
+    }
+
+    #[test]
+    fn injected_failure_before_head_keeps_prior_tip() {
+        let dir = tempdir().unwrap();
+        let first = persist_atomic(dir.path(), sample_meta(), None).unwrap();
+        let prior_tip = fs::read_to_string(building_meta_path(dir.path())).unwrap();
+        let prior_head = fs::read_to_string(building_revision_path(dir.path())).unwrap();
+
+        FAIL_BEFORE_HEAD.with(|c| c.set(true));
+        let mut next = sample_meta();
+        next.note = Some("mutated".into());
+        let err = persist_atomic(dir.path(), next, Some(&first.revision)).unwrap_err();
+        FAIL_BEFORE_HEAD.with(|c| c.set(false));
+        assert!(err.contains("injected failure"), "{err}");
+        assert_eq!(
+            fs::read_to_string(building_meta_path(dir.path())).unwrap(),
+            prior_tip
+        );
+        assert_eq!(
+            fs::read_to_string(building_revision_path(dir.path())).unwrap(),
+            prior_head
+        );
+        let loaded = load_persisted(dir.path()).unwrap().unwrap();
+        assert_eq!(loaded.revision.as_deref(), Some(first.revision.as_str()));
+        assert!(loaded.note.is_none());
+    }
+
+    #[test]
+    fn concurrent_cas_one_wins() {
+        let dir = tempdir().unwrap();
+        let root = Arc::new(dir.path().to_path_buf());
+        let first = persist_atomic(root.as_path(), sample_meta(), None).unwrap();
+        let barrier = Arc::new(Barrier::new(2));
+        let mut handles = Vec::new();
+        for i in 0..2 {
+            let root = Arc::clone(&root);
+            let barrier = Arc::clone(&barrier);
+            let base = first.revision.clone();
+            handles.push(thread::spawn(move || {
+                barrier.wait();
+                let mut meta = sample_meta();
+                meta.note = Some(format!("writer-{i}"));
+                persist_atomic(root.as_path(), meta, Some(&base))
+            }));
+        }
+        let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        let wins = results.iter().filter(|r| r.is_ok()).count();
+        let losses = results.iter().filter(|r| r.is_err()).count();
+        assert_eq!(wins, 1, "{results:?}");
+        assert_eq!(losses, 1, "{results:?}");
+        let tip = load_persisted(root.as_path()).unwrap().unwrap();
+        assert!(tip.note.as_deref() == Some("writer-0") || tip.note.as_deref() == Some("writer-1"));
+    }
+
+    #[test]
+    fn idempotent_reimport_same_content() {
+        let dir = tempdir().unwrap();
+        let meta = sample_meta();
+        let first = persist_atomic(dir.path(), meta.clone(), None).unwrap();
+        let second = persist_replace_current(dir.path(), meta).unwrap();
+        assert_eq!(first.revision, second.revision);
+        assert_eq!(first.content_sha256, second.content_sha256);
+    }
+
+    #[test]
+    fn rollback_and_delete_preserve_immutable_objects() {
+        let dir = tempdir().unwrap();
+        let r1 = persist_atomic(dir.path(), sample_meta(), None).unwrap();
+        let mut m2 = sample_meta();
+        m2.note = Some("v2".into());
+        let r2 = persist_atomic(dir.path(), m2, Some(&r1.revision)).unwrap();
+        assert_ne!(r1.revision, r2.revision);
+        let rolled = rollback_to(dir.path(), &r1.revision, Some(&r2.revision)).unwrap();
+        assert_eq!(rolled.revision, r1.revision);
+        let loaded = load_persisted(dir.path()).unwrap().unwrap();
+        assert!(loaded.note.is_none());
+        assert!(revision_object_path(dir.path(), &r2.revision).is_file());
+        delete_persisted(dir.path(), Some(&r1.revision)).unwrap();
+        assert!(load_persisted(dir.path()).unwrap().is_none());
+        assert!(revision_object_path(dir.path(), &r1.revision).is_file());
+    }
+
+    #[test]
+    fn load_recovers_corrupt_tip_from_immutable_revision() {
+        let dir = tempdir().unwrap();
+        let rev = persist_atomic(dir.path(), sample_meta(), None).unwrap();
+        fs::write(building_meta_path(dir.path()), "{}\n").unwrap();
+        let loaded = load_persisted(dir.path()).unwrap().unwrap();
+        assert_eq!(loaded.revision.as_deref(), Some(rev.revision.as_str()));
+        assert_eq!(loaded.points[0].column, "SAT");
+        // Tip file repaired.
+        let tip = fs::read_to_string(building_meta_path(dir.path())).unwrap();
+        assert!(tip.contains("AHU_1"));
     }
 }
