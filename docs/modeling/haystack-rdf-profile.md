@@ -28,7 +28,7 @@ Requirements source: [`openfdd_agent_spec/HAYSTACK_RDF_ROLLOUT.md`](../../openfd
 | Haystack semantics | Terms resolve to pinned `ph` defs; markers/refs valid | **Not claimed** for package TTL |
 | Site mapping completeness | Roles, topology, units sufficient for FDD | Package inventory + diagnostics |
 | FDD readiness | DataFusion roles populated | Existing SQL path |
-| Graph/API services | Central SPARQL, authenticated exports | SPARQL **unavailable** on central (C4) |
+| Graph/API services | Central scoped dataset + SPARQL | Dataset route **shipped** (C4 H8); SPARQL **UNAVAILABLE** honesty (cannot close #1002) |
 
 ## Pinned vocabulary
 

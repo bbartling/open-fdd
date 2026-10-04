@@ -97,6 +97,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(csv_import_package_mapping_semantic_meta),
         )
         .route(
+            "/api/csv/import/package/mapping/haystack-dataset",
+            get(csv_import_package_mapping_haystack_dataset),
+        )
+        .route(
             "/api/csv/import/package/buildings",
             get(csv_import_package_buildings),
         )
@@ -198,6 +202,15 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/commands", post(issue_command))
         .route("/api/commands/{command_id}/ack", get(get_ack))
         .route("/api/agent/tools", get(agent_tools))
+        // C4 honesty: registered UNAVAILABLE — Option B cannot close #1002.
+        .route(
+            "/api/model/sparql",
+            post(central_package_sparql_unavailable),
+        )
+        .route(
+            "/api/model/sparql/predefined",
+            get(central_package_sparql_catalog_unavailable),
+        )
         .route("/api/fdd/rules", get(fdd_registry_rules))
         .route("/api/fdd/rules/{rule_id}/params", get(fdd_rule_params))
         .route("/api/fdd/cache/status", get(fdd_cache_status))
@@ -4107,6 +4120,84 @@ pub async fn csv_import_package_mapping_haystack_ttl(
         ttl,
     )
         .into_response())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HaystackDatasetQuery {
+    building_id: Option<String>,
+    equipment_id: Option<String>,
+    /// When true, include full Turtle bytes in the JSON envelope.
+    #[serde(default)]
+    include_turtle: Option<bool>,
+}
+
+/// Central scoped Haystack RDF dataset from committed authority + pinned defs (C4 H8).
+pub async fn csv_import_package_mapping_haystack_dataset(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<HaystackDatasetQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let Some(building_id) = q
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id query parameter required",
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let equipment_id = q
+        .equipment_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let include_turtle = q.include_turtle.unwrap_or(false);
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, Some(&building_id));
+    let cache = state.haystack_rdf.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        cache.get_or_materialize(&building_id, equipment_id.as_deref(), preferred.as_deref())
+    })
+    .await
+    .unwrap_or_else(|e| Err(json!({"ok": false, "error": format!("haystack dataset task: {e}")})));
+
+    match result {
+        Ok(snap) => Ok(Json(snap.to_json(include_turtle))),
+        Err(err) => {
+            let status = if err.get("present") == Some(&json!(false)) {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::BAD_REQUEST
+            };
+            Err((status, Json(err)))
+        }
+    }
+}
+
+/// Product-central SPARQL honesty (C4 Option B). JWT-gated via router layer.
+/// UNAVAILABLE cannot close #1002 graph-driven delivery.
+pub async fn central_package_sparql_unavailable() -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(crate::haystack_rdf::sparql_unavailable()),
+    )
+}
+
+pub async fn central_package_sparql_catalog_unavailable() -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(crate::haystack_rdf::sparql_unavailable()),
+    )
 }
 
 /// Strict Haystack projection JSON envelope (Turtle + omission report).

@@ -876,11 +876,11 @@ pub fn export_fixture_projection(
 }
 
 #[cfg(test)]
-mod tests {
+pub mod fixtures {
     use super::*;
     use serde_json::json;
 
-    fn sample_meta() -> SemanticMetaV1 {
+    pub fn sample_meta() -> SemanticMetaV1 {
         serde_json::from_value(json!({
             "schema": "openfdd_semantic_meta_v1",
             "building_id": "OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1",
@@ -935,7 +935,7 @@ mod tests {
         .unwrap()
     }
 
-    fn sample_inventory() -> Value {
+    pub fn sample_inventory() -> Value {
         json!({
             "building_id": "OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1",
             "equipment": [
@@ -973,6 +973,12 @@ mod tests {
             ]
         })
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fixtures::{sample_inventory, sample_meta};
+    use super::*;
 
     #[test]
     fn strict_uses_versioned_multi_library_iris() {
