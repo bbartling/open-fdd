@@ -202,11 +202,15 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/commands", post(issue_command))
         .route("/api/commands/{command_id}/ack", get(get_ack))
         .route("/api/agent/tools", get(agent_tools))
-        // C4 H9: server-owned SPARQL templates → typed bindings (not edge prototype graph).
+        // C4 H9/H10: server-owned SPARQL templates → typed bindings + consumers.
         .route("/api/model/sparql", post(central_package_sparql))
         .route(
             "/api/model/sparql/predefined",
             get(central_package_sparql_catalog),
+        )
+        .route(
+            "/api/model/sparql/consumers",
+            post(central_package_sparql_consumers),
         )
         .route("/api/fdd/rules", get(fdd_registry_rules))
         .route("/api/fdd/rules/{rule_id}/params", get(fdd_rule_params))
@@ -4278,6 +4282,82 @@ pub async fn central_package_sparql(
 
 pub async fn central_package_sparql_catalog() -> Json<Value> {
     Json(crate::haystack_rdf::sparql_catalog())
+}
+
+/// H10/H11: typed bindings + FDD/history/ECM consumer plans (JWT + building scope).
+pub async fn central_package_sparql_consumers(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<CentralPackageSparqlBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if body
+        .query
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_some()
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(crate::haystack_rdf::sparql_freeform_rejected()),
+        ));
+    }
+    let query_id = body
+        .query_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("fdd_role_candidates")
+        .to_string();
+    let Some(building_id) = body
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id required",
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let equipment_id = body
+        .equipment_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, Some(&building_id));
+    let cache = state.haystack_rdf.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        cache.execute_binding_consumers(
+            &building_id,
+            equipment_id.as_deref(),
+            preferred.as_deref(),
+            &query_id,
+        )
+    })
+    .await
+    .unwrap_or_else(|e| Err(json!({"ok": false, "error": format!("consumers task: {e}")})));
+
+    match result {
+        Ok(body) => Ok(Json(body)),
+        Err(err) => {
+            let status = if err.get("present") == Some(&json!(false)) {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::BAD_REQUEST
+            };
+            Err((status, Json(err)))
+        }
+    }
 }
 
 /// Strict Haystack projection JSON envelope (Turtle + omission report).

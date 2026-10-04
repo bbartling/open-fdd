@@ -17,6 +17,7 @@ SPARQL. Update when routes land. Tip authority: Wave S2 ADR
 | SPA Mapping export | browser download of same JSON/TTL | JWT | **Shipped** | Building membership checked; hub-root storage (see [tenant storage honesty](tenant-storage-honesty.md)) |
 | Central package RDF dataset | `GET /api/csv/import/package/mapping/haystack-dataset?building_id=` | JWT + building scope | **Shipped (C4 H8)** | Derived from committed `semantic_meta` + pinned defs (`ofdd_haystack_central_dataset_v1`); not edge prototype graph |
 | Central SPARQL | `POST /api/model/sparql` | JWT + building scope | **Shipped (C4 H9 templates)** | Server `query_id` templates → `ofdd_haystack_typed_bindings_v1`; free-form `query` rejected; consumers (H10+) still required to close #1002 |
+| Central SPARQL consumers | `POST /api/model/sparql/consumers` | JWT + building scope | **Shipped (C4 H10/H11)** | FDD role_map + history approved provider/series + ECM plan; no arbitrary URL fetch |
 | Central SPARQL catalog | `GET /api/model/sparql/predefined` | JWT | **Shipped (C4 H9)** | Lists template ids / SELECT bodies over package RDF |
 | Legacy edge | edge model SPARQL (+ predefined) | JWT (edge) | **Legacy / edge path** | Prefix `https://open-fdd.dev/model#`; Oxigraph; not the package TTL dataset |
 | MCP | `openfdd_model_sparql` / `_catalog` | JWT → `OPENFDD_API_BASE` | **Advertised; fails closed on 404/501** | Must not claim package TTL/dataset is the MCP query engine |

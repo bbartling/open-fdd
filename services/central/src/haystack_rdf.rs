@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
+use open_fdd_edge_prototype::csv_ingest::haystack_binding_consumers;
 use open_fdd_edge_prototype::csv_ingest::haystack_central_dataset::{self, CentralDatasetSnapshot};
 use open_fdd_edge_prototype::csv_ingest::haystack_sparql_bindings;
 use open_fdd_edge_prototype::csv_ingest::semantic_meta;
@@ -131,6 +132,35 @@ impl HaystackRdfCache {
             obj.insert("ok".into(), json!(true));
         }
         Ok(body)
+    }
+
+    /// H10/H11: SPARQL typed bindings + FDD/history/ECM consumer plans.
+    pub fn execute_binding_consumers(
+        &self,
+        building_id: &str,
+        equipment_id: Option<&str>,
+        preferred_tenant: Option<&str>,
+        template_id: &str,
+    ) -> Result<Value, Value> {
+        let (snap, inventory) =
+            self.get_or_materialize_with_inventory(building_id, equipment_id, preferred_tenant)?;
+        let set = haystack_sparql_bindings::execute_template_on_snapshot(
+            &snap,
+            Some(&inventory),
+            template_id,
+        )
+        .map_err(|e| {
+            json!({
+                "ok": false,
+                "error": e,
+                "schema": haystack_sparql_bindings::BINDING_SCHEMA,
+            })
+        })?;
+        let mut bundle = haystack_binding_consumers::consumer_bundle(&set, Some(&inventory));
+        if let Some(obj) = bundle.as_object_mut() {
+            obj.insert("bindings".into(), set.to_json());
+        }
+        Ok(bundle)
     }
 }
 
