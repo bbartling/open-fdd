@@ -858,7 +858,7 @@ async fn execute_bacnet_command(
 }
 
 fn spawn_command_loop(
-    mut events: tokio::sync::mpsc::UnboundedReceiver<Incoming>,
+    mut events: tokio::sync::mpsc::Receiver<Incoming>,
     client: AsyncClient,
     ctx: Arc<CommandContext>,
 ) -> JoinHandle<()> {

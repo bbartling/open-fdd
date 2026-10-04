@@ -333,10 +333,10 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
                 );
                 return;
             }
-            let key = (env.edge_id.clone(), env.message_id);
             let scope = receipt_scope(topic);
             // Durable reservation is shared with local HTTP. Pending and
             // committed receipts both suppress a concurrent/replayed copy.
+            // Dedup authority is this ledger — no independent seen map (#1127 P3).
             if !state.reserve_receipt_at(&scope, env.clone()).await {
                 if state
                     .receipt_status(&scope, &env.edge_id, env.message_id)
@@ -349,7 +349,6 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
                 *state.ingest_dup.lock().unwrap() += 1;
                 return;
             }
-            state.seen_messages.insert(key.clone(), ());
 
             // Wave O6: refuse MQTT append when building historian size cap is already hit.
             if let Some(msg) = crate::historian_limits::deny_building_over_size(
@@ -357,7 +356,6 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
                 &env.site_id,
             ) {
                 record_reject(state, payload, &msg);
-                state.seen_messages.remove(&key);
                 state
                     .release_receipt(&scope, &env.edge_id, env.message_id)
                     .await;
@@ -406,7 +404,6 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
                         payload,
                         &format!("canonical historian ingest failed: {err}"),
                     );
-                    state.seen_messages.remove(&key);
                     state
                         .release_receipt(&scope, &env.edge_id, env.message_id)
                         .await;

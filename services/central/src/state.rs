@@ -230,8 +230,6 @@ pub struct AppState {
     pub auth: AuthConfig,
     /// Explicit capability probes and scoped read proxy. Health never probes.
     pub capabilities: std::sync::Arc<CapabilitiesAggregator>,
-    /// (edge_id, message_id) → observed
-    pub seen_messages: DashMap<(String, Uuid), ()>,
     pub edges: DashMap<String, Mutex<EdgeShadow>>,
     pub command_acks: DashMap<Uuid, CommandAck>,
     pub pending_commands: DashMap<Uuid, PendingCommand>,
@@ -271,7 +269,6 @@ impl AppState {
         Self {
             auth: AuthConfig::load(),
             capabilities: CapabilitiesAggregator::from_env(),
-            seen_messages: DashMap::new(),
             edges: DashMap::new(),
             command_acks: DashMap::new(),
             pending_commands: DashMap::new(),
