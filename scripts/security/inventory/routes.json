@@ -4,10 +4,10 @@
   "source_commit_hint": "4a5c11e50b921df83f2ca3a59c52d4e99908157f",
   "source_file": "services/central/src/routes.rs",
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission. Single policy source with profile_required_v1.json + cross_cutting_checks.json (Astra A05).",
-  "route_count": 162,
+  "route_count": 163,
   "disposition_counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 103,
+    "PLANNED": 104,
     "BLOCKED_POLICY": 29
   },
   "routes": [
@@ -6172,16 +6172,55 @@
         "identity"
       ],
       "notes": "C4 H9: server SPARQL templates \u2192 ofdd_haystack_typed_bindings_v1; free-form query rejected"
+    },
+    {
+      "method": "POST",
+      "path": "/api/model/sparql/consumers",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_model_sparql_consumers",
+        "y.authz.post_api_model_sparql_consumers"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_model_sparql_consumers",
+        "y.authz.post_api_model_sparql_consumers"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity",
+        "semantic_meta"
+      ],
+      "notes": "C4 H10/H11: typed bindings \u2192 FDD role_map + history approved series + ECM plan"
     }
   ],
   "counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 103,
+    "PLANNED": 104,
     "BLOCKED_POLICY": 29
   },
   "summary": {
     "IMPLEMENTED": 30,
-    "PLANNED": 103,
+    "PLANNED": 104,
     "BLOCKED_POLICY": 29
   }
 }
