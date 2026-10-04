@@ -121,15 +121,49 @@ else
   record "model.ecm.mapping_ttl_foreign_denied" "NOT_APPLICABLE" "multi_tenant=false"
 fi
 
-# SPARQL honesty — product central must not pretend SPARQL is live.
-CODE_SPQ="$(code_for POST "/api/model/sparql" "$TOK_A")"
-# POST without body may 404/405/400 — only FAIL if 200 with empty ok list pretending success.
-if [[ "$CODE_SPQ" == "404" || "$CODE_SPQ" == "405" || "$CODE_SPQ" == "501" ]]; then
-  record "model.ecm.sparql_unavailable" "PASS" "status=$CODE_SPQ (honest unavailable)"
-elif [[ "$CODE_SPQ" == "200" ]]; then
-  record "model.ecm.sparql_unavailable" "FAIL" "SPARQL 200 unexpectedly live"
+# SPARQL — H9+ templates are live; free-form / missing query_id must not empty-PASS.
+# G36-05: send a body. Free-form query → 400 rejected. Catalog → AVAILABLE.
+CODE_CAT="$(code_for GET "/api/model/sparql/predefined" "$TOK_A")"
+cp -f "$ART/last.body" "$ART/sparql_catalog.json" 2>/dev/null || true
+if [[ "$CODE_CAT" == "200" ]] && jq -e '.status=="AVAILABLE" and (.queries|length)>0' \
+  "$ART/sparql_catalog.json" >/dev/null 2>&1; then
+  record "model.ecm.sparql_catalog_available" "PASS" "AVAILABLE with templates"
 else
-  record "model.ecm.sparql_unavailable" "PASS" "status=$CODE_SPQ (not empty-ok)"
+  record "model.ecm.sparql_catalog_available" "FAIL" "status=$CODE_CAT schema"
+fi
+
+# Free-form SELECT must be rejected (not empty-ok PASS).
+CODE_FREE="$(curl -s -o "$ART/sparql_free.body" -w '%{http_code}' -X POST \
+  -H "Authorization: Bearer $TOK_A" -H 'Content-Type: application/json' \
+  -d '{"query":"SELECT * WHERE { ?s ?p ?o } LIMIT 1","building_id":"'"$BUILDING_A"'"}' \
+  "$BASE/api/model/sparql")"
+if [[ "$CODE_FREE" == "400" ]] && jq -e '.ok==false' "$ART/sparql_free.body" >/dev/null 2>&1; then
+  record "model.ecm.sparql_freeform_rejected" "PASS" "400 rejected"
+elif [[ "$CODE_FREE" == "401" ]]; then
+  record "model.ecm.sparql_freeform_rejected" "ERROR" "401"
+else
+  record "model.ecm.sparql_freeform_rejected" "FAIL" "status=$CODE_FREE"
+fi
+
+# Legacy check id retained: "unavailable" now means free-form/unscoped is not a feature PASS.
+CODE_SPQ="$(code_for POST "/api/model/sparql" "$TOK_A")"
+if [[ "$CODE_SPQ" == "400" || "$CODE_SPQ" == "404" || "$CODE_SPQ" == "405" || "$CODE_SPQ" == "501" ]]; then
+  record "model.ecm.sparql_unavailable" "PASS" "status=$CODE_SPQ (no empty-ok without query_id)"
+elif [[ "$CODE_SPQ" == "200" ]]; then
+  record "model.ecm.sparql_unavailable" "FAIL" "SPARQL 200 without query_id/building"
+else
+  record "model.ecm.sparql_unavailable" "PASS" "status=$CODE_SPQ"
+fi
+
+# Negatives (C5): wrong NS / missing artifact paths are unit-covered; live blocked/skipped ≠ PASS.
+if [[ "${OPENFDD_GATE36_NEGATIVES:-0}" == "1" ]]; then
+  if [[ ! -f "$ROOT/scripts/fixtures/haystack_rdf/defs/defs.ttl" ]]; then
+    record "model.ecm.defs_artifact_present" "FAIL" "missing pinned defs.ttl"
+  else
+    record "model.ecm.defs_artifact_present" "PASS" "defs.ttl present"
+  fi
+else
+  record "model.ecm.defs_artifact_present" "NOT_APPLICABLE" "OPENFDD_GATE36_NEGATIVES!=1"
 fi
 
 # Offline ECM adapter (Python PyPI path) — optional; never invent HTTP product path.

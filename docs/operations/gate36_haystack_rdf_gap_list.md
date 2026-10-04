@@ -19,7 +19,7 @@ Rollout requirements: [`openfdd_agent_spec/HAYSTACK_RDF_ROLLOUT.md`](../../openf
 | G36-02 | Tenant B login only; no check that B can read **own** building inventory | B creds valid but model empty → false confidence | Add `model.ecm.mapping_own_b` with positive control on `BUILDING_B` |
 | G36-03 | No reverse probe **B→A** foreign deny symmetry beyond A→B | One-direction ACL miss | Mirror foreign mapping/TTL deny for `TOK_B` → `BUILDING_A` |
 | G36-04 | Foreign 404 without owner-positive existence control | 404 ambiguous (missing vs denied) | Admin/owner JWT proves target building exists before deny test |
-| G36-05 | SPARQL check POSTs **no query body** | Non-semantic HTTP status PASS | Send minimal SELECT; PASS only on parsed JSON with expected unavailable shape **or** honest 404/501 |
+| G36-05 | ~~SPARQL check POSTs **no query body**~~ **H13:** catalog AVAILABLE + free-form rejected | Was non-semantic PASS | `model.ecm.sparql_catalog_available` + `model.ecm.sparql_freeform_rejected` |
 | G36-06 | SPARQL fallback treats some non-404 codes as PASS without semantic proof | Transport errors masked | Classify 401/5xx as ERROR; require body schema when 200 |
 | G36-07 | ECM path only checks `import open_fdd.ecm_engineering` when offline flag set | Import ≠ adapter math | Run `tests/ecm_engineering` adapter fixture with model inputs (HR-08) |
 | G36-08 | Gate verdict `ok:true` while note says FQ owned elsewhere | Rollup confusion | Separate **smoke** vs **qualification** manifest profiles |
@@ -36,6 +36,8 @@ Existing IDs to preserve when extending (do not rename to imply Haystack PASS):
 - `model.ecm.mapping_foreign_denied`
 - `model.ecm.mapping_ttl_foreign_denied`
 - `model.ecm.sparql_unavailable`
+- `model.ecm.sparql_catalog_available`
+- `model.ecm.sparql_freeform_rejected`
 - `model.ecm.ecm_adapter_import`
 
 ## C1 evidence
