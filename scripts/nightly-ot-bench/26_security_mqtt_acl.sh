@@ -32,8 +32,8 @@ write_structured_verdict() {
   local extra_rc="${2:-}"
   if [[ -n "$extra_rc" ]]; then
     jq --argjson ut "$extra_rc" '{
-      ok: (.ok // (.status=="PASS")),
-      status: (.status // (if .ok==true then "PASS" else "FAIL" end)),
+      ok: (if .ok == false then false elif .ok == true then true elif .status == "PASS" then true else false end),
+      status: (if .status != null and .status != "" then .status elif .ok == true then "PASS" else "FAIL" end),
       reason: (.reason // .detail // .live_broker // ""),
       image: (.image // null),
       acl_source: (.acl_source // null),
@@ -42,8 +42,8 @@ write_structured_verdict() {
     }' "$src" | tee "$ART/security_gate_verdict.json" >/dev/null
   else
     jq '{
-      ok: (.ok // (.status=="PASS")),
-      status: (.status // (if .ok==true then "PASS" else "FAIL" end)),
+      ok: (if .ok == false then false elif .ok == true then true elif .status == "PASS" then true else false end),
+      status: (if .status != null and .status != "" then .status elif .ok == true then "PASS" else "FAIL" end),
       reason: (.reason // .detail // .live_broker // ""),
       image: (.image // null),
       acl_source: (.acl_source // null),
@@ -54,6 +54,8 @@ write_structured_verdict() {
 
 OBS_OUT="$ART/observer"
 mkdir -p "$OBS_OUT"
+PROBE_MARK="$ART/.probe_started"
+: > "$PROBE_MARK"
 set +e
 python3 -B "$ROOT/scripts/security/mqtt_tenant_acl_observer.py" \
   --out-dir "$OBS_OUT" \
@@ -112,20 +114,34 @@ if [[ "$ut_rc" -ne 0 ]]; then
   exit 1
 fi
 
-# R02: never prefer report PASS over a failed observer process.
-# Contradictory ok/status/rc → ERROR (cleanup flakes must not mint false green).
-obs_status=$(jq -r '.status // empty' "$ART/mqtt_acl_verdict.json" 2>/dev/null || true)
-obs_ok_bool=$(jq -r 'if .ok == true then "true" elif .ok == false then "false" else "null" end' \
-  "$ART/mqtt_acl_verdict.json" 2>/dev/null || echo null)
-write_structured_verdict "$ART/mqtt_acl_verdict.json" "$rc"
-if [[ "$obs_ok_bool" == "true" && "$obs_status" == "PASS" && "$rc" -eq 0 ]]; then
-  exit 0
-fi
-if [[ "$obs_ok_bool" == "true" && "$obs_status" == "PASS" && "$rc" -ne 0 ]]; then
-  jq --argjson ut "$rc" \
-    '.ok=false | .status="ERROR" | .reason="observer PASS but child_rc!=0 (contradictory)" | .unittest_rc=$ut' \
-    "$ART/security_gate_verdict.json" >"$ART/security_gate_verdict.json.tmp"
-  mv "$ART/security_gate_verdict.json.tmp" "$ART/security_gate_verdict.json"
-  exit 2
-fi
-exit "$rc"
+# Recompute from the observer file. ok=false, stale PASS, and exit 0 on FAIL
+# cannot leave this script with status 0.
+python3 - <<PY
+import json, sys
+from pathlib import Path
+sys.path.insert(0, "$ROOT/scripts/security")
+from openfdd_security.evidence import finalize_observer_gate
+observer = Path("$OBS_OUT/mqtt_acl_observer.json")
+started = Path("$PROBE_MARK").stat().st_mtime
+verdict = finalize_observer_gate(
+    observer,
+    child_rc=int("$rc"),
+    unittest_rc=int("$ut_rc"),
+    probe_started_mtime=started,
+)
+verdict["image"] = None
+verdict["acl_source"] = None
+if observer.is_file():
+    try:
+        raw = json.loads(observer.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        raw = {}
+    if isinstance(raw, dict):
+        verdict["image"] = raw.get("image")
+        verdict["acl_source"] = raw.get("acl_source")
+Path("$ART/security_gate_verdict.json").write_text(json.dumps(verdict, indent=2) + "\n")
+Path("$ART/mqtt_acl_verdict.json").write_text(json.dumps(verdict, indent=2) + "\n")
+print(json.dumps(verdict))
+status = verdict["status"]
+sys.exit(0 if verdict["ok"] else (1 if status == "FAIL" else 2))
+PY

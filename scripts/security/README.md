@@ -105,6 +105,17 @@ Profiles: `live_readonly`, `isolated_full`, `local_open`.
 Credentials use environment variable references from config — never CLI
 password arguments and never secrets in fixture JSON.
 
+## Gate verdicts (25 / 25b / 26)
+
+The shell wrappers recompute status from the report or observer file.
+
+- A PASS file written before the probe starts is stale and cannot exit 0.
+- Check status ERROR (timeout, connection loss) stays ERROR. It is not relabeled BLOCKED.
+- Gate 26 does not exit 0 when the observer says FAIL, or when `ok` is false and `status` is PASS.
+- Empty or ack-only HTTP 200 is not an own-object PASS. `live_readonly` accepts a nonempty equipment list. `isolated_full` still requires the seeded canary. An upstream 502 is not described as an empty 200.
+
+These checks are offline. They do not qualify a published image.
+
 ## Bounded matrix (Astra C-PY)
 
 Offline planner for authz / IDOR / SSRF / MQTT suite ownership:

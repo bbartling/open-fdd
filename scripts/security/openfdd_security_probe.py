@@ -113,13 +113,14 @@ def main(argv: list[str] | None = None) -> int:
     }
     print(json.dumps(summary, indent=2))
 
-    # Exit: 0 complete PASS or successful dry-run plan; 1 FAIL; 2 incomplete
+    # Exit: 0 dry-run plan or executed PASS (subset PASS is not fully_qualified);
+    # 1 FAIL; 2 ERROR/BLOCKED/incomplete. Callers must still read the report.
     if dry_run:
-        return 0
-    if report.fully_qualified:
         return 0
     if report.overall_status == "FAIL":
         return 1
+    if report.overall_status == "PASS":
+        return 0
     return 2
 
 

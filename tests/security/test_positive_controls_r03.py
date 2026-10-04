@@ -39,6 +39,11 @@ class PositiveControlTests(unittest.TestCase):
     def test_populated_list_without_canary_ok(self):
         self.assertTrue(_nonempty_own_control(b'{"equipment":[{"id":"AHU_1"}]}'))
 
+    def test_soft_ok_empty_equipment_is_not_own_success(self):
+        body = b'{"ok":true,"count":0,"equipment":[]}'
+        self.assertFalse(_nonempty_own_control(body))
+        self.assertFalse(_nonempty_own_control(body, "CANARY_A_SYNTH"))
+
     def test_structured_deny_requires_envelope(self):
         self.assertFalse(_structured_deny(404, b"not found", foreign_canary="B"))
         self.assertFalse(_structured_deny(404, b"<html>nope</html>", foreign_canary="B"))
