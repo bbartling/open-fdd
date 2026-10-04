@@ -187,6 +187,7 @@ async fn main() -> Result<()> {
                     unit_system: Some(unit_system.as_str()),
                     time_window: None,
                     building_id: None,
+                    cancel: None,
                 },
             )
             .await?;

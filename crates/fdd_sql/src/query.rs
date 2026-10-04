@@ -2,15 +2,38 @@
 //!
 //! Rule/batch execution keeps its existing compatibility path in `session`.
 //! Interactive APIs should either cap materialized rows with
-//! [`collect_sql_bounded`] or consume Arrow record batches from [`stream_sql`]
-//! rather than calling `DataFrame::collect` on an unbounded result.
+//! [`collect_sql_bounded`] / [`collect_sql_budgeted`] or consume Arrow record
+//! batches from [`stream_sql`] rather than calling `DataFrame::collect` on an
+//! unbounded result.
+
+use std::env;
 
 use anyhow::{anyhow, bail, Result};
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::physical_plan::SendableRecordBatchStream;
 use datafusion::prelude::SessionContext;
+use futures::StreamExt;
 
 pub const DEFAULT_INTERACTIVE_MAX_ROWS: usize = 10_000;
+/// Default interactive/result materialization byte budget (#1127 P2).
+pub const DEFAULT_RESULT_MAX_BYTES: usize = 64 * 1024 * 1024;
+
+/// Resolve `OPENFDD_RESULT_MAX_BYTES` (bytes) with a safe default.
+pub fn result_max_bytes_from_env() -> Result<usize> {
+    match env::var("OPENFDD_RESULT_MAX_BYTES") {
+        Ok(raw) => {
+            let n: usize = raw
+                .trim()
+                .parse()
+                .map_err(|_| anyhow!("OPENFDD_RESULT_MAX_BYTES must be a positive integer"))?;
+            if n == 0 {
+                bail!("OPENFDD_RESULT_MAX_BYTES must be greater than zero");
+            }
+            Ok(n)
+        }
+        Err(_) => Ok(DEFAULT_RESULT_MAX_BYTES),
+    }
+}
 
 /// Execute SQL as an Arrow record-batch stream without materializing the full
 /// result set in Open-FDD.
@@ -30,19 +53,50 @@ pub async fn collect_sql_bounded(
     sql: &str,
     max_rows: usize,
 ) -> Result<Vec<RecordBatch>> {
+    let max_bytes = result_max_bytes_from_env()?;
+    collect_sql_budgeted(ctx, sql, max_rows, max_bytes).await
+}
+
+/// Stream-materialize SQL with hard row **and** Arrow byte budgets.
+///
+/// Exceeding either budget fails closed (no silent truncation of fault coverage).
+pub async fn collect_sql_budgeted(
+    ctx: &SessionContext,
+    sql: &str,
+    max_rows: usize,
+    max_bytes: usize,
+) -> Result<Vec<RecordBatch>> {
     if max_rows == 0 {
-        bail!("interactive SQL row limit must be greater than zero");
+        bail!("SQL row budget must be greater than zero");
+    }
+    if max_bytes == 0 {
+        bail!("SQL byte budget must be greater than zero");
     }
     let probe_limit = max_rows
         .checked_add(1)
-        .ok_or_else(|| anyhow!("interactive SQL row limit is too large"))?;
+        .ok_or_else(|| anyhow!("SQL row budget is too large"))?;
     let df = ctx.sql(sql).await?.limit(0, Some(probe_limit))?;
-    let batches = df.collect().await?;
-    let rows = batches.iter().map(RecordBatch::num_rows).sum::<usize>();
-    if rows > max_rows {
-        bail!(
-            "interactive SQL result exceeds row limit of {max_rows}; add filters/aggregation or use stream_sql"
-        );
+    let mut stream = df.execute_stream().await?;
+    let mut batches = Vec::new();
+    let mut rows = 0usize;
+    let mut bytes = 0usize;
+    while let Some(next) = stream.next().await {
+        let batch = next?;
+        let batch_rows = batch.num_rows();
+        let batch_bytes = batch.get_array_memory_size();
+        rows = rows.saturating_add(batch_rows);
+        bytes = bytes.saturating_add(batch_bytes);
+        if bytes > max_bytes {
+            bail!(
+                "SQL result exceeds byte budget of {max_bytes} (OPENFDD_RESULT_MAX_BYTES); narrow the query — refusing silent truncation"
+            );
+        }
+        if rows > max_rows {
+            bail!(
+                "SQL result exceeds row limit of {max_rows}; add filters/aggregation or use stream_sql"
+            );
+        }
+        batches.push(batch);
     }
     Ok(batches)
 }
@@ -97,5 +151,19 @@ mod tests {
         let _stream = stream_sql(&ctx, "SELECT value FROM samples ORDER BY value")
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn byte_budget_fails_closed_without_silent_truncation() {
+        let ctx = SessionContext::new();
+        register_three_rows(&ctx);
+        let err = collect_sql_budgeted(&ctx, "SELECT * FROM samples", 100, 1)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("byte budget"),
+            "unexpected error: {err}"
+        );
     }
 }
