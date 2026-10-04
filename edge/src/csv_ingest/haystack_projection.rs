@@ -205,13 +205,12 @@ fn intentional_exclusion_columns(inventory: Option<&Value>) -> Vec<(String, Stri
                 let status = col.get("status").and_then(|v| v.as_str()).unwrap_or("");
                 let reason = col.get("exclusion_reason").and_then(|v| v.as_str());
                 let name = col.get("column").and_then(|v| v.as_str()).unwrap_or("");
-                if status == "excluded"
-                    || reason.is_some()
-                    || (name.contains("INTENTIONALLY_EXCLUDED") && status != "mapped")
+                if !name.is_empty()
+                    && (status == "excluded"
+                        || reason.is_some()
+                        || (name.contains("INTENTIONALLY_EXCLUDED") && status != "mapped"))
                 {
-                    if !name.is_empty() {
-                        out.push((eid.to_string(), name.to_string()));
-                    }
+                    out.push((eid.to_string(), name.to_string()));
                 }
             }
         }
