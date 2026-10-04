@@ -185,13 +185,12 @@ jobs:
 
       - name: Build and push openfdd-central
         uses: docker/build-push-action@v6
-        # Recipe 2 OT edge needs linux/arm64. QEMU arm64 RocksDB builds are slow —
-        # keep a long timeout; Pi Recipe 2 stays Soft-OPEN until a tip manifest proves both arches.
-        timeout-minutes: 180
+        # RocksDB via oxrocksdb + QEMU arm64 exceeds 2h; ship amd64 nightly first for local MQTTS tests.
+        timeout-minutes: 90
         with:
           context: .
           file: services/central/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.vars.outputs.central_tags }}
           build-args: |
@@ -210,11 +209,11 @@ jobs:
 
       - name: Build and push openfdd-web (React product UI)
         uses: docker/build-push-action@v6
-        timeout-minutes: 45
+        timeout-minutes: 30
         with:
           context: frontend/web
           file: frontend/web/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.vars.outputs.web_tags }}
           build-args: |
@@ -236,7 +235,6 @@ jobs:
 
       - name: Build and push openfdd-mqtt
         uses: docker/build-push-action@v6
-        # Recipe 1 cloud hub only — mqtt stays amd64 (no OT-edge broker requirement).
         timeout-minutes: 15
         with:
           context: services/mqtt
