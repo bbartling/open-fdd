@@ -2,6 +2,7 @@
 
 pub mod data_model_ttl;
 pub mod dataset;
+pub mod haystack_projection;
 pub mod package;
 pub mod parquet_bridge;
 pub mod parse;

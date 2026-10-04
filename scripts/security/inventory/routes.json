@@ -457,6 +457,128 @@
     },
     {
       "method": "GET",
+      "path": "/api/csv/import/package/mapping/haystack.ttl",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_mapping_haystack_ttl",
+        "y.authz.get_api_csv_import_package_mapping_haystack_ttl",
+        "y.authz.a_foreign_package_mapping_haystack_ttl_denied"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_mapping_haystack_ttl",
+        "y.authz.get_api_csv_import_package_mapping_haystack_ttl",
+        "y.authz.a_foreign_package_mapping_haystack_ttl_denied"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "text/turtle",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity",
+        "semantic_meta"
+      ],
+      "notes": "C3 strict Haystack TTL; suite emission follow-up — preauth covered in preauth_disclosure.rs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/csv/import/package/mapping/haystack-projection",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_mapping_haystack_projection",
+        "y.authz.get_api_csv_import_package_mapping_haystack_projection",
+        "y.authz.a_foreign_package_mapping_haystack_projection_denied"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_mapping_haystack_projection",
+        "y.authz.get_api_csv_import_package_mapping_haystack_projection",
+        "y.authz.a_foreign_package_mapping_haystack_projection_denied"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity",
+        "semantic_meta"
+      ],
+      "notes": "C3 projection JSON envelope (turtle + report)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/csv/import/package/mapping/semantic-meta",
+      "section": "csv",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_mapping_semantic_meta",
+        "y.authz.get_api_csv_import_package_mapping_semantic_meta",
+        "y.authz.a_foreign_package_mapping_semantic_meta_denied"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_csv_import_package_mapping_semantic_meta",
+        "y.authz.get_api_csv_import_package_mapping_semantic_meta",
+        "y.authz.a_foreign_package_mapping_semantic_meta_denied"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "C3 native openfdd_semantic_meta_v1 export"
+    },
+    {
+      "method": "GET",
       "path": "/api/csv/import/package/buildings",
       "section": "csv",
       "auth": "jwt_required",

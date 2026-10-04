@@ -50,6 +50,9 @@ Routes are registered in `edge/src/server.rs`. Below is a concise map — not ev
 | GET | `/api/ingest/contract` |
 | GET | `/api/csv/import/package/mapping` |
 | GET | `/api/csv/import/package/mapping/ttl` |
+| GET | `/api/csv/import/package/mapping/haystack.ttl` |
+| GET | `/api/csv/import/package/mapping/haystack-projection` |
+| GET | `/api/csv/import/package/mapping/semantic-meta` |
 | POST | `/api/csv/import/preflight`, `/execute` |
 | POST | `/api/csv-workbench/preview` |
 

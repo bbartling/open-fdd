@@ -23,8 +23,10 @@ SPARQL. Update when routes land. Tip authority: Wave S2 ADR
 | Dataset registry | `GET/DELETE /api/datasets` | JWT + building scope | **Shipped** (3.5.31) | Foreign `building_id` → 403 |
 | Session / roles | `/api/fdd/session-config` | JWT + building scope | **Shipped** | Wave O ACL |
 | Model/ECM stress gate | `36_model_ecm_qualification.sh` | stress profile | **Wired (CI/smoke); FQ on S4** | See gate script + Wave S4 MEGA |
-| Strict Haystack projection | (future) `/api/...` export | JWT + building scope | **Not shipped (C3)** | Profile [`haystack-rdf-profile.md`](haystack-rdf-profile.md); native TTL ≠ strict Haystack |
-| Haystack RDF C1 fixtures | `scripts/fixtures/haystack_rdf/` | repo | **Shipped (docs/tests)** | Synthetic only; independent expected answers |
+| Strict Haystack TTL | `GET /api/csv/import/package/mapping/haystack.ttl?building_id=` | JWT + building scope | **Shipped (C3)** | Profile [`haystack-rdf-profile.md`](haystack-rdf-profile.md); requires `semantic_meta.json` |
+| Strict Haystack projection JSON | `GET /api/csv/import/package/mapping/haystack-projection?building_id=` | JWT + building scope | **Shipped (C3)** | Turtle + omission report (`ofdd_haystack_projection_report_v1`) |
+| Native semantic meta JSON | `GET /api/csv/import/package/mapping/semantic-meta?building_id=` | JWT + building scope | **Shipped (C3)** | `openfdd_semantic_meta_v1` export; empty when absent |
+| Haystack RDF C1/C3 fixtures | `scripts/fixtures/haystack_rdf/` | repo | **Shipped (docs/tests)** | Synthetic only; independent expected answers |
 
 ## Capability honesty rules
 

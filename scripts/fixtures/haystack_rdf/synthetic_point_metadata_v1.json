@@ -1,29 +1,77 @@
 {
   "schema": "openfdd_semantic_meta_v1",
   "building_id": "OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1",
-  "note": "C2 native persistence fixture — Haystack tags/units preferred; unknown unit retained. Not a cookbook rewrite.",
+  "note": "C2/C3 fixture \u2014 tags/units preferred; unknown unit + unknown tag + ambiguity/exclusion cases for HR-03/05.",
   "points": [
     {
       "equipment_id": "AHU_CASE_1",
       "column": "SAT",
-      "haystack_tags": ["sensor", "point", "air", "supply", "temp"],
-      "unit": "°F",
+      "haystack_tags": [
+        "sensor",
+        "point",
+        "air",
+        "supply",
+        "temp",
+        "false"
+      ],
+      "unit": "\u00b0F",
       "unit_source": "package_map"
     },
     {
       "equipment_id": "AHU_CASE_1",
       "column": "MYSTERY_FLOW",
-      "haystack_tags": ["sensor", "point"],
+      "haystack_tags": [
+        "sensor",
+        "point",
+        "vendorFooTag"
+      ],
       "unit": "???",
       "unit_source": "vendor_export",
       "unit_status": "unknown"
+    },
+    {
+      "equipment_id": "VAV_CASE_1",
+      "column": "CLG_VLV_CMD",
+      "haystack_tags": [
+        "sensor",
+        "point",
+        "sp"
+      ],
+      "unit": "\u00b0F",
+      "unit_source": "package_map"
+    },
+    {
+      "equipment_id": "VAV_EXCLUDED_1",
+      "column": "INTENTIONALLY_EXCLUDED_AUX",
+      "haystack_tags": [
+        "sensor",
+        "point"
+      ]
     }
   ],
   "equipment": [
     {
       "equipment_id": "AHU_CASE_1",
       "display_name": "AHU Case 1",
-      "haystack_tags": ["ahu", "equip"]
+      "haystack_tags": [
+        "ahu",
+        "equip"
+      ]
+    },
+    {
+      "equipment_id": "VAV_CASE_1",
+      "haystack_tags": [
+        "vav",
+        "equip"
+      ]
+    },
+    {
+      "equipment_id": "VAV_EXCLUDED_1",
+      "haystack_tags": [
+        "vav",
+        "equip"
+      ],
+      "parent_equip": "AHU_CASE_1"
     }
   ]
 }

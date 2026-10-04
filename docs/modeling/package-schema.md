@@ -47,7 +47,7 @@ Optional building-root file consumed by package import (Haystack RDF C2 / #1000)
 | `semantic_meta.json` (preferred) | `openfdd_semantic_meta_v1` |
 | `openfdd_semantic_meta_v1.json` / `point_metadata.json` | same |
 
-Persists to `workspace/data/csv_buildings/<building_id>/semantic_meta.json` plus
+C3 projects this sidecar to strict Haystack via `GET /api/csv/import/package/mapping/haystack.ttl` (and JSON envelope `…/haystack-projection`). Persists to `workspace/data/csv_buildings/<building_id>/semantic_meta.json` plus
 `semantic_meta.revision.json` (atomic revision / content hash). Fields prefer
 **Project Haystack tags** (`haystack_tags`), units, refs, and provenance.
 Engineering quantities are Open-FDD-only when Haystack has no def. Old ZIPs

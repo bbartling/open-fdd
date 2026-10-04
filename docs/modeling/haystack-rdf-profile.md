@@ -7,8 +7,10 @@ permalink: /modeling/haystack-rdf-profile.html
 
 # Open-FDD Haystack projection profile — `ofdd_haystack_projection_v1`
 
-**Status:** specification (C1 #998). Passing this document alone does **not**
-establish Haystack interoperability, FDD readiness, or a live SPARQL service.
+**Status:** C3 product tip (#1001) implements strict export from native
+`openfdd_semantic_meta_v1` via `GET …/mapping/haystack.ttl` (defs pin
+`ph-markers-allowlist-v1`). Passing this document alone does **not**
+establish full Haystack server interoperability, FDD readiness, or a live SPARQL service.
 
 This profile names the **strict Haystack RDF interchange** Open-FDD will target
 in wave C3+. It is separate from today's **native** package inventory exports

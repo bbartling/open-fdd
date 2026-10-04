@@ -4,7 +4,11 @@
   "profile": "ofdd_haystack_projection_v1",
   "inventory": {
     "equipment_count": 3,
-    "equipment_ids": ["AHU_CASE_1", "VAV_CASE_1", "VAV_EXCLUDED_1"],
+    "equipment_ids": [
+      "AHU_CASE_1",
+      "VAV_CASE_1",
+      "VAV_EXCLUDED_1"
+    ],
     "stamped_ahu_count": 1,
     "stamped_vav_count": 2,
     "blocker_count": 1,
@@ -12,10 +16,15 @@
       {
         "equipment_id": "VAV_CASE_1",
         "role": "sat_sp",
-        "columns": ["CLG_VLV_CMD", "EFFECTIVE_SAT_SP"]
+        "columns": [
+          "CLG_VLV_CMD",
+          "EFFECTIVE_SAT_SP"
+        ]
       }
     ],
-    "missing_parent_ahu_equipment_ids": ["VAV_CASE_1"],
+    "missing_parent_ahu_equipment_ids": [
+      "VAV_CASE_1"
+    ],
     "confirmed_parent_edges": [
       {
         "child": "VAV_EXCLUDED_1",
@@ -64,12 +73,29 @@
   "strict_haystack_projection_v1": {
     "shipped_in_c1": false,
     "c3_delivery": true,
+    "profile": "ofdd_haystack_projection_v1",
+    "defs_pin": "ph-markers-allowlist-v1",
     "unknown_tags_policy": "omit_from_strict_with_projection_report",
     "unknown_unit_policy": "retain_in_native_metadata_not_strict_literal",
-    "ambiguous_role_policy": "no_single_column_promotion_without_selection_evidence"
+    "ambiguous_role_policy": "no_single_column_promotion_without_selection_evidence",
+    "expected_emitted_points_min": 1,
+    "must_omit_reasons": [
+      "unknown_tag",
+      "unknown_unit",
+      "ambiguous_role",
+      "intentional_exclusion",
+      "false_or_null_marker",
+      "missing_parent_ahu"
+    ],
+    "must_emit_column": "SAT",
+    "must_not_emit_columns": [
+      "CLG_VLV_CMD",
+      "INTENTIONALLY_EXCLUDED_AUX"
+    ]
   },
   "hr_mapping": {
-    "HR-05": "ambiguous_roles and missing parent remain explicit in JSON; TTL omits quality diagnostics today",
-    "HR-03": "strict Haystack TTL validation applies only after C3 projection — not package TTL"
+    "HR-05": "ambiguity/exclusion/missing parent appear in projection report; no invented parents or role\u2192tag",
+    "HR-03": "strict Haystack TTL from semantic_meta via ofdd_haystack_projection_v1 (C3)",
+    "HR-04": "advertised directions: native semantic-meta JSON, strict haystack.ttl + projection report; strict\u2192native not lossless"
   }
 }
