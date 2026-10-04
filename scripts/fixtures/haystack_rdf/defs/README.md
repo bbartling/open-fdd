@@ -6,6 +6,10 @@
 | `defs.pin.json` | Pin id, source URL, SHA-256, library versions |
 | `defs_index.json` | Compact symbol → `{lib,iri,owl,…}` index derived from `defs.ttl` for Rust resolution |
 
+**Compile embed:** the same three files are vendored at
+`edge/assets/haystack_rdf/defs/` for `include_str!` (Docker COPY `edge/` only).
+Keep the fixture tree and edge assets byte-identical when re-pinning.
+
 **Pin id:** `haystack-defs-ttl-4.0.0`
 
 The RDF documentation page's illustrative prefix version `4.0` is **not** the artifact pin. This download uses library base IRIs under `…/def/{lib}/4.0.0#`.

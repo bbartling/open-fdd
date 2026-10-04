@@ -18,10 +18,9 @@ pub const PHICT_BASE: &str = "https://project-haystack.org/def/phIct/4.0.0#";
 /// Documented RDF-mapping helper (not an ordinary instance-tag def).
 pub const HAS_TAG_IRI: &str = "https://project-haystack.org/def/ph/4.0.0#hasTag";
 
-const DEFS_INDEX_JSON: &str =
-    include_str!("../../../scripts/fixtures/haystack_rdf/defs/defs_index.json");
-const DEFS_PIN_JSON: &str =
-    include_str!("../../../scripts/fixtures/haystack_rdf/defs/defs.pin.json");
+// Embedded under edge/assets so Docker/central builds that COPY edge/ still compile.
+const DEFS_INDEX_JSON: &str = include_str!("../../assets/haystack_rdf/defs/defs_index.json");
+const DEFS_PIN_JSON: &str = include_str!("../../assets/haystack_rdf/defs/defs.pin.json");
 
 #[derive(Debug, Clone, Deserialize)]
 struct IndexFile {
@@ -162,7 +161,7 @@ mod tests {
     #[test]
     fn pin_sha_matches_vendored_ttl() {
         use sha2::{Digest, Sha256};
-        let ttl = include_bytes!("../../../scripts/fixtures/haystack_rdf/defs/defs.ttl");
+        let ttl = include_bytes!("../../assets/haystack_rdf/defs/defs.ttl");
         let mut h = Sha256::new();
         h.update(ttl);
         let digest = format!("{:x}", h.finalize());
