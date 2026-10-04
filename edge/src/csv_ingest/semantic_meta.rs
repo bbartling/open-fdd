@@ -167,6 +167,13 @@ fn atomic_write(path: &Path, body: &str) -> Result<(), String> {
         let _ = fs::remove_file(&tmp);
         format!("rename {}: {e}", path.display())
     })?;
+    // Durability: sync the directory entry after rename (head write is the commit point).
+    #[cfg(unix)]
+    if let Some(parent) = path.parent() {
+        File::open(parent)
+            .and_then(|d| d.sync_all())
+            .map_err(|e| format!("sync dir {}: {e}", parent.display()))?;
+    }
     Ok(())
 }
 
@@ -671,11 +678,12 @@ pub fn delete_persisted(
     }
     let tip = building_meta_path(building_root);
     let head = building_revision_path(building_root);
-    if tip.is_file() {
-        fs::remove_file(&tip).map_err(|e| format!("remove tip: {e}"))?;
-    }
+    // Remove head before tip so a crash cannot leave a head without tip.
     if head.is_file() {
         fs::remove_file(&head).map_err(|e| format!("remove head: {e}"))?;
+    }
+    if tip.is_file() {
+        fs::remove_file(&tip).map_err(|e| format!("remove tip: {e}"))?;
     }
     Ok(())
 }
