@@ -74,10 +74,16 @@ Same GHCR central image and SQL path. Only storage env changes (`OPENFDD_PARQUET
 
 ```text
 OPENFDD_QUERY_MEMORY_MB=256
+OPENFDD_COMPUTE_MEMORY_MB=256
+OPENFDD_COMPUTE_MAX_INFLIGHT=2
 OPENFDD_DATAFUSION_SPILL_DIR=/workspace/.cache/datafusion-spill
 ```
 
 Prefer lookback-bounded continuous cycles over full-history scans on small hosts.
+
+### Memory pressure policy (#1127)
+
+Scheduled AFDD defers when cgroup usage is elevated/critical (≥75% / ≥90% of a discovered hard limit) or when process-wide compute admission is saturated (`OPENFDD_COMPUTE_MAX_INFLIGHT`). Ingest/control stay preferred; a deferred AFDD cycle does **not** advance the checkpoint. Host stats expose `compute_pressure` alongside `cgroup_pressure`. Live Railway combined-load qualification remains operator/Grok Soft-OPEN after a GHCR pin — HTTP success alone is not survival proof.
 
 ## Feather
 
