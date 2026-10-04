@@ -15,6 +15,7 @@ mod durable_storage;
 mod engineering_bundle;
 mod eplus_runner;
 mod fuel;
+mod haystack_rdf;
 mod historian_limits;
 mod ingest;
 mod jobs;

@@ -20,6 +20,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthConfig;
 use crate::capabilities::CapabilitiesAggregator;
+use crate::haystack_rdf::HaystackRdfCache;
 use crate::live_historian::{LiveHistorianIngest, LiveWriter, PersistedMessageGroup};
 use crate::tenant_budget::TenantBudgetTracker;
 
@@ -260,6 +261,8 @@ pub struct AppState {
     /// Durable pending/committed receipt ledger for replay-safe local ingest.
     pub ingest_receipts: AsyncMutex<HashMap<(String, String, Uuid), IngestReceipt>>,
     pub ingest_receipts_path: PathBuf,
+    /// C4 H8: scoped package RDF derived from semantic_meta + pinned defs.
+    pub haystack_rdf: HaystackRdfCache,
     recovery_started: AtomicBool,
 }
 
@@ -287,6 +290,7 @@ impl AppState {
             live_writer: LiveWriter::start(),
             ingest_receipts: AsyncMutex::new(load_receipts()),
             ingest_receipts_path: receipts_path(),
+            haystack_rdf: HaystackRdfCache::new(),
             recovery_started: AtomicBool::new(false),
         }
     }

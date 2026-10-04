@@ -15,10 +15,11 @@ SPARQL. Update when routes land. Tip authority: Wave S2 ADR
 | SPA Mapping | `GET /api/csv/import/package/mapping?building_id=` | JWT + building scope | **Shipped** | Inventory JSON; stamped types (DM-04); `parent_ahu` only when the package map names `parentAhu` |
 | SPA Mapping TTL | `GET /api/csv/import/package/mapping/ttl?building_id=` | JWT + building scope | **Shipped** | Prefix `urn:openfdd:ns#`; dual TS/Rust exporters; skips `parent_ahu_source=inferred` |
 | SPA Mapping export | browser download of same JSON/TTL | JWT | **Shipped** | Building membership checked; hub-root storage (see [tenant storage honesty](tenant-storage-honesty.md)) |
-| Central SPARQL | `POST /api/model/sparql` | — | **Unavailable on central** | Not registered on product central router |
-| Central SPARQL catalog | `GET /api/model/sparql/predefined` | — | **Unavailable on central** | — |
+| Central package RDF dataset | `GET /api/csv/import/package/mapping/haystack-dataset?building_id=` | JWT + building scope | **Shipped (C4 H8)** | Derived from committed `semantic_meta` + pinned defs (`ofdd_haystack_central_dataset_v1`); not edge prototype graph |
+| Central SPARQL | `POST /api/model/sparql` | JWT | **Unavailable (501 honesty)** | Option B UNAVAILABLE **cannot close** #1002; templates/bindings are later C4 tips |
+| Central SPARQL catalog | `GET /api/model/sparql/predefined` | JWT | **Unavailable (501 honesty)** | Same Soft-OPEN delivery row |
 | Legacy edge | `POST /api/model/sparql` (+ predefined) | JWT (edge) | **Legacy / edge path** | Prefix `https://open-fdd.dev/model#`; Oxigraph; not the package TTL dataset |
-| MCP | `openfdd_model_sparql` / `_catalog` | JWT → `OPENFDD_API_BASE` | **Advertised; fails closed if central 404** | Must not claim package TTL is the MCP query dataset |
+| MCP | `openfdd_model_sparql` / `_catalog` | JWT → `OPENFDD_API_BASE` | **Advertised; fails closed on 404/501** | Must not claim package TTL/dataset is the MCP query engine |
 | Graph store (process) | in-process Oxigraph on edge | N/A | **Legacy** | Global `data/model/*` — not MT ACL ([DM-05 honesty](tenant-storage-honesty.md)) |
 | Dataset registry | `GET/DELETE /api/datasets` | JWT + building scope | **Shipped** (3.5.31) | Foreign `building_id` → 403 |
 | Session / roles | `/api/fdd/session-config` | JWT + building scope | **Shipped** | Wave O ACL |
@@ -30,8 +31,8 @@ SPARQL. Update when routes land. Tip authority: Wave S2 ADR
 
 ## Capability honesty rules
 
-1. If central returns 404 for SPARQL tools, report **unavailable** — never PASS via empty result lists.
-2. Downloaded package TTL (`urn:openfdd:ns#`) is **not** automatically the same dataset MCP SPARQL queries.
+1. If central returns 404/501 for SPARQL tools, report **unavailable** — never PASS via empty result lists. Option B UNAVAILABLE is honesty only and **cannot close** #1002.
+2. Downloaded package TTL / `haystack-dataset` (`urn:openfdd:…`) is **not** automatically a live SPARQL engine for MCP.
 3. SCAFFOLD docs in `docs/mcp-agents/roles/package-mapping.md` stay labeled until tools are live against central.
 4. Declaring `@prefix hs:` on native package TTL does **not** mean Haystack
    interoperability — see [JSON/RDF crosswalk](data-model-json-rdf-crosswalk.html).
@@ -42,9 +43,11 @@ SPARQL. Update when routes land. Tip authority: Wave S2 ADR
 
 ```bash
 TOKEN=…  # admin JWT
-# Expect 404 (or connection error) on product hub until S5 adds the route:
+# Expect 501 UNAVAILABLE honesty (not empty-list PASS); dataset route is separate:
 curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"query":"SELECT * WHERE { ?s ?p ?o } LIMIT 1"}' \
   "$OPENFDD_API_BASE/api/model/sparql"
+curl -sS -H "Authorization: Bearer $TOKEN" \
+  "$OPENFDD_API_BASE/api/csv/import/package/mapping/haystack-dataset?building_id=SITE"
 ```

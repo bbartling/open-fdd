@@ -68,9 +68,13 @@ Two namespaces already exist in-tree (`urn:openfdd:ns#` for package TTL;
     for unsafe labels; building/equipment tuple subjects use `ofdd:eq_<b>__<e>`.
     Tenant scope is server-derived — a named graph or client-supplied tenant id is
     not authorization (unchanged).
-12. **Central SPARQL:** Product central does **not** expose package-graph SPARQL
-    until wave **C4** lands with authenticated queries and HR-10 fixtures. Until
-    then, MCP and docs report **unavailable** (404), not empty success.
+12. **Central package RDF + SPARQL:** Product central materializes a **scoped
+    package RDF dataset** from committed native `semantic_meta` + pinned Haystack
+    defs (`GET …/haystack-dataset`, schema `ofdd_haystack_central_dataset_v1`).
+    That dataset is **not** the legacy `edge/src/model` commissioning graph.
+    Package-graph SPARQL templates/bindings remain **UNAVAILABLE** (501 honesty)
+    until later C4 tips; Option B UNAVAILABLE **cannot close** #1002
+    graph-driven FDD/ECM delivery. MCP and docs must not PASS via empty lists.
 
 ## Consequences
 
