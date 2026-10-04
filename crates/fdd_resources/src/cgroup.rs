@@ -206,11 +206,7 @@ fn resolve_self_cgroup_v1_memory(proc_root: &Path) -> Option<PathBuf> {
         }
         let rel = rel.trim().trim_start_matches('/');
         let base = PathBuf::from("/sys/fs/cgroup/memory");
-        let path = if rel.is_empty() {
-            base
-        } else {
-            base.join(rel)
-        };
+        let path = if rel.is_empty() { base } else { base.join(rel) };
         if path.join("memory.usage_in_bytes").is_file() {
             return Some(path);
         }
@@ -279,7 +275,9 @@ fn discover_cpu(cgroup_override: Option<&Path>, proc_root: &Path) -> CpuDiscover
         let q_floor = q.floor().max(1.0) as u64;
         effective = effective.min(q_floor);
         if q < 1.0 {
-            notes.push(format!("cpu quota {q} cores < 1; clamping effective_cores to 1"));
+            notes.push(format!(
+                "cpu quota {q} cores < 1; clamping effective_cores to 1"
+            ));
         }
     }
 

@@ -3364,50 +3364,51 @@ pub async fn fdd_run(
         )
     });
     let mut deferred_action_finish = false;
-    let mut result =
-        match tokio::time::timeout(Duration::from_secs(fdd_timeout_secs), &mut join).await {
-            Ok(Ok(v)) => v,
-            Ok(Err(e)) => json!({"ok": false, "error": format!("fdd run task failed: {e}")}),
-            Err(_) => {
-                cancel.store(true, std::sync::atomic::Ordering::SeqCst);
-                let aid = action_id.clone();
-                tokio::spawn(async move {
-                    let outcome = join.await;
-                    if let Some(aid) = aid {
-                        let detail = match outcome {
-                            Ok(v) => json!({
-                                "ok": false,
-                                "timeout": true,
-                                "cancel_requested": true,
-                                "worker_completed_after_timeout": true,
-                                "cancelled": v.get("cancelled"),
-                                "rules_succeeded": v.get("rules_succeeded"),
-                                "rules_failed": v.get("rules_failed"),
-                                "error": v.get("error"),
-                            }),
-                            Err(e) => json!({
-                                "ok": false,
-                                "timeout": true,
-                                "cancel_requested": true,
-                                "worker_completed_after_timeout": true,
-                                "error": format!("fdd run task failed after timeout: {e}"),
-                            }),
-                        };
-                        let _ = actions::finish_action(&aid, "fail", Some(detail));
-                    }
-                });
-                deferred_action_finish = true;
-                json!({
-                    "ok": false,
-                    "timeout": true,
-                    "cancel_requested": true,
-                    "worker_completion": "pending",
-                    "error": format!(
-                        "fdd run timed out after {fdd_timeout_secs}s (OPENFDD_FDD_RUN_TIMEOUT_SECS); cancel requested — worker completion pending (timeout ≠ cancelled)"
-                    ),
-                })
-            }
-        };
+    let mut result = match tokio::time::timeout(Duration::from_secs(fdd_timeout_secs), &mut join)
+        .await
+    {
+        Ok(Ok(v)) => v,
+        Ok(Err(e)) => json!({"ok": false, "error": format!("fdd run task failed: {e}")}),
+        Err(_) => {
+            cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+            let aid = action_id.clone();
+            tokio::spawn(async move {
+                let outcome = join.await;
+                if let Some(aid) = aid {
+                    let detail = match outcome {
+                        Ok(v) => json!({
+                            "ok": false,
+                            "timeout": true,
+                            "cancel_requested": true,
+                            "worker_completed_after_timeout": true,
+                            "cancelled": v.get("cancelled"),
+                            "rules_succeeded": v.get("rules_succeeded"),
+                            "rules_failed": v.get("rules_failed"),
+                            "error": v.get("error"),
+                        }),
+                        Err(e) => json!({
+                            "ok": false,
+                            "timeout": true,
+                            "cancel_requested": true,
+                            "worker_completed_after_timeout": true,
+                            "error": format!("fdd run task failed after timeout: {e}"),
+                        }),
+                    };
+                    let _ = actions::finish_action(&aid, "fail", Some(detail));
+                }
+            });
+            deferred_action_finish = true;
+            json!({
+                "ok": false,
+                "timeout": true,
+                "cancel_requested": true,
+                "worker_completion": "pending",
+                "error": format!(
+                    "fdd run timed out after {fdd_timeout_secs}s (OPENFDD_FDD_RUN_TIMEOUT_SECS); cancel requested — worker completion pending (timeout ≠ cancelled)"
+                ),
+            })
+        }
+    };
     // Echo the requested building_id when the edge did not surface one, so the
     // UI/MCP always know which site the run was scoped to.
     if let (Some(bid), Some(obj)) = (echo_building_id, result.as_object_mut()) {
@@ -6478,10 +6479,7 @@ mod version_tests {
         let _env_lock = crate::test_env_lock::lock_env();
         std::env::remove_var("OPENFDD_TENANT_ID");
         let mut headers = HeaderMap::new();
-        headers.insert(
-            "x-openfdd-tenant-id",
-            HeaderValue::from_static("acme"),
-        );
+        headers.insert("x-openfdd-tenant-id", HeaderValue::from_static("acme"));
         assert_eq!(super::local_ingest_receipt_tenant(&headers), "acme");
         std::env::set_var("OPENFDD_TENANT_ID", "hub-tenant");
         assert_eq!(super::local_ingest_receipt_tenant(&headers), "hub-tenant");

@@ -22,7 +22,7 @@ members = [
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/bbartling/open-fdd"
-version = "3.5.64"
+version = "3.5.65"
 rust-version = "1.80"
 
 [workspace.dependencies]

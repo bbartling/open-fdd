@@ -161,9 +161,6 @@ mod tests {
             .await
             .unwrap_err()
             .to_string();
-        assert!(
-            err.contains("byte budget"),
-            "unexpected error: {err}"
-        );
+        assert!(err.contains("byte budget"), "unexpected error: {err}");
     }
 }
