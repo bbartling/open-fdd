@@ -11,6 +11,10 @@ path = "src/main.rs"
 name = "openfdd-edge"
 path = "src/bin/openfdd_edge.rs"
 
+[[bin]]
+name = "haystack_c3_export_fixture"
+path = "src/bin/haystack_c3_export_fixture.rs"
+
 [dependencies]
 arrow.workspace = true
 base64 = "0.22"

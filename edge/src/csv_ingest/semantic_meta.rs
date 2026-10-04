@@ -46,6 +46,9 @@ pub struct SemanticMetaV1 {
 pub struct PointMeta {
     pub equipment_id: String,
     pub column: String,
+    /// Stable point identity independent of mutable CSV header / display name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub point_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub haystack_tags: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -54,8 +57,23 @@ pub struct PointMeta {
     pub unit_source: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unit_status: Option<String>,
+    /// Haystack `kind` string tag (Number, Bool, Str, …).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Haystack timezone id (`tz`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tz: Option<String>,
+    /// When true, emit `phIoT:his` marker (historized point).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub his: Option<bool>,
+    /// Containment equip ref (must exist in scoped model when set).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ref_equip: Option<String>,
+    /// Air-flow ref only with explicit evidence (`airRef` direction).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub air_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provenance: Option<String>,
 }
@@ -69,8 +87,13 @@ pub struct EquipmentMeta {
     pub haystack_tags: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub site_ref: Option<String>,
+    /// Parent equipment id. Relationship kind is required separately.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_equip: Option<String>,
+    /// `equipRef` (containment) or `airRef` (air flows from referent). Required
+    /// to emit a topology edge from `parent_equip`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_relation: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -142,22 +165,160 @@ pub fn parse_semantic_meta(raw: &Value) -> Result<SemanticMetaV1, String> {
     meta.schema = SCHEMA.to_string();
     meta.building_id = building_id;
 
-    // Identity hygiene (HR-02): reject empty equipment/column ids.
-    for (i, p) in meta.points.iter().enumerate() {
-        if p.equipment_id.trim().is_empty() || p.column.trim().is_empty() {
-            return Err(format!(
-                "semantic meta points[{i}]: equipment_id and column required"
-            ));
-        }
-    }
-    for (i, e) in meta.equipment.iter().enumerate() {
-        if e.equipment_id.trim().is_empty() {
+    // Identity hygiene (HR-02): normalize once; reject empty / padded / duplicate ids.
+    let mut equip_keys = BTreeMap::<String, ()>::new();
+    for (i, e) in meta.equipment.iter_mut().enumerate() {
+        let raw_id = e.equipment_id.clone();
+        let id = raw_id.trim().to_string();
+        if id.is_empty() {
             return Err(format!(
                 "semantic meta equipment[{i}]: equipment_id required"
             ));
         }
+        if id != raw_id {
+            return Err(format!(
+                "semantic meta equipment[{i}]: noncanonical equipment_id (leading/trailing whitespace)"
+            ));
+        }
+        if equip_keys.insert(id.clone(), ()).is_some() {
+            return Err(format!(
+                "semantic meta equipment: duplicate equipment_id {id:?}"
+            ));
+        }
+        e.equipment_id = id;
+        if let Some(rel) = e.parent_relation.as_deref().map(str::trim) {
+            if !(rel.is_empty() || rel == "equipRef" || rel == "airRef") {
+                return Err(format!(
+                    "semantic meta equipment[{i}]: parent_relation must be equipRef or airRef"
+                ));
+            }
+            if rel.is_empty() {
+                e.parent_relation = None;
+            } else {
+                e.parent_relation = Some(rel.to_string());
+            }
+        }
+    }
+
+    let mut point_keys = BTreeMap::<String, ()>::new();
+    for (i, p) in meta.points.iter_mut().enumerate() {
+        let raw_eid = p.equipment_id.clone();
+        let raw_col = p.column.clone();
+        let eid = raw_eid.trim();
+        let col = raw_col.trim();
+        if eid.is_empty() || col.is_empty() {
+            return Err(format!(
+                "semantic meta points[{i}]: equipment_id and column required"
+            ));
+        }
+        if eid != raw_eid || col != raw_col {
+            return Err(format!(
+                "semantic meta points[{i}]: noncanonical equipment_id/column (whitespace)"
+            ));
+        }
+        if let Some(pid) = p.point_id.as_deref() {
+            let trimmed = pid.trim();
+            if trimmed.is_empty() {
+                return Err(format!("semantic meta points[{i}]: point_id empty"));
+            }
+            if trimmed != pid {
+                return Err(format!(
+                    "semantic meta points[{i}]: noncanonical point_id (whitespace)"
+                ));
+            }
+            p.point_id = Some(trimmed.to_string());
+        }
+        let key = format!("{}|{}", eid, p.point_id.as_deref().unwrap_or(col));
+        if point_keys.insert(key, ()).is_some() {
+            return Err(format!(
+                "semantic meta points: duplicate point identity for equipment {eid:?}"
+            ));
+        }
+        p.equipment_id = eid.to_string();
+        p.column = col.to_string();
     }
     Ok(meta)
+}
+
+/// Exact equipment scope + optional parent/site closure for export/query.
+pub fn scope_meta(
+    meta: &SemanticMetaV1,
+    equipment_id: Option<&str>,
+) -> Result<SemanticMetaV1, String> {
+    let Some(want) = equipment_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(meta.clone());
+    };
+    let selected: Vec<EquipmentMeta> = meta
+        .equipment
+        .iter()
+        .filter(|e| e.equipment_id == want)
+        .cloned()
+        .collect();
+    if selected.is_empty() {
+        return Err(format!(
+            "equipment_id {want:?} not present in semantic_meta for building {}",
+            meta.building_id
+        ));
+    }
+    let mut keep = std::collections::BTreeSet::new();
+    keep.insert(want.to_string());
+    // Bounded closure: include explicitly referenced parents when present.
+    for e in &selected {
+        if let Some(parent) = e
+            .parent_equip
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            if meta.equipment.iter().any(|x| x.equipment_id == parent) {
+                keep.insert(parent.to_string());
+            }
+        }
+    }
+    for p in &meta.points {
+        if p.equipment_id != want {
+            continue;
+        }
+        if let Some(r) = p
+            .ref_equip
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            if meta.equipment.iter().any(|x| x.equipment_id == r) {
+                keep.insert(r.to_string());
+            }
+        }
+        if let Some(r) = p
+            .air_ref
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            if meta.equipment.iter().any(|x| x.equipment_id == r) {
+                keep.insert(r.to_string());
+            }
+        }
+    }
+    Ok(SemanticMetaV1 {
+        schema: meta.schema.clone(),
+        building_id: meta.building_id.clone(),
+        revision: meta.revision.clone(),
+        note: meta.note.clone(),
+        points: meta
+            .points
+            .iter()
+            .filter(|p| p.equipment_id == want)
+            .cloned()
+            .collect(),
+        equipment: meta
+            .equipment
+            .iter()
+            .filter(|e| keep.contains(&e.equipment_id))
+            .cloned()
+            .collect(),
+        engineering_quantities: meta.engineering_quantities.clone(),
+    })
 }
 
 pub fn find_package_semantic_meta(

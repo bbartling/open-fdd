@@ -32,7 +32,7 @@ Produced by SPA `buildMappingManifest()` and equivalent server inventory JSON.
 | `equipment[].roles` | column → SQL role | `ofdd:roleBinding` blank nodes | **Not** auto-mapped to Haystack tags |
 | `equipment[].columns[]` | Per-column status | Partially reflected in roles/unmapped | Point candidates (C3) |
 | `equipment[].unmapped_columns` | No SQL role | `ofdd:unmappedColumn` literals | Omitted unless mapped in C3 |
-| `equipment[].ambiguous_roles` | role → [columns] | **Not emitted** | Selection required before strict point |
+| `equipment[].ambiguous_roles` | role → [columns] | **Not emitted** | Semantic point retained; FDD selection unresolved |
 | `equipment[].blockers` | Human-readable | **Not emitted** | Projection report |
 | `equipment[].warnings` | Per-equipment | **Not emitted** | Projection report |
 | `equipment[].sampling` | Historian span sample | Not emitted | Not emitted |
@@ -51,9 +51,10 @@ C3 `ofdd_haystack_projection_v1` (from native `openfdd_semantic_meta_v1` only):
 - No `ph:equip` / `ph:point` instances from SQL roles alone.
 - No marker tags inferred from role names (`sat` ≠ `ph:sensor`).
 - Unknown vendor tags without defs → excluded + projection report.
-- Ambiguous roles / intentional exclusions → omitted + reported.
+- Ambiguous roles / intentional FDD exclusions → semantic points retained + reported (`ofdd:fddSelection` / `ofdd:fddExcluded`).
 - False/null/empty marker strings never become `ph:hasTag`.
 - Unknown units stay in native metadata; strict graph omits typed unit literals.
+- Topology edges need explicit `parent_relation` (`equipRef` \| `airRef`); bare `parent_equip` is reported, not asserted.
 
 ## Import / export directions
 
@@ -68,7 +69,7 @@ C3 `ofdd_haystack_projection_v1` (from native `openfdd_semantic_meta_v1` only):
 | Haystack JSON grid → product ingest | **No** (not advertised) | — |
 | ZIP → strict Haystack without native sidecar | **No** | Requires C2 `semantic_meta.json` |
 
-Do not describe native TTL as “Haystack RDF export” in UI or docs. Strict Haystack uses profile `ofdd_haystack_projection_v1` with defs pin `ph-markers-allowlist-v1`.
+Do not describe native TTL as “Haystack RDF export” in UI or docs. Strict Haystack uses profile `ofdd_haystack_projection_v1` with defs pin `haystack-defs-ttl-4.0.0` (official `ph` / `phIoT` / `phScience` 4.0.0).
 
 ## Code pointers
 

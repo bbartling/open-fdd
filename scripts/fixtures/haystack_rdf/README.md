@@ -1,14 +1,18 @@
-# Haystack RDF C1/C3 — synthetic fixtures (#998 / #1001)
+# Haystack RDF C1/C3 — synthetic fixtures (#998 / #1001 / #1123)
 
 Public, machine-portable fixtures for Haystack RDF wave **C1** (baseline profile)
-and **C3** (strict projection). They are **not** derived from product exporters
-and must not be copied from maintainer Downloads or live BAS exports.
+and **C3** (strict projection). Inventory/meta fixtures are hand-authored. The
+`generated/` Turtle is **product exporter output** from
+`cargo run -p open_fdd_edge_prototype --bin haystack_c3_export_fixture` for
+independent RDFLib KATs — regenerate after projector changes.
 
 | File | Role |
 | --- | --- |
 | `synthetic_mapping_inventory.json` | `PackageMappingResponse`-shaped inventory (AHU + VAV, ambiguity, missing parent, intentional exclusion) |
 | `synthetic_point_metadata_v1.json` | C2/C3 `openfdd_semantic_meta_v1` sidecar — unknown unit, unknown tag, false marker, ambiguity/exclusion columns |
 | `expected_c1_answers.json` | Independent expected answers for HR-03/04/05 and strict vs native export checks |
+| `defs/` | Pinned official Haystack 4.0.0 Turtle + SHA (`haystack-defs-ttl-4.0.0`) |
+| `generated/c3_projection.ttl` | Actual Rust exporter bytes (regenerate via bin above) |
 
 Building id: `OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1` (synthetic only).
 
