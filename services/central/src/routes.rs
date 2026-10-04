@@ -3312,7 +3312,22 @@ pub async fn fdd_run(
         .and_then(|s| s.parse().ok())
         .filter(|&s| s > 0)
         .unwrap_or(900);
+    let compute =
+        fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::ManualFdd).ok_or_else(
+            || {
+                (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({
+                        "ok": false,
+                        "error": "compute admission limit reached (OPENFDD_COMPUTE_MAX_INFLIGHT); retry later"
+                    })),
+                )
+            },
+        )?;
+    // Permit moves into the worker so HTTP timeout / Actions clear cannot release
+    // admission while the registry run still holds pool/CPU (#1127 P1).
     let join = tokio::task::spawn_blocking(move || {
+        let _compute = compute;
         open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
     });
     let mut result = match tokio::time::timeout(Duration::from_secs(fdd_timeout_secs), join).await {
@@ -3651,6 +3666,26 @@ pub async fn csv_import_package(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    // Admit before peek/decompress (#1127 P1). Body bytes are already buffered by
+    // axum; do not start zip work until import + compute slots are held.
+    let compute = fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Import)
+        .ok_or_else(|| {
+            (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(json!({
+                    "ok": false,
+                    "error": "compute admission limit reached (OPENFDD_COMPUTE_MAX_INFLIGHT); retry later"
+                })),
+            )
+        })?;
+    let import_slot = crate::historian_limits::acquire_import_slot()
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(json!({"ok": false, "error": e})),
+            )
+        })?;
     let ct = content_type(&headers);
     let peeked_building =
         match open_fdd_edge_prototype::csv_ingest::package::peek_package_building_id(&ct, &body) {
@@ -3680,14 +3715,6 @@ pub async fn csv_import_package(
             }
             Err(_) => None,
         };
-    let _import_slot = crate::historian_limits::acquire_import_slot()
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::TOO_MANY_REQUESTS,
-                Json(json!({"ok": false, "error": e})),
-            )
-        })?;
     let action_id = actions::start_action(
         "package_import",
         "Package import",
@@ -3695,6 +3722,8 @@ pub async fn csv_import_package(
     )
     .ok();
     let mut result = tokio::task::spawn_blocking(move || {
+        let _compute = compute;
+        let _import_slot = import_slot;
         open_fdd_edge_prototype::csv_ingest::package::import_package_handler(&ct, &body)
     })
     .await

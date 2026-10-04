@@ -9,6 +9,7 @@ anyhow.workspace = true
 chrono.workspace = true
 datafusion.workspace = true
 fdd_core = { path = "../fdd_core" }
+fdd_resources = { path = "../fdd_resources" }
 fdd_store = { path = "../fdd_store" }
 object_store.workspace = true
 serde.workspace = true

@@ -8,8 +8,10 @@ use fdd_rules::{
     rule_params, run_all_rules_with_overrides, substitute_sql, RuleRegistry, RuleSpec, RunOptions,
 };
 use fdd_sql::{
-    register_historian_building, register_parquet_tree, register_weather_for_building, run_sql,
+    new_historian_session, register_historian_building, register_parquet_tree,
+    register_weather_for_building, run_sql,
 };
+use fdd_store::HistorianConfig;
 use serde_json::{json, Value};
 
 fn sql_rules_dir() -> PathBuf {
@@ -847,9 +849,26 @@ pub fn series_response_scoped(
         Ok(rt) => rt,
         Err(e) => return json!({"ok": false, "error": format!("runtime: {e}")}),
     };
+    let Some(_series_admit) =
+        fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Series)
+    else {
+        return json!({
+            "ok": false,
+            "error": "compute admission limit reached (OPENFDD_COMPUTE_MAX_INFLIGHT); retry later"
+        });
+    };
     rt.block_on(async {
         let mut columns = columns;
-        let ctx = datafusion::prelude::SessionContext::new();
+        let hist_cfg = match HistorianConfig::from_env() {
+            Ok(c) => c,
+            Err(e) => return json!({"ok": false, "error": format!("historian config: {e}")}),
+        };
+        let ctx = match new_historian_session(&hist_cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return json!({"ok": false, "error": format!("bounded DataFusion session: {e}")})
+            }
+        };
         if let Some(bid) = scoped_bid.as_deref() {
             if let Err(e) = register_historian_building(&ctx, &storage_root, bid).await {
                 return json!({"ok": false, "error": e.to_string()});

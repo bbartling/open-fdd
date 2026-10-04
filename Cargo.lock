@@ -2007,6 +2007,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fdd_resources"
+version = "3.5.64"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "fdd_rules"
 version = "3.5.64"
 dependencies = [
@@ -2032,6 +2043,7 @@ dependencies = [
  "chrono",
  "datafusion",
  "fdd_core",
+ "fdd_resources",
  "fdd_store",
  "object_store",
  "serde",
@@ -3216,6 +3228,7 @@ dependencies = [
  "datafusion",
  "encoding_rs",
  "fdd_core",
+ "fdd_resources",
  "fdd_rules",
  "fdd_sql",
  "fdd_store",
@@ -3257,6 +3270,7 @@ dependencies = [
  "dashmap",
  "datafusion",
  "fdd_core",
+ "fdd_resources",
  "fdd_rules",
  "fdd_sql",
  "fdd_store",

@@ -50,6 +50,7 @@ spargebra = "=0.4.6"
 fdd_core = { path = "../crates/fdd_core" }
 fdd_rules = { path = "../crates/fdd_rules" }
 fdd_sql = { path = "../crates/fdd_sql" }
+fdd_resources = { path = "../crates/fdd_resources" }
 fdd_store = { path = "../crates/fdd_store" }
 walkdir = "2"
 zip = { version = "3", default-features = false, features = ["deflate"] }

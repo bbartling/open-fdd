@@ -1,0 +1,15 @@
+[package]
+name = "fdd_resources"
+description = "Portable cgroup/CPU discovery, compute budgets, and process-wide admission"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["sync"] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["rt", "macros", "sync"] }

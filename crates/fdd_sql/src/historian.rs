@@ -7,10 +7,9 @@
 
 use std::path::Path;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use datafusion::arrow::datatypes::DataType;
-use datafusion::execution::runtime_env::RuntimeEnvBuilder;
-use datafusion::prelude::{ParquetReadOptions, SessionConfig, SessionContext};
+use datafusion::prelude::{ParquetReadOptions, SessionContext};
 use fdd_store::HistorianConfig;
 use serde::Serialize;
 use walkdir::WalkDir;
@@ -28,31 +27,15 @@ pub struct HistorianRegistration {
     pub root: String,
 }
 
-/// Create a DataFusion session using the historian resource settings from H1.
+/// Create a DataFusion session using the process-wide shared aggregate pool.
 ///
-/// `OPENFDD_QUERY_MEMORY_MB` becomes a process-local DataFusion memory pool
-/// limit for this context. When `OPENFDD_DATAFUSION_SPILL_DIR` is configured,
-/// DataFusion temporary spill files are rooted there.
+/// Prefer `OPENFDD_COMPUTE_MEMORY_MB` for the shared MemoryPool. Concurrent
+/// sessions share that one pool (they do **not** each get a full
+/// `OPENFDD_QUERY_MEMORY_MB` budget). `OPENFDD_DATAFUSION_*` tuning is applied
+/// to SessionConfig with CPU clamping. When `OPENFDD_DATAFUSION_SPILL_DIR` is
+/// configured, temporary spill files are rooted there.
 pub fn new_historian_session(config: &HistorianConfig) -> Result<SessionContext> {
-    let memory_bytes = config
-        .query_memory_mb
-        .checked_mul(1024 * 1024)
-        .ok_or_else(|| anyhow!("OPENFDD_QUERY_MEMORY_MB is too large"))?;
-    let memory_bytes = usize::try_from(memory_bytes)
-        .map_err(|_| anyhow!("OPENFDD_QUERY_MEMORY_MB exceeds platform address space"))?;
-
-    let mut runtime = RuntimeEnvBuilder::new().with_memory_limit(memory_bytes, 1.0);
-    if let Some(spill_dir) = &config.spill_directory {
-        std::fs::create_dir_all(spill_dir)
-            .with_context(|| format!("create DataFusion spill dir {}", spill_dir.display()))?;
-        runtime = runtime.with_temp_file_path(spill_dir);
-    }
-
-    let runtime = runtime.build_arc().context("build DataFusion runtime")?;
-    Ok(SessionContext::new_with_config_rt(
-        SessionConfig::new(),
-        runtime,
-    ))
+    crate::runtime::new_shared_historian_session(config)
 }
 
 /// Register the canonical local historian when present, otherwise fall back to
@@ -540,7 +523,8 @@ mod tests {
             spill_directory: Some(spill.clone()),
             legacy_parquet_root: None,
         };
-        new_historian_session(&config).unwrap();
+        // Unshared: avoid racing the process OnceLock used by production factory.
+        crate::runtime::new_unshared_historian_session(&config).unwrap();
         assert!(spill.is_dir());
     }
 }

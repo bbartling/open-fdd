@@ -227,6 +227,7 @@ fn cgroup_pressure_block() -> Value {
 
 fn effective_compute_settings() -> Value {
     let query_mb = env::var("OPENFDD_QUERY_MEMORY_MB").ok();
+    let compute_mb = env::var("OPENFDD_COMPUTE_MEMORY_MB").ok();
     let spill = env::var("OPENFDD_DATAFUSION_SPILL_DIR").ok();
     let batch = env::var("OPENFDD_DATAFUSION_BATCH_SIZE").ok();
     let partitions = env::var("OPENFDD_DATAFUSION_TARGET_PARTITIONS").ok();
@@ -234,14 +235,19 @@ fn effective_compute_settings() -> Value {
     let flush_secs = env::var("OPENFDD_PARQUET_FLUSH_SECS")
         .or_else(|_| env::var("OPENFDD_PARQUET_FLUSH_SECONDS"))
         .ok();
+    let shared = HistorianConfig::from_env()
+        .ok()
+        .and_then(|cfg| fdd_sql::shared_runtime_info(&cfg).ok());
     json!({
         "OPENFDD_QUERY_MEMORY_MB": query_mb,
+        "OPENFDD_COMPUTE_MEMORY_MB": compute_mb,
         "OPENFDD_DATAFUSION_SPILL_DIR_set": spill.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false),
         "OPENFDD_DATAFUSION_BATCH_SIZE": batch,
         "OPENFDD_DATAFUSION_TARGET_PARTITIONS": partitions,
         "OPENFDD_PARQUET_FLUSH_ROWS": flush_rows,
         "OPENFDD_PARQUET_FLUSH_SECS": flush_secs,
-        "note": "Env presence only — P1 wires aggregate pool; effective SessionConfig proven later"
+        "shared_runtime": shared,
+        "note": "Aggregate pool via OPENFDD_COMPUTE_MEMORY_MB (preferred); QUERY_MEMORY is compatibility ceiling, not N independent pools"
     })
 }
 
