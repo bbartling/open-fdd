@@ -136,7 +136,7 @@ mod tests {
         let tmp = spill
             .as_ref()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| std::env::temp_dir());
+            .unwrap_or_else(std::env::temp_dir);
         HistorianConfig {
             storage_url: StorageUrl::File {
                 root: tmp.join("history-root"),
