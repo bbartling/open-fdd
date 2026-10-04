@@ -161,6 +161,100 @@ fn memory_block() -> Value {
     host_meminfo_block()
 }
 
+/// Cheap cgroup events / PSI (P0 telemetry for #1127). Present counters do **not**
+/// prove historical OOM; incident verdict remains UNKNOWN until platform exit proof.
+fn cgroup_pressure_block() -> Value {
+    let mut events = json!({"available": false});
+    let mut psi = json!({"available": false});
+    for base in cgroup_memory_paths() {
+        let events_path = base.join("memory.events");
+        if events_path.is_file() {
+            let mut map = serde_json::Map::new();
+            if let Ok(raw) = fs::read_to_string(&events_path) {
+                for line in raw.lines() {
+                    let mut parts = line.split_whitespace();
+                    if let (Some(k), Some(v)) = (parts.next(), parts.next()) {
+                        if let Ok(n) = v.parse::<u64>() {
+                            map.insert(k.to_string(), json!(n));
+                        }
+                    }
+                }
+                events = json!({
+                    "available": true,
+                    "source": "cgroup_memory.events",
+                    "fields": map,
+                    "note": "Current cgroup only — cannot classify prior restarts without exit/OOM history"
+                });
+            }
+        }
+        let pressure = base.join("memory.pressure");
+        if pressure.is_file() {
+            if let Ok(raw) = fs::read_to_string(&pressure) {
+                psi = json!({
+                    "available": true,
+                    "source": "cgroup_memory.pressure",
+                    "raw": raw.trim(),
+                    "note": "PSI stall text; not a confirmed OOM verdict"
+                });
+            }
+        }
+        if events.get("available") == Some(&json!(true))
+            || psi.get("available") == Some(&json!(true))
+        {
+            break;
+        }
+        // v1 layout
+        let events_v1 = base.join("memory/memory.oom_control");
+        if events_v1.is_file() {
+            events = json!({
+                "available": true,
+                "source": "cgroup_v1_oom_control",
+                "raw": fs::read_to_string(&events_v1).unwrap_or_default().trim(),
+                "note": "v1 oom_control snapshot; not historical Railway exit proof"
+            });
+            break;
+        }
+    }
+    json!({
+        "events": events,
+        "psi": psi,
+        "incident_verdict_lock": "UNKNOWN",
+        "memory_pressure_supported": true,
+        "confirmed_oom": false,
+        "evidence_dir_hint": "reports/issue1127_memory_audit_20261004/"
+    })
+}
+
+fn effective_compute_settings() -> Value {
+    let query_mb = env::var("OPENFDD_QUERY_MEMORY_MB").ok();
+    let spill = env::var("OPENFDD_DATAFUSION_SPILL_DIR").ok();
+    let batch = env::var("OPENFDD_DATAFUSION_BATCH_SIZE").ok();
+    let partitions = env::var("OPENFDD_DATAFUSION_TARGET_PARTITIONS").ok();
+    let flush_rows = env::var("OPENFDD_PARQUET_FLUSH_ROWS").ok();
+    let flush_secs = env::var("OPENFDD_PARQUET_FLUSH_SECS")
+        .or_else(|_| env::var("OPENFDD_PARQUET_FLUSH_SECONDS"))
+        .ok();
+    json!({
+        "OPENFDD_QUERY_MEMORY_MB": query_mb,
+        "OPENFDD_DATAFUSION_SPILL_DIR_set": spill.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false),
+        "OPENFDD_DATAFUSION_BATCH_SIZE": batch,
+        "OPENFDD_DATAFUSION_TARGET_PARTITIONS": partitions,
+        "OPENFDD_PARQUET_FLUSH_ROWS": flush_rows,
+        "OPENFDD_PARQUET_FLUSH_SECS": flush_secs,
+        "note": "Env presence only — P1 wires aggregate pool; effective SessionConfig proven later"
+    })
+}
+
+fn task_accounting_snapshot() -> Value {
+    // Cheap placeholder until P2 worker ownership lands. Do not invent running FDD counts.
+    json!({
+        "schema": "ofdd_task_accounting_v0",
+        "tracked_workers": null,
+        "actions_running_rows_are_not_workers": true,
+        "note": "Actions delete ≠ worker death (#1127). Real ownership lands in cancellation tip."
+    })
+}
+
 fn statvfs_bytes(path: &Path) -> Option<(u64, u64, u64)> {
     use std::ffi::CString;
     let c_path = CString::new(path.to_string_lossy().as_ref()).ok()?;
@@ -295,6 +389,9 @@ pub fn stats_json() -> Value {
             "note": usage_percent.is_none().then_some("CPU percent estimated from load average when available")
         },
         "memory": memory_block(),
+        "cgroup_pressure": cgroup_pressure_block(),
+        "effective_compute_settings": effective_compute_settings(),
+        "task_accounting": task_accounting_snapshot(),
         "storage": storage,
         "network": {"available": false, "note": "Network counters not collected in Rust edge yet"},
         "container_revisions": {
@@ -325,5 +422,18 @@ mod tests {
         let mem = body.get("memory").and_then(|v| v.as_object());
         assert!(mem.is_some());
         assert!(mem.unwrap().contains_key("source"));
+    }
+
+    #[test]
+    fn p0_telemetry_does_not_claim_confirmed_oom() {
+        let body = stats_json();
+        let pressure = body.get("cgroup_pressure").expect("cgroup_pressure");
+        assert_eq!(pressure["incident_verdict_lock"], "UNKNOWN");
+        assert_eq!(pressure["confirmed_oom"], false);
+        assert!(body.get("effective_compute_settings").is_some());
+        assert_eq!(
+            body["task_accounting"]["actions_running_rows_are_not_workers"],
+            true
+        );
     }
 }
