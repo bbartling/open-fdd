@@ -259,6 +259,14 @@ impl AfddSchedulerRuntime {
             "params": {}
         });
 
+        let pressure = fdd_resources::sample_pressure();
+        if pressure.defer_expensive_compute {
+            anyhow::bail!(
+                "memory pressure {:?}/{:?}%; AFDD deferred to protect ingest (OPENFDD compute pressure policy)",
+                pressure.state,
+                pressure.percent_used
+            );
+        }
         let Some(compute) =
             fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::ScheduledAfdd)
         else {

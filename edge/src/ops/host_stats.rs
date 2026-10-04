@@ -396,6 +396,7 @@ pub fn stats_json() -> Value {
         },
         "memory": memory_block(),
         "cgroup_pressure": cgroup_pressure_block(),
+        "compute_pressure": fdd_resources::sample_pressure(),
         "effective_compute_settings": effective_compute_settings(),
         "task_accounting": task_accounting_snapshot(),
         "storage": storage,

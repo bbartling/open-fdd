@@ -6,9 +6,11 @@
 pub mod admission;
 pub mod budget;
 pub mod cgroup;
+pub mod pressure;
 
 pub use admission::{
     acquire_compute, try_acquire_compute, ComputeClass, ComputePermit, DEFAULT_COMPUTE_MAX_INFLIGHT,
 };
 pub use budget::{ComputeBudget, ReserveEnvelopes};
 pub use cgroup::{discover_capacity, CapacityDiscovery, CpuDiscovery, MemoryDiscovery};
+pub use pressure::{evaluate_pressure, sample_pressure, PressureSnapshot, PressureState};
