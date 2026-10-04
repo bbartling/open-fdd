@@ -35,7 +35,10 @@ pub fn sample_pressure() -> PressureSnapshot {
 
 pub fn evaluate_pressure(discovery: &CapacityDiscovery) -> PressureSnapshot {
     let mut notes = discovery.memory.notes.clone();
-    let percent = match (discovery.memory.hard_limit_bytes, discovery.memory.current_bytes) {
+    let percent = match (
+        discovery.memory.hard_limit_bytes,
+        discovery.memory.current_bytes,
+    ) {
         (Some(hard), Some(cur)) if hard > 0 => Some((cur as f64 / hard as f64) * 100.0),
         _ => {
             notes.push("no hard limit+current pair; pressure state stays ok/unknown".into());

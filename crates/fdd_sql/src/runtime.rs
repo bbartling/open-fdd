@@ -47,7 +47,9 @@ fn build_shared(config: &HistorianConfig) -> Result<SharedCompute> {
             .with_context(|| format!("create DataFusion spill dir {}", spill_dir.display()))?;
         runtime = runtime.with_temp_file_path(spill_dir);
     }
-    let runtime = runtime.build_arc().context("build shared DataFusion runtime")?;
+    let runtime = runtime
+        .build_arc()
+        .context("build shared DataFusion runtime")?;
 
     let mut tuning = DataFusionTuning::from_env()?;
     clamp_tuning_to_cpu(&mut tuning, discovery.cpu.effective_cores);
@@ -155,17 +157,13 @@ mod tests {
         std::env::set_var("OPENFDD_COMPUTE_MEMORY_MB", "128");
         let tmp = TempDir::new().unwrap();
         let config = cfg(Some(tmp.path().join("spill")), 128);
-        // Use unshared builder for isolation from other tests' OnceLock... 
+        // Use unshared builder for isolation from other tests' OnceLock...
         // For aggregate proof, build two contexts from the same Arc manually.
         let built = build_shared(&config).unwrap();
-        let a = SessionContext::new_with_config_rt(
-            built.session_config.clone(),
-            built.runtime.clone(),
-        );
-        let b = SessionContext::new_with_config_rt(
-            built.session_config.clone(),
-            built.runtime.clone(),
-        );
+        let a =
+            SessionContext::new_with_config_rt(built.session_config.clone(), built.runtime.clone());
+        let b =
+            SessionContext::new_with_config_rt(built.session_config.clone(), built.runtime.clone());
         assert!(Arc::ptr_eq(&a.runtime_env(), &b.runtime_env()));
         assert!(Arc::ptr_eq(
             &a.runtime_env().memory_pool,
@@ -186,10 +184,8 @@ mod tests {
         assert_eq!(built.info.effective_target_partitions, Some(3));
         assert_eq!(built.session_config.batch_size(), 2048);
         assert_eq!(built.session_config.target_partitions(), 3);
-        let _ctx = SessionContext::new_with_config_rt(
-            built.session_config.clone(),
-            built.runtime.clone(),
-        );
+        let _ctx =
+            SessionContext::new_with_config_rt(built.session_config.clone(), built.runtime.clone());
         std::env::remove_var("OPENFDD_DATAFUSION_BATCH_SIZE");
         std::env::remove_var("OPENFDD_DATAFUSION_TARGET_PARTITIONS");
         std::env::remove_var("OPENFDD_COMPUTE_MEMORY_MB");

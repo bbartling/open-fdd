@@ -85,73 +85,77 @@ impl ComputeBudget {
             .checked_mul(1024 * 1024)
             .ok_or_else(|| anyhow::anyhow!("OPENFDD_QUERY_MEMORY_MB is too large"))?;
 
-        let (compute_bytes, compute_origin, expensive_ok) =
-            if let Ok(raw) = env::var("OPENFDD_COMPUTE_MEMORY_MB") {
-                let mb: u64 = raw
-                    .trim()
-                    .parse()
-                    .context("OPENFDD_COMPUTE_MEMORY_MB must be a positive integer")?;
-                if mb == 0 {
-                    bail!("OPENFDD_COMPUTE_MEMORY_MB must be greater than zero");
-                }
-                let bytes = mb
-                    .checked_mul(1024 * 1024)
-                    .ok_or_else(|| anyhow::anyhow!("OPENFDD_COMPUTE_MEMORY_MB is too large"))?;
-                if let Some(hard_b) = hard {
-                    if bytes + reserves.total() > hard_b {
-                        notes.push(
+        let (compute_bytes, compute_origin, expensive_ok) = if let Ok(raw) =
+            env::var("OPENFDD_COMPUTE_MEMORY_MB")
+        {
+            let mb: u64 = raw
+                .trim()
+                .parse()
+                .context("OPENFDD_COMPUTE_MEMORY_MB must be a positive integer")?;
+            if mb == 0 {
+                bail!("OPENFDD_COMPUTE_MEMORY_MB must be greater than zero");
+            }
+            let bytes = mb
+                .checked_mul(1024 * 1024)
+                .ok_or_else(|| anyhow::anyhow!("OPENFDD_COMPUTE_MEMORY_MB is too large"))?;
+            if let Some(hard_b) = hard {
+                if bytes + reserves.total() > hard_b {
+                    notes.push(
                             "OPENFDD_COMPUTE_MEMORY_MB + reserves exceed discovered hard capacity; clamping"
                                 .into(),
                         );
-                        let clamped = hard_b.saturating_sub(reserves.total());
-                        if clamped < 64 * 1024 * 1024 {
-                            notes.push(
+                    let clamped = hard_b.saturating_sub(reserves.total());
+                    if clamped < 64 * 1024 * 1024 {
+                        notes.push(
                                 "Protected envelopes leave <64 MiB compute — expensive work unavailable"
                                     .into(),
                             );
-                            (clamped.max(1), "OPENFDD_COMPUTE_MEMORY_MB_clamped_unavailable".into(), false)
-                        } else {
-                            (clamped, "OPENFDD_COMPUTE_MEMORY_MB_clamped".into(), true)
-                        }
+                        (
+                            clamped.max(1),
+                            "OPENFDD_COMPUTE_MEMORY_MB_clamped_unavailable".into(),
+                            false,
+                        )
                     } else {
-                        (bytes, "OPENFDD_COMPUTE_MEMORY_MB".into(), true)
+                        (clamped, "OPENFDD_COMPUTE_MEMORY_MB_clamped".into(), true)
                     }
                 } else {
                     (bytes, "OPENFDD_COMPUTE_MEMORY_MB".into(), true)
                 }
-            } else if let Some(hard_b) = hard {
-                let available = hard_b.saturating_sub(reserves.total());
-                if available < 64 * 1024 * 1024 {
-                    notes.push(
-                        "Protected envelopes leave <64 MiB compute — expensive work unavailable"
-                            .into(),
-                    );
-                    (
-                        available.max(1),
-                        "cgroup_minus_reserves_unavailable".into(),
-                        false,
-                    )
-                } else {
-                    // Cap initial aggregate at query_memory when COMPUTE unset so operators
-                    // who sized QUERY_MEMORY keep a familiar ceiling — shared, not multiplied.
-                    let capped = available.min(query_bytes.max(64 * 1024 * 1024));
-                    notes.push(
+            } else {
+                (bytes, "OPENFDD_COMPUTE_MEMORY_MB".into(), true)
+            }
+        } else if let Some(hard_b) = hard {
+            let available = hard_b.saturating_sub(reserves.total());
+            if available < 64 * 1024 * 1024 {
+                notes.push(
+                    "Protected envelopes leave <64 MiB compute — expensive work unavailable".into(),
+                );
+                (
+                    available.max(1),
+                    "cgroup_minus_reserves_unavailable".into(),
+                    false,
+                )
+            } else {
+                // Cap initial aggregate at query_memory when COMPUTE unset so operators
+                // who sized QUERY_MEMORY keep a familiar ceiling — shared, not multiplied.
+                let capped = available.min(query_bytes.max(64 * 1024 * 1024));
+                notes.push(
                         "OPENFDD_COMPUTE_MEMORY_MB unset: aggregate pool = min(cgroup−reserves, QUERY_MEMORY); concurrent sessions share one pool"
                             .into(),
                     );
-                    (capped, "cgroup_minus_reserves_capped_by_query".into(), true)
-                }
-            } else {
-                notes.push(
+                (capped, "cgroup_minus_reserves_capped_by_query".into(), true)
+            }
+        } else {
+            notes.push(
                     "No cgroup hard limit: aggregate pool falls back to OPENFDD_QUERY_MEMORY_MB (shared, not per-session)"
                         .into(),
                 );
-                (
-                    query_bytes.max(1),
-                    "OPENFDD_QUERY_MEMORY_MB_shared_fallback".into(),
-                    true,
-                )
-            };
+            (
+                query_bytes.max(1),
+                "OPENFDD_QUERY_MEMORY_MB_shared_fallback".into(),
+                true,
+            )
+        };
 
         let query_capped = query_bytes.min(compute_bytes).max(1);
         if query_capped < query_bytes {

@@ -998,7 +998,11 @@ fn read_package_manifest_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
             return Err(format!("symlink entries are not allowed: {entry_name}"));
         }
         let path = safe_member_path(&entry_name)?;
-        if path.file_name().map(|f| f == "manifest.json").unwrap_or(false) {
+        if path
+            .file_name()
+            .map(|f| f == "manifest.json")
+            .unwrap_or(false)
+        {
             candidates.push((i, path));
         }
     }

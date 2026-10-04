@@ -17,7 +17,6 @@ pub use historian::{
     new_historian_session, register_historian_building, register_historian_dataset,
     HistorianDatasetKind, HistorianRegistration,
 };
-pub use runtime::{new_shared_historian_session, shared_runtime_info, SharedRuntimeInfo};
 pub use object_store::{
     refresh_s3_scope_index_from_env, register_configured_historian,
     register_configured_historian_scoped, s3_scope_index_root, S3ObjectStoreConfig, S3UrlStyle,
@@ -26,6 +25,7 @@ pub use query::{
     collect_sql_bounded, collect_sql_budgeted, result_max_bytes_from_env, stream_sql,
     DEFAULT_INTERACTIVE_MAX_ROWS, DEFAULT_RESULT_MAX_BYTES,
 };
+pub use runtime::{new_shared_historian_session, shared_runtime_info, SharedRuntimeInfo};
 pub use session::{
     register_utility_if_present, register_weather_for_building, register_weather_if_present,
     run_sql, run_sql_bounded, run_sql_file, run_sql_file_bounded, QueryResult,
