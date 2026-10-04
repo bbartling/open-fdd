@@ -9,6 +9,7 @@ use dashmap::DashMap;
 use open_fdd_edge_prototype::csv_ingest::haystack_central_dataset::{self, CentralDatasetSnapshot};
 use open_fdd_edge_prototype::csv_ingest::semantic_meta;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 #[derive(Clone, Default)]
 pub struct HaystackRdfCache {
@@ -18,11 +19,6 @@ pub struct HaystackRdfCache {
 impl HaystackRdfCache {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    pub fn invalidate_building(&self, building_id: &str) {
-        self.by_key
-            .retain(|k, _| !k.starts_with(&format!("{building_id}|")));
     }
 
     pub fn get_or_materialize(
@@ -74,12 +70,15 @@ impl HaystackRdfCache {
             }));
         }
 
+        // Inventory + preferred tenant change Turtle (ambiguous roles, exclusions, parent_ahu).
+        let inventory_token = inventory_cache_token(&inventory, preferred_tenant);
         let provisional_key = format!(
-            "{}|{}|{}|{}",
+            "{}|{}|{}|{}|{}",
             building_id,
             scoped.revision.as_deref().unwrap_or(""),
             equipment_id.unwrap_or(""),
-            open_fdd_edge_prototype::csv_ingest::haystack_defs::DEFS_PIN
+            open_fdd_edge_prototype::csv_ingest::haystack_defs::DEFS_PIN,
+            inventory_token
         );
         if let Some(hit) = self.by_key.get(&provisional_key) {
             return Ok(hit.clone());
@@ -95,6 +94,39 @@ impl HaystackRdfCache {
     }
 }
 
+fn inventory_cache_token(inventory: &Value, preferred_tenant: Option<&str>) -> String {
+    let mut h = Sha256::new();
+    h.update(preferred_tenant.unwrap_or("").as_bytes());
+    h.update(b"|");
+    // Stable subset that affects projection output.
+    for key in [
+        "ambiguous_roles",
+        "excluded_columns",
+        "parent_ahu",
+        "equipment",
+        "points",
+        "mappings",
+        "column_map",
+        "equip_types",
+        "equipment_types",
+    ] {
+        if let Some(v) = inventory.get(key) {
+            h.update(key.as_bytes());
+            h.update(b"=");
+            h.update(v.to_string().as_bytes());
+            h.update(b";");
+        }
+    }
+    // Fallback: if none of the known keys are present, hash the full inventory.
+    if !["ambiguous_roles", "excluded_columns", "parent_ahu", "equipment", "points", "mappings", "column_map", "equip_types", "equipment_types"]
+        .iter()
+        .any(|k| inventory.get(*k).is_some())
+    {
+        h.update(inventory.to_string().as_bytes());
+    }
+    format!("{:x}", h.finalize())
+}
+
 pub fn sparql_unavailable() -> Value {
     haystack_central_dataset::sparql_unavailable_payload()
 }
@@ -108,5 +140,14 @@ mod tests {
         let body = sparql_unavailable();
         assert_eq!(body["feature_closeable_by_unavailable"], false);
         assert_eq!(body["status"], "UNAVAILABLE");
+    }
+
+    #[test]
+    fn inventory_token_includes_tenant_and_roles() {
+        let a = inventory_cache_token(&json!({"ambiguous_roles": ["x"]}), Some("t1"));
+        let b = inventory_cache_token(&json!({"ambiguous_roles": ["x"]}), Some("t2"));
+        let c = inventory_cache_token(&json!({"ambiguous_roles": ["y"]}), Some("t1"));
+        assert_ne!(a, b);
+        assert_ne!(a, c);
     }
 }
