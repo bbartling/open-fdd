@@ -101,6 +101,21 @@ pub fn historian_session_config_from_env() -> Result<SessionConfig> {
     DataFusionTuning::from_env()?.session_config()
 }
 
+/// Clamp partition/batch knobs to discovered CPU so small envelopes do not
+/// oversubscribe. More cores do not justify more partitions when memory is tight
+/// (memory clamping is applied in the shared-runtime budget).
+pub fn clamp_tuning_to_cpu(tuning: &mut DataFusionTuning, effective_cores: u64) {
+    let cores = (effective_cores.max(1) as usize).max(1);
+    if let Some(tp) = tuning.target_partitions {
+        tuning.target_partitions = Some(tp.clamp(1, cores));
+    }
+    // When unset, pin a conservative default from CPU rather than leaving DF to
+    // assume host-wide parallelism inside a small container.
+    if tuning.target_partitions.is_none() {
+        tuning.target_partitions = Some(cores.clamp(1, 8));
+    }
+}
+
 fn env_optional_usize(name: &str) -> Result<Option<usize>> {
     let Ok(raw) = env::var(name) else {
         return Ok(None);

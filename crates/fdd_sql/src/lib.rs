@@ -9,6 +9,7 @@ use fdd_store::{HistorianConfig, StorageUrl};
 pub mod historian;
 pub mod object_store;
 pub mod query;
+pub mod runtime;
 pub mod session;
 pub mod tuning;
 
@@ -16,6 +17,7 @@ pub use historian::{
     new_historian_session, register_historian_building, register_historian_dataset,
     HistorianDatasetKind, HistorianRegistration,
 };
+pub use runtime::{new_shared_historian_session, shared_runtime_info, SharedRuntimeInfo};
 pub use object_store::{
     refresh_s3_scope_index_from_env, register_configured_historian,
     register_configured_historian_scoped, s3_scope_index_root, S3ObjectStoreConfig, S3UrlStyle,
@@ -25,7 +27,7 @@ pub use session::{
     register_utility_if_present, register_weather_for_building, register_weather_if_present,
     run_sql, run_sql_bounded, run_sql_file, run_sql_file_bounded, QueryResult,
 };
-pub use tuning::{historian_session_config_from_env, DataFusionTuning};
+pub use tuning::{clamp_tuning_to_cpu, historian_session_config_from_env, DataFusionTuning};
 
 /// Compatibility registration entry point used by central/edge callers.
 ///

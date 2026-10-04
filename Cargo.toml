@@ -6,6 +6,7 @@ members = [
     "crates/fdd_core",
     "crates/fdd_csv",
     "crates/fdd_store",
+    "crates/fdd_resources",
     "crates/fdd_sql",
     "crates/fdd_rules",
     "crates/fdd_bench",

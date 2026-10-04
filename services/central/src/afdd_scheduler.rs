@@ -259,7 +259,15 @@ impl AfddSchedulerRuntime {
             "params": {}
         });
 
+        let Some(compute) =
+            fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::ScheduledAfdd)
+        else {
+            anyhow::bail!(
+                "compute admission limit reached (OPENFDD_COMPUTE_MAX_INFLIGHT); AFDD deferred"
+            );
+        };
         let result = tokio::task::spawn_blocking(move || {
+            let _compute = compute;
             open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
         })
         .await
