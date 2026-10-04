@@ -2222,6 +2222,30 @@ pub async fn get_edge_metadata(
     }
 }
 
+/// Tenant segment written into local ingest receipts.
+///
+/// Precedence: process `OPENFDD_TENANT_ID` → trusted request header → `-`.
+/// Multi-tenant mode still requires the header to match the process binding
+/// before this helper runs.
+fn local_ingest_receipt_tenant(headers: &HeaderMap) -> String {
+    if let Ok(raw) = std::env::var("OPENFDD_TENANT_ID") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    if let Some(raw) = headers
+        .get("x-openfdd-tenant-id")
+        .and_then(|value| value.to_str().ok())
+    {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() && trimmed != "-" {
+            return trimmed.to_string();
+        }
+    }
+    "-".into()
+}
+
 /// Accept one fieldbus envelope over the local, authenticated HTTP path.
 ///
 /// The envelope is the same `TelemetryEnvelope` used by MQTTS. Message IDs
@@ -2546,9 +2570,12 @@ pub async fn local_fieldbus_ingest(
         );
     }
 
+    // Dual/local fieldbus sends x-openfdd-tenant-id even when central MT is off.
+    // Echo that trusted header into the receipt scope when OPENFDD_TENANT_ID is
+    // unset so validate_receipt_for_envelope does not stall the spool (#1125).
     let receipt_scope = format!(
         "tenant={};building={}",
-        std::env::var("OPENFDD_TENANT_ID").unwrap_or_else(|_| "-".into()),
+        local_ingest_receipt_tenant(&headers),
         trusted_building
     );
 
@@ -6444,6 +6471,22 @@ mod version_tests {
         assert!(!connector_trigger_role_allowed(crate::auth::Role::Viewer));
         assert!(connector_trigger_role_allowed(crate::auth::Role::Operator));
         assert!(connector_trigger_role_allowed(crate::auth::Role::Admin));
+    }
+
+    #[test]
+    fn local_receipt_tenant_echoes_header_when_central_env_unset() {
+        let _env_lock = crate::test_env_lock::lock_env();
+        std::env::remove_var("OPENFDD_TENANT_ID");
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-openfdd-tenant-id",
+            HeaderValue::from_static("acme"),
+        );
+        assert_eq!(super::local_ingest_receipt_tenant(&headers), "acme");
+        std::env::set_var("OPENFDD_TENANT_ID", "hub-tenant");
+        assert_eq!(super::local_ingest_receipt_tenant(&headers), "hub-tenant");
+        std::env::remove_var("OPENFDD_TENANT_ID");
+        assert_eq!(super::local_ingest_receipt_tenant(&HeaderMap::new()), "-");
     }
 
     #[tokio::test]

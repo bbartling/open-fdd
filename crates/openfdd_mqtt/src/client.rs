@@ -26,7 +26,15 @@ pub struct MqttConfig {
 
 pub struct MqttHandle {
     client: AsyncClient,
-    pub events: mpsc::UnboundedReceiver<Incoming>,
+    pub events: mpsc::Receiver<Incoming>,
+}
+
+fn mqtt_event_queue_capacity() -> usize {
+    std::env::var("OPENFDD_MQTT_EVENT_QUEUE")
+        .ok()
+        .and_then(|raw| raw.trim().parse().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(1024)
 }
 
 impl MqttHandle {
@@ -48,7 +56,10 @@ impl MqttHandle {
         }));
 
         let (client, mut eventloop) = AsyncClient::new(opts, 64);
-        let (tx, rx) = mpsc::unbounded_channel();
+        // Bounded queue (#1127 P3): never grow unbounded under ingest pressure.
+        // On full queue, end the stream so the caller reconnects/resubscribes
+        // rather than buffering the whole broker backlog in RAM.
+        let (tx, rx) = mpsc::channel(mqtt_event_queue_capacity());
         // On poll Err, tear down this handle (drop `tx`) so callers re-connect and
         // re-subscribe. rumqttc may reconnect under the hood without restoring
         // subscriptions; sleeping here left ingest_ok flat while sticky edges
@@ -56,11 +67,16 @@ impl MqttHandle {
         tokio::spawn(async move {
             loop {
                 match eventloop.poll().await {
-                    Ok(Event::Incoming(i)) => {
-                        if tx.send(i).is_err() {
+                    Ok(Event::Incoming(i)) => match tx.try_send(i) {
+                        Ok(()) => {}
+                        Err(mpsc::error::TrySendError::Full(_)) => {
+                            warn!(
+                                "mqtt event queue full (OPENFDD_MQTT_EVENT_QUEUE); ending stream for backpressure/resubscribe"
+                            );
                             break;
                         }
-                    }
+                        Err(mpsc::error::TrySendError::Closed(_)) => break,
+                    },
                     Ok(_) => {}
                     Err(err) => {
                         warn!(%err, "mqtt eventloop error; ending event stream for resubscribe");
@@ -73,7 +89,7 @@ impl MqttHandle {
         Ok(Self { client, events: rx })
     }
 
-    pub fn split(self) -> (AsyncClient, mpsc::UnboundedReceiver<Incoming>) {
+    pub fn split(self) -> (AsyncClient, mpsc::Receiver<Incoming>) {
         (self.client, self.events)
     }
 
