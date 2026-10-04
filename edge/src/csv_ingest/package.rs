@@ -960,22 +960,76 @@ fn extract_package_zip_bytes(content_type: &str, body: &[u8]) -> Result<Vec<u8>,
 }
 
 /// Peek `manifest.json` `building_id` before package write (Wave O1 MT ACL).
+///
+/// Reads only package-manifest zip members (bounded) — does **not** extract the
+/// full archive (#1127 P2). Full extraction happens once inside the import worker.
 pub fn peek_package_building_id(content_type: &str, body: &[u8]) -> Result<String, String> {
     let zip_bytes = extract_package_zip_bytes(content_type, body)?;
-    let entries = read_zip_entries(&zip_bytes)?;
-    let prefix = resolve_building_prefix(&entries)?;
-    let manifest_path = if prefix.as_os_str().is_empty() {
-        PathBuf::from("manifest.json")
-    } else {
-        prefix.join("manifest.json")
-    };
-    let raw = entries
-        .get(&manifest_path)
-        .ok_or_else(|| "manifest.json missing".to_string())?;
+    let raw = read_package_manifest_bytes(&zip_bytes)?;
     let manifest_raw: Value =
-        serde_json::from_slice(raw).map_err(|e| format!("manifest.json: {e}"))?;
+        serde_json::from_slice(&raw).map_err(|e| format!("manifest.json: {e}"))?;
     let manifest = parse_manifest(&manifest_raw)?;
     validate_id(&manifest.building_id)
+}
+
+/// Extract only `**/manifest.json` package roots from a zip (no full tree).
+fn read_package_manifest_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let cursor = std::io::Cursor::new(bytes);
+    let mut archive =
+        zip::ZipArchive::new(cursor).map_err(|e| format!("not a readable zip: {e}"))?;
+    if archive.len() > max_entries() {
+        return Err(format!(
+            "zip has {} entries; cap is {} (OPENFDD_MAX_ENTRIES)",
+            archive.len(),
+            max_entries()
+        ));
+    }
+    const MANIFEST_PEEK_CAP: u64 = 1024 * 1024; // 1 MiB manifest ceiling
+    let mut candidates: Vec<(usize, PathBuf)> = Vec::new();
+    for i in 0..archive.len() {
+        let entry = archive
+            .by_index(i)
+            .map_err(|e| format!("zip entry {i}: {e}"))?;
+        if entry.is_dir() {
+            continue;
+        }
+        let entry_name = entry.name().to_string();
+        if zip_entry_is_symlink(&entry) {
+            return Err(format!("symlink entries are not allowed: {entry_name}"));
+        }
+        let path = safe_member_path(&entry_name)?;
+        if path.file_name().map(|f| f == "manifest.json").unwrap_or(false) {
+            candidates.push((i, path));
+        }
+    }
+    if candidates.is_empty() {
+        return Err("manifest.json missing".into());
+    }
+    // Prefer shallowest package manifest (root first, then nested).
+    candidates.sort_by_key(|(_, p)| p.components().count());
+    for (idx, path) in candidates {
+        let mut entry = archive
+            .by_index(idx)
+            .map_err(|e| format!("zip entry {}: {e}", path.display()))?;
+        let declared = entry.size();
+        if declared > MANIFEST_PEEK_CAP {
+            return Err(format!(
+                "manifest.json too large for peek ({} bytes > {MANIFEST_PEEK_CAP})",
+                declared
+            ));
+        }
+        let mut buf = Vec::with_capacity(declared as usize);
+        entry
+            .read_to_end(&mut buf)
+            .map_err(|e| format!("zip entry {:?}: {e}", path.display()))?;
+        if (buf.len() as u64) > MANIFEST_PEEK_CAP {
+            return Err("manifest.json expanded past peek cap".into());
+        }
+        if is_package_manifest(&buf) {
+            return Ok(buf);
+        }
+    }
+    Err("manifest.json missing openfdd_package_v1 marker".into())
 }
 
 /// HTTP entry: multipart / JSON base64 / raw zip body.

@@ -1444,6 +1444,14 @@ pub fn roles_response() -> Value {
 /// legacy ``building=``) so MQTT live sites AFDD like CSV packages (3.3.33).
 /// Without parquet cache, returns a clear error.
 pub fn run_registry(payload: &Value) -> Value {
+    run_registry_with_cancel(payload, None)
+}
+
+/// Registry run with optional cooperative cancel flag (#1127 P2).
+pub fn run_registry_with_cancel(
+    payload: &Value,
+    cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) -> Value {
     let pq = parquet_root();
     if !pq.is_dir() {
         return json!({
@@ -1628,15 +1636,19 @@ pub fn run_registry(payload: &Value) -> Value {
             unit_system: Some(unit_system),
             time_window,
             building_id,
+            cancel: cancel.as_ref(),
         },
     )) {
         Ok(report) => {
             let normalized = results_response(building_id);
             let result_count =
                 normalized.get("count").and_then(Value::as_u64).unwrap_or(0) as usize;
-            write_run_meta(building_id, "registry", result_count);
+            if !report.cancelled {
+                write_run_meta(building_id, "registry", result_count);
+            }
             json!({
-                "ok": true,
+                "ok": !report.cancelled,
+                "cancelled": report.cancelled,
                 "engine": "fdd_rules+DataFusion",
                 "mode": "registry",
                 "building_id": building_id,
@@ -1652,6 +1664,7 @@ pub fn run_registry(payload: &Value) -> Value {
                 "timings": report.timings,
                 "results_dir": out.display().to_string(),
                 "results": normalized.get("results").cloned().unwrap_or_else(|| json!([])),
+                "error": report.cancelled.then_some("CANCELLED: cooperative cancel stopped registry run"),
             })
         }
         Err(e) => json!({"ok": false, "error": e.to_string()}),

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -9,7 +11,8 @@ use datafusion::logical_expr::Expr;
 use datafusion::prelude::*;
 use fdd_sql::{
     new_historian_session, register_historian_building, register_parquet_tree,
-    register_utility_if_present, register_weather_for_building, run_sql,
+    register_utility_if_present, register_weather_for_building, result_max_bytes_from_env,
+    run_sql_bounded,
 };
 use fdd_store::{merge_windowed_rule_result, HistorianConfig};
 use serde::Serialize;
@@ -40,6 +43,9 @@ pub struct RuleRunReport {
     pub poll_seconds: f64,
     pub timings: Vec<RuleTiming>,
     pub total_ms: u128,
+    /// Set when cooperative cancel stopped the cycle early (#1127 P2).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cancelled: bool,
 }
 
 /// Classify a DataFusion error string as a missing-schema (skip) condition
@@ -189,7 +195,13 @@ pub struct RunOptions<'a> {
     pub time_window: Option<(&'a str, &'a str)>,
     /// Building id for utility CSV registration (`utilities_v1` under csv_buildings).
     pub building_id: Option<&'a str>,
+    /// Cooperative cancel (#1127 P2). Checked between rules; does not prove OS abort.
+    pub cancel: Option<&'a Arc<AtomicBool>>,
 }
+
+/// Large row ceiling for fault-result materialization; byte budget is the tighter
+/// guard (`OPENFDD_RESULT_MAX_BYTES`). Never silently truncate fault coverage.
+const FDD_RULE_MAX_ROWS: usize = 5_000_000;
 
 pub async fn run_all_rules(
     parquet_root: &Path,
@@ -378,7 +390,33 @@ pub async fn run_all_rules_with_overrides(
     let mut rules_failed = 0usize;
     let mut rules_skipped = 0usize;
     let equipment_filter = options.equipment_filter;
+    let result_max_bytes = result_max_bytes_from_env().context("OPENFDD_RESULT_MAX_BYTES")?;
     for rule in &registry.rules {
+        if options
+            .cancel
+            .is_some_and(|flag| flag.load(Ordering::SeqCst))
+        {
+            timings.push(RuleTiming {
+                rule_id: rule.rule_id.clone(),
+                row_count: 0,
+                elapsed_ms: 0,
+                output_path: String::new(),
+                error: Some("CANCELLED: cooperative cancel requested before rule start".into()),
+            });
+            rules_failed += 1;
+            // Stop the cycle; already-published rule files stay. Do not treat as
+            // a complete successful run (AFDD checkpoint must not advance on cancel).
+            return Ok(RuleRunReport {
+                rules_run: timings.len(),
+                rules_succeeded,
+                rules_failed,
+                rules_skipped,
+                poll_seconds,
+                timings,
+                total_ms: started.elapsed().as_millis(),
+                cancelled: true,
+            });
+        }
         let sql_path = rules_dir.join(&rule.sql_file);
         let t0 = std::time::Instant::now();
         let out_path = out_dir.join(format!("{}.json", rule.rule_id));
@@ -482,8 +520,31 @@ pub async fn run_all_rules_with_overrides(
             &history_columns,
             history_table,
         );
-        match run_sql(&ctx, &sql).await {
+        // Byte budget enforced inside collect_sql_budgeted via env; row cap stays
+        // high so legitimate fault coverage is not silently clipped by LIMIT.
+        match run_sql_bounded(&ctx, &sql, FDD_RULE_MAX_ROWS).await {
             Ok(result) => {
+                // Approximate JSON materialization against the same byte budget.
+                let approx_json = result.rows.len().saturating_mul(256);
+                if approx_json > result_max_bytes {
+                    let msg = format!(
+                        "rule result JSON exceeds byte budget of {result_max_bytes} (OPENFDD_RESULT_MAX_BYTES); refusing silent truncation"
+                    );
+                    let err_body = serde_json::json!({"rows": [], "error": msg.clone()});
+                    let mut error = msg;
+                    if let Err(err) = publish_rule_body(&out_path, &err_body, options.time_window) {
+                        error = format!("{error}; result file unchanged: {err}");
+                    }
+                    timings.push(RuleTiming {
+                        rule_id: rule.rule_id.clone(),
+                        row_count: 0,
+                        elapsed_ms: t0.elapsed().as_millis(),
+                        output_path: out_path.display().to_string(),
+                        error: Some(error),
+                    });
+                    rules_failed += 1;
+                    continue;
+                }
                 publish_rule_body(
                     &out_path,
                     &serde_json::json!({"rows": result.rows}),
@@ -548,6 +609,7 @@ pub async fn run_all_rules_with_overrides(
         poll_seconds,
         timings,
         total_ms: started.elapsed().as_millis(),
+        cancelled: false,
     })
 }
 

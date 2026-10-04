@@ -2045,6 +2045,7 @@ dependencies = [
  "fdd_core",
  "fdd_resources",
  "fdd_store",
+ "futures",
  "object_store",
  "serde",
  "serde_json",

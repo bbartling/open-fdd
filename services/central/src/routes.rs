@@ -3324,23 +3324,63 @@ pub async fn fdd_run(
                 )
             },
         )?;
-    // Permit moves into the worker so HTTP timeout / Actions clear cannot release
-    // admission while the registry run still holds pool/CPU (#1127 P1).
-    let join = tokio::task::spawn_blocking(move || {
+    // Permit + cancel flag move into the worker so HTTP timeout / Actions clear
+    // cannot release admission while the registry run still holds pool/CPU
+    // (#1127 P1/P2). Timeout alone does not prove cancellation completed.
+    let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let cancel_worker = cancel.clone();
+    let mut join = tokio::task::spawn_blocking(move || {
         let _compute = compute;
-        open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
+        open_fdd_edge_prototype::fdd::registry_api::run_registry_with_cancel(
+            &payload,
+            Some(cancel_worker),
+        )
     });
-    let mut result = match tokio::time::timeout(Duration::from_secs(fdd_timeout_secs), join).await {
-        Ok(Ok(v)) => v,
-        Ok(Err(e)) => json!({"ok": false, "error": format!("fdd run task failed: {e}")}),
-        Err(_) => json!({
-            "ok": false,
-            "timeout": true,
-            "error": format!(
-                "fdd run timed out after {fdd_timeout_secs}s (OPENFDD_FDD_RUN_TIMEOUT_SECS)"
-            ),
-        }),
-    };
+    let mut deferred_action_finish = false;
+    let mut result =
+        match tokio::time::timeout(Duration::from_secs(fdd_timeout_secs), &mut join).await {
+            Ok(Ok(v)) => v,
+            Ok(Err(e)) => json!({"ok": false, "error": format!("fdd run task failed: {e}")}),
+            Err(_) => {
+                cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+                let aid = action_id.clone();
+                tokio::spawn(async move {
+                    let outcome = join.await;
+                    if let Some(aid) = aid {
+                        let detail = match outcome {
+                            Ok(v) => json!({
+                                "ok": false,
+                                "timeout": true,
+                                "cancel_requested": true,
+                                "worker_completed_after_timeout": true,
+                                "cancelled": v.get("cancelled"),
+                                "rules_succeeded": v.get("rules_succeeded"),
+                                "rules_failed": v.get("rules_failed"),
+                                "error": v.get("error"),
+                            }),
+                            Err(e) => json!({
+                                "ok": false,
+                                "timeout": true,
+                                "cancel_requested": true,
+                                "worker_completed_after_timeout": true,
+                                "error": format!("fdd run task failed after timeout: {e}"),
+                            }),
+                        };
+                        let _ = actions::finish_action(&aid, "fail", Some(detail));
+                    }
+                });
+                deferred_action_finish = true;
+                json!({
+                    "ok": false,
+                    "timeout": true,
+                    "cancel_requested": true,
+                    "worker_completion": "pending",
+                    "error": format!(
+                        "fdd run timed out after {fdd_timeout_secs}s (OPENFDD_FDD_RUN_TIMEOUT_SECS); cancel requested — worker completion pending (timeout ≠ cancelled)"
+                    ),
+                })
+            }
+        };
     // Echo the requested building_id when the edge did not surface one, so the
     // UI/MCP always know which site the run was scoped to.
     if let (Some(bid), Some(obj)) = (echo_building_id, result.as_object_mut()) {
@@ -3351,17 +3391,20 @@ pub async fn fdd_run(
     }
 
     if let Some(ref aid) = action_id {
-        let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
-        let status = if ok { "ok" } else { "fail" };
-        let detail = json!({
-            "ok": ok,
-            "rules_succeeded": result.get("rules_succeeded"),
-            "rules_failed": result.get("rules_failed"),
-            "rules_skipped": result.get("rules_skipped"),
-            "total_ms": result.get("total_ms"),
-            "error": result.get("error"),
-        });
-        let _ = actions::finish_action(aid, status, Some(detail));
+        if !deferred_action_finish {
+            let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+            let status = if ok { "ok" } else { "fail" };
+            let detail = json!({
+                "ok": ok,
+                "rules_succeeded": result.get("rules_succeeded"),
+                "rules_failed": result.get("rules_failed"),
+                "rules_skipped": result.get("rules_skipped"),
+                "total_ms": result.get("total_ms"),
+                "cancelled": result.get("cancelled"),
+                "error": result.get("error"),
+            });
+            let _ = actions::finish_action(aid, status, Some(detail));
+        }
         if let Some(obj) = result.as_object_mut() {
             obj.insert("action_id".into(), json!(aid));
         }
