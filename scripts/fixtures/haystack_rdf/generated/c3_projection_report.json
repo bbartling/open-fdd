@@ -1,0 +1,63 @@
+{
+  "schema": "ofdd_haystack_projection_report_v1",
+  "profile": "ofdd_haystack_projection_v1",
+  "defs_pin": "haystack-defs-ttl-4.0.0",
+  "defs_sha256": "458caf628bf85d702d18d3c592527f9c43caa85500598c915c71c389ae74b635",
+  "building_id": "OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1",
+  "emitted_sites": 1,
+  "emitted_equips": 3,
+  "emitted_points": 4,
+  "omitted": [
+    {
+      "reason": "missing_parent_ahu",
+      "equipment_id": "VAV_CASE_1",
+      "detail": "stamped VAV without confirmed parent — no topology edge"
+    },
+    {
+      "reason": "unconfirmed_parent_relation",
+      "equipment_id": "VAV_EXCLUDED_1",
+      "term": "AHU_CASE_1",
+      "detail": "parent_equip present without parent_relation — not asserted as equipRef/airRef"
+    },
+    {
+      "reason": "false_or_null_marker",
+      "equipment_id": "AHU_CASE_1",
+      "column": "SAT",
+      "term": "false",
+      "detail": "false/null/empty markers are never present tags"
+    },
+    {
+      "reason": "unknown_tag",
+      "equipment_id": "AHU_CASE_1",
+      "column": "MYSTERY_FLOW",
+      "term": "vendorFooTag",
+      "detail": "not in pinned defs haystack-defs-ttl-4.0.0"
+    },
+    {
+      "reason": "unknown_unit",
+      "equipment_id": "AHU_CASE_1",
+      "column": "MYSTERY_FLOW",
+      "term": "???",
+      "detail": "retained in native metadata only — not strict literal"
+    },
+    {
+      "reason": "point_function_cardinality",
+      "equipment_id": "VAV_CASE_1",
+      "column": "CLG_VLV_CMD",
+      "term": "sensor+sp",
+      "detail": "Haystack point modeling: sensor/cmd/sp are mutually exclusive functions; retained with diagnostic"
+    },
+    {
+      "reason": "ambiguous_role_unresolved_fdd",
+      "equipment_id": "VAV_CASE_1",
+      "column": "CLG_VLV_CMD",
+      "detail": "valid semantic point retained; FDD role selection unresolved without evidence"
+    },
+    {
+      "reason": "intentional_exclusion_fdd",
+      "equipment_id": "VAV_EXCLUDED_1",
+      "column": "INTENTIONALLY_EXCLUDED_AUX",
+      "detail": "operator FDD exclusion — semantic point retained with ofdd:fddExcluded"
+    }
+  ]
+}

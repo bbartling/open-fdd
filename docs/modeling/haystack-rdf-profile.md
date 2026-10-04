@@ -7,9 +7,9 @@ permalink: /modeling/haystack-rdf-profile.html
 
 # Open-FDD Haystack projection profile — `ofdd_haystack_projection_v1`
 
-**Status:** C3 product tip (#1001) implements strict export from native
+**Status:** C3 audit repair (#1123 / #1001) implements strict export from native
 `openfdd_semantic_meta_v1` via `GET …/mapping/haystack.ttl` (defs pin
-`ph-markers-allowlist-v1`). Passing this document alone does **not**
+`haystack-defs-ttl-4.0.0` — official multi-library Turtle). Passing this document alone does **not**
 establish full Haystack server interoperability, FDD readiness, or a live SPARQL service.
 
 This profile names the **strict Haystack RDF interchange** Open-FDD will target
@@ -34,36 +34,38 @@ Requirements source: [`openfdd_agent_spec/HAYSTACK_RDF_ROLLOUT.md`](../../openfd
 
 | Prefix | Base IRI | Pin policy |
 | --- | --- | --- |
-| `ph` | `https://project-haystack.org/def/ph#` | Haystack Project defs as published for Haystack 4.x RDF mapping ([Rdf](https://project-haystack.org/doc/docHaystack/Rdf), [Json](https://project-haystack.org/doc/docHaystack/Json)) |
-| `ofdd` | `urn:openfdd:ns#` | Open-FDD native inventory + engineering extensions only |
+| `ph` | `https://project-haystack.org/def/ph/4.0.0#` | Official normalized defs artifact `defs.ttl` (SHA in `scripts/fixtures/haystack_rdf/defs/defs.pin.json`) |
+| `phIoT` | `https://project-haystack.org/def/phIoT/4.0.0#` | Same pin — sites, equips, points, refs |
+| `phScience` | `https://project-haystack.org/def/phScience/4.0.0#` | Same pin — phenomena / quantities (e.g. `air`, `temp`) |
+| `ofdd` | `urn:openfdd:ns#` | Open-FDD native inventory + FDD selection / engineering extensions only |
 
-Implementation must record the **exact defs bundle revision** used in CI when
-C3 lands (git tag, npm package, or pinned download hash). C1 locks the name
-`ofdd_haystack_projection_v1` and the namespace rules below — not a product tip.
+Pin id: **`haystack-defs-ttl-4.0.0`**. The RDF doc page's illustrative `4.0`
+prefix is not the pin. Symbols are case-sensitive (`heatPump`, not `heatpump`).
 
 ## Instance mapping (strict projection)
 
 Follow Haystack RDF instance rules:
 
 1. **Sites, equips, points** are distinct resources with Haystack classes from
-   `ph` where the source metadata supports the tag set.
-2. **Marker tags** attach via `ph:hasTag` to marker resources — never invent a
-   marker because a SQL role exists.
-3. **Typed values** use documented XSD / Haystack value forms; **references**
-   point to instance blank nodes or stable IRIs per export policy.
-4. **Blank nodes** are ephemeral labels in a given serialization. Persistent
-   identity is Open-FDD's internal site/equipment/point id + tenant scope, mapped
-   at export time (HR-02).
-5. **Never mint** Open-FDD extension terms inside `ph` or Brick IRIs. Use
-   `urn:openfdd:ns#` with documented semantics and optional shapes.
+   the owning library (`phIoT:site`, `phIoT:equip`, `phIoT:point`, …).
+2. **Marker / class tags** attach via `ph:hasTag` to the correct library IRI —
+   never invent a marker because a SQL role exists.
+3. **Point metadata** uses standard `ph:dis`, `ph:unit`, `ph:kind`, `ph:tz` and
+   `phIoT:his` where present. Numeric tag-value units remain a documented gap.
+4. **References** use `phIoT:siteRef` / `phIoT:equipRef` / `phIoT:airRef` only
+   with validated targets and explicit relation evidence (`equipRef` ≠ generic parent).
+5. **Named IRIs** under `urn:openfdd:site/…` are the interchange identity for this
+   profile (not blank-node labels). Point identity prefers `point_id` over CSV column.
+6. **Never mint** Open-FDD extension terms inside Haystack IRIs. Use
+   `urn:openfdd:ns#` for FDD selection / exclusions / provenance.
 
 ## Unknown tags and intentional exclusions
 
 - Tags without a pinned def are **excluded from the strict projection** and listed
   in a **projection report** (omitted term, source column/id, reason).
 - Source facts remain in **native metadata** (JSON sidecars / persisted revision).
-- Operator **intentional exclusions** (not FDD inputs) are not promoted to Haystack
-  points; they appear in native inventory only.
+- Ambiguous SQL roles and operator FDD exclusions **retain** valid semantic points;
+  FDD selection is reported separately (`ofdd:fddSelection` / `ofdd:fddExcluded`).
 
 ## Units: value vs point metadata
 

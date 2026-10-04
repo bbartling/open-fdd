@@ -74,27 +74,37 @@
     "shipped_in_c1": false,
     "c3_delivery": true,
     "profile": "ofdd_haystack_projection_v1",
-    "defs_pin": "ph-markers-allowlist-v1",
+    "defs_pin": "haystack-defs-ttl-4.0.0",
     "unknown_tags_policy": "omit_from_strict_with_projection_report",
     "unknown_unit_policy": "retain_in_native_metadata_not_strict_literal",
-    "ambiguous_role_policy": "no_single_column_promotion_without_selection_evidence",
-    "expected_emitted_points_min": 1,
+    "ambiguous_role_policy": "retain_semantic_point_fdd_selection_unresolved",
+    "expected_emitted_points_min": 3,
     "must_omit_reasons": [
       "unknown_tag",
       "unknown_unit",
-      "ambiguous_role",
-      "intentional_exclusion",
+      "ambiguous_role_unresolved_fdd",
+      "intentional_exclusion_fdd",
       "false_or_null_marker",
-      "missing_parent_ahu"
+      "missing_parent_ahu",
+      "unconfirmed_parent_relation",
+      "point_function_cardinality"
     ],
     "must_emit_column": "SAT",
-    "must_not_emit_columns": [
+    "must_not_emit_columns": [],
+    "defs_libraries": [
+      "ph",
+      "phIoT",
+      "phScience"
+    ],
+    "intentional_exclusion_policy": "retain_semantic_point_with_ofdd_fddExcluded",
+    "must_emit_columns_also": [
       "CLG_VLV_CMD",
       "INTENTIONALLY_EXCLUDED_AUX"
-    ]
+    ],
+    "c3_audit_repair": "#1123"
   },
   "hr_mapping": {
-    "HR-05": "ambiguity/exclusion/missing parent appear in projection report; no invented parents or role\u2192tag",
+    "HR-05": "ambiguity/exclusion reported; semantic points retained; FDD selection separate; no invented parents or role\u2192tag",
     "HR-03": "strict Haystack TTL from semantic_meta via ofdd_haystack_projection_v1 (C3)",
     "HR-04": "advertised directions: native semantic-meta JSON, strict haystack.ttl + projection report; strict\u2192native not lossless"
   }

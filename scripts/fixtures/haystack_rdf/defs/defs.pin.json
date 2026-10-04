@@ -1,0 +1,26 @@
+{
+  "defs_pin": "haystack-defs-ttl-4.0.0",
+  "source_url": "https://project-haystack.org/download/defs.ttl",
+  "artifact": "scripts/fixtures/haystack_rdf/defs/defs.ttl",
+  "sha256": "458caf628bf85d702d18d3c592527f9c43caa85500598c915c71c389ae74b635",
+  "library_versions": {
+    "ph": "4.0.0",
+    "phIoT": "4.0.0",
+    "phScience": "4.0.0",
+    "phIct": "4.0.0"
+  },
+  "base_uris": {
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "ph": "https://project-haystack.org/def/ph/4.0.0#",
+    "phIct": "https://project-haystack.org/def/phIct/4.0.0#",
+    "phScience": "https://project-haystack.org/def/phScience/4.0.0#",
+    "phIoT": "https://project-haystack.org/def/phIoT/4.0.0#"
+  },
+  "rdf_mapping_helpers": [
+    "ph:hasTag"
+  ],
+  "note": "Official normalized Haystack 4.0.0 Turtle defs. RDF doc page illustrative 4.0 prefix is not the pin; artifact uses 4.0.0."
+}

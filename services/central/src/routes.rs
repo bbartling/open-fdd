@@ -4007,18 +4007,40 @@ fn project_haystack_for_building(
         }
         Err(e) => return json!({"ok": false, "error": e}),
     };
+    // One validated scope: filter semantic meta AND inventory together (#1123 F4).
+    let scoped = match open_fdd_edge_prototype::csv_ingest::semantic_meta::scope_meta(
+        &meta,
+        equipment_id.as_deref(),
+    ) {
+        Ok(m) => m,
+        Err(e) => {
+            return json!({
+                "ok": false,
+                "error": e,
+                "incomplete": true,
+                "profile": open_fdd_edge_prototype::csv_ingest::haystack_projection::PROFILE,
+            });
+        }
+    };
     let inventory =
         open_fdd_edge_prototype::csv_ingest::package::get_package_mapping_handler_scoped(
             &building_id,
             equipment_id.as_deref(),
             preferred.as_deref(),
         );
-    let inv_ref = if inventory.get("ok").and_then(|v| v.as_bool()) == Some(false) {
-        None
-    } else {
-        Some(&inventory)
-    };
-    open_fdd_edge_prototype::csv_ingest::haystack_projection::project_strict_json(&meta, inv_ref)
+    if inventory.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+        return json!({
+            "ok": false,
+            "error": inventory.get("error").cloned().unwrap_or_else(|| json!("inventory unavailable for scoped Haystack projection")),
+            "incomplete": true,
+            "inventory": inventory,
+            "profile": open_fdd_edge_prototype::csv_ingest::haystack_projection::PROFILE,
+        });
+    }
+    open_fdd_edge_prototype::csv_ingest::haystack_projection::project_strict_json(
+        &scoped,
+        Some(&inventory),
+    )
 }
 
 /// Strict Haystack Turtle (`ofdd_haystack_projection_v1`) from native semantic meta.

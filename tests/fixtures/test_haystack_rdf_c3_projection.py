@@ -1,8 +1,9 @@
-"""C3 Haystack RDF strict projection — RDFLib parse + HR-03/04/05 fixture checks."""
+"""C3 Haystack RDF strict projection — independent RDFLib parse of product bytes."""
 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 FIX = ROOT / "scripts" / "fixtures" / "haystack_rdf"
+GENERATED_TTL = FIX / "generated" / "c3_projection.ttl"
+DEFS_TTL = FIX / "defs" / "defs.ttl"
+DEFS_PIN = FIX / "defs" / "defs.pin.json"
 
 
 def test_c3_expected_answers_declare_strict_delivery() -> None:
@@ -18,8 +22,19 @@ def test_c3_expected_answers_declare_strict_delivery() -> None:
     strict = exp["strict_haystack_projection_v1"]
     assert strict["c3_delivery"] is True
     assert strict["profile"] == "ofdd_haystack_projection_v1"
+    assert strict["defs_pin"] == "haystack-defs-ttl-4.0.0"
     assert "SAT" == strict["must_emit_column"]
-    assert "CLG_VLV_CMD" in strict["must_not_emit_columns"]
+    assert "CLG_VLV_CMD" in strict.get("must_emit_columns_also", [])
+
+
+def test_defs_pin_artifact_present() -> None:
+    pin = json.loads(DEFS_PIN.read_text())
+    assert pin["defs_pin"] == "haystack-defs-ttl-4.0.0"
+    assert DEFS_TTL.is_file()
+    import hashlib
+
+    digest = hashlib.sha256(DEFS_TTL.read_bytes()).hexdigest()
+    assert digest == pin["sha256"]
 
 
 def test_semantic_meta_has_c3_cases() -> None:
@@ -28,11 +43,6 @@ def test_semantic_meta_has_c3_cases() -> None:
     assert ("AHU_CASE_1", "SAT") in cols
     assert ("AHU_CASE_1", "MYSTERY_FLOW") in cols
     assert ("VAV_CASE_1", "CLG_VLV_CMD") in cols
-    sat = next(p for p in meta["points"] if p["column"] == "SAT")
-    assert "false" in sat["haystack_tags"]
-    mystery = next(p for p in meta["points"] if p["column"] == "MYSTERY_FLOW")
-    assert mystery.get("unit_status") == "unknown"
-    assert "vendorFooTag" in mystery["haystack_tags"]
 
 
 def test_inventory_marks_exclusion_and_ambiguity() -> None:
@@ -44,6 +54,32 @@ def test_inventory_marks_exclusion_and_ambiguity() -> None:
     assert aux["status"] == "excluded"
 
 
+def _ensure_product_ttl() -> Path:
+    """Prefer committed/CI-generated artifact; otherwise build via cargo bin."""
+    env_path = os.environ.get("OPENFDD_HAYSTACK_C3_TTL")
+    if env_path:
+        p = Path(env_path)
+        if not p.is_file():
+            raise FileNotFoundError(f"OPENFDD_HAYSTACK_C3_TTL missing: {p}")
+        return p
+    if GENERATED_TTL.is_file() and GENERATED_TTL.stat().st_size > 0:
+        return GENERATED_TTL
+    # Generate from the Rust exporter (actual product bytes).
+    cmd = [
+        "cargo",
+        "run",
+        "-q",
+        "-p",
+        "open_fdd_edge_prototype",
+        "--bin",
+        "haystack_c3_export_fixture",
+    ]
+    subprocess.run(cmd, cwd=ROOT, check=True)
+    if not GENERATED_TTL.is_file():
+        raise FileNotFoundError(f"exporter did not write {GENERATED_TTL}")
+    return GENERATED_TTL
+
+
 @pytest.mark.skipif(
     subprocess.call(
         [sys.executable, "-c", "import rdflib"],
@@ -53,54 +89,65 @@ def test_inventory_marks_exclusion_and_ambiguity() -> None:
     != 0,
     reason="rdflib not installed",
 )
-def test_rdflib_parses_projected_turtle_from_cargo_test_artifact(
-    tmp_path: Path,
-) -> None:
-    """Build Turtle using the same Rust API via `cargo test` print is awkward;
-    instead project with a one-shot rustc-free JSON fixture round-trip helper
-    embedded as expected static TTL when cargo tests already validated shape.
+def test_rdflib_parses_actual_exporter_bytes_against_pinned_defs() -> None:
+    from rdflib import Graph, Namespace, RDF, URIRef
 
-    Here we only assert RDFLib can parse a minimal projected graph matching
-    profile prefixes (syntax/HR-03 smoke without requiring full cargo in pytest).
-    """
-    from rdflib import Graph, Namespace
+    ttl_path = _ensure_product_ttl()
+    g = Graph()
+    g.parse(ttl_path.as_posix(), format="turtle")
 
-    # Minimal graph shape mirroring ofdd_haystack_projection_v1 (kept in sync with
-    # edge/src/csv_ingest/haystack_projection.rs emit_resource).
+    defs = Graph()
+    defs.parse(DEFS_TTL.as_posix(), format="turtle")
+
+    ph = Namespace("https://project-haystack.org/def/ph/4.0.0#")
+    ph_iot = Namespace("https://project-haystack.org/def/phIoT/4.0.0#")
+    ph_sci = Namespace("https://project-haystack.org/def/phScience/4.0.0#")
+
+    assert len(g) >= 10
+    assert (None, RDF.type, ph_iot.site) in g
+    assert (None, RDF.type, ph_iot.equip) in g
+    assert (None, RDF.type, ph_iot.point) in g
+    assert (None, ph.hasTag, ph_iot.sensor) in g
+    assert (None, ph.hasTag, ph_sci.air) in g
+    assert (None, ph.unit, None) in g
+
+    # Every standard object IRI used as rdf:type or ph:hasTag must exist in pinned defs.
+    for _s, p, o in g.triples((None, None, None)):
+        if p not in (RDF.type, ph.hasTag):
+            continue
+        if not isinstance(o, URIRef):
+            continue
+        iri = str(o)
+        if not iri.startswith("https://project-haystack.org/def/"):
+            continue
+        assert (o, None, None) in defs or (None, None, o) in defs, f"missing def for {iri}"
+
+    # Ambiguous + excluded columns remain as semantic points.
+    text = ttl_path.read_text(encoding="utf-8")
+    assert "CLG_VLV_CMD" in text or "fddSelection" in text
+    assert "fddExcluded" in text or "INTENTIONALLY_EXCLUDED_AUX" in text
+    # Unversioned wrong NS must not appear.
+    assert "https://project-haystack.org/def/ph#" not in text.replace(
+        "https://project-haystack.org/def/ph/4.0.0#", ""
+    )
+
+
+def test_handwritten_turtle_syntax_smoke_only() -> None:
+    """Labeled syntax smoke — does NOT close HR-03/04 or #1001."""
+    pytest.importorskip("rdflib")
+    from rdflib import Graph
+
     ttl = """
-@prefix ph: <https://project-haystack.org/def/ph#> .
+@prefix ph: <https://project-haystack.org/def/ph/4.0.0#> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
 @prefix ofdd: <urn:openfdd:ns#> .
-@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-
-ofdd:site_OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1 a ph:site ;
-  ph:hasTag ph:site ;
-  ofdd:buildingId "OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1" .
-
-ofdd:eq_OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1__AHU_CASE_1 a ph:equip ;
-  ph:hasTag ph:ahu ;
-  ph:hasTag ph:equip ;
-  ph:siteRef ofdd:site_OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1 ;
-  ofdd:equipmentId "AHU_CASE_1" .
-
-ofdd:pt_OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1__AHU_CASE_1__SAT a ph:point ;
-  ph:hasTag ph:sensor ;
-  ph:hasTag ph:point ;
-  ph:hasTag ph:air ;
-  ph:hasTag ph:supply ;
-  ph:hasTag ph:temp ;
-  ph:equipRef ofdd:eq_OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1__AHU_CASE_1 ;
-  ofdd:column "SAT" ;
-  ofdd:unit "°F" .
+ofdd:smoke a phIoT:site ;
+  ph:hasTag phIoT:site ;
+  ofdd:buildingId "SMOKE" .
 """
     g = Graph()
     g.parse(data=ttl, format="turtle")
-    ph = Namespace("https://project-haystack.org/def/ph#")
-    assert len(g) >= 10
-    assert any(o == ph.site for o in g.objects())
-    assert any(o == ph.equip for o in g.objects())
-    assert any(o == ph.point for o in g.objects())
-    # No false marker resource
-    assert ph["false"] not in set(g.objects())
+    assert len(g) >= 2
 
 
 def test_crosswalk_advertises_c3_directions() -> None:

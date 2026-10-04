@@ -1,0 +1,51 @@
+# profile=ofdd_haystack_projection_v1 defs_pin=haystack-defs-ttl-4.0.0 defs_sha256=458caf628bf85d702d18d3c592527f9c43caa85500598c915c71c389ae74b635
+# source=https://project-haystack.org/download/defs.ttl
+@prefix phScience: <https://project-haystack.org/def/phScience/4.0.0#> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix ph: <https://project-haystack.org/def/ph/4.0.0#> .
+@prefix ofdd: <urn:openfdd:ns#> .
+<urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1/equip/VAV_EXCLUDED_1/point/INTENTIONALLY_EXCLUDED_AUX> ofdd:fddExcluded "true" ;
+	ofdd:pointId "INTENTIONALLY_EXCLUDED_AUX" ;
+	ofdd:column "INTENTIONALLY_EXCLUDED_AUX" ;
+	phIoT:siteRef <urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1> ;
+	phIoT:equipRef <urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1/equip/VAV_EXCLUDED_1> ;
+	ph:hasTag phIoT:point , phIoT:sensor ;
+	a phIoT:point .
+<urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1/equip/VAV_CASE_1/point/CLG_VLV_CMD> ph:unit "°F" ;
+	ofdd:fddSelection "unresolved" ;
+	ofdd:pointId "CLG_VLV_CMD" ;
+	ofdd:column "CLG_VLV_CMD" ;
+	phIoT:siteRef <urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1> ;
+	phIoT:equipRef <urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1/equip/VAV_CASE_1> ;
+	ph:hasTag phIoT:sp , phIoT:point , phIoT:sensor ;
+	a phIoT:point .
+<urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1/equip/AHU_CASE_1/point/MYSTERY_FLOW> ofdd:pointId "MYSTERY_FLOW" ;
+	ofdd:column "MYSTERY_FLOW" ;
+	phIoT:siteRef <urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1> ;
+	phIoT:equipRef <urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1/equip/AHU_CASE_1> ;
+	ph:hasTag phIoT:point , phIoT:sensor ;
+	a phIoT:point .
+<urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1/equip/AHU_CASE_1/point/SAT> ph:unit "°F" ;
+	ofdd:pointId "SAT" ;
+	ofdd:column "SAT" ;
+	phIoT:siteRef <urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1> ;
+	phIoT:equipRef <urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1/equip/AHU_CASE_1> ;
+	ph:hasTag phScience:temp , phIoT:discharge , phScience:air , phIoT:point , phIoT:sensor ;
+	a phIoT:point .
+<urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1/equip/VAV_EXCLUDED_1> ofdd:equipmentId "VAV_EXCLUDED_1" ;
+	phIoT:siteRef <urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1> ;
+	ph:hasTag phIoT:equip , phIoT:vav ;
+	a phIoT:equip .
+<urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1/equip/VAV_CASE_1> ofdd:equipmentId "VAV_CASE_1" ;
+	phIoT:siteRef <urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1> ;
+	ph:hasTag phIoT:equip , phIoT:vav ;
+	a phIoT:equip .
+<urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1/equip/AHU_CASE_1> ph:dis "AHU Case 1" ;
+	ofdd:equipmentId "AHU_CASE_1" ;
+	phIoT:siteRef <urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1> ;
+	ph:hasTag phIoT:equip , phIoT:ahu ;
+	a phIoT:equip .
+<urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1> ofdd:buildingId "OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1" ;
+	ph:hasTag phIoT:site ;
+	a phIoT:site .
