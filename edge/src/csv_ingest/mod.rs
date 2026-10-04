@@ -5,6 +5,8 @@ pub mod dataset;
 pub mod haystack_binding_consumers;
 pub mod haystack_central_dataset;
 pub mod haystack_defs;
+#[cfg(test)]
+pub mod haystack_integration_kats;
 pub mod haystack_projection;
 pub mod haystack_sparql_bindings;
 pub mod package;

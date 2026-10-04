@@ -1366,3 +1366,12 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
   each live PASS now requires check-specific device/read-only/typed/restart/
   replay evidence, while missing command, authentication, process-ownership,
   and historian prerequisites remain explicitly fail-closed.
+
+## 2026-10-04 — Haystack H9–H16 audit train (master finish)
+
+- H9 #1134 SPARQL templates → typed bindings
+- H10/H11 #1135 FDD/history/ECM consumers
+- H12–H16 tip: integration KATs + gate-36 SPARQL honesty update + perf budgets doc
+- #1002/#1123 remain Soft-OPEN until live dual-tenant + C6 smoke evidence
+- H18 VERSION/GHCR deferred to master-finish M11
+
