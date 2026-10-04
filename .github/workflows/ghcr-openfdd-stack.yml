@@ -110,10 +110,11 @@ jobs:
           ./scripts/release/smoke_csv_central_boot.sh
 
   # Railway hub tip: central + web + mqtt (amd64). Must not wait on multi-arch fieldbus.
+  # Job budget must cover central RocksDB/oxrocksdb link (often >90m cold) + web + mqtt.
   publish-hub:
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v5
 
@@ -185,8 +186,9 @@ jobs:
 
       - name: Build and push openfdd-central
         uses: docker/build-push-action@v6
-        # RocksDB via oxrocksdb + QEMU arm64 exceeds 2h; ship amd64 nightly first for local MQTTS tests.
-        timeout-minutes: 90
+        # RocksDB via oxrocksdb is slow cold; amd64-only still regularly exceeds 90m.
+        # (arm64/QEMU remains fieldbus-only — do not reintroduce here.)
+        timeout-minutes: 240
         with:
           context: .
           file: services/central/Dockerfile
