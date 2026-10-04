@@ -1,4 +1,4 @@
-//! Central package Haystack RDF dataset cache (C4 / #1002 H8).
+//! Central package Haystack RDF dataset cache + SPARQL bindings (C4 H8/H9).
 //!
 //! Materializes scoped RDF from committed `semantic_meta` + pinned defs.
 //! Does **not** use the legacy `edge/src/model` commissioning graph.
@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 use open_fdd_edge_prototype::csv_ingest::haystack_central_dataset::{self, CentralDatasetSnapshot};
+use open_fdd_edge_prototype::csv_ingest::haystack_sparql_bindings;
 use open_fdd_edge_prototype::csv_ingest::semantic_meta;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -27,6 +28,16 @@ impl HaystackRdfCache {
         equipment_id: Option<&str>,
         preferred_tenant: Option<&str>,
     ) -> Result<CentralDatasetSnapshot, Value> {
+        self.get_or_materialize_with_inventory(building_id, equipment_id, preferred_tenant)
+            .map(|(snap, _)| snap)
+    }
+
+    pub fn get_or_materialize_with_inventory(
+        &self,
+        building_id: &str,
+        equipment_id: Option<&str>,
+        preferred_tenant: Option<&str>,
+    ) -> Result<(CentralDatasetSnapshot, Value), Value> {
         let root = open_fdd_edge_prototype::historian::store::workspace_dir()
             .join("data")
             .join("csv_buildings")
@@ -81,7 +92,7 @@ impl HaystackRdfCache {
             inventory_token
         );
         if let Some(hit) = self.by_key.get(&provisional_key) {
-            return Ok(hit.clone());
+            return Ok((hit.clone(), inventory));
         }
 
         let snap = haystack_central_dataset::materialize(&scoped, Some(&inventory), equipment_id)
@@ -90,7 +101,36 @@ impl HaystackRdfCache {
         // Index by both provisional and full cache key (includes turtle hash).
         self.by_key.insert(provisional_key, snap.clone());
         self.by_key.insert(snap.cache_key(), snap.clone());
-        Ok(snap)
+        Ok((snap, inventory))
+    }
+
+    pub fn execute_sparql_template(
+        &self,
+        building_id: &str,
+        equipment_id: Option<&str>,
+        preferred_tenant: Option<&str>,
+        template_id: &str,
+    ) -> Result<Value, Value> {
+        let (snap, inventory) =
+            self.get_or_materialize_with_inventory(building_id, equipment_id, preferred_tenant)?;
+        let set = haystack_sparql_bindings::execute_template_on_snapshot(
+            &snap,
+            Some(&inventory),
+            template_id,
+        )
+        .map_err(|e| {
+            json!({
+                "ok": false,
+                "error": e,
+                "schema": haystack_sparql_bindings::BINDING_SCHEMA,
+                "query_engine": haystack_sparql_bindings::QUERY_ENGINE,
+            })
+        })?;
+        let mut body = set.to_json();
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("ok".into(), json!(true));
+        }
+        Ok(body)
     }
 }
 
@@ -118,17 +158,31 @@ fn inventory_cache_token(inventory: &Value, preferred_tenant: Option<&str>) -> S
         }
     }
     // Fallback: if none of the known keys are present, hash the full inventory.
-    if !["ambiguous_roles", "excluded_columns", "parent_ahu", "equipment", "points", "mappings", "column_map", "equip_types", "equipment_types"]
-        .iter()
-        .any(|k| inventory.get(*k).is_some())
+    if ![
+        "ambiguous_roles",
+        "excluded_columns",
+        "parent_ahu",
+        "equipment",
+        "points",
+        "mappings",
+        "column_map",
+        "equip_types",
+        "equipment_types",
+    ]
+    .iter()
+    .any(|k| inventory.get(*k).is_some())
     {
         h.update(inventory.to_string().as_bytes());
     }
     format!("{:x}", h.finalize())
 }
 
-pub fn sparql_unavailable() -> Value {
-    haystack_central_dataset::sparql_unavailable_payload()
+pub fn sparql_catalog() -> Value {
+    haystack_sparql_bindings::catalog_payload()
+}
+
+pub fn sparql_freeform_rejected() -> Value {
+    haystack_sparql_bindings::freeform_rejected()
 }
 
 #[cfg(test)]
@@ -136,10 +190,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn unavailable_payload_blocks_feature_close() {
-        let body = sparql_unavailable();
+    fn catalog_is_available_not_option_b() {
+        let body = sparql_catalog();
+        assert_eq!(body["status"], "AVAILABLE");
         assert_eq!(body["feature_closeable_by_unavailable"], false);
-        assert_eq!(body["status"], "UNAVAILABLE");
+        assert!(body["queries"].as_array().unwrap().len() >= 3);
     }
 
     #[test]

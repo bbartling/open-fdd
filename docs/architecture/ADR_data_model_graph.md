@@ -72,9 +72,10 @@ Two namespaces already exist in-tree (`urn:openfdd:ns#` for package TTL;
     package RDF dataset** from committed native `semantic_meta` + pinned Haystack
     defs (`GET …/haystack-dataset`, schema `ofdd_haystack_central_dataset_v1`).
     That dataset is **not** the legacy `edge/src/model` commissioning graph.
-    Package-graph SPARQL templates/bindings remain **UNAVAILABLE** (501 honesty)
-    until later C4 tips; Option B UNAVAILABLE **cannot close** #1002
-    graph-driven FDD/ECM delivery. MCP and docs must not PASS via empty lists.
+    Package-graph SPARQL is server **template** execution (`POST /api/model/sparql`
+    with `query_id`) returning `ofdd_haystack_typed_bindings_v1` (C4 H9). Free-form
+    client SPARQL is rejected. Graph-driven FDD/ECM consumers (H10+) are still
+    required before closing #1002. MCP must not PASS via empty lists.
 
 ## Consequences
 

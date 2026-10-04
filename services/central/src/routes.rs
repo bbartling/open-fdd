@@ -202,14 +202,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/commands", post(issue_command))
         .route("/api/commands/{command_id}/ack", get(get_ack))
         .route("/api/agent/tools", get(agent_tools))
-        // C4 honesty: registered UNAVAILABLE — Option B cannot close #1002.
-        .route(
-            "/api/model/sparql",
-            post(central_package_sparql_unavailable),
-        )
+        // C4 H9: server-owned SPARQL templates → typed bindings (not edge prototype graph).
+        .route("/api/model/sparql", post(central_package_sparql))
         .route(
             "/api/model/sparql/predefined",
-            get(central_package_sparql_catalog_unavailable),
+            get(central_package_sparql_catalog),
         )
         .route("/api/fdd/rules", get(fdd_registry_rules))
         .route("/api/fdd/rules/{rule_id}/params", get(fdd_rule_params))
@@ -4184,20 +4181,103 @@ pub async fn csv_import_package_mapping_haystack_dataset(
     }
 }
 
-/// Product-central SPARQL honesty (C4 Option B). JWT-gated via router layer.
-/// UNAVAILABLE cannot close #1002 graph-driven delivery.
-pub async fn central_package_sparql_unavailable() -> (StatusCode, Json<Value>) {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(crate::haystack_rdf::sparql_unavailable()),
-    )
+#[derive(Debug, Deserialize)]
+pub struct CentralPackageSparqlBody {
+    /// Server template id from GET /api/model/sparql/predefined.
+    query_id: Option<String>,
+    /// Rejected: free-form SPARQL is not accepted on the product path.
+    query: Option<String>,
+    building_id: Option<String>,
+    equipment_id: Option<String>,
 }
 
-pub async fn central_package_sparql_catalog_unavailable() -> (StatusCode, Json<Value>) {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(crate::haystack_rdf::sparql_unavailable()),
-    )
+/// Product-central SPARQL templates over the package RDF dataset (C4 H9).
+/// JWT-gated via router layer. Free-form `query` is rejected.
+pub async fn central_package_sparql(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<CentralPackageSparqlBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if body
+        .query
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_some()
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(crate::haystack_rdf::sparql_freeform_rejected()),
+        ));
+    }
+    let Some(query_id) = body
+        .query_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "query_id required (see GET /api/model/sparql/predefined)",
+            })),
+        ));
+    };
+    let Some(building_id) = body
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id required",
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let equipment_id = body
+        .equipment_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, Some(&building_id));
+    let cache = state.haystack_rdf.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        cache.execute_sparql_template(
+            &building_id,
+            equipment_id.as_deref(),
+            preferred.as_deref(),
+            &query_id,
+        )
+    })
+    .await
+    .unwrap_or_else(|e| Err(json!({"ok": false, "error": format!("sparql task: {e}")})));
+
+    match result {
+        Ok(body) => Ok(Json(body)),
+        Err(err) => {
+            let status = if err.get("present") == Some(&json!(false)) {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::BAD_REQUEST
+            };
+            Err((status, Json(err)))
+        }
+    }
+}
+
+pub async fn central_package_sparql_catalog() -> Json<Value> {
+    Json(crate::haystack_rdf::sparql_catalog())
 }
 
 /// Strict Haystack projection JSON envelope (Turtle + omission report).

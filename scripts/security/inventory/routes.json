@@ -6133,7 +6133,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "C4 H8 honesty: central package SPARQL returns 501 UNAVAILABLE (cannot close #1002)"
+      "notes": "C4 H9: server SPARQL templates \u2192 ofdd_haystack_typed_bindings_v1; free-form query rejected"
     },
     {
       "method": "GET",
@@ -6171,7 +6171,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "C4 H8 honesty: SPARQL catalog returns 501 UNAVAILABLE"
+      "notes": "C4 H9: server SPARQL templates \u2192 ofdd_haystack_typed_bindings_v1; free-form query rejected"
     }
   ],
   "counts": {
