@@ -3,8 +3,8 @@
 //! Derives an immutable snapshot from committed `openfdd_semantic_meta_v1`
 //! authority + pinned Project Haystack defs. This is **not** the legacy
 //! `edge/src/model` commissioning graph (`https://open-fdd.dev/model#`).
-//! SPARQL query execution remains a separate C4 tip; Option B UNAVAILABLE
-//! cannot close graph-driven feature delivery.
+//! SPARQL templates → typed bindings ship in C4 H9 (`haystack_sparql_bindings`);
+//! graph-driven FDD/ECM consumers remain later tips before #1002 closes.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -65,8 +65,8 @@ impl CentralDatasetSnapshot {
             "turtle_sha256": self.turtle_sha256,
             "report": self.report,
             "not_edge_prototype_graph": self.not_edge_prototype_graph,
-            "sparql_status": "UNAVAILABLE",
-            "sparql_note": "Central SPARQL templates/bindings are a later C4 tip; Option B UNAVAILABLE cannot close #1002 graph-driven delivery",
+            "sparql_status": "AVAILABLE",
+            "sparql_note": "POST /api/model/sparql with query_id from GET /api/model/sparql/predefined (C4 H9 typed bindings)",
         });
         if include_turtle {
             v["turtle"] = json!(self.turtle);
@@ -127,14 +127,14 @@ pub fn materialize(
     })
 }
 
-/// Honesty payload for product-central SPARQL until H9 templates land.
+/// Legacy Option-B honesty payload (kept for regression tests; routes now use H9 catalog).
 pub fn sparql_unavailable_payload() -> Value {
     json!({
         "ok": false,
         "status": "UNAVAILABLE",
         "capability": "central_package_sparql",
         "feature_closeable_by_unavailable": false,
-        "error": "Central package-graph SPARQL is not delivered yet (C4/#1002). Option B UNAVAILABLE is honesty only and cannot close graph-driven FDD/ECM delivery.",
+        "error": "Legacy Option B payload — product path is GET/POST /api/model/sparql (H9 templates).",
         "dataset_route": "/api/csv/import/package/mapping/haystack-dataset",
         "authority": AUTHORITY,
         "defs_pin": DEFS_PIN,
