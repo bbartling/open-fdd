@@ -27,6 +27,27 @@ from openfdd_security.suites import SuiteContext, run_suite_y  # noqa: E402
 from openfdd_security.transport import Response  # noqa: E402
 
 
+class _EquipmentClient:
+    """Equipment GET returns a fixed body; other calls follow the E04 client."""
+
+    def __init__(self, fx: FixtureRefs, equipment_body: bytes, status: int = 200):
+        self.fx = fx
+        self.equipment_body = equipment_body
+        self.equipment_status = status
+        self._inner = SyntheticClient(fx)
+
+    def request(self, method, path, *, token=None, **kwargs):
+        if method == "GET" and path.startswith("/api/fdd/equipment?"):
+            return Response(
+                self.equipment_status,
+                {"Content-Type": "application/json"},
+                self.equipment_body,
+                0,
+                "http://fixture.invalid",
+            )
+        return self._inner.request(method, path, token=token, **kwargs)
+
+
 class SyntheticClient:
     def __init__(self, fx: FixtureRefs):
         self.fx = fx
@@ -176,6 +197,117 @@ class EvaluatorIntegrityTests(unittest.TestCase):
             "PASS",
             "E07: 401 must not prove viewer role denial",
         )
+
+    def test_live_populated_equipment_without_synthetic_canary_passes(self) -> None:
+        """live_readonly own-object proof is a nonempty equipment list.
+
+        A synthetic canary string is not present in production historian rows.
+        Empty/soft envelopes stay FAIL.
+        """
+        fx = FixtureRefs()
+        cfg = ProbeConfig(raw={}, origin_allowlist=[], identities={}, fixtures=fx)
+        results = []
+        ctx = SuiteContext(
+            _EquipmentClient(
+                fx,
+                json.dumps(
+                    {
+                        "ok": True,
+                        "count": 1,
+                        "equipment": [{"id": "AHU_1", "equipType": "ahu"}],
+                    }
+                ).encode(),
+            ),
+            cfg,
+            "live_readonly",
+            results.append,
+            tokens={
+                "operator_a": "fixture-only-a",
+                "operator_b": "fixture-only-b",
+                "viewer_a": "fixture-only-viewer",
+            },
+        )
+        run_suite_y(ctx)
+        by_id = {c.check_id: c for c in results}
+        self.assertEqual(by_id["y.authz.a_own_building_control"].status, "PASS")
+        self.assertEqual(by_id["y.authz.b_own_building_control"].status, "PASS")
+
+    def test_isolated_populated_equipment_still_requires_canary(self) -> None:
+        fx = FixtureRefs()
+        cfg = ProbeConfig(raw={}, origin_allowlist=[], identities={}, fixtures=fx)
+        results = []
+        ctx = SuiteContext(
+            _EquipmentClient(
+                fx,
+                json.dumps(
+                    {
+                        "ok": True,
+                        "count": 1,
+                        "equipment": [{"id": "AHU_1", "equipType": "ahu"}],
+                    }
+                ).encode(),
+            ),
+            cfg,
+            "isolated_full",
+            results.append,
+            tokens={
+                "operator_a": "fixture-only-a",
+                "operator_b": "fixture-only-b",
+                "viewer_a": "fixture-only-viewer",
+            },
+        )
+        run_suite_y(ctx)
+        by_id = {c.check_id: c for c in results}
+        self.assertEqual(by_id["y.authz.a_own_building_control"].status, "FAIL")
+        self.assertIn("canary", by_id["y.authz.a_own_building_control"].detail or "")
+
+    def test_soft_equipment_envelope_stays_fail(self) -> None:
+        fx = FixtureRefs()
+        cfg = ProbeConfig(raw={}, origin_allowlist=[], identities={}, fixtures=fx)
+        results = []
+        ctx = SuiteContext(
+            _EquipmentClient(fx, b'{"ok":true,"count":0,"equipment":[]}'),
+            cfg,
+            "live_readonly",
+            results.append,
+            tokens={
+                "operator_a": "fixture-only-a",
+                "operator_b": "fixture-only-b",
+                "viewer_a": "fixture-only-viewer",
+            },
+        )
+        run_suite_y(ctx)
+        by_id = {c.check_id: c for c in results}
+        for cid in (
+            "y.authz.a_own_building_control",
+            "y.authz.b_own_building_control",
+        ):
+            self.assertEqual(by_id[cid].status, "FAIL")
+            self.assertIn("empty/soft 200", by_id[cid].detail or "")
+
+    def test_upstream_502_is_not_labeled_empty_200(self) -> None:
+        fx = FixtureRefs()
+        cfg = ProbeConfig(raw={}, origin_allowlist=[], identities={}, fixtures=fx)
+        results = []
+        ctx = SuiteContext(
+            _EquipmentClient(fx, b"", status=502),
+            cfg,
+            "live_readonly",
+            results.append,
+            tokens={
+                "operator_a": "fixture-only-a",
+                "operator_b": "fixture-only-b",
+                "viewer_a": "fixture-only-viewer",
+            },
+        )
+        run_suite_y(ctx)
+        by_id = {c.check_id: c for c in results}
+        for cid in (
+            "y.authz.a_own_building_control",
+            "y.authz.b_own_building_control",
+        ):
+            self.assertNotEqual(by_id[cid].status, "PASS")
+            self.assertNotIn("empty/soft 200", by_id[cid].detail or "")
 
 
 class ZapEmptySiteTests(unittest.TestCase):

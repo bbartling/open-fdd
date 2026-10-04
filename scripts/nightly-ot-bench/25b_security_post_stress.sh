@@ -24,6 +24,8 @@ if [[ "${OPENFDD_SECURITY_EXECUTE:-0}" != "1" ]]; then
   exit 2
 fi
 
+PROBE_MARK="$OUT/.probe_started"
+: > "$PROBE_MARK"
 set +e
 python3 "$PROBE" \
   --config "$CFG" \
@@ -45,49 +47,32 @@ if [[ ! -f "$REPORT" ]]; then
   exit 2
 fi
 
-# Subset suites → full_profile=false → not fully_qualified; postcheck still must not FAIL.
-# Reject empty checks, any BLOCKED, fabricated counts, and child_rc contradictions (R01/R02).
+# Subset suites stay full_profile=false. Postcheck does not erase a precheck failure.
+# ERROR checks stay ERROR. A stale PASS report cannot exit 0.
 python3 - <<PY
 import json, sys
 from pathlib import Path
 sys.path.insert(0, "$ROOT/scripts/security")
-from openfdd_security.evidence import reconcile_child_rc, validate_report_for_qualification
+from openfdd_security.evidence import finalize_executed_gate
 from openfdd_security.profiles import required_check_ids
 report = Path("$REPORT")
 child_rc = int("$rc")
 req = required_check_ids("$PROFILE", ["X", "Y"])
-ok, reason = validate_report_for_qualification(
+started = Path("$PROBE_MARK").stat().st_mtime
+verdict = finalize_executed_gate(
     report,
     expected_profile="$PROFILE",
-    require_full_profile=False,
+    child_rc=child_rc,
     postcheck=True,
+    require_full_profile=False,
     required_check_ids=req,
-    child_rc=child_rc,
+    probe_started_mtime=started,
 )
-data = json.loads(report.read_text())
-ok2, status, reason2 = reconcile_child_rc(
-    report_ok=ok,
-    report_status=str(data.get("overall_status") or ("PASS" if ok else "FAIL")),
-    child_rc=child_rc,
-)
-final_ok = ok and ok2
-if ok and not ok2:
-    final_status, final_reason = status, reason2
-elif not ok:
-    final_status = "FAIL" if data.get("overall_status") == "FAIL" else "BLOCKED"
-    final_reason = reason
-else:
-    final_status, final_reason = "PASS", reason
-verdict = {
-    "ok": final_ok,
-    "status": final_status,
-    "reason": final_reason,
-    "note": "postcheck is suite subset; does not erase precheck failure",
-    "report": str(report),
-    "child_rc": child_rc,
-    "required_check_count": len(req),
-}
+verdict["note"] = "postcheck is suite subset; does not erase precheck failure"
+verdict["report"] = str(report)
+verdict["required_check_count"] = len(req)
 Path("$ART/security_gate_verdict.json").write_text(json.dumps(verdict, indent=2) + "\n")
 print(json.dumps(verdict))
-sys.exit(0 if final_ok else (1 if final_status == "FAIL" else 2))
+status = verdict["status"]
+sys.exit(0 if verdict["ok"] else (1 if status == "FAIL" else 2))
 PY

@@ -112,12 +112,19 @@ class SecurityReport:
             self.fully_qualified = False
             self.reason = f"{counts['fail']} check(s) FAIL"
             return
-        if counts["error"] or counts["blocked"]:
-            self.overall_status = "BLOCKED"
+        # Transport/parse ERROR is a child failure, not a missing-fixture BLOCKED.
+        if counts["error"]:
+            self.overall_status = "ERROR"
             self.fully_qualified = False
             self.reason = (
-                f"incomplete: error={counts['error']} blocked={counts['blocked']}"
+                f"{counts['error']} check(s) ERROR"
+                + (f"; blocked={counts['blocked']}" if counts["blocked"] else "")
             )
+            return
+        if counts["blocked"]:
+            self.overall_status = "BLOCKED"
+            self.fully_qualified = False
+            self.reason = f"incomplete: blocked={counts['blocked']}"
             return
         # All-SKIPPED (or SKIPPED+N/A with zero PASS) is not qualification evidence.
         if counts["pass"] == 0:
@@ -471,6 +478,188 @@ def validate_report_for_qualification(
         _ = st_rc
 
     return True, "ok"
+
+
+def _check_status_counts(checks: object) -> dict[str, int]:
+    counts = {
+        "planned": 0,
+        "pass": 0,
+        "fail": 0,
+        "error": 0,
+        "blocked": 0,
+        "skipped": 0,
+        "not_applicable": 0,
+    }
+    if not isinstance(checks, list):
+        return counts
+    for item in checks:
+        if not isinstance(item, dict):
+            continue
+        counts["planned"] += 1
+        key = {
+            "PASS": "pass",
+            "FAIL": "fail",
+            "ERROR": "error",
+            "BLOCKED": "blocked",
+            "SKIPPED": "skipped",
+            "NOT_APPLICABLE": "not_applicable",
+        }.get(str(item.get("status") or ""))
+        if key:
+            counts[key] += 1
+    return counts
+
+
+def _gate_verdict(ok: bool, status: str, reason: str, child_rc: int) -> dict[str, Any]:
+    """Exit-bearing gate verdict. ok is true only for status PASS."""
+    passed = bool(ok) and status == "PASS"
+    return {
+        "ok": passed,
+        "status": "PASS" if passed else status,
+        "reason": reason,
+        "child_rc": child_rc,
+    }
+
+
+def finalize_executed_gate(
+    report_path: Path,
+    *,
+    expected_profile: str,
+    child_rc: int,
+    postcheck: bool = False,
+    require_full_profile: bool = True,
+    required_check_ids: list[str] | None = None,
+    expected_sha256: str | None = None,
+    probe_started_mtime: float | None = None,
+) -> dict[str, Any]:
+    """Verdict for gates 25 and 25b.
+
+    A report that already existed before this probe is stale. Check-level
+    ERROR stays ERROR. A PASS report with a nonzero child exit is ERROR.
+    """
+    if (
+        probe_started_mtime is not None
+        and report_path.is_file()
+        and report_path.stat().st_mtime < probe_started_mtime
+    ):
+        return _gate_verdict(
+            False,
+            "ERROR",
+            "stale security_report.json predates this probe",
+            child_rc,
+        )
+    if not report_path.is_file():
+        return _gate_verdict(False, "ERROR", "missing security_report.json", child_rc)
+
+    data: dict[str, Any] = {}
+    try:
+        loaded = json.loads(report_path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            data = loaded
+    except json.JSONDecodeError:
+        data = {}
+    counts = _check_status_counts(data.get("checks"))
+    ok, reason = validate_report_for_qualification(
+        report_path,
+        expected_profile=expected_profile,
+        require_full_profile=require_full_profile,
+        postcheck=postcheck,
+        required_check_ids=required_check_ids,
+        expected_sha256=expected_sha256,
+        child_rc=child_rc,
+    )
+    if counts["error"]:
+        detail = reason or f"{counts['error']} check(s) ERROR"
+        return _gate_verdict(False, "ERROR", detail, child_rc)
+    overall = str(data.get("overall_status") or "")
+    if overall == "PASS" and child_rc != 0:
+        return _gate_verdict(
+            False,
+            "ERROR",
+            f"report PASS but child_rc={child_rc} (contradictory)",
+            child_rc,
+        )
+    if counts["fail"]:
+        return _gate_verdict(
+            False, "FAIL", reason or f"{counts['fail']} check(s) FAIL", child_rc
+        )
+    if not ok:
+        if counts["blocked"] or overall == "BLOCKED":
+            return _gate_verdict(False, "BLOCKED", reason, child_rc)
+        if overall == "FAIL":
+            return _gate_verdict(False, "FAIL", reason, child_rc)
+        return _gate_verdict(False, "ERROR", reason, child_rc)
+    if child_rc != 0:
+        return _gate_verdict(
+            False,
+            "ERROR",
+            f"report ok but child_rc={child_rc} (contradictory)",
+            child_rc,
+        )
+    return _gate_verdict(True, "PASS", reason or "ok", child_rc)
+
+
+def finalize_observer_gate(
+    observer_path: Path,
+    *,
+    child_rc: int,
+    unittest_rc: int = 0,
+    probe_started_mtime: float | None = None,
+) -> dict[str, Any]:
+    """Verdict for gate 26. Never treat ok=false or a stale PASS as success."""
+    if not observer_path.is_file():
+        return _gate_verdict(
+            False,
+            "FAIL",
+            "observer did not write mqtt_acl_observer.json",
+            child_rc,
+        )
+    if (
+        probe_started_mtime is not None
+        and observer_path.stat().st_mtime < probe_started_mtime
+    ):
+        return _gate_verdict(
+            False,
+            "ERROR",
+            "stale mqtt_acl_observer.json predates this run",
+            child_rc,
+        )
+    try:
+        loaded = json.loads(observer_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return _gate_verdict(False, "ERROR", "observer JSON is not valid", child_rc)
+    if not isinstance(loaded, dict):
+        return _gate_verdict(False, "ERROR", "observer JSON root must be object", child_rc)
+    if unittest_rc != 0:
+        return _gate_verdict(False, "FAIL", f"unittest_rc={unittest_rc}", child_rc)
+    ok_flag = loaded.get("ok")
+    status = str(loaded.get("status") or "")
+    reason = str(loaded.get("reason") or loaded.get("detail") or "")
+    if ok_flag is False and status == "PASS":
+        return _gate_verdict(
+            False,
+            "ERROR",
+            "observer ok=false contradicts status PASS",
+            child_rc,
+        )
+    if ok_flag is True and status == "PASS" and child_rc != 0:
+        return _gate_verdict(
+            False,
+            "ERROR",
+            f"observer PASS but child_rc={child_rc} (contradictory)",
+            child_rc,
+        )
+    if ok_flag is True and status == "PASS" and child_rc == 0:
+        return _gate_verdict(True, "PASS", reason or "ok", child_rc)
+    if status == "FAIL" or ok_flag is False:
+        return _gate_verdict(False, "FAIL", reason or "observer not ok", child_rc)
+    if status == "BLOCKED":
+        return _gate_verdict(False, "BLOCKED", reason or "observer blocked", child_rc)
+    return _gate_verdict(
+        False,
+        "ERROR",
+        f"unusable observer status={status!r}",
+        child_rc,
+    )
 
 
 def now_iso() -> str:

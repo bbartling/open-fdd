@@ -28,6 +28,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$DIR/lib.sh"
 # shellcheck disable=SC1091
 source "$DIR/lib_capacity_sample.sh"
+# shellcheck disable=SC1091
+source "$DIR/lib_security_gate.sh"
 # RAILWAY_ONLY before load_bench_env so sticky .env tip pins cannot clobber
 # OPENFDD_IMAGE_TAG / OPENFDD_MCP_IMAGE for hub stress.
 export RAILWAY_ONLY=1
@@ -257,6 +259,13 @@ run_security_gate() {
   else
     status="FAIL"
     reason="exit=$rc; missing structured verdict"
+  fi
+  local raw_status="$status"
+  status="$(security_gate_record_status "$rc" "$status" "$report")"
+  if [[ "$status" == "ERROR" && "$raw_status" == "PASS" ]]; then
+    reason="child_rc=${rc} contradicts verdict PASS"
+  elif [[ "$status" == "ERROR" && "$raw_status" == "BLOCKED" ]]; then
+    reason="check ERROR present; refusing BLOCKED label (child_rc=${rc})"
   fi
   local args=(python3 "$MANIFEST_PY" record --manifest "$MANIFEST" --gate "$gate" \
     --status "$status" --title "$title" --reason "$reason" --artifact "$log" --duration-secs "$dur")

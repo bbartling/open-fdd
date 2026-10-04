@@ -41,13 +41,18 @@ def _looks_html(body: bytes) -> bool:
     return b"<html" in t or b"<!doctype" in t
 
 
-def _nonempty_own_control(body: bytes, canary: str = "") -> bool:
+def _nonempty_own_control(
+    body: bytes, canary: str = "", *, require_canary: bool | None = None
+) -> bool:
     """Positive own-object control: known content, not error/empty/HTML.
 
-    Error objects (ok:false / error keys) never count as ownership proof even
-    when nonempty. When a canary is supplied it must appear in the body.
-    Empty lists are not authorization proof (separate empty-site UX checks).
+    ``{"ok": true, "count": 0, "equipment": []}`` is not ownership proof.
+    When ``require_canary`` is true the canary bytes must appear in the body.
+    Callers omit that requirement for live historian rows, which do not contain
+    a synthetic canary. Empty lists stay failures either way.
     """
+    if require_canary is None:
+        require_canary = bool(canary)
     if not body or body.strip() in (b"", b"[]", b"{}"):
         return False
     if _looks_html(body):
@@ -59,31 +64,70 @@ def _nonempty_own_control(body: bytes, canary: str = "") -> bool:
     if isinstance(data, dict):
         if data.get("ok") is False:
             return False
-        if any(k in data for k in ("error", "errors", "detail")) and not canary:
-            # Unstructured error/detail without fixture canary is not own success.
+        equipment = data.get("equipment")
+        if isinstance(equipment, list) and len(equipment) == 0:
+            return False
+        if any(k in data for k in ("error", "errors", "detail")) and not (
+            canary and canary.encode() in body
+        ):
             if data.get("ok") is not True and not any(
                 isinstance(data.get(k), (list, dict)) and data.get(k)
                 for k in ("equipment", "items", "buildings", "data", "rows", "result")
             ):
                 return False
-    if canary:
-        return canary.encode() in body
-    if isinstance(data, list):
-        return len(data) > 0
-    if isinstance(data, dict):
-        if not data:
-            return False
+        populated = False
         for key in ("equipment", "items", "buildings", "data", "rows", "result"):
             val = data.get(key)
             if isinstance(val, list) and len(val) > 0:
-                return True
+                populated = True
+                break
             if isinstance(val, dict) and val:
-                return True
-        # Bare status/ack objects are not object ownership proof.
-        if set(data.keys()) <= {"ok", "status", "message", "error", "errors", "detail"}:
+                populated = True
+                break
+        if not populated:
             return False
-        return any(v not in (None, "", [], {}) for v in data.values())
+        if require_canary and (not canary or canary.encode() not in body):
+            return False
+        return True
+    if isinstance(data, list):
+        if not data:
+            return False
+        if require_canary and (not canary or canary.encode() not in body):
+            return False
+        return True
     return False
+
+
+def _own_building_outcome(
+    status: int,
+    body: bytes,
+    canary: str,
+    *,
+    require_canary: bool,
+) -> tuple[str, str | None, str | None]:
+    """Return (status, detail, detector_id) for an own-building control."""
+    if status == 401:
+        return (
+            "ERROR",
+            "valid token got 401 — cannot demonstrate authorization",
+            "always_401",
+        )
+    if status != 200:
+        label = "BLOCKED" if status in (403, 404) else "FAIL"
+        return (
+            label,
+            f"own fixture missing or unexpected status {status}",
+            None,
+        )
+    if _nonempty_own_control(body, canary, require_canary=require_canary):
+        return "PASS", None, None
+    if require_canary and _nonempty_own_control(body, "", require_canary=False):
+        return "FAIL", "own object missing seeded canary", "empty_200"
+    return (
+        "FAIL",
+        "empty/soft 200 is not positive own-object control",
+        "empty_200",
+    )
 
 
 def _structured_deny(status: int, body: bytes, *, foreign_canary: str = "") -> bool:
@@ -655,50 +699,30 @@ def run_suite_y(ctx: SuiteContext) -> None:
                 )
         return
 
-    # Positive own control for A
+    # Positive own control for A. Isolated runs still require the seeded canary.
+    # Live historian rows are nonempty equipment objects; empty/soft 200 stays FAIL.
     q = urlencode({"building_id": fx.building_a})
+    require_canary = ctx.profile == "isolated_full"
     try:
         r = ctx.client.request(
             "GET", f"/api/fdd/equipment?{q}", token=tok_a
         )
+        st, detail, det = _own_building_outcome(
+            r.status, r.body, fx.canary_a, require_canary=require_canary
+        )
         if r.status == 401:
-            ctx.check(
-                "y.authz.a_own_building_control",
-                "Y",
-                "A own building equipment",
-                "ERROR",
-                detail="valid A token got 401 — cannot demonstrate authorization",
-                detector_id="always_401",
-                identity_alias="operator_a",
-            )
-        elif r.status == 200 and _nonempty_own_control(r.body, fx.canary_a):
-            ctx.check(
-                "y.authz.a_own_building_control",
-                "Y",
-                "A own building equipment",
-                "PASS",
-                expected="200+nonempty schema",
-                observed="200",
-                identity_alias="operator_a",
-            )
-        elif r.status == 200:
-            ctx.check(
-                "y.authz.a_own_building_control",
-                "Y",
-                "A own building equipment",
-                "FAIL",
-                detail="empty/soft 200 is not positive own-object control",
-                detector_id="empty_200",
-            )
-        else:
-            ctx.check(
-                "y.authz.a_own_building_control",
-                "Y",
-                "A own building equipment",
-                "BLOCKED" if r.status in (403, 404) else "FAIL",
-                observed=_status_of(r),
-                detail="own fixture missing or unexpected status",
-            )
+            detail = "valid A token got 401 — cannot demonstrate authorization"
+        ctx.check(
+            "y.authz.a_own_building_control",
+            "Y",
+            "A own building equipment",
+            st,
+            expected="200+nonempty schema" if st == "PASS" else None,
+            observed=_status_of(r),
+            identity_alias="operator_a",
+            detail=detail,
+            detector_id=det,
+        )
     except TransportError as exc:
         ctx.check(
             "y.authz.a_own_building_control",
@@ -906,15 +930,17 @@ def run_suite_y(ctx: SuiteContext) -> None:
             r = ctx.client.request(
                 "GET", f"/api/fdd/equipment?{q_b}", token=tok_b
             )
-            own_ok = r.status == 200 and _nonempty_own_control(r.body, fx.canary_b)
+            st, detail, det = _own_building_outcome(
+                r.status, r.body, fx.canary_b, require_canary=require_canary
+            )
             ctx.check(
                 "y.authz.b_own_building_control",
                 "Y",
                 "B own building equipment",
-                "PASS" if own_ok else "FAIL",
+                st,
                 observed=_status_of(r),
-                detail=None if own_ok else "empty/soft 200 is not positive own-object control",
-                detector_id=None if own_ok else "empty_200",
+                detail=detail,
+                detector_id=det,
             )
             r2 = ctx.client.request(
                 "GET", f"/api/fdd/equipment?{q}", token=tok_b

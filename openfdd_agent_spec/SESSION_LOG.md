@@ -1,3 +1,9 @@
+## 2026-10-04 — Security gate verdict integrity (#999)
+
+- Gates 25, 25b, and 26 now refuse a stale PASS artifact, a FAIL observer that exits 0, and an `ok: false` / `status: PASS` pair. Transport ERROR stays ERROR. The stress recorder does the same when a child exit or an ERROR check contradicts PASS/BLOCKED.
+- `live_readonly` own-building control accepts a nonempty equipment list. Empty/soft 200 still fails. `isolated_full` still requires the seeded canary. HTTP 502 is not labeled as an empty 200.
+- Offline only. No Railway/ACME scan, no Nessus run, no product image. Live proof on the published tip is still required. Merged parents: #1102, #1113–#1121.
+
 ## 2026-10-03 — Nessus importer A08 (#1102, Cursor takeover)
 
 - Hardened `scripts/security/nessus/import_nessus_report.py`: DTD/entity rejection,
