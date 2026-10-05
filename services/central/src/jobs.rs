@@ -986,9 +986,8 @@ mod tests {
 
     #[test]
     fn package_missing_not_found_includes_code() {
-        let err = JobError::NotFound(
-            "imported package not found for building_id: BUILDING_100".into(),
-        );
+        let err =
+            JobError::NotFound("imported package not found for building_id: BUILDING_100".into());
         let body = err.to_json();
         assert_eq!(body["ok"], json!(false));
         assert_eq!(body["code"], json!("package_missing"));
