@@ -278,40 +278,95 @@ def disposition_medium_alerts(
     medium_alert_names: list[str],
     dispositions: list[dict[str, Any]],
     today: str | None = None,
+    medium_findings: list[dict[str, Any]] | None = None,
 ) -> tuple[list[str], list[str]]:
     """Return (covered_plugin_ids, errors).
 
-    Every Medium plugin id must match exactly one disposition with required
-    fields and a non-expired expiry (YYYY-MM-DD). Extra dispositions are OK.
+    Every Medium finding must match exactly one typed disposition (plugin id +
+    required fields + non-expired YYYY-MM-DD). Duplicate dispositions for the
+    same plugin id are rejected. Name-only Mediums (no plugin id) never PASS.
     """
-    from datetime import date
+    import re
+    from datetime import date, datetime
 
     day = today or date.today().isoformat()
     by_plugin: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
+    seen_plugins: set[str] = set()
+    iso_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
     for d in dispositions:
         missing = [k for k in _REQUIRED_DISP_FIELDS if not str(d.get(k) or "").strip()]
         if missing:
             errors.append(f"disposition missing fields {missing}")
             continue
         pid = str(d["plugin_id"]).strip()
+        if not pid:
+            errors.append("disposition missing plugin_id")
+            continue
+        if pid in seen_plugins:
+            errors.append(f"duplicate disposition plugin_id={pid}")
+            continue
+        seen_plugins.add(pid)
         exp = str(d["expiry"]).strip()
+        if not iso_re.match(exp):
+            errors.append(f"disposition plugin {pid} expiry not YYYY-MM-DD: {exp!r}")
+            continue
+        try:
+            datetime.strptime(exp, "%Y-%m-%d")
+        except ValueError:
+            errors.append(f"disposition plugin {pid} expiry invalid calendar date: {exp}")
+            continue
         if exp < day:
             errors.append(f"disposition plugin {pid} expired {exp}")
             continue
         by_plugin[pid] = d
+
+    if medium_findings is not None:
+        findings = medium_findings
+    else:
+        # Aggregate path: one finding per distinct plugin id.
+        findings = [
+            {"plugin_id": pid, "alert_name": ""}
+            for pid in list(dict.fromkeys(medium_plugin_ids))
+        ]
+        if not medium_plugin_ids and medium_alert_names:
+            for name in medium_alert_names:
+                findings.append({"plugin_id": "", "alert_name": name})
+        elif medium_alert_names and len(medium_alert_names) > len(
+            set(medium_plugin_ids)
+        ):
+            errors.append(
+                "Medium alert count exceeds dispositionable plugin ids — "
+                "name-only or duplicate unnamed Mediums present"
+            )
+
     covered: list[str] = []
-    for pid in medium_plugin_ids:
-        if pid in by_plugin:
-            covered.append(pid)
-        else:
+    covered_set: set[str] = set()
+    for finding in findings:
+        pid = str(finding.get("plugin_id") or "").strip()
+        alert_name = str(finding.get("alert_name") or finding.get("name") or "").strip()
+        if not pid:
+            errors.append(
+                "Medium alert lacks plugin_id — cannot bind typed disposition"
+                + (f": {alert_name}" if alert_name else "")
+            )
+            continue
+        disp = by_plugin.get(pid)
+        if disp is None:
             errors.append(f"undispositioned Medium plugin_id={pid}")
-    # Name-only Mediums (no plugin id) cannot be dispositioned silently.
-    if not medium_plugin_ids and medium_alert_names:
-        errors.append(
-            "Medium alerts lack plugin_id — cannot bind typed dispositions: "
-            + ", ".join(medium_alert_names[:6])
-        )
+            continue
+        disp_name = str(disp.get("alert_name") or "").strip()
+        if alert_name and disp_name and disp_name not in alert_name and alert_name not in disp_name:
+            errors.append(
+                f"disposition plugin {pid} alert_name mismatch "
+                f"(disp={disp_name!r} alert={alert_name!r})"
+            )
+            continue
+        if pid not in covered_set:
+            covered.append(pid)
+            covered_set.add(pid)
+
     return covered, errors
 
 

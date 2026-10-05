@@ -168,20 +168,24 @@ def main(argv: list[str] | None = None) -> int:
                 accepted_names.add(name)
 
     unaccepted = [n for n in measured["medium_alerts"] if n not in accepted_names]
-    if meds and unaccepted and not args.accept_medium:
+    if meds and args.accept_medium:
+        # Q-07: blanket Medium accept is explicitly non-qualifying for release.
+        print(
+            f"FAIL: DEPRECATED --accept-medium is non-qualifying "
+            f"({meds} Medium alert(s): {', '.join(measured['medium_alerts'][:8])}). "
+            f"Use --dispositions with typed plugin_id rows.",
+            file=sys.stderr,
+        )
+        return 1
+    if meds and unaccepted:
         print(
             f"FAIL: {len(unaccepted)} unaccepted Medium alert(s) "
-            f"(add rule-specific dispositions or remove --accept-medium blanket): "
+            f"(add rule-specific dispositions): "
             f"{', '.join(unaccepted[:8])}",
             file=sys.stderr,
         )
         return 1
-    if meds and args.accept_medium:
-        print(
-            f"PASS with DEPRECATED blanket ACCEPT_ZAP_MEDIUM ({meds}): "
-            f"{', '.join(measured['medium_alerts'][:8])}"
-        )
-    elif meds:
+    if meds:
         print(
             f"PASS with rule-specific Medium dispositions ({meds}): "
             f"{', '.join(measured['medium_alerts'][:8])}"
