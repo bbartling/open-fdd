@@ -26,6 +26,9 @@ pub struct UserRecord {
     /// When true, authenticate fails (hub admin soft-delete / suspend).
     #[serde(default)]
     pub disabled: bool,
+    /// Bumped on disable / role / membership / password change so outstanding JWTs die (S09).
+    #[serde(default)]
+    pub session_version: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -145,6 +148,7 @@ mod tests {
                 password_env: None,
                 password: Some("x".into()),
                 disabled: false,
+                session_version: 0,
             }],
         };
         assert!(store.authenticate("evil", "x").is_none());

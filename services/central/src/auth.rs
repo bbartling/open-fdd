@@ -78,6 +78,27 @@ pub struct JwtClaims {
     /// Wave L — tenant memberships when multi-tenant mode is on (empty = hub-wide admin or single-tenant).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tenant_ids: Vec<String>,
+    /// File-plane session epoch (S09). Env identities always mint/verify as 0.
+    #[serde(default, rename = "sv")]
+    pub session_version: u64,
+}
+
+fn is_env_identity(sub: &str) -> bool {
+    matches!(
+        sub.trim().to_ascii_lowercase().as_str(),
+        "admin" | "agent" | "viewer" | "dev"
+    )
+}
+
+fn file_plane_session_version(sub: &str) -> Option<u64> {
+    if is_env_identity(sub) {
+        return Some(0);
+    }
+    let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+    crate::user_store::UserStore::load_or_empty(std::path::Path::new(&workspace))
+        .get(sub)
+        .filter(|r| !r.disabled)
+        .map(|r| r.session_version)
 }
 
 #[derive(Debug, Clone)]
@@ -227,6 +248,10 @@ impl AuthConfig {
     }
 
     /// Mint a JWT with optional tenant membership claims (Wave L L4+).
+    ///
+    /// File-plane subjects embed the current `session_version` so disable/role/
+    /// membership/password changes revoke outstanding tokens (S09). Env identities
+    /// (`admin`/`agent`/`viewer`) always use session_version 0.
     pub fn issue_token_with_tenants(
         &self,
         sub: &str,
@@ -240,12 +265,18 @@ impl AuthConfig {
             .as_ref()
             .ok_or_else(|| "auth not configured".to_string())?;
         let now = chrono::Utc::now().timestamp();
+        let session_version = if is_env_identity(sub) {
+            0
+        } else {
+            file_plane_session_version(sub).unwrap_or(0)
+        };
         let claims = JwtClaims {
             sub: sub.to_string(),
             role: role.as_str().to_string(),
             exp: now + ttl_secs.max(60),
             iat: now,
             tenant_ids: tenant_ids.to_vec(),
+            session_version,
         };
         encode(
             &Header::default(),
@@ -253,6 +284,24 @@ impl AuthConfig {
             &EncodingKey::from_secret(secret.as_bytes()),
         )
         .map_err(|e| format!("token mint failed: {e}"))
+    }
+
+    /// Decode bearer claims after signature/exp validation (S09 parent TTL ceiling).
+    pub fn decode_claims(&self, token: &str) -> Result<JwtClaims, String> {
+        let secret = self
+            .secret
+            .as_ref()
+            .ok_or_else(|| "auth not configured".to_string())?;
+        let mut validation = Validation::new(Algorithm::HS256);
+        validation.validate_aud = false;
+        validation.validate_exp = true;
+        let data = decode::<JwtClaims>(
+            token,
+            &DecodingKey::from_secret(secret.as_bytes()),
+            &validation,
+        )
+        .map_err(|e| format!("invalid token: {e}"))?;
+        Ok(data.claims)
     }
 
     /// Validate username/password for UI / agent login.
@@ -310,29 +359,43 @@ impl AuthConfig {
     }
 
     pub fn verify_bearer(&self, token: &str) -> Result<AuthUser, String> {
-        let secret = self
-            .secret
-            .as_ref()
-            .ok_or_else(|| "auth not configured".to_string())?;
-        let mut validation = Validation::new(Algorithm::HS256);
-        validation.validate_aud = false;
-        validation.validate_exp = true;
-        let data = decode::<JwtClaims>(
-            token,
-            &DecodingKey::from_secret(secret.as_bytes()),
-            &validation,
-        )
-        .map_err(|e| format!("invalid token: {e}"))?;
-        let role = Role::parse(&data.claims.role).ok_or_else(|| {
+        let claims = self.decode_claims(token)?;
+        let role = Role::parse(&claims.role).ok_or_else(|| {
             format!(
                 "invalid role {}; expected one of {VALID_ROLES:?}",
-                data.claims.role
+                claims.role
             )
         })?;
+        // S09: file-plane identities must still exist, be enabled, and match sv.
+        if !is_env_identity(&claims.sub) {
+            let workspace =
+                std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+            let store =
+                crate::user_store::UserStore::load_or_empty(std::path::Path::new(&workspace));
+            match store.get(&claims.sub) {
+                None => return Err("identity revoked".into()),
+                Some(rec) if rec.disabled => return Err("identity disabled".into()),
+                Some(rec) if rec.session_version != claims.session_version => {
+                    return Err("session revoked".into());
+                }
+                Some(rec) => {
+                    let store_role = Role::parse(rec.role.trim())
+                        .ok_or_else(|| "identity role invalid".to_string())?;
+                    if store_role != role {
+                        return Err("session revoked".into());
+                    }
+                    for tid in &claims.tenant_ids {
+                        if !rec.tenant_ids.iter().any(|t| t == tid) {
+                            return Err("session revoked".into());
+                        }
+                    }
+                }
+            }
+        }
         Ok(AuthUser {
-            sub: data.claims.sub,
+            sub: claims.sub,
             role,
-            tenant_ids: data.claims.tenant_ids,
+            tenant_ids: claims.tenant_ids,
         })
     }
 
@@ -390,6 +453,7 @@ mod tests {
             exp: chrono::Utc::now().timestamp() + 3600,
             iat: chrono::Utc::now().timestamp(),
             tenant_ids: vec![],
+            session_version: 0,
         };
         let token = encode(
             &Header::default(),
@@ -417,6 +481,7 @@ mod tests {
             exp: chrono::Utc::now().timestamp() + 3600,
             iat: chrono::Utc::now().timestamp(),
             tenant_ids: vec![],
+            session_version: 0,
         };
         let token = encode(
             &Header::default(),
@@ -540,6 +605,7 @@ mod tests {
             exp,
             iat,
             tenant_ids,
+            session_version: 0,
         };
         encode(
             &Header::default(),
@@ -630,5 +696,108 @@ mod tests {
             cfg.verify_bearer(&tampered).is_err(),
             "tampered payload must not authenticate"
         );
+    }
+
+    #[test]
+    fn s09_file_plane_disable_revokes_outstanding_token() {
+        use crate::test_env_lock::lock_env;
+        use crate::user_store::{UserRecord, UserStore};
+        use tempfile::tempdir;
+
+        let _g = lock_env();
+        let dir = tempdir().unwrap();
+        let cp = dir.path().join("openfdd/control_plane");
+        std::fs::create_dir_all(&cp).unwrap();
+        let mut store = UserStore::default();
+        store
+            .upsert(UserRecord {
+                username: "acme-ops".into(),
+                role: "operator".into(),
+                tenant_ids: vec!["acme".into()],
+                password_env: None,
+                password: Some("secret".into()),
+                disabled: false,
+                session_version: 0,
+            })
+            .unwrap();
+        store.save(dir.path()).unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", dir.path());
+
+        let cfg = AuthConfig {
+            secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: vec![],
+        };
+        let token = cfg
+            .issue_token_with_tenants("acme-ops", Role::Operator, 3600, &["acme".into()])
+            .unwrap();
+        assert!(cfg.verify_bearer(&token).is_ok());
+
+        let mut store = UserStore::load_or_empty(dir.path());
+        store.set_disabled("acme-ops", true).unwrap();
+        store.save(dir.path()).unwrap();
+        let err = cfg.verify_bearer(&token).expect_err("disabled must revoke");
+        assert!(
+            err.contains("disabled") || err.contains("revoked"),
+            "unexpected err: {err}"
+        );
+
+        std::env::remove_var("OPENFDD_WORKSPACE");
+    }
+
+    #[test]
+    fn s09_role_change_bumps_session_and_revokes_token() {
+        use crate::test_env_lock::lock_env;
+        use crate::user_store::{UserRecord, UserStore};
+        use tempfile::tempdir;
+
+        let _g = lock_env();
+        let dir = tempdir().unwrap();
+        let mut store = UserStore::default();
+        store
+            .upsert(UserRecord {
+                username: "acme-ops".into(),
+                role: "operator".into(),
+                tenant_ids: vec!["acme".into()],
+                password_env: None,
+                password: Some("secret".into()),
+                disabled: false,
+                session_version: 0,
+            })
+            .unwrap();
+        store.save(dir.path()).unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", dir.path());
+
+        let cfg = AuthConfig {
+            secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: vec![],
+        };
+        let token = cfg
+            .issue_token_with_tenants("acme-ops", Role::Operator, 3600, &["acme".into()])
+            .unwrap();
+        assert!(cfg.verify_bearer(&token).is_ok());
+
+        let mut store = UserStore::load_or_empty(dir.path());
+        store
+            .upsert(UserRecord {
+                username: "acme-ops".into(),
+                role: "viewer".into(),
+                tenant_ids: vec!["acme".into()],
+                password_env: None,
+                password: None,
+                disabled: false,
+                session_version: 0,
+            })
+            .unwrap();
+        assert_eq!(store.users[0].session_version, 1);
+        store.save(dir.path()).unwrap();
+        assert!(cfg.verify_bearer(&token).is_err());
+
+        std::env::remove_var("OPENFDD_WORKSPACE");
     }
 }
