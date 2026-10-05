@@ -756,6 +756,7 @@ impl AppState {
         const MAX_FAILS: u32 = 8;
         const WINDOW: Duration = Duration::from_secs(15 * 60);
         let mut map = self.login_failures.lock().unwrap();
+        Self::sweep_login_failures(&mut map, WINDOW);
         match map.get(key) {
             Some((n, at)) if *n >= MAX_FAILS && at.elapsed() < WINDOW => true,
             Some((_, at)) if at.elapsed() >= WINDOW => {
@@ -767,9 +768,22 @@ impl AppState {
     }
 
     pub fn login_record_failure(&self, key: &str) {
+        const WINDOW: Duration = Duration::from_secs(15 * 60);
+        const MAX_KEYS: usize = 10_000;
         let mut map = self.login_failures.lock().unwrap();
+        Self::sweep_login_failures(&mut map, WINDOW);
+        if map.len() >= MAX_KEYS && !map.contains_key(key) {
+            // Bound unique spoofed keys: drop an arbitrary expired-or-oldest entry.
+            if let Some(victim) = map
+                .iter()
+                .min_by_key(|(_, (_, at))| *at)
+                .map(|(k, _)| k.clone())
+            {
+                map.remove(&victim);
+            }
+        }
         let entry = map.entry(key.to_string()).or_insert((0, Instant::now()));
-        if entry.1.elapsed() > Duration::from_secs(15 * 60) {
+        if entry.1.elapsed() > WINDOW {
             *entry = (1, Instant::now());
         } else {
             entry.0 = entry.0.saturating_add(1);
@@ -779,6 +793,10 @@ impl AppState {
 
     pub fn login_record_success(&self, key: &str) {
         self.login_failures.lock().unwrap().remove(key);
+    }
+
+    fn sweep_login_failures(map: &mut HashMap<String, (u32, Instant)>, window: Duration) {
+        map.retain(|_, (_, at)| at.elapsed() < window);
     }
 }
 
