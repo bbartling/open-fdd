@@ -82,11 +82,14 @@ if [[ -z "$TOK_A" || -z "$TOK_B" ]]; then
 fi
 record "model.ecm.login" "PASS" "A+B"
 
-# Own mapping read (empty building may be 200 with empty equipment — not FAIL).
+# Own mapping read — HTTP 200 alone is not owner-positive evidence (Q-01).
+# Require JSON ok + nonempty equipment inventory (or explicit equipment array with rows).
 CODE_OWN="$(code_for GET "/api/csv/import/package/mapping?building_id=${BUILDING_A}" "$TOK_A")"
 cp -f "$ART/last.body" "$ART/mapping_own.json" 2>/dev/null || true
-if [[ "$CODE_OWN" == "200" ]]; then
-  record "model.ecm.mapping_own" "PASS" "200"
+if [[ "$CODE_OWN" == "200" ]] \
+  && jq -e '((.ok==true) or (.ok==null)) and ((.equipment|type=="array") and (.equipment|length)>0)' \
+    "$ART/mapping_own.json" >/dev/null 2>&1; then
+  record "model.ecm.mapping_own" "PASS" "200 nonempty equipment"
   # DM-04 provenance when stamped equipment present
   if jq -e '.equipment[]? | select(.equipment_type_source=="package")' \
     "$ART/mapping_own.json" >/dev/null 2>&1; then
@@ -96,6 +99,8 @@ if [[ "$CODE_OWN" == "200" ]]; then
   fi
 elif [[ "$CODE_OWN" == "401" ]]; then
   record "model.ecm.mapping_own" "ERROR" "401 own"
+elif [[ "$CODE_OWN" == "200" ]]; then
+  record "model.ecm.mapping_own" "FAIL" "200 without nonempty owner inventory"
 else
   record "model.ecm.mapping_own" "BLOCKED" "status=$CODE_OWN"
 fi
@@ -145,14 +150,19 @@ else
   record "model.ecm.sparql_freeform_rejected" "FAIL" "status=$CODE_FREE"
 fi
 
-# Legacy check id retained: "unavailable" now means free-form/unscoped is not a feature PASS.
+# Legacy check id retained: bodyless/unscoped SPARQL must not empty-PASS.
+# Only explicit client/route refusals qualify; 5xx/401 are ERROR, not PASS (Q-01).
 CODE_SPQ="$(code_for POST "/api/model/sparql" "$TOK_A")"
 if [[ "$CODE_SPQ" == "400" || "$CODE_SPQ" == "404" || "$CODE_SPQ" == "405" || "$CODE_SPQ" == "501" ]]; then
   record "model.ecm.sparql_unavailable" "PASS" "status=$CODE_SPQ (no empty-ok without query_id)"
 elif [[ "$CODE_SPQ" == "200" ]]; then
   record "model.ecm.sparql_unavailable" "FAIL" "SPARQL 200 without query_id/building"
+elif [[ "$CODE_SPQ" == "401" || "$CODE_SPQ" == "403" ]]; then
+  record "model.ecm.sparql_unavailable" "ERROR" "auth status=$CODE_SPQ"
+elif [[ "$CODE_SPQ" =~ ^5 ]]; then
+  record "model.ecm.sparql_unavailable" "ERROR" "transport status=$CODE_SPQ"
 else
-  record "model.ecm.sparql_unavailable" "PASS" "status=$CODE_SPQ"
+  record "model.ecm.sparql_unavailable" "FAIL" "unexpected status=$CODE_SPQ"
 fi
 
 # Negatives (C5): wrong NS / missing artifact paths are unit-covered; live blocked/skipped ≠ PASS.
@@ -177,14 +187,39 @@ else
   record "model.ecm.ecm_adapter_import" "NOT_APPLICABLE" "OPENFDD_ECM_OFFLINE!=1"
 fi
 
-FAILS="$(printf '%s\n' "${CHECKS[@]}" | jq -s '[.[] | select(.status=="FAIL" or .status=="ERROR")] | length')"
 printf '%s\n' "${CHECKS[@]}" | jq -s . | tee "$ART/checks.json" >/dev/null
+
+# Qualification profile (default): BLOCKED/SKIPPED/bare N/A on required checks
+# cannot exit 0. Smoke profile (OPENFDD_GATE36_SMOKE=1) keeps soft dispositions.
+QUALIFY=1
+if [[ "${OPENFDD_GATE36_SMOKE:-0}" == "1" ]]; then
+  QUALIFY=0
+fi
+
+FAILS="$(jq '[.[] | select(.status=="FAIL" or .status=="ERROR")] | length' "$ART/checks.json")"
+BLOCKED="$(jq '[.[] | select(.status=="BLOCKED" or .status=="SKIPPED")] | length' "$ART/checks.json")"
+# Bare NOT_APPLICABLE without an applicability reason string still counts when qualifying.
+NA_BARE="$(jq '[.[] | select(.status=="NOT_APPLICABLE" and ((.detail//"")|tostring|length)==0)] | length' "$ART/checks.json")"
+PASS_N="$(jq '[.[] | select(.status=="PASS")] | length' "$ART/checks.json")"
+
 if [[ "$FAILS" -gt 0 ]]; then
   jq -n --argjson c "$(cat "$ART/checks.json")" \
     '{ok:false,status:"FAIL",checks:$c}' | tee "$ART/verdict.json"
   exit 1
 fi
+if [[ "$QUALIFY" -eq 1 && ( "$BLOCKED" -gt 0 || "$NA_BARE" -gt 0 ) ]]; then
+  jq -n --argjson c "$(cat "$ART/checks.json")" --argjson b "$BLOCKED" --argjson n "$NA_BARE" \
+    '{ok:false,status:"BLOCKED",checks:$c,reason:("qualification refuses BLOCKED/SKIPPED/bare-N/A; blocked=" + ($b|tostring) + " bare_na=" + ($n|tostring))}' \
+    | tee "$ART/verdict.json"
+  exit 2
+fi
+if [[ "$PASS_N" -eq 0 ]]; then
+  jq -n --argjson c "$(cat "$ART/checks.json")" \
+    '{ok:false,status:"FAIL",checks:$c,reason:"zero PASS checks after recompute"}' \
+    | tee "$ART/verdict.json"
+  exit 1
+fi
 jq -n --argjson c "$(cat "$ART/checks.json")" \
-  '{ok:true,status:"PASS",checks:$c,note:"FQ evidence owned by Wave S4 MEGA"}' \
+  '{ok:true,status:"PASS",checks:$c,note:"gate36 checks recomputed; live FQ still Soft-OPEN"}' \
   | tee "$ART/verdict.json"
 exit 0
