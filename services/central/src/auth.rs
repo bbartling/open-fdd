@@ -366,28 +366,28 @@ impl AuthConfig {
                 claims.role
             )
         })?;
-        // S09: file-plane identities must still exist, be enabled, and match sv.
+        // S09: control-plane file users must still exist, be enabled, and match sv.
+        // Env identities and legacy JWT subjects not in users.json are unchanged.
         if !is_env_identity(&claims.sub) {
             let workspace =
                 std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
             let store =
                 crate::user_store::UserStore::load_or_empty(std::path::Path::new(&workspace));
-            match store.get(&claims.sub) {
-                None => return Err("identity revoked".into()),
-                Some(rec) if rec.disabled => return Err("identity disabled".into()),
-                Some(rec) if rec.session_version != claims.session_version => {
+            if let Some(rec) = store.get(&claims.sub) {
+                if rec.disabled {
+                    return Err("identity disabled".into());
+                }
+                if rec.session_version != claims.session_version {
                     return Err("session revoked".into());
                 }
-                Some(rec) => {
-                    let store_role = Role::parse(rec.role.trim())
-                        .ok_or_else(|| "identity role invalid".to_string())?;
-                    if store_role != role {
+                let store_role = Role::parse(rec.role.trim())
+                    .ok_or_else(|| "identity role invalid".to_string())?;
+                if store_role != role {
+                    return Err("session revoked".into());
+                }
+                for tid in &claims.tenant_ids {
+                    if !rec.tenant_ids.iter().any(|t| t == tid) {
                         return Err("session revoked".into());
-                    }
-                    for tid in &claims.tenant_ids {
-                        if !rec.tenant_ids.iter().any(|t| t == tid) {
-                            return Err("session revoked".into());
-                        }
                     }
                 }
             }
