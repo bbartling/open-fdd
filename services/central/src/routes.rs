@@ -1769,6 +1769,34 @@ fn request_scope_allowed(ctx: &crate::tenant::TenantContext, scope: &ConnectorSc
         && (ctx.hub_admin || ctx.tenant_id.as_deref() == Some(scope.tenant_id.as_str()))
 }
 
+/// Login throttle source IP.
+///
+/// Default: ignore `X-Forwarded-For` (account key uses `direct`) so rotating a
+/// spoofed leftmost hop cannot reset the failure window. When
+/// `OPENFDD_TRUST_X_FORWARDED_FOR=1`, use the **rightmost** hop (immediate
+/// client of the last trusted appender), never the caller-controlled leftmost.
+pub(crate) fn login_throttle_ip(headers: &HeaderMap) -> String {
+    let trust = matches!(
+        std::env::var("OPENFDD_TRUST_X_FORWARDED_FOR")
+            .ok()
+            .as_deref()
+            .map(str::trim),
+        Some("1") | Some("true") | Some("yes") | Some("on")
+    );
+    if !trust {
+        return "direct".into();
+    }
+    let Some(raw) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) else {
+        return "direct".into();
+    };
+    raw.split(',')
+        .map(str::trim)
+        .rev()
+        .find(|s| !s.is_empty())
+        .unwrap_or("direct")
+        .to_string()
+}
+
 /// Connector inventory is available to every authenticated connector role
 /// after tenant/building/edge authorization. Live reads remain read-only; the
 /// deployment policy recommends operator/admin for them, but this route does
@@ -1849,15 +1877,10 @@ pub async fn auth_login(
     Json(body): Json<AuthLoginRequest>,
 ) -> Result<Json<AuthLoginResponse>, (axum::http::StatusCode, Json<Value>)> {
     let request_id = crate::contract::ensure_request_id(&headers);
-    let ip = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("unknown")
-        .split(',')
-        .next()
-        .unwrap_or("unknown")
-        .trim();
     let username = body.username.trim().to_string();
+    // Never key throttle on caller-controlled leftmost X-Forwarded-For by default
+    // (S06). Optional trusted-proxy mode uses the rightmost hop only.
+    let ip = login_throttle_ip(&headers);
     let throttle_key = format!("{ip}:{}", username.to_lowercase());
     if state.login_is_throttled(&throttle_key) {
         open_fdd_edge_prototype::auth::audit::log_event(
@@ -6429,8 +6452,8 @@ pub async fn fuel_campus_weather_fetch(Json(body): Json<FuelWeatherFetchBody>) -
 mod version_tests {
     use super::{
         authorize_connector_scope, authorized_edge_ids, connector_proxy_role_allowed,
-        connector_trigger_role_allowed, local_fieldbus_ingest, request_scope_allowed,
-        resolve_build_version, router,
+        connector_trigger_role_allowed, local_fieldbus_ingest, login_throttle_ip,
+        request_scope_allowed, resolve_build_version, router,
     };
     use crate::capabilities::{CapabilitiesAggregator, ConfiguredUpstream};
     use crate::state::AppState;
@@ -6472,6 +6495,33 @@ mod version_tests {
         assert!(!connector_trigger_role_allowed(crate::auth::Role::Viewer));
         assert!(connector_trigger_role_allowed(crate::auth::Role::Operator));
         assert!(connector_trigger_role_allowed(crate::auth::Role::Admin));
+    }
+
+    #[test]
+    fn login_throttle_ignores_spoofed_xff_by_default() {
+        let _env_lock = crate::test_env_lock::lock_env();
+        std::env::remove_var("OPENFDD_TRUST_X_FORWARDED_FOR");
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("1.2.3.4, 10.0.0.1"),
+        );
+        assert_eq!(login_throttle_ip(&headers), "direct");
+
+        std::env::set_var("OPENFDD_TRUST_X_FORWARDED_FOR", "1");
+        // Trusted mode uses rightmost hop, not the spoofable leftmost value.
+        assert_eq!(login_throttle_ip(&headers), "10.0.0.1");
+        std::env::remove_var("OPENFDD_TRUST_X_FORWARDED_FOR");
+    }
+
+    #[test]
+    fn login_failure_map_is_bounded() {
+        let state = AppState::new();
+        for i in 0..12_000 {
+            state.login_record_failure(&format!("spoof-{i}:user"));
+        }
+        let len = state.login_failures.lock().unwrap().len();
+        assert!(len <= 10_000, "login_failures grew to {len}");
     }
 
     #[test]
