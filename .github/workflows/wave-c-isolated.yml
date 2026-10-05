@@ -35,8 +35,8 @@ jobs:
         env:
           DISPATCH_TAG: ${{ inputs.image_tag }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          # Last known published Wave U tip (update when master GHCR lags PR base).
-          FALLBACK_TAG: sha-f44b45f
+          # Last known published Soft-OPEN tip (update when master GHCR lags PR base).
+          FALLBACK_TAG: sha-215e159
         run: |
           set -euo pipefail
           tag_exists() {
