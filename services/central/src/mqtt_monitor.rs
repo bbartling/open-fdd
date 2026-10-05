@@ -19,6 +19,7 @@ use tempfile::TempDir;
 
 use crate::auth::{self, AuthUser};
 use crate::state::{AppState, MqttMonitorSnapshot};
+use crate::tenant::{ControlPlane, TenantContext};
 
 #[derive(Debug, Deserialize, Default)]
 struct StreamAuthQuery {
@@ -133,6 +134,93 @@ fn default_broker_port() -> u16 {
         .unwrap_or(8883)
 }
 
+/// Path-safe MQTT identity token (no wildcards / separators / newlines).
+fn kit_identity_token_ok(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && !value.contains("..")
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+}
+
+type EdgeKitScope = (String, String, Option<String>);
+type EdgeKitHttpErr = (StatusCode, Json<Value>);
+
+fn resolve_kit_scope(
+    state: &AppState,
+    user: &AuthUser,
+    site_id: &str,
+    edge_id: &str,
+    requested_tenant: Option<&str>,
+) -> Result<EdgeKitScope, EdgeKitHttpErr> {
+    let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+    let plane = ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
+    let ctx = TenantContext::resolve_fail_closed(user, &plane);
+
+    if !ctx.allow_building(site_id) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "site_id is outside the authenticated tenant scope"
+            })),
+        ));
+    }
+
+    let authorized = state.capabilities.authorized_edge_ids(&ctx);
+    if !authorized.contains(edge_id) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "edge_id is not a trusted configured edge for this principal"
+            })),
+        ));
+    }
+
+    let Some((configured_tenant, configured_building)) =
+        state.capabilities.configured_scope(edge_id)
+    else {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "edge_id has no trusted connector configuration"
+            })),
+        ));
+    };
+
+    if configured_building != site_id {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "site_id does not match the trusted edge building"
+            })),
+        ));
+    }
+
+    if let Some(requested) = requested_tenant {
+        if requested != configured_tenant {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "ok": false,
+                    "error": "tenant_id does not match the trusted edge tenant"
+                })),
+            ));
+        }
+    }
+
+    // Always mint from server-derived scope — never trust caller tenant as authority.
+    Ok((
+        site_id.to_string(),
+        edge_id.to_string(),
+        Some(configured_tenant.to_string()),
+    ))
+}
+
 async fn create_edge_kit(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<AuthUser>,
@@ -150,22 +238,31 @@ async fn create_edge_kit(
 
     let site_id = body.site_id.trim().to_string();
     let edge_id = body.edge_id.trim().to_string();
-    if site_id.is_empty() || edge_id.is_empty() {
+    if !kit_identity_token_ok(&site_id) || !kit_identity_token_ok(&edge_id) {
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "site_id and edge_id are required"})),
+            Json(json!({
+                "ok": false,
+                "error": "site_id/edge_id must be path-safe non-wildcard tokens"
+            })),
         ));
     }
-    if site_id.contains('/')
-        || site_id.contains("..")
-        || edge_id.contains('/')
-        || edge_id.contains("..")
-    {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "site_id/edge_id must be path-safe tokens"})),
-        ));
+    let requested_tenant = body
+        .tenant_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(tenant) = requested_tenant {
+        if !kit_identity_token_ok(tenant) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"ok": false, "error": "tenant_id must be a path-safe token"})),
+            ));
+        }
     }
+
+    let (site_id, edge_id, tenant_id) =
+        resolve_kit_scope(&state, &user, &site_id, &edge_id, requested_tenant)?;
 
     let broker_host = body
         .broker_host
@@ -175,12 +272,6 @@ async fn create_edge_kit(
         .map(str::to_string)
         .unwrap_or_else(default_broker_host);
     let broker_port = body.broker_port.unwrap_or_else(default_broker_port);
-    let tenant_id = body
-        .tenant_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
     let ca_dir = mqtt_ca_dir();
 
     let result = tokio::task::spawn_blocking(move || {
@@ -236,4 +327,83 @@ async fn create_edge_kit(
         })?,
     );
     Ok((StatusCode::OK, headers, bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::{AuthConfig, AuthUser, Role};
+    use crate::capabilities::{CapabilitiesAggregator, ConfiguredUpstream};
+    use crate::state::AppState;
+    use url::Url;
+
+    fn state_with_edges() -> Arc<AppState> {
+        let mut state = AppState::new();
+        state.auth = AuthConfig {
+            secret: Some("edge-kit-s04-test-secret-32chars!!".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        state.capabilities = CapabilitiesAggregator::for_tests(vec![
+            ConfiguredUpstream {
+                tenant_id: "legacy".into(),
+                building_id: "site-a".into(),
+                edge_id: "edge-a".into(),
+                base_url: Url::parse("http://127.0.0.1:9/").unwrap(),
+                token: None,
+            },
+            ConfiguredUpstream {
+                tenant_id: "legacy".into(),
+                building_id: "site-b".into(),
+                edge_id: "edge-b".into(),
+                base_url: Url::parse("http://127.0.0.1:9/").unwrap(),
+                token: None,
+            },
+        ]);
+        Arc::new(state)
+    }
+
+    #[test]
+    fn kit_tokens_reject_wildcards_and_separators() {
+        assert!(kit_identity_token_ok("edge-a"));
+        assert!(!kit_identity_token_ok("edge/*"));
+        assert!(!kit_identity_token_ok("a/b"));
+        assert!(!kit_identity_token_ok("..\nedge"));
+        assert!(!kit_identity_token_ok(""));
+    }
+
+    #[test]
+    fn edge_kit_scope_denies_foreign_configured_edge() {
+        let _lock = crate::test_env_lock::lock_env();
+        std::env::remove_var("OPENFDD_MULTI_TENANT");
+        let state = state_with_edges();
+        let user = AuthUser {
+            sub: "ops".into(),
+            role: Role::Operator,
+            tenant_ids: vec![],
+        };
+        let err = resolve_kit_scope(&state, &user, "site-a", "edge-b", None).unwrap_err();
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+        let ok = resolve_kit_scope(&state, &user, "site-a", "edge-a", None).unwrap();
+        assert_eq!(ok.0, "site-a");
+        assert_eq!(ok.1, "edge-a");
+        assert_eq!(ok.2.as_deref(), Some("legacy"));
+    }
+
+    #[test]
+    fn edge_kit_scope_rejects_conflicting_caller_tenant() {
+        let _lock = crate::test_env_lock::lock_env();
+        std::env::remove_var("OPENFDD_MULTI_TENANT");
+        let state = state_with_edges();
+        let user = AuthUser {
+            sub: "ops".into(),
+            role: Role::Operator,
+            tenant_ids: vec![],
+        };
+        let err = resolve_kit_scope(&state, &user, "site-a", "edge-a", Some("foreign-tenant"))
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+    }
 }
