@@ -148,6 +148,11 @@ impl JobError {
                 "expected_revision": expected,
                 "current_revision": current,
             }),
+            Self::NotFound(m) if m.starts_with("imported package not found") => json!({
+                "ok": false,
+                "error": m,
+                "code": "package_missing",
+            }),
             Self::NotFound(m) => json!({"ok": false, "error": m}),
             Self::Invalid(m) => json!({"ok": false, "error": m}),
             Self::Io(m) => json!({"ok": false, "error": m}),
@@ -977,6 +982,25 @@ mod tests {
             let err = save_job(bad, Some(&stale)).unwrap_err();
             assert!(matches!(err, JobError::Conflict { .. }));
         });
+    }
+
+    #[test]
+    fn package_missing_not_found_includes_code() {
+        let err = JobError::NotFound(
+            "imported package not found for building_id: BUILDING_100".into(),
+        );
+        let body = err.to_json();
+        assert_eq!(body["ok"], json!(false));
+        assert_eq!(body["code"], json!("package_missing"));
+        assert!(
+            body["error"]
+                .as_str()
+                .unwrap_or("")
+                .contains("BUILDING_100"),
+            "{body}"
+        );
+        let other = JobError::NotFound("job not found: job-x".into()).to_json();
+        assert!(other.get("code").is_none(), "{other}");
     }
 
     #[test]
