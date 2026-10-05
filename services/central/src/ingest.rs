@@ -428,19 +428,64 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
 }
 
 fn handle_ack(state: &AppState, payload: &[u8]) {
-    if let Ok(ack) = serde_json::from_slice::<openfdd_contracts::CommandAck>(payload) {
-        state.command_acks.insert(ack.command_id, ack);
-    } else {
+    let Ok(ack) = serde_json::from_slice::<openfdd_contracts::CommandAck>(payload) else {
         record_reject(state, payload, "ack decode failed");
-    }
+        return;
+    };
+    accept_bound_command_ack(state, ack);
 }
 
 fn handle_untyped_payload(state: &AppState, payload: &[u8]) {
-    if let Ok(ack) = serde_json::from_slice::<openfdd_contracts::CommandAck>(payload) {
-        state.command_acks.insert(ack.command_id, ack);
+    // Do not accept ACK-shaped bodies from untyped/malformed topics — only
+    // explicit ack-topic dispatch may mutate command_acks (S05).
+    record_reject(state, payload, "decode failed");
+}
+
+/// Bind MQTT ACK to an exact pending command (site/edge/id). Unknown, mismatched,
+/// or replayed terminal ACKs are rejected so forged edges cannot close foreign
+/// commands. `Accepted` updates the ack map but keeps pending so a later
+/// `Executed`/`Failed` can land; first terminal ACK wins.
+fn accept_bound_command_ack(state: &AppState, ack: openfdd_contracts::CommandAck) {
+    let terminal = matches!(
+        ack.status,
+        openfdd_contracts::CommandStatus::Executed
+            | openfdd_contracts::CommandStatus::Failed
+            | openfdd_contracts::CommandStatus::Rejected
+            | openfdd_contracts::CommandStatus::Expired
+    );
+    if let Some(existing) = state.command_acks.get(&ack.command_id) {
+        if matches!(
+            existing.status,
+            openfdd_contracts::CommandStatus::Executed
+                | openfdd_contracts::CommandStatus::Failed
+                | openfdd_contracts::CommandStatus::Rejected
+                | openfdd_contracts::CommandStatus::Expired
+        ) {
+            return;
+        }
+    }
+    let Some(pending) = state.pending_commands.get(&ack.command_id) else {
+        record_reject(
+            state,
+            &serde_json::to_vec(&ack).unwrap_or_default(),
+            "ack for unknown command_id",
+        );
+        return;
+    };
+    if ack.site_id != pending.command.site_id || ack.edge_id != pending.command.edge_id {
+        drop(pending);
+        record_reject(
+            state,
+            &serde_json::to_vec(&ack).unwrap_or_default(),
+            "ack site/edge does not match pending command",
+        );
         return;
     }
-    record_reject(state, payload, "decode failed");
+    drop(pending);
+    if terminal {
+        state.pending_commands.remove(&ack.command_id);
+    }
+    state.command_acks.insert(ack.command_id, ack);
 }
 
 fn reject_reason_bucket(error: &str) -> &'static str {
@@ -452,6 +497,8 @@ fn reject_reason_bucket(error: &str) -> &'static str {
         "historian_persist"
     } else if error.contains("historian size") || error.contains("size cap") {
         "historian_size_cap"
+    } else if error.contains("ack for unknown") || error.contains("ack site/edge") {
+        "ack_authority"
     } else if error.ends_with("decode failed") {
         "decode_failed"
     } else {
@@ -492,6 +539,115 @@ mod tests {
         assert_eq!(
             reject_reason_bucket("envelope site/edge (a/b) does not match topic (c/d)"),
             "topic_identity_mismatch"
+        );
+        assert_eq!(
+            reject_reason_bucket("ack for unknown command_id"),
+            "ack_authority"
+        );
+    }
+
+    #[test]
+    fn bound_ack_requires_pending_and_matching_site_edge() {
+        use crate::state::PendingCommand;
+        use chrono::Utc;
+        use openfdd_contracts::{CommandAck, CommandEnvelope, CommandStatus, Protocol};
+
+        let state = AppState::new();
+        let cmd = CommandEnvelope::new(
+            "ACME",
+            "vim-1",
+            Protocol::Mixed,
+            "edge:telemetry",
+            serde_json::json!({"action": "suspend"}),
+            "stress",
+            "openfdd/v1/sites/ACME/edges/vim-1/acks/mixed",
+            180,
+        );
+        let id = cmd.command_id;
+        state.pending_commands.insert(
+            id,
+            PendingCommand {
+                command: cmd.clone(),
+                publish_topic: "cmd".into(),
+                response_topic: cmd.response_topic.clone(),
+                issued_at: Utc::now(),
+                published: true,
+            },
+        );
+
+        // Foreign site/edge must not close the pending command.
+        let forged = CommandAck {
+            schema: cmd.schema.clone(),
+            command_id: id,
+            status: CommandStatus::Executed,
+            observed_at: Utc::now(),
+            site_id: "OTHER".into(),
+            edge_id: "other-edge".into(),
+            detail: Some("forged".into()),
+        };
+        accept_bound_command_ack(&state, forged);
+        assert!(state.pending_commands.contains_key(&id));
+        assert!(!state.command_acks.contains_key(&id));
+
+        let good = CommandAck::new(&cmd, CommandStatus::Executed, Some("ok".into()));
+        accept_bound_command_ack(&state, good.clone());
+        assert!(!state.pending_commands.contains_key(&id));
+        assert_eq!(
+            state.command_acks.get(&id).map(|a| a.status),
+            Some(CommandStatus::Executed)
+        );
+
+        // Replay of a different terminal status must not overwrite.
+        let replay = CommandAck::new(&cmd, CommandStatus::Failed, Some("replay".into()));
+        accept_bound_command_ack(&state, replay);
+        assert_eq!(
+            state.command_acks.get(&id).map(|a| a.status),
+            Some(CommandStatus::Executed)
+        );
+    }
+
+    #[test]
+    fn accepted_ack_keeps_pending_for_executed() {
+        use crate::state::PendingCommand;
+        use chrono::Utc;
+        use openfdd_contracts::{CommandAck, CommandEnvelope, CommandStatus, Protocol};
+
+        let state = AppState::new();
+        let cmd = CommandEnvelope::new(
+            "ACME",
+            "vim-1",
+            Protocol::Mixed,
+            "edge:telemetry",
+            serde_json::json!({"action": "suspend"}),
+            "stress",
+            "openfdd/v1/sites/ACME/edges/vim-1/acks/mixed",
+            180,
+        );
+        let id = cmd.command_id;
+        state.pending_commands.insert(
+            id,
+            PendingCommand {
+                command: cmd.clone(),
+                publish_topic: "cmd".into(),
+                response_topic: cmd.response_topic.clone(),
+                issued_at: Utc::now(),
+                published: true,
+            },
+        );
+        accept_bound_command_ack(&state, CommandAck::new(&cmd, CommandStatus::Accepted, None));
+        assert!(state.pending_commands.contains_key(&id));
+        assert_eq!(
+            state.command_acks.get(&id).map(|a| a.status),
+            Some(CommandStatus::Accepted)
+        );
+        accept_bound_command_ack(
+            &state,
+            CommandAck::new(&cmd, CommandStatus::Executed, Some("done".into())),
+        );
+        assert!(!state.pending_commands.contains_key(&id));
+        assert_eq!(
+            state.command_acks.get(&id).map(|a| a.status),
+            Some(CommandStatus::Executed)
         );
     }
 
