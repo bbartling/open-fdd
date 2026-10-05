@@ -37,6 +37,7 @@ def _valid_report(td: Path, **overrides) -> Path:
         dry_run=False,
         full_profile=True,
         suites=["X", "Y", "Z"],
+        candidate={"sha": "test-candidate-sha"},
     )
     for k, v in overrides.items():
         setattr(report, k, v)
@@ -262,10 +263,112 @@ class OrchestratorSabotageTest(unittest.TestCase):
             ok, reason = validate_report_for_qualification(
                 p,
                 expected_profile="isolated_full",
-                required_check_ids=["z.auth.admin_login", "z.auth.operator_login"],
+                required_check_ids=["a", "b", "z.auth.admin_login", "z.auth.operator_login"],
             )
             self.assertFalse(ok)
             self.assertIn("missing required", reason)
+
+    def test_q04_required_na_without_applicability_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            report = SecurityReport(
+                profile="isolated_full",
+                executed=True,
+                dry_run=False,
+                full_profile=True,
+                candidate={"sha": "q04-candidate"},
+            )
+            report.add(CheckResult(check_id="a", suite="X", title="a", status="PASS"))
+            report.add(
+                CheckResult(
+                    check_id="b",
+                    suite="Y",
+                    title="b",
+                    status="NOT_APPLICABLE",
+                )
+            )
+            write_report(report, Path(td))
+            ok, reason = validate_report_for_qualification(
+                Path(td) / "security_report.json",
+                expected_profile="isolated_full",
+                required_check_ids=["a", "b"],
+            )
+            self.assertFalse(ok)
+            self.assertIn("applicability", reason.lower())
+
+    def test_q04_unknown_extra_check_id_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            report = SecurityReport(
+                profile="isolated_full",
+                executed=True,
+                dry_run=False,
+                full_profile=True,
+                candidate={"sha": "q04-unknown"},
+            )
+            report.add(CheckResult(check_id="a", suite="X", title="a", status="PASS"))
+            report.add(CheckResult(check_id="extra.unknown", suite="Y", title="x", status="PASS"))
+            write_report(report, Path(td))
+            ok, reason = validate_report_for_qualification(
+                Path(td) / "security_report.json",
+                expected_profile="isolated_full",
+                required_check_ids=["a"],
+            )
+            self.assertFalse(ok)
+            self.assertIn("unknown check_ids", reason)
+
+    def test_q04_missing_candidate_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            report = SecurityReport(
+                profile="isolated_full",
+                executed=True,
+                dry_run=False,
+                full_profile=True,
+            )
+            report.add(CheckResult(check_id="a", suite="X", title="a", status="PASS"))
+            write_report(report, Path(td))
+            ok, reason = validate_report_for_qualification(
+                Path(td) / "security_report.json",
+                expected_profile="isolated_full",
+            )
+            self.assertFalse(ok)
+            self.assertIn("candidate", reason.lower())
+
+    def test_q02_finalize_observer_rejects_empty_and_inner_fail(self):
+        from openfdd_security.evidence import finalize_observer_gate
+
+        with tempfile.TemporaryDirectory() as td:
+            empty = Path(td) / "empty.json"
+            empty.write_text(
+                json.dumps({"ok": True, "status": "PASS", "checks": []}),
+                encoding="utf-8",
+            )
+            v = finalize_observer_gate(empty, child_rc=0)
+            self.assertFalse(v["ok"])
+            self.assertNotEqual(v["status"], "PASS")
+
+            inner = Path(td) / "inner.json"
+            inner.write_text(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "status": "PASS",
+                        "image": "ghcr.io/bbartling/openfdd-mqtt:sha-test",
+                        "acl_source": "provisioner",
+                        "checks": [
+                            {"check": "mqtt.key_mode_640", "status": "PASS"},
+                            {"check": "mqtt.acl.content_semantics", "status": "PASS"},
+                            {"check": "mqtt.acl.broker_image_policy", "status": "PASS"},
+                            {
+                                "check": "mqtt.acl.live_broker_observer",
+                                "status": "FAIL",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            v2 = finalize_observer_gate(inner, child_rc=0)
+            self.assertFalse(v2["ok"])
+            self.assertEqual(v2["status"], "FAIL")
 
     def test_r01_pass_plus_skipped_rejected(self):
         with tempfile.TemporaryDirectory() as td:

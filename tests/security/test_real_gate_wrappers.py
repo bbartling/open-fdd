@@ -88,6 +88,7 @@ def _qualifying_report(directory: Path) -> None:
         dry_run=False,
         full_profile=True,
         suites=["X", "Y", "Z"],
+        candidate={"sha": "wrapper-test-candidate"},
     )
     for cid in required_check_ids("live_readonly", ["X", "Y", "Z"]):
         report.add(
@@ -345,6 +346,73 @@ class RealGateWrapperTests(unittest.TestCase):
         verdict = self._verdict(art)
         self.assertFalse(verdict["ok"])
         self.assertEqual(verdict["status"], "ERROR")
+
+    def test_gate26_empty_checks_top_level_pass_is_not_green(self) -> None:
+        art = self.root / "g26empty"
+        template = self.root / "observer-empty.json"
+        template.write_text(
+            json.dumps(
+                {
+                    "ok": True,
+                    "status": "PASS",
+                    "image": None,
+                    "acl_source": None,
+                    "checks": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        proc = self._run(
+            GATE26,
+            self._env(
+                art,
+                "copy-template",
+                OPENFDD_MQTT_ACL_EXECUTE="1",
+                OPENFDD_SABOTAGE_TEMPLATE=str(template),
+            ),
+        )
+        self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        verdict = self._verdict(art)
+        self.assertFalse(verdict["ok"])
+        self.assertNotEqual(verdict["status"], "PASS")
+
+    def test_gate26_inner_fail_with_top_level_pass_is_not_green(self) -> None:
+        art = self.root / "g26inner"
+        template = self.root / "observer-inner-fail.json"
+        template.write_text(
+            json.dumps(
+                {
+                    "ok": True,
+                    "status": "PASS",
+                    "image": "ghcr.io/bbartling/openfdd-mqtt:sha-test",
+                    "acl_source": "provisioner",
+                    "checks": [
+                        {"check": "mqtt.key_mode_640", "status": "PASS"},
+                        {"check": "mqtt.acl.content_semantics", "status": "PASS"},
+                        {"check": "mqtt.acl.broker_image_policy", "status": "PASS"},
+                        {
+                            "check": "mqtt.acl.live_broker_observer",
+                            "status": "FAIL",
+                            "detail": "synthetic inner fail",
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        proc = self._run(
+            GATE26,
+            self._env(
+                art,
+                "copy-template",
+                OPENFDD_MQTT_ACL_EXECUTE="1",
+                OPENFDD_SABOTAGE_TEMPLATE=str(template),
+            ),
+        )
+        self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        verdict = self._verdict(art)
+        self.assertFalse(verdict["ok"])
+        self.assertEqual(verdict["status"], "FAIL")
 
     def test_gate26_stale_pass_observer_is_not_green(self) -> None:
         art = self.root / "g26stale"

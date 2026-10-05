@@ -134,6 +134,7 @@ class ConfigTransportTest(unittest.TestCase):
             executed=True,
             dry_run=False,
             full_profile=True,
+            candidate={"sha": "config-transport-candidate"},
         )
         report.add(
             CheckResult(

@@ -416,18 +416,30 @@ def validate_report_for_qualification(
                 return False, f"counts.{k} contradicts recomputed ({declared[k]}!={v})"
 
     if required_check_ids:
+        allowed = set(required_check_ids)
+        unknown = sorted(cid for cid in ids if cid not in allowed)
+        if unknown:
+            return False, f"unknown check_ids not in required set: {unknown[:8]}"
         missing = [cid for cid in required_check_ids if cid not in by_id]
         if missing:
             return False, f"missing required check_ids: {missing[:8]}"
         for cid in required_check_ids:
-            st = by_id[cid].get("status")
+            entry = by_id[cid]
+            st = entry.get("status")
             if st == "SKIPPED":
                 return False, f"required check {cid} is SKIPPED"
             if st == "BLOCKED":
                 return False, f"required check {cid} is BLOCKED"
             if st in ("FAIL", "ERROR"):
                 return False, f"required check {cid} is {st}"
-            if st not in ("PASS", "NOT_APPLICABLE"):
+            if st == "NOT_APPLICABLE":
+                if not _na_has_applicability_evidence(entry):
+                    return False, (
+                        f"required check {cid} is NOT_APPLICABLE without "
+                        "applicability evidence"
+                    )
+                continue
+            if st != "PASS":
                 return False, f"required check {cid} status {st!r}"
 
     if recomputed["fail"]:
@@ -462,10 +474,20 @@ def validate_report_for_qualification(
         return False, "fully_qualified true contradicts recomputed failures"
 
     meta_path = report_path.parent / "security_report.sha256"
+    if require_full_profile and not postcheck and not meta_path.is_file():
+        return False, "missing security_report.sha256 sidecar"
     if meta_path.is_file():
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         if meta.get("sha256") and meta["sha256"] != digest:
             return False, "sidecar hash disagrees with report bytes"
+
+    if require_full_profile and not postcheck and not expected_candidate_sha:
+        cand = data.get("candidate") or {}
+        if not isinstance(cand, dict):
+            return False, "candidate must be object"
+        got = str(cand.get("sha") or cand.get("source_sha") or cand.get("digest") or "")
+        if not got:
+            return False, "missing candidate identity"
 
     if child_rc is not None:
         ok_rc, st_rc, reason_rc = reconcile_child_rc(
@@ -509,6 +531,23 @@ def _check_status_counts(checks: object) -> dict[str, int]:
     return counts
 
 
+def _na_has_applicability_evidence(check: dict[str, Any]) -> bool:
+    """NOT_APPLICABLE must carry explicit applicability evidence, not a bare status."""
+    applicability = check.get("applicability")
+    if isinstance(applicability, dict) and applicability:
+        reason = str(applicability.get("reason") or applicability.get("policy") or "").strip()
+        return bool(reason)
+    if isinstance(applicability, str) and applicability.strip():
+        return True
+    detail = check.get("detail")
+    if isinstance(detail, str) and detail.strip():
+        return True
+    expected = check.get("expected")
+    if isinstance(expected, str) and expected.strip():
+        return True
+    return False
+
+
 def _gate_verdict(ok: bool, status: str, reason: str, child_rc: int) -> dict[str, Any]:
     """Exit-bearing gate verdict. ok is true only for status PASS."""
     passed = bool(ok) and status == "PASS"
@@ -518,6 +557,15 @@ def _gate_verdict(ok: bool, status: str, reason: str, child_rc: int) -> dict[str
         "reason": reason,
         "child_rc": child_rc,
     }
+
+
+# Gate 26 observer must present these check IDs; verdict is recomputed from them.
+MQTT_OBSERVER_REQUIRED_CHECKS: tuple[str, ...] = (
+    "mqtt.key_mode_640",
+    "mqtt.acl.content_semantics",
+    "mqtt.acl.broker_image_policy",
+    "mqtt.acl.live_broker_observer",
+)
 
 
 def finalize_executed_gate(
@@ -605,7 +653,11 @@ def finalize_observer_gate(
     unittest_rc: int = 0,
     probe_started_mtime: float | None = None,
 ) -> dict[str, Any]:
-    """Verdict for gate 26. Never treat ok=false or a stale PASS as success."""
+    """Verdict for gate 26.
+
+    Recompute from ``checks[]`` and required MQTT IDs. Top-level ok/status alone
+    cannot qualify empty, contradictory, or incomplete observer evidence.
+    """
     if not observer_path.is_file():
         return _gate_verdict(
             False,
@@ -631,6 +683,7 @@ def finalize_observer_gate(
         return _gate_verdict(False, "ERROR", "observer JSON root must be object", child_rc)
     if unittest_rc != 0:
         return _gate_verdict(False, "FAIL", f"unittest_rc={unittest_rc}", child_rc)
+
     ok_flag = loaded.get("ok")
     status = str(loaded.get("status") or "")
     reason = str(loaded.get("reason") or loaded.get("detail") or "")
@@ -648,12 +701,105 @@ def finalize_observer_gate(
             f"observer PASS but child_rc={child_rc} (contradictory)",
             child_rc,
         )
-    if ok_flag is True and status == "PASS" and child_rc == 0:
-        return _gate_verdict(True, "PASS", reason or "ok", child_rc)
+
+    image = loaded.get("image")
+    acl_source = loaded.get("acl_source")
+    if not (isinstance(image, str) and image.strip()):
+        return _gate_verdict(
+            False, "FAIL", "observer missing image identity", child_rc
+        )
+    if not (isinstance(acl_source, str) and acl_source.strip()):
+        return _gate_verdict(
+            False, "FAIL", "observer missing acl_source identity", child_rc
+        )
+
+    checks = loaded.get("checks")
+    if not isinstance(checks, list) or not checks:
+        return _gate_verdict(
+            False,
+            "FAIL",
+            "observer checks[] empty or missing; cannot recompute PASS",
+            child_rc,
+        )
+
+    by_id: dict[str, dict[str, Any]] = {}
+    for item in checks:
+        if not isinstance(item, dict):
+            return _gate_verdict(
+                False, "ERROR", "observer check entry is not an object", child_rc
+            )
+        cid = item.get("check") or item.get("check_id")
+        if not isinstance(cid, str) or not cid:
+            return _gate_verdict(
+                False, "ERROR", "observer check missing check id", child_rc
+            )
+        if cid in by_id:
+            return _gate_verdict(
+                False, "ERROR", f"duplicate observer check id {cid}", child_rc
+            )
+        by_id[cid] = item
+
+    for req in MQTT_OBSERVER_REQUIRED_CHECKS:
+        if req not in by_id:
+            return _gate_verdict(
+                False, "FAIL", f"missing required observer check {req}", child_rc
+            )
+
+    counts = _check_status_counts(
+        [
+            {
+                "status": item.get("status"),
+                "check_id": item.get("check") or item.get("check_id"),
+            }
+            for item in checks
+            if isinstance(item, dict)
+        ]
+    )
+    if counts["error"]:
+        return _gate_verdict(
+            False,
+            "ERROR",
+            f"{counts['error']} observer check(s) ERROR",
+            child_rc,
+        )
+    if counts["fail"]:
+        return _gate_verdict(
+            False,
+            "FAIL",
+            f"{counts['fail']} observer check(s) FAIL",
+            child_rc,
+        )
+    if counts["blocked"]:
+        return _gate_verdict(
+            False,
+            "BLOCKED",
+            f"{counts['blocked']} observer check(s) BLOCKED",
+            child_rc,
+        )
+
+    for req in MQTT_OBSERVER_REQUIRED_CHECKS:
+        st = str(by_id[req].get("status") or "")
+        if st != "PASS":
+            if st == "SKIPPED":
+                return _gate_verdict(
+                    False,
+                    "BLOCKED",
+                    f"required observer check {req} is SKIPPED",
+                    child_rc,
+                )
+            return _gate_verdict(
+                False,
+                "FAIL",
+                f"required observer check {req} status {st!r}",
+                child_rc,
+            )
+
     if status == "FAIL" or ok_flag is False:
         return _gate_verdict(False, "FAIL", reason or "observer not ok", child_rc)
     if status == "BLOCKED":
         return _gate_verdict(False, "BLOCKED", reason or "observer blocked", child_rc)
+    if ok_flag is True and status == "PASS" and child_rc == 0:
+        return _gate_verdict(True, "PASS", reason or "ok", child_rc)
     return _gate_verdict(
         False,
         "ERROR",
