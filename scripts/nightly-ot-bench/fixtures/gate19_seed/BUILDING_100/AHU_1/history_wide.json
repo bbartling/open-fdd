@@ -1,0 +1,8 @@
+{
+  "equipType": "ahu",
+  "points": {
+    "fan-cmd": "SF_SPD",
+    "duct-static-pressure": "DA_P",
+    "duct-static-pressure-sp": "DA_P_SP"
+  }
+}
