@@ -30,7 +30,16 @@ UI prefers health so the pin matches the **running central container**, not a st
 
 ## Tiny platform rev bumps
 
-On each turnkey stack patch that ships to GHCR nightly, bump workspace patch (`3.3.N` → `3.3.N+1`) in root `VERSION` and Cargo workspace crates that pin the platform version. Sidebar then shows a new `3.3.N+shortsha` after pull. Do **not** bump PyPI `open-fdd` unless the Python package changed.
+On each turnkey stack patch that ships to GHCR nightly, bump workspace patch (`3.5.N` → `3.5.N+1`) in root `VERSION` and Cargo workspace `version` (keep them identical). Sidebar then shows a new `3.5.N+shortsha` after pull. Do **not** bump PyPI `open-fdd` unless the Python package changed.
+
+### Current platform tip (keep honest)
+
+| When | Platform VERSION | Immutable pin | Notes |
+| --- | --- | --- | --- |
+| Soft-OPEN / audit baseline (2026-10-05) | **3.5.65** | `sha-215e159` (`215e1594…`) | Grok live window; next Cursor train does **not** bump until closeout |
+| Next GHCR closeout | **3.5.66** if still next at release | `sha-<7>` via `./scripts/ghcr_newest_by_created.py` | One bump at train end; pin newest-by-created, not `:nightly` name sort |
+
+Product tips between Soft-OPEN and closeout stay on the current VERSION until that single closeout bump. Never claim the new tip until GHCR publish is green and the `sha-*` digest resolves.
 
 ## Agent rules
 
