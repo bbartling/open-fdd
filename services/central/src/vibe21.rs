@@ -593,9 +593,7 @@ fn extract_flat_zip(bytes: &[u8], dest: &Path) -> Result<(), String> {
         .ok_or_else(|| "invalid model destination".to_string())?;
     let staging = parent.join(format!(
         ".{}-staging-{}",
-        dest.file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("model"),
+        dest.file_name().and_then(|s| s.to_str()).unwrap_or("model"),
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&staging);
@@ -644,9 +642,7 @@ fn extract_flat_zip(bytes: &[u8], dest: &Path) -> Result<(), String> {
     }
     let backup = parent.join(format!(
         ".{}-bak-{}",
-        dest.file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("model"),
+        dest.file_name().and_then(|s| s.to_str()).unwrap_or("model"),
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&backup);
