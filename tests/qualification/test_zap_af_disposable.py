@@ -250,6 +250,34 @@ class ZapAfExecuteVerdictTest(unittest.TestCase):
         self.assertEqual(errs, [])
         self.assertEqual(sorted(covered), ["10055", "90003"])
 
+    def test_duplicate_disposition_and_bad_expiry_rejected(self):
+        base = af.load_medium_dispositions()
+        dup = base + [dict(base[0])]
+        _, errs = af.disposition_medium_alerts(
+            medium_plugin_ids=["10055"],
+            medium_alert_names=["CSP: style-src unsafe-inline"],
+            dispositions=dup,
+            today="2026-10-03",
+        )
+        self.assertTrue(any("duplicate" in e for e in errs), errs)
+        bad_exp = [dict(base[0], expiry="10/03/2026")]
+        _, errs2 = af.disposition_medium_alerts(
+            medium_plugin_ids=["10055"],
+            medium_alert_names=["CSP: style-src unsafe-inline"],
+            dispositions=bad_exp,
+            today="2026-10-03",
+        )
+        self.assertTrue(any("YYYY-MM-DD" in e for e in errs2), errs2)
+
+    def test_name_only_medium_without_plugin_fails(self):
+        _, errs = af.disposition_medium_alerts(
+            medium_plugin_ids=[],
+            medium_alert_names=["allowed-plugin", "no-plugin-id"],
+            dispositions=af.load_medium_dispositions(),
+            today="2026-10-03",
+        )
+        self.assertTrue(any("lacks plugin_id" in e for e in errs), errs)
+
     def test_stale_or_wrong_target_report_is_rejected(self):
         cases = (
             (
