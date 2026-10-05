@@ -5,9 +5,11 @@
 //! per-equipment `role_map`, per-rule `params`. Unknown keys are ignored with a
 //! warning; the deprecated `include_ahu_chw_valve` is always coerced off.
 //!
-//! The config persists at `workspace/data/session_config.json`, seeds the Lab
-//! rule sliders on load, and — when a `building_id` is supplied — applies the
-//! `role_map` to the ingested package via `columns.csv` rewrite + re-ingest.
+//! Persistence is scoped by optional tenant + building:
+//! - `workspace/data/tenants/{tid}/buildings/{bid}/session_config.json`
+//! - `workspace/data/buildings/{bid}/session_config.json` (no tenant)
+//! - legacy hub-global `workspace/data/session_config.json` (read fallback when
+//!   unscoped / building-only; never shared across tenants)
 
 use crate::historian::store::workspace_dir;
 use serde_json::{json, Map, Value};
@@ -15,8 +17,56 @@ use std::path::PathBuf;
 
 pub const SESSION_SCHEMA: &str = "openfdd_session_v1";
 
-fn session_config_path() -> PathBuf {
+/// Authoritative scope for session-config bytes (S03).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SessionConfigScope {
+    pub tenant_id: Option<String>,
+    pub building_id: Option<String>,
+}
+
+impl SessionConfigScope {
+    pub fn new(tenant_id: Option<&str>, building_id: Option<&str>) -> Self {
+        Self {
+            tenant_id: sanitize_scope_id(tenant_id),
+            building_id: sanitize_scope_id(building_id),
+        }
+    }
+}
+
+fn sanitize_scope_id(raw: Option<&str>) -> Option<String> {
+    let s = raw?.trim();
+    if s.is_empty() {
+        return None;
+    }
+    if s.contains('/') || s.contains('\\') || s.contains("..") || s.contains('\0') {
+        return None;
+    }
+    Some(s.to_string())
+}
+
+fn legacy_session_config_path() -> PathBuf {
     workspace_dir().join("data").join("session_config.json")
+}
+
+fn session_config_path_for(scope: &SessionConfigScope) -> PathBuf {
+    match (
+        scope.tenant_id.as_deref(),
+        scope.building_id.as_deref(),
+    ) {
+        (Some(tid), Some(bid)) => workspace_dir()
+            .join("data")
+            .join("tenants")
+            .join(tid)
+            .join("buildings")
+            .join(bid)
+            .join("session_config.json"),
+        (None, Some(bid)) => workspace_dir()
+            .join("data")
+            .join("buildings")
+            .join(bid)
+            .join("session_config.json"),
+        _ => legacy_session_config_path(),
+    }
 }
 
 fn default_config() -> Value {
@@ -29,21 +79,65 @@ fn default_config() -> Value {
     })
 }
 
-/// `GET /api/fdd/session-config` — persisted session config or defaults.
+fn read_config_file(path: &std::path::Path) -> Option<Value> {
+    let text = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str::<Value>(&text).ok()
+}
+
+/// `GET /api/fdd/session-config` — unscoped / legacy hub-global.
 pub fn get_session_config() -> Value {
-    let path = session_config_path();
-    let (config, persisted) = match std::fs::read_to_string(&path) {
-        Ok(text) => match serde_json::from_str::<Value>(&text) {
-            Ok(v) => (v, true),
-            Err(_) => (default_config(), false),
-        },
-        Err(_) => (default_config(), false),
-    };
+    get_session_config_scoped(&SessionConfigScope::default())
+}
+
+/// Scoped session config. Tenant-scoped reads never fall back to hub-global
+/// bytes (prevents A reading B's settings via a shared file). Building-only
+/// (no tenant) may migrate from the legacy path for single-tenant hubs.
+pub fn get_session_config_scoped(scope: &SessionConfigScope) -> Value {
+    let path = session_config_path_for(scope);
+    if let Some(config) = read_config_file(&path) {
+        return json!({
+            "ok": true,
+            "persisted": true,
+            "path": path.display().to_string(),
+            "scope": {
+                "tenant_id": scope.tenant_id,
+                "building_id": scope.building_id,
+            },
+            "legacy_fallback": false,
+            "config": config,
+        });
+    }
+
+    let allow_legacy = scope.tenant_id.is_none();
+    if allow_legacy {
+        let legacy = legacy_session_config_path();
+        if legacy != path {
+            if let Some(config) = read_config_file(&legacy) {
+                return json!({
+                    "ok": true,
+                    "persisted": true,
+                    "path": legacy.display().to_string(),
+                    "scope": {
+                        "tenant_id": scope.tenant_id,
+                        "building_id": scope.building_id,
+                    },
+                    "legacy_fallback": true,
+                    "config": config,
+                });
+            }
+        }
+    }
+
     json!({
         "ok": true,
-        "persisted": persisted,
+        "persisted": false,
         "path": path.display().to_string(),
-        "config": config,
+        "scope": {
+            "tenant_id": scope.tenant_id,
+            "building_id": scope.building_id,
+        },
+        "legacy_fallback": false,
+        "config": default_config(),
     })
 }
 
@@ -194,9 +288,17 @@ pub fn normalize_session_config(raw: &Value) -> Result<(Value, Vec<String>), Str
     Ok((Value::Object(out), warnings))
 }
 
-/// Persist a normalized session config to the workspace. Returns warnings.
+/// Persist a normalized session config to the legacy hub-global path.
 pub fn save_session_config(config: &Value) -> Result<(), String> {
-    let path = session_config_path();
+    save_session_config_scoped(&SessionConfigScope::default(), config)
+}
+
+/// Persist under the authoritative tenant/building path.
+pub fn save_session_config_scoped(
+    scope: &SessionConfigScope,
+    config: &Value,
+) -> Result<(), String> {
+    let path = session_config_path_for(scope);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
     }
@@ -207,18 +309,16 @@ pub fn save_session_config(config: &Value) -> Result<(), String> {
     .map_err(|e| format!("write {}: {e}", path.display()))
 }
 
-/// Remove equipment role_map entries for a deleted site; drop params keyed by building id.
-/// Does not wipe global unit_system / other sites' equipment.
-pub fn strip_site_from_session_config(
+fn strip_site_from_path(
+    path: &std::path::Path,
     building_id: &str,
     equipment_ids: &[String],
 ) -> Result<usize, String> {
-    let path = session_config_path();
     if !path.is_file() {
         return Ok(0);
     }
     let text =
-        std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let mut config: Value =
         serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))?;
     let mut removed = 0usize;
@@ -228,7 +328,6 @@ pub fn strip_site_from_session_config(
                 removed += 1;
             }
         }
-        // Also drop a role_map key that equals the building id (rare but safe).
         if rm.remove(building_id).is_some() {
             removed += 1;
         }
@@ -246,30 +345,85 @@ pub fn strip_site_from_session_config(
         }
     }
     if removed > 0 {
-        save_session_config(&config)?;
+        std::fs::write(
+            path,
+            serde_json::to_string_pretty(&config).unwrap_or_default(),
+        )
+        .map_err(|e| format!("write {}: {e}", path.display()))?;
+    }
+    Ok(removed)
+}
+
+/// Remove equipment role_map entries for a deleted site; drop params keyed by building id.
+/// Does not wipe global unit_system / other sites' equipment.
+pub fn strip_site_from_session_config(
+    building_id: &str,
+    equipment_ids: &[String],
+) -> Result<usize, String> {
+    strip_site_from_session_config_scoped(
+        &SessionConfigScope::new(None, Some(building_id)),
+        building_id,
+        equipment_ids,
+    )
+}
+
+/// Strip site keys from the scoped config file (and legacy hub file when present).
+pub fn strip_site_from_session_config_scoped(
+    scope: &SessionConfigScope,
+    building_id: &str,
+    equipment_ids: &[String],
+) -> Result<usize, String> {
+    let mut removed = strip_site_from_path(
+        &session_config_path_for(scope),
+        building_id,
+        equipment_ids,
+    )?;
+    // Also clean legacy hub-global leftovers for single-tenant migrations.
+    if scope.tenant_id.is_none() {
+        removed += strip_site_from_path(&legacy_session_config_path(), building_id, equipment_ids)?;
     }
     Ok(removed)
 }
 
 /// `PUT /api/fdd/session-config` — validate, persist, optionally apply the
 /// role_map to an ingested building (`{"building_id": "...", "config": {…}}`
-/// or the config object directly).
+/// or the config object directly). Optional `tenant_id` is server-supplied.
 pub fn put_session_config(body: &Value) -> Value {
-    let (raw, building_id) = match body.get("config") {
+    let (raw, building_id, tenant_id) = match body.get("config") {
         Some(cfg) => (
             cfg,
             body.get("building_id")
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string(),
+            body.get("tenant_id")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
         ),
-        None => (body, String::new()),
+        None => (
+            body,
+            body.get("building_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            body.get("tenant_id")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+        ),
     };
+    let scope = SessionConfigScope::new(
+        tenant_id.as_deref(),
+        if building_id.is_empty() {
+            None
+        } else {
+            Some(building_id.as_str())
+        },
+    );
     let (config, mut warnings) = match normalize_session_config(raw) {
         Ok(v) => v,
         Err(e) => return json!({"ok": false, "error": e}),
     };
-    if let Err(e) = save_session_config(&config) {
+    if let Err(e) = save_session_config_scoped(&scope, &config) {
         return json!({"ok": false, "error": e});
     }
 
@@ -312,7 +466,11 @@ pub fn put_session_config(body: &Value) -> Value {
         "config": config,
         "warnings": warnings,
         "applied_role_map": applied_role_map,
-        "path": session_config_path().display().to_string(),
+        "path": session_config_path_for(&scope).display().to_string(),
+        "scope": {
+            "tenant_id": scope.tenant_id,
+            "building_id": scope.building_id,
+        },
     })
 }
 
@@ -451,6 +609,65 @@ mod tests {
         assert!(after["config"]["role_map"].get("AHU_KEEP").is_some());
         assert!(after["config"]["params"].get("BUILDING_50").is_none());
         assert_eq!(after["config"]["params"]["FC1"]["eps_dsp"], json!(0.2));
+
+        std::env::remove_var("OPENFDD_WORKSPACE");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn tenant_scoped_configs_do_not_collide() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd_session_tenant_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", &tmp);
+
+        let scope_a = SessionConfigScope::new(Some("tenant_a"), Some("SHARED_BLDG"));
+        let scope_b = SessionConfigScope::new(Some("tenant_b"), Some("SHARED_BLDG"));
+
+        save_session_config_scoped(
+            &scope_a,
+            &json!({
+                "schema_version": SESSION_SCHEMA,
+                "unit_system": "metric",
+                "params": {"FC1": {"eps_dsp": 0.11}},
+            }),
+        )
+        .unwrap();
+        save_session_config_scoped(
+            &scope_b,
+            &json!({
+                "schema_version": SESSION_SCHEMA,
+                "unit_system": "imperial",
+                "params": {"FC1": {"eps_dsp": 0.99}},
+            }),
+        )
+        .unwrap();
+
+        let a = get_session_config_scoped(&scope_a);
+        let b = get_session_config_scoped(&scope_b);
+        assert_eq!(a["config"]["unit_system"], json!("metric"));
+        assert_eq!(a["config"]["params"]["FC1"]["eps_dsp"], json!(0.11));
+        assert_eq!(b["config"]["unit_system"], json!("imperial"));
+        assert_eq!(b["config"]["params"]["FC1"]["eps_dsp"], json!(0.99));
+        assert_ne!(a["path"], b["path"]);
+        // Tenant-scoped reads must not leak hub-global leftovers.
+        save_session_config(&json!({
+            "schema_version": SESSION_SCHEMA,
+            "unit_system": "si",
+            "params": {"FC1": {"eps_dsp": 7.0}},
+        }))
+        .unwrap();
+        let a2 = get_session_config_scoped(&scope_a);
+        assert_eq!(a2["config"]["unit_system"], json!("metric"));
+        assert_eq!(a2["legacy_fallback"], json!(false));
 
         std::env::remove_var("OPENFDD_WORKSPACE");
         let _ = std::fs::remove_dir_all(&tmp);

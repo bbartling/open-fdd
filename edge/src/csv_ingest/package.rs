@@ -760,7 +760,14 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         // Lab sliders pick it up. Invalid configs only warn — never block ingest.
         match crate::fdd::session_config::normalize_session_config(cfg) {
             Ok((normalized, mut cfg_warnings)) => {
-                if let Err(e) = crate::fdd::session_config::save_session_config(&normalized) {
+                // Persist under building scope (tenant when provided by import caller).
+                let scope = crate::fdd::session_config::SessionConfigScope::new(
+                    None,
+                    Some(manifest.building_id.as_str()),
+                );
+                if let Err(e) =
+                    crate::fdd::session_config::save_session_config_scoped(&scope, &normalized)
+                {
                     warnings.push(format!("session_config.json not persisted: {e}"));
                 }
                 warnings.append(&mut cfg_warnings);
@@ -1497,7 +1504,12 @@ pub fn get_package_mapping_handler_scoped(
         None => all_ids.clone(),
     };
 
-    let session = crate::fdd::session_config::get_session_config();
+    let session = crate::fdd::session_config::get_session_config_scoped(
+        &crate::fdd::session_config::SessionConfigScope::new(
+            preferred_tenant,
+            Some(building_id.as_str()),
+        ),
+    );
     let unit_system = session
         .get("config")
         .and_then(|c| c.get("unit_system"))
@@ -1731,7 +1743,12 @@ fn mapping_from_historian_equipment(
             Err(e) => return json!({"ok": false, "error": format!("equipment_id: {e}")}),
         }
     }
-    let session = crate::fdd::session_config::get_session_config();
+    let session = crate::fdd::session_config::get_session_config_scoped(
+        &crate::fdd::session_config::SessionConfigScope::new(
+            preferred_tenant,
+            Some(building_id),
+        ),
+    );
     let unit_system = session
         .get("config")
         .and_then(|c| c.get("unit_system"))
