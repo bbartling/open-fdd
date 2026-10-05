@@ -3068,9 +3068,56 @@ pub async fn get_ack(
         });
     };
     if let Some(ack) = state.command_acks.get(&id) {
+        // Non-terminal Accepted must still honor command TTL.
+        if matches!(ack.status, openfdd_contracts::CommandStatus::Accepted) {
+            let expired_command = state.pending_commands.get(&id).and_then(|pending| {
+                pending
+                    .command
+                    .is_expired(Utc::now())
+                    .then(|| pending.command.clone())
+            });
+            if let Some(command) = expired_command {
+                drop(ack);
+                state.pending_commands.remove(&id);
+                let expired = openfdd_contracts::CommandAck::new(
+                    &command,
+                    openfdd_contracts::CommandStatus::Expired,
+                    Some("command ttl expired before edge executed ack".into()),
+                );
+                state.command_acks.insert(id, expired.clone());
+                return Json(CommandAckResponse {
+                    ok: true,
+                    ack: Some(expired),
+                    pending: Some(false),
+                    error: None,
+                });
+            }
+        }
         return Json(CommandAckResponse {
             ok: true,
             ack: Some(ack.clone()),
+            pending: Some(false),
+            error: None,
+        });
+    }
+    let expired_command = state.pending_commands.get(&id).and_then(|pending| {
+        pending
+            .command
+            .is_expired(Utc::now())
+            .then(|| pending.command.clone())
+    });
+    if let Some(command) = expired_command {
+        // TTL expired without an edge ack → durable terminal status.
+        state.pending_commands.remove(&id);
+        let ack = openfdd_contracts::CommandAck::new(
+            &command,
+            openfdd_contracts::CommandStatus::Expired,
+            Some("command ttl expired before edge ack".into()),
+        );
+        state.command_acks.insert(id, ack.clone());
+        return Json(CommandAckResponse {
+            ok: true,
+            ack: Some(ack),
             pending: Some(false),
             error: None,
         });

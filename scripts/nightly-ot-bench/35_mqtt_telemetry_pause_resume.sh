@@ -5,6 +5,10 @@
 # Path under test: Central POST /api/commands target_id=edge:telemetry
 # (MQTT command topic → fieldbus). When local fieldbus REST is reachable,
 # also assert suspended/resumed status and force one poll after resume.
+#
+# #1151: always force-resume on exit so a failed suspend-ack path cannot leave
+# telemetry_suspended=true behind. Prefer the local fieldbus edge when REST is
+# reachable so ack/status assertions match the command target.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck disable=SC1091
@@ -67,6 +71,24 @@ pick_edge() {
   source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib_pick_edge.sh"
   edges_json="$(curl -sf --max-time 20 "${auth_hdr[@]}" "$BASE/api/edges")"
   echo "$edges_json" | tee "$ART/edges.json" >/dev/null
+
+  # Prefer the local fieldbus edge when REST is reachable and EXPECTED_* unset,
+  # so suspend/resume ack + cleanup target the same edge we can verify.
+  if [[ "$fb_reachable" == "1" && -n "${LOCAL_EDGE_ID:-}" \
+      && -z "${EXPECTED_EDGE_ID:-}" && -z "${EXPECTED_SITE_ID:-}" ]]; then
+    local local_site
+    local_site="$(echo "$edges_json" | jq -r --arg e "$LOCAL_EDGE_ID" '
+      (.edges // [])[]
+      | select(.edge_id == $e)
+      | (.site_id // .building_id // .site // empty)
+    ' | head -1)"
+    if [[ -n "$local_site" ]]; then
+      echo "$local_site" "$LOCAL_EDGE_ID"
+      return 0
+    fi
+    echo "WARN: local edge $LOCAL_EDGE_ID not in /api/edges — falling back to resolve_edge_target" \
+      | tee -a "$ART/pause_resume.log"
+  fi
   resolve_edge_target "$edges_json"
 }
 
@@ -91,7 +113,7 @@ issue_telemetry() {
     local ack
     ack="$(curl -sf --max-time 15 "${auth_hdr[@]}" "$BASE/api/commands/${cmd_id}/ack" || echo '{}')"
     echo "$ack" | tee "$ART/ack_${action}_${i}.json" >/dev/null
-    status="$(echo "$ack" | jq -r '.ack.status // "pending"')"
+    status="$(echo "$ack" | jq -r '.ack.status // if .pending == true then "pending" elif .error then .error else "pending" end')"
     if [[ "$status" == "executed" ]]; then
       echo "ack $action=executed" | tee -a "$ART/pause_resume.log"
       return 0
@@ -109,6 +131,28 @@ issue_telemetry() {
   echo "FAIL: no executed ack for $action (last=$status)" | tee -a "$ART/pause_resume.log"
   return 1
 }
+
+SITE_ID=""
+EDGE_ID=""
+CLEANUP_DONE=0
+force_resume_cleanup() {
+  if [[ "$CLEANUP_DONE" == "1" ]]; then
+    return 0
+  fi
+  CLEANUP_DONE=1
+  if [[ -z "${SITE_ID:-}" || -z "${EDGE_ID:-}" ]]; then
+    return 0
+  fi
+  echo "cleanup: force resume site=$SITE_ID edge=$EDGE_ID" | tee -a "$ART/pause_resume.log"
+  issue_telemetry resume "$SITE_ID" "$EDGE_ID" \
+    | tee "$ART/cleanup_resume.log" >/dev/null 2>&1 || true
+  if [[ "$fb_reachable" == "1" && -n "${LOCAL_EDGE_ID:-}" && "$EDGE_ID" == "$LOCAL_EDGE_ID" ]]; then
+    fb -X POST "$FIELDBUS_BASE/telemetry/resume" \
+      -d '{"approved_by":"stress-gate-35-cleanup"}' \
+      | tee "$ART/cleanup_fb_resume.json" >/dev/null 2>&1 || true
+  fi
+}
+trap force_resume_cleanup EXIT
 
 if ! pick_out="$(pick_edge)"; then
   echo "FAIL: could not resolve site/edge for pause/resume (see resolve_edge_target)" | tee -a "$ART/pause_resume.log"
@@ -148,16 +192,14 @@ delta_suspend=$((mid - before))
 if [[ "$delta_suspend" -gt 2 ]]; then
   echo "FAIL: ingest advanced while suspended ($before → $mid, delta=$delta_suspend)" \
     | tee -a "$ART/pause_resume.log"
-  # Still resume so we leave the edge healthy.
-  issue_telemetry resume "$SITE_ID" "$EDGE_ID" || true
-  if [[ "$use_local_fb" == "1" ]]; then
-    fb -X POST "$FIELDBUS_BASE/telemetry/resume" -d '{"approved_by":"stress-gate-35-cleanup"}' || true
-  fi
+  # trap EXIT forces resume cleanup.
   exit 1
 fi
 echo "PASS: ingest stalled while suspended (delta=$delta_suspend)" | tee -a "$ART/pause_resume.log"
 
 issue_telemetry resume "$SITE_ID" "$EDGE_ID"
+# Successful intentional resume — mark cleanup done so EXIT trap does not re-issue.
+CLEANUP_DONE=1
 
 if [[ "$use_local_fb" == "1" ]]; then
   status="$(fb "$FIELDBUS_BASE/telemetry/status")"
