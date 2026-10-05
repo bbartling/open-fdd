@@ -83,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(mqtt_monitor::router(Arc::clone(&state)))
         .merge(sql_anomaly::router(Arc::clone(&state)))
         .merge(cutover::router())
-        .merge(vibe21::router())
+        .merge(vibe21::router(Arc::clone(&state)))
         .merge(openapi::router())
         .layer(middleware::from_fn(contract::request_id_middleware))
         .layer(TraceLayer::new_for_http());

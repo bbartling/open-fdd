@@ -12,19 +12,39 @@ pub fn sessions_root() -> PathBuf {
     crate::historian::store::workspace_dir().join("data/csv_import_sessions")
 }
 
-pub fn session_dir(id: &str) -> PathBuf {
-    sessions_root().join(sanitize_session_id(id))
+/// Parse a session id without silently rewriting it.
+/// Invalid / empty / all-stripped IDs are rejected (do not alias the sessions root).
+fn parse_session_id(id: &str) -> Result<String, String> {
+    let trimmed = id.trim();
+    if trimmed.is_empty() {
+        return Err("invalid session id".into());
+    }
+    if !trimmed
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err("invalid session id".into());
+    }
+    Ok(trimmed.to_string())
 }
 
-fn sanitize_session_id(id: &str) -> String {
-    id.chars()
-        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
-        .collect()
+pub fn session_dir(id: &str) -> Result<PathBuf, String> {
+    let safe = parse_session_id(id)?;
+    let root = sessions_root();
+    let dir = root.join(&safe);
+    // Require a strict descendant — never the sessions root itself.
+    if dir == root || !dir.starts_with(&root) {
+        return Err("invalid session id".into());
+    }
+    Ok(dir)
 }
 
 pub fn create_session() -> Value {
     let id = format!("csv-{}", Utc::now().timestamp_millis());
-    let dir = session_dir(&id);
+    let dir = match session_dir(&id) {
+        Ok(dir) => dir,
+        Err(e) => return json!({"ok": false, "error": e}),
+    };
     if let Err(e) = fs::create_dir_all(dir.join("files")) {
         return json!({"ok": false, "error": e.to_string()});
     }
@@ -45,7 +65,7 @@ pub fn create_session() -> Value {
 }
 
 pub fn save_session(id: &str, session: &Value) -> Result<(), String> {
-    let dir = session_dir(id);
+    let dir = session_dir(id)?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     fs::write(
         dir.join("session.json"),
@@ -55,7 +75,7 @@ pub fn save_session(id: &str, session: &Value) -> Result<(), String> {
 }
 
 pub fn load_session(id: &str) -> Option<Value> {
-    let path = session_dir(id).join("session.json");
+    let path = session_dir(id).ok()?.join("session.json");
     let text = fs::read_to_string(path).ok()?;
     serde_json::from_str(&text).ok()
 }
@@ -63,7 +83,7 @@ pub fn load_session(id: &str) -> Option<Value> {
 pub fn stage_file(session_id: &str, filename: &str, raw: &[u8]) -> Result<Value, String> {
     let safe = sanitize_filename(filename)?;
     let (profile, _text) = parse::parse_csv_bytes(raw, None)?;
-    let dir = session_dir(session_id).join("files");
+    let dir = session_dir(session_id)?.join("files");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     fs::write(dir.join(&safe), raw).map_err(|e| e.to_string())?;
     Ok(json!({
@@ -95,7 +115,7 @@ pub fn read_staged_file(
     filename: &str,
 ) -> Result<(ParseProfile, String), String> {
     let safe = sanitize_filename(filename)?;
-    let path = session_dir(session_id).join("files").join(&safe);
+    let path = session_dir(session_id)?.join("files").join(&safe);
     if !path.starts_with(sessions_root()) {
         return Err("path traversal".into());
     }
@@ -104,7 +124,9 @@ pub fn read_staged_file(
 }
 
 pub fn list_staged_files(session_id: &str) -> Vec<String> {
-    let dir = session_dir(session_id).join("files");
+    let Ok(dir) = session_dir(session_id).map(|d| d.join("files")) else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     if let Ok(entries) = fs::read_dir(dir) {
         for e in entries.flatten() {
@@ -121,7 +143,7 @@ pub fn list_staged_files(session_id: &str) -> Vec<String> {
 
 pub fn delete_staged_file(session_id: &str, filename: &str) -> Result<(), String> {
     let safe = sanitize_filename(filename)?;
-    let path = session_dir(session_id).join("files").join(&safe);
+    let path = session_dir(session_id)?.join("files").join(&safe);
     if path.exists() {
         fs::remove_file(path).map_err(|e| e.to_string())?;
     }
@@ -129,18 +151,24 @@ pub fn delete_staged_file(session_id: &str, filename: &str) -> Result<(), String
 }
 
 pub fn delete_session(session_id: &str) -> Result<(), String> {
-    let dir = session_dir(session_id);
-    if !dir.starts_with(sessions_root()) {
+    let root = sessions_root();
+    let dir = session_dir(session_id)?;
+    if dir == root || !dir.starts_with(&root) {
         return Err("invalid session id".into());
     }
-    if dir.exists() {
-        fs::remove_dir_all(dir).map_err(|e| e.to_string())?;
+    // Only delete an existing nested session directory — never invent a path wipe.
+    if !dir.exists() {
+        return Ok(());
     }
-    Ok(())
+    if !dir.is_dir() {
+        return Err("invalid session id".into());
+    }
+    fs::remove_dir_all(dir).map_err(|e| e.to_string())
 }
 
 pub fn session_path_ok(path: &Path) -> bool {
-    path.starts_with(sessions_root())
+    let root = sessions_root();
+    path.starts_with(&root) && path != root
 }
 
 /// Recent import sessions (newest first) for agent/UI pickers.
@@ -209,12 +237,40 @@ mod tests {
     #[test]
     fn delete_session_removes_directory() {
         let id = "test-delete-session";
-        let dir = session_dir(id);
+        let dir = session_dir(id).unwrap();
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("files")).unwrap();
         fs::write(dir.join("session.json"), r#"{"status":"planned"}"#).unwrap();
         assert!(dir.exists());
         delete_session(id).unwrap();
         assert!(!dir.exists());
+    }
+
+    #[test]
+    fn all_invalid_session_id_is_rejected() {
+        assert!(parse_session_id("!!!").is_err());
+        assert!(parse_session_id("").is_err());
+        assert!(parse_session_id("   ").is_err());
+        assert!(parse_session_id("../x").is_err());
+        assert!(session_dir("!!!").is_err());
+    }
+
+    #[test]
+    fn delete_all_invalid_session_id_does_not_wipe_root() {
+        let root = sessions_root();
+        fs::create_dir_all(&root).unwrap();
+        let sibling_id = "sibling-keep-me";
+        let sibling = session_dir(sibling_id).unwrap();
+        let _ = fs::remove_dir_all(&sibling);
+        fs::create_dir_all(sibling.join("files")).unwrap();
+        fs::write(sibling.join("session.json"), r#"{"status":"planned"}"#).unwrap();
+
+        let err = delete_session("!!!").unwrap_err();
+        assert!(err.contains("invalid"), "{err}");
+        assert!(root.exists(), "sessions root must remain");
+        assert!(sibling.exists(), "sibling session must remain");
+        assert!(sibling.join("session.json").exists());
+
+        delete_session(sibling_id).unwrap();
     }
 }
