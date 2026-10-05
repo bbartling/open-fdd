@@ -162,6 +162,25 @@ impl HaystackRdfCache {
         }
         Ok(bundle)
     }
+
+    /// Bounded read-only SELECT/ASK free-form SPARQL (N5).
+    pub fn execute_readonly_query(
+        &self,
+        building_id: &str,
+        equipment_id: Option<&str>,
+        preferred_tenant: Option<&str>,
+        query_text: &str,
+    ) -> Result<Value, Value> {
+        let (snap, _inventory) =
+            self.get_or_materialize_with_inventory(building_id, equipment_id, preferred_tenant)?;
+        haystack_sparql_bindings::execute_readonly_on_snapshot(&snap, query_text).map_err(|e| {
+            json!({
+                "ok": false,
+                "error": e,
+                "schema": "ofdd_sparql_readonly_v1",
+            })
+        })
+    }
 }
 
 fn inventory_cache_token(inventory: &Value, preferred_tenant: Option<&str>) -> String {

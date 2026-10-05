@@ -191,6 +191,150 @@ fn ensure_select_query(query_text: &str) -> Result<(), String> {
     }
 }
 
+/// Cap free-form query text before parse/execute (bytes).
+pub const SPARQL_MAX_QUERY_BYTES: usize = 16_384;
+
+fn pattern_forbids_service(pattern: &spargebra::algebra::GraphPattern) -> Result<(), String> {
+    use spargebra::algebra::GraphPattern as GP;
+    match pattern {
+        GP::Service { .. } => Err("SERVICE/federation is not allowed".into()),
+        GP::Join { left, right } | GP::Union { left, right } | GP::Minus { left, right } => {
+            pattern_forbids_service(left)?;
+            pattern_forbids_service(right)
+        }
+        GP::LeftJoin { left, right, .. } => {
+            pattern_forbids_service(left)?;
+            pattern_forbids_service(right)
+        }
+        GP::Filter { inner, .. }
+        | GP::Extend { inner, .. }
+        | GP::Graph { inner, .. }
+        | GP::OrderBy { inner, .. }
+        | GP::Project { inner, .. }
+        | GP::Distinct { inner }
+        | GP::Reduced { inner }
+        | GP::Slice { inner, .. }
+        | GP::Group { inner, .. } => pattern_forbids_service(inner),
+        GP::Bgp { .. } | GP::Path { .. } | GP::Values { .. } => Ok(()),
+        other => {
+            // Future GraphPattern variants: fail closed rather than allow SERVICE.
+            let s = format!("{other:?}");
+            if s.contains("Service") {
+                return Err("SERVICE/federation is not allowed".into());
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Parse + policy gate for product free-form SPARQL (SELECT/ASK only).
+pub fn ensure_readonly_query(query_text: &str) -> Result<spargebra::Query, String> {
+    let trimmed = query_text.trim();
+    if trimmed.is_empty() {
+        return Err("query text is required".into());
+    }
+    if trimmed.len() > SPARQL_MAX_QUERY_BYTES {
+        return Err(format!("query exceeds {SPARQL_MAX_QUERY_BYTES} byte limit"));
+    }
+    let parsed = SparqlParser::new()
+        .parse_query(trimmed)
+        .map_err(|e| format!("SPARQL parse error: {e}"))?;
+    let (dataset, pattern) = match &parsed {
+        spargebra::Query::Select {
+            dataset, pattern, ..
+        } => (dataset, pattern),
+        spargebra::Query::Ask {
+            dataset, pattern, ..
+        } => (dataset, pattern),
+        spargebra::Query::Construct { .. } | spargebra::Query::Describe { .. } => {
+            return Err("Only read-only SELECT and ASK are supported".into());
+        }
+    };
+    if dataset.is_some() {
+        return Err("FROM / FROM NAMED dataset clauses are not allowed".into());
+    }
+    pattern_forbids_service(pattern)?;
+    Ok(parsed)
+}
+
+/// Execute a bounded read-only SELECT/ASK against a central package snapshot.
+pub fn execute_readonly_on_snapshot(
+    snap: &CentralDatasetSnapshot,
+    query_text: &str,
+) -> Result<Value, String> {
+    let trimmed = query_text.trim();
+    if trimmed.is_empty() {
+        return Err("query text is required".into());
+    }
+    let full = if trimmed.to_ascii_uppercase().contains("PREFIX ") {
+        trimmed.to_string()
+    } else {
+        format!("{PREFIXES}\n{trimmed}")
+    };
+    let parsed = ensure_readonly_query(&full)?;
+    let store = load_store(&snap.turtle)?;
+    let results = SparqlEvaluator::new()
+        .parse_query(&full)
+        .map_err(|e| format!("SPARQL parse error: {e}"))?
+        .on_store(&store)
+        .execute()
+        .map_err(|e| format!("SPARQL execution error: {e}"))?;
+    match (&parsed, results) {
+        (spargebra::Query::Ask { .. }, QueryResults::Boolean(b)) => Ok(json!({
+            "ok": true,
+            "kind": "ask",
+            "boolean": b,
+            "schema": "ofdd_sparql_readonly_v1",
+            "query_engine": "central_package_sparql_readonly_v1",
+            "building_id": snap.building_id,
+            "defs_pin": DEFS_PIN,
+            "turtle_sha256": snap.turtle_sha256,
+            "model_revision": snap.model_revision,
+            "not_edge_prototype_graph": true,
+        })),
+        (spargebra::Query::Select { .. }, QueryResults::Solutions(solutions)) => {
+            let cap = SPARQL_MAX_ROWS.saturating_add(1);
+            let mut rows = Vec::new();
+            let mut columns: Vec<String> = Vec::new();
+            for sol in solutions {
+                if rows.len() >= cap {
+                    break;
+                }
+                let sol = sol.map_err(|e| format!("SPARQL solution error: {e}"))?;
+                let mut map = BTreeMap::new();
+                for (var, term) in sol.iter() {
+                    let name = var.as_str().to_string();
+                    if !columns.iter().any(|c| c == &name) {
+                        columns.push(name.clone());
+                    }
+                    map.insert(name, term_lex(term));
+                }
+                rows.push(map);
+            }
+            let truncated = rows.len() > SPARQL_MAX_ROWS;
+            if truncated {
+                rows.truncate(SPARQL_MAX_ROWS);
+            }
+            Ok(json!({
+                "ok": true,
+                "kind": "select",
+                "columns": columns,
+                "rows": rows,
+                "row_count": rows.len(),
+                "truncated": truncated,
+                "schema": "ofdd_sparql_readonly_v1",
+                "query_engine": "central_package_sparql_readonly_v1",
+                "building_id": snap.building_id,
+                "defs_pin": DEFS_PIN,
+                "turtle_sha256": snap.turtle_sha256,
+                "model_revision": snap.model_revision,
+                "not_edge_prototype_graph": true,
+            }))
+        }
+        _ => Err("query kind / result mismatch".into()),
+    }
+}
+
 fn load_store(turtle: &str) -> Result<Store, String> {
     let store = Store::new().map_err(|e| format!("oxigraph store: {e}"))?;
     store
@@ -521,6 +665,42 @@ mod tests {
             execute_template_from_meta(&sample_meta(), Some(&sample_inventory()), None, "nope")
                 .unwrap_err();
         assert!(err.contains("unknown"));
+    }
+
+    #[test]
+    fn readonly_select_and_ask_policy() {
+        ensure_readonly_query("SELECT ?s WHERE { ?s ?p ?o } LIMIT 1").expect("select");
+        ensure_readonly_query("ASK { ?s ?p ?o }").expect("ask");
+        assert!(
+            ensure_readonly_query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+                .unwrap_err()
+                .contains("SELECT and ASK")
+        );
+        assert!(ensure_readonly_query(
+            "SELECT * WHERE { SERVICE <http://evil.example/sparql> { ?s ?p ?o } }"
+        )
+        .unwrap_err()
+        .contains("SERVICE"));
+        assert!(
+            ensure_readonly_query("SELECT * FROM <http://example/g> WHERE { ?s ?p ?o }")
+                .unwrap_err()
+                .contains("FROM")
+        );
+    }
+
+    #[test]
+    fn readonly_execute_counts_equipment() {
+        let snap =
+            haystack_central_dataset::materialize(&sample_meta(), Some(&sample_inventory()), None)
+                .expect("materialize");
+        let out = execute_readonly_on_snapshot(
+            &snap,
+            "SELECT (COUNT(DISTINCT ?equipmentId) AS ?n) WHERE { ?e ofdd:equipmentId ?equipmentId }",
+        )
+        .expect("count");
+        assert_eq!(out["ok"], json!(true));
+        assert_eq!(out["kind"], json!("select"));
+        assert!(out["row_count"].as_u64().unwrap_or(0) >= 1);
     }
 
     #[test]

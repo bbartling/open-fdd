@@ -248,3 +248,46 @@ export async function listCookbookRoles(): Promise<string[]> {
   );
   return Array.isArray(body.roles) ? body.roles.map(String) : [];
 }
+
+export interface SparqlCatalogQuery {
+  id: string;
+  label: string;
+  category?: string;
+  query?: string;
+}
+
+export async function getSparqlCatalog(): Promise<SparqlCatalogQuery[]> {
+  const body = await apiFetch<{
+    ok?: boolean;
+    queries?: SparqlCatalogQuery[];
+  }>("/api/model/sparql/predefined");
+  return Array.isArray(body.queries) ? body.queries : [];
+}
+
+export interface SparqlQueryResult {
+  ok?: boolean;
+  kind?: string;
+  boolean?: boolean;
+  columns?: string[];
+  rows?: Record<string, string>[];
+  row_count?: number;
+  truncated?: boolean;
+  error?: string;
+  defs_pin?: string;
+  turtle_sha256?: string;
+  model_revision?: string | null;
+}
+
+/** N5: bounded read-only SELECT/ASK against the active site model. */
+export async function runSparqlQuery(
+  buildingId: string,
+  query: string,
+): Promise<SparqlQueryResult> {
+  return apiFetch<SparqlQueryResult>("/api/model/sparql/query", {
+    method: "POST",
+    body: JSON.stringify({
+      building_id: buildingId,
+      query,
+    }),
+  });
+}

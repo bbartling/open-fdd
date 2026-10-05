@@ -209,6 +209,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(central_package_sparql_catalog),
         )
         .route(
+            "/api/model/sparql/query",
+            post(central_package_sparql_query),
+        )
+        .route(
             "/api/model/sparql/consumers",
             post(central_package_sparql_consumers),
         )
@@ -4514,6 +4518,84 @@ pub async fn central_package_sparql(
 
 pub async fn central_package_sparql_catalog() -> Json<Value> {
     Json(crate::haystack_rdf::sparql_catalog())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CentralPackageSparqlQueryBody {
+    /// Editable SPARQL text (SELECT or ASK). Server clamps size and rejects mutations.
+    query: Option<String>,
+    building_id: Option<String>,
+    equipment_id: Option<String>,
+}
+
+/// N5: bounded read-only free-form SPARQL for UI + AI agents (JWT + building scope).
+pub async fn central_package_sparql_query(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<CentralPackageSparqlQueryBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let Some(query) = body
+        .query
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "query text required"})),
+        ));
+    };
+    let Some(building_id) = body
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "building_id required"})),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let equipment_id = body
+        .equipment_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, Some(&building_id));
+    let cache = state.haystack_rdf.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        cache.execute_readonly_query(
+            &building_id,
+            equipment_id.as_deref(),
+            preferred.as_deref(),
+            &query,
+        )
+    })
+    .await
+    .unwrap_or_else(|e| Err(json!({"ok": false, "error": format!("sparql task: {e}")})));
+    match result {
+        Ok(v) => Ok(Json(v)),
+        Err(err) => {
+            let status = if err
+                .get("error")
+                .and_then(|e| e.as_str())
+                .map(|s| s.contains("not allowed") || s.contains("exceeds"))
+                .unwrap_or(false)
+            {
+                StatusCode::BAD_REQUEST
+            } else {
+                StatusCode::BAD_REQUEST
+            };
+            Err((status, Json(err)))
+        }
+    }
 }
 
 /// H10/H11: typed bindings + FDD/history/ECM consumer plans (JWT + building scope).
