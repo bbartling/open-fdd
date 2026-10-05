@@ -80,15 +80,21 @@ issue_cert edge_foreign 'edge:site-a:fieldbus-1' clientAuth '' "$TMP/foreign-ca.
 
 cp "$TMP/server.cert.pem" "$TMP/certs/server.cert.pem"
 cp "$TMP/server.key.pem" "$TMP/certs/server.key.pem"
-chmod 644 "$TMP/certs"/* "$TMP"/*.pem "$TMP"/*.key.pem 2>/dev/null || chmod 644 "$TMP/certs"/*
+# Host-side modes: openfdd-mqtt entrypoint chowns to uid 1883 and forces key 640.
+# Mount must be writable so the entrypoint can repair root-owned kit files.
+chmod 644 "$TMP/certs"/*.cert.pem "$TMP/certs"/ca.pem "$TMP/certs"/acl 2>/dev/null || true
+chmod 600 "$TMP/certs"/server.key.pem 2>/dev/null || true
+chmod 600 "$TMP"/*.key.pem 2>/dev/null || true
+chmod 644 "$TMP"/*.cert.pem "$TMP"/ca.pem "$TMP"/foreign-ca.pem 2>/dev/null || true
 
 echo "== Pull mqtt image $TAG =="
 docker pull "$MQTT_IMAGE" >/dev/null
 docker pull "$CLIENT" >/dev/null
 
 docker network create "$NET" >/dev/null
+# Writable certs mount: entrypoint chowns to mosquitto (1883) before drop-priv.
 docker run -d --name "$BROKER" --network "$NET" --network-alias mqtt \
-  -v "$TMP/certs:/mosquitto/certs:ro" \
+  -v "$TMP/certs:/mosquitto/certs" \
   "$MQTT_IMAGE" >/dev/null
 
 # Wait for broker listen (mosquitto has no HTTP health).
