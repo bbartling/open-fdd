@@ -80,7 +80,9 @@ issue_cert edge_foreign 'edge:site-a:fieldbus-1' clientAuth '' "$TMP/foreign-ca.
 
 cp "$TMP/server.cert.pem" "$TMP/certs/server.cert.pem"
 cp "$TMP/server.key.pem" "$TMP/certs/server.key.pem"
-chmod 644 "$TMP/certs"/* "$TMP"/*.pem "$TMP"/*.key.pem 2>/dev/null || chmod 644 "$TMP/certs"/*
+# Certs may be world-readable; private keys must stay 600/640 for openfdd-mqtt.
+chmod 644 "$TMP/certs"/*.cert.pem "$TMP/certs"/ca.pem "$TMP"/*.cert.pem "$TMP"/ca.pem "$TMP"/foreign-ca.pem 2>/dev/null || true
+chmod 600 "$TMP/certs"/*.key.pem "$TMP"/*.key.pem 2>/dev/null || true
 
 echo "== Pull mqtt image $TAG =="
 docker pull "$MQTT_IMAGE" >/dev/null
