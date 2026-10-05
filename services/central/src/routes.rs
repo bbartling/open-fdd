@@ -1791,8 +1791,8 @@ pub(crate) fn login_throttle_ip(headers: &HeaderMap) -> String {
     };
     raw.split(',')
         .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .next_back()
+        .rev()
+        .find(|s| !s.is_empty())
         .unwrap_or("direct")
         .to_string()
 }
