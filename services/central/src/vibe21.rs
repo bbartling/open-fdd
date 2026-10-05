@@ -6,10 +6,11 @@
 
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
-use axum::extract::{DefaultBodyLimit, Path as AxumPath};
+use axum::extract::{DefaultBodyLimit, Extension, Path as AxumPath, State};
 use axum::http::{header, HeaderMap, StatusCode};
+use axum::middleware;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -18,7 +19,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+use crate::auth::{self, AuthUser};
 use crate::jobs::workspace_root;
+use crate::state::AppState;
+
+/// Soft caps for compatibility ZIP imports (entry count + uncompressed bytes).
+const MAX_ZIP_ENTRIES: usize = 256;
+const MAX_ZIP_UNCOMPRESSED_BYTES: u64 = 64 * 1024 * 1024;
 
 static ACTIVE_BUNDLE: OnceLock<RuntimeBundle> = OnceLock::new();
 
@@ -499,7 +506,10 @@ fn validate_unity_zip(bytes: &[u8]) -> Result<(), String> {
         return Err("not a zip archive".into());
     }
     let names = zip_member_names(bytes)?;
-    if names.iter().any(|n| n.contains("..")) {
+    if names.len() > MAX_ZIP_ENTRIES {
+        return Err(format!("zip exceeds entry limit ({MAX_ZIP_ENTRIES})"));
+    }
+    if names.iter().any(|n| !zip_entry_name_safe(n)) {
         return Err("zip-slip rejected".into());
     }
     let has_index = names
@@ -517,7 +527,10 @@ fn validate_model_release_zip(bytes: &[u8]) -> Result<(), String> {
         return Err("not a zip archive".into());
     }
     let names = zip_member_names(bytes)?;
-    if names.iter().any(|n| n.contains("..")) {
+    if names.len() > MAX_ZIP_ENTRIES {
+        return Err(format!("zip exceeds entry limit ({MAX_ZIP_ENTRIES})"));
+    }
+    if names.iter().any(|n| !zip_entry_name_safe(n)) {
         return Err("zip-slip rejected".into());
     }
     let lower: Vec<String> = names.iter().map(|n| n.to_ascii_lowercase()).collect();
@@ -553,20 +566,70 @@ fn validate_model_release_zip(bytes: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-fn extract_flat_zip(bytes: &[u8], dest: &Path) -> Result<(), String> {
-    if dest.exists() {
-        let _ = std::fs::remove_dir_all(dest);
+/// Reject absolute / parent / backslash ZIP member names before any join.
+fn zip_entry_name_safe(name: &str) -> bool {
+    if name.is_empty() || name.contains("..") {
+        return false;
     }
-    std::fs::create_dir_all(dest).map_err(|e| e.to_string())?;
+    if name.starts_with('/') || name.starts_with('\\') || name.contains('\\') {
+        return false;
+    }
+    let path = Path::new(name);
+    if path.is_absolute() {
+        return false;
+    }
+    for component in path.components() {
+        match component {
+            Component::Normal(_) | Component::CurDir => {}
+            _ => return false,
+        }
+    }
+    true
+}
+
+fn extract_flat_zip(bytes: &[u8], dest: &Path) -> Result<(), String> {
+    let parent = dest
+        .parent()
+        .ok_or_else(|| "invalid model destination".to_string())?;
+    let staging = parent.join(format!(
+        ".{}-staging-{}",
+        dest.file_name().and_then(|s| s.to_str()).unwrap_or("model"),
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&staging);
+    std::fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
     let cursor = std::io::Cursor::new(bytes);
     let mut archive = zip::ZipArchive::new(cursor).map_err(|e| e.to_string())?;
+    if archive.len() > MAX_ZIP_ENTRIES {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(format!(
+            "zip exceeds entry limit ({MAX_ZIP_ENTRIES}): {}",
+            archive.len()
+        ));
+    }
+    let mut uncompressed_total: u64 = 0;
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
         let name = entry.name().to_string();
-        if name.contains("..") {
+        if !zip_entry_name_safe(&name) {
+            let _ = std::fs::remove_dir_all(&staging);
             return Err(format!("zip-slip rejected: {name}"));
         }
-        let out = dest.join(&name);
+        let enclosed = entry
+            .enclosed_name()
+            .ok_or_else(|| format!("zip-slip rejected: {name}"))?;
+        let out = staging.join(enclosed);
+        if !out.starts_with(&staging) {
+            let _ = std::fs::remove_dir_all(&staging);
+            return Err(format!("zip-slip rejected: {name}"));
+        }
+        uncompressed_total = uncompressed_total.saturating_add(entry.size());
+        if uncompressed_total > MAX_ZIP_UNCOMPRESSED_BYTES {
+            let _ = std::fs::remove_dir_all(&staging);
+            return Err(format!(
+                "zip exceeds uncompressed size limit ({MAX_ZIP_UNCOMPRESSED_BYTES} bytes)"
+            ));
+        }
         if entry.is_dir() {
             std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
             continue;
@@ -577,10 +640,54 @@ fn extract_flat_zip(bytes: &[u8], dest: &Path) -> Result<(), String> {
         let mut outfile = std::fs::File::create(&out).map_err(|e| e.to_string())?;
         std::io::copy(&mut entry, &mut outfile).map_err(|e| e.to_string())?;
     }
+    let backup = parent.join(format!(
+        ".{}-bak-{}",
+        dest.file_name().and_then(|s| s.to_str()).unwrap_or("model"),
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&backup);
+    if dest.exists() {
+        std::fs::rename(dest, &backup).map_err(|e| {
+            let _ = std::fs::remove_dir_all(&staging);
+            e.to_string()
+        })?;
+    }
+    if let Err(e) = std::fs::rename(&staging, dest) {
+        if backup.exists() {
+            let _ = std::fs::rename(&backup, dest);
+        }
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(e.to_string());
+    }
+    let _ = std::fs::remove_dir_all(&backup);
     Ok(())
 }
 
-async fn import_unity_zip(headers: HeaderMap, body: Bytes) -> (StatusCode, Json<Value>) {
+fn deny_unless_operator(
+    state: &AppState,
+    user: &AuthUser,
+) -> Result<(), (StatusCode, Json<Value>)> {
+    if state.auth.required() && !user.role.can_issue_commands() {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "operator or admin role required for vibe21 import/export"
+            })),
+        ));
+    }
+    Ok(())
+}
+
+async fn import_unity_zip(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> (StatusCode, Json<Value>) {
+    if let Err(resp) = deny_unless_operator(&state, &user) {
+        return resp;
+    }
     let name = filename_header(&headers);
     if let Some(msg) = reject_joblib_filename(&name) {
         return (
@@ -643,7 +750,15 @@ async fn import_unity_zip(headers: HeaderMap, body: Bytes) -> (StatusCode, Json<
     )
 }
 
-async fn import_model_release(headers: HeaderMap, body: Bytes) -> (StatusCode, Json<Value>) {
+async fn import_model_release(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> (StatusCode, Json<Value>) {
+    if let Err(resp) = deny_unless_operator(&state, &user) {
+        return resp;
+    }
     let name = filename_header(&headers);
     if let Some(msg) = reject_joblib_filename(&name) {
         return (
@@ -692,7 +807,13 @@ async fn import_model_release(headers: HeaderMap, body: Bytes) -> (StatusCode, J
     )
 }
 
-async fn training_export() -> Response {
+async fn training_export(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+) -> Response {
+    if let Err(resp) = deny_unless_operator(&state, &user) {
+        return resp.into_response();
+    }
     let Some(bundle) = load_bundle() else {
         return (
             StatusCode::CONFLICT,
@@ -787,29 +908,51 @@ fn walkdir_files(root: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// Public vibe21 routes (Unity + Flask-compatible /api/v1).
-pub fn router() -> Router {
-    Router::new()
-        .route("/api/v1/health", get(v1_health))
-        .route("/api/v1/models", get(v1_models))
+/// Vibe21 routes: health + Unity static remain public; import/export/API need JWT.
+pub fn router(state: Arc<AppState>) -> Router {
+    let mutations = Router::new()
         .route("/api/v1/models/import", post(import_model_release))
+        .route("/api/v1/training/export", get(training_export))
+        .route("/api/unity/builds/import", post(import_unity_zip))
+        .layer(DefaultBodyLimit::max(128 * 1024 * 1024))
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            auth::jwt_middleware,
+        ));
+
+    let authenticated_reads = Router::new()
+        .route("/api/v1/models", get(v1_models))
         .route("/api/v1/twin/manifest", get(v1_twin_manifest))
         .route("/api/v1/twin/geometry", get(v1_twin_geometry))
         .route("/api/v1/predict/demand_hourly", post(v1_predict))
-        .route("/api/v1/training/export", get(training_export))
         .route("/api/unity/builds/active", get(import_unity_status))
-        .route("/api/unity/builds/import", post(import_unity_zip))
+        .layer(DefaultBodyLimit::max(8 * 1024 * 1024))
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            auth::jwt_middleware,
+        ));
+
+    let public = Router::new()
+        .route("/api/v1/health", get(v1_health))
         .route("/twins/{twin_id}/builds/{build_id}/", get(unity_index))
         .route(
             "/twins/{twin_id}/builds/{build_id}/{*rest}",
             get(unity_asset),
-        )
-        .layer(DefaultBodyLimit::max(128 * 1024 * 1024))
+        );
+
+    Router::new()
+        .merge(public)
+        .merge(mutations)
+        .merge(authenticated_reads)
+        .with_state(state)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
 
     #[test]
     fn safe_join_rejects_dotdot() {
@@ -829,6 +972,136 @@ mod tests {
     fn model_release_requires_portable_members() {
         // empty / non-zip
         assert!(validate_model_release_zip(b"notzip").is_err());
+    }
+
+    #[test]
+    fn zip_entry_name_safe_rejects_absolute_and_parent() {
+        assert!(zip_entry_name_safe("model.onnx"));
+        assert!(zip_entry_name_safe("nested/model.onnx"));
+        assert!(!zip_entry_name_safe("/tmp/canary"));
+        assert!(!zip_entry_name_safe("../etc/passwd"));
+        assert!(!zip_entry_name_safe("foo/../../etc/passwd"));
+        assert!(!zip_entry_name_safe(r"C:\Windows\canary"));
+        assert!(!zip_entry_name_safe(r"evil\path"));
+    }
+
+    fn write_synthetic_zip(members: &[(&str, &[u8])]) -> Vec<u8> {
+        use std::io::{Cursor, Write};
+        let mut cursor = Cursor::new(Vec::new());
+        {
+            let mut zipw = zip::ZipWriter::new(&mut cursor);
+            let opts = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            for (name, bytes) in members {
+                zipw.start_file(*name, opts).unwrap();
+                zipw.write_all(bytes).unwrap();
+            }
+            zipw.finish().unwrap();
+        }
+        cursor.into_inner()
+    }
+
+    #[test]
+    fn model_release_rejects_absolute_member_before_extract() {
+        let bytes = write_synthetic_zip(&[
+            ("model-release.json", b"{}"),
+            ("feature_spec.json", b"{}"),
+            ("target_spec.json", b"{}"),
+            ("conformance.jsonl", b""),
+            ("portable_marker.json", b"{}"),
+            ("/tmp/openfdd-canary", b"canary"),
+        ]);
+        let err = validate_model_release_zip(&bytes).unwrap_err();
+        assert!(err.contains("zip-slip"), "{err}");
+    }
+
+    #[test]
+    fn extract_flat_zip_rejects_absolute_member_and_preserves_dest() {
+        let root = tempfile::tempdir().unwrap();
+        let dest = root.path().join("models").join("release-a");
+        std::fs::create_dir_all(&dest).unwrap();
+        let marker = dest.join("keep-me.txt");
+        std::fs::write(&marker, b"original").unwrap();
+        let canary = root.path().join("canary-escaped.txt");
+        assert!(!canary.exists());
+
+        let bytes = write_synthetic_zip(&[
+            ("model-release.json", b"{}"),
+            ("feature_spec.json", b"{}"),
+            ("target_spec.json", b"{}"),
+            ("conformance.jsonl", b""),
+            ("portable_marker.json", b"{}"),
+            ("/tmp/should-not-land", b"bad"),
+        ]);
+        // Force a member name that enclosed_name rejects; validate would also fail.
+        let err = extract_flat_zip(&bytes, &dest).unwrap_err();
+        assert!(err.contains("zip-slip"), "{err}");
+        assert_eq!(std::fs::read_to_string(&marker).unwrap(), "original");
+        assert!(!canary.exists());
+    }
+
+    #[tokio::test]
+    async fn vibe21_import_requires_jwt_when_auth_configured() {
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some("vibe21-s01-auth-test-secret-32chars!".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        let state = Arc::new(state);
+        let app = router(Arc::clone(&state));
+        let request = Request::post("/api/v1/models/import")
+            .header("content-type", "application/zip")
+            .body(Body::from(vec![0u8; 8]))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn vibe21_import_denies_viewer_before_archive_work() {
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some("vibe21-s01-viewer-test-secret-32chars".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        let state = Arc::new(state);
+        let token = state
+            .auth
+            .issue_token_with_tenants("viewer-s01", crate::auth::Role::Viewer, 60, &[])
+            .unwrap();
+        let app = router(Arc::clone(&state));
+        let request = Request::post("/api/v1/models/import")
+            .header("content-type", "application/zip")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(vec![0u8; 8]))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn vibe21_training_export_requires_jwt_when_auth_configured() {
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some("vibe21-s01-export-test-secret-32char".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        let state = Arc::new(state);
+        let app = router(Arc::clone(&state));
+        let request = Request::get("/api/v1/training/export")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[test]
