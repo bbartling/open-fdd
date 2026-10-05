@@ -41,9 +41,7 @@ function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-function formatErr(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
+type SparqlResultRow = Record<string, string> & { id: string };
 
 const DEFAULT_SPARQL = `SELECT DISTINCT ?equipmentId WHERE {
   ?equip ofdd:equipmentId ?equipmentId .
@@ -168,15 +166,21 @@ function SparqlPanel({ buildingId }: { buildingId: string }) {
             {result.truncated ? " (truncated)" : ""}
             {result.defs_pin ? ` · defs ${result.defs_pin}` : ""}
           </p>
-          <DataTable
+          <DataTable<SparqlResultRow>
             id="sparql-results"
             label="SPARQL result rows"
             testId="sparql-results-table"
-            columns={columns.map((c) => ({ key: c, header: c }))}
-            rows={rows.map((r, i) => ({
-              id: String(i),
-              ...Object.fromEntries(columns.map((c) => [c, r[c] ?? ""])),
+            columns={columns.map((c) => ({
+              key: c as keyof SparqlResultRow & string,
+              header: c,
             }))}
+            rows={rows.map((r, i) => {
+              const row: SparqlResultRow = { id: String(i) };
+              for (const c of columns) {
+                row[c] = String(r[c] ?? "");
+              }
+              return row;
+            })}
           />
         </>
       ) : null}

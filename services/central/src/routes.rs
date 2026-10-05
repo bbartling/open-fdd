@@ -4619,19 +4619,7 @@ pub async fn central_package_sparql_query(
     .unwrap_or_else(|e| Err(json!({"ok": false, "error": format!("sparql task: {e}")})));
     match result {
         Ok(v) => Ok(Json(v)),
-        Err(err) => {
-            let status = if err
-                .get("error")
-                .and_then(|e| e.as_str())
-                .map(|s| s.contains("not allowed") || s.contains("exceeds"))
-                .unwrap_or(false)
-            {
-                StatusCode::BAD_REQUEST
-            } else {
-                StatusCode::BAD_REQUEST
-            };
-            Err((status, Json(err)))
-        }
+        Err(err) => Err((StatusCode::BAD_REQUEST, Json(err))),
     }
 }
 
