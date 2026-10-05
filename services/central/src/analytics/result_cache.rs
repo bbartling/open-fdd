@@ -21,6 +21,47 @@ use serde_json::{json, Value};
 
 use super::{AnalyticsEnvelope, AnalyticsRequest, SCHEMA_VERSION};
 
+fn analytics_admission_busy() -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(json!({
+            "ok": false,
+            "error": "compute admission limit reached (OPENFDD_COMPUTE_MAX_INFLIGHT); retry later",
+            "code": "compute_admission_busy",
+            "class": "analytics",
+        })),
+    )
+}
+
+fn analytics_pressure_deferred(notes: &[String]) -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({
+            "ok": false,
+            "error": "memory pressure: deferring expensive analytics recompute; retry later",
+            "code": "compute_pressure_deferred",
+            "class": "analytics",
+            "notes": notes,
+        })),
+    )
+}
+
+/// Cache hits skip this. Recompute paths must hold a process-wide Analytics
+/// permit and refuse when pressure asks to defer expensive compute (#1127 M-01).
+async fn compute_with_admission(
+    compute: impl AsyncFnOnce() -> AnalyticsEnvelope,
+) -> Result<AnalyticsEnvelope, (StatusCode, Json<Value>)> {
+    let pressure = fdd_resources::sample_pressure();
+    if pressure.defer_expensive_compute {
+        return Err(analytics_pressure_deferred(&pressure.notes));
+    }
+    let permit = fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Analytics)
+        .ok_or_else(analytics_admission_busy)?;
+    let envelope = compute().await;
+    drop(permit);
+    Ok(envelope)
+}
+
 pub struct ServedAnalytics {
     pub envelope: AnalyticsEnvelope,
     pub cache: Value,
@@ -71,7 +112,7 @@ pub async fn serve_with(
         .map(str::trim)
         .filter(|s| !s.is_empty())
     else {
-        let envelope = compute().await;
+        let envelope = compute_with_admission(compute).await?;
         return Ok(skipped(
             envelope,
             started,
@@ -82,7 +123,7 @@ pub async fn serve_with(
     let key = match cache_key(building_id, query_id, query_version, req) {
         Ok(key) => key,
         Err(reason) => {
-            let envelope = compute().await;
+            let envelope = compute_with_admission(compute).await?;
             return Ok(skipped(envelope, started, &reason));
         }
     };
@@ -122,7 +163,7 @@ pub async fn serve_with(
         sessions,
         building_id: key.building_id.clone(),
     };
-    let envelope = compute().await;
+    let envelope = compute_with_admission(compute).await?;
     let table = table_from_envelope(&envelope);
     let provenance = CacheProvenance {
         building_id: key.building_id.clone(),
@@ -508,5 +549,38 @@ mod tests {
         assert_eq!(fresh.cache["hit"], false);
         assert_eq!(fresh.cache["stale"], false);
         assert_eq!(fresh.envelope.rows[0]["fault_hours"], 2.0);
+    }
+
+    #[tokio::test]
+    async fn cache_miss_refuses_when_compute_admission_saturated() {
+        let mut held = Vec::new();
+        loop {
+            match fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::ManualFdd) {
+                Some(p) => held.push(p),
+                None => break,
+            }
+            if held.len() > 64 {
+                panic!("semaphore did not saturate");
+            }
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let sessions = Mutex::new(SessionBook::new(limits()));
+        let err = match serve_with(
+            tmp.path(),
+            &sessions,
+            "runtime",
+            "runtime-v1",
+            &req("site-busy"),
+            StaleAction::ServeStale,
+            async || envelope("runtime-v1", &req("site-busy").query, Vec::new()),
+        )
+        .await
+        {
+            Ok(_) => panic!("saturated admission must refuse analytics recompute"),
+            Err(e) => e,
+        };
+        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(err.1["code"], json!("compute_admission_busy"));
+        drop(held);
     }
 }
