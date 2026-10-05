@@ -399,8 +399,8 @@ mod tests {
             role: Role::Operator,
             tenant_ids: vec![],
         };
-        let err =
-            resolve_kit_scope(&state, &user, "site-a", "edge-a", Some("foreign-tenant")).unwrap_err();
+        let err = resolve_kit_scope(&state, &user, "site-a", "edge-a", Some("foreign-tenant"))
+            .unwrap_err();
         assert_eq!(err.0, StatusCode::FORBIDDEN);
     }
 }
