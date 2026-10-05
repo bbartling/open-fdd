@@ -49,10 +49,7 @@ fn legacy_session_config_path() -> PathBuf {
 }
 
 fn session_config_path_for(scope: &SessionConfigScope) -> PathBuf {
-    match (
-        scope.tenant_id.as_deref(),
-        scope.building_id.as_deref(),
-    ) {
+    match (scope.tenant_id.as_deref(), scope.building_id.as_deref()) {
         (Some(tid), Some(bid)) => workspace_dir()
             .join("data")
             .join("tenants")
@@ -373,11 +370,8 @@ pub fn strip_site_from_session_config_scoped(
     building_id: &str,
     equipment_ids: &[String],
 ) -> Result<usize, String> {
-    let mut removed = strip_site_from_path(
-        &session_config_path_for(scope),
-        building_id,
-        equipment_ids,
-    )?;
+    let mut removed =
+        strip_site_from_path(&session_config_path_for(scope), building_id, equipment_ids)?;
     // Also clean legacy hub-global leftovers for single-tenant migrations.
     if scope.tenant_id.is_none() {
         removed += strip_site_from_path(&legacy_session_config_path(), building_id, equipment_ids)?;

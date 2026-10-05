@@ -1744,10 +1744,7 @@ fn mapping_from_historian_equipment(
         }
     }
     let session = crate::fdd::session_config::get_session_config_scoped(
-        &crate::fdd::session_config::SessionConfigScope::new(
-            preferred_tenant,
-            Some(building_id),
-        ),
+        &crate::fdd::session_config::SessionConfigScope::new(preferred_tenant, Some(building_id)),
     );
     let unit_system = session
         .get("config")
