@@ -182,6 +182,10 @@ impl ComputeBudget {
 mod tests {
     use super::*;
     use crate::cgroup::{CpuDiscovery, MemoryDiscovery};
+    use std::sync::Mutex;
+
+    // Env-mutating budget tests must not race (CI runs lib tests parallel).
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn discovery(hard: Option<u64>) -> CapacityDiscovery {
         CapacityDiscovery {
@@ -207,6 +211,7 @@ mod tests {
 
     #[test]
     fn compute_env_wins_and_is_not_multiplied_by_sessions() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         std::env::set_var("OPENFDD_COMPUTE_MEMORY_MB", "512");
         std::env::remove_var("OPENFDD_INGEST_RESERVE_MB");
         let budget = ComputeBudget::resolve(&discovery(Some(24_000_000_000)), 512).unwrap();
@@ -218,6 +223,7 @@ mod tests {
 
     #[test]
     fn tiny_cgroup_marks_expensive_unavailable() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         std::env::remove_var("OPENFDD_COMPUTE_MEMORY_MB");
         // 200 MiB hard; default reserves exceed leftover.
         let budget = ComputeBudget::resolve(&discovery(Some(200 * 1024 * 1024)), 512).unwrap();

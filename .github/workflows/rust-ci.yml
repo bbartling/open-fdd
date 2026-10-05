@@ -42,7 +42,7 @@ jobs:
 
       - name: Central / fieldbus / MQTT contract tests
         run: |
-          cargo test -p openfdd_contracts -p openfdd_mqtt -p openfdd-central -p openfdd-fieldbus
+          cargo test -p openfdd_contracts -p openfdd_mqtt -p fdd_resources -p openfdd-central -p openfdd-fieldbus
           cargo test -p openfdd-central --test csv_fdd_integration
           cargo test -p openfdd-central --test jobs_api_integration -- --test-threads=1
 
