@@ -193,6 +193,8 @@ jobs:
             docker compose -f "$f" config >/dev/null
             echo "OK config: $f"
           done
+          # S07: selected-OT + HTTPS must render without inventing image-less mqtt.
+          bash scripts/ops/render_selected_ot_https.sh
 
       - name: File smoke (stack recipes)
         run: bash scripts/release/smoke_standalone_mqtts.sh
@@ -204,6 +206,7 @@ jobs:
           bash -n scripts/openfdd_stack_up.sh
           bash -n scripts/openfdd_caddy_smoke.sh
           bash -n scripts/release/smoke_standalone_mqtts.sh
+          bash -n scripts/ops/render_selected_ot_https.sh
           bash -n scripts/test_openfdd_stack_image_tag.sh
           bash scripts/test_openfdd_stack_image_tag.sh
           test -f docker/compose.wattlab.react.yml

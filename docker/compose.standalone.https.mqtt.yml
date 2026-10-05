@@ -1,0 +1,23 @@
+# Optional MQTT/fieldbus publication overrides for full-stack HTTPS.
+# Requires a base file that already defines `mqtt` / `fieldbus` images
+# (compose.standalone.yml + compose.react.yml / react.fieldbus).
+# Do NOT merge this with selected-OT broker-free recipes (S07).
+#
+#   docker compose -f docker/compose.standalone.yml \
+#     -f docker/compose.react.yml \
+#     -f docker/compose.standalone.https.yml \
+#     -f docker/compose.standalone.https.mqtt.yml \
+#     --profile https-mqtt --profile https-fieldbus up -d
+
+services:
+  mqtt:
+    profiles: ["https-mqtt"]
+    # Replace base publication; loopback by default (LAN edges set OPENFDD_MQTT_BIND=0.0.0.0).
+    ports: !override
+      - "${OPENFDD_MQTT_BIND:-127.0.0.1}:8883:8883"
+
+  fieldbus:
+    profiles: ["https-fieldbus"]
+    environment:
+      OPENFDD_FIELDBUS_HTTP_HOST: 127.0.0.1
+      OPENFDD_FIELDBUS_API_KEY: ${OPENFDD_FIELDBUS_API_KEY:-}
