@@ -144,13 +144,16 @@ fn kit_identity_token_ok(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
 }
 
+type EdgeKitScope = (String, String, Option<String>);
+type EdgeKitHttpErr = (StatusCode, Json<Value>);
+
 fn resolve_kit_scope(
     state: &AppState,
     user: &AuthUser,
     site_id: &str,
     edge_id: &str,
     requested_tenant: Option<&str>,
-) -> Result<(String, String, Option<String>), (StatusCode, Json<Value>)> {
+) -> Result<EdgeKitScope, EdgeKitHttpErr> {
     let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
     let plane = ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
     let ctx = TenantContext::resolve_fail_closed(user, &plane);
