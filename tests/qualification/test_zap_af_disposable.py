@@ -95,13 +95,30 @@ class ZapAfAuthMeSchemaTest(unittest.TestCase):
                 ]
             }
         )
-        self.assertTrue(summary["auth_me_hit"])
+        self.assertTrue(summary["auth_me_url_mention"])
+        self.assertFalse(summary["auth_me_hit"])
         # Still not a substitute for verify_auth_me_response.
         self.assertFalse(
             af.verify_auth_me_response(status=401, body=b"{}", content_type="application/json")[
                 "ok"
             ]
         )
+
+    def test_structured_auth_traffic_is_required_for_hit(self):
+        summary = af.summarize_zap_json(
+            {
+                "site": [{"@name": "http://fixture.invalid", "alerts": []}],
+                "openfdd_auth_traffic": {
+                    "method": "GET",
+                    "path": "/api/auth/me",
+                    "status": 200,
+                    "identity_schema_ok": True,
+                    "origin": "scanner",
+                },
+            }
+        )
+        self.assertTrue(summary["auth_me_hit"])
+        self.assertFalse(summary["auth_me_url_mention"])
 
 
 class ZapAfSelftestTest(unittest.TestCase):
@@ -270,6 +287,7 @@ class ZapAfExecuteVerdictTest(unittest.TestCase):
                 self.assertNotEqual(verdict["status"], "PASS")
 
     def test_clean_report_passes_with_verified_auth(self):
+        # Passive mode: preflight schema is enough; URL mention is not scanner proof.
         rc, verdict = self.run_synthetic(
             {
                 "site": [
@@ -284,7 +302,166 @@ class ZapAfExecuteVerdictTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(verdict["status"], "PASS")
         self.assertTrue(verdict.get("auth_me_hit"))
-        self.assertTrue(verdict.get("auth_me_in_zap_report"))
+        self.assertFalse(verdict.get("auth_me_in_zap_report"))
+        self.assertTrue(verdict.get("auth_me_url_mention"))
+        self.assertEqual(verdict.get("auth_proof"), "preflight_status_identity_schema")
+
+    def test_active_url_mention_alone_cannot_pass(self):
+        """Q-03: URL text ending in /api/auth/me is not scanner auth traffic."""
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td)
+            (work / "openapi.json").write_text(
+                json.dumps(
+                    {
+                        "openapi": "3.0.3",
+                        "info": {"title": "fixture", "version": "0"},
+                        "paths": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            report_path = work / "zap-af-report.json"
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "site": [
+                            {
+                                "@name": "http://fixture.invalid",
+                                "urls": ["http://fixture.invalid/api/auth/me"],
+                                "alerts": [],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            future = time.time() + 5
+            os.utime(report_path, (future, future))
+            out = work / "verdict.json"
+            env = {
+                "ZAP_TARGET_ORIGIN": "http://fixture.invalid",
+                "ZAP_AUTH_HEADER_VALUE": "Bearer synthetic",
+                "ZAP_AF_WORK_DIR": str(work),
+                "OPENFDD_ZAP_AF_ACTIVE": "1",
+            }
+            auth_ok = {
+                "ok": True,
+                "status": 200,
+                "path": "/api/auth/me",
+                "schema_ok": True,
+                "role_present": True,
+                "subject_present": True,
+            }
+
+            class _Resp:
+                status = 200
+                headers = {"Content-Type": "application/json"}
+
+                def getcode(self):
+                    return 200
+
+                def read(self, *_a, **_k):
+                    return b'{"role":"admin","sub":"admin"}'
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_a):
+                    return False
+
+            with (
+                mock.patch.dict(os.environ, env, clear=True),
+                mock.patch.object(af, "detect_zap", return_value=("zap.sh", "synthetic-zap")),
+                mock.patch.object(af, "_run_zap_sh", return_value=0),
+                mock.patch.object(af, "verify_auth_me_response", return_value=auth_ok),
+                mock.patch("urllib.request.urlopen", return_value=_Resp()),
+                contextlib.redirect_stdout(io.StringIO()),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                rc = af.run_execute(out)
+            verdict = json.loads(out.read_text(encoding="utf-8"))
+            self.assertNotEqual(rc, 0)
+            self.assertEqual(verdict["status"], "FAIL")
+            self.assertIn("structured", verdict.get("notes", ""))
+
+    def test_active_structured_scanner_traffic_passes(self):
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td)
+            (work / "openapi.json").write_text(
+                json.dumps(
+                    {
+                        "openapi": "3.0.3",
+                        "info": {"title": "fixture", "version": "0"},
+                        "paths": {"/api/health": {"get": {"responses": {"200": {"description": "ok"}}}}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            report_path = work / "zap-af-report.json"
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "site": [{"@name": "http://fixture.invalid", "alerts": []}],
+                        "openfdd_auth_traffic": {
+                            "method": "GET",
+                            "path": "/api/auth/me",
+                            "status": 200,
+                            "identity_schema_ok": True,
+                            "origin": "scanner",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            future = time.time() + 5
+            os.utime(report_path, (future, future))
+            out = work / "verdict.json"
+            env = {
+                "ZAP_TARGET_ORIGIN": "http://fixture.invalid",
+                "ZAP_AUTH_HEADER_VALUE": "Bearer synthetic",
+                "ZAP_AF_WORK_DIR": str(work),
+                "OPENFDD_ZAP_AF_ACTIVE": "1",
+            }
+            auth_ok = {
+                "ok": True,
+                "status": 200,
+                "path": "/api/auth/me",
+                "schema_ok": True,
+                "role_present": True,
+                "subject_present": True,
+            }
+
+            class _Resp:
+                status = 200
+                headers = {"Content-Type": "application/json"}
+
+                def getcode(self):
+                    return 200
+
+                def read(self, *_a, **_k):
+                    return b'{"role":"admin","sub":"admin"}'
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_a):
+                    return False
+
+            with (
+                mock.patch.dict(os.environ, env, clear=True),
+                mock.patch.object(af, "detect_zap", return_value=("zap.sh", "synthetic-zap")),
+                mock.patch.object(af, "_run_zap_sh", return_value=0),
+                mock.patch.object(af, "verify_auth_me_response", return_value=auth_ok),
+                mock.patch("urllib.request.urlopen", return_value=_Resp()),
+                contextlib.redirect_stdout(io.StringIO()),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                rc = af.run_execute(out)
+            verdict = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(rc, 0)
+            self.assertEqual(verdict["status"], "PASS")
+            self.assertTrue(verdict.get("auth_me_in_zap_report"))
+            self.assertEqual(verdict.get("auth_proof"), "preflight_schema+scanner_auth_traffic")
 
     def test_active_without_scanner_auth_me_fails(self):
         """Active AF cannot PASS on preflight alone (A06)."""

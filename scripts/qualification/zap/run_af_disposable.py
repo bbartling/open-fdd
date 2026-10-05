@@ -199,8 +199,35 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
             for u in site.get("urls") or []:
                 url_blob_parts.append(str(u))
     url_blob = "\n".join(url_blob_parts).lower()
-    # Informational only — report URL text is NOT authenticated proof (A06).
-    auth_me_hit = "/api/auth/me" in url_blob
+    # URL/text mention is informational only — never authenticated proof (Q-03).
+    auth_me_url_mention = "/api/auth/me" in url_blob
+    traffic = data.get("openfdd_auth_traffic")
+    auth_me_hit = False
+    auth_traffic: dict[str, Any] = {}
+    if isinstance(traffic, dict):
+        method = str(traffic.get("method") or "").strip().upper()
+        path = str(traffic.get("path") or traffic.get("uri") or "").strip()
+        try:
+            status = int(traffic.get("status") or traffic.get("status_code") or 0)
+        except (TypeError, ValueError):
+            status = 0
+        schema_ok = bool(traffic.get("identity_schema_ok") or traffic.get("schema_ok"))
+        origin = str(traffic.get("origin") or "").strip().lower()
+        auth_traffic = {
+            "method": method,
+            "path": path,
+            "status": status,
+            "identity_schema_ok": schema_ok,
+            "origin": origin,
+        }
+        # Scanner-origin authenticated /api/auth/me with identity schema.
+        auth_me_hit = (
+            method == "GET"
+            and path.rstrip("/").endswith("/api/auth/me")
+            and status == 200
+            and schema_ok
+            and origin in ("scanner", "zap", "af")
+        )
     return {
         "site_count": len(sites),
         "malformed_sites": malformed_sites,
@@ -210,7 +237,9 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
         "high_alert_names": sorted(set(high_names)),
         "medium_alert_names": sorted(set(medium_names)),
         "medium_plugin_ids": sorted(set(medium_plugins)),
+        "auth_me_url_mention": auth_me_url_mention,
         "auth_me_hit": auth_me_hit,
+        "auth_traffic": auth_traffic,
     }
 
 
@@ -1212,11 +1241,12 @@ def run_execute(verdict_path: Path) -> int:
         exit_code = 1
     elif exit_code == 0 and active and not bool(summary.get("auth_me_hit")):
         # Preflight proves credentials work; authenticated AF still requires
-        # scanner-origin /api/auth/me traffic in the ZAP report (A06).
+        # scanner-origin structured /api/auth/me traffic (not URL text) (Q-03).
         status = "FAIL"
+        mention = bool(summary.get("auth_me_url_mention"))
         notes = (
-            "FAIL: active AF missing scanner-origin /api/auth/me in ZAP report "
-            "(preflight alone is not authenticated coverage)"
+            "FAIL: active AF missing scanner-origin structured /api/auth/me traffic "
+            f"(url_mention={mention}; preflight alone is not authenticated coverage)"
         )
         exit_code = 1
     elif exit_code == 0:
@@ -1230,9 +1260,11 @@ def run_execute(verdict_path: Path) -> int:
             f"PASS: disposable AF High=0 Medium_undispositioned=0 "
             f"Medium_observed={medium_observed} site_count={sites} "
             f"auth_me_preflight=true auth_me_in_report={bool(summary.get('auth_me_hit'))} "
+            f"auth_me_url_mention={bool(summary.get('auth_me_url_mention'))} "
             f"active_scan={active} zap_rc={rc}{disp_note}"
         )
 
+    scanner_auth = bool(summary.get("auth_me_hit"))
     v = build_verdict(
         status=status,
         mode="execute",
@@ -1253,11 +1285,12 @@ def run_execute(verdict_path: Path) -> int:
         auth_header_configured=True,
         auth_me_hit=bool(auth_me_preflight.get("ok")),
         auth_me_preflight=auth_me_preflight,
-        # Scanner report URL text is coverage evidence for AF, not sole proof.
-        auth_me_in_zap_report=bool(summary.get("auth_me_hit")),
+        auth_me_in_zap_report=scanner_auth,
+        auth_me_url_mention=bool(summary.get("auth_me_url_mention")),
+        auth_traffic=summary.get("auth_traffic") or {},
         auth_proof=(
-            "preflight_schema+scanner_auth_me"
-            if active
+            "preflight_schema+scanner_auth_traffic"
+            if active and scanner_auth
             else "preflight_status_identity_schema"
         ),
         zap_image=detail if mode == "docker" else None,
