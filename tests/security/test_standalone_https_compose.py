@@ -25,6 +25,10 @@ class StandaloneHttpsComposeTest(unittest.TestCase):
             "docker/compose.react.yml",
             "-f",
             "docker/compose.standalone.https.yml",
+            "-f",
+            "docker/compose.standalone.https.mqtt.yml",
+            "--profile",
+            "https-mqtt",
             "config",
         ]
         try:
