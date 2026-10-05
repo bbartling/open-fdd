@@ -3692,8 +3692,18 @@ pub struct SessionConfigQuery {
     pub building_id: Option<String>,
 }
 
-/// `openfdd_session_v1` session/fault settings (#515) — persisted per workspace.
+impl SessionConfigQuery {
+    fn scoped(&self) -> Option<&str> {
+        self.building_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    }
+}
+
+/// `openfdd_session_v1` session/fault settings (#515) — tenant/building scoped.
 /// Wave O9: `building_id` query/body is ACL-gated when multi-tenant is on.
+/// S03: bytes are stored under the authoritative tenant+building path.
 pub async fn fdd_session_config_get(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -3702,24 +3712,76 @@ pub async fn fdd_session_config_get(
     if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
         return Err(deny);
     }
+    if crate::tenant::multi_tenant_enabled() && q.scoped().is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id is required for session-config under multi-tenant mode"
+            })),
+        ));
+    }
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, q.scoped());
+    let scope = open_fdd_edge_prototype::fdd::session_config::SessionConfigScope::new(
+        preferred.as_deref(),
+        q.scoped(),
+    );
     Ok(Json(
-        open_fdd_edge_prototype::fdd::session_config::get_session_config(),
+        open_fdd_edge_prototype::fdd::session_config::get_session_config_scoped(&scope),
     ))
 }
 
 pub async fn fdd_session_config_put(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(body): Json<Value>,
+    Json(mut body): Json<Value>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let user = state.auth.user_from_headers(&headers).map_err(|e| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    if matches!(user.role, auth::Role::Viewer) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "viewer role cannot mutate session-config"
+            })),
+        ));
+    }
     let building_id = body
         .get("building_id")
         .and_then(|v| v.as_str())
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string);
+    if crate::tenant::multi_tenant_enabled() && building_id.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id is required for session-config under multi-tenant mode"
+            })),
+        ));
+    }
     if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id.as_deref()) {
         return Err(deny);
+    }
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, building_id.as_deref());
+    // Server-derived tenant only — ignore any client-supplied tenant_id.
+    if let Some(obj) = body.as_object_mut() {
+        match preferred.as_deref() {
+            Some(tid) => {
+                obj.insert("tenant_id".into(), json!(tid));
+            }
+            None => {
+                obj.remove("tenant_id");
+            }
+        }
     }
     let result = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::fdd::session_config::put_session_config(&body)
