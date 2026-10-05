@@ -2,6 +2,25 @@
 
 This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER.md) owns historical FQ/ops pins; [BUG_REPORT_WAVE_P](docs/operations/BUG_REPORT_WAVE_P.md) owns bugs and evidence. **Active product patch train (2026-10-03):** [`.cursor/plans/patch_all_open_issues_master.plan.md`](.cursor/plans/patch_all_open_issues_master.plan.md). Historical migration milestones remain under `docs/migration/` and `openfdd_agent_spec/`.
 
+## Next-rev Soft-OPEN board (2026-10-05) — IN PROGRESS
+
+**Orchestrator:** [`.cursor/plans/next_rev_ghcr_refresh_train_20261005.plan.md`](.cursor/plans/next_rev_ghcr_refresh_train_20261005.plan.md)  
+**Soft-OPEN tip under Grok:** `sha-215e159` / **3.5.65** (ART `nightly-ot-bench_20261005T133051Z` overall FAIL). Cursor patches; **no FQ** from this train. Next product bump at N9: **3.5.66** (if still next).
+
+| Issue | Disposition | Close only when |
+| --- | --- | --- |
+| [#999](https://github.com/bbartling/open-fdd/issues/999) | Absorb / Soft-OPEN | Own-object controls + `auth_me_in_zap_report=true` on live AF |
+| [#1127](https://github.com/bbartling/open-fdd/issues/1127) | Absorb / Soft-OPEN | Combined analytics/AFDD survival under budget + memory acceptance |
+| [#1149](https://github.com/bbartling/open-fdd/issues/1149) | Absorb tip landed | Live tip prove of non-empty BUILDING_100 export |
+| [#1151](https://github.com/bbartling/open-fdd/issues/1151) | Absorb tip landed | Live tip prove of suspend ack + no leave-behind |
+| [#1130](https://github.com/bbartling/open-fdd/issues/1130) | Soft-OPEN (CSP `unsafe-inline`) | Scoped disposition expire + retest — not blanket suppress |
+| [#1131](https://github.com/bbartling/open-fdd/issues/1131) / [#1132](https://github.com/bbartling/open-fdd/issues/1132) | Prefer absorb (fonts/HSTS tips) | Plugin retest on tip |
+| [#997](https://github.com/bbartling/open-fdd/issues/997) / [#1123](https://github.com/bbartling/open-fdd/issues/1123) / [#1004](https://github.com/bbartling/open-fdd/issues/1004) | Soft-OPEN | Live C6 smoke after N9 tip |
+| [#1070](https://github.com/bbartling/open-fdd/issues/1070) | Soft-OPEN (parallel) | gate39 ≥24h wall-clock — not an N9 blocker |
+| [#1010](https://github.com/bbartling/open-fdd/issues/1010) / [#985](https://github.com/bbartling/open-fdd/issues/985) | Defer | Not this tip |
+
+Green Actions / HTTP 200 / mid-stress smoke ≠ close. Grok owns live re-stress after N9 GHCR pin.
+
 ## Status rules
 
 - **PLANNED / IN PROGRESS:** requirements or implementation remain.
