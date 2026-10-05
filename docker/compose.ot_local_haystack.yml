@@ -48,7 +48,7 @@ services:
     image: ${OPENFDD_HAYSTACK_IMAGE:-ghcr.io/bbartling/openfdd-haystack:nightly}
     environment:
       OPENFDD_FIELDBUS_CONFIG_DIR: /app/config
-      OPENFDD_FIELDBUS_HTTP_HOST: 127.0.0.1
+      OPENFDD_FIELDBUS_HTTP_HOST: 0.0.0.0
       OPENFDD_FIELDBUS_HTTP_PORT: "8082"
       OPENFDD_CONNECTOR_API_KEY: ${OPENFDD_CONNECTOR_API_KEY:?set connector api key}
       OPENFDD_MQTT_ENABLED: "0"
@@ -62,6 +62,8 @@ services:
       OPENFDD_HAYSTACK_USER: ${OPENFDD_HAYSTACK_USER:-}
       OPENFDD_HAYSTACK_PASS: ${OPENFDD_HAYSTACK_PASS:-}
       OPENFDD_HAYSTACK_AUTH_MODE: ${OPENFDD_HAYSTACK_AUTH_MODE:-basic}
+    # Host publishes loopback only; listen on all interfaces inside the container
+    # so Docker port mapping can reach the management API (S07).
     ports:
       - "127.0.0.1:${OPENFDD_HAYSTACK_HTTP_PORT:-8082}:8082"
     volumes:

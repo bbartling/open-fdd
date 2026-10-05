@@ -1,13 +1,17 @@
-# Open-FDD standalone HTTPS overlay (Wave U U3 / UA-02)
+# Open-FDD standalone HTTPS overlay (Wave U U3 / UA-02) — Caddy + web/central only.
 # Combine with compose.standalone.yml + compose.react.yml:
 #   OPENFDD_CENTRAL_BIND=127.0.0.1 \
 #   docker compose -f docker/compose.standalone.yml \
 #     -f docker/compose.react.yml \
-#     -f docker/compose.standalone.https.yml config
+#     -f docker/compose.standalone.https.yml \
+#     -f docker/compose.standalone.https.mqtt.yml \
+#     --profile https-mqtt config
+#
+# Selected OT (haystack / bacnet-modbus) recipes stay broker-free — use this file
+# alone with the OT compose (no mqtt overlay). See S07.
 #
 # Secure recipe: Caddy owns LAN entry (80/443). Web and central are not published
-# on the LAN; MQTT binds loopback unless OPENFDD_MQTT_BIND is set for edge clients.
-# Astra A03 TLS modes (pick one Caddyfile via OPENFDD_CADDY_TLS_MODE):
+# on the LAN. Astra A03 TLS modes (pick one Caddyfile via OPENFDD_CADDY_TLS_MODE):
 #   provided  → Caddyfile.standalone.https          (+ /certs/server.crt|key)
 #   local_ca  → Caddyfile.standalone.https.local_ca (tls internal)
 #   lab       → Caddyfile.standalone.https.lab      (+ /certs/lab.crt|key)
@@ -45,16 +49,6 @@ services:
     ports: !reset []
     expose:
       - "8080"
-
-  mqtt:
-    # Replace base publication; loopback by default (LAN edges set OPENFDD_MQTT_BIND=0.0.0.0).
-    ports: !override
-      - "${OPENFDD_MQTT_BIND:-127.0.0.1}:8883:8883"
-
-  fieldbus:
-    environment:
-      OPENFDD_FIELDBUS_HTTP_HOST: 127.0.0.1
-      OPENFDD_FIELDBUS_API_KEY: ${OPENFDD_FIELDBUS_API_KEY:-}
 
 volumes:
   caddy-data:
