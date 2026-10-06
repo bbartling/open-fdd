@@ -33,6 +33,18 @@ fn analytics_admission_busy() -> (StatusCode, Json<Value>) {
     )
 }
 
+fn analytics_request_rejected(detail: String) -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(json!({
+            "ok": false,
+            "error": detail,
+            "code": "analytics_request_rejected",
+            "class": "analytics",
+        })),
+    )
+}
+
 fn analytics_pressure_deferred(notes: &[String]) -> (StatusCode, Json<Value>) {
     (
         StatusCode::SERVICE_UNAVAILABLE,
@@ -104,6 +116,9 @@ pub async fn serve_with(
     on_stale: StaleAction,
     compute: impl AsyncFnOnce() -> AnalyticsEnvelope,
 ) -> Result<ServedAnalytics, (StatusCode, Json<Value>)> {
+    if let Err(detail) = super::validate_analytics_request(req) {
+        return Err(analytics_request_rejected(detail));
+    }
     let started = Instant::now();
     let Some(building_id) = req
         .query

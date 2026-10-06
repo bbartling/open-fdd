@@ -12,6 +12,7 @@ use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use bytes::Bytes;
 use chrono::Utc;
+use tower::limit::ConcurrencyLimitLayer;
 use openfdd_contracts::{
     CommandEnvelope, LocalIngestReceipt, LocalIngestStatus, Protocol, TelemetryEnvelope,
     TopicBuilder, TopicKind, LOCAL_INGEST_RECEIPT_CONTRACT_V1,
@@ -320,6 +321,20 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/jobs/{job_id}/eplus/runs/{eplus_run_id}/artifacts",
             post(jobs_attach_eplus_artifact),
         )
+        .route("/api/fuel/campus/import", post(fuel_campus_import))
+        .route("/api/fuel/campus", get(fuel_campus_list))
+        .route(
+            "/api/fuel/campus/weather/fetch",
+            post(fuel_campus_weather_fetch),
+        )
+        .merge(csv)
+        // Remaining protected POSTs (FDD run, fuel, admin) stay bounded well
+        // below the CSV nest. Analytics no longer inherit 128 MiB (#1169).
+        .layer(DefaultBodyLimit::max(16 * 1024 * 1024));
+
+    // #1169: analytics family is isolated from the 128 MiB CSV limit. ZAP AF
+    // activeScan must not buffer huge bodies or run unbounded concurrent DF work.
+    let analytics = Router::new()
         .route("/api/analytics/runtime", post(analytics_runtime))
         .route("/api/analytics/vav-health", post(analytics_vav_health))
         .route("/api/analytics/ahu-health", post(analytics_ahu_health))
@@ -389,18 +404,12 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/analytics/topology", post(analytics_topology))
         .route("/api/analytics/sensor-stats", post(analytics_sensor_stats))
         .route("/api/analytics/sql-anomaly", post(analytics_sql_anomaly))
-        .route("/api/fuel/campus/import", post(fuel_campus_import))
-        .route("/api/fuel/campus", get(fuel_campus_list))
-        .route(
-            "/api/fuel/campus/weather/fetch",
-            post(fuel_campus_weather_fetch),
-        )
-        .merge(csv)
-        // OFDD-075: analytics/FDD posts (building-scoped Overview samples) can
-        // exceed Axum's ~2 MiB default and 413 before reaching the handler.
-        // Raise the whole protected router to 128 MiB (CSV nest already sets its
-        // own limit; this covers analytics + fdd/run).
-        .layer(DefaultBodyLimit::max(128 * 1024 * 1024))
+        .layer(DefaultBodyLimit::max(analytics_body_limit_bytes()))
+        .layer(ConcurrencyLimitLayer::new(analytics_http_max_inflight()));
+
+    let protected = Router::new()
+        .merge(protected)
+        .merge(analytics)
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
             auth::jwt_middleware,
@@ -410,6 +419,22 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(public)
         .merge(protected)
         .with_state(state)
+}
+
+fn analytics_body_limit_bytes() -> usize {
+    std::env::var("OPENFDD_ANALYTICS_BODY_LIMIT_BYTES")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(2 * 1024 * 1024)
+}
+
+fn analytics_http_max_inflight() -> usize {
+    std::env::var("OPENFDD_ANALYTICS_HTTP_MAX_INFLIGHT")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(2)
 }
 
 /// Public liveness body. No historian locks, so a wedged query cannot stall it.

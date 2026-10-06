@@ -26,8 +26,23 @@ pub struct PressureSnapshot {
 }
 
 /// High watermark defaults (percent of hard cgroup limit).
-const ELEVATED_PCT: f64 = 75.0;
-const CRITICAL_PCT: f64 = 90.0;
+/// Shed earlier than the old 75/90 pair so authenticated ZAP AF cannot climb
+/// 1.5→20 GB before deferral engages (#1169).
+fn elevated_pct() -> f64 {
+    std::env::var("OPENFDD_PRESSURE_ELEVATED_PCT")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|value| *value > 0.0 && *value < 100.0)
+        .unwrap_or(60.0)
+}
+
+fn critical_pct() -> f64 {
+    std::env::var("OPENFDD_PRESSURE_CRITICAL_PCT")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|value| *value > 0.0 && *value <= 100.0)
+        .unwrap_or(80.0)
+}
 
 pub fn sample_pressure() -> PressureSnapshot {
     evaluate_pressure(&discover_capacity())
@@ -45,9 +60,11 @@ pub fn evaluate_pressure(discovery: &CapacityDiscovery) -> PressureSnapshot {
             None
         }
     };
+    let elevated = elevated_pct();
+    let critical = critical_pct().max(elevated);
     let state = match percent {
-        Some(p) if p >= CRITICAL_PCT => PressureState::Critical,
-        Some(p) if p >= ELEVATED_PCT => PressureState::Elevated,
+        Some(p) if p >= critical => PressureState::Critical,
+        Some(p) if p >= elevated => PressureState::Elevated,
         _ => PressureState::Ok,
     };
     PressureSnapshot {
@@ -89,10 +106,17 @@ mod tests {
 
     #[test]
     fn critical_defers_expensive_compute() {
-        let snap = evaluate_pressure(&disc(1000, 950));
+        let snap = evaluate_pressure(&disc(1000, 850));
         assert_eq!(snap.state, PressureState::Critical);
         assert!(snap.defer_expensive_compute);
         assert!(snap.protect_ingest);
+    }
+
+    #[test]
+    fn elevated_defers_at_sixty_percent() {
+        let snap = evaluate_pressure(&disc(1000, 650));
+        assert_eq!(snap.state, PressureState::Elevated);
+        assert!(snap.defer_expensive_compute);
     }
 
     #[test]
