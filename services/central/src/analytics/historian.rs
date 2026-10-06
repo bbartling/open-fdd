@@ -1143,8 +1143,9 @@ fn as_u64(v: Option<&serde_json::Value>) -> u64 {
 pub const SENSOR_HEALTH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
 
 /// Default lookback for `/api/analytics/runtime` when `query.start` is omitted.
-/// Shorter than the old 90d default so LEAD Δt stays under Railway edge budgets.
-pub const RUNTIME_DEFAULT_LOOKBACK_DAYS: i64 = 14;
+/// Shorter window keeps LEAD Δt under Railway edge budgets on large ACME hives
+/// (#1127 Soft-OPEN tip: 12s fail-closed under pressure).
+pub const RUNTIME_DEFAULT_LOOKBACK_DAYS: i64 = 7;
 
 /// Bounded expand when the default lookback is empty (synthetic fixtures outside
 /// wall-clock). Never use `start=None` — full-history LEAD hangs → nginx 502.

@@ -1846,16 +1846,25 @@ fn mapping_from_historian_equipment(
 /// `GET /api/csv/import/package/buildings` — list ingested package building ids
 /// plus historian sites under the parquet root (canonical MQTT `history/building_id=`
 /// and legacy `building=`), so the sidebar/Overview picker matches Sites (3.3.33).
+///
+/// `packages` is the exportable subset (dirs under `csv_buildings` with
+/// `manifest.json`). Gate 19 / engineering export must use `packages`, not the
+/// historian-union `buildings` list (#1149 / Soft-OPEN tip sha-93f8ec2).
 pub fn list_package_buildings_handler() -> Value {
     let data_root = workspace_dir().join("data").join("csv_buildings");
     let mut buildings = Vec::new();
+    let mut packages = Vec::new();
     if data_root.is_dir() {
         if let Ok(rd) = std::fs::read_dir(&data_root) {
             for e in rd.flatten() {
-                if e.path().is_dir() {
+                let path = e.path();
+                if path.is_dir() {
                     if let Some(name) = e.file_name().to_str() {
                         if !name.starts_with('.') {
                             buildings.push(name.to_string());
+                            if path.join("manifest.json").is_file() {
+                                packages.push(name.to_string());
+                            }
                         }
                     }
                 }
@@ -1870,9 +1879,12 @@ pub fn list_package_buildings_handler() -> Value {
     }
     buildings.sort();
     buildings.dedup();
+    packages.sort();
+    packages.dedup();
     json!({
         "ok": true,
         "buildings": buildings,
+        "packages": packages,
         "path": data_root.display().to_string(),
     })
 }
@@ -2270,6 +2282,14 @@ mod tests {
                 .iter()
                 .any(|b| b == "BUILDING_9"),
             "{buildings}"
+        );
+        assert!(
+            buildings["packages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|b| b == "BUILDING_9"),
+            "exportable packages must include BUILDING_9 with manifest: {buildings}"
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
