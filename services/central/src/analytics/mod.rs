@@ -97,6 +97,55 @@ pub struct AnalyticsRequest {
     pub read_tenant_id: Option<String>,
 }
 
+/// Hard ceiling for authenticated analytics windows (#1169). Override with
+/// `OPENFDD_ANALYTICS_MAX_LOOKBACK_DAYS` (default 366).
+pub fn analytics_max_lookback_days() -> i64 {
+    std::env::var("OPENFDD_ANALYTICS_MAX_LOOKBACK_DAYS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(366)
+}
+
+/// Reject ZAP-shaped "scan the world" requests before DataFusion allocation.
+pub fn validate_analytics_request(req: &AnalyticsRequest) -> Result<(), String> {
+    let has_inline = req
+        .samples
+        .as_ref()
+        .is_some_and(|samples| !samples.is_empty())
+        || req.series.as_ref().is_some_and(|series| !series.is_null());
+    let building = req
+        .query
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if building.is_none() && !has_inline {
+        return Err(
+            "building_id is required for historian analytics (or provide inline samples/series)"
+                .into(),
+        );
+    }
+    let max_days = analytics_max_lookback_days();
+    let end = req.query.end.unwrap_or_else(Utc::now);
+    if let Some(start) = req.query.start {
+        if end < start {
+            return Err("query.end must be >= query.start".into());
+        }
+        if (end - start).num_days() > max_days {
+            return Err(format!(
+                "analytics lookback exceeds OPENFDD_ANALYTICS_MAX_LOOKBACK_DAYS={max_days}"
+            ));
+        }
+    }
+    if let Some(max_points) = req.query.max_points {
+        if max_points > 500_000 {
+            return Err("max_points exceeds 500000".into());
+        }
+    }
+    Ok(())
+}
+
 /// Typed analytics response envelope (no Plotly JSON).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalyticsEnvelope {
@@ -257,5 +306,40 @@ mod tests {
         let w = version_mismatch_warning(QV_RUNTIME, Some("runtime-v99"));
         assert!(w.unwrap().contains("runtime-v99"));
         assert!(version_mismatch_warning(QV_RUNTIME, Some(QV_RUNTIME)).is_none());
+    }
+
+    #[test]
+    fn validate_rejects_missing_building_without_inline() {
+        let err = validate_analytics_request(&AnalyticsRequest::default()).unwrap_err();
+        assert!(err.contains("building_id"));
+    }
+
+    #[test]
+    fn validate_rejects_unbounded_lookback() {
+        let req = AnalyticsRequest {
+            query: AnalyticsQuery {
+                building_id: Some("BUILDING_100".into()),
+                start: Some(Utc::now() - chrono::Duration::days(500)),
+                end: Some(Utc::now()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let err = validate_analytics_request(&req).unwrap_err();
+        assert!(err.contains("lookback"));
+    }
+
+    #[test]
+    fn validate_accepts_scoped_short_window() {
+        let req = AnalyticsRequest {
+            query: AnalyticsQuery {
+                building_id: Some("BUILDING_100".into()),
+                start: Some(Utc::now() - chrono::Duration::days(14)),
+                end: Some(Utc::now()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(validate_analytics_request(&req).is_ok());
     }
 }
