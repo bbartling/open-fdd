@@ -12,7 +12,6 @@ use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use bytes::Bytes;
 use chrono::Utc;
-use tower::limit::ConcurrencyLimitLayer;
 use openfdd_contracts::{
     CommandEnvelope, LocalIngestReceipt, LocalIngestStatus, Protocol, TelemetryEnvelope,
     TopicBuilder, TopicKind, LOCAL_INGEST_RECEIPT_CONTRACT_V1,
@@ -28,6 +27,7 @@ use openfdd_contracts::{
 use openfdd_mqtt::publish_json;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tower::limit::ConcurrencyLimitLayer;
 
 use crate::actions;
 use crate::analytics::{self, AnalyticsRequest};
@@ -407,13 +407,14 @@ pub fn router(state: Arc<AppState>) -> Router {
         .layer(DefaultBodyLimit::max(analytics_body_limit_bytes()))
         .layer(ConcurrencyLimitLayer::new(analytics_http_max_inflight()));
 
-    let protected = Router::new()
-        .merge(protected)
-        .merge(analytics)
-        .layer(middleware::from_fn_with_state(
-            Arc::clone(&state),
-            auth::jwt_middleware,
-        ));
+    let protected =
+        Router::new()
+            .merge(protected)
+            .merge(analytics)
+            .layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                auth::jwt_middleware,
+            ));
 
     Router::new()
         .merge(public)
