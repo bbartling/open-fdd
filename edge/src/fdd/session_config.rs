@@ -35,13 +35,16 @@ impl SessionConfigScope {
     /// Control-plane pseudo-tenant `legacy` (single-tenant hub) maps to file paths
     /// without a tenant segment — never `data/tenants/legacy/…`.
     pub fn for_storage(&self) -> Self {
-        let tenant_id = self.tenant_id.as_ref().and_then(|t| {
-            if t == "legacy" {
-                None
-            } else {
-                Some(t.clone())
-            }
-        });
+        let tenant_id =
+            self.tenant_id.as_ref().and_then(
+                |t| {
+                    if t == "legacy" {
+                        None
+                    } else {
+                        Some(t.clone())
+                    }
+                },
+            );
         Self {
             tenant_id,
             building_id: self.building_id.clone(),
