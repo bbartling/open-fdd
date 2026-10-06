@@ -4,7 +4,14 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROBE="$ROOT/scripts/security/openfdd_security_probe.py"
-CFG="${OPENFDD_SECURITY_CONFIG:-$ROOT/scripts/security/config/example_security_fixtures.json}"
+CFG_DEFAULT="$ROOT/scripts/security/config/example_security_fixtures.json"
+if [[ -n "${RAILWAY_BASE:-}" \
+   || "${OPENFDD_API_BASE:-}" == *railway.app* \
+   || "${CENTRAL_BASE:-}" == *railway.app* \
+   || "${OPENFDD_SECURITY_FIXTURES_PROFILE:-}" == "railway_hub" ]]; then
+  CFG_DEFAULT="$ROOT/scripts/security/config/railway_hub_security_fixtures.json"
+fi
+CFG="${OPENFDD_SECURITY_CONFIG:-$CFG_DEFAULT}"
 PROFILE="${OPENFDD_SECURITY_PROFILE:-live_readonly}"
 BASE="${OPENFDD_API_BASE:-${RAILWAY_BASE:-${CENTRAL_BASE:-}}}"
 ART="${ARTIFACT_DIR:-$ROOT/reports/security/gate25b_$(date -u +%Y%m%dT%H%M%SZ)}"
@@ -12,6 +19,7 @@ mkdir -p "$ART"
 chmod 700 "$ART" 2>/dev/null || true
 OUT="$ART/python_harness_post"
 mkdir -p "$OUT"
+echo "gate25b security fixtures: $CFG" | tee "$ART/fixtures_path.txt"
 
 if [[ -z "$BASE" ]]; then
   jq -n '{ok:false,status:"BLOCKED",reason:"missing base URL"}' | tee "$ART/security_gate_verdict.json"

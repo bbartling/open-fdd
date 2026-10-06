@@ -201,7 +201,16 @@ impl AfddSchedulerRuntime {
         let end_utc = self
             .latest_telemetry()?
             .ok_or_else(|| anyhow::anyhow!("no persisted telemetry watermark is available"))?;
-        let lookback_seconds = i64::try_from(config.lookback_seconds()?)?;
+        let configured = i64::try_from(config.lookback_seconds()?)?;
+        // Cap operator run-now so Railway edge/nginx cannot 504 a 24h hive
+        // scan under memory pressure (#1127 / Soft-OPEN tip). Continuous timer
+        // still uses the configured lookback.
+        let max_run_now = std::env::var("OPENFDD_AFDD_RUN_NOW_MAX_LOOKBACK_SECONDS")
+            .ok()
+            .and_then(|value| value.parse::<i64>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(6 * 3600);
+        let lookback_seconds = configured.min(max_run_now);
         let now = Utc::now();
         let window = AfddCycleWindow {
             start_utc: end_utc - Duration::seconds(lookback_seconds),
@@ -209,7 +218,22 @@ impl AfddSchedulerRuntime {
             scheduled_for_utc: now,
             catch_up: false,
         };
-        self.execute_cycle(scope, "run_now", window, true).await
+        let timeout_secs = std::env::var("OPENFDD_AFDD_RUN_NOW_TIMEOUT_SECONDS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(50);
+        match tokio::time::timeout(
+            StdDuration::from_secs(timeout_secs),
+            self.execute_cycle(scope, "run_now", window, true),
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => anyhow::bail!(
+                "AFDD run-now exceeded OPENFDD_AFDD_RUN_NOW_TIMEOUT_SECONDS={timeout_secs}; deferred under budget"
+            ),
+        }
     }
 
     async fn run_backfill(

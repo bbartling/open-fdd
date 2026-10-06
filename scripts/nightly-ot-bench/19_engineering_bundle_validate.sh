@@ -44,8 +44,9 @@ list_buildings() {
 
 building_present() {
   local bid="$1"
+  # Exportable package only — historian-only sites must not skip seed (#1149).
   jq -e --arg b "$bid" '
-    ((.buildings // []) | map(tostring) | index($b)) != null
+    ((.packages // []) | map(tostring) | index($b)) != null
   ' "$ART/package_buildings.json" >/dev/null 2>&1
 }
 

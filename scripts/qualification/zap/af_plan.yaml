@@ -17,6 +17,9 @@ env:
         # Prefer SPA root on web+central disposable; health remains a 200 seed.
         - "${ZAP_TARGET_ORIGIN}/"
         - "${ZAP_TARGET_ORIGIN}/api/health"
+        # Seed scanner-origin authenticated /api/auth/me so AF report proves
+        # session traffic (preflight alone is insufficient) (#999).
+        - "${ZAP_TARGET_ORIGIN}/api/auth/me"
       includePaths:
         - "${ZAP_TARGET_ORIGIN}.*"
       authentication:
