@@ -18,6 +18,7 @@ This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER
 | [#997](https://github.com/bbartling/open-fdd/issues/997) / [#1123](https://github.com/bbartling/open-fdd/issues/1123) / [#1004](https://github.com/bbartling/open-fdd/issues/1004) | Soft-OPEN | Live C6 smoke after N9 tip |
 | [#1070](https://github.com/bbartling/open-fdd/issues/1070) | Soft-OPEN (parallel) | gate39 ≥24h wall-clock — not an N9 blocker |
 | [#1010](https://github.com/bbartling/open-fdd/issues/1010) / [#985](https://github.com/bbartling/open-fdd/issues/985) | Defer | Not this tip |
+| **Q05 / Q06** (Haystack RDF honesty) | **PARTIAL** | H12 full ZIP→DataFusion path + H14 measured p50/p95 artifacts; Q06 AppSec `rdflib` on committed `c3_projection.ttl` (see [`haystack_rdf_perf_budgets.md`](docs/operations/haystack_rdf_perf_budgets.md)) |
 
 Green Actions / HTTP 200 / mid-stress smoke ≠ close. Grok owns live re-stress after N9 GHCR pin.
 

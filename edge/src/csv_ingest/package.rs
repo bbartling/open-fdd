@@ -769,6 +769,11 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
                     crate::fdd::session_config::save_session_config_scoped(&scope, &normalized)
                 {
                     warnings.push(format!("session_config.json not persisted: {e}"));
+                } else if scope.tenant_id.is_none() {
+                    // #515: unscoped Lab GET reads hub-global bytes on single-tenant hubs.
+                    if let Err(e) = crate::fdd::session_config::save_session_config(&normalized) {
+                        warnings.push(format!("session_config hub mirror not persisted: {e}"));
+                    }
                 }
                 warnings.append(&mut cfg_warnings);
             }

@@ -31,6 +31,25 @@ impl SessionConfigScope {
             building_id: sanitize_scope_id(building_id),
         }
     }
+
+    /// Control-plane pseudo-tenant `legacy` (single-tenant hub) maps to file paths
+    /// without a tenant segment — never `data/tenants/legacy/…`.
+    pub fn for_storage(&self) -> Self {
+        let tenant_id =
+            self.tenant_id.as_ref().and_then(
+                |t| {
+                    if t == "legacy" {
+                        None
+                    } else {
+                        Some(t.clone())
+                    }
+                },
+            );
+        Self {
+            tenant_id,
+            building_id: self.building_id.clone(),
+        }
+    }
 }
 
 fn sanitize_scope_id(raw: Option<&str>) -> Option<String> {
@@ -90,6 +109,7 @@ pub fn get_session_config() -> Value {
 /// bytes (prevents A reading B's settings via a shared file). Building-only
 /// (no tenant) may migrate from the legacy path for single-tenant hubs.
 pub fn get_session_config_scoped(scope: &SessionConfigScope) -> Value {
+    let scope = &scope.for_storage();
     let path = session_config_path_for(scope);
     if let Some(config) = read_config_file(&path) {
         return json!({
@@ -295,6 +315,7 @@ pub fn save_session_config_scoped(
     scope: &SessionConfigScope,
     config: &Value,
 ) -> Result<(), String> {
+    let scope = &scope.for_storage();
     let path = session_config_path_for(scope);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
@@ -603,6 +624,38 @@ mod tests {
         assert!(after["config"]["role_map"].get("AHU_KEEP").is_some());
         assert!(after["config"]["params"].get("BUILDING_50").is_none());
         assert_eq!(after["config"]["params"]["FC1"]["eps_dsp"], json!(0.2));
+
+        std::env::remove_var("OPENFDD_WORKSPACE");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn legacy_pseudo_tenant_reads_building_scoped_bytes() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd_session_legacy_pseudo_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", &tmp);
+
+        let building_scope = SessionConfigScope::new(None, Some("BLDG_A"));
+        save_session_config_scoped(
+            &building_scope,
+            &json!({
+                "schema_version": SESSION_SCHEMA,
+                "unit_system": "metric",
+                "params": {"FC1": {"eps_dsp": 0.3}},
+            }),
+        )
+        .unwrap();
+
+        let legacy_wrapped = SessionConfigScope::new(Some("legacy"), Some("BLDG_A"));
+        let got = get_session_config_scoped(&legacy_wrapped);
+        assert_eq!(got["persisted"], json!(true));
+        assert_eq!(got["config"]["unit_system"], json!("metric"));
+        assert_eq!(got["config"]["params"]["FC1"]["eps_dsp"], json!(0.3));
 
         std::env::remove_var("OPENFDD_WORKSPACE");
         let _ = std::fs::remove_dir_all(&tmp);

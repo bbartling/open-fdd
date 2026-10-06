@@ -101,20 +101,32 @@ impl UserStore {
             .iter()
             .position(|u| u.username.eq_ignore_ascii_case(&name))
         {
+            let prev = &self.users[idx];
+            let prev_sv = prev.session_version;
+            let role_changed = prev.role != next.role;
+            let tenants_changed = prev.tenant_ids != next.tenant_ids;
+            let disabled_changed = prev.disabled != next.disabled;
             // Keep prior password material when update omits both.
             if !has_env && !has_pw {
-                next.password_env = self.users[idx].password_env.clone();
-                next.password = self.users[idx].password.clone();
+                next.password_env = prev.password_env.clone();
+                next.password = prev.password.clone();
             } else if has_pw && !has_env {
                 next.password_env = None;
             } else if has_env {
                 next.password = None;
+            }
+            let password_changed =
+                next.password_env != prev.password_env || next.password != prev.password;
+            next.session_version = prev_sv;
+            if role_changed || tenants_changed || disabled_changed || password_changed {
+                next.session_version = prev_sv.saturating_add(1);
             }
             self.users[idx] = next;
         } else {
             if has_env {
                 next.password = None;
             }
+            next.session_version = 0;
             self.users.push(next);
         }
         Ok(())
@@ -126,6 +138,9 @@ impl UserStore {
             .iter_mut()
             .find(|u| u.username.eq_ignore_ascii_case(username.trim()))
             .ok_or_else(|| "user not found".to_string())?;
+        if rec.disabled != disabled {
+            rec.session_version = rec.session_version.saturating_add(1);
+        }
         rec.disabled = disabled;
         Ok(())
     }
@@ -294,15 +309,18 @@ mod tests {
                 password_env: None,
                 password: Some("secret".into()),
                 disabled: false,
+                session_version: 0,
             })
             .unwrap();
         store.save(dir.path()).unwrap();
         let loaded = UserStore::load_or_empty(dir.path());
         assert_eq!(loaded.users.len(), 1);
         assert!(loaded.authenticate("acme-ops", "secret").is_some());
+        assert_eq!(loaded.users[0].session_version, 0);
 
         let mut store = loaded;
         store.set_disabled("acme-ops", true).unwrap();
+        assert_eq!(store.users[0].session_version, 1);
         store.save(dir.path()).unwrap();
         let loaded = UserStore::load_or_empty(dir.path());
         assert!(loaded.authenticate("acme-ops", "secret").is_none());
@@ -324,6 +342,7 @@ mod tests {
                 password_env: None,
                 password: Some("x".into()),
                 disabled: false,
+                session_version: 0,
             })
             .is_err());
         assert!(store
@@ -334,6 +353,7 @@ mod tests {
                 password_env: None,
                 password: Some("x".into()),
                 disabled: false,
+                session_version: 0,
             })
             .is_err());
     }
@@ -384,6 +404,7 @@ mod tests {
                 password_env: None,
                 password: Some("a".into()),
                 disabled: false,
+                session_version: 0,
             })
             .unwrap();
         store
@@ -394,6 +415,7 @@ mod tests {
                 password_env: None,
                 password: Some("b".into()),
                 disabled: false,
+                session_version: 0,
             })
             .unwrap();
         let plan = plan_user_cascade_delete(&store, &plane, "alice").unwrap();

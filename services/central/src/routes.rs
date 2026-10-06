@@ -840,6 +840,7 @@ pub async fn admin_upsert_user(
         password_env: body.password_env,
         password: body.password,
         disabled: body.disabled,
+        session_version: 0,
     };
     store.upsert(rec).map_err(|e| {
         (
@@ -2021,7 +2022,43 @@ pub async fn auth_agent_token(
     }
     let hub_admin = matches!(user.role, auth::Role::Admin) && user.tenant_ids.is_empty();
     let scoped_admin = matches!(user.role, auth::Role::Admin) && !user.tenant_ids.is_empty();
-    let ttl = body.ttl_secs.unwrap_or(3600).clamp(60, 86_400);
+    // S09: child TTL cannot exceed parent bearer remaining lifetime.
+    let mut ttl = body.ttl_secs.unwrap_or(3600).clamp(60, 86_400);
+    if state.auth.required() {
+        let auth_header = headers
+            .get(axum::http::header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let parent_token = auth_header
+            .strip_prefix("Bearer ")
+            .or_else(|| auth_header.strip_prefix("bearer "))
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        if let Some(parent_token) = parent_token {
+            match state.auth.decode_claims(parent_token) {
+                Ok(parent) => {
+                    let now = chrono::Utc::now().timestamp();
+                    let remaining = parent.exp - now;
+                    if remaining < 60 {
+                        return Err((
+                            axum::http::StatusCode::FORBIDDEN,
+                            Json(json!({
+                                "ok": false,
+                                "error": "parent token near expiry; remint admin session first"
+                            })),
+                        ));
+                    }
+                    ttl = ttl.min(remaining);
+                }
+                Err(detail) => {
+                    return Err((
+                        axum::http::StatusCode::UNAUTHORIZED,
+                        Json(json!({"ok": false, "error": detail})),
+                    ));
+                }
+            }
+        }
+    }
     let requested = body
         .tenant_id
         .as_ref()
@@ -4582,19 +4619,7 @@ pub async fn central_package_sparql_query(
     .unwrap_or_else(|e| Err(json!({"ok": false, "error": format!("sparql task: {e}")})));
     match result {
         Ok(v) => Ok(Json(v)),
-        Err(err) => {
-            let status = if err
-                .get("error")
-                .and_then(|e| e.as_str())
-                .map(|s| s.contains("not allowed") || s.contains("exceeds"))
-                .unwrap_or(false)
-            {
-                StatusCode::BAD_REQUEST
-            } else {
-                StatusCode::BAD_REQUEST
-            };
-            Err((status, Json(err)))
-        }
+        Err(err) => Err((StatusCode::BAD_REQUEST, Json(err))),
     }
 }
 
