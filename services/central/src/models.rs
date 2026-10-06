@@ -15,6 +15,18 @@ pub struct OkHealthResponse {
     pub ingest_ok: u64,
     pub ingest_dup: u64,
     pub ingest_reject: u64,
+    /// Ledger-full drops after durable eviction failed (#1168).
+    #[serde(default)]
+    pub ingest_backpressure: u64,
+    /// Live durable receipt map size (pending + committed tombstones).
+    #[serde(default)]
+    pub receipts_len: usize,
+    #[serde(default)]
+    pub receipts_capacity: usize,
+    #[serde(default)]
+    pub receipts_pending: usize,
+    #[serde(default)]
+    pub receipts_pending_capacity: usize,
     /// Wave L — multi-tenant shared-hosting mode (default false / OFF).
     #[serde(default)]
     pub multi_tenant: bool,
@@ -64,6 +76,14 @@ pub struct IngestStatsResponse {
     pub ingest_ok: u64,
     pub ingest_dup: u64,
     pub ingest_reject: u64,
+    #[serde(default)]
+    pub ingest_backpressure: u64,
+    #[serde(default)]
+    pub receipts_len: usize,
+    #[serde(default)]
+    pub receipts_capacity: usize,
+    #[serde(default)]
+    pub receipts_pending: usize,
     /// Operator-readable reject counts (no payload dump).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub reject_buckets: std::collections::BTreeMap<String, u64>,

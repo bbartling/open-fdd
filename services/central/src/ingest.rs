@@ -343,7 +343,8 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
                     .await
                     .is_none()
                 {
-                    state.mqtt_record_error("durable ingest receipt ledger unavailable");
+                    // #1168: visible backpressure — never silent-drop / never mark MQTT down.
+                    state.note_ingest_backpressure("durable ingest receipt ledger unavailable");
                     return;
                 }
                 *state.ingest_dup.lock().unwrap() += 1;

@@ -3,7 +3,7 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -27,12 +27,47 @@ use crate::tenant_budget::TenantBudgetTracker;
 const MQTT_MONITOR_CAPACITY: usize = 100;
 const MQTT_PREVIEW_BYTES: usize = 4096;
 const LOCAL_RECEIPTS_FILE: &str = "state/local-fieldbus-receipts.jsonl";
-const RECEIPT_CAPACITY: usize = 50_000;
-const PENDING_RECEIPT_CAPACITY: usize = 10_000;
-/// Compaction folds the append log. It does not expire committed tombstones:
-/// a replay of a committed message id must stay a duplicate for the life of
-/// the bounded ledger. Pending envelopes are never reduced to tombstones.
+/// Default durable ledger horizon. Override with `OPENFDD_RECEIPT_CAPACITY` (tests).
+const RECEIPT_CAPACITY_DEFAULT: usize = 50_000;
+const PENDING_RECEIPT_CAPACITY_DEFAULT: usize = 10_000;
+/// Evict oldest durable tombstones when the map would exceed capacity.
+/// Pending / Retryable receipts are never selected (#1168).
+const RECEIPT_EVICT_BATCH_MIN: usize = 64;
+/// Compaction folds the append log. Durable identities may later be watermark-
+/// evicted; pending envelopes are never reduced to tombstones.
 const RECEIPT_COMPACTION_BYTES: u64 = 8 * 1024 * 1024;
+const RECEIPT_HEALTH_HIGH_WATER_NUM: usize = 9;
+const RECEIPT_HEALTH_HIGH_WATER_DEN: usize = 10;
+
+fn receipt_capacity() -> usize {
+    std::env::var("OPENFDD_RECEIPT_CAPACITY")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(RECEIPT_CAPACITY_DEFAULT)
+}
+
+fn pending_receipt_capacity() -> usize {
+    std::env::var("OPENFDD_PENDING_RECEIPT_CAPACITY")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(PENDING_RECEIPT_CAPACITY_DEFAULT)
+}
+
+fn receipt_evict_batch(capacity: usize) -> usize {
+    (capacity / 100).max(RECEIPT_EVICT_BATCH_MIN).min(capacity)
+}
+
+/// Snapshot used by `/api/health` and `/api/ingest/stats` (#1168).
+#[derive(Debug, Clone, Copy)]
+pub struct ReceiptLedgerStats {
+    pub len: usize,
+    pub capacity: usize,
+    pub pending: usize,
+    pub pending_capacity: usize,
+    pub high_water: bool,
+}
 
 fn equipment_key(building_id: &str, equipment_id: &str) -> String {
     format!("{building_id}\u{1f}{equipment_id}")
@@ -237,6 +272,8 @@ pub struct AppState {
     pub ingest_ok: Mutex<u64>,
     pub ingest_dup: Mutex<u64>,
     pub ingest_reject: Mutex<u64>,
+    /// Ledger-full drops that could not reserve after durable eviction (#1168).
+    pub ingest_backpressure: AtomicU64,
     /// Count-only reject reason buckets for `/api/ingest/stats` (no dead-letter dump).
     pub ingest_reject_buckets: Mutex<std::collections::BTreeMap<String, u64>>,
     /// Process boot instant for `/api/health` honesty after re-pin.
@@ -262,6 +299,7 @@ pub struct AppState {
     /// C4 H8: scoped package RDF derived from semantic_meta + pinned defs.
     pub haystack_rdf: HaystackRdfCache,
     recovery_started: AtomicBool,
+    last_backpressure_warn: Mutex<Option<Instant>>,
 }
 
 impl AppState {
@@ -276,6 +314,7 @@ impl AppState {
             ingest_ok: Mutex::new(0),
             ingest_dup: Mutex::new(0),
             ingest_reject: Mutex::new(0),
+            ingest_backpressure: AtomicU64::new(0),
             ingest_reject_buckets: Mutex::new(std::collections::BTreeMap::new()),
             started_at: Utc::now(),
             last_ingest_at: Mutex::new(None),
@@ -289,6 +328,7 @@ impl AppState {
             ingest_receipts_path: receipts_path(),
             haystack_rdf: HaystackRdfCache::new(),
             recovery_started: AtomicBool::new(false),
+            last_backpressure_warn: Mutex::new(None),
         }
     }
 
@@ -300,18 +340,26 @@ impl AppState {
         let eligible_points = eligible_point_count(&envelope);
         let payload_digest = envelope_digest(&envelope);
         let key = (scope.to_string(), edge_id.clone(), message_id);
+        let capacity = receipt_capacity();
+        let pending_capacity = pending_receipt_capacity();
         let mut receipts = self.ingest_receipts.lock().await;
         if receipts.contains_key(&key) {
             return false;
         }
-        if receipts.len() >= RECEIPT_CAPACITY
-            || receipts
-                .values()
-                .filter(|receipt| receipt.status == IngestReceiptStatus::Pending)
-                .count()
-                >= PENDING_RECEIPT_CAPACITY
-        {
+        let pending_count = receipts
+            .values()
+            .filter(|receipt| receipt.status == IngestReceiptStatus::Pending)
+            .count();
+        if pending_count >= pending_capacity {
             return false;
+        }
+        if receipts.len() >= capacity {
+            let need = receipt_evict_batch(capacity);
+            let evicted =
+                evict_durable_receipts(&mut receipts, &self.ingest_receipts_path, need).await;
+            if receipts.len() >= capacity || evicted == 0 {
+                return false;
+            }
         }
         receipts.insert(
             key,
@@ -333,7 +381,7 @@ impl AppState {
         let receipt = receipts
             .get(&(scope.to_string(), edge_id.clone(), message_id))
             .cloned();
-        if enforce_receipt_capacity(&mut receipts)
+        if receipts.len() <= capacity
             && append_receipt_event(
                 &self.ingest_receipts_path,
                 scope,
@@ -349,6 +397,58 @@ impl AppState {
             receipts.remove(&(scope.to_string(), edge_id, message_id));
             false
         }
+    }
+
+    pub async fn receipt_ledger_stats(&self) -> ReceiptLedgerStats {
+        let capacity = receipt_capacity();
+        let pending_capacity = pending_receipt_capacity();
+        let receipts = self.ingest_receipts.lock().await;
+        let pending = receipts
+            .values()
+            .filter(|receipt| receipt.status == IngestReceiptStatus::Pending)
+            .count();
+        let len = receipts.len();
+        let high_water = len.saturating_mul(RECEIPT_HEALTH_HIGH_WATER_DEN)
+            >= capacity.saturating_mul(RECEIPT_HEALTH_HIGH_WATER_NUM)
+            || pending >= pending_capacity;
+        ReceiptLedgerStats {
+            len,
+            capacity,
+            pending,
+            pending_capacity,
+            high_water,
+        }
+    }
+
+    /// Visible ledger-full drop: counters + rate-limited warn. Does not mark MQTT down.
+    pub fn note_ingest_backpressure(&self, detail: &str) {
+        self.ingest_backpressure.fetch_add(1, Ordering::Relaxed);
+        *self.ingest_reject.lock().unwrap() += 1;
+        {
+            let mut buckets = self.ingest_reject_buckets.lock().unwrap();
+            *buckets.entry("receipt_ledger_backpressure".into()).or_insert(0) += 1;
+        }
+        let should_warn = {
+            let mut last = self.last_backpressure_warn.lock().unwrap();
+            match *last {
+                Some(prev) if prev.elapsed() < Duration::from_secs(30) => false,
+                _ => {
+                    *last = Some(Instant::now());
+                    true
+                }
+            }
+        };
+        if should_warn {
+            warn!(
+                detail,
+                backpressure = self.ingest_backpressure.load(Ordering::Relaxed),
+                "durable ingest receipt ledger backpressure"
+            );
+        }
+        open_fdd_edge_prototype::auth::audit::log_event(
+            "mqtt_ingest_backpressure",
+            serde_json::json!({ "reason": detail }),
+        );
     }
 
     /// Return whether an existing receipt has the same immutable payload.
@@ -891,11 +991,57 @@ async fn append_receipt_event(
     .is_some()
 }
 
-fn enforce_receipt_capacity(receipts: &mut HashMap<(String, String, Uuid), IngestReceipt>) -> bool {
-    // Replay keys are retained for the full bounded ledger horizon. Never
-    // evict a committed id without a durable tombstone: once the cap is
-    // reached reserve_receipt_at applies backpressure instead.
-    receipts.len() <= RECEIPT_CAPACITY
+fn durable_receipt_evictable(status: IngestReceiptStatus) -> bool {
+    matches!(
+        status,
+        IngestReceiptStatus::Committed
+            | IngestReceiptStatus::TerminalZeroEligible
+            | IngestReceiptStatus::Rejected
+    )
+}
+
+/// Drop oldest durable tombstones to free ledger slots. Pending/Retryable are
+/// never selected. Each eviction is journaled as a delete tombstone before the
+/// in-memory remove so restart cannot resurrect a dropped committed id as live.
+async fn evict_durable_receipts(
+    receipts: &mut HashMap<(String, String, Uuid), IngestReceipt>,
+    path: &std::path::Path,
+    need: usize,
+) -> usize {
+    if need == 0 {
+        return 0;
+    }
+    let mut candidates: Vec<((String, String, Uuid), DateTime<Utc>)> = receipts
+        .iter()
+        .filter(|(_, receipt)| durable_receipt_evictable(receipt.status))
+        .map(|(key, receipt)| (key.clone(), receipt.updated_at))
+        .collect();
+    candidates.sort_by_key(|(_, updated_at)| *updated_at);
+    let mut evicted = 0;
+    for (key, _) in candidates.into_iter().take(need) {
+        let (scope, edge_id, message_id) = key.clone();
+        if !append_receipt_event(path, &scope, &edge_id, message_id, None).await {
+            warn!(
+                scope = %scope,
+                edge_id = %edge_id,
+                %message_id,
+                "receipt watermark eviction refused because the delete tombstone failed"
+            );
+            break;
+        }
+        receipts.remove(&key);
+        evicted += 1;
+    }
+    if evicted > 0 {
+        maybe_compact_receipt_journal(path, receipts).await;
+        warn!(
+            evicted,
+            remaining = receipts.len(),
+            capacity = receipt_capacity(),
+            "evicted durable receipt tombstones under ledger watermark"
+        );
+    }
+    evicted
 }
 
 /// Rewrite the receipt journal from the live map once it grows beyond a fixed
@@ -1439,5 +1585,80 @@ mod tests {
             error.kind() == std::io::ErrorKind::AlreadyExists || error.raw_os_error().is_some()
         );
         assert_eq!(std::fs::read(&path).unwrap(), original);
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize process environment while capacity env is under test"
+    )]
+    async fn committed_watermark_eviction_accepts_past_capacity() {
+        let _env = crate::test_env_lock::lock_env();
+        let temp = tempfile::tempdir().unwrap();
+        std::env::set_var("OPENFDD_RECEIPT_CAPACITY", "8");
+        std::env::set_var("OPENFDD_PENDING_RECEIPT_CAPACITY", "8");
+        let mut state = AppState::new();
+        state.ingest_receipts_path = temp.path().join("receipts.jsonl");
+        let scope = "tenant-a/building-local";
+        for idx in 0..20 {
+            let envelope = local_envelope("edge-local", &format!("equipment-{idx}"));
+            let message_id = envelope.message_id;
+            assert!(
+                state.reserve_receipt_at(scope, envelope).await,
+                "reserve {idx} should succeed via durable eviction"
+            );
+            assert!(state.commit_receipt(scope, "edge-local", message_id).await);
+        }
+        let stats = state.receipt_ledger_stats().await;
+        assert!(stats.len <= stats.capacity);
+        assert_eq!(
+            state.ingest_backpressure.load(Ordering::Relaxed),
+            0,
+            "eviction must keep ingest flowing without backpressure"
+        );
+        // Restart reload must stay under capacity after watermark eviction.
+        let reloaded = load_receipts_at(&state.ingest_receipts_path).unwrap();
+        assert!(reloaded.len() <= 8);
+        for key in ["OPENFDD_RECEIPT_CAPACITY", "OPENFDD_PENDING_RECEIPT_CAPACITY"] {
+            std::env::remove_var(key);
+        }
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize process environment while capacity env is under test"
+    )]
+    async fn pending_cap_backpressure_is_visible() {
+        let _env = crate::test_env_lock::lock_env();
+        let temp = tempfile::tempdir().unwrap();
+        std::env::set_var("OPENFDD_RECEIPT_CAPACITY", "50");
+        std::env::set_var("OPENFDD_PENDING_RECEIPT_CAPACITY", "2");
+        let mut state = AppState::new();
+        state.ingest_receipts_path = temp.path().join("receipts.jsonl");
+        let scope = "tenant-a/building-local";
+        assert!(
+            state
+                .reserve_receipt_at(scope, local_envelope("edge-local", "eq-1"))
+                .await
+        );
+        assert!(
+            state
+                .reserve_receipt_at(scope, local_envelope("edge-local", "eq-2"))
+                .await
+        );
+        assert!(
+            !state
+                .reserve_receipt_at(scope, local_envelope("edge-local", "eq-3"))
+                .await
+        );
+        state.note_ingest_backpressure("test pending cap");
+        let stats = state.receipt_ledger_stats().await;
+        assert!(stats.high_water);
+        assert_eq!(stats.pending, 2);
+        assert_eq!(state.ingest_backpressure.load(Ordering::Relaxed), 1);
+        for key in ["OPENFDD_RECEIPT_CAPACITY", "OPENFDD_PENDING_RECEIPT_CAPACITY"] {
+            std::env::remove_var(key);
+        }
     }
 }
