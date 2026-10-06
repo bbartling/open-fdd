@@ -477,8 +477,14 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
         .unwrap_or_else(|poison| poison.into_inner())
         .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
     let historian_present = crate::durable_storage::historian_root_present();
+    let ledger = state.receipt_ledger_stats().await;
+    let ingest_backpressure = state
+        .ingest_backpressure
+        .load(std::sync::atomic::Ordering::Relaxed);
+    // #1168: never hard-code ok when the durable receipt ledger is saturated.
+    let ok = !ledger.high_water;
     Json(OkHealthResponse {
-        ok: true,
+        ok,
         service: "openfdd-central".into(),
         version: resolve_build_version(),
         edges: state.edges.len(),
@@ -494,6 +500,11 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
             .ingest_reject
             .lock()
             .unwrap_or_else(|poison| poison.into_inner()),
+        ingest_backpressure,
+        receipts_len: ledger.len,
+        receipts_capacity: ledger.capacity,
+        receipts_pending: ledger.pending,
+        receipts_pending_capacity: ledger.pending_capacity,
         multi_tenant: crate::tenant::multi_tenant_enabled(),
         started_at: state
             .started_at
@@ -2735,6 +2746,7 @@ pub async fn local_fieldbus_ingest(
             .await
             .is_none()
         {
+            state.note_ingest_backpressure("local receipt ledger unavailable");
             return local_error(
                 StatusCode::SERVICE_UNAVAILABLE,
                 &receipt_scope,
@@ -2875,11 +2887,18 @@ pub async fn local_fieldbus_ingest(
     responses((status = 200, description = "MQTT ingest counters", body = IngestStatsResponse))
 )]
 pub async fn ingest_stats(State(state): State<Arc<AppState>>) -> Json<IngestStatsResponse> {
+    let ledger = state.receipt_ledger_stats().await;
     Json(IngestStatsResponse {
-        ok: true,
+        ok: !ledger.high_water,
         ingest_ok: *state.ingest_ok.lock().unwrap(),
         ingest_dup: *state.ingest_dup.lock().unwrap(),
         ingest_reject: *state.ingest_reject.lock().unwrap(),
+        ingest_backpressure: state
+            .ingest_backpressure
+            .load(std::sync::atomic::Ordering::Relaxed),
+        receipts_len: ledger.len,
+        receipts_capacity: ledger.capacity,
+        receipts_pending: ledger.pending,
         reject_buckets: state.ingest_reject_buckets.lock().unwrap().clone(),
         dead_letters: state.dead_letters.lock().unwrap().len(),
     })
