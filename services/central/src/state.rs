@@ -426,7 +426,9 @@ impl AppState {
         *self.ingest_reject.lock().unwrap() += 1;
         {
             let mut buckets = self.ingest_reject_buckets.lock().unwrap();
-            *buckets.entry("receipt_ledger_backpressure".into()).or_insert(0) += 1;
+            *buckets
+                .entry("receipt_ledger_backpressure".into())
+                .or_insert(0) += 1;
         }
         let should_warn = {
             let mut last = self.last_backpressure_warn.lock().unwrap();
@@ -1619,7 +1621,10 @@ mod tests {
         // Restart reload must stay under capacity after watermark eviction.
         let reloaded = load_receipts_at(&state.ingest_receipts_path).unwrap();
         assert!(reloaded.len() <= 8);
-        for key in ["OPENFDD_RECEIPT_CAPACITY", "OPENFDD_PENDING_RECEIPT_CAPACITY"] {
+        for key in [
+            "OPENFDD_RECEIPT_CAPACITY",
+            "OPENFDD_PENDING_RECEIPT_CAPACITY",
+        ] {
             std::env::remove_var(key);
         }
     }
@@ -1657,7 +1662,10 @@ mod tests {
         assert!(stats.high_water);
         assert_eq!(stats.pending, 2);
         assert_eq!(state.ingest_backpressure.load(Ordering::Relaxed), 1);
-        for key in ["OPENFDD_RECEIPT_CAPACITY", "OPENFDD_PENDING_RECEIPT_CAPACITY"] {
+        for key in [
+            "OPENFDD_RECEIPT_CAPACITY",
+            "OPENFDD_PENDING_RECEIPT_CAPACITY",
+        ] {
             std::env::remove_var(key);
         }
     }
