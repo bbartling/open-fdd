@@ -1,6 +1,6 @@
 [package]
 name = "openfdd_connector_runtime"
-version = "3.5.67"
+version = "3.5.68"
 edition = "2021"
 rust-version = "1.80"
 license = "MIT"
