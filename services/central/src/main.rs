@@ -48,6 +48,8 @@ use tracing::{info, warn};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Panic → stderr before any subscriber so Railway crash slices keep a death line.
+    logging::install_panic_hook();
     logging::init_tracing("info,openfdd_central=info,security_audit=info");
 
     durable_storage::assert_authoritative_storage()?;
@@ -55,6 +57,12 @@ async fn main() -> anyhow::Result<()> {
     initialize_s3_scope_index().await?;
 
     let state = Arc::new(AppState::new());
+    // Joinable boot line for ART / Railway log windows around started_at flips (Q1a).
+    info!(
+        version = %routes::resolve_build_version(),
+        started_at = %state.started_at.to_rfc3339(),
+        "openfdd-central boot"
+    );
     let afdd_runtime = afdd_scheduler::AfddSchedulerRuntime::from_env()?;
     let afdd_task = afdd_scheduler::spawn(Arc::clone(&afdd_runtime));
     match jobs::recover_interrupted_runs() {
@@ -102,6 +110,8 @@ async fn main() -> anyhow::Result<()> {
     .map_err(|e| anyhow::anyhow!(e))?;
     info!(
         %addr,
+        version = %routes::resolve_build_version(),
+        started_at = %state.started_at.to_rfc3339(),
         auth_enabled = state.auth.required(),
         "openfdd-central listening (secrets not logged)"
     );

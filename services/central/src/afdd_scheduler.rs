@@ -285,6 +285,15 @@ impl AfddSchedulerRuntime {
 
         let pressure = fdd_resources::sample_pressure();
         if pressure.defer_expensive_compute {
+            tracing::warn!(
+                target: "security_audit",
+                event = "afdd_pressure_defer",
+                ?pressure.state,
+                percent_used = ?pressure.percent_used,
+                trigger,
+                scope,
+                "AFDD deferred under memory pressure (not OOM claim; fail-closed)"
+            );
             anyhow::bail!(
                 "memory pressure {:?}/{:?}%; AFDD deferred to protect ingest (OPENFDD compute pressure policy)",
                 pressure.state,
@@ -294,6 +303,13 @@ impl AfddSchedulerRuntime {
         let Some(compute) =
             fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::ScheduledAfdd)
         else {
+            tracing::warn!(
+                target: "security_audit",
+                event = "afdd_compute_admission_shed",
+                trigger,
+                scope,
+                "OPENFDD_COMPUTE_MAX_INFLIGHT saturated; AFDD deferred"
+            );
             anyhow::bail!(
                 "compute admission limit reached (OPENFDD_COMPUTE_MAX_INFLIGHT); AFDD deferred"
             );

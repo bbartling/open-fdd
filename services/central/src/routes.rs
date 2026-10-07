@@ -4,9 +4,11 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::{rejection::BytesRejection, DefaultBodyLimit, Extension, Path, Query, State};
+use axum::extract::{
+    rejection::BytesRejection, DefaultBodyLimit, Extension, Path, Query, Request, State,
+};
 use axum::http::{header, HeaderMap, StatusCode};
-use axum::middleware;
+use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
@@ -413,6 +415,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             .merge(analytics)
             .layer(middleware::from_fn_with_state(
                 Arc::clone(&state),
+                protected_admission_middleware,
+            ))
+            .layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
                 auth::jwt_middleware,
             ));
 
@@ -420,6 +426,57 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(public)
         .merge(protected)
         .with_state(state)
+}
+
+/// Authenticated-path admission: mutation rate shed + try_acquire HTTP concurrency.
+/// Health/version stay on the public router. Fail-closed 429/503 — never wait and
+/// never treat this as an OOM/memory-spike cure (#1127 / #1169 / Q1a logging).
+async fn protected_admission_middleware(
+    State(state): State<Arc<AppState>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let path = req.uri().path();
+    let mutation_kind = match path {
+        "/api/commands" => Some("commands"),
+        "/api/auth/agent-token" => Some("agent_token"),
+        _ => None,
+    };
+    if let Some(kind) = mutation_kind {
+        if state.mutation_rate_limited(kind) {
+            return (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(json!({
+                    "ok": false,
+                    "error": format!(
+                        "authenticated {kind} rate budget exceeded; retry later (AF storm shed)"
+                    ),
+                    "shed": true,
+                })),
+            )
+                .into_response();
+        }
+    }
+    let Some(permit) = state.try_http_permit() else {
+        tracing::warn!(
+            target: "security_audit",
+            event = "http_inflight_shed",
+            path,
+            "OPENFDD_HTTP_MAX_INFLIGHT saturated; shedding with 503 (fail-closed)"
+        );
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "ok": false,
+                "error": "authenticated HTTP concurrency limit reached (OPENFDD_HTTP_MAX_INFLIGHT); retry later",
+                "shed": true,
+            })),
+        )
+            .into_response();
+    };
+    let response = next.run(req).await;
+    drop(permit);
+    response
 }
 
 fn analytics_body_limit_bytes() -> usize {
@@ -3498,11 +3555,18 @@ pub async fn fdd_run(
     let compute =
         fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::ManualFdd).ok_or_else(
             || {
+                tracing::warn!(
+                    target: "security_audit",
+                    event = "compute_admission_shed",
+                    class = "manual_fdd",
+                    "OPENFDD_COMPUTE_MAX_INFLIGHT saturated; FDD deferred with 429"
+                );
                 (
                     StatusCode::TOO_MANY_REQUESTS,
                     Json(json!({
                         "ok": false,
-                        "error": "compute admission limit reached (OPENFDD_COMPUTE_MAX_INFLIGHT); retry later"
+                        "error": "compute admission limit reached (OPENFDD_COMPUTE_MAX_INFLIGHT); retry later",
+                        "shed": true,
                     })),
                 )
             },
