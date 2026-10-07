@@ -32,10 +32,7 @@ pub fn install_panic_hook() {
             "non-string panic payload".into()
         };
         let mut stderr = std::io::stderr().lock();
-        let _ = writeln!(
-            stderr,
-            "FATAL openfdd-central panic at {loc}: {payload}"
-        );
+        let _ = writeln!(stderr, "FATAL openfdd-central panic at {loc}: {payload}");
         let _ = stderr.flush();
         previous(info);
     }));

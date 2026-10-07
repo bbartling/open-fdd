@@ -409,18 +409,17 @@ pub fn router(state: Arc<AppState>) -> Router {
         .layer(DefaultBodyLimit::max(analytics_body_limit_bytes()))
         .layer(ConcurrencyLimitLayer::new(analytics_http_max_inflight()));
 
-    let protected =
-        Router::new()
-            .merge(protected)
-            .merge(analytics)
-            .layer(middleware::from_fn_with_state(
-                Arc::clone(&state),
-                protected_admission_middleware,
-            ))
-            .layer(middleware::from_fn_with_state(
-                Arc::clone(&state),
-                auth::jwt_middleware,
-            ));
+    let protected = Router::new()
+        .merge(protected)
+        .merge(analytics)
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            protected_admission_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            auth::jwt_middleware,
+        ));
 
     Router::new()
         .merge(public)

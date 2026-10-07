@@ -874,7 +874,10 @@ impl AppState {
         let mut map = self.mutation_windows.lock().unwrap();
         let slots = map.entry(kind).or_default();
         let now = Instant::now();
-        while slots.front().is_some_and(|at| now.duration_since(*at) > window) {
+        while slots
+            .front()
+            .is_some_and(|at| now.duration_since(*at) > window)
+        {
             slots.pop_front();
         }
         if slots.len() >= limit {
