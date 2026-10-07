@@ -218,11 +218,13 @@ impl AfddSchedulerRuntime {
             scheduled_for_utc: now,
             catch_up: false,
         };
+        // Soft-OPEN gate38: default 50→90s under live ACME hive; still fail-closed
+        // deferred (not process death). Override with OPENFDD_AFDD_RUN_NOW_TIMEOUT_SECONDS.
         let timeout_secs = std::env::var("OPENFDD_AFDD_RUN_NOW_TIMEOUT_SECONDS")
             .ok()
             .and_then(|value| value.parse::<u64>().ok())
             .filter(|value| *value > 0)
-            .unwrap_or(50);
+            .unwrap_or(90);
         match tokio::time::timeout(
             StdDuration::from_secs(timeout_secs),
             self.execute_cycle(scope, "run_now", window, true),

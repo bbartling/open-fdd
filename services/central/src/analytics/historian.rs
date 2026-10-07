@@ -1155,9 +1155,11 @@ pub const RUNTIME_RETAIN_FALLBACK_DAYS: i64 = 365;
 /// fail-closes with an empty envelope (HTTP 200 + warning) instead of hanging.
 const SENSOR_HEALTH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
-/// Wall-clock budget for historian runtime LEAD Δt. Railway edge often kills at
-/// ~15–40s; fail-closed HTTP 200 beats nginx 502.
-pub const RUNTIME_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(12);
+/// Wall-clock budget for historian runtime LEAD Δt.
+/// Soft-OPEN ACME gate37: raised 12→30s so live hive fail-closed completes
+/// under budget without process death (still fail-closed empty rows on timeout).
+/// Override at deploy with a rebuild or future env-hook; nginx read stays 600s.
+pub const RUNTIME_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Reserve part of the request budget for the optional weekly chart query.
 const RUNTIME_MAIN_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
@@ -1174,7 +1176,8 @@ pub const MECH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
 pub const MECH_RETAIN_FALLBACK_DAYS: i64 = 365;
 
 /// Wall-clock budget for mechanical-cooling OAT bin LEAD Δt (large hives).
-pub const MECH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(12);
+/// Soft-OPEN: raised 12→30s with runtime (same honesty as RUNTIME_QUERY_TIMEOUT).
+pub const MECH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Return the portion of a request budget that remains for a child operation.
 /// Every fallback/optional query must use the same request deadline rather than

@@ -3,7 +3,7 @@
   "notes": [
     "Railway hub (gleaming-cooperation) live_readonly profile.",
     "Credentials are environment-variable references only — never store secrets here.",
-    "Map OPENFDD_USER_A_OPS_PASSWORD ← OPENFDD_USER_ACME_OPS_PASSWORD,",
+    "Map OPENFDD_USER_A_OPS_PASSWORD ↔ OPENFDD_USER_ACME_OPS_PASSWORD (harness aliases both ways in resolve_password + gate25 entrypoints),",
     "OPENFDD_USER_B_OPS_PASSWORD ← OPENFDD_USER_B100_OPS_PASSWORD via stress wrapper."
   ],
   "origin_allowlist": [
