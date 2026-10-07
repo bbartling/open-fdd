@@ -3,6 +3,16 @@
 # Finalize even after preceding failures; cannot erase precheck failure.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Tip sequential / Railway: ACME ops env names ↔ A_OPS fixture names (Q4 / #999).
+if [[ -z "${OPENFDD_USER_A_OPS_PASSWORD:-}" && -n "${OPENFDD_USER_ACME_OPS_PASSWORD:-}" ]]; then
+  export OPENFDD_USER_A_OPS_PASSWORD="$OPENFDD_USER_ACME_OPS_PASSWORD"
+fi
+if [[ -z "${OPENFDD_USER_ACME_OPS_PASSWORD:-}" && -n "${OPENFDD_USER_A_OPS_PASSWORD:-}" ]]; then
+  export OPENFDD_USER_ACME_OPS_PASSWORD="$OPENFDD_USER_A_OPS_PASSWORD"
+fi
+export OPENFDD_USER_A_OPS_USER="${OPENFDD_USER_A_OPS_USER:-${OPENFDD_USER_ACME_OPS_USER:-acme-ops}}"
+export OPENFDD_OPS_A_PASSWORD="${OPENFDD_OPS_A_PASSWORD:-${OPENFDD_USER_A_OPS_PASSWORD:-}}"
+export OPENFDD_OPS_A_USER="${OPENFDD_OPS_A_USER:-${OPENFDD_USER_A_OPS_USER:-acme-ops}}"
 PROBE="$ROOT/scripts/security/openfdd_security_probe.py"
 CFG_DEFAULT="$ROOT/scripts/security/config/example_security_fixtures.json"
 if [[ -n "${RAILWAY_BASE:-}" \

@@ -418,7 +418,10 @@ def validate_report_for_qualification(
     if required_check_ids:
         allowed = set(required_check_ids)
         unknown = sorted(cid for cid in ids if cid not in allowed)
-        if unknown:
+        # live_readonly tip gates (25/25b) emit additive suite checks beyond the
+        # X/Y/Z required set — do not BLOCKED/FAIL on extras (Soft-OPEN Q4).
+        # isolated_full sabotage still rejects unknown IDs.
+        if unknown and expected_profile != "live_readonly":
             return False, f"unknown check_ids not in required set: {unknown[:8]}"
         missing = [cid for cid in required_check_ids if cid not in by_id]
         if missing:

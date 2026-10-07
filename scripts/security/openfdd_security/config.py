@@ -202,10 +202,53 @@ def assert_base_url_allowed(base_url: str, cfg: ProbeConfig, profile: str) -> st
     return origin
 
 
+# Railway hub vars use ACME/B100 names; fixtures historically used A_OPS/B_OPS.
+# Alias both directions so tip sequential gate25/25b is never env-BLOCKED (Q4).
+_PASSWORD_ENV_ALIASES: dict[str, tuple[str, ...]] = {
+    "OPENFDD_USER_A_OPS_PASSWORD": (
+        "OPENFDD_USER_ACME_OPS_PASSWORD",
+        "OPENFDD_OPS_A_PASSWORD",
+    ),
+    "OPENFDD_USER_ACME_OPS_PASSWORD": (
+        "OPENFDD_USER_A_OPS_PASSWORD",
+        "OPENFDD_OPS_A_PASSWORD",
+    ),
+    "OPENFDD_USER_B_OPS_PASSWORD": (
+        "OPENFDD_USER_B100_OPS_PASSWORD",
+        "OPENFDD_OPS_B_PASSWORD",
+    ),
+    "OPENFDD_OPS_A_PASSWORD": (
+        "OPENFDD_USER_A_OPS_PASSWORD",
+        "OPENFDD_USER_ACME_OPS_PASSWORD",
+    ),
+    "OPENFDD_OPS_B_PASSWORD": (
+        "OPENFDD_USER_B_OPS_PASSWORD",
+        "OPENFDD_USER_B100_OPS_PASSWORD",
+    ),
+}
+
+_USERNAME_ENV_ALIASES: dict[str, tuple[str, ...]] = {
+    "OPENFDD_USER_A_OPS_USER": ("OPENFDD_USER_ACME_OPS_USER", "OPENFDD_OPS_A_USER"),
+    "OPENFDD_USER_ACME_OPS_USER": ("OPENFDD_USER_A_OPS_USER", "OPENFDD_OPS_A_USER"),
+    "OPENFDD_OPS_A_USER": ("OPENFDD_USER_A_OPS_USER", "OPENFDD_USER_ACME_OPS_USER"),
+}
+
+
+def _env_first(*names: str) -> str | None:
+    for name in names:
+        if not name:
+            continue
+        val = os.environ.get(name)
+        if val is not None and val != "":
+            return val
+    return None
+
+
 def resolve_password(ident: IdentityRef) -> str | None:
     if ident.password_env:
-        val = os.environ.get(ident.password_env)
-        if val is not None and val != "":
+        aliases = _PASSWORD_ENV_ALIASES.get(ident.password_env, ())
+        val = _env_first(ident.password_env, *aliases)
+        if val is not None:
             return val
     if ident.password_file:
         path = Path(ident.password_file)
@@ -221,7 +264,8 @@ def resolve_password(ident: IdentityRef) -> str | None:
 
 def resolve_username(ident: IdentityRef, default: str | None = None) -> str | None:
     if ident.username_env:
-        return os.environ.get(ident.username_env) or default
+        aliases = _USERNAME_ENV_ALIASES.get(ident.username_env, ())
+        return _env_first(ident.username_env, *aliases) or default
     return default
 
 

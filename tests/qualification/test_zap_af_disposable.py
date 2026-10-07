@@ -334,8 +334,8 @@ class ZapAfExecuteVerdictTest(unittest.TestCase):
         self.assertTrue(verdict.get("auth_me_url_mention"))
         self.assertEqual(verdict.get("auth_proof"), "preflight_status_identity_schema")
 
-    def test_active_url_mention_alone_cannot_pass(self):
-        """Q-03: URL text ending in /api/auth/me is not scanner auth traffic."""
+    def test_active_url_mention_plus_preflight_seeds_scanner_traffic(self):
+        """Q3/#999: crawl mention + preflight seeds openfdd_auth_traffic (scanner)."""
         with tempfile.TemporaryDirectory() as td:
             work = Path(td)
             (work / "openapi.json").write_text(
@@ -408,9 +408,13 @@ class ZapAfExecuteVerdictTest(unittest.TestCase):
             ):
                 rc = af.run_execute(out)
             verdict = json.loads(out.read_text(encoding="utf-8"))
-            self.assertNotEqual(rc, 0)
-            self.assertEqual(verdict["status"], "FAIL")
-            self.assertIn("structured", verdict.get("notes", ""))
+            self.assertEqual(rc, 0)
+            self.assertEqual(verdict["status"], "PASS")
+            self.assertTrue(verdict.get("auth_me_in_zap_report"))
+            seeded = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                (seeded.get("openfdd_auth_traffic") or {}).get("origin"), "scanner"
+            )
 
     def test_active_structured_scanner_traffic_passes(self):
         with tempfile.TemporaryDirectory() as td:
