@@ -4,7 +4,7 @@ use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
@@ -14,7 +14,7 @@ use openfdd_mqtt::AsyncClient;
 use serde::Deserialize;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 use tracing::warn;
 use uuid::Uuid;
 
@@ -288,6 +288,11 @@ pub struct AppState {
     mqtt_monitor: Mutex<MqttMonitorState>,
     /// Login failures keyed by ip+username (generic throttle; no secrets).
     pub login_failures: Mutex<HashMap<String, (u32, std::time::Instant)>>,
+    /// Authenticated HTTP in-flight cap (fail-closed 503; health stays public).
+    /// Bounds ZAP AF / analytics storms so the process sheds instead of dying (#1169).
+    pub http_inflight: Arc<Semaphore>,
+    /// Sliding-window counts for mutation storm sheds (commands / agent-token).
+    pub mutation_windows: Mutex<HashMap<&'static str, VecDeque<Instant>>>,
     /// Wave L L5 — per-tenant sliding-window budgets (noop when disabled).
     pub tenant_budgets: TenantBudgetTracker,
     /// One canonical writer shared by MQTT and local HTTP delivery.
@@ -322,6 +327,8 @@ impl AppState {
             mqtt_publisher: Mutex::new(None),
             mqtt_monitor: Mutex::new(MqttMonitorState::default()),
             login_failures: Mutex::new(HashMap::new()),
+            http_inflight: Arc::new(Semaphore::new(http_max_inflight())),
+            mutation_windows: Mutex::new(HashMap::new()),
             tenant_budgets: TenantBudgetTracker::new(),
             live_writer: LiveWriter::start(),
             ingest_receipts: AsyncMutex::new(load_receipts()),
@@ -853,6 +860,41 @@ impl AppState {
         }
     }
 
+    /// Fail-closed when authenticated HTTP concurrency is saturated (#1169).
+    /// Does not wait — waiting under ZAP AF queues memory and can still kill the replica.
+    pub fn try_http_permit(&self) -> Option<tokio::sync::OwnedSemaphorePermit> {
+        self.http_inflight.clone().try_acquire_owned().ok()
+    }
+
+    /// Sliding-window mutation budget for AF-shaped command/token floods.
+    /// Returns true when the caller should shed (429) without doing work.
+    pub fn mutation_rate_limited(&self, kind: &'static str) -> bool {
+        let limit = mutation_rate_limit(kind);
+        let window = Duration::from_secs(mutation_rate_window_secs());
+        let mut map = self.mutation_windows.lock().unwrap();
+        let slots = map.entry(kind).or_default();
+        let now = Instant::now();
+        while slots
+            .front()
+            .is_some_and(|at| now.duration_since(*at) > window)
+        {
+            slots.pop_front();
+        }
+        if slots.len() >= limit {
+            warn!(
+                target: "security_audit",
+                event = "api_storm_shed",
+                kind,
+                limit,
+                window_secs = window.as_secs(),
+                "authenticated mutation rate budget exceeded; shedding with 429"
+            );
+            return true;
+        }
+        slots.push_back(now);
+        false
+    }
+
     /// Returns true if this key is currently locked out.
     pub fn login_is_throttled(&self, key: &str) -> bool {
         const MAX_FAILS: u32 = 8;
@@ -900,6 +942,42 @@ impl AppState {
     fn sweep_login_failures(map: &mut HashMap<String, (u32, Instant)>, window: Duration) {
         map.retain(|_, (_, at)| at.elapsed() < window);
     }
+}
+
+/// Default authenticated HTTP concurrency. Override with `OPENFDD_HTTP_MAX_INFLIGHT`.
+/// Health/version stay on the public router and are never gated by this semaphore.
+fn http_max_inflight() -> usize {
+    std::env::var("OPENFDD_HTTP_MAX_INFLIGHT")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(48)
+}
+
+fn mutation_rate_window_secs() -> u64 {
+    std::env::var("OPENFDD_MUTATION_RATE_WINDOW_SECS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(60)
+}
+
+fn mutation_rate_limit(kind: &str) -> usize {
+    let env_key = match kind {
+        "commands" => "OPENFDD_COMMANDS_RATE_LIMIT",
+        "agent_token" => "OPENFDD_AGENT_TOKEN_RATE_LIMIT",
+        _ => "OPENFDD_MUTATION_RATE_LIMIT",
+    };
+    std::env::var(env_key)
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(match kind {
+            // ZAP AF fuzzed command_issued ×272 / agent_token ×55 in one window.
+            "commands" => 30,
+            "agent_token" => 12,
+            _ => 60,
+        })
 }
 
 fn push_monitor_event(monitor: &mut MqttMonitorState, kind: &str, message: impl Into<String>) {
@@ -1163,6 +1241,32 @@ fn compact_receipt_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mutation_rate_sheds_after_budget() {
+        std::env::set_var("OPENFDD_COMMANDS_RATE_LIMIT", "3");
+        std::env::set_var("OPENFDD_MUTATION_RATE_WINDOW_SECS", "60");
+        let state = AppState::new();
+        assert!(!state.mutation_rate_limited("commands"));
+        assert!(!state.mutation_rate_limited("commands"));
+        assert!(!state.mutation_rate_limited("commands"));
+        assert!(state.mutation_rate_limited("commands"));
+        std::env::remove_var("OPENFDD_COMMANDS_RATE_LIMIT");
+        std::env::remove_var("OPENFDD_MUTATION_RATE_WINDOW_SECS");
+    }
+
+    #[test]
+    fn http_inflight_try_acquire_exhausts() {
+        std::env::set_var("OPENFDD_HTTP_MAX_INFLIGHT", "2");
+        let state = AppState::new();
+        let a = state.try_http_permit();
+        let b = state.try_http_permit();
+        assert!(a.is_some() && b.is_some());
+        assert!(state.try_http_permit().is_none());
+        drop(a);
+        assert!(state.try_http_permit().is_some());
+        std::env::remove_var("OPENFDD_HTTP_MAX_INFLIGHT");
+    }
 
     #[tokio::test]
     async fn receipt_reservation_is_single_writer_and_restart_safe() {
