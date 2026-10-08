@@ -213,14 +213,23 @@ def summarize_zap_json(data: dict[str, Any]) -> dict[str, Any]:
             plugin = str(a.get("pluginid") or a.get("alertRef") or "").strip()
             if plugin:
                 medium_plugins.append(plugin)
-        for key in ("url", "uri", "instance", "param"):
+        for key in ("url", "uri", "instance", "instances", "param"):
             val = a.get(key)
             if isinstance(val, str):
                 url_blob_parts.append(val)
             elif isinstance(val, list):
                 for item in val:
                     if isinstance(item, dict):
-                        url_blob_parts.append(str(item.get("uri") or item.get("url") or ""))
+                        # ZAP traditional-json nests alert hit URIs under instances[].uri
+                        # (#999) — top-level url/uri alone often omit /api/auth/me.
+                        url_blob_parts.append(
+                            str(
+                                item.get("uri")
+                                or item.get("url")
+                                or item.get("URI")
+                                or ""
+                            )
+                        )
                     else:
                         url_blob_parts.append(str(item))
     for site in sites:

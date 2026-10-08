@@ -1188,11 +1188,15 @@ def run_suite_y(ctx: SuiteContext) -> None:
     ):
         try:
             own_cid = foreign_cid.replace("_foreign_", "_own_").replace("_denied", "")
+            # Live hub fixtures use building_a=ACME (historian rows, no synthetic
+            # canary). Require populated own content, not canary bytes (#999).
             q_own = urlencode({"building_id": fx.building_a})
             r_own = ctx.client.request("GET", f"{path}?{q_own}", token=tok_a)
             if r_own.status == 401:
                 own_st = "ERROR"
-            elif r_own.status == 200 and _nonempty_own_control(r_own.body, fx.canary_a):
+            elif r_own.status == 200 and _nonempty_own_control(
+                r_own.body, fx.canary_a, require_canary=False
+            ):
                 own_st = "PASS"
             elif r_own.status == 200:
                 own_st = "BLOCKED"
@@ -1248,7 +1252,9 @@ def run_suite_y(ctx: SuiteContext) -> None:
             own_cid = foreign_cid.replace("_foreign_", "_own_").replace("_denied", "")
             if r_own.status == 401:
                 own_st = "ERROR"
-            elif r_own.status == 200 and _nonempty_own_control(r_own.body, fx.canary_a):
+            elif r_own.status == 200 and _nonempty_own_control(
+                r_own.body, fx.canary_a, require_canary=False
+            ):
                 own_st = "PASS"
             elif r_own.status == 200:
                 # Empty list/soft 200 is not authorization proof (empty-site UX separate).
@@ -1320,7 +1326,9 @@ def run_suite_y(ctx: SuiteContext) -> None:
             own_cid = foreign_cid.replace("_foreign_", "_own_").replace("_denied", "")
             if r_own.status == 401:
                 own_st = "ERROR"
-            elif r_own.status == 200 and _nonempty_own_control(r_own.body, fx.canary_a):
+            elif r_own.status == 200 and _nonempty_own_control(
+                r_own.body, fx.canary_a, require_canary=False
+            ):
                 own_st = "PASS"
             elif r_own.status in (200, 204, 400, 422):
                 # Status-only / empty / schema-reject is not populated analytics proof.
