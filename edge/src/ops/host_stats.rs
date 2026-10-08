@@ -247,7 +247,7 @@ fn effective_compute_settings() -> Value {
         "OPENFDD_PARQUET_FLUSH_ROWS": flush_rows,
         "OPENFDD_PARQUET_FLUSH_SECS": flush_secs,
         "shared_runtime": shared,
-        "note": "Aggregate pool via OPENFDD_COMPUTE_MEMORY_MB (preferred); QUERY_MEMORY is compatibility ceiling, not N independent pools"
+        "note": "Aggregate FairSpillPool = (cgroup−reserves)×OPENFDD_COMPUTE_MEMORY_FRACTION (or COMPUTE_MEMORY_MB); QUERY_MEMORY is per-request ceiling, not the pool size (#1179)"
     })
 }
 

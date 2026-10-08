@@ -16,10 +16,13 @@ use super::{
     QV_SETPOINTS, QV_SQL_ANOMALY, QV_TOPOLOGY,
 };
 
-/// DataFusion session that honors `OPENFDD_QUERY_MEMORY_MB` + spill dir.
+/// Production DataFusion session: shared process-wide FairSpillPool sized as a
+/// fraction of the detected cgroup/host limit, DiskManager spill under
+/// `OPENFDD_DATAFUSION_SPILL_DIR` (default `<storage_root>/.datafusion-spill`),
+/// and `OPENFDD_QUERY_MEMORY_MB` as the per-request ceiling (not the pool size).
 ///
-/// Bare `SessionContext::new()` ignores those env vars — production analytics
-/// and AFDD must use this helper so Railway memory settings are real.
+/// Bare `SessionContext::new()` has no pool and no spill — never use it on
+/// product analytics / AFDD paths (#1179).
 pub fn new_bounded_session() -> Result<SessionContext> {
     let cfg = HistorianConfig::from_env().map_err(|e| anyhow!("historian config: {e}"))?;
     new_historian_session(&cfg).map_err(|e| anyhow!("bounded DataFusion session: {e}"))
