@@ -13,4 +13,7 @@ pub use admission::{
 };
 pub use budget::{ComputeBudget, ReserveEnvelopes};
 pub use cgroup::{discover_capacity, CapacityDiscovery, CpuDiscovery, MemoryDiscovery};
-pub use pressure::{evaluate_pressure, sample_pressure, PressureSnapshot, PressureState};
+pub use pressure::{
+    evaluate_pressure, memory_budget_json, sample_pressure, PressureSnapshot, PressureState,
+    ShedState,
+};

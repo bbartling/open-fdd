@@ -40,6 +40,10 @@ pub struct OkHealthResponse {
     /// True when OPENFDD storage/parquet root exists on disk (durable historian, not since-boot).
     #[serde(default)]
     pub historian_present: bool,
+    /// Portable cgroup/host memory budget (#1179): hard/pool/current/shed_state.
+    /// Health stays HTTP 200 with shed_state when under memory pressure (capacity 24b).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_budget: Option<Value>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
