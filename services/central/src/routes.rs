@@ -594,6 +594,7 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
         uptime_secs,
         last_ingest_at,
         historian_present,
+        memory_budget: Some(fdd_resources::memory_budget_json()),
     })
 }
 

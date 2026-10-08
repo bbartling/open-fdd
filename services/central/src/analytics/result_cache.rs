@@ -45,13 +45,26 @@ fn analytics_request_rejected(detail: String) -> (StatusCode, Json<Value>) {
     )
 }
 
-fn analytics_pressure_deferred(notes: &[String]) -> (StatusCode, Json<Value>) {
+fn analytics_pressure_deferred(notes: &[String], abort: bool) -> (StatusCode, Json<Value>) {
+    let status = if abort {
+        StatusCode::GATEWAY_TIMEOUT
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
     (
-        StatusCode::SERVICE_UNAVAILABLE,
+        status,
         Json(json!({
             "ok": false,
-            "error": "memory pressure: deferring expensive analytics recompute; retry later",
-            "code": "compute_pressure_deferred",
+            "error": if abort {
+                "memory abort: refusing expensive analytics before cgroup kill; retry later"
+            } else {
+                "memory shed: deferring expensive analytics recompute; retry later"
+            },
+            "code": if abort {
+                "memory_abort"
+            } else {
+                "memory_shed"
+            },
             "class": "analytics",
             "notes": notes,
         })),
@@ -65,7 +78,17 @@ async fn compute_with_admission(
 ) -> Result<AnalyticsEnvelope, (StatusCode, Json<Value>)> {
     let pressure = fdd_resources::sample_pressure();
     if pressure.defer_expensive_compute {
-        return Err(analytics_pressure_deferred(&pressure.notes));
+        tracing::warn!(
+            target: "security_audit",
+            event = "memory_shed",
+            shed_state = ?pressure.shed_state,
+            percent_used = ?pressure.percent_used,
+            "analytics shed under cgroup memory fraction"
+        );
+        return Err(analytics_pressure_deferred(
+            &pressure.notes,
+            pressure.abort_in_flight,
+        ));
     }
     let permit = fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Analytics)
         .ok_or_else(analytics_admission_busy)?;
