@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Stage + lightly enhance the OpenFDD synthetic 59-rule golden fixture.
 
-Source handoff ZIP → reports/wattlab-parity/fixtures/synthetic_59/
+Source handoff ZIP → reports/eplus-dump/fixtures/synthetic_59/
+(legacy wattlab-parity path still accepted as fallback by soaks).
 Enhancements (do not rewrite expected_faults.csv goldens):
   - copy default_confirmation_expectations.csv to outer root
   - add AHU_CASE_SCHED_1_STRING companion + expected_faults_extra.csv
@@ -21,7 +22,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SRC = Path.home() / "OPENFDD_SYNTHETIC_59_RULE_HANDOFF_V1_20260812_085050.zip"
-DEFAULT_OUT = ROOT / "reports/wattlab-parity/fixtures/synthetic_59"
+DEFAULT_OUT = ROOT / "reports/eplus-dump/fixtures/synthetic_59"
+LEGACY_OUT = ROOT / "reports/wattlab-parity/fixtures/synthetic_59"
 
 # Mirrors edge/src/csv_ingest/package.rs haystack_point_to_role (explicit arms).
 HAYSTACK_TO_SNAKE: dict[str, str] = {
