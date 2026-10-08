@@ -63,10 +63,23 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--sample", action="store_true", help="print health receipt fields")
     ap.add_argument("--soak", action="store_true", help="local ingest soak toward target")
+    ap.add_argument(
+        "--flood",
+        action="store_true",
+        help="alias of --soak: bounded flood until --target (lab watermark prove)",
+    )
     ap.add_argument("--target", type=int, default=50_000)
+    ap.add_argument(
+        "--lab-capacity",
+        type=int,
+        default=0,
+        help="document-only: lab may set OPENFDD_RECEIPT_CAPACITY lower; assert against this",
+    )
     ap.add_argument("--require-50k", action="store_true")
     ap.add_argument("--art", default="", help="optional artifact dir")
     args = ap.parse_args()
+    if args.flood:
+        args.soak = True
     base = (os.environ.get("OPENFDD_API_BASE") or os.environ.get("RAILWAY_BASE") or "").rstrip("/")
     if not base:
         print("FAIL: set OPENFDD_API_BASE", file=sys.stderr)
