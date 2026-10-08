@@ -566,6 +566,35 @@ fn time_range_sql(
     out
 }
 
+/// Resolve analytics start/end: default lookback when start omitted; reject
+/// spans wider than [`ANALYTICS_MAX_LOOKBACK_DAYS`] (caller maps to 422).
+pub fn resolve_analytics_window(
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+    default_lookback_days: i64,
+) -> Result<(DateTime<Utc>, Option<DateTime<Utc>>), String> {
+    let end_t = end.unwrap_or_else(Utc::now);
+    let start_t =
+        start.unwrap_or_else(|| end_t - chrono::Duration::days(default_lookback_days.max(1)));
+    if start_t >= end_t {
+        return Err("query.start must be before query.end".into());
+    }
+    let span = end_t - start_t;
+    if span > chrono::Duration::days(ANALYTICS_MAX_LOOKBACK_DAYS) {
+        return Err(format!(
+            "analytics window exceeds {ANALYTICS_MAX_LOOKBACK_DAYS} days; pass a tighter query.start/end or page by month (refresh over full history is refused)"
+        ));
+    }
+    Ok((start_t, Some(end_t)))
+}
+
+/// Bucket width (seconds) so `date_bin` yields ≤ `max_points` buckets over span.
+fn date_bin_seconds_for_points(start: DateTime<Utc>, end: DateTime<Utc>, max_points: usize) -> i64 {
+    let span = (end - start).num_seconds().max(1);
+    let buckets = max_points.max(1) as i64;
+    (span / buckets).max(1)
+}
+
 /// Preset tokens name canonical kinds. They are not `equipment_id` prefixes.
 ///
 /// `RTU` is kind `ahu`. It must not become `LIKE 'RTU%'`, which selects
@@ -1149,6 +1178,16 @@ pub const SENSOR_HEALTH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
 /// Shorter window keeps LEAD Δt under Railway edge budgets on large ACME hives
 /// (#1127 Soft-OPEN tip: 12s fail-closed under pressure).
 pub const RUNTIME_DEFAULT_LOOKBACK_DAYS: i64 = 7;
+
+/// Default lookback for BAS-vs-web and other hive chart queries (#1179).
+pub const BAS_VS_WEB_DEFAULT_LOOKBACK_DAYS: i64 = RUNTIME_DEFAULT_LOOKBACK_DAYS;
+
+/// Max allowed analytics span when `refresh:true` over a hive (#1179).
+/// Wider windows must page by month or pass an explicit bounded start/end.
+pub const ANALYTICS_MAX_LOOKBACK_DAYS: i64 = 90;
+
+/// Wall budget for BAS-vs-web historian path (fail-closed envelope, not 502).
+pub const BAS_VS_WEB_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Bounded expand when the default lookback is empty (synthetic fixtures outside
 /// wall-clock). Never use `start=None` — full-history LEAD hangs → nginx 502.
@@ -2437,7 +2476,16 @@ pub async fn bas_vs_web_from_history(
     max_points: usize,
     building_id: Option<&str>,
     preferred_tenant: Option<&str>,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
+    let (start_t, end_opt) =
+        match resolve_analytics_window(start, end, BAS_VS_WEB_DEFAULT_LOOKBACK_DAYS) {
+            Ok(w) => w,
+            Err(msg) => anyhow::bail!("{msg}"),
+        };
+    let end_t = end_opt.unwrap_or_else(Utc::now);
+    let deadline = tokio::time::Instant::now() + BAS_VS_WEB_QUERY_TIMEOUT;
     let Some((ctx, cols, n, _scan)) =
         open_history_scoped_for_tenant(building_id, preferred_tenant).await?
     else {
@@ -2458,6 +2506,10 @@ pub async fn bas_vs_web_from_history(
     let weather_only = stamped_weather_id_predicate(building_id, false);
     let weather_excluded = stamped_weather_id_predicate(building_id, true);
     let limit = max_points.clamp(100, 5000);
+    let range_sql = time_range_sql(ts_col, Some(start_t), Some(end_t));
+    let bin_secs = date_bin_seconds_for_points(start_t, end_t, limit);
+    // Two-pass shape without ROW_NUMBER/COUNT(*) OVER: second-level join then
+    // date_bin GROUP BY with a bounded bucket count (#1179).
     let (web_label, sql) = if let Some(web) = web_col {
         (
             web.to_string(),
@@ -2466,37 +2518,37 @@ pub async fn bas_vs_web_from_history(
 WITH bas_by_ts AS (
   SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas}) AS bas_oat_f
   FROM history
-  WHERE {bas} IS NOT NULL
+  WHERE {bas} IS NOT NULL{range_sql}
   GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
 ),
 web_by_ts AS (
   SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({web}) AS web_oat_f
   FROM history
-  WHERE {web} IS NOT NULL
+  WHERE {web} IS NOT NULL{range_sql}
   GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
 ),
 joined AS (
-  SELECT
-    CAST(b.ts AS VARCHAR) AS timestamp_utc,
-    'site' AS equipment_id,
-    b.bas_oat_f,
-    w.web_oat_f,
-    (b.bas_oat_f - w.web_oat_f) AS delta_f,
-    ROW_NUMBER() OVER (ORDER BY b.ts) AS _rn,
-    COUNT(*) OVER () AS _cnt
+  SELECT b.ts, b.bas_oat_f, w.web_oat_f, (b.bas_oat_f - w.web_oat_f) AS delta_f
   FROM bas_by_ts b
   INNER JOIN web_by_ts w ON b.ts = w.ts
+),
+bucketed AS (
+  SELECT
+    date_bin(INTERVAL '{bin_secs}' SECOND, ts) AS bucket_ts,
+    AVG(bas_oat_f) AS bas_oat_f,
+    AVG(web_oat_f) AS web_oat_f,
+    AVG(delta_f) AS delta_f
+  FROM joined
+  GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, ts)
 )
-SELECT timestamp_utc, equipment_id, bas_oat_f, web_oat_f, delta_f
-FROM joined
-WHERE _rn = 1
-   OR _rn = _cnt
-   OR (_rn % (CASE
-        WHEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT) > 1
-        THEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT)
-        ELSE 1
-      END)) = 0
-ORDER BY timestamp_utc
+SELECT
+  CAST(bucket_ts AS VARCHAR) AS timestamp_utc,
+  'site' AS equipment_id,
+  bas_oat_f,
+  web_oat_f,
+  delta_f
+FROM bucketed
+ORDER BY bucket_ts
 LIMIT {limit}
 "#
             ),
@@ -2509,43 +2561,76 @@ LIMIT {limit}
 WITH bas_by_ts AS (
   SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas}) AS bas_oat_f
   FROM history
-  WHERE {bas} IS NOT NULL{weather_excluded}
+  WHERE {bas} IS NOT NULL{weather_excluded}{range_sql}
   GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
 ),
 web_by_ts AS (
   SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas}) AS web_oat_f
   FROM history
-  WHERE {bas} IS NOT NULL{weather_only}
+  WHERE {bas} IS NOT NULL{weather_only}{range_sql}
   GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
 ),
 joined AS (
-  SELECT
-    CAST(b.ts AS VARCHAR) AS timestamp_utc,
-    'site' AS equipment_id,
-    b.bas_oat_f,
-    w.web_oat_f,
-    (b.bas_oat_f - w.web_oat_f) AS delta_f,
-    ROW_NUMBER() OVER (ORDER BY b.ts) AS _rn,
-    COUNT(*) OVER () AS _cnt
+  SELECT b.ts, b.bas_oat_f, w.web_oat_f, (b.bas_oat_f - w.web_oat_f) AS delta_f
   FROM bas_by_ts b
   INNER JOIN web_by_ts w ON b.ts = w.ts
+),
+bucketed AS (
+  SELECT
+    date_bin(INTERVAL '{bin_secs}' SECOND, ts) AS bucket_ts,
+    AVG(bas_oat_f) AS bas_oat_f,
+    AVG(web_oat_f) AS web_oat_f,
+    AVG(delta_f) AS delta_f
+  FROM joined
+  GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, ts)
 )
-SELECT timestamp_utc, equipment_id, bas_oat_f, web_oat_f, delta_f
-FROM joined
-WHERE _rn = 1
-   OR _rn = _cnt
-   OR (_rn % (CASE
-        WHEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT) > 1
-        THEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT)
-        ELSE 1
-      END)) = 0
-ORDER BY timestamp_utc
+SELECT
+  CAST(bucket_ts AS VARCHAR) AS timestamp_utc,
+  'site' AS equipment_id,
+  bas_oat_f,
+  web_oat_f,
+  delta_f
+FROM bucketed
+ORDER BY bucket_ts
 LIMIT {limit}
 "#
             ),
         )
     };
-    let result = run_sql(&ctx, &sql).await?;
+    let budget = remaining_budget(deadline, BAS_VS_WEB_QUERY_TIMEOUT);
+    let timed = tokio::time::timeout(budget, run_sql(&ctx, &sql)).await;
+    let result = match timed {
+        Ok(inner) => inner?,
+        Err(_) => {
+            tracing::warn!(
+                timeout_secs = BAS_VS_WEB_QUERY_TIMEOUT.as_secs(),
+                "bas-vs-web historian path exceeded wall budget; fail-closed"
+            );
+            let query = AnalyticsQuery {
+                building_id: building_id.map(str::to_string),
+                start: Some(start_t),
+                end: Some(end_t),
+                ..AnalyticsQuery::default()
+            };
+            let mut env = envelope_with_engine(
+                "bas-vs-web-oat-v3",
+                &query,
+                vec![format!(
+                    "bas-vs-web historian query exceeded {}s budget; fail-closed — pass a tighter query.start/end",
+                    BAS_VS_WEB_QUERY_TIMEOUT.as_secs()
+                )],
+                DF_ENGINE,
+            );
+            env.coverage = Some(json!({
+                "fail_closed": true,
+                "timeout_secs": BAS_VS_WEB_QUERY_TIMEOUT.as_secs(),
+                "building_id": safe_building_segment(building_id),
+                "start": start_t.to_rfc3339(),
+                "end": end_t.to_rfc3339(),
+            }));
+            return Ok(Some(env));
+        }
+    };
     if result.rows.is_empty() {
         return Ok(None);
     }
@@ -2577,13 +2662,23 @@ LIMIT {limit}
     let mut warnings = vec![
         "BAS vs web OAT from historian DataFusion (site-broadcast oa_t × web OAT by timestamp)"
             .into(),
+        format!(
+            "bounded window {} .. {} with date_bin({bin_secs}s) downsample (no ROW_NUMBER OVER)",
+            start_t.to_rfc3339(),
+            end_t.to_rfc3339()
+        ),
     ];
     if weather_split {
         warnings.push(
             "web OAT sourced from equipment stamped kind weather (single oa_t column site)".into(),
         );
     }
-    let query = AnalyticsQuery::default();
+    let query = AnalyticsQuery {
+        building_id: building_id.map(str::to_string),
+        start: Some(start_t),
+        end: Some(end_t),
+        ..AnalyticsQuery::default()
+    };
     let mut env = envelope_with_engine("bas-vs-web-oat-v3", &query, warnings, DF_ENGINE);
     env.points = points;
     env.rows = rows;
@@ -2595,8 +2690,12 @@ LIMIT {limit}
         "web_column": web_label,
         "weather_equipment_split": weather_split,
         "oat_join": "site_broadcast_by_second",
+        "downsample": "date_bin",
+        "bin_seconds": bin_secs,
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
+        "start": start_t.to_rfc3339(),
+        "end": end_t.to_rfc3339(),
     }));
     Ok(Some(env))
 }
@@ -5062,7 +5161,7 @@ mod tests {
         );
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = bas_vs_web_from_history(None, 500, Some("bldg2_mqtt_oat"), None)
+        let env = bas_vs_web_from_history(None, 500, Some("bldg2_mqtt_oat"), None, None, None)
             .await
             .unwrap()
             .expect("MQTT outside_air_temperature weather-split should yield points");
@@ -5106,7 +5205,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_BAS", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = bas_vs_web_from_history(None, 500, Some("BUILDING_BAS"), None)
+        let env = bas_vs_web_from_history(None, 500, Some("BUILDING_BAS"), None, None, None)
             .await
             .unwrap()
             .expect("site BAS×web join should produce overlay points");
@@ -5155,7 +5254,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_MICRO", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = bas_vs_web_from_history(None, 500, Some("BUILDING_MICRO"), None)
+        let env = bas_vs_web_from_history(None, 500, Some("BUILDING_MICRO"), None, None, None)
             .await
             .unwrap()
             .expect("second-truncated join should align mismatched micros");

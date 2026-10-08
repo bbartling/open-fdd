@@ -292,14 +292,50 @@ async fn register_weather_view_from_history(
     }
 }
 
-/// Execute SQL and materialize the complete result for compatibility callers.
-/// Interactive callers should prefer [`run_sql_bounded`] or the Arrow streaming
-/// helpers in `crate::query`.
+/// Execute SQL and materialize JSON rows with a hard JSON-side byte budget.
+///
+/// Streams Arrow batches (no unbounded `collect()`). Fail-closed when the
+/// measured JSON payload would exceed `OPENFDD_RESULT_MAX_BYTES` (#1179).
+/// Interactive callers that only need Arrow should prefer [`run_sql_bounded`]
+/// or `crate::query::stream_sql`.
 pub async fn run_sql(ctx: &SessionContext, sql: &str) -> Result<QueryResult> {
     let started = std::time::Instant::now();
-    let df = ctx.sql(sql).await?;
-    let batches = df.collect().await?;
-    Ok(query_result_from_batches(&batches, started))
+    let max_bytes = crate::query::result_max_bytes_from_env()?;
+    let mut stream = crate::query::stream_sql(ctx, sql).await?;
+    use futures::StreamExt;
+    let mut rows = Vec::new();
+    let mut columns = Vec::new();
+    let mut json_bytes = 0usize;
+    while let Some(next) = stream.next().await {
+        let batch = next?;
+        let schema = batch.schema();
+        if columns.is_empty() {
+            columns = schema.fields().iter().map(|f| f.name().clone()).collect();
+        }
+        for row_idx in 0..batch.num_rows() {
+            let mut obj = serde_json::Map::new();
+            for (col_idx, field) in schema.fields().iter().enumerate() {
+                let col = batch.column(col_idx);
+                let val = format_cell(col, row_idx);
+                obj.insert(field.name().clone(), val);
+            }
+            let value = serde_json::Value::Object(obj);
+            let encoded = serde_json::to_vec(&value).unwrap_or_default();
+            json_bytes = json_bytes.saturating_add(encoded.len());
+            if json_bytes > max_bytes {
+                anyhow::bail!(
+                    "SQL JSON result exceeds byte budget of {max_bytes} (OPENFDD_RESULT_MAX_BYTES); narrow the query — refusing silent truncation"
+                );
+            }
+            rows.push(value);
+        }
+    }
+    Ok(QueryResult {
+        row_count: rows.len(),
+        columns,
+        rows,
+        elapsed_ms: started.elapsed().as_millis(),
+    })
 }
 
 /// Execute SQL with a hard materialized-row limit for interactive callers.

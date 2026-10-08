@@ -925,36 +925,50 @@ pub fn series_response_scoped(
                 "roles": [],
             });
         }
-        // Span-preserving downsample (Inspect / RCx parity): first + last + evenly
-        // spaced rows across the full historian window - not DESC LIMIT (recent-only).
+        // Bounded date_bin downsample (#1179) — no ROW_NUMBER/COUNT(*) OVER full set.
+        // Default lookback keeps series under the shared FairSpillPool.
         const SERIES_MAX_POINTS: usize = 8000;
         let limit = SERIES_MAX_POINTS;
+        let lookback_days = std::env::var("OPENFDD_SERIES_LOOKBACK_DAYS")
+            .ok()
+            .and_then(|s| s.trim().parse::<i64>().ok())
+            .unwrap_or(7)
+            .max(1);
+        let bin_secs = ((lookback_days * 86400) / (limit as i64)).max(1);
         let sql = format!(
             r#"
-SELECT timestamp_utc, equipment_id, {cols}
-FROM (
+WITH bounded AS (
   SELECT
-    CAST(timestamp_utc AS VARCHAR) AS timestamp_utc,
+    timestamp_utc,
     equipment_id,
-    {cols},
-    ROW_NUMBER() OVER (ORDER BY timestamp_utc) AS _rn,
-    COUNT(*) OVER () AS _cnt
+    {cols}
   FROM history
   WHERE equipment_id = '{eq}'
+    AND timestamp_utc >= (NOW() - INTERVAL '{lookback_days}' DAY)
+),
+bucketed AS (
+  SELECT
+    date_bin(INTERVAL '{bin_secs}' SECOND, timestamp_utc) AS bucket_ts,
+    equipment_id,
+    {cols_avg}
+  FROM bounded
+  GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, timestamp_utc), equipment_id
 )
-WHERE _rn = 1
-   OR _rn = _cnt
-   OR (_rn % (CASE
-        WHEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT) > 1
-        THEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT)
-        ELSE 1
-      END)) = 0
-ORDER BY timestamp_utc
+SELECT CAST(bucket_ts AS VARCHAR) AS timestamp_utc, equipment_id, {cols}
+FROM bucketed
+ORDER BY bucket_ts
 LIMIT {limit}
 "#,
             cols = columns.join(", "),
+            cols_avg = columns
+                .iter()
+                .map(|c| format!("AVG({c}) AS {c}"))
+                .collect::<Vec<_>>()
+                .join(", "),
             eq = escaped_equipment,
             limit = limit,
+            lookback_days = lookback_days,
+            bin_secs = bin_secs,
         );
         match run_sql(&ctx, &sql).await {
             Ok(mut result) => {
