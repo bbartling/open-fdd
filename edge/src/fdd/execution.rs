@@ -135,7 +135,9 @@ fn bind_params(sql: &str, params: &Value) -> String {
 }
 
 async fn execute_query_from_historian(sql: &str) -> Result<Vec<Value>, String> {
-    let ctx = SessionContext::new();
+    // Shared FairSpillPool + spill (#1179) — never bare SessionContext::new().
+    let cfg = fdd_store::HistorianConfig::from_env().map_err(|e| e.to_string())?;
+    let ctx = fdd_sql::new_historian_session(&cfg).map_err(|e| e.to_string())?;
     register_historian_tables(&ctx).await?;
     let df = ctx.sql(sql).await.map_err(|e| e.to_string())?;
     let batches = df.collect().await.map_err(|e| e.to_string())?;
