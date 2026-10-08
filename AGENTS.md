@@ -144,7 +144,7 @@ A Railway one-click template should eventually encode **central → mqtt → web
 
 - **Never** local `docker build` / heavy Rust compile for stack images. Ship via PR → GH Actions → GHCR `nightly` / `sha-*`.
 - Before pulling new images: prune unused/old digests first, then `./scripts/openfdd_stack_pull.sh …` and `./scripts/openfdd_stack_up.sh … --no-pull`.
-- DataFusion: `OPENFDD_QUERY_MEMORY_MB=256` (or 512) + `OPENFDD_DATAFUSION_SPILL_DIR` — see [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md).
+- DataFusion memory: process FairSpillPool = `(cgroup/host hard − reserves) × OPENFDD_COMPUTE_MEMORY_FRACTION` (default 0.50); `OPENFDD_QUERY_MEMORY_MB` is per-request only; spill under `OPENFDD_DATAFUSION_SPILL_DIR` — see [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md) (#1179).
 - BACnet OT on cell edges: **fixed 300 s** poll/publish (compiled into fieldbus; not adjustable), poll ~**30%** health points only — [`docs/operations/BACNET_OT_POLICY.md`](docs/operations/BACNET_OT_POLICY.md). **`openfdd-fieldbus` never on Railway/cloud.** Hard BACnet debug: [`docs/mcp-agents/companion-rusty-bacnet-mcp.md`](docs/mcp-agents/companion-rusty-bacnet-mcp.md).
 - Who-Is / discovery: fieldbus binds **`0.0.0.0`** + hosted BACnet/IP port (`whois_bind_port = 0` → `bacnet_server.port`, `SO_REUSEADDR`) so directed-broadcast I-Am is receivable (#526); do not use the unicast `OPENFDD_FIELDBUS_BIND` address for discovery. Unicast reads stay ephemeral — see [`services/fieldbus/AGENTS.md`](services/fieldbus/AGENTS.md).
 - **Pi / arm64 edges:** pull multi-arch `openfdd-fieldbus` (`linux/arm64`); do **not** run central/web soak on Pi 3 (~905 MiB) — fieldbus-only.
