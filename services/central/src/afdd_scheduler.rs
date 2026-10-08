@@ -11,6 +11,7 @@
 
 use std::collections::VecDeque;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration as StdDuration;
 
@@ -23,8 +24,8 @@ use chrono::{DateTime, Duration, Utc};
 use dashmap::DashMap;
 use fdd_store::{
     apply_scheduler_config_update, lookback_matches_cadence, next_due_at, parse_backfill_request,
-    plan_bounded_backfill, plan_continuous_cycle, wall_clock_local_rfc3339, AfddConfig,
-    AfddCycleWindow, AfddMode, AfddOperatorSchedule, AfddSchedulerCheckpoint,
+    plan_bounded_backfill, plan_continuous_cycle, wall_clock_local_rfc3339, AfddBackfillChunk,
+    AfddConfig, AfddCycleWindow, AfddMode, AfddOperatorSchedule, AfddSchedulerCheckpoint,
     SchedulerConfigUpdate, AFDD_SCHEDULER_CHECKPOINT_PATH, AFDD_SCHEDULER_RUNTIME_CONFIG_PATH,
     OPERATOR_INTERVAL_MINUTES, OPERATOR_LOOKBACK_DAYS,
 };
@@ -225,16 +226,37 @@ impl AfddSchedulerRuntime {
             .and_then(|value| value.parse::<u64>().ok())
             .filter(|value| *value > 0)
             .unwrap_or(90);
-        match tokio::time::timeout(
-            StdDuration::from_secs(timeout_secs),
-            self.execute_cycle(scope, "run_now", window, true),
-        )
-        .await
-        {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_flag = cancel.clone();
+        let fut = self.execute_cycle_chunked(scope, "run_now", window, true, Some(cancel));
+        tokio::pin!(fut);
+        match tokio::time::timeout(StdDuration::from_secs(timeout_secs), &mut fut).await {
             Ok(result) => result,
-            Err(_) => anyhow::bail!(
-                "AFDD run-now exceeded OPENFDD_AFDD_RUN_NOW_TIMEOUT_SECONDS={timeout_secs}; deferred under budget"
-            ),
+            Err(_) => {
+                // Keep the future alive, set cancel, wait for cooperative stop (#1179).
+                cancel_flag.store(true, Ordering::SeqCst);
+                let wait = StdDuration::from_secs(
+                    std::env::var("OPENFDD_AFDD_CANCEL_WAIT_SECONDS")
+                        .ok()
+                        .and_then(|v| v.parse().ok())
+                        .filter(|v| *v > 0)
+                        .unwrap_or(15),
+                );
+                match tokio::time::timeout(wait, fut).await {
+                    Ok(Ok(mut record)) => {
+                        record.status = "cancelled".into();
+                        record.ok = false;
+                        record.error = Some(format!(
+                            "AFDD run-now exceeded OPENFDD_AFDD_RUN_NOW_TIMEOUT_SECONDS={timeout_secs}; cancelled"
+                        ));
+                        Ok(record)
+                    }
+                    Ok(Err(e)) => Err(e),
+                    Err(_) => anyhow::bail!(
+                        "AFDD run-now exceeded OPENFDD_AFDD_RUN_NOW_TIMEOUT_SECONDS={timeout_secs}; cancel requested (worker still draining)"
+                    ),
+                }
+            }
         }
     }
 
@@ -255,7 +277,10 @@ impl AfddSchedulerRuntime {
                 catch_up: false,
             };
             // Backfill does not move the continuous checkpoint.
-            records.push(self.execute_cycle(scope, "backfill", window, false).await?);
+            records.push(
+                self.execute_cycle_chunked(scope, "backfill", window, false, None)
+                    .await?,
+            );
         }
         Ok(records)
     }
@@ -267,6 +292,20 @@ impl AfddSchedulerRuntime {
         window: AfddCycleWindow,
         advance_checkpoint: bool,
     ) -> Result<AfddCycleRecord> {
+        self.execute_cycle_chunked(scope, trigger, window, advance_checkpoint, None)
+            .await
+    }
+
+    /// Chunked AFDD: time slices × equipment (type-first registry list) with
+    /// cooperative cancel and between-chunk pressure checks (#1179 R3).
+    async fn execute_cycle_chunked(
+        &self,
+        scope: &str,
+        trigger: &str,
+        window: AfddCycleWindow,
+        advance_checkpoint: bool,
+        cancel: Option<Arc<AtomicBool>>,
+    ) -> Result<AfddCycleRecord> {
         let scope_lock = self.scope_lock(scope);
         let Ok(_guard) = scope_lock.try_lock() else {
             anyhow::bail!("AFDD cycle already running for scope {scope}");
@@ -274,16 +313,6 @@ impl AfddSchedulerRuntime {
 
         let started_at_utc = Utc::now();
         let run_id = Uuid::new_v4().to_string();
-        let payload = json!({
-            "mode": "registry",
-            "building_id": if scope == "all" { Value::Null } else { json!(scope) },
-            "start_utc": window.start_utc.to_rfc3339(),
-            "end_utc": window.end_utc.to_rfc3339(),
-            "afdd_trigger": trigger,
-            "afdd_catch_up": window.catch_up,
-            "afdd_run_id": run_id,
-            "params": {}
-        });
 
         let pressure = fdd_resources::sample_pressure();
         if pressure.defer_expensive_compute {
@@ -316,33 +345,139 @@ impl AfddSchedulerRuntime {
                 "compute admission limit reached (OPENFDD_COMPUTE_MAX_INFLIGHT); AFDD deferred"
             );
         };
-        let result = tokio::task::spawn_blocking(move || {
-            let _compute = compute;
-            open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
-        })
-        .await
-        .unwrap_or_else(
-            |error| json!({"ok": false, "error": format!("AFDD registry task failed: {error}")}),
-        );
 
-        let ok = result.get("ok").and_then(Value::as_bool).unwrap_or(false);
-        let error = result
-            .get("error")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-            .filter(|value| !value.is_empty());
-        let rules_failed = result.get("rules_failed").and_then(Value::as_u64);
-        // Partial success: registry ok but some rules failed - do not advance checkpoint.
-        // Backfill passes advance_checkpoint=false so a historical range cannot
-        // move the continuous watermark.
-        let rules_clean = ok && rules_failed.unwrap_or(0) == 0;
-        let status = if !ok {
-            "failed"
-        } else if rules_failed.unwrap_or(0) > 0 {
+        let chunk_hours = std::env::var("OPENFDD_AFDD_CHUNK_HOURS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(1);
+        let time_chunks = plan_bounded_backfill(window.start_utc, window.end_utc, chunk_hours)
+            .unwrap_or_else(|_| {
+                vec![AfddBackfillChunk {
+                    start_utc: window.start_utc,
+                    end_utc: window.end_utc,
+                }]
+            });
+
+        let building = if scope == "all" { None } else { Some(scope) };
+        let equipment_ids = list_equipment_ids_type_first(building);
+        let equipment_chunks: Vec<Option<String>> = if equipment_ids.is_empty() {
+            vec![None]
+        } else {
+            equipment_ids.into_iter().map(Some).collect()
+        };
+
+        let mut rules_succeeded = 0u64;
+        let mut rules_failed = 0u64;
+        let mut rules_skipped = 0u64;
+        let mut cancelled = false;
+        let mut last_error: Option<String> = None;
+        let mut chunks_ok = 0u64;
+        let mut chunks_failed = 0u64;
+
+        for tchunk in &time_chunks {
+            if cancel.as_ref().is_some_and(|c| c.load(Ordering::SeqCst)) {
+                cancelled = true;
+                break;
+            }
+            let mid = fdd_resources::sample_pressure();
+            if mid.defer_expensive_compute {
+                tracing::warn!(
+                    target: "security_audit",
+                    event = "memory_shed",
+                    percent_used = ?mid.percent_used,
+                    trigger,
+                    scope,
+                    "AFDD cycle stopped mid-chunk under memory pressure"
+                );
+                last_error = Some(format!(
+                    "memory shed at {:?}% during chunked AFDD; partial results kept",
+                    mid.percent_used
+                ));
+                cancelled = true;
+                break;
+            }
+            for eq in &equipment_chunks {
+                if cancel.as_ref().is_some_and(|c| c.load(Ordering::SeqCst)) {
+                    cancelled = true;
+                    break;
+                }
+                let mut payload = json!({
+                    "mode": "registry",
+                    "building_id": if scope == "all" { Value::Null } else { json!(scope) },
+                    "start_utc": tchunk.start_utc.to_rfc3339(),
+                    "end_utc": tchunk.end_utc.to_rfc3339(),
+                    "afdd_trigger": trigger,
+                    "afdd_catch_up": window.catch_up,
+                    "afdd_run_id": run_id,
+                    "params": {}
+                });
+                if let Some(equipment_id) = eq {
+                    payload["equipment_id"] = json!(equipment_id);
+                }
+                let cancel_worker = cancel.clone();
+                let result = tokio::task::spawn_blocking({
+                    let payload = payload.clone();
+                    move || {
+                        open_fdd_edge_prototype::fdd::registry_api::run_registry_with_cancel(
+                            &payload,
+                            cancel_worker,
+                        )
+                    }
+                })
+                .await
+                .unwrap_or_else(|error| {
+                    json!({"ok": false, "error": format!("AFDD registry task failed: {error}")})
+                });
+                if result
+                    .get("cancelled")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                {
+                    cancelled = true;
+                }
+                let ok = result.get("ok").and_then(Value::as_bool).unwrap_or(false);
+                rules_succeeded += result
+                    .get("rules_succeeded")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                rules_failed += result
+                    .get("rules_failed")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                rules_skipped += result
+                    .get("rules_skipped")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                if ok && !cancelled {
+                    chunks_ok += 1;
+                } else {
+                    chunks_failed += 1;
+                    if let Some(err) = result.get("error").and_then(Value::as_str) {
+                        last_error = Some(err.to_string());
+                    }
+                }
+                if cancelled {
+                    break;
+                }
+            }
+            if cancelled {
+                break;
+            }
+        }
+        drop(compute);
+
+        let rules_clean = !cancelled && chunks_failed == 0 && rules_failed == 0;
+        let status = if cancelled {
+            "cancelled"
+        } else if chunks_failed > 0 || rules_failed > 0 {
             "partial"
+        } else if chunks_ok == 0 {
+            "failed"
         } else {
             "completed"
         };
+        let ok = status == "completed";
         let record = AfddCycleRecord {
             run_id,
             scope: scope.to_string(),
@@ -358,15 +493,19 @@ impl AfddSchedulerRuntime {
             error: if ok {
                 None
             } else {
-                error.or_else(|| Some("AFDD registry cycle failed".into()))
+                last_error.or_else(|| {
+                    Some(if cancelled {
+                        "AFDD cycle cancelled under budget/pressure".into()
+                    } else {
+                        "AFDD registry cycle failed or partial".into()
+                    })
+                })
             },
-            rules_succeeded: result.get("rules_succeeded").and_then(Value::as_u64),
-            rules_failed,
-            rules_skipped: result.get("rules_skipped").and_then(Value::as_u64),
+            rules_succeeded: Some(rules_succeeded),
+            rules_failed: Some(rules_failed),
+            rules_skipped: Some(rules_skipped),
         };
 
-        // Persist run metadata before advancing the success checkpoint so a
-        // failed write cannot leave an advanced watermark without a run record.
         self.persist_run_record(&record)?;
         if advance_checkpoint && rules_clean {
             self.persist_checkpoint(&AfddSchedulerCheckpoint {
@@ -433,6 +572,34 @@ fn load_operator_schedule(store: &CanonicalStateStore) -> Result<Option<AfddOper
 pub struct RunNowRequest {
     #[serde(default)]
     building_id: Option<String>,
+}
+
+/// Type-first equipment list for chunked AFDD. Exact `equipment_id` values only
+/// (no substring/prefix). Falls back to a single whole-building chunk when empty.
+fn list_equipment_ids_type_first(building_id: Option<&str>) -> Vec<String> {
+    let resp = open_fdd_edge_prototype::fdd::registry_api::equipment_response(building_id);
+    let mut rows: Vec<(String, String)> = resp
+        .get("equipment")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|row| {
+            let id = row.get("equipment_id")?.as_str()?.trim();
+            if id.is_empty() {
+                return None;
+            }
+            let kind = row
+                .get("equipment_type")
+                .or_else(|| row.get("equipType"))
+                .or_else(|| row.get("kind"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            Some((kind, id.to_string()))
+        })
+        .collect();
+    rows.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    rows.into_iter().map(|(_, id)| id).collect()
 }
 
 fn normalize_scope(building_id: Option<&str>) -> String {
