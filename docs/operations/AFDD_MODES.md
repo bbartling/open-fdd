@@ -64,7 +64,7 @@ OPENFDD_PARQUET_FLUSH_SECONDS=300
 - **Window:** lookback-sized only. `end` = latest persisted telemetry watermark; `start` = `end − lookback` (`plan_continuous_cycle`). Result rows outside that window are left unchanged (`merge_windowed_rule_result`). A rows-only file and a null-bound `preserved_unscoped` slice keep the same rows hash. After downtime, catch-up is still one lookback-sized window (`catch_up`). Historical rebuild is `POST /api/afdd/scheduler/backfill` with an explicit range (`plan_bounded_backfill`), never an update-all flag.
 - Compact ACME hive parts before enabling continuous AFDD (`scripts/ops/railway_compact_hub.sh` / hub-admin compaction).
 - Stress SoT: gate **38** `38_acme_afdd_qualification.sh` (MEGA required). Gate **19** remains synth flood only.
-- **RAM:** Pro `openfdd-central` replica limit is 24 GB. Watch Railway memory limit/current/max and the hub capacity sampler during Overview / RCx / this cycle ([`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) § STRESS NOTE #1). The 2026-09-28 OOM was the old Hobby 8 GB cap. Keep the headroom.
+- **RAM (portable, #1179):** Aggregate DataFusion pool = `(detected cgroup/host hard − reserves) × OPENFDD_COMPUTE_MEMORY_FRACTION` (default **0.50**) as a **FairSpillPool** with spill under `OPENFDD_DATAFUSION_SPILL_DIR` (default `<storage_root>/.datafusion-spill`). `OPENFDD_QUERY_MEMORY_MB` is the **per-request** ceiling (default pool/2), not the process pool. Absolute overrides (`OPENFDD_COMPUTE_MEMORY_MB`) are clamped to `hard − reserves`. Watch `/api/health.memory_budget` `{hard_limit_bytes, pool_bytes, current_bytes, peak_bytes, shed_state}` — not Railway-hardcoded 10/24 GB in product code. Example derived pools: ~3 GiB on 8 GiB edge, ~10 GiB on 24 GiB hub, ~46 GiB on 100 GiB VM (after reserves).
 
 ## Local == cloud
 
@@ -73,17 +73,25 @@ Same GHCR central image and SQL path. Only storage env changes (`OPENFDD_PARQUET
 ## Low-RAM labs
 
 ```text
+# Prefer fraction defaults; pin absolutes only when measuring a known box.
+OPENFDD_COMPUTE_MEMORY_FRACTION=0.50
 OPENFDD_QUERY_MEMORY_MB=256
-OPENFDD_COMPUTE_MEMORY_MB=256
 OPENFDD_COMPUTE_MAX_INFLIGHT=2
+OPENFDD_MEMORY_SHED_FRACTION=0.75
+OPENFDD_MEMORY_ABORT_FRACTION=0.85
 OPENFDD_DATAFUSION_SPILL_DIR=/workspace/.cache/datafusion-spill
 ```
 
-Prefer lookback-bounded continuous cycles over full-history scans on small hosts.
+Prefer lookback-bounded continuous cycles over full-history scans on small hosts. AFDD run-now is **chunked** (time × equipment) with cooperative cancel (`partial` / `cancelled`).
 
-### Memory pressure policy (#1127)
+### Memory pressure policy (#1127 / #1179)
 
-Scheduled AFDD defers when cgroup usage is elevated/critical (≥75% / ≥90% of a discovered hard limit) or when process-wide compute admission is saturated (`OPENFDD_COMPUTE_MAX_INFLIGHT`). Ingest/control stay preferred; a deferred AFDD cycle does **not** advance the checkpoint. Host stats expose `compute_pressure` alongside `cgroup_pressure`. Live Railway combined-load qualification remains operator/Grok Soft-OPEN after a GHCR pin — HTTP success alone is not survival proof.
+Heavy analytics/AFDD **shed** new work at `OPENFDD_MEMORY_SHED_FRACTION` (default **0.75 × hard**) with HTTP 503 + `security_audit{event:"memory_shed"}`; **abort** in-flight heavy work at `OPENFDD_MEMORY_ABORT_FRACTION` (default **0.85**). Light paths (health, auth, ingest ack) never shed on memory alone — health stays **200** with `memory_budget.shed_state`. Ingest/control stay preferred; a deferred/cancelled AFDD cycle does **not** advance the checkpoint. Live Railway combined-load qualification remains operator/Grok Soft-OPEN after a GHCR pin — HTTP success alone is not survival proof; require `events` `oom_killed` watch + memory series.
+
+### Lab ops (this Soft-OPEN program)
+
+- **No backups** unless Ben asks. Data continuity = keep historian volumes across `compose pull` + `up -d` (never `-v`).
+- Docker maintenance before pulls: prune unused images/digests; **never** `docker volume prune` / `compose down -v` / delete `workspace/`.
 
 ## Feather
 

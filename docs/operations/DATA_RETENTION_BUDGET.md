@@ -53,6 +53,8 @@ python3 scripts/openfdd_disk_preflight.py --self-test
 
 Eviction walks hive trees (`history/`, `analytics_results/`, exact key `building={id}`, tenant history). It does not substring-match `equipment_id`. `building_id` stays a path parameter.
 
+DataFusion spill (`OPENFDD_DATAFUSION_SPILL_DIR`, default `<storage_root>/.datafusion-spill`) is ephemeral query scratch under the same storage root — keep it inside the local disk budget envelope (`OPENFDD_DATAFUSION_SPILL_MAX_GB` / `_BYTES`). Spill is not a durable historian; safe to prune when central is idle.
+
 ## Soft-OPEN
 
 Logic and tests ship here. Proof on a real edge disk (live cap, prune, update with and without headroom) is a field pass, not this change. Do not delete operator archives to make a lab green. No VERSION bump. Not an FQ claim. Scorecard: [ANALYTICS_RESULT_CACHE.md](ANALYTICS_RESULT_CACHE.md) § Compliance.

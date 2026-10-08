@@ -205,6 +205,8 @@ OPENFDD_UI_GENERATION_DEFAULT=react
 
 Store these only in Railway **Variables / Secrets**. Never commit them, never paste JWTs into chat transcripts or repo files.
 
+**Memory budget (portable, #1179):** do **not** set product defaults to “10 of 24 GB”. Leave `OPENFDD_COMPUTE_MEMORY_MB` unset so the tip sizes FairSpillPool as a fraction of the discovered cgroup hard limit; optional `OPENFDD_QUERY_MEMORY_MB` is per-request only. After re-pin, `GET /api/health` must show `memory_budget` with `pool_bytes` ≫ 512 MiB on a 24 GB service when QUERY is unset. Soft-OPEN lab: **no backups** unless Ben asks — `compose pull` + `up -d` keeps historian volumes (never `-v`).
+
 **Default hub = central + mqtt + web.** Railway AI / deploy assistants should follow [RAILWAY_DEPLOYMENT_CHECKLIST.md](RAILWAY_DEPLOYMENT_CHECKLIST.md) § *AI / Railway-assistant bootstrap context*. Railway AI does **not** run Open-FDD MCP or HVAC FDD — that is a **local external agent** with an operator JWT after deploy.
 
 | Identity | Login | JWT role | Use |
