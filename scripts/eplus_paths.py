@@ -27,11 +27,23 @@ def parity_root() -> Path:
 
 
 def synthetic_fixture_dir() -> Path:
+    """Locate staged synthetic_59 fixture root (prefers eplus-dump).
+
+    Accepts either the nested handoff folder or a flat tree that already
+    contains ``OPENFDD_SYNTHETIC_59_RULE_WEEK_V1.zip`` (#1069 / MEGA residual).
+    """
+    candidates: list[Path] = []
     for base in (EPLUS_DUMP_ROOT, LEGACY_PARITY_ROOT):
-        p = base / "fixtures/synthetic_59/openfdd_synthetic_59_rule_fixture_v1"
-        if p.is_dir():
-            return p
-    return LEGACY_PARITY_ROOT / "fixtures/synthetic_59/openfdd_synthetic_59_rule_fixture_v1"
+        root = base / "fixtures/synthetic_59"
+        candidates.append(root / "openfdd_synthetic_59_rule_fixture_v1")
+        candidates.append(root)
+    for p in candidates:
+        if (p / "OPENFDD_SYNTHETIC_59_RULE_WEEK_V1.zip").is_file() or p.is_dir():
+            if (p / "OPENFDD_SYNTHETIC_59_RULE_WEEK_V1.zip").is_file() or (
+                p / "expected_faults.csv"
+            ).is_file():
+                return p
+    return EPLUS_DUMP_ROOT / "fixtures/synthetic_59/openfdd_synthetic_59_rule_fixture_v1"
 
 
 def synthetic_artifacts_dir() -> Path:
