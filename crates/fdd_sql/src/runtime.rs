@@ -56,7 +56,8 @@ fn default_spill_dir(config: &HistorianConfig) -> Option<PathBuf> {
         StorageUrl::File { root } => Some(root.join(".datafusion-spill")),
         StorageUrl::S3 { .. } => {
             // Object storage has no local root; fall back to workspace temp.
-            let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+            let workspace =
+                std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
             Some(PathBuf::from(workspace).join("data/openfdd/.datafusion-spill"))
         }
     }
@@ -117,9 +118,7 @@ fn build_shared(config: &HistorianConfig) -> Result<SharedCompute> {
             spill.display()
         ));
     } else {
-        notes.push(
-            "No spill directory resolved — FairSpillPool cannot spill to disk".into(),
-        );
+        notes.push("No spill directory resolved — FairSpillPool cannot spill to disk".into());
     }
 
     let runtime = runtime

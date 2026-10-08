@@ -212,7 +212,11 @@ impl ComputeBudget {
                 "No hard memory limit discovered: aggregate pool falls back to QUERY/config (shared FairSpillPool, not per-session)"
                     .into(),
             );
-            (fallback.max(1), "query_or_config_shared_fallback".into(), true)
+            (
+                fallback.max(1),
+                "query_or_config_shared_fallback".into(),
+                true,
+            )
         };
 
         let (query_bytes, query_origin) = if let Some(explicit) = query_explicit_bytes {
@@ -225,9 +229,7 @@ impl ComputeBudget {
             (capped, "OPENFDD_QUERY_MEMORY_MB".into())
         } else {
             let half = (compute_bytes / 2).max(1);
-            notes.push(
-                "OPENFDD_QUERY_MEMORY_MB unset: per-request ceiling = pool/2".into(),
-            );
+            notes.push("OPENFDD_QUERY_MEMORY_MB unset: per-request ceiling = pool/2".into());
             (half, "pool_half_default".into())
         };
 
