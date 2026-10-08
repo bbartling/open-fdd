@@ -1193,6 +1193,9 @@ pub const BAS_VS_WEB_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::f
 /// wall-clock). Never use `start=None` — full-history LEAD hangs → nginx 502.
 pub const RUNTIME_RETAIN_FALLBACK_DAYS: i64 = 365;
 
+/// Same retain floor as runtime for BAS×web when the 7-day default misses hive rows.
+pub const BAS_VS_WEB_RETAIN_FALLBACK_DAYS: i64 = RUNTIME_RETAIN_FALLBACK_DAYS;
+
 /// Wall-clock budget for the historian sensor_health aggregate. Exceeding this
 /// fail-closes with an empty envelope (HTTP 200 + warning) instead of hanging.
 const SENSOR_HEALTH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
@@ -2479,7 +2482,8 @@ pub async fn bas_vs_web_from_history(
     start: Option<DateTime<Utc>>,
     end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let (start_t, end_opt) =
+    let defaulted_start = start.is_none();
+    let (mut start_t, end_opt) =
         match resolve_analytics_window(start, end, BAS_VS_WEB_DEFAULT_LOOKBACK_DAYS) {
             Ok(w) => w,
             Err(msg) => anyhow::bail!("{msg}"),
@@ -2506,13 +2510,16 @@ pub async fn bas_vs_web_from_history(
     let weather_only = stamped_weather_id_predicate(building_id, false);
     let weather_excluded = stamped_weather_id_predicate(building_id, true);
     let limit = max_points.clamp(100, 5000);
-    let range_sql = time_range_sql(ts_col, Some(start_t), Some(end_t));
-    let bin_secs = date_bin_seconds_for_points(start_t, end_t, limit);
+    let mut used_retain_fallback = false;
+    let mut bin_secs = date_bin_seconds_for_points(start_t, end_t, limit);
     // Two-pass shape without ROW_NUMBER/COUNT(*) OVER: second-level join then
     // date_bin GROUP BY with a bounded bucket count (#1179).
-    let (web_label, sql) = if let Some(web) = web_col {
-        (
-            web.to_string(),
+    let web_label = web_col
+        .map(str::to_string)
+        .unwrap_or_else(|| "oa_t@weather".into());
+    let build_sql = |start_t: DateTime<Utc>, bin_secs: i64| -> String {
+        let range_sql = time_range_sql(ts_col, Some(start_t), Some(end_t));
+        if let Some(web) = web_col {
             format!(
                 r#"
 WITH bas_by_ts AS (
@@ -2551,11 +2558,8 @@ FROM bucketed
 ORDER BY bucket_ts
 LIMIT {limit}
 "#
-            ),
-        )
-    } else {
-        (
-            "oa_t@weather".into(),
+            )
+        } else {
             format!(
                 r#"
 WITH bas_by_ts AS (
@@ -2594,42 +2598,54 @@ FROM bucketed
 ORDER BY bucket_ts
 LIMIT {limit}
 "#
-            ),
-        )
-    };
-    let budget = remaining_budget(deadline, BAS_VS_WEB_QUERY_TIMEOUT);
-    let timed = tokio::time::timeout(budget, run_sql(&ctx, &sql)).await;
-    let result = match timed {
-        Ok(inner) => inner?,
-        Err(_) => {
-            tracing::warn!(
-                timeout_secs = BAS_VS_WEB_QUERY_TIMEOUT.as_secs(),
-                "bas-vs-web historian path exceeded wall budget; fail-closed"
-            );
-            let query = AnalyticsQuery {
-                building_id: building_id.map(str::to_string),
-                start: Some(start_t),
-                end: Some(end_t),
-                ..AnalyticsQuery::default()
-            };
-            let mut env = envelope_with_engine(
-                "bas-vs-web-oat-v3",
-                &query,
-                vec![format!(
-                    "bas-vs-web historian query exceeded {}s budget; fail-closed — pass a tighter query.start/end",
-                    BAS_VS_WEB_QUERY_TIMEOUT.as_secs()
-                )],
-                DF_ENGINE,
-            );
-            env.coverage = Some(json!({
-                "fail_closed": true,
-                "timeout_secs": BAS_VS_WEB_QUERY_TIMEOUT.as_secs(),
-                "building_id": safe_building_segment(building_id),
-                "start": start_t.to_rfc3339(),
-                "end": end_t.to_rfc3339(),
-            }));
-            return Ok(Some(env));
+            )
         }
+    };
+    let result = loop {
+        let sql = build_sql(start_t, bin_secs);
+        let budget = remaining_budget(deadline, BAS_VS_WEB_QUERY_TIMEOUT);
+        let timed = tokio::time::timeout(budget, run_sql(&ctx, &sql)).await;
+        let attempt = match timed {
+            Ok(inner) => inner?,
+            Err(_) => {
+                tracing::warn!(
+                    timeout_secs = BAS_VS_WEB_QUERY_TIMEOUT.as_secs(),
+                    "bas-vs-web historian path exceeded wall budget; fail-closed"
+                );
+                let query = AnalyticsQuery {
+                    building_id: building_id.map(str::to_string),
+                    start: Some(start_t),
+                    end: Some(end_t),
+                    ..AnalyticsQuery::default()
+                };
+                let mut env = envelope_with_engine(
+                    "bas-vs-web-oat-v3",
+                    &query,
+                    vec![format!(
+                        "bas-vs-web historian query exceeded {}s budget; fail-closed — pass a tighter query.start/end",
+                        BAS_VS_WEB_QUERY_TIMEOUT.as_secs()
+                    )],
+                    DF_ENGINE,
+                );
+                env.coverage = Some(json!({
+                    "fail_closed": true,
+                    "timeout_secs": BAS_VS_WEB_QUERY_TIMEOUT.as_secs(),
+                    "building_id": safe_building_segment(building_id),
+                    "start": start_t.to_rfc3339(),
+                    "end": end_t.to_rfc3339(),
+                }));
+                return Ok(Some(env));
+            }
+        };
+        if attempt.rows.is_empty() && defaulted_start && !used_retain_fallback {
+            // Synthetic / lab fixtures often sit outside the 7-day default.
+            // Expand once to the retain floor — still bounded, never start=None.
+            used_retain_fallback = true;
+            start_t = end_t - chrono::Duration::days(BAS_VS_WEB_RETAIN_FALLBACK_DAYS);
+            bin_secs = date_bin_seconds_for_points(start_t, end_t, limit);
+            continue;
+        }
+        break attempt;
     };
     if result.rows.is_empty() {
         return Ok(None);
@@ -2668,6 +2684,17 @@ LIMIT {limit}
             end_t.to_rfc3339()
         ),
     ];
+    if used_retain_fallback {
+        warnings.push(format!(
+            "bas-vs-web {}-day default window was empty; expanded to historian retain floor ({} days, still bounded) — pass query.start/end to bound",
+            BAS_VS_WEB_DEFAULT_LOOKBACK_DAYS, BAS_VS_WEB_RETAIN_FALLBACK_DAYS
+        ));
+    } else if defaulted_start {
+        warnings.push(format!(
+            "bas-vs-web defaulted start to last {} days; pass query.start for a custom window",
+            BAS_VS_WEB_DEFAULT_LOOKBACK_DAYS
+        ));
+    }
     if weather_split {
         warnings.push(
             "web OAT sourced from equipment stamped kind weather (single oa_t column site)".into(),
@@ -5260,11 +5287,16 @@ mod tests {
             .expect("second-truncated join should align mismatched micros");
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
 
+        // Retain-fallback windows can date_bin-collapse close samples into one
+        // bucket; the contract is micros still join on the second, not raw count.
         assert!(
-            env.points.len() >= 3,
-            "expected overlay points, got {}",
+            !env.points.is_empty(),
+            "expected at least one overlay bucket after second join, got {}",
             env.points.len()
         );
+        let p0 = &env.points[0];
+        assert!(p0["bas_oat_f"].as_f64().is_some());
+        assert!(p0["web_oat_f"].as_f64().is_some());
         assert_eq!(
             env.coverage.as_ref().unwrap()["oat_join"],
             "site_broadcast_by_second"
