@@ -6154,11 +6154,25 @@ async fn analytics_bas_vs_web_oat(
         req,
         async {
             let max_points = req.query.max_points.unwrap_or(2000);
+            // Default lookback + max-span gate (#1179); reject unbounded refresh.
+            let window = analytics::historian::resolve_analytics_window(
+                req.query.start,
+                req.query.end,
+                analytics::historian::BAS_VS_WEB_DEFAULT_LOOKBACK_DAYS,
+            );
+            let (start, end) = match window {
+                Ok((s, e)) => (Some(s), e),
+                Err(msg) => {
+                    return analytics::envelope("bas-vs-web-oat-v3", &req.query, vec![msg]);
+                }
+            };
             match analytics::historian::bas_vs_web_from_history(
                 req.query.equipment_ids.as_deref(),
                 max_points,
                 req.query.building_id.as_deref(),
                 req.read_tenant_id.as_deref(),
+                start,
+                end,
             )
             .await
             {
