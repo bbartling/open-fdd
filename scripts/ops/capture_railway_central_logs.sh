@@ -6,6 +6,9 @@
 #
 # Writes: $ARTIFACT_DIR/railway_central_crash_<UTC>.log (secrets redacted lightly).
 # Does NOT claim OOM. Restart without this attachment = incomplete evidence (Q1a).
+#
+# IMPORTANT: redactor must NOT use `python3 - <<'PY'` on a pipe — the heredoc
+# steals stdin and the log stream is discarded (#1179 harness bug).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -18,6 +21,8 @@ LINES="${OPENFDD_RAILWAY_LOG_LINES:-800}"
 mkdir -p "$ART"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 out="$ART/railway_central_crash_${stamp}.log"
+raw="$(mktemp)"
+trap 'rm -f "$raw"' EXIT
 
 if ! command -v railway >/dev/null 2>&1; then
   echo "BLOCKED: railway CLI not on PATH" | tee "$out"
@@ -34,16 +39,15 @@ fi
   # Prefer since/until when FLIP_UTC is an RFC3339 instant.
   if [[ -n "$FLIP_UTC" ]]; then
     # Portable ± window via python (date -d GNU-only).
-    read -r since until < <(python3 - <<PY
+    read -r since until < <(python3 -c "
 from datetime import datetime, timedelta, timezone
-raw = "${FLIP_UTC}".replace("Z", "+00:00")
+raw = '''${FLIP_UTC}'''.replace('Z', '+00:00')
 flip = datetime.fromisoformat(raw)
 if flip.tzinfo is None:
     flip = flip.replace(tzinfo=timezone.utc)
-w = timedelta(minutes=int("${WINDOW_MIN}"))
-print((flip - w).strftime("%Y-%m-%dT%H:%M:%SZ"), (flip + w).strftime("%Y-%m-%dT%H:%M:%SZ"))
-PY
-)
+w = timedelta(minutes=int('''${WINDOW_MIN}'''))
+print((flip - w).strftime('%Y-%m-%dT%H:%M:%SZ'), (flip + w).strftime('%Y-%m-%dT%H:%M:%SZ'))
+")
     echo "# since=$since until=$until"
     railway logs -s "$SERVICE" -n "$LINES" --since "$since" --until "$until" 2>&1 \
       || railway logs -s "$SERVICE" -n "$LINES" 2>&1 \
@@ -51,22 +55,33 @@ PY
   else
     railway logs -s "$SERVICE" -n "$LINES" 2>&1 || true
   fi
-} | python3 - <<'PY' | tee "$out"
-import re, sys
-text = sys.stdin.read()
-# Light redact: bearer tokens / password= values. Keep panic/ERROR/WARN.
-text = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._\-]+", r"\1[REDACTED]", text)
-text = re.sub(r'(?i)("password"\s*:\s*")[^"]*"', r'\1[REDACTED]"', text)
-text = re.sub(r"(?i)(password=)\S+", r"\1[REDACTED]", text)
-sys.stdout.write(text)
-PY
+} >"$raw"
 
-echo "wrote $out"
+# Redact from the temp file so stdin is never the script source.
+python3 -c "
+import re, sys
+path = sys.argv[1]
+text = open(path, encoding='utf-8', errors='replace').read()
+text = re.sub(r'(?i)(bearer\s+)[A-Za-z0-9._\-]+', r'\1[REDACTED]', text)
+text = re.sub(r'(?i)(\"password\"\s*:\s*\")[^\"]*\"', r'\1[REDACTED]\"', text)
+text = re.sub(r'(?i)(password=)\S+', r'\1[REDACTED]', text)
+sys.stdout.write(text)
+" "$raw" | tee "$out" >/dev/null
+
+# Assert non-empty capture (header alone is ~4 lines; require body).
+bytes="$(wc -c <"$out" | tr -d ' ')"
+if [[ "${bytes:-0}" -lt 80 ]]; then
+  echo "FAIL: capture file empty or too small (${bytes} bytes) — stdin steal or railway logs failed" | tee -a "$out"
+  echo "wrote $out (EMPTY)"
+  exit 1
+fi
+
+echo "wrote $out (${bytes} bytes)"
 # Quick triage hints (not a verdict).
 if grep -Eiq 'oom|out of memory|Killed process' "$out"; then
   echo "HINT: OOM-like strings present — cite them; do not invent OOM without this"
 elif grep -Eiq 'FATAL openfdd-central panic|panic at' "$out"; then
   echo "HINT: panic/FATAL line present — attach this file to #1127/#1169"
 else
-  echo "HINT: no OOM/panic string in slice — death reason may still be missing; widen window"
+  echo "HINT: no OOM/panic string in slice — death reason may still be missing; widen window / check events"
 fi
