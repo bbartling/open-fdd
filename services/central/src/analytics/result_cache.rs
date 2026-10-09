@@ -447,10 +447,46 @@ fn session_error(err: SessionError) -> (StatusCode, Json<Value>) {
 mod tests {
     use super::*;
     use crate::analytics::{envelope, AnalyticsQuery};
+    use crate::test_env_lock::lock_env;
     use fdd_store::SessionLimits;
     use std::fs;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
+    use std::sync::{Arc, MutexGuard};
+
+    /// GitHub runners often report high host RSS; pin a tiny synthetic cgroup so
+    /// analytics cache tests exercise admission/cache logic, not live shed.
+    struct CgroupTestEnv {
+        _env_lock: MutexGuard<'static, ()>,
+        _dir: tempfile::TempDir,
+        prev_cgroup: Option<String>,
+    }
+
+    impl CgroupTestEnv {
+        fn low_pressure() -> Self {
+            let _env_lock = lock_env();
+            let prev_cgroup = std::env::var("OPENFDD_CGROUP_DIR").ok();
+            let tmp = tempfile::tempdir().unwrap();
+            let cg = tmp.path().join("cg");
+            fs::create_dir_all(&cg).unwrap();
+            fs::write(cg.join("memory.current"), "1000\n").unwrap();
+            fs::write(cg.join("memory.max"), "1000000000\n").unwrap();
+            std::env::set_var("OPENFDD_CGROUP_DIR", &cg);
+            Self {
+                _env_lock,
+                _dir: tmp,
+                prev_cgroup,
+            }
+        }
+    }
+
+    impl Drop for CgroupTestEnv {
+        fn drop(&mut self) {
+            match self.prev_cgroup.take() {
+                Some(v) => std::env::set_var("OPENFDD_CGROUP_DIR", v),
+                None => std::env::remove_var("OPENFDD_CGROUP_DIR"),
+            }
+        }
+    }
 
     fn req(building: &str) -> AnalyticsRequest {
         AnalyticsRequest {
@@ -473,6 +509,7 @@ mod tests {
 
     #[tokio::test]
     async fn cache_hit_does_not_recompute_and_records_elapsed() {
+        let _cg = CgroupTestEnv::low_pressure();
         let tmp = tempfile::tempdir().unwrap();
         let sessions = Mutex::new(SessionBook::new(limits()));
         let calls = Arc::new(AtomicUsize::new(0));
@@ -524,6 +561,7 @@ mod tests {
 
     #[tokio::test]
     async fn watermark_advance_is_stale_until_refresh() {
+        let _cg = CgroupTestEnv::low_pressure();
         let tmp = tempfile::tempdir().unwrap();
         let sessions = Mutex::new(SessionBook::new(limits()));
         let calls = Arc::new(AtomicUsize::new(0));
@@ -598,6 +636,7 @@ mod tests {
 
     #[tokio::test]
     async fn cache_miss_refuses_when_compute_admission_saturated() {
+        let _cg = CgroupTestEnv::low_pressure();
         let mut held = Vec::new();
         loop {
             match fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::ManualFdd) {
