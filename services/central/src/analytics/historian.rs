@@ -5290,10 +5290,19 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_BAS", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = bas_vs_web_from_history(None, 500, Some("BUILDING_BAS"), None, None, None)
-            .await
-            .unwrap()
-            .expect("site BAS×web join should produce overlay points");
+        let july_start = Utc.with_ymd_and_hms(2026, 7, 1, 0, 0, 0).unwrap();
+        let july_end = Utc.with_ymd_and_hms(2026, 7, 2, 0, 0, 0).unwrap();
+        let env = bas_vs_web_from_history(
+            None,
+            500,
+            Some("BUILDING_BAS"),
+            None,
+            Some(july_start),
+            Some(july_end),
+        )
+        .await
+        .unwrap()
+        .expect("site BAS×web join should produce overlay points");
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
 
         assert!(!env.points.is_empty());
@@ -5339,10 +5348,19 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_MICRO", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = bas_vs_web_from_history(None, 500, Some("BUILDING_MICRO"), None, None, None)
-            .await
-            .unwrap()
-            .expect("second-truncated join should align mismatched micros");
+        let july_start = Utc.with_ymd_and_hms(2026, 7, 1, 0, 0, 0).unwrap();
+        let july_end = Utc.with_ymd_and_hms(2026, 7, 2, 0, 0, 0).unwrap();
+        let env = bas_vs_web_from_history(
+            None,
+            500,
+            Some("BUILDING_MICRO"),
+            None,
+            Some(july_start),
+            Some(july_end),
+        )
+        .await
+        .unwrap()
+        .expect("second-truncated join should align mismatched micros");
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
 
         // Retain-fallback windows can date_bin-collapse close samples into one
