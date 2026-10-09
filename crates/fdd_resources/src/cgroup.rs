@@ -54,10 +54,10 @@ pub fn discover_capacity_at(cgroup_override: Option<&Path>, proc_root: &Path) ->
 fn discover_memory(cgroup_override: Option<&Path>, proc_root: &Path) -> MemoryDiscovery {
     let mut notes = Vec::new();
     if let Some(root) = cgroup_override {
-        if let Some(m) = read_cgroup_v2_memory(root, &mut notes) {
+        if let Some(m) = read_cgroup_v2_memory(root, proc_root, &mut notes) {
             return m;
         }
-        if let Some(m) = read_cgroup_v1_memory(root, &mut notes) {
+        if let Some(m) = read_cgroup_v1_memory(root, proc_root, &mut notes) {
             return m;
         }
         notes.push(format!(
@@ -68,12 +68,12 @@ fn discover_memory(cgroup_override: Option<&Path>, proc_root: &Path) -> MemoryDi
 
     // Prefer process membership when /proc is available.
     if let Some(path) = resolve_self_cgroup_v2(proc_root) {
-        if let Some(m) = read_cgroup_v2_memory(&path, &mut notes) {
+        if let Some(m) = read_cgroup_v2_memory(&path, proc_root, &mut notes) {
             return m;
         }
     }
     if let Some(path) = resolve_self_cgroup_v1_memory(proc_root) {
-        if let Some(m) = read_cgroup_v1_memory(&path, &mut notes) {
+        if let Some(m) = read_cgroup_v1_memory(&path, proc_root, &mut notes) {
             return m;
         }
     }
@@ -83,10 +83,10 @@ fn discover_memory(cgroup_override: Option<&Path>, proc_root: &Path) -> MemoryDi
         if cgroup_override.is_some() {
             break;
         }
-        if let Some(m) = read_cgroup_v2_memory(root, &mut notes) {
+        if let Some(m) = read_cgroup_v2_memory(root, proc_root, &mut notes) {
             return m;
         }
-        if let Some(m) = read_cgroup_v1_memory(root, &mut notes) {
+        if let Some(m) = read_cgroup_v1_memory(root, proc_root, &mut notes) {
             return m;
         }
     }
@@ -98,7 +98,7 @@ fn discover_memory(cgroup_override: Option<&Path>, proc_root: &Path) -> MemoryDi
         current_bytes: None,
         high_bytes: None,
         source: if host.is_some() {
-            "host_proc_fallback".into()
+            "host_meminfo".into()
         } else {
             "unavailable".into()
         },
@@ -113,7 +113,11 @@ fn discover_memory(cgroup_override: Option<&Path>, proc_root: &Path) -> MemoryDi
     }
 }
 
-fn read_cgroup_v2_memory(root: &Path, notes: &mut Vec<String>) -> Option<MemoryDiscovery> {
+fn read_cgroup_v2_memory(
+    root: &Path,
+    proc_root: &Path,
+    notes: &mut Vec<String>,
+) -> Option<MemoryDiscovery> {
     let current_path = root.join("memory.current");
     if !current_path.is_file() {
         return None;
@@ -125,6 +129,20 @@ fn read_cgroup_v2_memory(root: &Path, notes: &mut Vec<String>) -> Option<MemoryD
     let high = high_raw.as_deref().and_then(parse_cgroup_limit);
     if hard.is_none() {
         notes.push("cgroup v2 memory.max is max/unlimited or unreadable".into());
+        if let Some(host) = host_meminfo(proc_root) {
+            notes.push(format!(
+                "using host MemTotal {host} bytes as portable hard limit (edge shed/abort)"
+            ));
+            return Some(MemoryDiscovery {
+                available: true,
+                hard_limit_bytes: Some(host),
+                current_bytes: current,
+                high_bytes: high,
+                source: "host_meminfo".into(),
+                hierarchy_complete: true,
+                notes: notes.clone(),
+            });
+        }
     }
     Some(MemoryDiscovery {
         available: true,
@@ -137,7 +155,11 @@ fn read_cgroup_v2_memory(root: &Path, notes: &mut Vec<String>) -> Option<MemoryD
     })
 }
 
-fn read_cgroup_v1_memory(root: &Path, notes: &mut Vec<String>) -> Option<MemoryDiscovery> {
+fn read_cgroup_v1_memory(
+    root: &Path,
+    proc_root: &Path,
+    notes: &mut Vec<String>,
+) -> Option<MemoryDiscovery> {
     let usage = root.join("memory.usage_in_bytes");
     let limit = root.join("memory.limit_in_bytes");
     // Also accept memory/ subdirectory layout.
@@ -162,6 +184,22 @@ fn read_cgroup_v1_memory(root: &Path, notes: &mut Vec<String>) -> Option<MemoryD
             Some(n)
         }
     });
+    if hard.is_none() {
+        if let Some(host) = host_meminfo(proc_root) {
+            notes.push(format!(
+                "using host MemTotal {host} bytes as portable hard limit (edge shed/abort)"
+            ));
+            return Some(MemoryDiscovery {
+                available: true,
+                hard_limit_bytes: Some(host),
+                current_bytes: current,
+                high_bytes: None,
+                source: "host_meminfo".into(),
+                hierarchy_complete: true,
+                notes: notes.clone(),
+            });
+        }
+    }
     Some(MemoryDiscovery {
         available: true,
         hard_limit_bytes: hard,
@@ -430,8 +468,9 @@ mod tests {
 
         let cap = discover_capacity_at(Some(&cg), &proc);
         assert!(cap.memory.available);
-        assert_eq!(cap.memory.hard_limit_bytes, None);
-        assert!(!cap.memory.hierarchy_complete);
+        assert_eq!(cap.memory.hard_limit_bytes, Some(16_384_000 * 1024));
+        assert_eq!(cap.memory.source, "host_meminfo");
+        assert!(cap.memory.hierarchy_complete);
     }
 
     #[test]
@@ -448,8 +487,8 @@ mod tests {
         write(&proc.join("cpuinfo"), "processor\t: 0\n");
 
         let cap = discover_capacity_at(Some(&cg), &proc);
-        assert_eq!(cap.memory.hard_limit_bytes, None);
-        assert!(cap.memory.source.starts_with("cgroup_v1:"));
+        assert_eq!(cap.memory.hard_limit_bytes, Some(8_192_000 * 1024));
+        assert_eq!(cap.memory.source, "host_meminfo");
     }
 
     #[test]

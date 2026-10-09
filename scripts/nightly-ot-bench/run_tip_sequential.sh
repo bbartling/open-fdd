@@ -24,7 +24,7 @@ export BASE="$BASE_URL"
 
 GATES=("$@")
 if [[ ${#GATES[@]} -eq 0 ]]; then
-  GATES=(19 25 25b 26 35 36 37 38 39)
+  GATES=(19 25 25b 26 35 36 37 38 39 43 44 45 46 47)
 fi
 
 ART="${ARTIFACT_DIR:-$ROOT/reports/tip_sequential_$(date -u +%Y%m%dT%H%M%SZ)}"
@@ -34,15 +34,20 @@ echo "tip sequential BASE=$BASE RAILWAY_ONLY=$RAILWAY_ONLY art=$ART" | tee "$ART
 fail=0
 for g in "${GATES[@]}"; do
   case "$g" in
-    19) script="$ROOT/scripts/nightly-ot-bench/19_engineering_bundle.sh" ;;
+    19) script="$ROOT/scripts/nightly-ot-bench/19_engineering_bundle_validate.sh" ;;
     25) script="$ROOT/scripts/nightly-ot-bench/25_security_python_harness.sh" ;;
     25b) script="$ROOT/scripts/nightly-ot-bench/25b_security_post_stress.sh" ;;
-    26) script="$ROOT/scripts/nightly-ot-bench/26_mqtt_acl_qualification.sh" ;;
+    26) script="$ROOT/scripts/nightly-ot-bench/26_security_mqtt_acl.sh" ;;
     35) script="$ROOT/scripts/nightly-ot-bench/35_mqtt_telemetry_pause_resume.sh" ;;
     36) script="$ROOT/scripts/nightly-ot-bench/36_model_ecm_qualification.sh" ;;
     37) script="$ROOT/scripts/nightly-ot-bench/37_acme_analytics_charts.sh" ;;
     38) script="$ROOT/scripts/nightly-ot-bench/38_acme_afdd_qualification.sh" ;;
     39) script="$ROOT/scripts/nightly-ot-bench/39_mqtts_gap_blame.sh" ;;
+    43) script="$ROOT/scripts/nightly-ot-bench/43_overview_browser_analytics.sh" ;;
+    44) script="$ROOT/scripts/nightly-ot-bench/44_run_now_latency_budget.sh" ;;
+    45) script="$ROOT/scripts/nightly-ot-bench/45_analytics_planning_comb.sh" ;;
+    46) script="$ROOT/scripts/nightly-ot-bench/46_data_model_integrity.sh" ;;
+    47) script="$ROOT/scripts/nightly-ot-bench/47_mid_request_memory_shed.sh" ;;
     *) echo "unknown gate $g" >&2; fail=1; continue ;;
   esac
   echo "=== gate $g ===" | tee -a "$ART/run.log"

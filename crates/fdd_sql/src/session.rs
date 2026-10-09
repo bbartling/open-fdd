@@ -307,6 +307,11 @@ pub async fn run_sql(ctx: &SessionContext, sql: &str) -> Result<QueryResult> {
     let mut columns = Vec::new();
     let mut json_bytes = 0usize;
     while let Some(next) = stream.next().await {
+        if fdd_resources::memory_abort_requested() {
+            anyhow::bail!(
+                "SQL cancelled by in-flight memory watchdog (OPENFDD memory abort policy)"
+            );
+        }
         let batch = next?;
         let schema = batch.schema();
         if columns.is_empty() {

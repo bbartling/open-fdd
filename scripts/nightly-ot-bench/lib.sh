@@ -14,6 +14,7 @@ load_bench_env() {
   local saved_api="${OPENFDD_API_BASE:-}"
   local saved_base="${BASE:-}"
   local saved_central="${CENTRAL_BASE:-}"
+  local saved_edge="${OPENFDD_EDGE_BASE:-}"
   # Railway field stress: sticky local .env must not clobber tip pin / MCP image.
   local saved_image_tag="${OPENFDD_IMAGE_TAG:-}"
   local saved_mcp_image="${OPENFDD_MCP_IMAGE:-}"
@@ -36,7 +37,8 @@ load_bench_env() {
     fi
     [[ -n "$saved_api" ]] && export OPENFDD_API_BASE="$saved_api"
     [[ -n "$saved_base" ]] && export BASE="$saved_base"
-    [[ -n "$saved_central" ]] && CENTRAL_BASE="$saved_central"
+    [[ -n "$saved_central" ]] && export CENTRAL_BASE="$saved_central"
+    [[ -n "$saved_edge" ]] && export OPENFDD_EDGE_BASE="$saved_edge"
     [[ -n "$saved_image_tag" ]] && export OPENFDD_IMAGE_TAG="$saved_image_tag"
   fi
 

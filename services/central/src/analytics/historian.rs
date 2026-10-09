@@ -135,9 +135,25 @@ fn session_is_metric() -> bool {
         .unwrap_or(false)
 }
 
-/// History temperature column as °F for bin/SQL physics.
+/// SQL expression: coerce a history role column to DOUBLE for aggregates.
+///
+/// Parquet ingest may store numeric points as Utf8View; AVG/STDDEV/SUM require
+/// an explicit cast (Railway wide hives hit `avg(Utf8View)` planning errors).
+pub(crate) fn history_role_numeric_sql(col: &str) -> String {
+    if col.is_empty() || !col.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return "CAST(NULL AS DOUBLE)".to_string();
+    }
+    format!("try_cast(trim(CAST({col} AS VARCHAR)) AS DOUBLE)")
+}
+
+/// History temperature column as °F DOUBLE (cast + optional metric → imperial).
 fn history_temp_sql(col: &str) -> String {
-    fdd_core::sql_temp_to_fahrenheit(col, session_is_metric())
+    let numeric = history_role_numeric_sql(col);
+    if session_is_metric() && fdd_core::is_temperature_role(col) {
+        format!("(({numeric}) * 9.0 / 5.0 + 32.0)")
+    } else {
+        numeric
+    }
 }
 
 /// Sanitize a `building_id` for use as a Hive path segment. Rejects any value
@@ -264,30 +280,29 @@ fn pick_ts_col(cols: &HashSet<String>) -> Option<&'static str> {
 fn on_expr(cols: &HashSet<String>) -> Option<String> {
     let has_status = cols.contains("fan_status");
     let has_cmd = cols.contains("fan_cmd");
+    let fan_status = history_role_numeric_sql("fan_status");
+    let fan_cmd = history_role_numeric_sql("fan_cmd");
     if has_status && has_cmd {
-        Some(
+        Some(format!(
             "CASE \
-               WHEN fan_status IS NOT NULL THEN \
-                 CASE WHEN fan_status > 0.05 THEN true ELSE false END \
-               WHEN fan_cmd IS NOT NULL THEN \
-                 CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.05 \
+               WHEN {fan_status} IS NOT NULL THEN \
+                 CASE WHEN {fan_status} > 0.05 THEN true ELSE false END \
+               WHEN {fan_cmd} IS NOT NULL THEN \
+                 CASE WHEN (CASE WHEN {fan_cmd} > 1.0 THEN {fan_cmd} / 100.0 ELSE {fan_cmd} END) > 0.05 \
                    THEN true ELSE false END \
                ELSE false \
              END"
-            .into(),
-        )
+        ))
     } else if has_status {
-        Some(
-            "CASE WHEN fan_status IS NOT NULL AND fan_status > 0.05 THEN true ELSE false END"
-                .into(),
-        )
+        Some(format!(
+            "CASE WHEN {fan_status} IS NOT NULL AND {fan_status} > 0.05 THEN true ELSE false END"
+        ))
     } else if has_cmd {
-        Some(
-            "CASE WHEN fan_cmd IS NOT NULL AND \
-               (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.05 \
+        Some(format!(
+            "CASE WHEN {fan_cmd} IS NOT NULL AND \
+               (CASE WHEN {fan_cmd} > 1.0 THEN {fan_cmd} / 100.0 ELSE {fan_cmd} END) > 0.05 \
              THEN true ELSE false END"
-                .into(),
-        )
+        ))
     } else {
         None
     }
@@ -295,7 +310,8 @@ fn on_expr(cols: &HashSet<String>) -> Option<String> {
 
 /// Threshold on-expression for a single numeric status/amp column.
 fn col_on_gt(col: &str, threshold: f64) -> String {
-    format!("CASE WHEN {col} IS NOT NULL AND {col} > {threshold} THEN true ELSE false END")
+    let n = history_role_numeric_sql(col);
+    format!("CASE WHEN {n} IS NOT NULL AND {n} > {threshold} THEN true ELSE false END")
 }
 
 /// Mechanical-cooling proof (never fan).
@@ -996,15 +1012,18 @@ async fn runtime_weekly_plant_rows(
     } = params;
     let (signal_label, stamped_types) = metadata;
     let oat_by_ts_cte = match oat {
-        Some(c) => format!(
+        Some(c) => {
+            let c_f = history_temp_sql(c);
+            format!(
             r#"
 oat_by_ts AS (
-  SELECT {ts_col} AS ts, AVG({c}) AS oat_f
+  SELECT {ts_col} AS ts, AVG({c_f}) AS oat_f
   FROM history
-  WHERE {c} IS NOT NULL{range_sql}
+  WHERE {c_f} IS NOT NULL{range_sql}
   GROUP BY {ts_col}
 ),"#
-        ),
+            )
+        }
         None => String::new(),
     };
     let oat_join = if oat.is_some() {
@@ -1251,11 +1270,12 @@ pub(crate) fn build_sensor_health_sql(
     let range_filter = time_range_sql("timestamp_utc", start, end);
     let mut aggs = vec!["COUNT(*) AS n".to_string()];
     for role in role_cols {
-        aggs.push(format!("COUNT({role}) AS n_finite_{role}"));
-        aggs.push(format!("MIN({role}) AS minv_{role}"));
-        aggs.push(format!("MAX({role}) AS maxv_{role}"));
-        aggs.push(format!("AVG({role}) AS meanv_{role}"));
-        aggs.push(format!("STDDEV_POP({role}) AS stdv_{role}"));
+        let num = history_role_numeric_sql(role);
+        aggs.push(format!("COUNT({num}) AS n_finite_{role}"));
+        aggs.push(format!("MIN({num}) AS minv_{role}"));
+        aggs.push(format!("MAX({num}) AS maxv_{role}"));
+        aggs.push(format!("AVG({num}) AS meanv_{role}"));
+        aggs.push(format!("STDDEV_POP({num}) AS stdv_{role}"));
     }
     format!(
         "SELECT equipment_id, {} \
@@ -1492,11 +1512,12 @@ pub async fn sensor_stats_from_history(
     let selects: Vec<String> = role_cols
         .iter()
         .map(|role| {
+            let num = history_role_numeric_sql(role);
             format!(
                 "SELECT equipment_id, '{role}' AS role, \
-                   COUNT(*) AS n, COUNT({role}) AS n_finite, \
-                   AVG({role}) AS meanv, STDDEV_POP({role}) AS stdv, \
-                   MIN({role}) AS minv, MAX({role}) AS maxv \
+                   COUNT(*) AS n, COUNT({num}) AS n_finite, \
+                   AVG({num}) AS meanv, STDDEV_POP({num}) AS stdv, \
+                   MIN({num}) AS minv, MAX({num}) AS maxv \
                  FROM history \
                  WHERE equipment_id IS NOT NULL{eq_filter}{fan_where} \
                  GROUP BY equipment_id"
@@ -1581,13 +1602,14 @@ pub async fn setpoints_from_history(
     let selects: Vec<String> = present
         .iter()
         .map(|role| {
+            let num = history_role_numeric_sql(role);
             format!(
                 "SELECT equipment_id, '{role}' AS role, \
-                   approx_percentile({role}, 0.5) FILTER (WHERE ({occ})) AS median_occupied, \
-                   approx_percentile({role}, 0.5) FILTER (WHERE NOT ({occ})) AS median_unoccupied, \
-                   approx_percentile({role}, 0.5) AS median_all, \
-                   COUNT({role}) FILTER (WHERE ({occ})) AS n_occupied, \
-                   COUNT({role}) FILTER (WHERE NOT ({occ})) AS n_unoccupied \
+                   approx_percentile({num}, 0.5) FILTER (WHERE ({occ})) AS median_occupied, \
+                   approx_percentile({num}, 0.5) FILTER (WHERE NOT ({occ})) AS median_unoccupied, \
+                   approx_percentile({num}, 0.5) AS median_all, \
+                   COUNT({num}) FILTER (WHERE ({occ})) AS n_occupied, \
+                   COUNT({num}) FILTER (WHERE NOT ({occ})) AS n_unoccupied \
                  FROM history \
                  WHERE equipment_id IS NOT NULL{eq_filter} \
                  GROUP BY equipment_id"
@@ -1602,13 +1624,14 @@ pub async fn setpoints_from_history(
             let selects: Vec<String> = present
                 .iter()
                 .map(|role| {
+                    let num = history_role_numeric_sql(role);
                     format!(
                         "SELECT equipment_id, '{role}' AS role, \
-                           AVG({role}) AS median_all, \
-                           COUNT({role}) AS n_occupied, \
+                           AVG({num}) AS median_all, \
+                           COUNT({num}) AS n_occupied, \
                            CAST(0 AS BIGINT) AS n_unoccupied, \
-                           AVG({role}) AS median_occupied, \
-                           AVG({role}) AS median_unoccupied \
+                           AVG({num}) AS median_occupied, \
+                           AVG({num}) AS median_unoccupied \
                          FROM history \
                          WHERE equipment_id IS NOT NULL{eq_filter} \
                          GROUP BY equipment_id"
@@ -1675,14 +1698,15 @@ pub async fn diurnal_from_history(
     let selects: Vec<String> = role_cols
         .iter()
         .map(|role| {
+            let num = history_role_numeric_sql(role);
             format!(
                 "SELECT equipment_id, '{role}' AS role, \
                    date_part('hour', {ts_col}) AS hour, \
                    CASE WHEN ({fan_sql}) THEN 'on' ELSE 'off' END AS fan_state, \
-                   COUNT({role}) AS n, AVG({role}) AS meanv, \
-                   MIN({role}) AS minv, MAX({role}) AS maxv \
+                   COUNT({num}) AS n, AVG({num}) AS meanv, \
+                   MIN({num}) AS minv, MAX({num}) AS maxv \
                  FROM history \
-                 WHERE equipment_id IS NOT NULL AND {role} IS NOT NULL{eq_filter} \
+                 WHERE equipment_id IS NOT NULL AND {num} IS NOT NULL{eq_filter} \
                  GROUP BY equipment_id, date_part('hour', {ts_col}), \
                    CASE WHEN ({fan_sql}) THEN 'on' ELSE 'off' END"
             )
@@ -1965,15 +1989,21 @@ pub async fn economizer_from_history(
     };
     let dt_min = dt_min_f.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
+    let oat_expr = history_temp_sql(oat_col);
+    let rat_expr = history_temp_sql(rat_col);
+    let mat_expr = history_temp_sql(mat_col);
     let damper_proj = if cols.contains("oa_damper_pct") {
-        "oa_damper_pct AS damper_fb_pct"
+        format!(
+            "{} AS damper_fb_pct",
+            history_role_numeric_sql("oa_damper_pct")
+        )
     } else {
-        "CAST(NULL AS DOUBLE) AS damper_fb_pct"
+        "CAST(NULL AS DOUBLE) AS damper_fb_pct".to_string()
     };
     let sat_proj = if cols.contains("sat") {
-        "sat AS sat_f"
+        format!("{} AS sat_f", history_temp_sql("sat"))
     } else {
-        "CAST(NULL AS DOUBLE) AS sat_f"
+        "CAST(NULL AS DOUBLE) AS sat_f".to_string()
     };
 
     let sql = format!(
@@ -1981,9 +2011,9 @@ pub async fn economizer_from_history(
 WITH base AS (
   SELECT
     equipment_id,
-    {oat_col} AS oa_t,
-    {rat_col} AS rat,
-    {mat_col} AS mat,
+    {oat_expr} AS oa_t,
+    {rat_expr} AS rat,
+    {mat_expr} AS mat,
     {on_sql} AS fan_on,
     {damper_proj},
     {sat_proj}
@@ -2029,9 +2059,9 @@ WITH base AS (
   SELECT
     equipment_id,
     CAST({ts_col} AS VARCHAR) AS timestamp_utc,
-    {oat_col} AS oat_f,
-    {rat_col} AS rat_f,
-    {mat_col} AS mat_f,
+    {oat_expr} AS oat_f,
+    {rat_expr} AS rat_f,
+    {mat_expr} AS mat_f,
     {sat_proj},
     {damper_proj},
     CASE WHEN ({on_sql}) THEN 1 ELSE 0 END AS fan_on_i
@@ -2231,7 +2261,7 @@ pub async fn mech_oat_bins_from_history(
             format!(
                 "SELECT {ts_col} AS ts, AVG({oat_f}) AS oat_f
   FROM history
-  WHERE {oat} IS NOT NULL AND {oat_f} >= 40.0 AND {oat_f} <= 110.0{range_sql}
+  WHERE {oat_f} IS NOT NULL AND {oat_f} >= 40.0 AND {oat_f} <= 110.0{range_sql}
   GROUP BY {ts_col}"
             ),
             oat,
@@ -2243,13 +2273,13 @@ pub async fn mech_oat_bins_from_history(
                 "weather_oat AS (
   SELECT {ts_col} AS ts, AVG({oa_t_f}) AS oat_f
   FROM history
-  WHERE oa_t IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0{range_sql}{weather_ids}
+  WHERE {oa_t_f} IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0{range_sql}{weather_ids}
   GROUP BY {ts_col}
 ),
 fallback_oat AS (
   SELECT {ts_col} AS ts, AVG({oa_t_f}) AS oat_f
   FROM history
-  WHERE oa_t IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0{range_sql}
+  WHERE {oa_t_f} IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0{range_sql}
   GROUP BY {ts_col}
 ),"
             ),
@@ -2267,7 +2297,7 @@ fallback_oat AS (
             format!(
                 "SELECT {ts_col} AS ts, AVG({oat_f}) AS oat_f
   FROM history
-  WHERE {oat} IS NOT NULL AND {oat_f} >= 40.0 AND {oat_f} <= 110.0{range_sql}
+  WHERE {oat_f} IS NOT NULL AND {oat_f} >= 40.0 AND {oat_f} <= 110.0{range_sql}
   GROUP BY {ts_col}"
             ),
             oat,
@@ -2517,21 +2547,23 @@ pub async fn bas_vs_web_from_history(
     let web_label = web_col
         .map(str::to_string)
         .unwrap_or_else(|| "oa_t@weather".into());
+    let bas_f = history_temp_sql(bas);
     let build_sql = |start_t: DateTime<Utc>, bin_secs: i64| -> String {
         let range_sql = time_range_sql(ts_col, Some(start_t), Some(end_t));
         if let Some(web) = web_col {
+            let web_f = history_temp_sql(web);
             format!(
                 r#"
 WITH bas_by_ts AS (
-  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas}) AS bas_oat_f
+  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas_f}) AS bas_oat_f
   FROM history
-  WHERE {bas} IS NOT NULL{range_sql}
+  WHERE {bas_f} IS NOT NULL{range_sql}
   GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
 ),
 web_by_ts AS (
-  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({web}) AS web_oat_f
+  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({web_f}) AS web_oat_f
   FROM history
-  WHERE {web} IS NOT NULL{range_sql}
+  WHERE {web_f} IS NOT NULL{range_sql}
   GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
 ),
 joined AS (
@@ -2563,15 +2595,15 @@ LIMIT {limit}
             format!(
                 r#"
 WITH bas_by_ts AS (
-  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas}) AS bas_oat_f
+  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas_f}) AS bas_oat_f
   FROM history
-  WHERE {bas} IS NOT NULL{weather_excluded}{range_sql}
+  WHERE {bas_f} IS NOT NULL{weather_excluded}{range_sql}
   GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
 ),
 web_by_ts AS (
-  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas}) AS web_oat_f
+  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas_f}) AS web_oat_f
   FROM history
-  WHERE {bas} IS NOT NULL{weather_only}{range_sql}
+  WHERE {bas_f} IS NOT NULL{weather_only}{range_sql}
   GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
 ),
 joined AS (
@@ -2641,7 +2673,13 @@ LIMIT {limit}
             // Synthetic / lab fixtures often sit outside the 7-day default.
             // Expand once to the retain floor — still bounded, never start=None.
             used_retain_fallback = true;
-            start_t = end_t - chrono::Duration::days(BAS_VS_WEB_RETAIN_FALLBACK_DAYS);
+            let max_span = std::env::var("OPENFDD_ANALYTICS_MAX_SPAN_DAYS")
+                .ok()
+                .and_then(|v| v.parse::<i64>().ok())
+                .filter(|v| *v > 0)
+                .unwrap_or(ANALYTICS_MAX_LOOKBACK_DAYS)
+                .min(BAS_VS_WEB_RETAIN_FALLBACK_DAYS);
+            start_t = end_t - chrono::Duration::days(max_span);
             bin_secs = date_bin_seconds_for_points(start_t, end_t, limit);
             continue;
         }
@@ -3078,19 +3116,24 @@ pub async fn rcx_timeseries_from_history(
         String::new()
     };
     let limit = max_points.clamp(200, 20000);
+    let value_f = history_role_numeric_sql(role_col);
     let overlay_sel = overlay_col
         .filter(|c| cols.contains(*c))
-        .map(|c| format!(", {c} AS overlay_f"))
+        .map(|c| format!(", {} AS overlay_f", history_role_numeric_sql(c)))
         .unwrap_or_else(|| ", CAST(NULL AS FLOAT) AS overlay_f".into());
     let return_sel = pair_return_col
         .filter(|c| cols.contains(*c))
-        .map(|c| format!(", {c} AS return_f"))
+        .map(|c| format!(", {} AS return_f", history_role_numeric_sql(c)))
         .unwrap_or_else(|| ", CAST(NULL AS FLOAT) AS return_f".into());
     // Optional motor/fan proof for vibe19 right-hand "motor on" y2 overlay.
+    let fan_status = history_role_numeric_sql("fan_status");
+    let fan_cmd = history_role_numeric_sql("fan_cmd");
     let motor_sel = if cols.contains("fan_status") {
-        ", fan_status AS motor_f".to_string()
+        format!(", {fan_status} AS motor_f")
     } else if cols.contains("fan_cmd") {
-        ", CASE WHEN fan_cmd > 0.05 THEN 1.0 ELSE 0.0 END AS motor_f".to_string()
+        format!(
+            ", CASE WHEN {fan_cmd} IS NOT NULL AND {fan_cmd} > 0.05 THEN 1.0 ELSE 0.0 END AS motor_f"
+        )
     } else {
         ", CAST(NULL AS FLOAT) AS motor_f".into()
     };
@@ -3104,14 +3147,14 @@ FROM (
   SELECT
     CAST({ts_col} AS VARCHAR) AS timestamp_utc,
     equipment_id,
-    {role_col} AS value_f
+    {value_f} AS value_f
     {overlay_sel}
     {return_sel}
     {motor_sel},
     ROW_NUMBER() OVER (ORDER BY {ts_col}, equipment_id) AS _rn,
     COUNT(*) OVER () AS _cnt
   FROM history
-  WHERE equipment_id IS NOT NULL AND {role_col} IS NOT NULL{eq_filter}{fan_filter}
+  WHERE equipment_id IS NOT NULL AND {value_f} IS NOT NULL{eq_filter}{fan_filter}
 )
 WHERE _rn = 1
    OR _rn = _cnt
@@ -3228,10 +3271,13 @@ pub async fn rcx_oat_scatter_from_history(
     } else {
         ", CAST(NULL AS FLOAT) AS dry_bulb_f".into()
     };
+    let oat_f = history_temp_sql(oat);
+    let y_f = history_role_numeric_sql(y_col);
     let dry_cte = dry_ref
         .map(|c| {
+            let dry = history_temp_sql(c);
             format!(
-                ", dry_by_ts AS (\n  SELECT {ts_col} AS ts, AVG({c}) AS dry_f\n  FROM history\n  WHERE {c} IS NOT NULL\n  GROUP BY {ts_col}\n)"
+                ", dry_by_ts AS (\n  SELECT {ts_col} AS ts, AVG({dry}) AS dry_f\n  FROM history\n  WHERE {dry} IS NOT NULL\n  GROUP BY {ts_col}\n)"
             )
         })
         .unwrap_or_default();
@@ -3243,22 +3289,22 @@ pub async fn rcx_oat_scatter_from_history(
     let sql = format!(
         r#"
 WITH oat_by_ts AS (
-  SELECT {ts_col} AS ts, AVG({oat}) AS oat_f
+  SELECT {ts_col} AS ts, AVG({oat_f}) AS oat_f
   FROM history
-  WHERE {oat} IS NOT NULL
+  WHERE {oat_f} IS NOT NULL
   GROUP BY {ts_col}
 ){dry_cte}
 SELECT
   CAST(h.{ts_col} AS VARCHAR) AS ts_utc,
   h.equipment_id,
   o.oat_f,
-  h.{y_col} AS y_f
+  {y_f} AS y_f
   {dry_sel}
 FROM history h
 LEFT JOIN oat_by_ts o ON h.{ts_col} = o.ts
 {dry_join}
 WHERE h.equipment_id IS NOT NULL
-  AND h.{y_col} IS NOT NULL
+  AND {y_f} IS NOT NULL
   AND o.oat_f IS NOT NULL{eq_filter_h}
 ORDER BY h.{ts_col}, h.equipment_id
 LIMIT {limit}
@@ -3326,11 +3372,12 @@ pub async fn rcx_box_from_history(
         String::new()
     };
     let limit = max_points.clamp(200, 20000);
+    let value_f = history_role_numeric_sql(role_col);
     let sql = format!(
         r#"
-SELECT equipment_id, {role_col} AS value_f
+SELECT equipment_id, {value_f} AS value_f
 FROM history
-WHERE equipment_id IS NOT NULL AND {role_col} IS NOT NULL{eq_filter}{fan_filter}
+WHERE equipment_id IS NOT NULL AND {value_f} IS NOT NULL{eq_filter}{fan_filter}
 LIMIT {limit}
 "#
     );
@@ -3391,16 +3438,17 @@ pub async fn rcx_zone_comfort_rank_from_history(
     } else {
         String::new()
     };
+    let zone_t = history_role_numeric_sql("zone_t");
     let sql = format!(
         r#"
 SELECT
   equipment_id,
   COUNT(*) AS n_samples,
-  SUM(CASE WHEN zone_t < {comfort_low_f} OR zone_t > {comfort_high_f} THEN 1 ELSE 0 END) AS n_fail
+  SUM(CASE WHEN {zone_t} < {comfort_low_f} OR {zone_t} > {comfort_high_f} THEN 1 ELSE 0 END) AS n_fail
 FROM history
-WHERE equipment_id IS NOT NULL AND zone_t IS NOT NULL{eq_filter}{occ_filter}
+WHERE equipment_id IS NOT NULL AND {zone_t} IS NOT NULL{eq_filter}{occ_filter}
 GROUP BY equipment_id
-ORDER BY (CAST(SUM(CASE WHEN zone_t < {comfort_low_f} OR zone_t > {comfort_high_f} THEN 1 ELSE 0 END) AS FLOAT)
+ORDER BY (CAST(SUM(CASE WHEN {zone_t} < {comfort_low_f} OR {zone_t} > {comfort_high_f} THEN 1 ELSE 0 END) AS FLOAT)
           / CAST(COUNT(*) AS FLOAT)) DESC
 "#
     );
@@ -3502,25 +3550,27 @@ pub async fn rcx_metering_from_history(
     let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols, role_col).await;
     let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
     let cooling = kind != "gas";
+    let oat_expr = history_temp_sql(oat);
+    let rate_expr = history_role_numeric_sql(role_col);
     let sql = format!(
         r#"
 WITH oat_month AS (
   SELECT
     substr(CAST({ts_col} AS VARCHAR), 1, 7) AS month,
-    AVG({oat}) AS avg_oat_f,
+    AVG({oat_expr}) AS avg_oat_f,
     COUNT(*) AS oat_n
   FROM history
-  WHERE {oat} IS NOT NULL
+  WHERE {oat_expr} IS NOT NULL
   GROUP BY substr(CAST({ts_col} AS VARCHAR), 1, 7)
 ),
 meter_month AS (
   SELECT
     h.equipment_id,
     substr(CAST(h.{ts_col} AS VARCHAR), 1, 7) AS month,
-    AVG(h.{role_col}) AS avg_rate,
+    AVG({rate_expr}) AS avg_rate,
     COUNT(*) AS n_samples
   FROM history h
-  WHERE h.equipment_id IS NOT NULL AND h.{role_col} IS NOT NULL{eq_filter_h}
+  WHERE h.equipment_id IS NOT NULL AND {rate_expr} IS NOT NULL{eq_filter_h}
   GROUP BY h.equipment_id, substr(CAST(h.{ts_col} AS VARCHAR), 1, 7)
 )
 SELECT
@@ -3782,6 +3832,7 @@ fn zscore_anomaly_role_sql(
     eq_filter: &str,
     transition_events: bool,
 ) -> String {
+    let num = history_role_numeric_sql(role);
     let preceding = window_rows.saturating_sub(1);
     let event_col = if transition_events {
         "CAST(SUM(CASE WHEN is_anom = 1 AND COALESCE(prev_anom, 0) = 0 THEN 1 ELSE 0 END) AS DOUBLE) AS anomaly_events"
@@ -3809,17 +3860,17 @@ FROM (
           ELSE (val - roll_mean) / roll_std
         END AS zscore
       FROM (
-        SELECT equipment_id, {ts_col} AS ts, {role} AS val,
-          AVG({role}) OVER (
+        SELECT equipment_id, {ts_col} AS ts, {num} AS val,
+          AVG({num}) OVER (
             PARTITION BY equipment_id ORDER BY {ts_col}
             ROWS BETWEEN {preceding} PRECEDING AND CURRENT ROW
           ) AS roll_mean,
-          STDDEV_POP({role}) OVER (
+          STDDEV_POP({num}) OVER (
             PARTITION BY equipment_id ORDER BY {ts_col}
             ROWS BETWEEN {preceding} PRECEDING AND CURRENT ROW
           ) AS roll_std
         FROM history
-        WHERE equipment_id IS NOT NULL AND {role} IS NOT NULL{eq_filter}
+        WHERE equipment_id IS NOT NULL AND {num} IS NOT NULL{eq_filter}
       ) w
     ) z
   ) flags
@@ -3837,6 +3888,7 @@ fn robust_anomaly_role_sql(
     eq_filter: &str,
     transition_events: bool,
 ) -> String {
+    let num = history_role_numeric_sql(role);
     let event_col = if transition_events {
         "CAST(SUM(CASE WHEN is_anom = 1 AND COALESCE(prev_anom, 0) = 0 THEN 1 ELSE 0 END) AS DOUBLE) AS anomaly_events"
     } else {
@@ -3867,16 +3919,16 @@ FROM (
       ELSE 0
     END) OVER (PARTITION BY b.equipment_id ORDER BY b.ts) AS prev_anom
   FROM (
-    SELECT equipment_id, {ts_col} AS ts, {role} AS val
+    SELECT equipment_id, {ts_col} AS ts, {num} AS val
     FROM history
-    WHERE equipment_id IS NOT NULL AND {role} IS NOT NULL{eq_filter}
+    WHERE equipment_id IS NOT NULL AND {num} IS NOT NULL{eq_filter}
   ) b
   INNER JOIN (
     SELECT equipment_id,
-      approx_percentile({role}, 0.5) AS med,
-      STDDEV_POP({role}) AS sigma
+      approx_percentile({num}, 0.5) AS med,
+      STDDEV_POP({num}) AS sigma
     FROM history
-    WHERE equipment_id IS NOT NULL AND {role} IS NOT NULL{eq_filter}
+    WHERE equipment_id IS NOT NULL AND {num} IS NOT NULL{eq_filter}
     GROUP BY equipment_id
   ) s ON b.equipment_id = s.equipment_id
 ) agg
@@ -4235,9 +4287,13 @@ mod tests {
             "sensor_health must be single-pass, not UNION ALL: {sql}"
         );
         assert!(
-            sql.contains("COUNT(sat) AS n_finite_sat")
-                && sql.contains("COUNT(mat) AS n_finite_mat"),
-            "expected per-role aggregates: {sql}"
+            sql.contains("COUNT(try_cast(trim(CAST(sat AS VARCHAR)) AS DOUBLE)) AS n_finite_sat")
+                && sql.contains("COUNT(try_cast(trim(CAST(mat AS VARCHAR)) AS DOUBLE)) AS n_finite_mat"),
+            "expected per-role aggregates with numeric cast: {sql}"
+        );
+        assert!(
+            sql.contains("AVG(try_cast(trim(CAST(sat AS VARCHAR)) AS DOUBLE))"),
+            "AVG must cast Utf8View/string roles before aggregate: {sql}"
         );
         assert!(
             sql.contains("GROUP BY equipment_id"),

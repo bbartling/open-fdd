@@ -92,7 +92,14 @@ async fn compute_with_admission(
     }
     let permit = fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Analytics)
         .ok_or_else(analytics_admission_busy)?;
+    let _inflight = fdd_resources::InFlightGuard::spawn("analytics");
     let envelope = compute().await;
+    if fdd_resources::memory_abort_requested() {
+        return Err(analytics_pressure_deferred(
+            &["in-flight memory watchdog aborted analytics SQL".into()],
+            true,
+        ));
+    }
     drop(permit);
     Ok(envelope)
 }

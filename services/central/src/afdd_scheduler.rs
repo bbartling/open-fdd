@@ -10,7 +10,7 @@
 //! An explicit historical range is `POST /api/afdd/scheduler/backfill`.
 
 use std::collections::VecDeque;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration as StdDuration;
@@ -137,6 +137,56 @@ impl AfddSchedulerRuntime {
         Ok(Some(watermark.latest_persisted_timestamp_utc))
     }
 
+    /// Scoped watermark from building historian parquet order (#1192).
+    fn latest_telemetry_for_scope(&self, scope: &str) -> Result<Option<DateTime<Utc>>> {
+        if scope == "all" {
+            return self.latest_telemetry();
+        }
+        let workspace = PathBuf::from(
+            std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()),
+        );
+        let root = workspace.join("openfdd");
+        let order = fdd_store::historian_watermark_order(&root, scope)?;
+        if order == 0 {
+            return Ok(None);
+        }
+        let ts = fdd_store::order_key_to_rfc3339(order);
+        if ts.is_empty() {
+            return Ok(None);
+        }
+        let parsed = DateTime::parse_from_rfc3339(&ts.replace('Z', "+00:00"))
+            .map(|d| d.with_timezone(&Utc))
+            .with_context(|| format!("parse historian watermark order {order} as RFC3339"))?;
+        Ok(Some(parsed))
+    }
+
+    fn no_data_cycle_record(
+        &self,
+        scope: &str,
+        trigger: &str,
+        run_id: String,
+        started_at_utc: DateTime<Utc>,
+        window: AfddCycleWindow,
+    ) -> AfddCycleRecord {
+        AfddCycleRecord {
+            run_id,
+            scope: scope.to_string(),
+            trigger: trigger.to_string(),
+            status: "no_data".into(),
+            started_at_utc,
+            finished_at_utc: Utc::now(),
+            start_utc: window.start_utc,
+            end_utc: window.end_utc,
+            catch_up: window.catch_up,
+            result_scope: result_scope_for(trigger).into(),
+            ok: true,
+            error: None,
+            rules_succeeded: Some(0),
+            rules_failed: Some(0),
+            rules_skipped: Some(0),
+        }
+    }
+
     fn persist_checkpoint(&self, checkpoint: &AfddSchedulerCheckpoint) -> Result<()> {
         let bytes = serde_json::to_vec_pretty(checkpoint)?;
         self.store
@@ -199,9 +249,21 @@ impl AfddSchedulerRuntime {
 
     async fn run_now(&self, scope: &str) -> Result<AfddCycleRecord> {
         let config = self.config_snapshot();
-        let end_utc = self
-            .latest_telemetry()?
-            .ok_or_else(|| anyhow::anyhow!("no persisted telemetry watermark is available"))?;
+        let started_at_utc = Utc::now();
+        let run_id = Uuid::new_v4().to_string();
+        let Some(end_utc) = self.latest_telemetry_for_scope(scope)? else {
+            let configured = i64::try_from(config.lookback_seconds()?)?;
+            let window = AfddCycleWindow {
+                start_utc: started_at_utc - Duration::seconds(configured),
+                end_utc: started_at_utc,
+                scheduled_for_utc: started_at_utc,
+                catch_up: false,
+            };
+            let record = self.no_data_cycle_record(scope, "run_now", run_id, started_at_utc, window);
+            self.record_cycle(record.clone());
+            let _ = self.persist_run_record(&record);
+            return Ok(record);
+        };
         let configured = i64::try_from(config.lookback_seconds()?)?;
         // Cap operator run-now so Railway edge/nginx cannot 504 a 24h hive
         // scan under memory pressure (#1127 / Soft-OPEN tip). Continuous timer
@@ -228,6 +290,18 @@ impl AfddSchedulerRuntime {
             .unwrap_or(90);
         let cancel = Arc::new(AtomicBool::new(false));
         let cancel_flag = cancel.clone();
+        let _inflight = fdd_resources::InFlightGuard::spawn("afdd_run_now");
+        let inflight_cancel = _inflight.cancel_flag();
+        let cancel_bridge = cancel.clone();
+        tokio::spawn(async move {
+            while !cancel_bridge.load(Ordering::SeqCst) {
+                if inflight_cancel.load(Ordering::SeqCst) {
+                    cancel_bridge.store(true, Ordering::SeqCst);
+                    break;
+                }
+                tokio::time::sleep(StdDuration::from_millis(200)).await;
+            }
+        });
         let fut = self.execute_cycle_chunked(scope, "run_now", window, true, Some(cancel));
         tokio::pin!(fut);
         match tokio::time::timeout(StdDuration::from_secs(timeout_secs), &mut fut).await {
@@ -313,6 +387,7 @@ impl AfddSchedulerRuntime {
 
         let started_at_utc = Utc::now();
         let run_id = Uuid::new_v4().to_string();
+        let _inflight = fdd_resources::InFlightGuard::spawn("afdd_chunk");
 
         let pressure = fdd_resources::sample_pressure();
         if pressure.defer_expensive_compute {

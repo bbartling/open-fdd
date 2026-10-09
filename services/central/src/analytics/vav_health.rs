@@ -141,26 +141,30 @@ pub async fn vav_health_from_history(
     // No id-prefix SQL filter. Family Zones membership is a zone-terminal
     // stamp (VAV, FCU, zone_other, heat pump, baseboard) or a modeled zone
     // temperature. A non-zone stamp is excluded even when the id looks like a zone.
-    let sql = r#"
+    let zone_t = historian::history_role_numeric_sql("zone_t");
+    let damper_pct = historian::history_role_numeric_sql("damper_pct");
+    let sql = format!(
+        r#"
 SELECT
   equipment_id,
-  AVG(CASE WHEN zone_t IS NOT NULL THEN 1.0 ELSE 0.0 END) AS zone_cov,
-  AVG(CASE WHEN damper_pct IS NOT NULL THEN 1.0 ELSE 0.0 END) AS dmp_cov,
+  AVG(CASE WHEN {zone_t} IS NOT NULL THEN 1.0 ELSE 0.0 END) AS zone_cov,
+  AVG(CASE WHEN {damper_pct} IS NOT NULL THEN 1.0 ELSE 0.0 END) AS dmp_cov,
   SUM(CASE
-    WHEN zone_t IS NOT NULL AND (zone_t < {lo} OR zone_t > {hi}) THEN 1.0 ELSE 0.0
+    WHEN {zone_t} IS NOT NULL AND ({zone_t} < {lo} OR {zone_t} > {hi}) THEN 1.0 ELSE 0.0
   END) * 300.0 / 3600.0 AS comfort_fail_h,
   SUM(CASE
-    WHEN damper_pct IS NOT NULL AND (
-      CASE WHEN damper_pct > 1.0 THEN damper_pct / 100.0 ELSE damper_pct END
+    WHEN {damper_pct} IS NOT NULL AND (
+      CASE WHEN {damper_pct} > 1.0 THEN {damper_pct} / 100.0 ELSE {damper_pct} END
     ) >= 0.975 THEN 1.0 ELSE 0.0
   END) * 300.0 / 3600.0 AS full_open_h,
   COUNT(*) * 300.0 / 3600.0 AS span_h
 FROM history
 GROUP BY equipment_id
 ORDER BY equipment_id
-"#
-    .replace("{lo}", &comfort_low.to_string())
-    .replace("{hi}", &comfort_high.to_string());
+"#,
+        lo = comfort_low,
+        hi = comfort_high,
+    );
     let result = match run_sql(&ctx, &sql).await {
         Ok(r) => r,
         Err(e) => {

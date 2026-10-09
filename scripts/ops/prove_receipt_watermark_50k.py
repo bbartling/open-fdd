@@ -122,23 +122,18 @@ def main() -> int:
         sent = 0
         while sent < target:
             mid = str(uuid.uuid4())
+            seq = sent + 1
             envelope = {
-                "schema_version": "telemetry-envelope-v1",
-                "message_id": mid,
-                "building_id": building,
+                "schema": "openfdd.mqtt.telemetry.v1",
+                "sequence": seq,
+                "site_id": building,
                 "edge_id": edge,
-                "protocol": "bacnet",
                 "observed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "points": [
                     {
-                        "id": "soak-point",
-                        "value": sent,
-                        "quality": "good",
-                        "tags": {
-                            "building_id": building,
-                            "equipment_id": "SOAK_EQ",
-                            "role": "sample",
-                        },
+                        "name": "soak-point",
+                        "value": float(sent),
+                        "unit": "1",
                     }
                 ],
             }
