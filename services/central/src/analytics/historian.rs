@@ -1015,7 +1015,7 @@ async fn runtime_weekly_plant_rows(
         Some(c) => {
             let c_f = history_temp_sql(c);
             format!(
-            r#"
+                r#"
 oat_by_ts AS (
   SELECT {ts_col} AS ts, AVG({c_f}) AS oat_f
   FROM history
@@ -4288,7 +4288,9 @@ mod tests {
         );
         assert!(
             sql.contains("COUNT(try_cast(trim(CAST(sat AS VARCHAR)) AS DOUBLE)) AS n_finite_sat")
-                && sql.contains("COUNT(try_cast(trim(CAST(mat AS VARCHAR)) AS DOUBLE)) AS n_finite_mat"),
+                && sql.contains(
+                    "COUNT(try_cast(trim(CAST(mat AS VARCHAR)) AS DOUBLE)) AS n_finite_mat"
+                ),
             "expected per-role aggregates with numeric cast: {sql}"
         );
         assert!(

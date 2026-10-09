@@ -44,8 +44,7 @@ pub fn active_cancel_flag() -> Option<Arc<AtomicBool>> {
 }
 
 pub fn memory_abort_requested() -> bool {
-    active_cancel_flag()
-        .is_some_and(|f| f.load(Ordering::SeqCst))
+    active_cancel_flag().is_some_and(|f| f.load(Ordering::SeqCst))
 }
 
 fn sample_interval_ms() -> u64 {

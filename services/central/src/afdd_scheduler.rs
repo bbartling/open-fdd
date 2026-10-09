@@ -259,7 +259,8 @@ impl AfddSchedulerRuntime {
                 scheduled_for_utc: started_at_utc,
                 catch_up: false,
             };
-            let record = self.no_data_cycle_record(scope, "run_now", run_id, started_at_utc, window);
+            let record =
+                self.no_data_cycle_record(scope, "run_now", run_id, started_at_utc, window);
             self.record_cycle(record.clone());
             let _ = self.persist_run_record(&record);
             return Ok(record);
