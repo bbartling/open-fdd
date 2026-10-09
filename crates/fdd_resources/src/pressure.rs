@@ -138,6 +138,7 @@ pub fn memory_budget_json() -> serde_json::Value {
     let discovery = discover_capacity();
     let pressure = evaluate_pressure(&discovery);
     let budget = crate::budget::ComputeBudget::resolve(&discovery, 512).ok();
+    let last_trip = crate::in_flight::last_memory_trip();
     serde_json::json!({
         "hard_limit_bytes": pressure.hard_limit_bytes,
         "pool_bytes": budget.as_ref().map(|b| b.compute_memory_bytes),
@@ -147,6 +148,8 @@ pub fn memory_budget_json() -> serde_json::Value {
         "shed_bytes": pressure.shed_bytes,
         "abort_bytes": pressure.abort_bytes,
         "shed_state": pressure.shed_state,
+        "sample_ms": crate::in_flight::memory_sample_ms(),
+        "last_trip": last_trip,
         "source": pressure.source,
         "compute_origin": budget.as_ref().map(|b| &b.compute_origin),
         "notes": pressure.notes,

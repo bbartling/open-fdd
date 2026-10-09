@@ -25,7 +25,10 @@
 
 | ID | Status | Symptom | Evidence | Next |
 |----|--------|---------|----------|------|
-| **#1179 central OOM** | **OPEN** (patch train 3.5.69) | ACME analytics/AFDD `oom_killed` at cgroup hard limit on `sha-b5c4e9c` | `reports/crash_rca_b5c4e9c.md` · restarts #2/#3/#4 | FairSpillPool + bounded queries + chunked AFDD + shed/abort; local `scripts/gates/afdd_oom_regression.sh`; close only on Grok live zero `oom_killed` |
+| **#1179 central OOM** | **PATCHED** (3.5.70 train) | bas-vs-web/analytics still spiked to 23.7 GB on 3.5.69; guard never left `ok` | `CURSOR_HANDOFF_45b362a` · `railway_crash_20261009T*` | In-flight cgroup sampler + stream cancel; bas-vs-web max span; host MemTotal on unlimited cgroups; Grok prove on `sha-*` 3.5.70 |
+| **#1192 run-now latency** | **PATCHED** (3.5.70) | Synthetic-59 run-now 90s `cancelled` (global watermark) | MEGA wave M 20261009 | Scoped historian watermark + `no_data` short-circuit; gate 44 budget |
+| **avg(Utf8View) plots** | **PATCHED** (3.5.70) | Overview/FDD planning errors on Utf8View columns | Railway UI + handoff | `history_role_numeric_sql` + series downsample; gates 43/45 comb |
+| **#1179 central OOM (3.5.69)** | **OPEN** (superseded row above) | ACME analytics/AFDD `oom_killed` at cgroup hard limit on `sha-b5c4e9c` | `reports/crash_rca_b5c4e9c.md` · restarts #2/#3/#4 | See 3.5.70 row — close #1179 only after Grok live zero `oom_killed` |
 | **sensor-faults-matrix** | **CLOSED** (Wave K / 3.4.0 / gate 10) | Was: Lakeside Sensor faults empty | Stress `20260910T021557Z`: matched=71 rows=71 | — |
 | **mqtt-bacnet-quad-points** | **CLOSED** (Wave K / 3.4.0 / gate 10) | Was: dual-publish collapsed; RH missing | Gate 10: zone_t=135 oa_t=65 zone_rh=19 web_oa_t=34 | — |
 | **data-model-all-sites** | **CLOSED** (Wave K / 3.4.0 / gate 10) | Was: empty MQTT roles; weak cross-site | Gate 10: mapping roles>0; cross-site fail_closed | — |

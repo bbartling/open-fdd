@@ -14,6 +14,14 @@ use fdd_sql::{
 use fdd_store::HistorianConfig;
 use serde_json::{json, Value};
 
+/// Coerce historian column to DOUBLE for AVG downsample (Utf8View-safe).
+fn series_numeric_sql(col: &str) -> String {
+    if col.is_empty() || !col.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return "CAST(NULL AS DOUBLE)".to_string();
+    }
+    format!("try_cast(trim(CAST({col} AS VARCHAR)) AS DOUBLE)")
+}
+
 fn sql_rules_dir() -> PathBuf {
     if let Ok(p) = std::env::var("OPENFDD_SQL_RULES_DIR") {
         return PathBuf::from(p);
@@ -962,7 +970,10 @@ LIMIT {limit}
             cols = columns.join(", "),
             cols_avg = columns
                 .iter()
-                .map(|c| format!("AVG({c}) AS {c}"))
+                .map(|c| {
+                    let n = series_numeric_sql(c);
+                    format!("AVG({n}) AS {c}")
+                })
                 .collect::<Vec<_>>()
                 .join(", "),
             eq = escaped_equipment,
