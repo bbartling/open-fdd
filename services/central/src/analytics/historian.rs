@@ -4635,8 +4635,8 @@ mod tests {
             Some(chrono::Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()),
             Some(chrono::Utc.with_ymd_and_hms(2026, 1, 2, 0, 0, 0).unwrap()),
         )
-            .await
-            .unwrap();
+        .await
+        .unwrap();
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
         assert!(out.is_none());
     }
