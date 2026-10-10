@@ -224,8 +224,18 @@ def main() -> int:
     skips = 0
 
     tok = login(base, user, password)
-    start = (datetime.now(timezone.utc) - timedelta(days=args.lookback_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    window_body = {"building_id": bid, "max_points": 4000, "start": start}
+    start = (os.environ.get("OPENFDD_GATE_START") or "").strip()
+    if not start:
+        start = (datetime.now(timezone.utc) - timedelta(days=args.lookback_days)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+    window_body: dict = {"building_id": bid, "max_points": 4000, "start": start}
+    end = (os.environ.get("OPENFDD_GATE_END") or "").strip()
+    if end:
+        window_body["end"] = end
+    # Prefer fresh compute for planning comb — cached empty must not greenwash.
+    if os.environ.get("OPENFDD_GATE_REFRESH", "1").strip() not in ("0", "false", "False"):
+        window_body["refresh"] = True
 
     code, health = http_json("GET", f"{base}/api/health", token=tok, timeout=30.0)
     (art / "health.json").write_text(json.dumps({"http": code, "body": health}, indent=2))
