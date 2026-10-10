@@ -56,6 +56,26 @@ pub fn ingest_building(
     ingest_building_with_batch_hook(data_root, building_id, out_dir, |_, _| Ok(()))
 }
 
+/// Re-ingest only the named equipment (exact ids after package validation).
+///
+/// Soft-OPEN 370 T1d / M70-04: append/roles must not rewrite untouched equipment
+/// or re-run weather ingest when only equipment CSVs/roles changed.
+pub fn ingest_building_equipment(
+    data_root: &Path,
+    building_id: &str,
+    out_dir: &Path,
+    equipment_ids: &[String],
+) -> Result<IngestReport> {
+    ingest_building_filtered(
+        data_root,
+        building_id,
+        out_dir,
+        Some(equipment_ids),
+        false,
+        |_, _| Ok(()),
+    )
+}
+
 /// Same as [`ingest_building`], but invokes `on_batch` once per equipment after the
 /// CSV→Arrow batch is built and parquet is written — so callers can dual-write
 /// Feather (or other stores) without re-reading parquet.
@@ -63,6 +83,20 @@ pub fn ingest_building_with_batch_hook<F>(
     data_root: &Path,
     building_id: &str,
     out_dir: &Path,
+    on_batch: F,
+) -> Result<IngestReport>
+where
+    F: FnMut(&str, &RecordBatch) -> Result<()>,
+{
+    ingest_building_filtered(data_root, building_id, out_dir, None, true, on_batch)
+}
+
+fn ingest_building_filtered<F>(
+    data_root: &Path,
+    building_id: &str,
+    out_dir: &Path,
+    equipment_filter: Option<&[String]>,
+    include_weather: bool,
     mut on_batch: F,
 ) -> Result<IngestReport>
 where
@@ -75,6 +109,11 @@ where
     let mut total_rows = 0u64;
 
     for eq in &validation.equipment {
+        if let Some(filter) = equipment_filter {
+            if !filter.iter().any(|id| id == &eq.equipment_id) {
+                continue;
+            }
+        }
         let t0 = Instant::now();
         let (batch, rows) =
             read_csv_batch(Path::new(&eq.history_path), Path::new(&eq.columns_path))?;
@@ -125,17 +164,28 @@ where
         serde_json::to_string_pretty(&manifest_sidecar)?,
     )?;
 
-    let staged = out_dir.parent().unwrap_or(out_dir).join("weather_staging");
-    let weather_root = if staged.join("history_wide.csv").is_file() {
-        staged
-    } else {
-        data_root.join("weather")
-    };
-    let (weather_ingested, weather_rows, weather_error) =
+    let (weather_ingested, weather_rows, weather_error) = if include_weather {
+        let staged = out_dir.parent().unwrap_or(out_dir).join("weather_staging");
+        let weather_root = if staged.join("history_wide.csv").is_file() {
+            staged
+        } else {
+            data_root.join("weather")
+        };
         match ingest_weather_tree(&weather_root, out_dir) {
             Ok(n) => (n > 0, Some(n), None),
             Err(e) => (false, None, Some(e.to_string())),
-        };
+        }
+    } else {
+        (false, None, None)
+    };
+
+    if let Some(filter) = equipment_filter {
+        if timings.is_empty() {
+            anyhow::bail!(
+                "no matching equipment to ingest for filter {filter:?} under building {building_id}"
+            );
+        }
+    }
 
     Ok(IngestReport {
         building_id: building_id.to_string(),
@@ -706,6 +756,55 @@ mod tests {
         let pq = out.join("building=BUILDING_100/equipment=AHU_1/history.parquet");
         assert!(pq.is_file());
         assert!(meta_path_for(&pq).is_file());
+    }
+
+    #[test]
+    fn ingest_building_equipment_skips_untouched_and_weather() {
+        let tmp = TempDir::new().unwrap();
+        let data = tmp.path().join("SITE_SCOPED");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        for (eq, sat) in [("AHU_A", "10.0"), ("AHU_B", "20.0")] {
+            let dir = data.join(eq);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(
+                dir.join("columns.csv"),
+                "col,point_role\nsat,supply_air_temp\n",
+            )
+            .unwrap();
+            let mut f = std::fs::File::create(dir.join("history_wide.csv")).unwrap();
+            writeln!(f, "timestamp_utc,sat").unwrap();
+            writeln!(f, "2026-01-01T00:00:00Z,{sat}").unwrap();
+        }
+        let out = tmp.path().join("parquet");
+        // Seed both partitions so we can prove the scoped pass leaves B alone.
+        ingest_building(tmp.path(), "SITE_SCOPED", &out).unwrap();
+        let a_meta =
+            meta_path_for(&out.join("building=SITE_SCOPED/equipment=AHU_A/history.parquet"));
+        let b_meta =
+            meta_path_for(&out.join("building=SITE_SCOPED/equipment=AHU_B/history.parquet"));
+        let b_before = std::fs::read_to_string(&b_meta).unwrap();
+        // Touch A CSV only.
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(data.join("AHU_A/history_wide.csv"))
+            .unwrap();
+        writeln!(f, "2026-01-01T00:05:00Z,11.0").unwrap();
+
+        let report =
+            ingest_building_equipment(tmp.path(), "SITE_SCOPED", &out, &["AHU_A".to_string()])
+                .unwrap();
+        assert_eq!(report.equipment_written, 1);
+        assert_eq!(report.total_rows, 2);
+        assert!(!report.weather_ingested);
+        assert!(report.weather_rows.is_none());
+        assert_eq!(
+            std::fs::read_to_string(&b_meta).unwrap(),
+            b_before,
+            "untouched equipment parquet meta must not rewrite"
+        );
+        let a_after = std::fs::read_to_string(&a_meta).unwrap();
+        assert!(a_after.contains("\"row_count\":2") || a_after.contains("\"row_count\": 2"));
     }
 
     #[test]
