@@ -28,6 +28,7 @@
 | **M70-01 cancel lifecycle** | **OPEN** (Soft-OPEN 370 T1b / #1198) | Thread-local cancel + Drop detaches watchdog; AFDD bridge no success stop | SOURCE-CONFIRMED · #1198 | LIVE tip prove drain |
 | **M70-02 cancel/permit race** | **OPEN** (Soft-OPEN 370 T1b / #1198) | Cancel checked after stream await; AFDD permit/scope released while blocking worker continues | SOURCE-CONFIRMED · #1198 | LIVE mid-request trip |
 | **M70-03 stage budgets** | **OPEN** (Soft-OPEN 370 T1c) | `query_memory_bytes` advertised not enforced; stages escape pool | SOURCE-CONFIRMED runtime/budget | Materialization respects QUERY_MEMORY_MB (#1199); residual per-run DF pool |
+| **GHCR-370-fmt** | **PATCHED** (Soft-OPEN 370 / #1205) | GHCR stack publish Format check FAIL on `35d5df0` / 3.5.71 | LIVE CI `38079750552` | #1205 `be9467ca` fmt; await re-publish |
 | **M70-04 append rebuild** | **OPEN** (Soft-OPEN 370 T1d / #1200) | Append loaded full CSV history + full-building re-ingest | SOURCE-CONFIRMED → #1200 streaming merge + scoped ingest | LIVE tip prove append under QUERY_MEMORY; residual true Parquet delta partitions |
 | **M70-05 queues/receipts** | **OPEN** (Soft-OPEN 370 T1e) | Unbounded writer channel; resident committed receipts | SOURCE-CONFIRMED → bounded sync_channel + micro-batch byte budget + resident compact/shrink | LIVE tip prove; residual edge spool paging |
 | **M70-06 cache/serialize** | **OPEN** (Soft-OPEN 370 T1e) | Cache hit/miss serialize outside compute guard | SOURCE-CONFIRMED → hit admit + respond serialize admit | LIVE tip prove under pressure |
