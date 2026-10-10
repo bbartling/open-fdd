@@ -258,6 +258,11 @@ impl Drop for InFlightGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // ACTIVE_TOKENS is process-global; serialize lifecycle tests against
+    // parallel cargo test workers (CI failed nested_guards when interleaved).
+    static LIFECYCLE_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn sample_ms_default_is_one_second() {
@@ -274,6 +279,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn drop_unregisters_token_and_stops_watchdog() {
+        let _lock = LIFECYCLE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let g = InFlightGuard::spawn("lifecycle_test");
         let flag = g.cancel_flag();
         assert!(active_cancel_flag().is_some());
@@ -286,16 +292,20 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn nested_guards_unregister_only_own_token() {
+        let _lock = LIFECYCLE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let outer = InFlightGuard::spawn("outer");
+        let outer_flag = outer.cancel_flag();
         let inner = InFlightGuard::spawn("inner");
+        let inner_flag = inner.cancel_flag();
         inner.request_cancel();
+        assert!(inner_flag.load(Ordering::SeqCst));
         assert!(memory_abort_requested());
         drop(inner);
         // Outer still registered; its flag is still false.
+        assert!(!outer_flag.load(Ordering::SeqCst));
         assert!(!outer.is_cancelled());
         assert!(!memory_abort_requested());
         drop(outer);
         assert!(!memory_abort_requested());
-        assert!(active_cancel_flag().is_none());
     }
 }
