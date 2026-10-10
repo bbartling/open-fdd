@@ -1201,6 +1201,13 @@ pub const RUNTIME_DEFAULT_LOOKBACK_DAYS: i64 = 7;
 /// Default lookback for BAS-vs-web and other hive chart queries (#1179).
 pub const BAS_VS_WEB_DEFAULT_LOOKBACK_DAYS: i64 = RUNTIME_DEFAULT_LOOKBACK_DAYS;
 
+/// Default lookback for economizer historian path (Soft-OPEN 370 T1f / M70-07).
+/// Full-history GROUP BY / LEAD over large hives is refused without an explicit window.
+pub const ECONOMIZER_DEFAULT_LOOKBACK_DAYS: i64 = 14;
+
+/// Default lookback for VAV health matrix historian path (M70-07).
+pub const VAV_HEALTH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
+
 /// Max allowed analytics span when `refresh:true` over a hive (#1179).
 /// Wider windows must page by month or pass an explicit bounded start/end.
 pub const ANALYTICS_MAX_LOOKBACK_DAYS: i64 = 90;
@@ -1951,6 +1958,8 @@ pub async fn economizer_from_history(
     dt_min_f: f64,
     building_id: Option<&str>,
     max_points: usize,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
         return Ok(None);
@@ -1987,6 +1996,16 @@ pub async fn economizer_from_history(
     let Some(ts_col) = pick_ts_col(&cols) else {
         return Ok(None);
     };
+    let (win_start, win_end) =
+        resolve_analytics_window(start, end, ECONOMIZER_DEFAULT_LOOKBACK_DAYS)
+            .map_err(|e| anyhow::anyhow!(e))?;
+    let win_end = win_end.unwrap_or_else(Utc::now);
+    // M70-07: never scan the full hive for economizer counts/plots.
+    let ts_window = format!(
+        " AND CAST({ts_col} AS TIMESTAMP) >= TIMESTAMP '{}' AND CAST({ts_col} AS TIMESTAMP) < TIMESTAMP '{}'",
+        win_start.to_rfc3339(),
+        win_end.to_rfc3339()
+    );
     let dt_min = dt_min_f.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
     let oat_expr = history_temp_sql(oat_col);
@@ -2018,7 +2037,7 @@ WITH base AS (
     {damper_proj},
     {sat_proj}
   FROM history
-  WHERE equipment_id IS NOT NULL{eq_filter}
+  WHERE equipment_id IS NOT NULL{eq_filter}{ts_window}
 )
 SELECT
   equipment_id,
@@ -2066,7 +2085,7 @@ WITH base AS (
     {damper_proj},
     CASE WHEN ({on_sql}) THEN 1 ELSE 0 END AS fan_on_i
   FROM history
-  WHERE equipment_id IS NOT NULL{eq_filter}
+  WHERE equipment_id IS NOT NULL{eq_filter}{ts_window}
 ),
 fan_pts AS (
   SELECT
@@ -2165,6 +2184,12 @@ LIMIT {limit}
         "economizer fan-on counts + free-cooling plot points from historian DataFusion \
          (vibe19 Overview chart parity)"
             .into(),
+        format!(
+            "economizer window {} .. {} (default lookback {}d when start omitted)",
+            win_start.to_rfc3339(),
+            win_end.to_rfc3339(),
+            ECONOMIZER_DEFAULT_LOOKBACK_DAYS
+        ),
     ];
     if points.is_empty() {
         warnings.push("no fan-on economizer points available for scatter/MAT/temps plots".into());
@@ -2185,6 +2210,8 @@ LIMIT {limit}
         "oat_column": oat_col,
         "rat_column": rat_col,
         "mat_column": mat_col,
+        "window_start_utc": win_start.to_rfc3339(),
+        "window_end_utc": win_end.to_rfc3339(),
     }));
     Ok(Some(env))
 }
@@ -4487,14 +4514,30 @@ mod tests {
         }
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let b50 = economizer_from_history(None, 10.0, Some("BUILDING_50"), 4000)
-            .await
-            .unwrap()
-            .expect("B50 economizer envelope");
-        let b100 = economizer_from_history(None, 10.0, Some("BUILDING_100"), 4000)
-            .await
-            .unwrap()
-            .expect("B100 economizer envelope");
+        let win_start = chrono::Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        let win_end = chrono::Utc.with_ymd_and_hms(2026, 1, 2, 0, 0, 0).unwrap();
+        let b50 = economizer_from_history(
+            None,
+            10.0,
+            Some("BUILDING_50"),
+            4000,
+            Some(win_start),
+            Some(win_end),
+        )
+        .await
+        .unwrap()
+        .expect("B50 economizer envelope");
+        let b100 = economizer_from_history(
+            None,
+            10.0,
+            Some("BUILDING_100"),
+            4000,
+            Some(win_start),
+            Some(win_end),
+        )
+        .await
+        .unwrap()
+        .expect("B100 economizer envelope");
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
 
         // Each scope sees only its own AHU — no cross-building bleed.
@@ -4539,10 +4582,17 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_50", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = economizer_from_history(None, 10.0, Some("BUILDING_50"), 4000)
-            .await
-            .unwrap()
-            .expect("economizer with damper");
+        let env = economizer_from_history(
+            None,
+            10.0,
+            Some("BUILDING_50"),
+            4000,
+            Some(chrono::Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()),
+            Some(chrono::Utc.with_ymd_and_hms(2026, 1, 2, 0, 0, 0).unwrap()),
+        )
+        .await
+        .unwrap()
+        .expect("economizer with damper");
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
 
         assert_eq!(env.engine, DF_ENGINE);
@@ -4577,7 +4627,14 @@ mod tests {
 
         // Requesting a site that was never ingested must not fall back to the
         // whole tree (that would leak BUILDING_50 into a BUILDING_999 scope).
-        let out = economizer_from_history(None, 10.0, Some("BUILDING_999"), 4000)
+        let out = economizer_from_history(
+            None,
+            10.0,
+            Some("BUILDING_999"),
+            4000,
+            Some(chrono::Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()),
+            Some(chrono::Utc.with_ymd_and_hms(2026, 1, 2, 0, 0, 0).unwrap()),
+        )
             .await
             .unwrap();
         std::env::remove_var("OPENFDD_PARQUET_ROOT");

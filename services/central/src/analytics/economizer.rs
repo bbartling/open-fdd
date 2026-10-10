@@ -275,6 +275,8 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
             dt_min,
             req.query.building_id.as_deref(),
             req.query.max_points.unwrap_or(4000),
+            req.query.start,
+            req.query.end,
         )
         .await
         {
