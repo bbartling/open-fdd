@@ -712,14 +712,25 @@ enum WriterCommand {
 /// Owns every canonical live historian and performs Parquet publication on one
 /// blocking thread. Request handlers await the reply; they do not publish from
 /// the async runtime or the shared Tokio blocking pool.
+///
+/// Soft-OPEN 370 T1e / M70-05: the command queue is a bounded `sync_channel`.
+/// Full queue returns honest backpressure instead of growing RAM unboundedly.
 pub struct LiveWriter {
-    tx: std::sync::mpsc::Sender<WriterCommand>,
+    tx: std::sync::mpsc::SyncSender<WriterCommand>,
     thread: Option<std::thread::JoinHandle<()>>,
+}
+
+fn writer_queue_capacity() -> usize {
+    std::env::var("OPENFDD_LIVE_WRITER_QUEUE_CAP")
+        .ok()
+        .and_then(|raw| raw.parse().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(64)
 }
 
 impl LiveWriter {
     pub fn start() -> Self {
-        let (tx, rx) = std::sync::mpsc::channel();
+        let (tx, rx) = std::sync::mpsc::sync_channel(writer_queue_capacity());
         let thread = std::thread::Builder::new()
             .name("openfdd-live-writer".into())
             .spawn(move || writer_loop(rx))
@@ -730,19 +741,29 @@ impl LiveWriter {
         }
     }
 
+    fn enqueue(&self, command: WriterCommand) -> Result<()> {
+        match self.tx.try_send(command) {
+            Ok(()) => Ok(()),
+            Err(std::sync::mpsc::TrySendError::Full(_)) => {
+                bail!("live historian writer queue full (OPENFDD_LIVE_WRITER_QUEUE_CAP)")
+            }
+            Err(std::sync::mpsc::TrySendError::Disconnected(_)) => {
+                bail!("live historian writer stopped")
+            }
+        }
+    }
+
     pub async fn ingest(
         &self,
         scope: &str,
         envelope: &TelemetryEnvelope,
     ) -> Result<LiveHistorianIngest> {
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-        self.tx
-            .send(WriterCommand::Ingest {
-                scope: scope.to_string(),
-                envelope: envelope.clone(),
-                reply: reply_tx,
-            })
-            .map_err(|_| anyhow!("live historian writer stopped"))?;
+        self.enqueue(WriterCommand::Ingest {
+            scope: scope.to_string(),
+            envelope: envelope.clone(),
+            reply: reply_tx,
+        })?;
         reply_rx
             .await
             .map_err(|_| anyhow!("live historian writer dropped the reply"))?
@@ -750,12 +771,10 @@ impl LiveWriter {
 
     pub async fn flush(&self, graceful: bool) -> Result<LiveHistorianIngest> {
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-        self.tx
-            .send(WriterCommand::Flush {
-                graceful,
-                reply: reply_tx,
-            })
-            .map_err(|_| anyhow!("live historian writer stopped"))?;
+        self.enqueue(WriterCommand::Flush {
+            graceful,
+            reply: reply_tx,
+        })?;
         reply_rx
             .await
             .map_err(|_| anyhow!("live historian writer dropped the reply"))?
@@ -763,12 +782,10 @@ impl LiveWriter {
 
     pub async fn publish_pending(&self, scope: &str) -> Result<LiveHistorianIngest> {
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-        self.tx
-            .send(WriterCommand::PublishPending {
-                scope: scope.to_string(),
-                reply: reply_tx,
-            })
-            .map_err(|_| anyhow!("live historian writer stopped"))?;
+        self.enqueue(WriterCommand::PublishPending {
+            scope: scope.to_string(),
+            reply: reply_tx,
+        })?;
         reply_rx
             .await
             .map_err(|_| anyhow!("live historian writer dropped the reply"))?
@@ -777,9 +794,7 @@ impl LiveWriter {
     #[cfg(test)]
     pub async fn runs_without_tokio_context(&self) -> Result<bool> {
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-        self.tx
-            .send(WriterCommand::Probe { reply: reply_tx })
-            .map_err(|_| anyhow!("live historian writer stopped"))?;
+        self.enqueue(WriterCommand::Probe { reply: reply_tx })?;
         reply_rx
             .await
             .map_err(|_| anyhow!("live historian writer dropped the reply"))
@@ -788,6 +803,8 @@ impl LiveWriter {
 
 impl Drop for LiveWriter {
     fn drop(&mut self) {
+        // Shutdown may block briefly so the worker can drain; try_send would
+        // drop Shutdown under load and leave the thread running.
         let _ = self.tx.send(WriterCommand::Shutdown);
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();

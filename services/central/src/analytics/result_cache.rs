@@ -118,6 +118,10 @@ pub async fn respond(
     compute: impl AsyncFnOnce() -> AnalyticsEnvelope,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let served = serve(query_id, query_version, req, compute).await?;
+    // M70-06: JSON construction/serialization is charged to compute admission
+    // (serve may have already dropped its permit after SQL/cache work).
+    let _permit = fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Analytics)
+        .ok_or_else(analytics_admission_busy)?;
     Ok(json_body(&served))
 }
 
@@ -193,6 +197,10 @@ pub async fn serve_with(
     let plan = read_plan(freshness, req.refresh, on_stale);
     if plan.serve_cached {
         if let Some((table, prov)) = cached {
+            // M70-06: cache hits still clone/build response rows — admit first.
+            let _permit =
+                fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Analytics)
+                    .ok_or_else(analytics_admission_busy)?;
             let envelope = envelope_from_table(&table, &prov, req);
             let cache = cache_status(true, plan.stale, started, &key, &prov, historian_order);
             return Ok(ServedAnalytics { envelope, cache });
