@@ -263,6 +263,7 @@ mod tests {
                 hard_limit_bytes: hard,
                 current_bytes: Some(0),
                 high_bytes: None,
+                peak_bytes: None,
                 source: "test".into(),
                 hierarchy_complete: hard.is_some(),
                 notes: vec![],

@@ -16,6 +16,7 @@ fn disc(hard: u64, current: u64) -> CapacityDiscovery {
             hard_limit_bytes: Some(hard),
             current_bytes: Some(current),
             high_bytes: None,
+            peak_bytes: None,
             source: "qual_fixture".into(),
             hierarchy_complete: true,
             notes: vec![],

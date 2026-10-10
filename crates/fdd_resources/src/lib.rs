@@ -13,7 +13,10 @@ pub use admission::{
     acquire_compute, try_acquire_compute, ComputeClass, ComputePermit, DEFAULT_COMPUTE_MAX_INFLIGHT,
 };
 pub use budget::{ComputeBudget, ReserveEnvelopes};
-pub use cgroup::{discover_capacity, CapacityDiscovery, CpuDiscovery, MemoryDiscovery};
+pub use cgroup::{
+    discover_capacity, CapacityDiscovery, CpuDiscovery, MemoryDiscovery,
+    CGROUP_V1_UNLIMITED_SENTINEL,
+};
 pub use in_flight::{
     active_cancel_flag, last_memory_trip, memory_abort_requested, memory_sample_ms, CancelToken,
     InFlightGuard, MemoryTrip,

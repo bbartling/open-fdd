@@ -88,7 +88,15 @@ pub fn evaluate_pressure(discovery: &CapacityDiscovery) -> PressureSnapshot {
     let mut notes = discovery.memory.notes.clone();
     let hard = discovery.memory.hard_limit_bytes;
     let current = discovery.memory.current_bytes;
-    let peak = discovery.memory.high_bytes;
+    // M70-09: peak is memory.peak / max_usage only — never memory.high or current.
+    let peak = discovery.memory.peak_bytes;
+    let high = discovery.memory.high_bytes;
+    if peak.is_none() {
+        notes.push("peak_bytes unavailable (not substituted from memory.high/current)".into());
+    }
+    if high.is_some() {
+        notes.push("memory.high is a throttle threshold, reported separately from peak".into());
+    }
     let shed_f = shed_fraction();
     let abort_f = abort_fraction();
     let shed_bytes = hard.map(|h| ((h as f64) * shed_f).round() as u64);
@@ -125,7 +133,7 @@ pub fn evaluate_pressure(discovery: &CapacityDiscovery) -> PressureSnapshot {
         percent_used: percent.map(|p| (p * 10.0).round() / 10.0),
         hard_limit_bytes: hard,
         current_bytes: current,
-        peak_bytes: peak.or(current),
+        peak_bytes: peak,
         shed_bytes,
         abort_bytes,
         source: discovery.memory.source.clone(),
@@ -143,8 +151,14 @@ pub fn memory_budget_json() -> serde_json::Value {
         "hard_limit_bytes": pressure.hard_limit_bytes,
         "pool_bytes": budget.as_ref().map(|b| b.compute_memory_bytes),
         "query_bytes": budget.as_ref().map(|b| b.query_memory_bytes),
+        // query_bytes is an advertised per-run ceiling; DataFusion intermediates
+        // are enforced via shared FairSpillPool + materialization budgets until
+        // a dedicated per-run pool limiter lands (M70-03 residual).
+        "query_bytes_enforced": "materialization_and_shared_pool",
         "current_bytes": pressure.current_bytes,
         "peak_bytes": pressure.peak_bytes,
+        "high_bytes": discovery.memory.high_bytes,
+        "peak_available": pressure.peak_bytes.is_some(),
         "shed_bytes": pressure.shed_bytes,
         "abort_bytes": pressure.abort_bytes,
         "shed_state": pressure.shed_state,
@@ -152,6 +166,7 @@ pub fn memory_budget_json() -> serde_json::Value {
         "last_trip": last_trip,
         "source": pressure.source,
         "compute_origin": budget.as_ref().map(|b| &b.compute_origin),
+        "hierarchy_complete": discovery.memory.hierarchy_complete,
         "notes": pressure.notes,
     })
 }
@@ -168,6 +183,7 @@ mod tests {
                 hard_limit_bytes: Some(hard),
                 current_bytes: Some(current),
                 high_bytes: None,
+                peak_bytes: None,
                 source: "test".into(),
                 hierarchy_complete: true,
                 notes: vec![],
@@ -216,5 +232,17 @@ mod tests {
         assert_eq!(snap.shed_state, ShedState::Ok);
         assert!(!snap.defer_expensive_compute);
         assert!(!snap.abort_in_flight);
+    }
+
+    #[test]
+    fn peak_not_substituted_from_high_or_current() {
+        let mut d = disc(1000, 500);
+        d.memory.high_bytes = Some(700);
+        d.memory.peak_bytes = Some(900);
+        let snap = evaluate_pressure(&d);
+        assert_eq!(snap.peak_bytes, Some(900));
+        d.memory.peak_bytes = None;
+        let snap2 = evaluate_pressure(&d);
+        assert_eq!(snap2.peak_bytes, None, "must not fall back to current/high");
     }
 }

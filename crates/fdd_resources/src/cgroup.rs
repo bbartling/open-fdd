@@ -7,12 +7,19 @@ use serde::Serialize;
 
 /// Memory capacity discovery result. Never prefers host RAM over a tighter
 /// container ceiling when the hierarchy is visible.
+/// Linux cgroup v1 PAGE_COUNTER_MAX × PAGE_SIZE sentinel on 64-bit 4 KiB pages.
+/// Slightly below `u64::MAX/2`; treating only `>= u64::MAX/2` as unlimited misses it (M70-09).
+pub const CGROUP_V1_UNLIMITED_SENTINEL: u64 = 9_223_372_036_854_771_712;
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct MemoryDiscovery {
     pub available: bool,
     pub hard_limit_bytes: Option<u64>,
     pub current_bytes: Option<u64>,
+    /// Throttle threshold (`memory.high`) — not a measured peak.
     pub high_bytes: Option<u64>,
+    /// Historical peak from `memory.peak` when available; never substituted from high/current.
+    pub peak_bytes: Option<u64>,
     pub source: String,
     pub hierarchy_complete: bool,
     pub notes: Vec<String>,
@@ -97,6 +104,7 @@ fn discover_memory(cgroup_override: Option<&Path>, proc_root: &Path) -> MemoryDi
         hard_limit_bytes: host,
         current_bytes: None,
         high_bytes: None,
+        peak_bytes: None,
         source: if host.is_some() {
             "host_meminfo".into()
         } else {
@@ -125,8 +133,19 @@ fn read_cgroup_v2_memory(
     let current = read_u64_file(&current_path);
     let max_raw = fs::read_to_string(root.join("memory.max")).ok();
     let high_raw = fs::read_to_string(root.join("memory.high")).ok();
-    let hard = max_raw.as_deref().and_then(parse_cgroup_limit);
+    let peak = read_u64_file(&root.join("memory.peak"));
+    let leaf_hard = max_raw.as_deref().and_then(parse_cgroup_limit);
     let high = high_raw.as_deref().and_then(parse_cgroup_limit);
+    // Effective hard limit is the tightest finite memory.max on the visible
+    // ancestor chain (M70-09). Sibling headroom is still incomplete without
+    // ancestor usage; mark hierarchy_complete only when a finite limit exists.
+    let (hard, ancestor_note) = effective_v2_hard_limit(root, leaf_hard);
+    if let Some(note) = ancestor_note {
+        notes.push(note);
+    }
+    if peak.is_none() {
+        notes.push("memory.peak unavailable — peak_bytes left unset (not high/current)".into());
+    }
     if hard.is_none() {
         notes.push("cgroup v2 memory.max is max/unlimited or unreadable".into());
         if let Some(host) = host_meminfo(proc_root) {
@@ -138,8 +157,10 @@ fn read_cgroup_v2_memory(
                 hard_limit_bytes: Some(host),
                 current_bytes: current,
                 high_bytes: high,
+                peak_bytes: peak,
                 source: "host_meminfo".into(),
-                hierarchy_complete: true,
+                // Unlimited leaf under host fallback is not a complete hierarchy proof.
+                hierarchy_complete: false,
                 notes: notes.clone(),
             });
         }
@@ -149,10 +170,47 @@ fn read_cgroup_v2_memory(
         hard_limit_bytes: hard,
         current_bytes: current,
         high_bytes: high,
+        peak_bytes: peak,
         source: format!("cgroup_v2:{}", root.display()),
         hierarchy_complete: hard.is_some(),
         notes: notes.clone(),
     })
+}
+
+/// Walk parents for the smallest finite `memory.max` (hierarchical constraint).
+fn effective_v2_hard_limit(leaf: &Path, leaf_hard: Option<u64>) -> (Option<u64>, Option<String>) {
+    let mut best = leaf_hard;
+    let mut walked = 0u32;
+    let mut cur = leaf.to_path_buf();
+    for _ in 0..32 {
+        let Some(parent) = cur.parent().map(Path::to_path_buf) else {
+            break;
+        };
+        if parent == cur {
+            break;
+        }
+        let parent_max = fs::read_to_string(parent.join("memory.max"))
+            .ok()
+            .as_deref()
+            .and_then(parse_cgroup_limit);
+        if let Some(p) = parent_max {
+            walked += 1;
+            best = Some(best.map(|b| b.min(p)).unwrap_or(p));
+        }
+        // Stop at filesystem root or when memory.current disappears (left controller tree).
+        if !parent.join("memory.current").is_file() && !parent.join("memory.max").is_file() {
+            break;
+        }
+        cur = parent;
+    }
+    let note = if walked > 0 {
+        Some(format!(
+            "effective hard limit uses min(leaf, {walked} ancestor memory.max values)"
+        ))
+    } else {
+        None
+    };
+    (best, note)
 }
 
 fn read_cgroup_v1_memory(
@@ -176,14 +234,18 @@ fn read_cgroup_v1_memory(
     };
     let current = read_u64_file(&usage);
     let hard = read_u64_file(&limit).and_then(|n| {
-        // v1 unlimited sentinel is near u64::MAX
-        if n >= u64::MAX / 2 {
-            notes.push("cgroup v1 memory.limit_in_bytes is unlimited sentinel".into());
+        // Real kernel sentinel is PAGE_COUNTER_MAX*PAGE_SIZE; also treat >= MAX/2.
+        if n >= CGROUP_V1_UNLIMITED_SENTINEL || n >= u64::MAX / 2 {
+            notes.push(format!(
+                "cgroup v1 memory.limit_in_bytes is unlimited sentinel ({n})"
+            ));
             None
         } else {
             Some(n)
         }
     });
+    let peak = read_u64_file(&root.join("memory.max_usage_in_bytes"))
+        .or_else(|| read_u64_file(&root.join("memory/memory.max_usage_in_bytes")));
     if hard.is_none() {
         if let Some(host) = host_meminfo(proc_root) {
             notes.push(format!(
@@ -194,8 +256,9 @@ fn read_cgroup_v1_memory(
                 hard_limit_bytes: Some(host),
                 current_bytes: current,
                 high_bytes: None,
+                peak_bytes: peak,
                 source: "host_meminfo".into(),
-                hierarchy_complete: true,
+                hierarchy_complete: false,
                 notes: notes.clone(),
             });
         }
@@ -205,6 +268,7 @@ fn read_cgroup_v1_memory(
         hard_limit_bytes: hard,
         current_bytes: current,
         high_bytes: None,
+        peak_bytes: peak,
         source: format!("cgroup_v1:{}", root.display()),
         hierarchy_complete: hard.is_some(),
         notes: notes.clone(),
@@ -470,7 +534,8 @@ mod tests {
         assert!(cap.memory.available);
         assert_eq!(cap.memory.hard_limit_bytes, Some(16_384_000 * 1024));
         assert_eq!(cap.memory.source, "host_meminfo");
-        assert!(cap.memory.hierarchy_complete);
+        // Host fallback is not a complete cgroup hierarchy proof (M70-09).
+        assert!(!cap.memory.hierarchy_complete);
     }
 
     #[test]
@@ -489,6 +554,63 @@ mod tests {
         let cap = discover_capacity_at(Some(&cg), &proc);
         assert_eq!(cap.memory.hard_limit_bytes, Some(8_192_000 * 1024));
         assert_eq!(cap.memory.source, "host_meminfo");
+    }
+
+    #[test]
+    fn v1_page_counter_max_sentinel_ignored() {
+        let tmp = TempDir::new().unwrap();
+        let cg = tmp.path().join("cg");
+        write(&cg.join("memory/memory.usage_in_bytes"), "1234\n");
+        write(
+            &cg.join("memory/memory.limit_in_bytes"),
+            &format!("{CGROUP_V1_UNLIMITED_SENTINEL}\n"),
+        );
+        let proc = tmp.path().join("proc");
+        write(&proc.join("meminfo"), "MemTotal:         8192000 kB\n");
+        write(&proc.join("cpuinfo"), "processor\t: 0\n");
+
+        let cap = discover_capacity_at(Some(&cg), &proc);
+        assert_eq!(cap.memory.hard_limit_bytes, Some(8_192_000 * 1024));
+        assert_eq!(cap.memory.source, "host_meminfo");
+        assert!(!cap.memory.hierarchy_complete);
+    }
+
+    #[test]
+    fn v2_reads_peak_separate_from_high() {
+        let tmp = TempDir::new().unwrap();
+        let cg = tmp.path().join("cg");
+        write(&cg.join("memory.current"), "500\n");
+        write(&cg.join("memory.max"), "10000\n");
+        write(&cg.join("memory.high"), "700\n");
+        write(&cg.join("memory.peak"), "900\n");
+        let proc = tmp.path().join("proc");
+        write(&proc.join("meminfo"), "MemTotal:       999999999 kB\n");
+        write(&proc.join("cpuinfo"), "processor\t: 0\n");
+
+        let cap = discover_capacity_at(Some(&cg), &proc);
+        assert_eq!(cap.memory.current_bytes, Some(500));
+        assert_eq!(cap.memory.high_bytes, Some(700));
+        assert_eq!(cap.memory.peak_bytes, Some(900));
+        assert_eq!(cap.memory.hard_limit_bytes, Some(10000));
+    }
+
+    #[test]
+    fn v2_ancestor_tighter_max_wins() {
+        let tmp = TempDir::new().unwrap();
+        let parent = tmp.path().join("parent");
+        let leaf = parent.join("leaf");
+        write(&parent.join("memory.current"), "100\n");
+        write(&parent.join("memory.max"), "5000\n");
+        write(&leaf.join("memory.current"), "100\n");
+        write(&leaf.join("memory.max"), "10000\n");
+        write(&leaf.join("memory.peak"), "200\n");
+        let proc = tmp.path().join("proc");
+        write(&proc.join("meminfo"), "MemTotal:       999999999 kB\n");
+        write(&proc.join("cpuinfo"), "processor\t: 0\n");
+
+        let cap = discover_capacity_at(Some(&leaf), &proc);
+        assert_eq!(cap.memory.hard_limit_bytes, Some(5000));
+        assert_eq!(cap.memory.peak_bytes, Some(200));
     }
 
     #[test]
