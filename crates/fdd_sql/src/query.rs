@@ -35,6 +35,30 @@ pub fn result_max_bytes_from_env() -> Result<usize> {
     }
 }
 
+/// Per-run materialization ceiling: min(result max, `OPENFDD_QUERY_MEMORY_MB`).
+///
+/// This enforces the advertised query envelope on retained Arrow output stages
+/// (M70-03). DataFusion operator intermediates remain under the shared
+/// FairSpillPool; a dedicated per-run pool limiter is still residual.
+pub fn query_stage_max_bytes_from_env() -> Result<usize> {
+    let result_max = result_max_bytes_from_env()?;
+    match env::var("OPENFDD_QUERY_MEMORY_MB") {
+        Ok(raw) => {
+            let mb: u64 = raw
+                .trim()
+                .parse()
+                .map_err(|_| anyhow!("OPENFDD_QUERY_MEMORY_MB must be a positive integer"))?;
+            if mb == 0 {
+                bail!("OPENFDD_QUERY_MEMORY_MB must be greater than zero");
+            }
+            let query_bytes = usize::try_from(mb.saturating_mul(1024 * 1024))
+                .map_err(|_| anyhow!("OPENFDD_QUERY_MEMORY_MB exceeds platform address space"))?;
+            Ok(result_max.min(query_bytes))
+        }
+        Err(_) => Ok(result_max),
+    }
+}
+
 /// Execute SQL as an Arrow record-batch stream without materializing the full
 /// result set in Open-FDD.
 pub async fn stream_sql(ctx: &SessionContext, sql: &str) -> Result<SendableRecordBatchStream> {
@@ -53,7 +77,7 @@ pub async fn collect_sql_bounded(
     sql: &str,
     max_rows: usize,
 ) -> Result<Vec<RecordBatch>> {
-    let max_bytes = result_max_bytes_from_env()?;
+    let max_bytes = query_stage_max_bytes_from_env()?;
     collect_sql_budgeted(ctx, sql, max_rows, max_bytes).await
 }
 
@@ -88,7 +112,7 @@ pub async fn collect_sql_budgeted(
         bytes = bytes.saturating_add(batch_bytes);
         if bytes > max_bytes {
             bail!(
-                "SQL result exceeds byte budget of {max_bytes} (OPENFDD_RESULT_MAX_BYTES); narrow the query — refusing silent truncation"
+                "SQL result exceeds per-run stage byte budget of {max_bytes} (OPENFDD_RESULT_MAX_BYTES / OPENFDD_QUERY_MEMORY_MB); narrow the query — refusing silent truncation"
             );
         }
         if rows > max_rows {

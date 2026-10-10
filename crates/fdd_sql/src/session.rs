@@ -323,7 +323,7 @@ pub async fn run_sql_with_cancel(
     }
 
     let started = std::time::Instant::now();
-    let max_bytes = crate::query::result_max_bytes_from_env()?;
+    let max_bytes = crate::query::query_stage_max_bytes_from_env()?;
     let mut stream = crate::query::stream_sql(ctx, sql).await?;
     let mut rows = Vec::new();
     let mut columns = Vec::new();
