@@ -132,10 +132,7 @@ fn register_token(flag: &Arc<AtomicBool>) {
 
 fn unregister_token(flag: &Arc<AtomicBool>) {
     if let Ok(mut tokens) = active_tokens().lock() {
-        if let Some(pos) = tokens
-            .iter()
-            .rposition(|t| Arc::ptr_eq(t, flag))
-        {
+        if let Some(pos) = tokens.iter().rposition(|t| Arc::ptr_eq(t, flag)) {
             tokens.remove(pos);
         }
     }

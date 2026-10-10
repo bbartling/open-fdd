@@ -95,9 +95,7 @@ async fn compute_with_admission(
     let inflight = fdd_resources::InFlightGuard::spawn("analytics");
     let cancel = inflight.cancel_flag();
     let envelope = compute().await;
-    if cancel.load(std::sync::atomic::Ordering::SeqCst)
-        || fdd_resources::memory_abort_requested()
-    {
+    if cancel.load(std::sync::atomic::Ordering::SeqCst) || fdd_resources::memory_abort_requested() {
         return Err(analytics_pressure_deferred(
             &["in-flight memory watchdog aborted analytics SQL".into()],
             true,

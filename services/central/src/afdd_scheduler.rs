@@ -331,47 +331,48 @@ impl AfddSchedulerRuntime {
         let _bridge = CancelBridge::link(inflight.cancel_flag(), cancel.clone());
         let fut = self.execute_cycle_chunked(scope, "run_now", window, true, Some(cancel));
         tokio::pin!(fut);
-        let outcome =
-            match tokio::time::timeout(StdDuration::from_secs(timeout_secs), &mut fut).await {
-                Ok(result) => result,
-                Err(_) => {
-                    // Keep the future alive, set cancel, wait for cooperative stop (#1179).
-                    cancel_flag.store(true, Ordering::SeqCst);
-                    let wait = StdDuration::from_secs(
-                        std::env::var("OPENFDD_AFDD_CANCEL_WAIT_SECONDS")
-                            .ok()
-                            .and_then(|v| v.parse().ok())
-                            .filter(|v| *v > 0)
-                            .unwrap_or(15),
-                    );
-                    match tokio::time::timeout(wait, &mut fut).await {
-                        Ok(Ok(mut record)) => {
-                            record.status = "cancelled".into();
-                            record.ok = false;
-                            record.error = Some(format!(
+        let outcome = match tokio::time::timeout(StdDuration::from_secs(timeout_secs), &mut fut)
+            .await
+        {
+            Ok(result) => result,
+            Err(_) => {
+                // Keep the future alive, set cancel, wait for cooperative stop (#1179).
+                cancel_flag.store(true, Ordering::SeqCst);
+                let wait = StdDuration::from_secs(
+                    std::env::var("OPENFDD_AFDD_CANCEL_WAIT_SECONDS")
+                        .ok()
+                        .and_then(|v| v.parse().ok())
+                        .filter(|v| *v > 0)
+                        .unwrap_or(15),
+                );
+                match tokio::time::timeout(wait, &mut fut).await {
+                    Ok(Ok(mut record)) => {
+                        record.status = "cancelled".into();
+                        record.ok = false;
+                        record.error = Some(format!(
                                 "AFDD run-now exceeded OPENFDD_AFDD_RUN_NOW_TIMEOUT_SECONDS={timeout_secs}; cancelled"
                             ));
-                            Ok(record)
-                        }
-                        Ok(Err(e)) => Err(e),
-                        Err(_) => {
-                            // M70-02: do not drop fut (permit/scope) while the
-                            // blocking worker may still be running — drain to join.
-                            match fut.await {
-                                Ok(mut record) => {
-                                    record.status = "cancelled".into();
-                                    record.ok = false;
-                                    record.error = Some(format!(
+                        Ok(record)
+                    }
+                    Ok(Err(e)) => Err(e),
+                    Err(_) => {
+                        // M70-02: do not drop fut (permit/scope) while the
+                        // blocking worker may still be running — drain to join.
+                        match fut.await {
+                            Ok(mut record) => {
+                                record.status = "cancelled".into();
+                                record.ok = false;
+                                record.error = Some(format!(
                                         "AFDD run-now exceeded OPENFDD_AFDD_RUN_NOW_TIMEOUT_SECONDS={timeout_secs}; cancelled after worker drain"
                                     ));
-                                    Ok(record)
-                                }
-                                Err(e) => Err(e),
+                                Ok(record)
                             }
+                            Err(e) => Err(e),
                         }
                     }
                 }
-            };
+            }
+        };
         drop(inflight);
         outcome
     }

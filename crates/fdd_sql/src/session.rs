@@ -315,15 +315,11 @@ pub async fn run_sql_with_cancel(
     use std::sync::atomic::Ordering;
 
     let cancelled = || {
-        cancel
-            .as_ref()
-            .is_some_and(|c| c.load(Ordering::SeqCst))
+        cancel.as_ref().is_some_and(|c| c.load(Ordering::SeqCst))
             || fdd_resources::memory_abort_requested()
     };
     if cancelled() {
-        anyhow::bail!(
-            "SQL cancelled by in-flight memory watchdog (OPENFDD memory abort policy)"
-        );
+        anyhow::bail!("SQL cancelled by in-flight memory watchdog (OPENFDD memory abort policy)");
     }
 
     let started = std::time::Instant::now();
