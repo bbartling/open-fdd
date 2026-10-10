@@ -206,8 +206,62 @@ def phase_fixture_hashes(root: Path) -> PhaseResult:
     )
 
 
+def _hourly_append_chunk_from_zip(zip_path: Path) -> tuple[str, str, str]:
+    """Build one new hourly CSV row from fixture zip (harness-only; not product).
+
+    Returns (building_id, equipment_id, csv_text). Prefers typed AHU history.
+    """
+    import zipfile
+    from datetime import datetime, timedelta, timezone
+
+    with zipfile.ZipFile(zip_path) as zf:
+        candidates = [
+            n
+            for n in zf.namelist()
+            if n.endswith("/history_wide.csv") and "/AHU_" in n
+        ]
+        if not candidates:
+            candidates = [n for n in zf.namelist() if n.endswith("/history_wide.csv")]
+        if not candidates:
+            raise FileNotFoundError("no history_wide.csv in package zip")
+        # Prefer shallow AHU_* over nested paths for stable equipment_id
+        candidates.sort(key=lambda n: (n.count("/"), n))
+        hist_name = candidates[0]
+        parts = Path(hist_name).parts
+        building_id = parts[0]
+        equipment_id = parts[-2]
+        lines = zf.read(hist_name).decode("utf-8", errors="replace").splitlines()
+    if len(lines) < 2:
+        raise ValueError(f"{hist_name} has no data rows")
+    header = lines[0]
+    last = lines[-1]
+    cols = last.split(",")
+    ts_raw = cols[0].strip()
+    # Parse common package timestamps; advance one hour for a fresh append row.
+    ts = None
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S%z",
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%d %H:%M:%S+00:00",
+    ):
+        try:
+            fixed = ts_raw.replace("+00:00", "+0000") if fmt.endswith("%z") else ts_raw
+            ts = datetime.strptime(fixed, fmt)
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            break
+        except ValueError:
+            continue
+    if ts is None:
+        ts = datetime(2026, 7, 17, 11, 0, tzinfo=timezone.utc)
+    new_ts = (ts + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S+00:00")
+    cols[0] = new_ts
+    csv_text = header + "\n" + ",".join(cols) + "\n"
+    return building_id, equipment_id, csv_text
+
+
 def phase_seed_append(base: str, token: str, fixture_root: Path) -> PhaseResult:
-    """Seed BUILDING_50 then append — require nonempty ok + durable counts."""
+    """Seed BUILDING_50 then JSON hourly append — require nonempty ok + durable counts."""
     zip_path = fixture_root / "BUILDING_50_openfdd.zip"
     if not zip_path.is_file():
         return PhaseResult("seed_append", "BLOCKED", f"missing {zip_path}")
@@ -235,23 +289,46 @@ def phase_seed_append(base: str, token: str, fixture_root: Path) -> PhaseResult:
             "seed returned ok without positive equipment_written/total_rows (empty PASS banned)",
             {"body": body},
         )
-    # Append same zip again (hourly append path may reject; treat structural ok)
+    try:
+        building_id, equipment_id, csv_chunk = _hourly_append_chunk_from_zip(zip_path)
+    except Exception as exc:  # noqa: BLE001 — harness surface
+        return PhaseResult(
+            "seed_append",
+            "FAIL",
+            f"append chunk build failed: {exc}",
+            {"seed": {"code": code, "total_rows": body.get("total_rows")}},
+        )
+    # Tip contract: JSON hourly chunk (zip append intentionally rejected after T1d).
+    append_payload = {
+        "confirm": True,
+        "building_id": body.get("building_id") or building_id,
+        "equipment_id": equipment_id,
+        "csv": csv_chunk,
+    }
     code_a, body_a = http_json(
         "POST",
         f"{base.rstrip('/')}/api/csv/import/package/append",
         token=token,
-        body=raw,
-        content_type="application/zip",
+        body=json.dumps(append_payload).encode(),
+        content_type="application/json",
         timeout=600,
     )
     metrics = {
-        "seed": {"code": code, "total_rows": body.get("total_rows"), "equipment_written": body.get("equipment_written")},
-        "append": {"code": code_a, "body_ok": isinstance(body_a, dict) and body_a.get("ok")},
+        "seed": {
+            "code": code,
+            "total_rows": body.get("total_rows"),
+            "equipment_written": body.get("equipment_written"),
+            "building_id": body.get("building_id") or building_id,
+        },
+        "append": {
+            "code": code_a,
+            "body_ok": isinstance(body_a, dict) and body_a.get("ok"),
+            "equipment_id": equipment_id,
+        },
         "trusted_window": TRUSTED_WINDOW,
     }
     if code_a == 0:
         return PhaseResult("seed_append", "FAIL", "append transport error", metrics)
-    # Append may be 200 ok or structured fail; empty timeout banned above
     if code_a == 200 and isinstance(body_a, dict) and body_a.get("ok") is True:
         if not (body_a.get("total_rows") or body_a.get("equipment_written") or body_a.get("merges")):
             return PhaseResult(
@@ -261,7 +338,6 @@ def phase_seed_append(base: str, token: str, fixture_root: Path) -> PhaseResult:
                 metrics,
             )
         return PhaseResult("seed_append", "PASS", "seed+append nonempty", metrics)
-    # Structured rejection with reason is FAIL for this control (log before fix)
     return PhaseResult(
         "seed_append",
         "FAIL",

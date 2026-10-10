@@ -52,13 +52,14 @@ python3 "$ROOT/scripts/ops/local_memory_ingest_bench.py" \
   --out "$OUT/preflight" | tee "$OUT/preflight.json"
 
 # Pull + up csv recipe (central+web) — no local build
+export OPENFDD_CENTRAL_BIND="${OPENFDD_CENTRAL_BIND:-127.0.0.1}"
 "$ROOT/scripts/openfdd_stack_pull.sh" csv
 "$ROOT/scripts/openfdd_stack_up.sh" csv --no-pull
 
 # Enforce central memory after recreate (compose may not ship mem_limit)
-CENTRAL_CID="$(docker ps --filter name=openfdd-central --format '{{.ID}}' | head -1)"
+CENTRAL_CID="$(docker ps --filter name=openfdd-csv-central --format '{{.ID}}' | head -1)"
 if [[ -z "$CENTRAL_CID" ]]; then
-  CENTRAL_CID="$(docker ps --format '{{.Names}}\t{{.ID}}' | awk '/central/{print $2; exit}')"
+  CENTRAL_CID="$(docker ps --format '{{.Names}}\t{{.ID}}' | awk '/csv.*central|openfdd-central/{print $2; exit}')"
 fi
 if [[ -z "$CENTRAL_CID" ]]; then
   echo "FAIL: openfdd-central container not found" | tee "$OUT/FAIL.txt"
@@ -67,13 +68,19 @@ fi
 docker update --memory="$CENTRAL_MEM" --memory-swap="$CENTRAL_MEM" "$CENTRAL_CID"
 docker inspect "$CENTRAL_CID" --format 'central_memory={{.HostConfig.Memory}} name={{.Name}}' | tee "$OUT/central_cgroup.txt"
 
-# Wait health
+# Wait health (publish can lag briefly after recreate)
 BASE="${OPENFDD_CENTRAL_BASE:-http://127.0.0.1:8080}"
-for i in $(seq 1 60); do
+code=000
+for i in $(seq 1 90); do
   code=$(curl -s -o /tmp/t6a_health.json -w '%{http_code}' --connect-timeout 2 "$BASE/api/health" || echo 000)
   [[ "$code" == "200" ]] && break
   sleep 2
 done
+if [[ "$code" != "200" ]]; then
+  echo "ERROR: central not healthy at $BASE/api/health after 180s" | tee "$OUT/FAIL.txt"
+  docker ps -a --filter name=openfdd-csv --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | tee -a "$OUT/FAIL.txt" || true
+  exit 2
+fi
 python3 - <<'PY' "$OUT" "$BASE"
 import json,sys,urllib.request
 out, base = sys.argv[1], sys.argv[2]
