@@ -43,6 +43,7 @@ for g in "${GATES[@]}"; do
     37) script="$ROOT/scripts/nightly-ot-bench/37_acme_analytics_charts.sh" ;;
     38) script="$ROOT/scripts/nightly-ot-bench/38_acme_afdd_qualification.sh" ;;
     39) script="$ROOT/scripts/nightly-ot-bench/39_mqtts_gap_blame.sh" ;;
+    40) script="$ROOT/scripts/nightly-ot-bench/40_no_id_heuristics.sh" ;;
     43) script="$ROOT/scripts/nightly-ot-bench/43_overview_browser_analytics.sh" ;;
     44) script="$ROOT/scripts/nightly-ot-bench/44_run_now_latency_budget.sh" ;;
     45) script="$ROOT/scripts/nightly-ot-bench/45_analytics_planning_comb.sh" ;;

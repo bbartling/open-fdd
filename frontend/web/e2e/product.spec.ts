@@ -199,7 +199,9 @@ test.describe("react product workflows (real stack)", () => {
 
   test("RCx Plotly hosts expose type-based PNG stems (never newplot)", async ({
     page,
+    request,
   }) => {
+    await ensureProductSession(page, request);
     await page.goto("/rcx");
     await waitForGatedPage(page, "rcx-page", "/rcx → rcx-page");
     const hosts = page.locator("[data-download-filename]");

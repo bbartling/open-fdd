@@ -11,11 +11,20 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
+# Preserve caller building/API base — .env may pin a different lab default (e.g. BENS_BENCH_OT).
+_PRESERVE_BUILDING="${OPENFDD_BUILDING_ID:-}"
+_PRESERVE_API_BASE="${OPENFDD_API_BASE:-}"
 if [[ -f "$ROOT/.env" ]]; then
   set -a
   # shellcheck disable=SC1091
   source "$ROOT/.env"
   set +a
+fi
+if [[ -n "$_PRESERVE_BUILDING" ]]; then
+  OPENFDD_BUILDING_ID="$_PRESERVE_BUILDING"
+fi
+if [[ -n "$_PRESERVE_API_BASE" ]]; then
+  OPENFDD_API_BASE="$_PRESERVE_API_BASE"
 fi
 
 BUILDING="${OPENFDD_BUILDING_ID:-}"
