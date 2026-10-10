@@ -71,6 +71,7 @@ struct PendingInput {
 struct PendingBatch {
     inputs: Vec<PendingInput>,
     rows: usize,
+    bytes: usize,
     first_buffered_at: Instant,
 }
 
@@ -81,12 +82,17 @@ struct PendingBatch {
 /// calls `flush_due()` from its existing interval loop and `shutdown_flush()`
 /// during graceful shutdown. This keeps lifecycle ownership explicit and avoids
 /// hidden tasks inside the storage crate.
+///
+/// Soft-OPEN 370 T1e / M70-05: `max_pending_bytes` is a **global** resident
+/// budget across every equipment key — not only per-key row thresholds.
 #[derive(Debug, Clone)]
 pub struct MicroBatchHistorian {
     writer: ParquetPartWriter,
     flush_rows: usize,
     flush_after: Duration,
+    max_pending_bytes: usize,
     pending: BTreeMap<HistorianBatchKey, PendingBatch>,
+    pending_bytes: usize,
 }
 
 impl MicroBatchHistorian {
@@ -95,17 +101,31 @@ impl MicroBatchHistorian {
         flush_rows: usize,
         flush_after: Duration,
     ) -> Result<Self> {
+        Self::new_with_byte_budget(writer, flush_rows, flush_after, default_max_pending_bytes())
+    }
+
+    pub fn new_with_byte_budget(
+        writer: ParquetPartWriter,
+        flush_rows: usize,
+        flush_after: Duration,
+        max_pending_bytes: usize,
+    ) -> Result<Self> {
         if flush_rows == 0 {
             bail!("micro-batch flush_rows must be greater than zero");
         }
         if flush_after.is_zero() {
             bail!("micro-batch flush_after must be greater than zero");
         }
+        if max_pending_bytes == 0 {
+            bail!("micro-batch max_pending_bytes must be greater than zero");
+        }
         Ok(Self {
             writer,
             flush_rows,
             flush_after,
+            max_pending_bytes,
             pending: BTreeMap::new(),
+            pending_bytes: 0,
         })
     }
 
@@ -115,6 +135,10 @@ impl MicroBatchHistorian {
 
     pub fn pending_rows(&self) -> usize {
         self.pending.values().map(|pending| pending.rows).sum()
+    }
+
+    pub fn pending_bytes(&self) -> usize {
+        self.pending_bytes
     }
 
     pub fn pending_keys(&self) -> usize {
@@ -180,18 +204,46 @@ impl MicroBatchHistorian {
         }
 
         let rows = batch.num_rows();
+        let batch_bytes = batch.get_array_memory_size().max(1);
+        // Soft-OPEN 370 T1e: refuse before buffering when the global resident
+        // budget cannot accept this batch (do not erase other pending keys).
+        if self.pending_bytes.saturating_add(batch_bytes) > self.max_pending_bytes {
+            // Prefer flushing this key if it already has rows; otherwise fail closed.
+            if self.pending.get(&key).is_some_and(|p| p.rows > 0) {
+                let mut reports = vec![self.flush_key(&key, FlushReason::RowThreshold)?];
+                // Retry push after freeing this key's resident bytes.
+                reports.extend(self.push_at_with_token(
+                    key.building_id.clone(),
+                    key.equipment_id.clone(),
+                    batch,
+                    now,
+                    token,
+                )?);
+                return Ok(reports);
+            }
+            bail!(
+                "micro-batch pending byte budget exceeded ({} + {} > {})",
+                self.pending_bytes,
+                batch_bytes,
+                self.max_pending_bytes
+            );
+        }
+
         let pending = self
             .pending
             .entry(key.clone())
             .or_insert_with(|| PendingBatch {
                 inputs: Vec::new(),
                 rows: 0,
+                bytes: 0,
                 first_buffered_at: now,
             });
         pending.rows += rows;
+        pending.bytes += batch_bytes;
+        self.pending_bytes += batch_bytes;
         pending.inputs.push(PendingInput { batch, token });
 
-        if pending.rows >= self.flush_rows {
+        if pending.rows >= self.flush_rows || self.pending_bytes >= self.max_pending_bytes {
             return Ok(vec![self.flush_key(&key, FlushReason::RowThreshold)?]);
         }
         Ok(Vec::new())
@@ -270,7 +322,9 @@ impl MicroBatchHistorian {
 
         // Remove only after every immutable part was successfully published.
         // Provenance is the input list that was encoded, not a later guess.
-        self.pending.remove(key);
+        if let Some(removed) = self.pending.remove(key) {
+            self.pending_bytes = self.pending_bytes.saturating_sub(removed.bytes);
+        }
         Ok(MicroBatchFlush {
             building_id: key.building_id.clone(),
             equipment_id: key.equipment_id.clone(),
@@ -280,6 +334,14 @@ impl MicroBatchHistorian {
             provenance,
         })
     }
+}
+
+fn default_max_pending_bytes() -> usize {
+    std::env::var("OPENFDD_MICRO_BATCH_MAX_PENDING_BYTES")
+        .ok()
+        .and_then(|raw| raw.parse().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(32 * 1024 * 1024)
 }
 
 #[cfg(test)]
@@ -333,6 +395,31 @@ mod tests {
     fn historian(tmp: &TempDir, flush_rows: usize, flush_after: Duration) -> MicroBatchHistorian {
         let writer = ParquetPartWriter::new(LocalStorage::new(tmp.path()));
         MicroBatchHistorian::new(writer, flush_rows, flush_after).unwrap()
+    }
+
+    #[test]
+    fn global_byte_budget_fails_closed_without_erasing_pending() {
+        let tmp = TempDir::new().unwrap();
+        let writer = ParquetPartWriter::new(LocalStorage::new(tmp.path()));
+        let mut historian =
+            MicroBatchHistorian::new_with_byte_budget(writer, 10_000, Duration::from_secs(60), 1)
+                .unwrap();
+        let start = Instant::now();
+        let err = historian
+            .push_at(
+                "SITE_A",
+                "AHU_A",
+                batch_for_equipment(&["2026-08-20T12:00:00Z"], "AHU_A"),
+                start,
+            )
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("pending byte budget exceeded"),
+            "unexpected error: {err}"
+        );
+        assert_eq!(historian.pending_rows(), 0);
+        assert_eq!(historian.pending_bytes(), 0);
     }
 
     #[test]

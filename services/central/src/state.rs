@@ -543,6 +543,7 @@ impl AppState {
             updated.persisted_rows = rows;
         }
         updated.updated_at = Utc::now();
+        compact_resident_committed(&mut updated);
         receipts.insert(key.clone(), updated.clone());
         let snapshot = Some(updated);
         if append_receipt_event(
@@ -582,6 +583,7 @@ impl AppState {
         let mut updated = previous.clone();
         updated.status = IngestReceiptStatus::TerminalZeroEligible;
         updated.updated_at = Utc::now();
+        compact_resident_committed(&mut updated);
         if append_receipt_event(
             &self.ingest_receipts_path,
             scope,
@@ -634,6 +636,9 @@ impl AppState {
             }
             updated.updated_at = Utc::now();
             let became_committed = updated.status == IngestReceiptStatus::Committed;
+            if became_committed {
+                compact_resident_committed(&mut updated);
+            }
             let event = Some(updated.clone());
             if append_receipt_event(
                 &self.ingest_receipts_path,
@@ -1195,9 +1200,23 @@ fn compacted_receipt(receipt: &IngestReceipt) -> IngestReceipt {
         tombstone.status,
         IngestReceiptStatus::Committed | IngestReceiptStatus::TerminalZeroEligible
     ) {
+        // Clear + shrink: Vec.clear alone retains capacity (M70-05).
         tombstone.envelope.points.clear();
+        tombstone.envelope.points.shrink_to_fit();
     }
     tombstone
+}
+
+/// Compact a committed receipt in the resident map immediately after the
+/// durability boundary — do not wait for journal snapshot compaction.
+fn compact_resident_committed(receipt: &mut IngestReceipt) {
+    if matches!(
+        receipt.status,
+        IngestReceiptStatus::Committed | IngestReceiptStatus::TerminalZeroEligible
+    ) {
+        receipt.envelope.points.clear();
+        receipt.envelope.points.shrink_to_fit();
+    }
 }
 
 fn envelope_digest(envelope: &TelemetryEnvelope) -> String {
@@ -1592,6 +1611,32 @@ mod tests {
         ] {
             std::env::remove_var(key);
         }
+    }
+
+    #[tokio::test]
+    async fn commit_compacts_resident_points_immediately() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = AppState::new();
+        state.ingest_receipts_path = temp.path().join("receipts.jsonl");
+        let envelope = local_envelope("edge-local", "equipment-a");
+        let message_id = envelope.message_id;
+        let scope = "tenant-a/building-local";
+        assert!(state.reserve_receipt_at(scope, envelope).await);
+        assert!(state.commit_receipt(scope, "edge-local", message_id).await);
+        let receipts = state.ingest_receipts.lock().await;
+        let receipt = receipts
+            .get(&(scope.to_string(), "edge-local".to_string(), message_id))
+            .expect("committed receipt stays resident");
+        assert_eq!(receipt.status, IngestReceiptStatus::Committed);
+        assert!(
+            receipt.envelope.points.is_empty(),
+            "committed resident receipt must drop point payload immediately"
+        );
+        assert_eq!(
+            receipt.envelope.points.capacity(),
+            0,
+            "shrink_to_fit must release point Vec capacity"
+        );
     }
 
     #[tokio::test]
