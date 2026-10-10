@@ -92,14 +92,16 @@ async fn compute_with_admission(
     }
     let permit = fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Analytics)
         .ok_or_else(analytics_admission_busy)?;
-    let _inflight = fdd_resources::InFlightGuard::spawn("analytics");
+    let inflight = fdd_resources::InFlightGuard::spawn("analytics");
+    let cancel = inflight.cancel_flag();
     let envelope = compute().await;
-    if fdd_resources::memory_abort_requested() {
+    if cancel.load(std::sync::atomic::Ordering::SeqCst) || fdd_resources::memory_abort_requested() {
         return Err(analytics_pressure_deferred(
             &["in-flight memory watchdog aborted analytics SQL".into()],
             true,
         ));
     }
+    drop(inflight);
     drop(permit);
     Ok(envelope)
 }
