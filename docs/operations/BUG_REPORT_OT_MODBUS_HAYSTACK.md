@@ -25,7 +25,8 @@
 
 | ID | Status | Symptom | Evidence | Next |
 |----|--------|---------|----------|------|
-| **#1179 central OOM** | **PATCHED** (3.5.70 train) | bas-vs-web/analytics still spiked to 23.7 GB on 3.5.69; guard never left `ok` | `CURSOR_HANDOFF_45b362a` · `railway_crash_20261009T*` | In-flight cgroup sampler + stream cancel; bas-vs-web max span; host MemTotal on unlimited cgroups; Grok prove on `sha-*` 3.5.70 |
+| **M70-10 gate false PASS** | **OPEN** (Soft-OPEN 370 T3b) | Gate47 null-only PASS; 43→45 Playwright off; 44 START/END; crash_watch deployments/self-grep; OOM peak fallback | SOURCE-CONFIRMED + GATE47_COUNTEREXAMPLE | Repair evaluators before memory qualify |
+| **#1179 central OOM** | **OPEN** (live prove) | bas-vs-web/analytics spiked to 23.7 GB on 3.5.69; tip Soft-OPEN not yet FQ | `CURSOR_HANDOFF_45b362a` · `railway_crash_20261009T*` | Absorb M70 via 370; close only with live tip evidence |
 | **#1192 run-now latency** | **PATCHED** (3.5.70) | Synthetic-59 run-now 90s `cancelled` (global watermark) | MEGA wave M 20261009 | Scoped historian watermark + `no_data` short-circuit; gate 44 budget |
 | **avg(Utf8View) plots** | **PATCHED** (3.5.70) | Overview/FDD planning errors on Utf8View columns | Railway UI + handoff | `history_role_numeric_sql` + series downsample; gates 43/45 comb |
 | **#1179 central OOM (3.5.69)** | **OPEN** (superseded row above) | ACME analytics/AFDD `oom_killed` at cgroup hard limit on `sha-b5c4e9c` | `reports/crash_rca_b5c4e9c.md` · restarts #2/#3/#4 | See 3.5.70 row — close #1179 only after Grok live zero `oom_killed` |

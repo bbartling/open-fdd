@@ -45,15 +45,26 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Writable workspace+spill overlay: seed from hive, never mount historian :ro
+# (spill/import need write). JWT secret must be ≥32 chars (auth fail-closed).
+WORK="$ART/workspace_overlay"
+mkdir -p "$WORK"
+if command -v rsync >/dev/null 2>&1; then
+  rsync -a --delete "$HIVE"/ "$WORK"/
+else
+  cp -a "$HIVE"/. "$WORK"/
+fi
+mkdir -p "$WORK/.datafusion-spill"
+
 docker pull "$IMG" >/dev/null
 docker run -d --name "$NAME" \
   --memory="${MEM_GB}g" --memory-swap="${MEM_GB}g" \
   -e OPENFDD_STORAGE_URL="file:///workspace/openfdd" \
   -e OPENFDD_PARQUET_ROOT="/workspace/openfdd" \
   -e OPENFDD_DATAFUSION_SPILL_DIR="/workspace/openfdd/.datafusion-spill" \
-  -e OPENFDD_JWT_SECRET="oom-regression-not-a-secret" \
+  -e OPENFDD_JWT_SECRET="oom-regression-secret-at-least-32b" \
   -e OPENFDD_ADMIN_PASSWORD="oom-regression-admin" \
-  -v "$HIVE:/workspace/openfdd:ro" \
+  -v "$WORK:/workspace/openfdd:rw" \
   -p 18080:8080 \
   "$IMG" >/dev/null
 
@@ -103,49 +114,40 @@ if [[ "$AFTER" != "$STARTED" ]]; then
   exit 1
 fi
 
-# memory.peak from cgroup (docker)
+# memory.peak from cgroup only — never substitute current docker-stats as peak
+# (M70-10). Unsupported peak = BLOCKED.
 CG=$(docker inspect -f '{{.Id}}' "$NAME")
 PEAK=""
+PEAK_SRC=""
 for p in \
   "/sys/fs/cgroup/system.slice/docker-${CG}.scope/memory.peak" \
   "/sys/fs/cgroup/docker/${CG}/memory.peak" \
   "/sys/fs/cgroup/memory/docker/${CG}/memory.peak"; do
-  if [[ -r "$p" ]]; then PEAK="$(cat "$p")"; break; fi
+  if [[ -r "$p" ]]; then PEAK="$(cat "$p")"; PEAK_SRC="$p"; break; fi
 done
-# Fallback: docker stats
 if [[ -z "$PEAK" ]]; then
-  PEAK="$(docker stats --no-stream --format '{{.MemUsage}}' "$NAME" | awk '{print $1}')"
-  echo "WARN: memory.peak unavailable; used docker stats $PEAK" | tee -a "$ART/run.txt"
+  echo "BLOCKED: raw cgroup memory.peak unavailable (docker-stats current is not peak)" \
+    | tee "$ART/BLOCKED.txt"
+  exit 2
 fi
+echo "peak_source=$PEAK_SRC peak_raw=$PEAK" | tee -a "$ART/run.txt"
 python3 - <<PY | tee -a "$ART/run.txt"
-import os, sys
+import sys
 mem_gb = float("${MEM_GB}")
 shed = float("${SHED_FRAC}")
 limit = int(mem_gb * 1024**3)
 peak_raw = """${PEAK}""".strip()
-peak = None
-if peak_raw.isdigit():
-    peak = int(peak_raw)
-else:
-    # e.g. 1.2GiB
-    u = peak_raw.lower().replace("i","")
-    try:
-        if u.endswith("gb") or u.endswith("g"):
-            peak = int(float(u.rstrip("gb")) * 1024**3)
-        elif u.endswith("mb") or u.endswith("m"):
-            peak = int(float(u.rstrip("mb")) * 1024**2)
-    except Exception:
-        peak = None
-open("${ART}/peak.txt","w").write(str(peak_raw)+"\n")
-if peak is None:
-    print("BLOCKED: could not parse memory peak", peak_raw)
+if not peak_raw.isdigit():
+    print("BLOCKED: memory.peak not an integer:", peak_raw)
     sys.exit(2)
+peak = int(peak_raw)
+open("${ART}/peak.txt","w").write(peak_raw + "\n")
 cap = int(limit * shed)
 print(f"memory.peak={peak} limit={limit} shed_cap={cap}")
 if peak >= cap:
     print(f"FAIL: peak {peak} >= shed fraction cap {cap}")
     sys.exit(1)
-print("PASS: process alive, started_at stable, peak under shed fraction")
+print("PASS: process alive, started_at stable, raw cgroup peak under shed fraction")
 PY
 rc=$?
 curl -fsS http://127.0.0.1:18080/api/health >"$ART/health_after.json" || true
