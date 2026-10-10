@@ -43,6 +43,41 @@ const LATEST_TELEMETRY_WATERMARK_PATH: &str = "state/live-historian/latest-telem
 const MAX_RECENT_CYCLES: usize = 50;
 const AFDD_RUNS_PREFIX: &str = "state/afdd/runs";
 
+/// Polls `from` into `into` until either is set or the guard drops (M70-01).
+struct CancelBridge {
+    stop: Arc<AtomicBool>,
+    handle: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl CancelBridge {
+    fn link(from: Arc<AtomicBool>, into: Arc<AtomicBool>) -> Self {
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop_w = stop.clone();
+        let handle = tokio::spawn(async move {
+            while !stop_w.load(Ordering::SeqCst) && !into.load(Ordering::SeqCst) {
+                if from.load(Ordering::SeqCst) {
+                    into.store(true, Ordering::SeqCst);
+                    break;
+                }
+                tokio::time::sleep(StdDuration::from_millis(200)).await;
+            }
+        });
+        Self {
+            stop,
+            handle: Some(handle),
+        }
+    }
+}
+
+impl Drop for CancelBridge {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        if let Some(handle) = self.handle.take() {
+            handle.abort();
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct LatestTelemetryWatermark {
     latest_persisted_timestamp_utc: DateTime<Utc>,
@@ -291,48 +326,54 @@ impl AfddSchedulerRuntime {
             .unwrap_or(90);
         let cancel = Arc::new(AtomicBool::new(false));
         let cancel_flag = cancel.clone();
-        let _inflight = fdd_resources::InFlightGuard::spawn("afdd_run_now");
-        let inflight_cancel = _inflight.cancel_flag();
-        let cancel_bridge = cancel.clone();
-        tokio::spawn(async move {
-            while !cancel_bridge.load(Ordering::SeqCst) {
-                if inflight_cancel.load(Ordering::SeqCst) {
-                    cancel_bridge.store(true, Ordering::SeqCst);
-                    break;
-                }
-                tokio::time::sleep(StdDuration::from_millis(200)).await;
-            }
-        });
+        let inflight = fdd_resources::InFlightGuard::spawn("afdd_run_now");
+        // Structured bridge: Drop stops the poller on success/error (M70-01).
+        let _bridge = CancelBridge::link(inflight.cancel_flag(), cancel.clone());
         let fut = self.execute_cycle_chunked(scope, "run_now", window, true, Some(cancel));
         tokio::pin!(fut);
-        match tokio::time::timeout(StdDuration::from_secs(timeout_secs), &mut fut).await {
-            Ok(result) => result,
-            Err(_) => {
-                // Keep the future alive, set cancel, wait for cooperative stop (#1179).
-                cancel_flag.store(true, Ordering::SeqCst);
-                let wait = StdDuration::from_secs(
-                    std::env::var("OPENFDD_AFDD_CANCEL_WAIT_SECONDS")
-                        .ok()
-                        .and_then(|v| v.parse().ok())
-                        .filter(|v| *v > 0)
-                        .unwrap_or(15),
-                );
-                match tokio::time::timeout(wait, fut).await {
-                    Ok(Ok(mut record)) => {
-                        record.status = "cancelled".into();
-                        record.ok = false;
-                        record.error = Some(format!(
-                            "AFDD run-now exceeded OPENFDD_AFDD_RUN_NOW_TIMEOUT_SECONDS={timeout_secs}; cancelled"
-                        ));
-                        Ok(record)
+        let outcome =
+            match tokio::time::timeout(StdDuration::from_secs(timeout_secs), &mut fut).await {
+                Ok(result) => result,
+                Err(_) => {
+                    // Keep the future alive, set cancel, wait for cooperative stop (#1179).
+                    cancel_flag.store(true, Ordering::SeqCst);
+                    let wait = StdDuration::from_secs(
+                        std::env::var("OPENFDD_AFDD_CANCEL_WAIT_SECONDS")
+                            .ok()
+                            .and_then(|v| v.parse().ok())
+                            .filter(|v| *v > 0)
+                            .unwrap_or(15),
+                    );
+                    match tokio::time::timeout(wait, &mut fut).await {
+                        Ok(Ok(mut record)) => {
+                            record.status = "cancelled".into();
+                            record.ok = false;
+                            record.error = Some(format!(
+                                "AFDD run-now exceeded OPENFDD_AFDD_RUN_NOW_TIMEOUT_SECONDS={timeout_secs}; cancelled"
+                            ));
+                            Ok(record)
+                        }
+                        Ok(Err(e)) => Err(e),
+                        Err(_) => {
+                            // M70-02: do not drop fut (permit/scope) while the
+                            // blocking worker may still be running — drain to join.
+                            match fut.await {
+                                Ok(mut record) => {
+                                    record.status = "cancelled".into();
+                                    record.ok = false;
+                                    record.error = Some(format!(
+                                        "AFDD run-now exceeded OPENFDD_AFDD_RUN_NOW_TIMEOUT_SECONDS={timeout_secs}; cancelled after worker drain"
+                                    ));
+                                    Ok(record)
+                                }
+                                Err(e) => Err(e),
+                            }
+                        }
                     }
-                    Ok(Err(e)) => Err(e),
-                    Err(_) => anyhow::bail!(
-                        "AFDD run-now exceeded OPENFDD_AFDD_RUN_NOW_TIMEOUT_SECONDS={timeout_secs}; cancel requested (worker still draining)"
-                    ),
                 }
-            }
-        }
+            };
+        drop(inflight);
+        outcome
     }
 
     async fn run_backfill(
@@ -388,7 +429,18 @@ impl AfddSchedulerRuntime {
 
         let started_at_utc = Utc::now();
         let run_id = Uuid::new_v4().to_string();
-        let _inflight = fdd_resources::InFlightGuard::spawn("afdd_chunk");
+        let inflight = fdd_resources::InFlightGuard::spawn("afdd_chunk");
+        // Scheduled/backfill must observe memory abort even without a caller
+        // cancel flag; when a caller flag exists, bridge the guard into it so
+        // workers see one token (M70-01/02).
+        let (cancel, _cancel_bridge) = match cancel {
+            Some(existing) => {
+                let bridge = CancelBridge::link(inflight.cancel_flag(), existing.clone());
+                (Some(existing), Some(bridge))
+            }
+            None => (Some(inflight.cancel_flag()), None),
+        };
+        let _inflight = inflight;
 
         let pressure = fdd_resources::sample_pressure();
         if pressure.defer_expensive_compute {

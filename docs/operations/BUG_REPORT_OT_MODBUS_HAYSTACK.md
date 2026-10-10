@@ -25,8 +25,17 @@
 
 | ID | Status | Symptom | Evidence | Next |
 |----|--------|---------|----------|------|
-| **M70-10 gate false PASS** | **OPEN** (Soft-OPEN 370 T3b) | Gate47 null-only PASS; 43→45 Playwright off; 44 START/END; crash_watch deployments/self-grep; OOM peak fallback | SOURCE-CONFIRMED + GATE47_COUNTEREXAMPLE | Repair evaluators before memory qualify |
-| **#1179 central OOM** | **OPEN** (live prove) | bas-vs-web/analytics spiked to 23.7 GB on 3.5.69; tip Soft-OPEN not yet FQ | `CURSOR_HANDOFF_45b362a` · `railway_crash_20261009T*` | Absorb M70 via 370; close only with live tip evidence |
+| **M70-01 cancel lifecycle** | **OPEN** (Soft-OPEN 370 T1b) | Thread-local cancel + Drop detaches watchdog; AFDD bridge no success stop | SOURCE-CONFIRMED `in_flight.rs` / `afdd_scheduler.rs` · private MEMORY_AUDIT 20261010 | Explicit cancel token + stop/join watchdog + bridge shutdown; no late publish |
+| **M70-02 cancel/permit race** | **OPEN** (Soft-OPEN 370 T1b) | Cancel checked after stream await; AFDD permit/scope released while blocking worker continues | SOURCE-CONFIRMED session/query/runner/afdd_scheduler | Race cancel with awaits; worker-owned permit/scope through teardown |
+| **M70-03 stage budgets** | **OPEN** (Soft-OPEN 370 T1c) | `query_memory_bytes` advertised not enforced; stages escape pool | SOURCE-CONFIRMED runtime/budget | Per-run + aggregate stage budgets |
+| **M70-04 append rebuild** | **OPEN** (Soft-OPEN 370 T1d) | Append loads full CSV history + full-building re-ingest | SOURCE-CONFIRMED package/append | Bounded incremental Parquet persistence |
+| **M70-05 queues/receipts** | **OPEN** (Soft-OPEN 370 T1e) | Unbounded writer channel; resident committed receipts | SOURCE-CONFIRMED live_historian/state | Byte-bounded queues + receipt compaction |
+| **M70-06 cache/serialize** | **OPEN** (Soft-OPEN 370 T1c/e) | Cache hit/miss serialize outside compute guard | SOURCE-CONFIRMED result_cache | Admit full read→send lifecycle |
+| **M70-07 analytics windows** | **OPEN** (Soft-OPEN 370 T1f) | Economizer/VAV/anomaly full-history; BAS setup before timeout | SOURCE-CONFIRMED historian | Time/project/partition bounds (not Cartesian) |
+| **M70-08 chunk completeness** | **OPEN** (Soft-OPEN 370 T1f) | Same-window equipment replace; chunk boundary state reset | SOURCE-CONFIRMED AFDD window storage | Equipment-scoped publish + boundary parity |
+| **M70-09 telemetry honesty** | **OPEN** (Soft-OPEN 370 T1c) | `memory.high` as peak; near-zero trip time; cgroup ancestor gaps | SOURCE-CONFIRMED pressure/cgroup/in_flight | Real peak / wall trip / ancestor+host |
+| **M70-10 gate false PASS** | **OPEN** (Soft-OPEN 370 T3b / #1197) | Gate47 null-only PASS; 43→45 Playwright off; 44 START/END; crash_watch deployments/self-grep | SOURCE-CONFIRMED + GATE47_COUNTEREXAMPLE | Harness repaired in #1197; prove on tip Soft-OPEN |
+| **#1179 central OOM** | **OPEN** (live prove) | bas-vs-web/analytics spiked to 23.7 GB on 3.5.69; tip Soft-OPEN not yet FQ | `CURSOR_HANDOFF_45b362a` · `railway_crash_20261009T*` · M70 SOURCE-CONFIRMED | Absorb M70 via 370; close only with live tip evidence — do not close from merges |
 | **#1192 run-now latency** | **PATCHED** (3.5.70) | Synthetic-59 run-now 90s `cancelled` (global watermark) | MEGA wave M 20261009 | Scoped historian watermark + `no_data` short-circuit; gate 44 budget |
 | **avg(Utf8View) plots** | **PATCHED** (3.5.70) | Overview/FDD planning errors on Utf8View columns | Railway UI + handoff | `history_role_numeric_sql` + series downsample; gates 43/45 comb |
 | **#1179 central OOM (3.5.69)** | **OPEN** (superseded row above) | ACME analytics/AFDD `oom_killed` at cgroup hard limit on `sha-b5c4e9c` | `reports/crash_rca_b5c4e9c.md` · restarts #2/#3/#4 | See 3.5.70 row — close #1179 only after Grok live zero `oom_killed` |

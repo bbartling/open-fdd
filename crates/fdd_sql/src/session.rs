@@ -299,25 +299,82 @@ async fn register_weather_view_from_history(
 /// Interactive callers that only need Arrow should prefer [`run_sql_bounded`]
 /// or `crate::query::stream_sql`.
 pub async fn run_sql(ctx: &SessionContext, sql: &str) -> Result<QueryResult> {
+    run_sql_with_cancel(ctx, sql, None).await
+}
+
+/// Execute SQL with an optional explicit cancel token raced against stream waits
+/// (Soft-OPEN 370 T1b / M70-02). Dropping the stream on cancel releases engine
+/// reservations; ambient `memory_abort_requested` remains a secondary fallback.
+pub async fn run_sql_with_cancel(
+    ctx: &SessionContext,
+    sql: &str,
+    cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) -> Result<QueryResult> {
+    use futures::FutureExt;
+    use futures::StreamExt;
+    use std::sync::atomic::Ordering;
+
+    let cancelled = || {
+        cancel
+            .as_ref()
+            .is_some_and(|c| c.load(Ordering::SeqCst))
+            || fdd_resources::memory_abort_requested()
+    };
+    if cancelled() {
+        anyhow::bail!(
+            "SQL cancelled by in-flight memory watchdog (OPENFDD memory abort policy)"
+        );
+    }
+
     let started = std::time::Instant::now();
     let max_bytes = crate::query::result_max_bytes_from_env()?;
     let mut stream = crate::query::stream_sql(ctx, sql).await?;
-    use futures::StreamExt;
     let mut rows = Vec::new();
     let mut columns = Vec::new();
     let mut json_bytes = 0usize;
-    while let Some(next) = stream.next().await {
-        if fdd_resources::memory_abort_requested() {
+    loop {
+        if cancelled() {
+            drop(stream);
             anyhow::bail!(
                 "SQL cancelled by in-flight memory watchdog (OPENFDD memory abort policy)"
             );
         }
+        let next = {
+            let wait = stream.next();
+            tokio::pin!(wait);
+            tokio::select! {
+                biased;
+                _ = async {
+                    loop {
+                        if cancelled() {
+                            break;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                    }
+                }.fuse() => {
+                    drop(stream);
+                    anyhow::bail!(
+                        "SQL cancelled by in-flight memory watchdog (OPENFDD memory abort policy)"
+                    );
+                }
+                item = &mut wait => item,
+            }
+        };
+        let Some(next) = next else {
+            break;
+        };
         let batch = next?;
         let schema = batch.schema();
         if columns.is_empty() {
             columns = schema.fields().iter().map(|f| f.name().clone()).collect();
         }
         for row_idx in 0..batch.num_rows() {
+            if cancelled() {
+                drop(stream);
+                anyhow::bail!(
+                    "SQL cancelled by in-flight memory watchdog (OPENFDD memory abort policy)"
+                );
+            }
             let mut obj = serde_json::Map::new();
             for (col_idx, field) in schema.fields().iter().enumerate() {
                 let col = batch.column(col_idx);
