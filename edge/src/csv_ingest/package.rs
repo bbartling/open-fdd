@@ -1247,7 +1247,7 @@ pub fn update_package_roles_handler(body: &Value) -> Value {
         &data_root,
         &building_id,
         &out_dir,
-        &[equipment_id.clone()],
+        std::slice::from_ref(&equipment_id),
     ) {
         Ok(report) => json!({
             "ok": true,
