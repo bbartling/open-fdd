@@ -63,7 +63,10 @@ pub use historian::{
     weather_partition_path, BuildingReadRoot, BuildingReadSource, HistorianConfig, LocalStorage,
     ObjectMetadata, StorageUrl,
 };
-pub use ingest::{ingest_building, ingest_building_with_batch_hook, IngestReport, IngestTiming};
+pub use ingest::{
+    ingest_building, ingest_building_equipment, ingest_building_with_batch_hook, IngestReport,
+    IngestTiming,
+};
 pub use meta::SidecarMeta;
 pub use micro_batch::{
     BatchProvenance, FlushReason, HistorianBatchKey, MicroBatchFlush, MicroBatchHistorian,

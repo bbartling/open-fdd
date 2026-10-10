@@ -1125,6 +1125,7 @@ fn append_package_json(body: &Value) -> Value {
         files.push((eq.to_string(), csv.to_string()));
     }
     let mut merges = Vec::new();
+    let mut touched: Vec<String> = Vec::new();
     for (eq, csv) in files {
         let equipment_id = match validate_id(&eq) {
             Ok(id) => id,
@@ -1141,22 +1142,27 @@ fn append_package_json(body: &Value) -> Value {
                 "error": format!("equipment {equipment_id} missing history_wide.csv"),
             });
         }
-        let existing = std::fs::read_to_string(&hist).unwrap_or_default();
-        match fdd_store::merge_history_wide_text(&hist, &csv, &hist, Some(existing)) {
-            Ok(r) => merges.push(json!({
-                "equipment_id": equipment_id,
-                "rows_in": r.rows_in,
-                "rows_added": r.rows_added,
-                "rows_duped": r.rows_duped,
-                "rows_out": r.rows_out,
-                "ts_min": r.ts_min,
-                "ts_max": r.ts_max,
-            })),
+        // Stream-merge from path (do not pre-load full history into a String).
+        match fdd_store::merge_history_wide_text(&hist, &csv, &hist, None) {
+            Ok(r) => {
+                merges.push(json!({
+                    "equipment_id": equipment_id,
+                    "rows_in": r.rows_in,
+                    "rows_added": r.rows_added,
+                    "rows_duped": r.rows_duped,
+                    "rows_out": r.rows_out,
+                    "ts_min": r.ts_min,
+                    "ts_max": r.ts_max,
+                    "incoming_resident_rows": r.incoming_resident_rows,
+                }));
+                touched.push(equipment_id);
+            }
             Err(e) => return json!({"ok": false, "error": e.to_string()}),
         }
     }
     let out_dir = parquet_out_dir();
-    match fdd_store::ingest_building(&data_root, &building_id, &out_dir) {
+    // Touched equipment only — no full-building / weather rebuild (M70-04).
+    match fdd_store::ingest_building_equipment(&data_root, &building_id, &out_dir, &touched) {
         Ok(report) => json!({
             "ok": true,
             "building_id": building_id,
@@ -1164,6 +1170,7 @@ fn append_package_json(body: &Value) -> Value {
             "equipment_written": report.equipment_written,
             "total_rows": report.total_rows,
             "total_ms": report.total_ms,
+            "scoped_equipment": touched,
         }),
         Err(e) => json!({"ok": false, "error": format!("parquet ingest: {e:#}")}),
     }
@@ -1235,7 +1242,13 @@ pub fn update_package_roles_handler(body: &Value) -> Value {
         return json!({"ok": false, "error": e});
     }
     let out_dir = parquet_out_dir();
-    match fdd_store::ingest_building(&data_root, &building_id, &out_dir) {
+    // Mapping-only edit: re-ingest the affected equipment only (M70-04).
+    match fdd_store::ingest_building_equipment(
+        &data_root,
+        &building_id,
+        &out_dir,
+        &[equipment_id.clone()],
+    ) {
         Ok(report) => json!({
             "ok": true,
             "building_id": building_id,
@@ -1244,6 +1257,7 @@ pub fn update_package_roles_handler(body: &Value) -> Value {
             "ignored_columns": ignored,
             "equipment_written": report.equipment_written,
             "total_rows": report.total_rows,
+            "scoped_equipment": [equipment_id],
         }),
         Err(e) => json!({"ok": false, "error": format!("re-ingest failed: {e:#}")}),
     }

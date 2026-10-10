@@ -4156,7 +4156,26 @@ pub async fn csv_import_package_append(
             ));
         }
     }
-    let _import_slot = crate::historian_limits::acquire_import_slot()
+    // Admit compute before merge/parse (M70-04) — body limits alone do not
+    // bound existing history streams. Match seed ordering: compute then import.
+    let compute = fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Import)
+        .ok_or_else(|| {
+            tracing::warn!(
+                target: "security_audit",
+                event = "compute_admission_shed",
+                class = "import_append",
+                "OPENFDD_COMPUTE_MAX_INFLIGHT saturated; package append deferred with 429"
+            );
+            (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(json!({
+                    "ok": false,
+                    "error": "compute admission limit reached (OPENFDD_COMPUTE_MAX_INFLIGHT); retry later",
+                    "shed": true,
+                })),
+            )
+        })?;
+    let import_slot = crate::historian_limits::acquire_import_slot()
         .await
         .map_err(|e| {
             (
@@ -4165,6 +4184,8 @@ pub async fn csv_import_package_append(
             )
         })?;
     let result = tokio::task::spawn_blocking(move || {
+        let _compute = compute;
+        let _import_slot = import_slot;
         open_fdd_edge_prototype::csv_ingest::package::append_package_handler(&ct, &body)
     })
     .await
@@ -4198,7 +4219,26 @@ pub async fn csv_import_package_roles(
     if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id.as_deref()) {
         return Err(deny);
     }
+    // Mapping-only edits still re-ingest Parquet for the touched equipment (M70-04).
+    let compute = fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Import)
+        .ok_or_else(|| {
+            tracing::warn!(
+                target: "security_audit",
+                event = "compute_admission_shed",
+                class = "import_roles",
+                "OPENFDD_COMPUTE_MAX_INFLIGHT saturated; package roles deferred with 429"
+            );
+            (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(json!({
+                    "ok": false,
+                    "error": "compute admission limit reached (OPENFDD_COMPUTE_MAX_INFLIGHT); retry later",
+                    "shed": true,
+                })),
+            )
+        })?;
     let result = tokio::task::spawn_blocking(move || {
+        let _compute = compute;
         open_fdd_edge_prototype::csv_ingest::package::update_package_roles_handler(&body)
     })
     .await

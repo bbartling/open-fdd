@@ -28,7 +28,7 @@
 | **M70-01 cancel lifecycle** | **OPEN** (Soft-OPEN 370 T1b / #1198) | Thread-local cancel + Drop detaches watchdog; AFDD bridge no success stop | SOURCE-CONFIRMED · #1198 | LIVE tip prove drain |
 | **M70-02 cancel/permit race** | **OPEN** (Soft-OPEN 370 T1b / #1198) | Cancel checked after stream await; AFDD permit/scope released while blocking worker continues | SOURCE-CONFIRMED · #1198 | LIVE mid-request trip |
 | **M70-03 stage budgets** | **OPEN** (Soft-OPEN 370 T1c) | `query_memory_bytes` advertised not enforced; stages escape pool | SOURCE-CONFIRMED runtime/budget | Materialization respects QUERY_MEMORY_MB (#1199); residual per-run DF pool |
-| **M70-04 append rebuild** | **OPEN** (Soft-OPEN 370 T1d) | Append loads full CSV history + full-building re-ingest | SOURCE-CONFIRMED package/append | Bounded incremental Parquet persistence |
+| **M70-04 append rebuild** | **OPEN** (Soft-OPEN 370 T1d) | Append loaded full CSV history + full-building re-ingest | SOURCE-CONFIRMED → streaming merge + scoped ingest (T1d PR) | LIVE tip prove append under QUERY_MEMORY; residual true Parquet delta partitions |
 | **M70-05 queues/receipts** | **OPEN** (Soft-OPEN 370 T1e) | Unbounded writer channel; resident committed receipts | SOURCE-CONFIRMED live_historian/state | Byte-bounded queues + receipt compaction |
 | **M70-06 cache/serialize** | **OPEN** (Soft-OPEN 370 T1c/e) | Cache hit/miss serialize outside compute guard | SOURCE-CONFIRMED result_cache | Admit full read→send lifecycle |
 | **M70-07 analytics windows** | **OPEN** (Soft-OPEN 370 T1f) | Economizer/VAV/anomaly full-history; BAS setup before timeout | SOURCE-CONFIRMED historian | Time/project/partition bounds (not Cartesian) |
