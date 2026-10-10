@@ -10,7 +10,15 @@ use super::historian::{self, open_history_scan};
 use super::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest, DF_ENGINE};
 
 pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
-    match vav_health_from_history(req.query.building_id.as_deref(), 70.0, 75.0).await {
+    match vav_health_from_history(
+        req.query.building_id.as_deref(),
+        70.0,
+        75.0,
+        req.query.start,
+        req.query.end,
+    )
+    .await
+    {
         Ok(Some(env)) => env,
         Ok(None) => {
             let mut env = envelope_with_engine(
@@ -105,6 +113,8 @@ pub async fn vav_health_from_history(
     building_id: Option<&str>,
     comfort_low: f64,
     comfort_high: f64,
+    start: Option<chrono::DateTime<chrono::Utc>>,
+    end: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
         let q = AnalyticsQuery {
@@ -141,6 +151,13 @@ pub async fn vav_health_from_history(
     // No id-prefix SQL filter. Family Zones membership is a zone-terminal
     // stamp (VAV, FCU, zone_other, heat pump, baseboard) or a modeled zone
     // temperature. A non-zone stamp is excluded even when the id looks like a zone.
+    let (win_start, win_end) = historian::resolve_analytics_window(
+        start,
+        end,
+        historian::VAV_HEALTH_DEFAULT_LOOKBACK_DAYS,
+    )
+    .map_err(|e| anyhow::anyhow!(e))?;
+    let win_end = win_end.unwrap_or_else(chrono::Utc::now);
     let zone_t = historian::history_role_numeric_sql("zone_t");
     let damper_pct = historian::history_role_numeric_sql("damper_pct");
     let sql = format!(
@@ -159,11 +176,15 @@ SELECT
   END) * 300.0 / 3600.0 AS full_open_h,
   COUNT(*) * 300.0 / 3600.0 AS span_h
 FROM history
+WHERE CAST(timestamp_utc AS TIMESTAMP) >= TIMESTAMP '{start}'
+  AND CAST(timestamp_utc AS TIMESTAMP) < TIMESTAMP '{end}'
 GROUP BY equipment_id
 ORDER BY equipment_id
 "#,
         lo = comfort_low,
         hi = comfort_high,
+        start = win_start.to_rfc3339(),
+        end = win_end.to_rfc3339(),
     );
     let result = match run_sql(&ctx, &sql).await {
         Ok(r) => r,
@@ -319,7 +340,7 @@ mod tests {
 
     #[tokio::test]
     async fn refuses_missing_building_id() {
-        let env = vav_health_from_history(None, 70.0, 75.0)
+        let env = vav_health_from_history(None, 70.0, 75.0, None, None)
             .await
             .unwrap()
             .unwrap();

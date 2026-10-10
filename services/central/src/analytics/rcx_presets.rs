@@ -498,7 +498,9 @@ pub async fn run_preset(
     };
     if meta.id == "vav_health_matrix" {
         return Ok(Some(
-            match super::vav_health::vav_health_from_history(building_id, 70.0, 75.0).await? {
+            match super::vav_health::vav_health_from_history(building_id, 70.0, 75.0, None, None)
+                .await?
+            {
                 Some(env) => annotate(env, meta),
                 None => empty_stub(
                     meta,

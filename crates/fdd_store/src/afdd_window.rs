@@ -3,6 +3,8 @@
 //! Scheduled cycles write one analysis window. Rows that belong to a slice
 //! outside that window stay unchanged. Unbounded "update all" is rejected.
 
+use std::collections::BTreeSet;
+
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Duration, Utc};
 use serde_json::{json, Map, Value};
@@ -410,7 +412,9 @@ pub fn rule_result_window_fingerprints(body: &Value) -> Vec<Value> {
 /// Upsert `incoming` rows for `[start_utc, end_utc)`.
 ///
 /// Slices that extend outside the window, disjoint slices, and legacy unscoped
-/// rows are kept by value. A slice fully inside the window is replaced.
+/// rows are kept by value. A slice fully inside the window is replaced **per
+/// exact `equipment_id` only** (Soft-OPEN 370 T1f / M70-08): publishing one
+/// equipment cannot erase other equipment already stored for the same window.
 pub fn merge_windowed_rule_result(
     existing: Option<&Value>,
     start_utc: &str,
@@ -425,18 +429,57 @@ pub fn merge_windowed_rule_result(
     if win_end <= win_start {
         bail!("AFDD result window end must be after start");
     }
-    let mut windows: Vec<Value> = existing_windows(existing)
-        .into_iter()
-        .filter(|slice| !slice_fully_covered(slice, win_start, win_end))
-        .map(canonicalize_unscoped_slice)
-        .collect();
-    windows.push(new_slice(start_utc, end_utc, incoming));
+    let incoming_equipment = incoming_equipment_ids(incoming);
+    let mut retained_same_window_rows = Vec::new();
+    let mut windows: Vec<Value> = Vec::new();
+    for slice in existing_windows(existing) {
+        if slice_fully_covered(&slice, win_start, win_end) {
+            if let Some(rows) = slice.get("rows").and_then(Value::as_array) {
+                for row in rows {
+                    let Some(eq) = row.get("equipment_id").and_then(Value::as_str) else {
+                        // Rows without equipment_id are replaced with the incoming slice.
+                        continue;
+                    };
+                    if !incoming_equipment.contains(eq) {
+                        retained_same_window_rows.push(row.clone());
+                    }
+                }
+            }
+            continue;
+        }
+        windows.push(canonicalize_unscoped_slice(slice));
+    }
+    let mut merged_incoming = incoming.clone();
+    if !retained_same_window_rows.is_empty() {
+        let mut rows = retained_same_window_rows;
+        if let Some(Value::Array(incoming_rows)) = incoming.get("rows") {
+            rows.extend(incoming_rows.iter().cloned());
+        }
+        if let Some(obj) = merged_incoming.as_object_mut() {
+            obj.insert("rows".into(), Value::Array(rows));
+        }
+    }
+    windows.push(new_slice(start_utc, end_utc, &merged_incoming));
     let rows = display_rows(&windows);
     Ok(json!({
         "rows": rows,
         "windows": windows,
         "result_scope": "lookback_window",
     }))
+}
+
+fn incoming_equipment_ids(incoming: &Value) -> BTreeSet<String> {
+    let mut ids = BTreeSet::new();
+    if let Some(rows) = incoming.get("rows").and_then(Value::as_array) {
+        for row in rows {
+            if let Some(eq) = row.get("equipment_id").and_then(Value::as_str) {
+                if !eq.is_empty() {
+                    ids.insert(eq.to_string());
+                }
+            }
+        }
+    }
+    ids
 }
 
 #[cfg(test)]
@@ -477,6 +520,42 @@ mod tests {
         let parsed: Value =
             serde_json::from_str(&serde_json::to_string_pretty(&updated).unwrap()).unwrap();
         assert_eq!(parsed["windows"][0], kept);
+    }
+
+    #[test]
+    fn same_window_keeps_other_equipment_rows() {
+        let existing = json!({
+            "rows": [{"equipment_id": "AHU_A", "fault_hours": 2.0}],
+            "windows": [{
+                "start_utc": "2026-09-28T10:00:00Z",
+                "end_utc": "2026-09-29T10:00:00Z",
+                "rows": [{"equipment_id": "AHU_A", "fault_hours": 2.0}]
+            }]
+        });
+        let updated = merge_windowed_rule_result(
+            Some(&existing),
+            "2026-09-28T10:00:00Z",
+            "2026-09-29T10:00:00Z",
+            &json!({"rows": [{"equipment_id": "AHU_B", "fault_hours": 1.5}]}),
+        )
+        .unwrap();
+        let rows = updated["windows"][0]["rows"].as_array().unwrap();
+        assert_eq!(rows.len(), 2, "both equipment must remain for the window");
+        assert!(rows.iter().any(|r| r["equipment_id"] == "AHU_A"));
+        assert!(rows.iter().any(|r| r["equipment_id"] == "AHU_B"));
+        let again = merge_windowed_rule_result(
+            Some(&updated),
+            "2026-09-28T10:00:00Z",
+            "2026-09-29T10:00:00Z",
+            &json!({"rows": [{"equipment_id": "AHU_B", "fault_hours": 3.0}]}),
+        )
+        .unwrap();
+        let rows = again["windows"][0]["rows"].as_array().unwrap();
+        assert_eq!(rows.len(), 2);
+        let b = rows.iter().find(|r| r["equipment_id"] == "AHU_B").unwrap();
+        assert_eq!(b["fault_hours"], 3.0);
+        let a = rows.iter().find(|r| r["equipment_id"] == "AHU_A").unwrap();
+        assert_eq!(a["fault_hours"], 2.0);
     }
 
     #[test]
