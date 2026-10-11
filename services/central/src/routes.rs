@@ -2747,8 +2747,10 @@ pub async fn local_fieldbus_ingest(
         );
     }
 
-    if let Some(existing_status) = state
-        .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
+    // Soft-OPEN 371 T1e: Absent (evicted/never reserved) is not "already
+    // committed" — only Present identities take the idempotent replay path.
+    if let crate::state::ReceiptLookup::Present(existing_status) = state
+        .lookup_receipt(&receipt_scope, &envelope.edge_id, envelope.message_id)
         .await
     {
         *state.ingest_dup.lock().unwrap() += 1;
@@ -2824,11 +2826,14 @@ pub async fn local_fieldbus_ingest(
         .reserve_receipt_at(&receipt_scope, envelope.clone())
         .await
     {
-        if state
-            .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
-            .await
-            .is_none()
-        {
+        // Absent after failed reserve = ledger backpressure / eviction race,
+        // not an idempotent duplicate (#1168 / Soft-OPEN 371 T1e).
+        if matches!(
+            state
+                .lookup_receipt(&receipt_scope, &envelope.edge_id, envelope.message_id)
+                .await,
+            crate::state::ReceiptLookup::Absent
+        ) {
             state.note_ingest_backpressure("local receipt ledger unavailable");
             return local_error(
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -2909,7 +2914,7 @@ pub async fn local_fieldbus_ingest(
         ));
     }
     let final_status = state
-        .receipt_status(&receipt_scope, &envelope.edge_id, envelope.message_id)
+        .lookup_receipt(&receipt_scope, &envelope.edge_id, envelope.message_id)
         .await;
     let receipt_edge_id = envelope.edge_id.clone();
     let receipt_message_id = envelope.message_id;
@@ -2918,15 +2923,25 @@ pub async fn local_fieldbus_ingest(
         .await
         .unwrap_or(0);
     let status = match final_status {
-        Some(crate::state::IngestReceiptStatus::Committed) if persisted_rows > 0 => {
+        crate::state::ReceiptLookup::Present(crate::state::IngestReceiptStatus::Committed)
+            if persisted_rows > 0 =>
+        {
             LocalIngestStatus::Committed
         }
-        Some(crate::state::IngestReceiptStatus::TerminalZeroEligible) => {
-            LocalIngestStatus::TerminalZeroEligible
+        crate::state::ReceiptLookup::Present(
+            crate::state::IngestReceiptStatus::TerminalZeroEligible,
+        ) => LocalIngestStatus::TerminalZeroEligible,
+        crate::state::ReceiptLookup::Present(crate::state::IngestReceiptStatus::Rejected) => {
+            LocalIngestStatus::Rejected
         }
-        Some(crate::state::IngestReceiptStatus::Rejected) => LocalIngestStatus::Rejected,
-        Some(crate::state::IngestReceiptStatus::Retryable) => LocalIngestStatus::Retryable,
-        _ => LocalIngestStatus::Pending,
+        crate::state::ReceiptLookup::Present(crate::state::IngestReceiptStatus::Retryable) => {
+            LocalIngestStatus::Retryable
+        }
+        crate::state::ReceiptLookup::Absent
+        | crate::state::ReceiptLookup::Present(crate::state::IngestReceiptStatus::Pending)
+        | crate::state::ReceiptLookup::Present(crate::state::IngestReceiptStatus::Committed) => {
+            LocalIngestStatus::Pending
+        }
     };
     let durable = status == LocalIngestStatus::Committed;
     let entry = state.edges.entry(envelope.edge_id.clone()).or_default();

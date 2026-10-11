@@ -1667,6 +1667,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_RECEIPT_CAPACITY for eviction/replay identity test"
+    )]
     async fn evicted_receipt_identity_is_absent_and_may_be_reserved_again() {
         let _guard = crate::test_env_lock::lock_env();
         std::env::set_var("OPENFDD_RECEIPT_CAPACITY", "4");
