@@ -11,13 +11,14 @@ use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
 use anyhow::{anyhow, Context, Result};
-use datafusion::execution::memory_pool::{FairSpillPool, TrackConsumersPool};
+use datafusion::execution::memory_pool::{FairSpillPool, MemoryPool, TrackConsumersPool};
 use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
 use datafusion::prelude::{SessionConfig, SessionContext};
 use fdd_resources::{discover_capacity, ComputeBudget};
 use fdd_store::{HistorianConfig, StorageUrl};
 use serde::Serialize;
 
+use crate::run_quota::RunQuotaPool;
 use crate::tuning::{clamp_tuning_to_cpu, DataFusionTuning};
 
 /// Default spill directory byte budget when unset (tied loosely to disk budget).
@@ -41,6 +42,11 @@ pub struct SharedRuntimeInfo {
 }
 
 struct SharedCompute {
+    /// Aggregate FairSpillPool (+ TrackConsumers). Per-run sessions wrap this
+    /// with [`RunQuotaPool`] at the resolved `query_memory_bytes` ceiling.
+    aggregate_pool: Arc<dyn MemoryPool>,
+    /// Template runtime (spill / object-store). Sessions clone and replace the
+    /// memory pool with a per-run quota wrapper.
     runtime: Arc<RuntimeEnv>,
     session_config: SessionConfig,
     info: SharedRuntimeInfo,
@@ -96,11 +102,11 @@ fn build_shared(config: &HistorianConfig) -> Result<SharedCompute> {
 
     // FairSpillPool + TrackConsumersPool — Greedy via with_memory_limit is wrong
     // for concurrent spillable operators (#1179).
-    let pool = Arc::new(TrackConsumersPool::new(
+    let aggregate_pool: Arc<dyn MemoryPool> = Arc::new(TrackConsumersPool::new(
         FairSpillPool::new(memory_bytes),
         NonZeroUsize::new(5).expect("non-zero"),
     ));
-    let mut runtime = RuntimeEnvBuilder::new().with_memory_pool(pool);
+    let mut runtime = RuntimeEnvBuilder::new().with_memory_pool(Arc::clone(&aggregate_pool));
 
     if let Some(ref spill) = spill_dir {
         std::fs::create_dir_all(spill)
@@ -136,7 +142,7 @@ fn build_shared(config: &HistorianConfig) -> Result<SharedCompute> {
         compute_origin: budget.compute_origin,
         query_origin: budget.query_origin,
         compute_fraction: budget.compute_fraction,
-        pool_kind: "FairSpillPool+TrackConsumersPool".into(),
+        pool_kind: "RunQuotaPool>FairSpillPool+TrackConsumersPool".into(),
         expensive_compute_available: budget.expensive_compute_available,
         spill_directory: spill_dir.as_ref().map(|p| p.display().to_string()),
         spill_max_bytes: spill_dir.as_ref().map(|_| spill_cap),
@@ -146,6 +152,7 @@ fn build_shared(config: &HistorianConfig) -> Result<SharedCompute> {
     };
 
     Ok(SharedCompute {
+        aggregate_pool,
         runtime,
         session_config,
         info,
@@ -165,7 +172,13 @@ pub fn shared_runtime_info(config: &HistorianConfig) -> Result<SharedRuntimeInfo
     Ok(shared(config)?.info.clone())
 }
 
-/// Production session factory: shared FairSpillPool + env-tuned SessionConfig.
+/// Resolved diagnostics when the shared runtime has already been initialized.
+pub fn try_shared_runtime_info() -> Option<SharedRuntimeInfo> {
+    SHARED.get().map(|s| s.info.clone())
+}
+
+/// Production session factory: shared aggregate FairSpillPool + per-run
+/// [`RunQuotaPool`] at the resolved `query_memory_bytes` ceiling (T1c).
 pub fn new_shared_historian_session(config: &HistorianConfig) -> Result<SessionContext> {
     let shared = shared(config)?;
     if !shared.info.expensive_compute_available {
@@ -174,9 +187,14 @@ pub fn new_shared_historian_session(config: &HistorianConfig) -> Result<SessionC
             shared.info.compute_origin
         );
     }
+    let quota = usize::try_from(shared.info.query_memory_bytes)
+        .map_err(|_| anyhow!("resolved query_memory_bytes exceeds platform address space"))?
+        .max(1);
+    let mut runtime = (*shared.runtime).clone();
+    runtime.memory_pool = Arc::new(RunQuotaPool::new(Arc::clone(&shared.aggregate_pool), quota));
     Ok(SessionContext::new_with_config_rt(
         shared.session_config.clone(),
-        shared.runtime.clone(),
+        Arc::new(runtime),
     ))
 }
 
@@ -233,28 +251,46 @@ mod tests {
     }
 
     #[test]
-    fn two_sessions_share_one_memory_pool() {
+    fn two_sessions_share_aggregate_pool_with_independent_run_quotas() {
         std::env::set_var("OPENFDD_COMPUTE_MEMORY_MB", "128");
+        std::env::set_var("OPENFDD_QUERY_MEMORY_MB", "32");
         let tmp = TempDir::new().unwrap();
-        let config = cfg(Some(tmp.path().join("spill")), 128);
+        let config = cfg(Some(tmp.path().join("spill")), 32);
         let built = build_shared(&config).unwrap();
-        let a =
-            SessionContext::new_with_config_rt(built.session_config.clone(), built.runtime.clone());
-        let b =
-            SessionContext::new_with_config_rt(built.session_config.clone(), built.runtime.clone());
-        assert!(Arc::ptr_eq(&a.runtime_env(), &b.runtime_env()));
-        assert!(Arc::ptr_eq(
-            &a.runtime_env().memory_pool,
-            &b.runtime_env().memory_pool
-        ));
-        assert_eq!(built.info.pool_kind, "FairSpillPool+TrackConsumersPool");
-        // Display proves FairSpillPool is inside TrackConsumersPool.
-        let pool_dbg = format!("{}", a.runtime_env().memory_pool);
+        let quota = usize::try_from(built.info.query_memory_bytes)
+            .unwrap()
+            .max(1);
+        let mut rt_a = (*built.runtime).clone();
+        rt_a.memory_pool = Arc::new(RunQuotaPool::new(Arc::clone(&built.aggregate_pool), quota));
+        let mut rt_b = (*built.runtime).clone();
+        rt_b.memory_pool = Arc::new(RunQuotaPool::new(Arc::clone(&built.aggregate_pool), quota));
+        let a = SessionContext::new_with_config_rt(built.session_config.clone(), Arc::new(rt_a));
+        let b = SessionContext::new_with_config_rt(built.session_config.clone(), Arc::new(rt_b));
+        let rt_env_a = a.runtime_env();
+        let rt_env_b = b.runtime_env();
+        assert!(!Arc::ptr_eq(&rt_env_a, &rt_env_b));
+        let pool_a = rt_env_a
+            .memory_pool
+            .as_ref()
+            .downcast_ref::<RunQuotaPool>()
+            .expect("run quota wrapper");
+        let pool_b = rt_env_b
+            .memory_pool
+            .as_ref()
+            .downcast_ref::<RunQuotaPool>()
+            .expect("run quota wrapper");
+        assert!(Arc::ptr_eq(pool_a.parent(), pool_b.parent()));
+        assert_eq!(
+            built.info.pool_kind,
+            "RunQuotaPool>FairSpillPool+TrackConsumersPool"
+        );
+        let pool_dbg = format!("{}", rt_env_a.memory_pool);
         assert!(
-            pool_dbg.contains("fair") && pool_dbg.contains("track_consumers"),
+            pool_dbg.contains("run_quota") && pool_dbg.contains("fair"),
             "unexpected pool display: {pool_dbg}"
         );
         std::env::remove_var("OPENFDD_COMPUTE_MEMORY_MB");
+        std::env::remove_var("OPENFDD_QUERY_MEMORY_MB");
     }
 
     #[test]

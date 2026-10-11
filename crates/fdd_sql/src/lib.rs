@@ -9,6 +9,7 @@ use fdd_store::{HistorianConfig, StorageUrl};
 pub mod historian;
 pub mod object_store;
 pub mod query;
+pub mod run_quota;
 pub mod runtime;
 pub mod session;
 pub mod tuning;
@@ -23,8 +24,10 @@ pub use object_store::{
 };
 pub use query::{
     collect_sql_bounded, collect_sql_budgeted, collect_sql_budgeted_with_cancel,
-    result_max_bytes_from_env, stream_sql, DEFAULT_INTERACTIVE_MAX_ROWS, DEFAULT_RESULT_MAX_BYTES,
+    query_stage_max_bytes_from_env, query_stage_max_bytes_resolved, result_max_bytes_from_env,
+    stream_sql, DEFAULT_INTERACTIVE_MAX_ROWS, DEFAULT_RESULT_MAX_BYTES,
 };
+pub use run_quota::RunQuotaPool;
 pub use runtime::{new_shared_historian_session, shared_runtime_info, SharedRuntimeInfo};
 pub use session::{
     register_utility_if_present, register_weather_for_building, register_weather_if_present,

@@ -36,8 +36,8 @@ pub use afdd_window::{
 };
 pub use analytics_cache::{
     config_hash, freshness_for_watermark, historian_watermark_order, order_key_to_rfc3339,
-    read_plan, read_result, write_result, AnalyticsCacheKey, AnalyticsResultTable, CacheFreshness,
-    CacheProvenance, ReadPlan, StaleAction, SCHEMA_NAME,
+    peek_result_provenance, read_plan, read_result, write_result, AnalyticsCacheKey,
+    AnalyticsResultTable, CacheFreshness, CacheProvenance, ReadPlan, StaleAction, SCHEMA_NAME,
 };
 pub use append::{merge_history_wide_csv, merge_history_wide_text, MergeReport};
 pub use building_session::{

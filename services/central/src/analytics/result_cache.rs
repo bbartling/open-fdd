@@ -14,8 +14,9 @@ use axum::Json;
 use chrono::{DateTime, SecondsFormat, Utc};
 use fdd_store::{
     config_hash, freshness_for_watermark, historian_watermark_order, order_key_to_rfc3339,
-    read_plan, read_result, write_result, AnalyticsCacheKey, AnalyticsResultTable, CacheFreshness,
-    CacheProvenance, SessionBook, SessionError, SessionKind, StaleAction,
+    peek_result_provenance, read_plan, read_result, write_result, AnalyticsCacheKey,
+    AnalyticsResultTable, CacheFreshness, CacheProvenance, SessionBook, SessionError, SessionKind,
+    StaleAction,
 };
 use serde_json::{json, Value};
 
@@ -189,22 +190,23 @@ pub async fn serve_with(
     }
 
     let historian_order = historian_watermark_order(root, &key.building_id).unwrap_or(0);
-    let cached = read_result(root, &key).ok().flatten();
-    let freshness = match &cached {
-        Some((_, prov)) => freshness_for_watermark(prov.watermark_order, historian_order),
+    // Soft-OPEN 371 T1c: peek provenance only — never materialize Parquet rows
+    // before compute admission when serving a durable cache hit.
+    let peeked = peek_result_provenance(root, &key).ok().flatten();
+    let freshness = match &peeked {
+        Some(prov) => freshness_for_watermark(prov.watermark_order, historian_order),
         None => CacheFreshness::Miss,
     };
     let plan = read_plan(freshness, req.refresh, on_stale);
-    if plan.serve_cached {
-        if let Some((table, prov)) = cached {
-            // M70-06: cache hits still clone/build response rows — admit first.
-            let _permit =
-                fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Analytics)
-                    .ok_or_else(analytics_admission_busy)?;
+    if plan.serve_cached && peeked.is_some() {
+        let _permit = fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Analytics)
+            .ok_or_else(analytics_admission_busy)?;
+        if let Some((table, prov)) = read_result(root, &key).ok().flatten() {
             let envelope = envelope_from_table(&table, &prov, req);
             let cache = cache_status(true, plan.stale, started, &key, &prov, historian_order);
             return Ok(ServedAnalytics { envelope, cache });
         }
+        // Rare race: cache file vanished after peek — fall through to recompute.
     }
 
     {
