@@ -522,7 +522,7 @@ pub async fn run_all_rules_with_overrides(
         );
         // Soft-OPEN 371 T1b: race cancel through the actual bounded collector
         // (run_sql_bounded previously ignored options.cancel during stream wait).
-        let cancel_flag = options.cancel.map(|c| Arc::clone(c));
+        let cancel_flag = options.cancel.map(Arc::clone);
         match run_sql_bounded_with_cancel(&ctx, &sql, FDD_RULE_MAX_ROWS, cancel_flag).await {
             Ok(result) => {
                 // Re-check cancel before final publication (M71-03).
