@@ -88,6 +88,9 @@ pub struct IngestStatsResponse {
     pub receipts_capacity: usize,
     #[serde(default)]
     pub receipts_pending: usize,
+    /// Soft-OPEN 371 T1e: estimated bytes reserved on the live-writer queue.
+    #[serde(default)]
+    pub live_writer_queue_bytes: usize,
     /// Operator-readable reject counts (no payload dump).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub reject_buckets: std::collections::BTreeMap<String, u64>,

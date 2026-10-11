@@ -69,7 +69,8 @@ pub use ingest::{
 };
 pub use meta::SidecarMeta;
 pub use micro_batch::{
-    BatchProvenance, FlushReason, HistorianBatchKey, MicroBatchFlush, MicroBatchHistorian,
+    process_pending_bytes, BatchProvenance, FlushReason, HistorianBatchKey, MicroBatchFlush,
+    MicroBatchHistorian,
 };
 pub use migration::{
     discover_legacy_historian, LegacyHistorianCandidate, LegacyHistorianFormat,
