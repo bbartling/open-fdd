@@ -113,11 +113,27 @@ import json,sys
 from pathlib import Path
 out=Path(sys.argv[1])
 verdicts=[]
-for p in out.glob("*/SUMMARY.json"):
+for p in sorted(out.glob("*/SUMMARY.json")):
     d=json.loads(p.read_text())
     verdicts.append((str(p), d.get("verdict")))
     print(p.name, d.get("verdict"))
-if any(v=="FAIL" for _,v in verdicts):
+if not verdicts:
+    print("T6a_AGGREGATOR_FAIL empty artifacts")
     raise SystemExit(2)
-print("T6a_CONTROL_DONE")
+vals=[v for _,v in verdicts]
+if any(v=="FAIL" for v in vals):
+    print("T6a_AGGREGATOR_FAIL")
+    raise SystemExit(2)
+if any(v=="BLOCKED" for v in vals):
+    print("T6a_BLOCKED")
+    raise SystemExit(3)
+# Smoke/control may be CONTROL_ONLY or PARTIAL; never claim FULL Soft-OPEN qualify here.
+if all(v in {"PASS", "CONTROL_ONLY", "PARTIAL"} for v in vals):
+    if any(v=="PARTIAL" for v in vals) or all(v=="CONTROL_ONLY" for v in vals) or "CONTROL_ONLY" in vals:
+        print("T6a_CONTROL_ONLY")
+        raise SystemExit(0)
+    print("T6a_CONTROL_DONE")
+    raise SystemExit(0)
+print("T6a_AGGREGATOR_FAIL unexpected verdicts", vals)
+raise SystemExit(2)
 PY
