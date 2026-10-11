@@ -335,11 +335,27 @@ fn pick_best_column(role: &str, candidates: &[(usize, String)]) -> (usize, Strin
         .unwrap_or_else(|| candidates[0].clone())
 }
 
+/// Atomically publish `history.parquet` (Soft-OPEN 371 T1d).
+///
+/// Write to a sibling temp file then rename so a failed/partial write cannot
+/// destroy the last-good Parquet.
 fn write_parquet(path: &Path, batch: &RecordBatch) -> Result<()> {
-    let file = std::fs::File::create(path)?;
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(parent)?;
+    let tmp = parent.join(format!(
+        ".{}.ingest-{}.tmp",
+        path.file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("history.parquet"),
+        std::process::id()
+    ));
+    let file = std::fs::File::create(&tmp)
+        .with_context(|| format!("create ingest temp {}", tmp.display()))?;
     let mut writer = ArrowWriter::try_new(file, batch.schema(), None)?;
     writer.write(batch)?;
     writer.close()?;
+    std::fs::rename(&tmp, path)
+        .with_context(|| format!("atomic rename {} -> {}", tmp.display(), path.display()))?;
     Ok(())
 }
 
@@ -805,6 +821,42 @@ mod tests {
         );
         let a_after = std::fs::read_to_string(&a_meta).unwrap();
         assert!(a_after.contains("\"row_count\":2") || a_after.contains("\"row_count\": 2"));
+    }
+
+    #[test]
+    fn write_parquet_is_atomic_and_preserves_last_good_on_failed_rename_target() {
+        use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
+        use std::sync::Arc;
+
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("history.parquet");
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "timestamp_utc",
+            DataType::Timestamp(TimeUnit::Nanosecond, None),
+            false,
+        )]));
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![Arc::new(TimestampNanosecondArray::from(vec![1_i64])) as _],
+        )
+        .unwrap();
+        write_parquet(&path, &batch).unwrap();
+        let first = std::fs::read(&path).unwrap();
+        assert!(!first.is_empty());
+        // Second publish replaces atomically; no leftover .tmp beside the final.
+        write_parquet(&path, &batch).unwrap();
+        let second = std::fs::read(&path).unwrap();
+        assert_eq!(first.len(), second.len());
+        let leftovers: Vec<_> = std::fs::read_dir(tmp.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.contains(".tmp"))
+            .collect();
+        assert!(
+            leftovers.is_empty(),
+            "temp ingest files must not remain: {leftovers:?}"
+        );
     }
 
     #[test]

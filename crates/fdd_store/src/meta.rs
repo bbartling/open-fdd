@@ -30,11 +30,23 @@ pub fn read_meta(path: &Path) -> anyhow::Result<SidecarMeta> {
     Ok(serde_json::from_str(&text)?)
 }
 
+/// Stream-hash the source CSV (Soft-OPEN 371 T1d): do not load the whole file.
 pub fn source_fingerprint(path: &Path) -> anyhow::Result<(u64, u64, String)> {
     use sha2::{Digest, Sha256};
+    use std::io::Read;
+
     let meta = std::fs::metadata(path)?;
-    let bytes = std::fs::read(path)?;
-    let hash = format!("{:x}", Sha256::digest(&bytes));
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let hash = format!("{:x}", hasher.finalize());
     Ok((
         meta.len(),
         meta.modified()?
@@ -42,4 +54,25 @@ pub fn source_fingerprint(path: &Path) -> anyhow::Result<(u64, u64, String)> {
             .as_secs(),
         hash,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sha2::{Digest, Sha256};
+    use std::io::Write;
+
+    #[test]
+    fn source_fingerprint_matches_full_file_digest_without_loading_via_fs_read_api() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("history_wide.csv");
+        let mut f = std::fs::File::create(&path).unwrap();
+        // Larger than the 64 KiB stream buffer to exercise the loop.
+        let payload = "timestamp_utc,sat\n".to_string() + &"2026-01-01T00:00:00Z,70\n".repeat(5000);
+        f.write_all(payload.as_bytes()).unwrap();
+        drop(f);
+        let (_size, _mtime, streamed) = source_fingerprint(&path).unwrap();
+        let expected = format!("{:x}", Sha256::digest(payload.as_bytes()));
+        assert_eq!(streamed, expected);
+    }
 }
