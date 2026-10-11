@@ -1,0 +1,4 @@
+# Soft-OPEN 371 T3e — product browser acceptance (Python tooling only).
+# Pin loosely enough for lab Chrome/driver; record exact versions in SUMMARY.
+selenium>=4.18,<5
+webdriver-manager>=4.0,<5
