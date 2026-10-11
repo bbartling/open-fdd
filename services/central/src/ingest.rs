@@ -338,11 +338,14 @@ async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8
             // committed receipts both suppress a concurrent/replayed copy.
             // Dedup authority is this ledger — no independent seen map (#1127 P3).
             if !state.reserve_receipt_at(&scope, env.clone()).await {
-                if state
-                    .receipt_status(&scope, &env.edge_id, env.message_id)
-                    .await
-                    .is_none()
-                {
+                // Soft-OPEN 371 T1e: Absent after failed reserve is ledger
+                // pressure/eviction — not an idempotent duplicate.
+                if matches!(
+                    state
+                        .lookup_receipt(&scope, &env.edge_id, env.message_id)
+                        .await,
+                    crate::state::ReceiptLookup::Absent
+                ) {
                     // #1168: visible backpressure — never silent-drop / never mark MQTT down.
                     state.note_ingest_backpressure("durable ingest receipt ledger unavailable");
                     return;

@@ -92,6 +92,8 @@ def http_json(
     except urllib.error.HTTPError as e:
         raw = e.read().decode("utf-8", errors="replace")
         code = e.code
+    except TimeoutError as e:
+        return 0, {"error": f"timeout after {timeout}s: {e}"}, f"timeout after {timeout}s"
     except urllib.error.URLError as e:
         return 0, {"error": str(e)}, str(e)
     try:
@@ -387,7 +389,7 @@ def main() -> int:
                 site=site,
                 art=art,
                 lookback_days=args.lookback_days,
-                hard_timeout=args.hard_timeout,
+                hard_timeout=args.hard_timeout_secs,
                 start_override=args.start or None,
             )
         )

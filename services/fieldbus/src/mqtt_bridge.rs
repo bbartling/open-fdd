@@ -917,11 +917,9 @@ enum DrainPace {
 async fn drain_local_spool(client: &LocalIngestClient, spool: &Mutex<TelemetrySpool>) -> DrainPace {
     let pending = {
         let guard = spool.lock().await;
-        match guard.list_pending().await {
-            Ok(pending) => pending
-                .into_iter()
-                .take(SINK_DRAIN_BATCH)
-                .collect::<Vec<_>>(),
+        // Soft-OPEN 371 T1e: page before deserialize — never load-all then .take().
+        match guard.page_pending(SINK_DRAIN_BATCH).await {
+            Ok(pending) => pending,
             Err(err) => {
                 warn!(%err, "list local spool failed");
                 return DrainPace::Blocked;
@@ -961,11 +959,9 @@ async fn drain_mqtt_spool(
 ) -> bool {
     let pending = {
         let guard = spool.lock().await;
-        match guard.list_pending().await {
-            Ok(pending) => pending
-                .into_iter()
-                .take(SINK_DRAIN_BATCH)
-                .collect::<Vec<_>>(),
+        // Soft-OPEN 371 T1e: page before deserialize — never load-all then .take().
+        match guard.page_pending(SINK_DRAIN_BATCH).await {
+            Ok(pending) => pending,
             Err(_) => {
                 warn!("list spool failed");
                 return false;
@@ -1187,9 +1183,8 @@ pub async fn spawn_if_configured(
                     tokio::spawn(async move {
                         let mut mqtt: Option<MqttSession> = None;
                         loop {
-                            let pending = spool.lock().await.list_pending().await.ok();
                             let pending_count =
-                                pending.as_ref().map(|rows| rows.len()).unwrap_or(0);
+                                spool.lock().await.count_pending().await.unwrap_or(0);
                             if pending_count == 0 {
                                 pace_after(DrainPace::Idle).await;
                                 continue;
@@ -1207,8 +1202,14 @@ pub async fn spawn_if_configured(
                                 .ok()
                                 .flatten();
                                 if mqtt.is_none() {
+                                    let sample = spool
+                                        .lock()
+                                        .await
+                                        .page_pending(SINK_DRAIN_BATCH)
+                                        .await
+                                        .ok();
                                     remote_ledger.record_no_session(&equipment_ids_from_pending(
-                                        pending.as_deref(),
+                                        sample.as_deref(),
                                     ));
                                     pace_after(DrainPace::Blocked).await;
                                     continue;

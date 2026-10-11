@@ -399,18 +399,61 @@ impl TelemetrySpool {
         Ok(())
     }
 
-    pub async fn list_pending(&self) -> anyhow::Result<Vec<SpoolRecord>> {
-        let mut out = Vec::new();
-        let mut entries = fs::read_dir(&self.cfg.dir).await?;
+    /// Soft-OPEN 371 T1e: list pending **names** (sorted) without reading bodies.
+    /// Callers page with [`Self::page_pending`] so a large outage backlog cannot
+    /// force full deserialize-then-`.take()`.
+    pub async fn list_pending_paths(&self) -> anyhow::Result<Vec<PathBuf>> {
         let mut names = Vec::new();
+        let mut entries = fs::read_dir(&self.cfg.dir).await?;
         while let Some(e) = entries.next_entry().await? {
-            names.push(e.path());
-        }
-        names.sort();
-        for path in names {
+            let path = e.path();
             if path.extension().and_then(|s| s.to_str()) != Some("json") {
                 continue;
             }
+            // Only root pending seq files (`000…json`); skip subdirs.
+            if path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(parse_seq_name_str)
+                .is_some()
+            {
+                names.push(path);
+            }
+        }
+        names.sort();
+        Ok(names)
+    }
+
+    /// Count pending records from the directory index alone (no deserialize).
+    pub async fn count_pending(&self) -> anyhow::Result<usize> {
+        Ok(self.list_pending_paths().await?.len())
+    }
+
+    /// Soft-OPEN 371 T1e: page at most `limit` pending records — sort paths,
+    /// then read/deserialize only that page. Prefer this over
+    /// [`Self::list_pending`] + `.take()` when draining under load.
+    pub async fn page_pending(&self, limit: usize) -> anyhow::Result<Vec<SpoolRecord>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let names = self.list_pending_paths().await?;
+        let mut out = Vec::with_capacity(limit.min(names.len()));
+        for path in names.into_iter().take(limit) {
+            let raw = fs::read(&path).await?;
+            match serde_json::from_slice::<SpoolRecord>(&raw) {
+                Ok(r) => out.push(r),
+                Err(err) => warn!(?path, %err, "skip corrupt spool record"),
+            }
+        }
+        Ok(out)
+    }
+
+    /// Full pending materialization (tests / rare admin paths). Prefer
+    /// [`Self::page_pending`] on drain loops.
+    pub async fn list_pending(&self) -> anyhow::Result<Vec<SpoolRecord>> {
+        let names = self.list_pending_paths().await?;
+        let mut out = Vec::with_capacity(names.len());
+        for path in names {
             let raw = fs::read(&path).await?;
             match serde_json::from_slice::<SpoolRecord>(&raw) {
                 Ok(r) => out.push(r),
@@ -452,23 +495,32 @@ impl TelemetrySpool {
     }
 
     async fn trim(&self) -> anyhow::Result<()> {
-        let pending = self.list_pending().await?;
-        if pending.len() <= self.cfg.max_records {
+        let paths = self.list_pending_paths().await?;
+        if paths.len() <= self.cfg.max_records {
             return Ok(());
         }
-        let drop_n = pending.len() - self.cfg.max_records;
-        let candidates = pending
-            .iter()
-            .filter(|record| record.operation_signature.is_none())
-            .collect::<Vec<_>>();
-        if candidates.len() < drop_n {
+        let drop_n = paths.len() - self.cfg.max_records;
+        info!(drop_n, "trimming oldest spool records");
+        let mut dropped = 0usize;
+        for path in paths {
+            if dropped >= drop_n {
+                break;
+            }
+            let raw = fs::read(&path).await?;
+            let Ok(rec) = serde_json::from_slice::<SpoolRecord>(&raw) else {
+                continue;
+            };
+            // Never silently drop admitted manual operations.
+            if rec.operation_signature.is_some() {
+                continue;
+            }
+            self.ack(rec.seq).await?;
+            dropped += 1;
+        }
+        if dropped < drop_n {
             return Err(anyhow::anyhow!(
                 "spool capacity would evict an admitted manual operation"
             ));
-        }
-        info!(drop_n, "trimming oldest spool records");
-        for rec in candidates.into_iter().take(drop_n) {
-            self.ack(rec.seq).await?;
         }
         Ok(())
     }
@@ -609,7 +661,10 @@ async fn next_quarantine_path(dir: &Path, stem: &str) -> anyhow::Result<PathBuf>
 }
 
 fn parse_seq_name(name: &std::ffi::OsString) -> Option<u64> {
-    let s = name.to_str()?;
+    parse_seq_name_str(name.to_str()?)
+}
+
+fn parse_seq_name_str(s: &str) -> Option<u64> {
     let stem = s.strip_suffix(".json")?;
     stem.parse().ok()
 }
@@ -618,6 +673,27 @@ fn parse_seq_name(name: &std::ffi::OsString) -> Option<u64> {
 mod tests {
     use super::*;
     use openfdd_contracts::{Protocol, Quality, TelemetryEnvelope, TelemetryPoint, ValueKind};
+
+    #[tokio::test]
+    async fn page_pending_reads_only_requested_page() {
+        let dir = std::env::temp_dir().join(format!("ofdd-spool-page-{}", uuid::Uuid::new_v4()));
+        let _ = fs::remove_dir_all(&dir).await;
+        let mut spool = TelemetrySpool::open(SpoolConfig::new(&dir)).await.unwrap();
+        for i in 0..12u64 {
+            let env = TelemetryEnvelope::new("s", "e", Protocol::Bacnet, i + 1, Vec::new());
+            spool.enqueue("local", env).await.unwrap();
+        }
+        assert_eq!(spool.count_pending().await.unwrap(), 12);
+        let page = spool.page_pending(3).await.unwrap();
+        assert_eq!(page.len(), 3);
+        assert_eq!(
+            page.iter().map(|r| r.seq).collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
+        // Full list still sees the backlog; page did not erase pending data.
+        assert_eq!(spool.list_pending().await.unwrap().len(), 12);
+        let _ = fs::remove_dir_all(&dir).await;
+    }
 
     #[tokio::test]
     async fn enqueue_and_ack() {

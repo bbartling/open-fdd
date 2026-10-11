@@ -139,6 +139,15 @@ pub enum IngestReceiptStatus {
     Retryable,
 }
 
+/// Soft-OPEN 371 T1e: receipt identity lookup after watermark eviction.
+/// `Absent` means the ledger no longer remembers the id (never reserved,
+/// released, or evicted). It is not a journal I/O failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReceiptLookup {
+    Present(IngestReceiptStatus),
+    Absent,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IngestReceipt {
     pub scope: String,
@@ -749,6 +758,21 @@ impl AppState {
             .map(|receipt| receipt.status)
     }
 
+    /// Soft-OPEN 371 T1e: explicit Absent vs Present. Eviction deletes the
+    /// remembered identity (`Absent`); that is not a journal read error.
+    /// Callers must not treat Absent as "already committed".
+    pub async fn lookup_receipt(
+        &self,
+        scope: &str,
+        edge_id: &str,
+        message_id: Uuid,
+    ) -> ReceiptLookup {
+        match self.receipt_status(scope, edge_id, message_id).await {
+            Some(status) => ReceiptLookup::Present(status),
+            None => ReceiptLookup::Absent,
+        }
+    }
+
     pub async fn receipt_persisted_rows(
         &self,
         scope: &str,
@@ -1012,8 +1036,16 @@ fn load_receipts() -> HashMap<(String, String, Uuid), IngestReceipt> {
 fn load_receipts_at(
     path: &std::path::Path,
 ) -> Result<HashMap<(String, String, Uuid), IngestReceipt>, String> {
-    let Ok(bytes) = std::fs::read(path) else {
-        return Ok(HashMap::new());
+    // Soft-OPEN 371 T1e: missing journal → empty ledger (NotFound). Any other
+    // I/O error must fail closed — never silently restart with an empty map.
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(HashMap::new());
+        }
+        Err(error) => {
+            return Err(format!("read receipt journal: {error}"));
+        }
     };
     let mut receipts = HashMap::new();
     for line in bytes
@@ -1611,6 +1643,87 @@ mod tests {
         ] {
             std::env::remove_var(key);
         }
+    }
+
+    #[test]
+    fn load_receipts_missing_journal_is_empty_not_found() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("missing-receipts.jsonl");
+        let map = load_receipts_at(&path).expect("NotFound must yield empty ledger");
+        assert!(map.is_empty());
+    }
+
+    #[test]
+    fn load_receipts_io_error_fails_closed() {
+        let temp = tempfile::tempdir().unwrap();
+        // Path is a directory: read() fails with a non-NotFound error.
+        let path = temp.path().join("not-a-file");
+        std::fs::create_dir_all(&path).unwrap();
+        let err = load_receipts_at(&path).expect_err("directory path must fail closed");
+        assert!(
+            err.contains("read receipt journal"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_RECEIPT_CAPACITY for eviction/replay identity test"
+    )]
+    async fn evicted_receipt_identity_is_absent_and_may_be_reserved_again() {
+        let _guard = crate::test_env_lock::lock_env();
+        std::env::set_var("OPENFDD_RECEIPT_CAPACITY", "4");
+        std::env::set_var("OPENFDD_PENDING_RECEIPT_CAPACITY", "4");
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = AppState::new();
+        state.ingest_receipts_path = temp.path().join("receipts.jsonl");
+        let scope = "tenant-a/building-local";
+        let mut first_id = None;
+        for i in 0..4u64 {
+            let env = local_envelope("edge-local", &format!("equipment-{i}"));
+            if i == 0 {
+                first_id = Some(env.message_id);
+            }
+            assert!(state.reserve_receipt_at(scope, env.clone()).await);
+            assert!(
+                state
+                    .commit_receipt(scope, "edge-local", env.message_id)
+                    .await
+            );
+        }
+        let first = first_id.expect("first message id");
+        assert_eq!(
+            state.lookup_receipt(scope, "edge-local", first).await,
+            ReceiptLookup::Present(IngestReceiptStatus::Committed)
+        );
+        // One more committed tombstone forces watermark eviction of oldest.
+        let extra = local_envelope("edge-local", "equipment-extra");
+        assert!(state.reserve_receipt_at(scope, extra.clone()).await);
+        assert!(
+            state
+                .commit_receipt(scope, "edge-local", extra.message_id)
+                .await
+        );
+        assert_eq!(
+            state.lookup_receipt(scope, "edge-local", first).await,
+            ReceiptLookup::Absent,
+            "eviction must delete remembered identity"
+        );
+        // Replay of an evicted id is a new reservation — not silent idempotent
+        // commit. Canonical durability is the historian, not the forgotten ledger.
+        let mut replay = local_envelope("edge-local", "equipment-0");
+        replay.message_id = first;
+        assert!(
+            state.reserve_receipt_at(scope, replay).await,
+            "evicted identity must be reservable again"
+        );
+        assert_eq!(
+            state.lookup_receipt(scope, "edge-local", first).await,
+            ReceiptLookup::Present(IngestReceiptStatus::Pending)
+        );
+        std::env::remove_var("OPENFDD_RECEIPT_CAPACITY");
+        std::env::remove_var("OPENFDD_PENDING_RECEIPT_CAPACITY");
     }
 
     #[tokio::test]
