@@ -278,6 +278,33 @@ pub fn write_result(
     Ok(final_path)
 }
 
+/// Read only Parquet key/value provenance without materializing Arrow batches.
+///
+/// Soft-OPEN 371 T1c: callers must acquire compute admission before
+/// [`read_result`] materializes durable cache rows.
+pub fn peek_result_provenance(
+    storage_root: &Path,
+    key: &AnalyticsCacheKey,
+) -> Result<Option<CacheProvenance>> {
+    let path = partition_dir(storage_root, key)?.join("results.parquet");
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let file = File::open(&path).with_context(|| format!("open {}", path.display()))?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
+    let meta = metadata_map(builder.metadata().file_metadata().key_value_metadata());
+    if !cache_meta_matches_key(&meta, key) {
+        return Ok(None);
+    }
+    Ok(Some(provenance_from_meta(&meta)?))
+}
+
+fn cache_meta_matches_key(meta: &HashMap<String, String>, key: &AnalyticsCacheKey) -> bool {
+    meta.get("openfdd.schema").map(String::as_str) == Some(SCHEMA_NAME)
+        && meta.get("openfdd.config_hash").map(String::as_str) == Some(key.config_hash.as_str())
+        && meta.get("openfdd.building_id").map(String::as_str) == Some(key.building_id.as_str())
+}
+
 pub fn read_result(
     storage_root: &Path,
     key: &AnalyticsCacheKey,
@@ -289,13 +316,7 @@ pub fn read_result(
     let file = File::open(&path).with_context(|| format!("open {}", path.display()))?;
     let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
     let meta = metadata_map(builder.metadata().file_metadata().key_value_metadata());
-    if meta.get("openfdd.schema").map(String::as_str) != Some(SCHEMA_NAME) {
-        return Ok(None);
-    }
-    if meta.get("openfdd.config_hash").map(String::as_str) != Some(key.config_hash.as_str()) {
-        return Ok(None);
-    }
-    if meta.get("openfdd.building_id").map(String::as_str) != Some(key.building_id.as_str()) {
+    if !cache_meta_matches_key(&meta, key) {
         return Ok(None);
     }
     let schema = builder.schema().clone();
@@ -892,6 +913,10 @@ mod tests {
         assert!(names.contains(&"run_hours".to_string()));
         assert!(names.contains(&"on".to_string()));
         assert!(!names.iter().any(|n| n == "payload" || n == "envelope_json"));
+
+        let peeked = peek_result_provenance(tmp.path(), &key).unwrap().unwrap();
+        assert_eq!(peeked.watermark_order, 20260108000000);
+        assert_eq!(peeked.config_hash, hash);
 
         let (table, got) = read_result(tmp.path(), &key).unwrap().unwrap();
         assert_eq!(table.rows[0]["equipment_id"], "AHU_1");

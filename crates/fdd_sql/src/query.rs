@@ -38,28 +38,41 @@ pub fn result_max_bytes_from_env() -> Result<usize> {
     }
 }
 
-/// Per-run materialization ceiling: min(result max, `OPENFDD_QUERY_MEMORY_MB`).
+/// Materialization ceiling from an already-resolved per-request quota.
 ///
-/// This enforces the advertised query envelope on retained Arrow output stages
-/// (M70-03). DataFusion operator intermediates remain under the shared
-/// FairSpillPool; a dedicated per-run pool limiter is still residual.
-pub fn query_stage_max_bytes_from_env() -> Result<usize> {
+/// Soft-OPEN 371 T1c: callers must pass [`ComputeBudget::query_memory_bytes`]
+/// (or shared-runtime diagnostics), not a raw re-parse of `OPENFDD_QUERY_MEMORY_MB`.
+/// Cap is `min(RESULT_MAX, resolved_query)`.
+pub fn query_stage_max_bytes_resolved(query_memory_bytes: u64) -> Result<usize> {
     let result_max = result_max_bytes_from_env()?;
-    match env::var("OPENFDD_QUERY_MEMORY_MB") {
-        Ok(raw) => {
-            let mb: u64 = raw
-                .trim()
-                .parse()
-                .map_err(|_| anyhow!("OPENFDD_QUERY_MEMORY_MB must be a positive integer"))?;
-            if mb == 0 {
-                bail!("OPENFDD_QUERY_MEMORY_MB must be greater than zero");
-            }
-            let query_bytes = usize::try_from(mb.saturating_mul(1024 * 1024))
-                .map_err(|_| anyhow!("OPENFDD_QUERY_MEMORY_MB exceeds platform address space"))?;
-            Ok(result_max.min(query_bytes))
-        }
-        Err(_) => Ok(result_max),
+    let query_bytes = usize::try_from(query_memory_bytes)
+        .map_err(|_| anyhow!("resolved query_memory_bytes exceeds platform address space"))?;
+    if query_bytes == 0 {
+        bail!("resolved query_memory_bytes must be greater than zero");
     }
+    Ok(result_max.min(query_bytes).max(1))
+}
+
+/// Per-run materialization ceiling using the **resolved** query budget.
+///
+/// Resolves via [`fdd_resources::ComputeBudget`] so unset `OPENFDD_QUERY_MEMORY_MB`
+/// becomes `pool/2` (clamped), and an oversized explicit env is capped to the
+/// aggregate FairSpillPool — never raw `RESULT_MAX` alone when a pool exists.
+pub fn query_stage_max_bytes_from_env() -> Result<usize> {
+    if let Some(info) = crate::runtime::try_shared_runtime_info() {
+        return query_stage_max_bytes_resolved(info.query_memory_bytes);
+    }
+    let discovery = fdd_resources::discover_capacity();
+    let hint_mb = match env::var("OPENFDD_QUERY_MEMORY_MB") {
+        Ok(raw) => raw
+            .trim()
+            .parse::<u64>()
+            .map_err(|_| anyhow!("OPENFDD_QUERY_MEMORY_MB must be a positive integer"))?
+            .max(1),
+        Err(_) => 256,
+    };
+    let budget = fdd_resources::ComputeBudget::resolve(&discovery, hint_mb)?;
+    query_stage_max_bytes_resolved(budget.query_memory_bytes)
 }
 
 /// Execute SQL as an Arrow record-batch stream without materializing the full
@@ -266,5 +279,16 @@ mod tests {
             "expected cancel error, got: {err}"
         );
         assert!(cancel.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn resolved_stage_cap_uses_query_quota_not_raw_result_max_alone() {
+        std::env::remove_var("OPENFDD_RESULT_MAX_BYTES");
+        // Resolved pool/2 style 8 MiB must win over default 64 MiB RESULT_MAX.
+        let capped = query_stage_max_bytes_resolved(8 * 1024 * 1024).unwrap();
+        assert_eq!(capped, 8 * 1024 * 1024);
+        // Explicit oversized resolved query still cannot exceed RESULT_MAX default.
+        let capped_hi = query_stage_max_bytes_resolved(128 * 1024 * 1024).unwrap();
+        assert_eq!(capped_hi, DEFAULT_RESULT_MAX_BYTES);
     }
 }
