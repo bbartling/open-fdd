@@ -12,7 +12,7 @@ use datafusion::prelude::*;
 use fdd_sql::{
     new_historian_session, register_historian_building, register_parquet_tree,
     register_utility_if_present, register_weather_for_building, result_max_bytes_from_env,
-    run_sql_bounded,
+    run_sql_bounded_with_cancel,
 };
 use fdd_store::{merge_windowed_rule_result, HistorianConfig};
 use serde::Serialize;
@@ -520,10 +520,37 @@ pub async fn run_all_rules_with_overrides(
             &history_columns,
             history_table,
         );
-        // Byte budget enforced inside collect_sql_budgeted via env; row cap stays
-        // high so legitimate fault coverage is not silently clipped by LIMIT.
-        match run_sql_bounded(&ctx, &sql, FDD_RULE_MAX_ROWS).await {
+        // Soft-OPEN 371 T1b: race cancel through the actual bounded collector
+        // (run_sql_bounded previously ignored options.cancel during stream wait).
+        let cancel_flag = options.cancel.map(Arc::clone);
+        match run_sql_bounded_with_cancel(&ctx, &sql, FDD_RULE_MAX_ROWS, cancel_flag).await {
             Ok(result) => {
+                // Re-check cancel before final publication (M71-03).
+                if options
+                    .cancel
+                    .is_some_and(|flag| flag.load(Ordering::SeqCst))
+                {
+                    timings.push(RuleTiming {
+                        rule_id: rule.rule_id.clone(),
+                        row_count: 0,
+                        elapsed_ms: t0.elapsed().as_millis(),
+                        output_path: String::new(),
+                        error: Some(
+                            "CANCELLED: cooperative cancel requested before rule publish".into(),
+                        ),
+                    });
+                    rules_failed += 1;
+                    return Ok(RuleRunReport {
+                        rules_run: timings.len(),
+                        rules_succeeded,
+                        rules_failed,
+                        rules_skipped,
+                        poll_seconds,
+                        timings,
+                        total_ms: started.elapsed().as_millis(),
+                        cancelled: true,
+                    });
+                }
                 // Approximate JSON materialization against the same byte budget.
                 let approx_json = result.rows.len().saturating_mul(256);
                 if approx_json > result_max_bytes {
@@ -561,6 +588,29 @@ pub async fn run_all_rules_with_overrides(
             }
             Err(e) => {
                 let msg = e.to_string();
+                if msg.contains("cancelled by cooperative cancel")
+                    || msg.contains("CANCELLED")
+                    || msg.contains("memory abort")
+                {
+                    timings.push(RuleTiming {
+                        rule_id: rule.rule_id.clone(),
+                        row_count: 0,
+                        elapsed_ms: t0.elapsed().as_millis(),
+                        output_path: String::new(),
+                        error: Some(format!("CANCELLED: {msg}")),
+                    });
+                    rules_failed += 1;
+                    return Ok(RuleRunReport {
+                        rules_run: timings.len(),
+                        rules_succeeded,
+                        rules_failed,
+                        rules_skipped,
+                        poll_seconds,
+                        timings,
+                        total_ms: started.elapsed().as_millis(),
+                        cancelled: true,
+                    });
+                }
                 if is_missing_schema_error(&msg) {
                     // Schema/weather miss classified at runtime -> skip, not fail
                     // (OFDD-066/068). Keeps Liberty runs at rules_failed == 0.

@@ -402,8 +402,21 @@ pub async fn run_sql_bounded(
     sql: &str,
     max_rows: usize,
 ) -> Result<QueryResult> {
+    run_sql_bounded_with_cancel(ctx, sql, max_rows, None).await
+}
+
+/// Bounded collect with cooperative cancel (Soft-OPEN 371 T1b — registry path).
+pub async fn run_sql_bounded_with_cancel(
+    ctx: &SessionContext,
+    sql: &str,
+    max_rows: usize,
+    cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) -> Result<QueryResult> {
     let started = std::time::Instant::now();
-    let batches = crate::query::collect_sql_bounded(ctx, sql, max_rows).await?;
+    let max_bytes = crate::query::query_stage_max_bytes_from_env()?;
+    let batches =
+        crate::query::collect_sql_budgeted_with_cancel(ctx, sql, max_rows, max_bytes, cancel)
+            .await?;
     Ok(query_result_from_batches(&batches, started))
 }
 

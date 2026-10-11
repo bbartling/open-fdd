@@ -7,11 +7,14 @@
 //! unbounded result.
 
 use std::env;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Result};
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::physical_plan::SendableRecordBatchStream;
 use datafusion::prelude::SessionContext;
+use futures::FutureExt;
 use futures::StreamExt;
 
 pub const DEFAULT_INTERACTIVE_MAX_ROWS: usize = 10_000;
@@ -90,21 +93,72 @@ pub async fn collect_sql_budgeted(
     max_rows: usize,
     max_bytes: usize,
 ) -> Result<Vec<RecordBatch>> {
+    collect_sql_budgeted_with_cancel(ctx, sql, max_rows, max_bytes, None).await
+}
+
+/// Same as [`collect_sql_budgeted`] with an optional cooperative cancel token.
+///
+/// Soft-OPEN 371 T1b / M71-03: the registry runner must race cancel against the
+/// actual stream wait — not only before rule start. Dropping the stream on
+/// cancel releases engine reservations.
+pub async fn collect_sql_budgeted_with_cancel(
+    ctx: &SessionContext,
+    sql: &str,
+    max_rows: usize,
+    max_bytes: usize,
+    cancel: Option<Arc<AtomicBool>>,
+) -> Result<Vec<RecordBatch>> {
     if max_rows == 0 {
         bail!("SQL row budget must be greater than zero");
     }
     if max_bytes == 0 {
         bail!("SQL byte budget must be greater than zero");
     }
+    let cancelled = || {
+        cancel.as_ref().is_some_and(|c| c.load(Ordering::SeqCst))
+            || fdd_resources::memory_abort_requested()
+    };
+    if cancelled() {
+        bail!("SQL cancelled by cooperative cancel / memory abort before collect");
+    }
     let probe_limit = max_rows
         .checked_add(1)
         .ok_or_else(|| anyhow!("SQL row budget is too large"))?;
     let df = ctx.sql(sql).await?.limit(0, Some(probe_limit))?;
+    if cancelled() {
+        bail!("SQL cancelled by cooperative cancel / memory abort after planning");
+    }
     let mut stream = df.execute_stream().await?;
     let mut batches = Vec::new();
     let mut rows = 0usize;
     let mut bytes = 0usize;
-    while let Some(next) = stream.next().await {
+    loop {
+        if cancelled() {
+            drop(stream);
+            bail!("SQL cancelled by cooperative cancel / memory abort during collect");
+        }
+        let next = {
+            let wait = stream.next();
+            tokio::pin!(wait);
+            tokio::select! {
+                biased;
+                _ = async {
+                    loop {
+                        if cancelled() {
+                            break;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                    }
+                }.fuse() => {
+                    drop(stream);
+                    bail!("SQL cancelled by cooperative cancel / memory abort during collect");
+                }
+                item = &mut wait => item,
+            }
+        };
+        let Some(next) = next else {
+            break;
+        };
         let batch = next?;
         let batch_rows = batch.num_rows();
         let batch_bytes = batch.get_array_memory_size();
@@ -121,6 +175,9 @@ pub async fn collect_sql_budgeted(
             );
         }
         batches.push(batch);
+    }
+    if cancelled() {
+        bail!("SQL cancelled by cooperative cancel / memory abort before return");
     }
     Ok(batches)
 }
@@ -186,5 +243,28 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("byte budget"), "unexpected error: {err}");
+    }
+
+    #[tokio::test]
+    async fn cancel_token_fails_collect_before_materialize() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let ctx = SessionContext::new();
+        register_three_rows(&ctx);
+        let cancel = Arc::new(AtomicBool::new(true));
+        let err = collect_sql_budgeted_with_cancel(
+            &ctx,
+            "SELECT * FROM samples",
+            100,
+            1024 * 1024,
+            Some(Arc::clone(&cancel)),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains("cancelled"),
+            "expected cancel error, got: {err}"
+        );
+        assert!(cancel.load(Ordering::SeqCst));
     }
 }
