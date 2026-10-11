@@ -1,0 +1,86 @@
+{
+  "schema": "openfdd_product_ui_acceptance_v1",
+  "train": "Soft-OPEN 371",
+  "notes": [
+    "Sites are test inputs only — never product runtime special cases.",
+    "No secrets/tokens/topology in this public fixture.",
+    "Independent oracles are filled by the operator/harness; endpoint self-counts are not oracles.",
+    "AHU_2-only PASS cannot close BUILDING_100 when AHU_1 cohort completeness is required."
+  ],
+  "expected_revision_env": "OPENFDD_EXPECTED_REVISION",
+  "ui_deadline_seconds": 120,
+  "sites": [
+    {
+      "site_id": "BUILDING_100",
+      "kind": "package_historical",
+      "require_form_login": true,
+      "require_site_select": true,
+      "historian_window": {
+        "mode": "fixed_seven_day_inside_historian_range",
+        "forbid_silent_widen_to_all_history": true
+      },
+      "required_views": ["overview", "fdd", "rcx", "inspect"],
+      "rcx_presets": [
+        "ahu_motor_weekly",
+        "boiler_motor_weekly",
+        "chiller_motor_weekly",
+        "mech_cooling_oat_bins",
+        "bas_vs_web_oat"
+      ],
+      "equipment_completeness": {
+        "type_first": true,
+        "forbid_ahu2_only_conceal_truncated_ahu1": true
+      },
+      "weather": {
+        "require_distinct_bas_and_web_oat": true,
+        "roles": ["outside-air-temp", "web-outside-air-temp"]
+      },
+      "fail_markers": [
+        "Central analytics unavailable",
+        "502 Bad Gateway",
+        "avg(Utf8View)",
+        "Error during planning",
+        "No series loaded"
+      ]
+    },
+    {
+      "site_id": "ACME",
+      "kind": "mqtt_live",
+      "require_form_login": true,
+      "require_site_select": true,
+      "overview_actions": [
+        {
+          "id": "update_analytics",
+          "testid_hint": "overview-refresh",
+          "deadline_seconds": 120,
+          "require_fresh_completed_result": true
+        },
+        {
+          "id": "update_fdd_run_all",
+          "testid_hint": "overview-rules-refresh",
+          "deadline_seconds": 120,
+          "require_fresh_completed_result": true
+        }
+      ],
+      "require_mqtt_ingest_continuity": true,
+      "required_views": ["overview", "fdd", "rcx", "inspect"],
+      "fail_markers": [
+        "Central analytics unavailable",
+        "502 Bad Gateway",
+        "avg(Utf8View)",
+        "Error during planning"
+      ]
+    }
+  ],
+  "negative_contracts": [
+    "mounted_empty_plotly_host",
+    "null_only_chart",
+    "spinner_screenshot_alone",
+    "nginx_502_html_alert",
+    "missing_auth_or_browser",
+    "stale_revision_mismatch",
+    "cached_figure_other_period",
+    "missing_preset_execution",
+    "ahu2_only_conceals_truncated_ahu1"
+  ]
+}
