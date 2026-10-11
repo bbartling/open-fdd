@@ -7,6 +7,7 @@
 //! every remaining batch before a clean process exit.
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Result};
@@ -15,6 +16,10 @@ use arrow::record_batch::RecordBatch;
 use serde::Serialize;
 
 use crate::parquet_parts::{ParquetPart, ParquetPartWriter};
+
+/// Soft-OPEN 371 T1e: aggregate pending micro-batch bytes across every
+/// LiveHistorian / scope in the process (not only per-instance 32 MiB caps).
+static PROCESS_PENDING_BYTES: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct HistorianBatchKey {
@@ -83,9 +88,11 @@ struct PendingBatch {
 /// during graceful shutdown. This keeps lifecycle ownership explicit and avoids
 /// hidden tasks inside the storage crate.
 ///
-/// Soft-OPEN 370 T1e / M70-05: `max_pending_bytes` is a **global** resident
-/// budget across every equipment key — not only per-key row thresholds.
-#[derive(Debug, Clone)]
+/// Soft-OPEN 370 T1e / M70-05: `max_pending_bytes` is a **per-instance** resident
+/// budget across every equipment key on that historian — not only per-key row
+/// thresholds. Soft-OPEN 371 T1e adds a separate process-wide aggregate
+/// (`OPENFDD_MICRO_BATCH_PROCESS_MAX_PENDING_BYTES`, default 128 MiB).
+#[derive(Debug)]
 pub struct MicroBatchHistorian {
     writer: ParquetPartWriter,
     flush_rows: usize,
@@ -205,7 +212,7 @@ impl MicroBatchHistorian {
 
         let rows = batch.num_rows();
         let batch_bytes = batch.get_array_memory_size().max(1);
-        // Soft-OPEN 370 T1e: refuse before buffering when the global resident
+        // Soft-OPEN 370 T1e: refuse before buffering when the instance resident
         // budget cannot accept this batch (do not erase other pending keys).
         if self.pending_bytes.saturating_add(batch_bytes) > self.max_pending_bytes {
             // Prefer flushing this key if it already has rows; otherwise fail closed.
@@ -228,6 +235,8 @@ impl MicroBatchHistorian {
                 self.max_pending_bytes
             );
         }
+        // Soft-OPEN 371 T1e: also charge the process-wide aggregate across scopes.
+        try_reserve_process_bytes(batch_bytes)?;
 
         let pending = self
             .pending
@@ -324,6 +333,7 @@ impl MicroBatchHistorian {
         // Provenance is the input list that was encoded, not a later guess.
         if let Some(removed) = self.pending.remove(key) {
             self.pending_bytes = self.pending_bytes.saturating_sub(removed.bytes);
+            release_process_bytes(removed.bytes);
         }
         Ok(MicroBatchFlush {
             building_id: key.building_id.clone(),
@@ -336,6 +346,19 @@ impl MicroBatchHistorian {
     }
 }
 
+impl Drop for MicroBatchHistorian {
+    fn drop(&mut self) {
+        // Release process-wide accounting when the instance is dropped without a
+        // successful flush (failed publish / test teardown). Resident Arrow is
+        // freed with `pending`; do not leave the aggregate charged.
+        if self.pending_bytes > 0 {
+            release_process_bytes(self.pending_bytes);
+            self.pending_bytes = 0;
+            self.pending.clear();
+        }
+    }
+}
+
 fn default_max_pending_bytes() -> usize {
     std::env::var("OPENFDD_MICRO_BATCH_MAX_PENDING_BYTES")
         .ok()
@@ -344,9 +367,48 @@ fn default_max_pending_bytes() -> usize {
         .unwrap_or(32 * 1024 * 1024)
 }
 
+fn process_max_pending_bytes() -> usize {
+    std::env::var("OPENFDD_MICRO_BATCH_PROCESS_MAX_PENDING_BYTES")
+        .ok()
+        .and_then(|raw| raw.parse().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(128 * 1024 * 1024)
+}
+
+/// Current process-wide micro-batch resident bytes (all scopes).
+pub fn process_pending_bytes() -> usize {
+    PROCESS_PENDING_BYTES.load(Ordering::Acquire)
+}
+
+fn try_reserve_process_bytes(additional: usize) -> Result<()> {
+    let limit = process_max_pending_bytes();
+    let mut cur = PROCESS_PENDING_BYTES.load(Ordering::Acquire);
+    loop {
+        let next = cur
+            .checked_add(additional)
+            .ok_or_else(|| anyhow!("micro-batch process pending byte overflow"))?;
+        if next > limit {
+            bail!(
+                "micro-batch process pending byte budget exceeded ({cur} + {additional} > {limit}; OPENFDD_MICRO_BATCH_PROCESS_MAX_PENDING_BYTES)"
+            );
+        }
+        match PROCESS_PENDING_BYTES.compare_exchange(cur, next, Ordering::AcqRel, Ordering::Acquire)
+        {
+            Ok(_) => return Ok(()),
+            Err(observed) => cur = observed,
+        }
+    }
+}
+
+fn release_process_bytes(bytes: usize) {
+    let _ = PROCESS_PENDING_BYTES.try_update(Ordering::AcqRel, Ordering::Acquire, |cur| {
+        Some(cur.saturating_sub(bytes))
+    });
+}
+
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use arrow::array::{Float64Array, StringArray, TimestampNanosecondArray};
     use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
@@ -356,6 +418,9 @@ mod tests {
 
     use super::*;
     use crate::historian::LocalStorage;
+
+    /// Process-wide pending-byte counter is shared; serialize these unit tests.
+    static PROCESS_BYTES_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn batch(times: &[&str]) -> RecordBatch {
         batch_for_equipment(times, "AHU_1")
@@ -399,6 +464,9 @@ mod tests {
 
     #[test]
     fn global_byte_budget_fails_closed_without_erasing_pending() {
+        let _guard = PROCESS_BYTES_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let tmp = TempDir::new().unwrap();
         let writer = ParquetPartWriter::new(LocalStorage::new(tmp.path()));
         let mut historian =
@@ -424,6 +492,9 @@ mod tests {
 
     #[test]
     fn row_threshold_flushes_and_clears_pending_rows() {
+        let _guard = PROCESS_BYTES_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let tmp = TempDir::new().unwrap();
         let start = Instant::now();
         let mut historian = historian(&tmp, 2, Duration::from_secs(60));
@@ -453,6 +524,9 @@ mod tests {
 
     #[test]
     fn time_threshold_flushes_small_batch() {
+        let _guard = PROCESS_BYTES_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let tmp = TempDir::new().unwrap();
         let start = Instant::now();
         let mut historian = historian(&tmp, 100, Duration::from_secs(30));
@@ -478,6 +552,9 @@ mod tests {
 
     #[test]
     fn time_and_row_flushes_return_only_the_published_batch_tokens() {
+        let _guard = PROCESS_BYTES_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let tmp = TempDir::new().unwrap();
         let start = Instant::now();
         let mut timed_historian = historian(&tmp, 2, Duration::from_secs(30));
@@ -559,6 +636,9 @@ mod tests {
 
     #[test]
     fn shutdown_flush_drains_all_keys() {
+        let _guard = PROCESS_BYTES_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let tmp = TempDir::new().unwrap();
         let mut historian = historian(&tmp, 100, Duration::from_secs(60));
         historian
@@ -581,6 +661,9 @@ mod tests {
 
     #[test]
     fn schema_change_is_rejected_without_losing_pending_rows() {
+        let _guard = PROCESS_BYTES_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let tmp = TempDir::new().unwrap();
         let mut historian = historian(&tmp, 100, Duration::from_secs(60));
         historian
@@ -609,6 +692,9 @@ mod tests {
 
     #[test]
     fn failed_flush_keeps_rows_buffered_for_retry() {
+        let _guard = PROCESS_BYTES_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let tmp = TempDir::new().unwrap();
         let mut historian = historian(&tmp, 1, Duration::from_secs(60));
         assert!(historian
@@ -620,5 +706,36 @@ mod tests {
             .is_err());
         assert_eq!(historian.pending_rows(), 1);
         assert_eq!(historian.pending_keys(), 1);
+    }
+
+    #[test]
+    fn process_pending_bytes_charge_and_release_on_flush() {
+        let _guard = PROCESS_BYTES_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let tmp = TempDir::new().unwrap();
+        let start = Instant::now();
+        let before = process_pending_bytes();
+        let mut historian = historian(&tmp, 100, Duration::from_secs(60));
+        historian
+            .push_at(
+                "BUILDING_100",
+                "AHU_1",
+                batch(&["2026-08-20T12:00:00Z"]),
+                start,
+            )
+            .unwrap();
+        let charged = process_pending_bytes();
+        assert!(
+            charged > before,
+            "process pending should rise after push (before={before} after={charged})"
+        );
+        let my_bytes = charged - before;
+        let flushed = historian
+            .flush_due_at(start + Duration::from_secs(120))
+            .unwrap();
+        assert_eq!(flushed.len(), 1);
+        assert_eq!(historian.pending_bytes(), 0);
+        assert_eq!(process_pending_bytes(), charged - my_bytes);
     }
 }

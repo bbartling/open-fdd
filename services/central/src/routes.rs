@@ -2982,6 +2982,7 @@ pub async fn ingest_stats(State(state): State<Arc<AppState>>) -> Json<IngestStat
         receipts_len: ledger.len,
         receipts_capacity: ledger.capacity,
         receipts_pending: ledger.pending,
+        live_writer_queue_bytes: crate::live_historian::live_writer_queue_bytes(),
         reject_buckets: state.ingest_reject_buckets.lock().unwrap().clone(),
         dead_letters: state.dead_letters.lock().unwrap().len(),
     })
