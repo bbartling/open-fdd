@@ -3800,8 +3800,8 @@ pub async fn sql_anomaly_from_history(
         };
     let win = req.window_rows.clamp(3, 168);
     // Warmup for rolling z: assume ≤15 min samples; cap at 2 days.
-    let warmup = chrono::Duration::minutes((win as i64).saturating_mul(15))
-        .min(chrono::Duration::days(2));
+    let warmup =
+        chrono::Duration::minutes((win as i64).saturating_mul(15)).min(chrono::Duration::days(2));
     let scan_start = report_start - warmup;
     let scan_filter = time_range_sql("timestamp_utc", Some(scan_start), report_end);
     let report_bound = report_start.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
