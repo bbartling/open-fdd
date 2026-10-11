@@ -12,8 +12,9 @@ This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER
 | --- | --- | --- |
 | T0b evaluator honesty (M71-01) | **MERGED** | #1210 — strict typed counts + durable readback + stub FAIL |
 | T1b registry cancel (M71-03) | **MERGED** | #1211 / `6609c82b` — cancel through registry SQL collect |
-| T1c run quota (M71-04) | **PATCHING** | #1214 — `RunQuotaPool` + cache peek-before-admit; body-after-permit residual |
-| T1d–f source residuals | **OPEN** | Append bounds, spool/receipt, AFDD windows |
+| T1c run quota (M71-04) | **MERGED** | #1214 — `RunQuotaPool` + cache peek-before-admit; body-after-permit residual |
+| T1f anomaly dates (M71-08) | **PATCHING** | #1216 — bound sql_anomaly start/end + warmup; residual AFDD JSON rebuild |
+| T1d–e source residuals | **OPEN** | Append bounds (#1215), spool/receipt |
 | T2b–d / T3d product UI | **OPEN** | ACME 502 / BUILDING_100 motors+BAS-OAT / Utf8View; pin must be tip |
 | T6a full matrix | **PARTIAL** | Long phases still unimplemented after honesty repair |
 

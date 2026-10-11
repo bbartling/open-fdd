@@ -3758,16 +3758,55 @@ pub const ANOMALY_SCREEN_ROLES: &[&str] = &[
     "oa_h",
 ];
 
-/// Rolling Z-score (+ optional LAG transition events) per equipment × role.
-pub async fn sql_anomaly_from_history(
-    equipment_filter: Option<&[String]>,
-    building_id: Option<&str>,
+/// Default report lookback when callers omit `query.start` (Soft-OPEN 371 T1f).
+pub const ANOMALY_DEFAULT_LOOKBACK_DAYS: i64 = 14;
+
+/// Caller knobs for [`sql_anomaly_from_history`] (keeps the public arity clippy-clean).
+#[derive(Debug, Clone)]
+pub struct SqlAnomalyRequest<'a> {
+    pub equipment_filter: Option<&'a [String]>,
+    pub building_id: Option<&'a str>,
+    pub window_rows: u32,
+    pub z_threshold: f64,
+    pub method: &'a str,
+    pub transition_events: bool,
+    pub start: Option<DateTime<Utc>>,
+    pub end: Option<DateTime<Utc>>,
+}
+
+struct AnomalyRoleSql<'a> {
+    role: &'a str,
+    ts_col: &'a str,
     window_rows: u32,
-    z_threshold: f64,
-    method: &str,
+    threshold: f64,
+    eq_filter: &'a str,
+    scan_filter: &'a str,
+    report_start_rfc3339: &'a str,
     transition_events: bool,
+}
+
+/// Rolling Z-score (+ optional LAG transition events) per equipment × role.
+///
+/// Soft-OPEN 371 T1f: honor requested `start`/`end` (default 14d lookback). Scan
+/// includes a bounded warmup ahead of the report window for rolling stats; only
+/// in-window anomalies contribute to hours/events.
+pub async fn sql_anomaly_from_history(
+    req: SqlAnomalyRequest<'_>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+    let (report_start, report_end) =
+        match resolve_analytics_window(req.start, req.end, ANOMALY_DEFAULT_LOOKBACK_DAYS) {
+            Ok(w) => w,
+            Err(msg) => anyhow::bail!("{msg}"),
+        };
+    let win = req.window_rows.clamp(3, 168);
+    // Warmup for rolling z: assume ≤15 min samples; cap at 2 days.
+    let warmup = chrono::Duration::minutes((win as i64).saturating_mul(15))
+        .min(chrono::Duration::days(2));
+    let scan_start = report_start - warmup;
+    let scan_filter = time_range_sql("timestamp_utc", Some(scan_start), report_end);
+    let report_bound = report_start.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(req.building_id).await? else {
         return Ok(None);
     };
     let ts_col = pick_ts_col(&cols).unwrap_or("timestamp_utc");
@@ -3779,16 +3818,25 @@ pub async fn sql_anomaly_from_history(
     if role_cols.is_empty() {
         return Ok(None);
     }
-    let eq_filter = equipment_filter_sql(equipment_filter);
-    let win = window_rows.clamp(3, 168);
-    let thr = z_threshold.clamp(1.0, 10.0);
-    let use_robust = method.eq_ignore_ascii_case("robust");
+    let eq_filter = equipment_filter_sql(req.equipment_filter);
+    let thr = req.z_threshold.clamp(1.0, 10.0);
+    let use_robust = req.method.eq_ignore_ascii_case("robust");
     let mut parts = Vec::with_capacity(role_cols.len());
     for role in &role_cols {
+        let opts = AnomalyRoleSql {
+            role,
+            ts_col,
+            window_rows: win,
+            threshold: thr,
+            eq_filter: &eq_filter,
+            scan_filter: &scan_filter,
+            report_start_rfc3339: &report_bound,
+            transition_events: req.transition_events,
+        };
         parts.push(if use_robust {
-            robust_anomaly_role_sql(role, ts_col, thr, &eq_filter, transition_events)
+            robust_anomaly_role_sql(&opts)
         } else {
-            zscore_anomaly_role_sql(role, ts_col, win, thr, &eq_filter, transition_events)
+            zscore_anomaly_role_sql(&opts)
         });
     }
     let sql = format!(
@@ -3796,7 +3844,7 @@ pub async fn sql_anomaly_from_history(
         parts.join(" UNION ALL ")
     );
     let result = run_sql(&ctx, &sql).await?;
-    let stamps = equipment_stamp_map(building_id);
+    let stamps = equipment_stamp_map(req.building_id);
     let mut rows = Vec::with_capacity(result.rows.len());
     for r in &result.rows {
         let eq = r
@@ -3836,9 +3884,13 @@ pub async fn sql_anomaly_from_history(
         "roles_screened": role_cols.len(),
         "window_rows": win,
         "z_threshold": thr,
-        "method": method_out_label(method),
-        "transition_events": transition_events,
-        "building_id": safe_building_segment(building_id),
+        "method": method_out_label(req.method),
+        "transition_events": req.transition_events,
+        "building_id": safe_building_segment(req.building_id),
+        "window_start": report_start.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        "window_end": report_end.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+        "scan_start": scan_start.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        "warmup_minutes": warmup.num_minutes(),
     }));
     Ok(Some(env))
 }
@@ -3851,29 +3903,30 @@ fn method_out_label(method: &str) -> &str {
     }
 }
 
-fn zscore_anomaly_role_sql(
-    role: &str,
-    ts_col: &str,
-    window_rows: u32,
-    threshold: f64,
-    eq_filter: &str,
-    transition_events: bool,
-) -> String {
-    let num = history_role_numeric_sql(role);
-    let preceding = window_rows.saturating_sub(1);
-    let event_col = if transition_events {
-        "CAST(SUM(CASE WHEN is_anom = 1 AND COALESCE(prev_anom, 0) = 0 THEN 1 ELSE 0 END) AS DOUBLE) AS anomaly_events"
+fn zscore_anomaly_role_sql(opts: &AnomalyRoleSql<'_>) -> String {
+    let num = history_role_numeric_sql(opts.role);
+    let preceding = opts.window_rows.saturating_sub(1);
+    let in_report = format!("ts >= '{}'", opts.report_start_rfc3339);
+    let event_col = if opts.transition_events {
+        format!(
+            "CAST(SUM(CASE WHEN is_anom = 1 AND COALESCE(prev_anom, 0) = 0 AND {in_report} THEN 1 ELSE 0 END) AS DOUBLE) AS anomaly_events"
+        )
     } else {
-        "CAST(0 AS DOUBLE) AS anomaly_events"
+        "CAST(0 AS DOUBLE) AS anomaly_events".to_string()
     };
+    let role = opts.role;
+    let ts_col = opts.ts_col;
+    let threshold = opts.threshold;
+    let eq_filter = opts.eq_filter;
+    let scan_filter = opts.scan_filter;
     format!(
         r#"
 SELECT equipment_id, '{role}' AS role, 'zscore' AS method,
-  MAX(ABS(zscore)) AS score,
+  MAX(CASE WHEN {in_report} THEN ABS(zscore) END) AS score,
   {threshold} AS threshold,
-  CAST(SUM(is_anom) AS DOUBLE) AS anomaly_hours,
+  CAST(SUM(CASE WHEN is_anom = 1 AND {in_report} THEN 1 ELSE 0 END) AS DOUBLE) AS anomaly_hours,
   {event_col},
-  MAX(CASE WHEN is_anom = 1 THEN ts END) AS last_at
+  MAX(CASE WHEN is_anom = 1 AND {in_report} THEN ts END) AS last_at
 FROM (
   SELECT equipment_id, ts, zscore, is_anom,
     LAG(is_anom) OVER (PARTITION BY equipment_id ORDER BY ts) AS prev_anom
@@ -3897,40 +3950,42 @@ FROM (
             ROWS BETWEEN {preceding} PRECEDING AND CURRENT ROW
           ) AS roll_std
         FROM history
-        WHERE equipment_id IS NOT NULL AND {num} IS NOT NULL{eq_filter}
+        WHERE equipment_id IS NOT NULL AND {num} IS NOT NULL{eq_filter}{scan_filter}
       ) w
     ) z
   ) flags
 ) agg
 GROUP BY equipment_id
-HAVING SUM(is_anom) > 0"#
+HAVING SUM(CASE WHEN is_anom = 1 AND {in_report} THEN 1 ELSE 0 END) > 0"#
     )
 }
 
 /// Static median / MAD-style robust z per equipment (Soft fallback when MAD window unsupported).
-fn robust_anomaly_role_sql(
-    role: &str,
-    ts_col: &str,
-    threshold: f64,
-    eq_filter: &str,
-    transition_events: bool,
-) -> String {
-    let num = history_role_numeric_sql(role);
-    let event_col = if transition_events {
-        "CAST(SUM(CASE WHEN is_anom = 1 AND COALESCE(prev_anom, 0) = 0 THEN 1 ELSE 0 END) AS DOUBLE) AS anomaly_events"
+fn robust_anomaly_role_sql(opts: &AnomalyRoleSql<'_>) -> String {
+    let num = history_role_numeric_sql(opts.role);
+    let in_report = format!("ts >= '{}'", opts.report_start_rfc3339);
+    let event_col = if opts.transition_events {
+        format!(
+            "CAST(SUM(CASE WHEN is_anom = 1 AND COALESCE(prev_anom, 0) = 0 AND {in_report} THEN 1 ELSE 0 END) AS DOUBLE) AS anomaly_events"
+        )
     } else {
-        "CAST(0 AS DOUBLE) AS anomaly_events"
+        "CAST(0 AS DOUBLE) AS anomaly_events".to_string()
     };
+    let role = opts.role;
+    let ts_col = opts.ts_col;
+    let threshold = opts.threshold;
+    let eq_filter = opts.eq_filter;
+    let scan_filter = opts.scan_filter;
     format!(
         r#"
 SELECT equipment_id, '{role}' AS role, 'robust' AS method,
-  MAX(ABS(rz)) AS score,
+  MAX(CASE WHEN {in_report} THEN ABS(rz) END) AS score,
   {threshold} AS threshold,
-  CAST(SUM(is_anom) AS DOUBLE) AS anomaly_hours,
+  CAST(SUM(CASE WHEN is_anom = 1 AND {in_report} THEN 1 ELSE 0 END) AS DOUBLE) AS anomaly_hours,
   {event_col},
-  MAX(CASE WHEN is_anom = 1 THEN ts END) AS last_at
+  MAX(CASE WHEN is_anom = 1 AND {in_report} THEN ts END) AS last_at
 FROM (
-  SELECT b.equipment_id, b.ts, b.val,
+  SELECT b.equipment_id AS equipment_id, b.ts AS ts, b.val,
     CASE
       WHEN s.sigma IS NULL OR s.sigma < 1e-9 THEN NULL
       ELSE (b.val - s.med) / s.sigma
@@ -3948,19 +4003,19 @@ FROM (
   FROM (
     SELECT equipment_id, {ts_col} AS ts, {num} AS val
     FROM history
-    WHERE equipment_id IS NOT NULL AND {num} IS NOT NULL{eq_filter}
+    WHERE equipment_id IS NOT NULL AND {num} IS NOT NULL{eq_filter}{scan_filter}
   ) b
   INNER JOIN (
     SELECT equipment_id,
       approx_percentile({num}, 0.5) AS med,
       STDDEV_POP({num}) AS sigma
     FROM history
-    WHERE equipment_id IS NOT NULL AND {num} IS NOT NULL{eq_filter}
+    WHERE equipment_id IS NOT NULL AND {num} IS NOT NULL{eq_filter}{scan_filter}
     GROUP BY equipment_id
   ) s ON b.equipment_id = s.equipment_id
 ) agg
 GROUP BY equipment_id
-HAVING SUM(is_anom) > 0"#
+HAVING SUM(CASE WHEN is_anom = 1 AND {in_report} THEN 1 ELSE 0 END) > 0"#
     )
 }
 
@@ -3996,11 +4051,43 @@ mod tests {
 
     #[test]
     fn zscore_role_sql_rolling_window_and_lag_transition() {
-        let sql = zscore_anomaly_role_sql("sat", "timestamp_utc", 24, 3.0, "", true);
+        let sql = zscore_anomaly_role_sql(&AnomalyRoleSql {
+            role: "sat",
+            ts_col: "timestamp_utc",
+            window_rows: 24,
+            threshold: 3.0,
+            eq_filter: "",
+            scan_filter: " AND timestamp_utc >= '2026-01-01T00:00:00Z'",
+            report_start_rfc3339: "2026-01-15T00:00:00Z",
+            transition_events: true,
+        });
         assert!(sql.contains("ROWS BETWEEN 23 PRECEDING"));
         assert!(sql.contains("ABS(zscore) > 3"));
         assert!(sql.contains("LAG(is_anom)"));
         assert!(sql.contains("anomaly_events"));
+        assert!(sql.contains("timestamp_utc >= '2026-01-01T00:00:00Z'"));
+        assert!(sql.contains("ts >= '2026-01-15T00:00:00Z'"));
+    }
+
+    #[test]
+    fn anomaly_sql_binds_report_window_separate_from_scan_warmup() {
+        let sql = zscore_anomaly_role_sql(&AnomalyRoleSql {
+            role: "sat",
+            ts_col: "timestamp_utc",
+            window_rows: 24,
+            threshold: 3.0,
+            eq_filter: "",
+            scan_filter: " AND timestamp_utc >= '2026-06-01T00:00:00Z' AND timestamp_utc < '2026-07-01T00:00:00Z'",
+            report_start_rfc3339: "2026-06-15T00:00:00Z",
+            transition_events: false,
+        });
+        assert!(
+            sql.contains("2026-06-01T00:00:00Z") && sql.contains("2026-06-15T00:00:00Z"),
+            "scan and report bounds must both appear: {sql}"
+        );
+        assert!(sql.contains(
+            "SUM(CASE WHEN is_anom = 1 AND ts >= '2026-06-15T00:00:00Z' THEN 1 ELSE 0 END)"
+        ));
     }
 
     #[test]
