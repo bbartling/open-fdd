@@ -10,8 +10,10 @@ This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER
 
 | Track | Status | Notes |
 | --- | --- | --- |
-| T0b evaluator honesty (M71-01) | **IN PROGRESS** | Strict typed counts + durable readback + explicit stub FAIL; worktree `softopen371/t0b-evaluator-honesty` |
-| T1b–f source residuals | **OPEN** | Registry cancel caller, run quotas, append bounds, spool, AFDD windows |
+| T0b evaluator honesty (M71-01) | **MERGED** | #1210 — strict typed counts + durable readback + stub FAIL |
+| T1b registry cancel (M71-03) | **PATCHING** | #1211 — cancel through registry SQL collect; clippy tip `1abb6fdf` |
+| T1c run quota (M71-04) | **PATCHING** | #1214 — `RunQuotaPool` + cache peek-before-admit; body-after-permit residual |
+| T1d–f source residuals | **OPEN** | Append bounds, spool/receipt, AFDD windows |
 | T2b–d / T3d product UI | **OPEN** | ACME 502 / BUILDING_100 motors+BAS-OAT / Utf8View; pin must be tip |
 | T6a full matrix | **PARTIAL** | Long phases still unimplemented after honesty repair |
 
