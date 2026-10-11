@@ -45,22 +45,30 @@ if ! OPENFDD_BUILDING_ID="$BUILDING" OPENFDD_API_BASE="$BASE" ARTIFACT_DIR="$ART
   exit 1
 fi
 
-if [[ "${OPENFDD_UI_GATE_SKIP_PLAYWRIGHT:-0}" == "1" ]]; then
-  echo "SKIP: OPENFDD_UI_GATE_SKIP_PLAYWRIGHT=1"
+SOFTOPEN_STRICT="${OPENFDD_SOFTOPEN_BROWSER_STRICT:-0}"
+blocked_or_skip() {
+  local msg="$1"
+  if [[ "$SOFTOPEN_STRICT" == "1" ]]; then
+    echo "BLOCKED: $msg" | tee "$ART/BLOCKED.txt"
+    exit 2
+  fi
+  echo "SKIP: $msg"
   exit 0
+}
+
+if [[ "${OPENFDD_UI_GATE_SKIP_PLAYWRIGHT:-0}" == "1" ]]; then
+  blocked_or_skip "OPENFDD_UI_GATE_SKIP_PLAYWRIGHT=1 — not a Soft-OPEN browser PASS"
 fi
 
 WEB="$ROOT/frontend/web"
 UI_BASE="${OPENFDD_PLAYWRIGHT_BASE_URL:-http://127.0.0.1:3000}"
 spa_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$UI_BASE/" || true)"
 if [[ "$spa_code" != "200" && "$spa_code" != "301" && "$spa_code" != "302" ]]; then
-  echo "SKIP: SPA not reachable at $UI_BASE (HTTP $spa_code) — backend probe PASS only"
-  exit 0
+  blocked_or_skip "SPA not reachable at $UI_BASE (HTTP $spa_code)"
 fi
 
 if [[ -z "${OPENFDD_ADMIN_PASSWORD:-}" ]]; then
-  echo "SKIP: OPENFDD_ADMIN_PASSWORD unset — backend probe PASS only"
-  exit 0
+  blocked_or_skip "OPENFDD_ADMIN_PASSWORD unset"
 fi
 
 export OPENFDD_PLAYWRIGHT_BASE_URL="$UI_BASE"

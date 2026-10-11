@@ -108,7 +108,12 @@ const { chromium } = require('playwright');
 
 run_host() {
   pushd "$WEB" >/dev/null
-  npx playwright test e2e/product.spec.ts e2e/smoke.spec.ts --reporter=list
+  local specs=(e2e/product.spec.ts e2e/smoke.spec.ts)
+  # Soft-OPEN 371: include strengthened FDD/RCx Soft-OPEN gate when a site is set.
+  if [[ -n "${OPENFDD_GATE_BUILDING_ID:-}${OPENFDD_GATE_BUILDING_IDS:-}" ]]; then
+    specs+=(e2e/fdd-rcx-gate.spec.ts)
+  fi
+  npx playwright test "${specs[@]}" --reporter=list
   local rc=$?
   popd >/dev/null
   return "$rc"
@@ -122,10 +127,12 @@ run_docker() {
     -e OPENFDD_PLAYWRIGHT_BASE_URL="$OPENFDD_PLAYWRIGHT_BASE_URL" \
     -e OPENFDD_PLAYWRIGHT_REQUIRE_STACK=1 \
     -e OPENFDD_ADMIN_PASSWORD="${OPENFDD_ADMIN_PASSWORD:-}" \
+    -e OPENFDD_GATE_BUILDING_ID="${OPENFDD_GATE_BUILDING_ID:-}" \
+    -e OPENFDD_GATE_BUILDING_IDS="${OPENFDD_GATE_BUILDING_IDS:-}" \
     -e CI=1 \
     -v "$WEB:/work" -w /work \
     "$PW_IMAGE" \
-    bash -lc 'npm ci --silent && npx playwright test e2e/product.spec.ts e2e/smoke.spec.ts --reporter=list'
+    bash -lc 'npm ci --silent && specs="e2e/product.spec.ts e2e/smoke.spec.ts"; if [ -n "${OPENFDD_GATE_BUILDING_ID:-}${OPENFDD_GATE_BUILDING_IDS:-}" ]; then specs="$specs e2e/fdd-rcx-gate.spec.ts"; fi; npx playwright test $specs --reporter=list'
 }
 
 LOG="$ART/16_playwright_web.log"

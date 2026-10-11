@@ -26,9 +26,24 @@ OPENFDD_BUILDING_ID="$BUILDING" OPENFDD_API_BASE="$BASE" ARTIFACT_DIR="$ART/back
   | tee "$ART/backend_comb.txt"
 
 # Real browser path — ui_fdd_rcx_validate without skip override.
+# Soft-OPEN 371: unreachable SPA/auth is BLOCKED (rc=2), never silent PASS.
 export OPENFDD_UI_GATE_SKIP_PLAYWRIGHT=0
+export OPENFDD_SOFTOPEN_BROWSER_STRICT=1
 OPENFDD_BUILDING_ID="$BUILDING" OPENFDD_API_BASE="$BASE" ARTIFACT_DIR="$ART/browser" \
   bash "$ROOT/scripts/gates/ui_fdd_rcx_validate.sh" \
   | tee "$ART/browser.txt"
+
+# Require Playwright actually executed Soft-OPEN cases (not zero-test green).
+if [[ -f "$ART/browser/BLOCKED.txt" ]]; then
+  echo "BLOCKED gate 43 browser — see $ART/browser/BLOCKED.txt" | tee "$ART/BLOCKED.txt"
+  exit 2
+fi
+if ! rg -q "executed Soft-OPEN|PASS: ui_fdd_rcx|passed" "$ART/browser.txt" 2>/dev/null; then
+  # Playwright list reporter prints "N passed" when cases run.
+  if ! rg -q "[1-9][0-9]* passed" "$ART/browser.txt" 2>/dev/null; then
+    echo "FAIL: gate 43 browser produced no positive executed Playwright cases" | tee "$ART/FAIL.txt"
+    exit 1
+  fi
+fi
 
 echo "PASS gate 43 backend+browser building=$BUILDING" | tee "$ART/gate43.txt"
