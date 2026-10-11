@@ -13,10 +13,11 @@ This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER
 | T0b evaluator honesty (M71-01) | **MERGED** | #1210 — strict typed counts + durable readback + stub FAIL |
 | T1b registry cancel (M71-03) | **MERGED** | #1211 / `6609c82b` — cancel through registry SQL collect |
 | T1c run quota (M71-04) | **MERGED** | #1214 — `RunQuotaPool` + cache peek-before-admit; body-after-permit residual |
-| T1d atomic append (M71-05) | **PATCHING** | #1215 — atomic Parquet + stream hash; residual full Arrow batch + delta |
-| T1e spool/queue bytes | **OPEN** | Pre-clone writer/receipt/microbatch (#1218) |
-| T1f anomaly dates (M71-08) | **MERGED** | #1216 / `21a38871` — bound sql_anomaly start/end + warmup; residual AFDD JSON rebuild |
-| T2b–d / T3d product UI | **OPEN** | ACME 502 / BUILDING_100 motors+BAS-OAT / Utf8View; pin must be tip |
+| T1d atomic append (M71-05) | **MERGED** | #1215 — atomic Parquet + stream hash; residual full Arrow + delta |
+| T1e spool/queue bytes | **PATCHING** | #1218 — pre-clone writer bytes + process microbatch |
+| T1f anomaly dates (M71-08) | **MERGED** | #1216 — bound sql_anomaly start/end + warmup; residual AFDD JSON rebuild |
+| T0c/T3d product smoke gate | **PATCHING** | #1219 — `product_smoke_softopen.py`; live dual-site prove + Selenium still required |
+| T2b–d / T3d product UI | **OPEN** | ACME product prove / BUILDING_100 motors+BAS-OAT; pin must be tip |
 | T6a full matrix | **BLOCKED** | mintbench NF co-tenancy; long phases still required |
 
 ## Next-rev Soft-OPEN board (2026-10-05) — IN PROGRESS
