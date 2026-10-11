@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Soft-OPEN 370 T1h/T6a — portable local memory + ingest qualification harness.
+"""Soft-OPEN 370/371 T1h/T6a — portable local memory + ingest qualification harness.
 
 Finite, host-aware controls. Never marks PASS from empty/no_data, HTTP 200
-timeout, process uptime, or health-only probes. Profiles:
+timeout, process uptime, or health-only probes. Soft-OPEN 371 T0b: strict typed
+counts, incomplete-status rejection, ZIP content validation, durable readback,
+unknown/explicit-stub phase FAIL, and CONTROL_ONLY vs FULL qualification exits.
+
+Profiles:
 
   bench32-4g / bench32-8g     — 32 GB class host, sequential central caps
   mintbench-3g                — ≤3 GiB combined (required first on mintbench)
@@ -21,7 +25,9 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import zipfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -32,6 +38,26 @@ TRUSTED_WINDOW = {
     "start": "2026-07-08T00:00:00Z",
     "end": "2026-07-15T00:00:00Z",
 }
+
+SMOKE_PHASES = frozenset(
+    {"preflight", "fixture_hashes", "auth", "health_schema", "seed_append"}
+)
+LONG_PHASES = frozenset(
+    {"concurrent_load", "pressure", "ot_continuity", "lifecycle_churn"}
+)
+KNOWN_PHASES = SMOKE_PHASES | LONG_PHASES
+INCOMPLETE_TOKENS = frozenset(
+    {
+        "partial",
+        "cancelled",
+        "canceled",
+        "timed_out",
+        "timeout",
+        "fail_closed",
+        "failed",
+        "error",
+    }
+)
 
 
 @dataclass
@@ -66,6 +92,61 @@ PROFILES = {
 }
 
 
+def positive_int_count(value: Any, *, allow_zero: bool = False) -> int | None:
+    """Strict nonnegative integer count. bool and numeric strings are never counts."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        if value < 0:
+            return None
+        if value == 0 and not allow_zero:
+            return None
+        return value
+    return None
+
+
+def response_incomplete(body: dict[str, Any]) -> str | None:
+    status = body.get("status")
+    if isinstance(status, str) and status.strip().lower() in INCOMPLETE_TOKENS:
+        return f"status={status}"
+    for flag in ("timed_out", "cancelled", "canceled", "fail_closed"):
+        if body.get(flag) is True:
+            return flag
+    return None
+
+
+def merges_positive_rows(merges: Any) -> int | None:
+    if not isinstance(merges, list) or not merges:
+        return None
+    total = 0
+    for item in merges:
+        if not isinstance(item, dict):
+            return None
+        why = response_incomplete(item)
+        if why is not None:
+            return None
+        rows = positive_int_count(item.get("rows_written"))
+        if rows is None:
+            return None
+        total += rows
+    return total if total > 0 else None
+
+
+def durable_count_from_body(body: dict[str, Any]) -> tuple[int | None, str]:
+    """Prefer total_rows, else equipment_written, else merges rows_written sum."""
+    why = response_incomplete(body)
+    if why is not None:
+        return None, why
+    for key in ("total_rows", "equipment_written"):
+        n = positive_int_count(body.get(key))
+        if n is not None:
+            return n, key
+    merge_rows = merges_positive_rows(body.get("merges"))
+    if merge_rows is not None:
+        return merge_rows, "merges.rows_written"
+    return None, "no positive typed count"
+
+
 def read_host() -> HostSnapshot:
     mem_total = mem_available = 0
     for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():
@@ -86,8 +167,15 @@ def profile_fit(host: HostSnapshot, profile: Profile) -> tuple[bool, str]:
         int(0.70 * host.mem_total_bytes),
         host.mem_available_bytes - reserve,
     )
+    # Shared 32 GiB bench: enforce min(40% total, 50% available) for all services.
+    if profile.name.startswith("bench32"):
+        shared = min(
+            int(0.40 * host.mem_total_bytes),
+            int(0.50 * host.mem_available_bytes),
+        )
+        ceiling = min(ceiling, shared)
     if ceiling <= 0:
-        return False, f"no headroom after 20% reserve (available={host.mem_available_bytes})"
+        return False, f"no headroom after reserve (available={host.mem_available_bytes})"
     if profile.combined_bytes > ceiling:
         return (
             False,
@@ -164,7 +252,6 @@ def phase_preflight(profile_name: str) -> PhaseResult:
     }
     if not ok:
         return PhaseResult("preflight", "BLOCKED", detail, metrics)
-    # Docker/cgroup check when docker available
     try:
         out = subprocess.check_output(
             ["docker", "info", "--format", "{{.CgroupVersion}}"],
@@ -183,14 +270,31 @@ def phase_preflight(profile_name: str) -> PhaseResult:
 
 def phase_fixture_hashes(root: Path) -> PhaseResult:
     needed = ["BUILDING_100_openfdd.zip", "BUILDING_50_openfdd.zip"]
-    digests = {}
-    missing = []
+    digests: dict[str, str] = {}
+    missing: list[str] = []
     for name in needed:
         path = root / name
         if not path.is_file():
             missing.append(name)
             continue
         digests[name] = sha256_file(path)
+        try:
+            with zipfile.ZipFile(path) as zf:
+                names = zf.namelist()
+        except zipfile.BadZipFile:
+            return PhaseResult(
+                "fixture_hashes",
+                "FAIL",
+                f"{name} is not a valid zip package",
+                {"root": str(root), "sha256": digests},
+            )
+        if not any(n.endswith("history_wide.csv") for n in names):
+            return PhaseResult(
+                "fixture_hashes",
+                "FAIL",
+                f"{name} zip missing history_wide.csv member",
+                {"root": str(root), "sha256": digests, "members": names[:20]},
+            )
     if missing:
         return PhaseResult(
             "fixture_hashes",
@@ -201,7 +305,7 @@ def phase_fixture_hashes(root: Path) -> PhaseResult:
     return PhaseResult(
         "fixture_hashes",
         "PASS",
-        "fixture digests frozen",
+        "fixture digests frozen + zip contents validated",
         {"root": str(root), "sha256": digests, "trusted_window": TRUSTED_WINDOW},
     )
 
@@ -211,7 +315,6 @@ def _hourly_append_chunk_from_zip(zip_path: Path) -> tuple[str, str, str]:
 
     Returns (building_id, equipment_id, csv_text). Prefers typed AHU history.
     """
-    import zipfile
     from datetime import datetime, timedelta, timezone
 
     with zipfile.ZipFile(zip_path) as zf:
@@ -224,7 +327,6 @@ def _hourly_append_chunk_from_zip(zip_path: Path) -> tuple[str, str, str]:
             candidates = [n for n in zf.namelist() if n.endswith("/history_wide.csv")]
         if not candidates:
             raise FileNotFoundError("no history_wide.csv in package zip")
-        # Prefer shallow AHU_* over nested paths for stable equipment_id
         candidates.sort(key=lambda n: (n.count("/"), n))
         hist_name = candidates[0]
         parts = Path(hist_name).parts
@@ -237,7 +339,6 @@ def _hourly_append_chunk_from_zip(zip_path: Path) -> tuple[str, str, str]:
     last = lines[-1]
     cols = last.split(",")
     ts_raw = cols[0].strip()
-    # Parse common package timestamps; advance one hour for a fresh append row.
     ts = None
     for fmt in (
         "%Y-%m-%d %H:%M:%S%z",
@@ -260,8 +361,86 @@ def _hourly_append_chunk_from_zip(zip_path: Path) -> tuple[str, str, str]:
     return building_id, equipment_id, csv_text
 
 
+def _buildings_contain(body: Any, building_id: str) -> bool:
+    if not isinstance(body, dict):
+        return False
+    buildings = body.get("buildings")
+    if isinstance(buildings, list):
+        for item in buildings:
+            if item == building_id:
+                return True
+            if isinstance(item, dict) and item.get("building_id") == building_id:
+                return True
+            if isinstance(item, dict) and item.get("id") == building_id:
+                return True
+    return False
+
+
+def _equipment_contain(body: Any, equipment_id: str) -> bool:
+    if not isinstance(body, dict):
+        return False
+    for key in ("equipment", "items", "rows"):
+        rows = body.get(key)
+        if isinstance(rows, list):
+            for item in rows:
+                if item == equipment_id:
+                    return True
+                if isinstance(item, dict):
+                    if item.get("equipment_id") == equipment_id:
+                        return True
+                    if item.get("id") == equipment_id:
+                        return True
+    return False
+
+
+def independent_durable_readback(
+    base: str, token: str, building_id: str, equipment_id: str
+) -> tuple[bool, dict[str, Any]]:
+    """Prove seed+append via GET surfaces — not the import response counters."""
+    metrics: dict[str, Any] = {
+        "building_id": building_id,
+        "equipment_id": equipment_id,
+        "calls": [],
+    }
+    code_b, body_b = http_json(
+        "GET",
+        f"{base.rstrip('/')}/api/csv/import/package/buildings",
+        token=token,
+        timeout=60,
+    )
+    metrics["calls"].append(
+        {
+            "path": "/api/csv/import/package/buildings",
+            "code": code_b,
+            "ok": isinstance(body_b, dict) and body_b.get("ok") is not False,
+        }
+    )
+    if code_b != 200 or not _buildings_contain(body_b, building_id):
+        metrics["fail"] = "building absent from package/buildings readback"
+        return False, metrics
+
+    q = urllib.parse.urlencode({"building_id": building_id})
+    code_e, body_e = http_json(
+        "GET",
+        f"{base.rstrip('/')}/api/fdd/equipment?{q}",
+        token=token,
+        timeout=60,
+    )
+    metrics["calls"].append(
+        {
+            "path": f"/api/fdd/equipment?building_id={building_id}",
+            "code": code_e,
+            "ok": isinstance(body_e, dict),
+        }
+    )
+    if code_e != 200 or not _equipment_contain(body_e, equipment_id):
+        metrics["fail"] = "equipment absent from fdd/equipment readback"
+        return False, metrics
+    return True, metrics
+
+
 def phase_seed_append(base: str, token: str, fixture_root: Path) -> PhaseResult:
-    """Seed BUILDING_50 then JSON hourly append — require nonempty ok + durable counts."""
+    """Seed BUILDING_50 then JSON hourly append — typed counts + durable readback."""
     zip_path = fixture_root / "BUILDING_50_openfdd.zip"
     if not zip_path.is_file():
         return PhaseResult("seed_append", "BLOCKED", f"missing {zip_path}")
@@ -281,12 +460,12 @@ def phase_seed_append(base: str, token: str, fixture_root: Path) -> PhaseResult:
             f"seed failed code={code}",
             {"body": body if isinstance(body, dict) else str(body)[:500]},
         )
-    rows = body.get("total_rows") or body.get("equipment_written")
-    if not rows:
+    seed_n, seed_src = durable_count_from_body(body)
+    if seed_n is None:
         return PhaseResult(
             "seed_append",
             "FAIL",
-            "seed returned ok without positive equipment_written/total_rows (empty PASS banned)",
+            f"seed returned ok without positive typed count ({seed_src})",
             {"body": body},
         )
     try:
@@ -298,7 +477,6 @@ def phase_seed_append(base: str, token: str, fixture_root: Path) -> PhaseResult:
             f"append chunk build failed: {exc}",
             {"seed": {"code": code, "total_rows": body.get("total_rows")}},
         )
-    # Tip contract: JSON hourly chunk (zip append intentionally rejected after T1d).
     append_payload = {
         "confirm": True,
         "building_id": body.get("building_id") or building_id,
@@ -313,11 +491,13 @@ def phase_seed_append(base: str, token: str, fixture_root: Path) -> PhaseResult:
         content_type="application/json",
         timeout=600,
     )
-    metrics = {
+    metrics: dict[str, Any] = {
         "seed": {
             "code": code,
             "total_rows": body.get("total_rows"),
             "equipment_written": body.get("equipment_written"),
+            "count_source": seed_src,
+            "count": seed_n,
             "building_id": body.get("building_id") or building_id,
         },
         "append": {
@@ -326,28 +506,56 @@ def phase_seed_append(base: str, token: str, fixture_root: Path) -> PhaseResult:
             "equipment_id": equipment_id,
         },
         "trusted_window": TRUSTED_WINDOW,
+        "qualification_scope": "CONTROL_ONLY",
     }
     if code_a == 0:
         return PhaseResult("seed_append", "FAIL", "append transport error", metrics)
-    if code_a == 200 and isinstance(body_a, dict) and body_a.get("ok") is True:
-        if not (body_a.get("total_rows") or body_a.get("equipment_written") or body_a.get("merges")):
-            return PhaseResult(
-                "seed_append",
-                "FAIL",
-                "append ok without merges/rows (empty PASS banned)",
-                metrics,
-            )
-        return PhaseResult("seed_append", "PASS", "seed+append nonempty", metrics)
+    if not (code_a == 200 and isinstance(body_a, dict) and body_a.get("ok") is True):
+        return PhaseResult(
+            "seed_append",
+            "FAIL",
+            f"append not durable-ok code={code_a}",
+            {**metrics, "append_body": body_a if isinstance(body_a, dict) else str(body_a)[:500]},
+        )
+    append_n, append_src = durable_count_from_body(body_a)
+    metrics["append"]["count_source"] = append_src
+    metrics["append"]["count"] = append_n
+    metrics["append"]["total_rows"] = body_a.get("total_rows")
+    metrics["append"]["equipment_written"] = body_a.get("equipment_written")
+    metrics["append"]["merges"] = body_a.get("merges")
+    if append_n is None:
+        return PhaseResult(
+            "seed_append",
+            "FAIL",
+            f"append ok without positive typed durable count ({append_src})",
+            metrics,
+        )
+
+    bid = str(body.get("building_id") or building_id)
+    ok_rb, rb_metrics = independent_durable_readback(base, token, bid, equipment_id)
+    metrics["durable_readback"] = rb_metrics
+    if not ok_rb:
+        return PhaseResult(
+            "seed_append",
+            "FAIL",
+            f"independent durable readback failed: {rb_metrics.get('fail')}",
+            metrics,
+        )
     return PhaseResult(
         "seed_append",
-        "FAIL",
-        f"append not durable-ok code={code_a}",
-        {**metrics, "append_body": body_a if isinstance(body_a, dict) else str(body_a)[:500]},
+        "PASS",
+        "seed+append typed counts + durable readback (CONTROL_ONLY)",
+        metrics,
     )
 
 
-def phase_health_honesty(base: str, token: str) -> PhaseResult:
-    """Schema smoke only — never memory PASS."""
+def phase_health_honesty(
+    base: str,
+    token: str,
+    *,
+    expected_version_substr: str | None = None,
+) -> PhaseResult:
+    """Typed memory_budget schema smoke — never memory PASS."""
     code, body = http_json(
         "GET",
         f"{base.rstrip('/')}/api/health",
@@ -356,26 +564,91 @@ def phase_health_honesty(base: str, token: str) -> PhaseResult:
     )
     if code != 200 or not isinstance(body, dict):
         return PhaseResult("health_schema", "FAIL", f"health code={code}", {"body": body})
-    mb = body.get("memory_budget") or {}
-    required = ["hard_limit_bytes", "current_bytes", "peak_bytes", "sample_ms", "source"]
-    missing = [k for k in required if mb.get(k) is None]
-    if missing:
+    version = body.get("version")
+    if not isinstance(version, str) or not version.strip():
         return PhaseResult(
             "health_schema",
             "FAIL",
-            f"null/missing memory_budget fields: {missing} (gate47 honesty)",
+            "health version missing/non-string",
+            {"version": version},
+        )
+    if expected_version_substr and expected_version_substr not in version:
+        return PhaseResult(
+            "health_schema",
+            "FAIL",
+            f"health version {version!r} missing expected {expected_version_substr!r}",
+            {"version": version},
+        )
+    mb = body.get("memory_budget")
+    if not isinstance(mb, dict):
+        return PhaseResult(
+            "health_schema",
+            "FAIL",
+            "memory_budget missing/non-object",
             {"memory_budget": mb},
+        )
+    required_int = ["hard_limit_bytes", "current_bytes", "peak_bytes", "sample_ms"]
+    bad: list[str] = []
+    for key in required_int:
+        n = positive_int_count(mb.get(key), allow_zero=(key != "hard_limit_bytes"))
+        if n is None:
+            bad.append(key)
+    source = mb.get("source")
+    if not isinstance(source, str) or not source.strip():
+        bad.append("source")
+    if bad:
+        return PhaseResult(
+            "health_schema",
+            "FAIL",
+            f"invalid typed memory_budget fields: {bad}",
+            {"memory_budget": mb},
+        )
+    hard = mb["hard_limit_bytes"]
+    current = mb["current_bytes"]
+    peak = mb["peak_bytes"]
+    sample_ms = mb["sample_ms"]
+    if not isinstance(hard, int) or hard <= 0:
+        return PhaseResult(
+            "health_schema", "FAIL", "hard_limit_bytes must be positive int", {"memory_budget": mb}
+        )
+    if current > hard:
+        return PhaseResult(
+            "health_schema",
+            "FAIL",
+            "current_bytes exceeds hard_limit_bytes",
+            {"memory_budget": mb},
+        )
+    if peak < current:
+        return PhaseResult(
+            "health_schema",
+            "FAIL",
+            "peak_bytes below current_bytes",
+            {"memory_budget": mb},
+        )
+    if sample_ms <= 0:
+        return PhaseResult(
+            "health_schema", "FAIL", "sample_ms must be positive", {"memory_budget": mb}
         )
     return PhaseResult(
         "health_schema",
         "PASS",
-        "memory_budget schema present (not a memory qualify)",
-        {"version": body.get("version"), "memory_budget": mb},
+        "memory_budget typed schema present (not a memory qualify)",
+        {"version": version, "memory_budget": mb},
     )
 
 
 def phase_not_run(name: str, why: str) -> PhaseResult:
     return PhaseResult(name, "NOT_RUN", why)
+
+
+def phase_unimplemented(name: str) -> PhaseResult:
+    """Explicitly selected long phase that is still a stub — fails qualification."""
+    return PhaseResult(
+        name,
+        "FAIL",
+        "phase explicitly selected but unimplemented (Soft-OPEN 371 T0b; not a smoke NOT_RUN)",
+        {"explicit": True, "implemented": False},
+    )
 
 
 def write_summary(out_dir: Path, phases: list[PhaseResult], meta: dict[str, Any]) -> Path:
@@ -392,13 +665,28 @@ def write_summary(out_dir: Path, phases: list[PhaseResult], meta: dict[str, Any]
 
 
 def aggregate_verdict(phases: list[PhaseResult]) -> str:
+    if not phases:
+        return "FAIL"
     statuses = {p.status for p in phases}
     if "FAIL" in statuses:
         return "FAIL"
     if "BLOCKED" in statuses:
         return "BLOCKED"
+    selected_long = [p for p in phases if p.phase in LONG_PHASES and "not selected" not in p.detail]
+    # Explicit long phases that remain NOT_RUN are incomplete (should be FAIL via stub).
+    if any(p.status == "NOT_RUN" and p.phase in LONG_PHASES and "not selected" not in p.detail for p in phases):
+        return "FAIL"
     if statuses <= {"PASS", "NOT_RUN"} and "PASS" in statuses:
-        return "PARTIAL" if "NOT_RUN" in statuses else "PASS"
+        if any(p.status == "NOT_RUN" for p in phases) or selected_long:
+            # Smoke-only: long phases not selected → CONTROL_ONLY, not FULL PASS.
+            if all(
+                p.status == "NOT_RUN" and "not selected" in p.detail
+                for p in phases
+                if p.phase in LONG_PHASES
+            ):
+                return "CONTROL_ONLY"
+            return "PARTIAL"
+        return "PASS"
     return "NOT_RUN"
 
 
@@ -419,6 +707,11 @@ def main() -> int:
     ap.add_argument("--user", default=os.environ.get("OPENFDD_BENCH_USER", "agent"))
     ap.add_argument("--password", default=os.environ.get("OPENFDD_AGENT_PASSWORD", ""))
     ap.add_argument(
+        "--expected-version-substr",
+        default=os.environ.get("OPENFDD_T6A_EXPECTED_VERSION", ""),
+        help="optional health version substring (e.g. 3.5.71+b146d4c); empty = any non-empty",
+    )
+    ap.add_argument(
         "--out",
         type=Path,
         default=Path("reports/local_memory_bench") / time.strftime("%Y%m%dT%H%M%SZ"),
@@ -426,12 +719,29 @@ def main() -> int:
     ap.add_argument(
         "--phases",
         default="preflight,fixture_hashes,health_schema,seed_append",
-        help="comma list; soak/pressure/ot default NOT_RUN until explicitly listed",
+        help="comma list; unknown names FAIL; explicit long soaks FAIL until implemented",
     )
     args = ap.parse_args()
 
     phases: list[PhaseResult] = []
     wanted = {p.strip() for p in args.phases.split(",") if p.strip()}
+    unknown = sorted(wanted - KNOWN_PHASES)
+    if unknown:
+        phases.append(
+            PhaseResult(
+                "phase_validation",
+                "FAIL",
+                f"unknown phases: {unknown}",
+                {"known": sorted(KNOWN_PHASES)},
+            )
+        )
+        summary = write_summary(
+            args.out,
+            phases,
+            {"profile": args.profile, "train": "Soft-OPEN 371 T0b", "error": "unknown_phase"},
+        )
+        print(json.dumps({"summary": str(summary), "verdict": "FAIL", "phases": [asdict(p) for p in phases]}, indent=2))
+        return 2
 
     if "preflight" in wanted:
         phases.append(phase_preflight(args.profile))
@@ -456,13 +766,19 @@ def main() -> int:
                 phases.append(PhaseResult("auth", "PASS", "jwt acquired"))
 
     if token and "health_schema" in wanted:
-        phases.append(phase_health_honesty(args.central_base, token))
+        phases.append(
+            phase_health_honesty(
+                args.central_base,
+                token,
+                expected_version_substr=args.expected_version_substr or None,
+            )
+        )
     if token and "seed_append" in wanted:
         phases.append(phase_seed_append(args.central_base, token, args.fixture_root))
 
-    for name in ("concurrent_load", "pressure", "ot_continuity", "lifecycle_churn"):
+    for name in sorted(LONG_PHASES):
         if name in wanted:
-            phases.append(phase_not_run(name, "explicit long soak not requested in this invocation"))
+            phases.append(phase_unimplemented(name))
         else:
             phases.append(phase_not_run(name, "not selected in --phases"))
 
@@ -470,22 +786,36 @@ def main() -> int:
         "profile": args.profile,
         "fixture_root": str(args.fixture_root),
         "central_base": args.central_base or None,
-        "train": "Soft-OPEN 370 T1h/T6a",
+        "expected_version_substr": args.expected_version_substr or None,
+        "train": "Soft-OPEN 371 T0b",
         "rules": [
             "no empty/timeout/uptime PASS",
+            "strict typed nonnegative counts (bool/string rejected)",
+            "independent durable readback required for seed_append",
+            "explicit unimplemented long phases FAIL",
+            "CONTROL_ONLY ≠ FULL qualification",
             "mintbench never 8 GiB central",
             "log FAIL before product fix",
         ],
     }
     summary = write_summary(args.out, phases, meta)
     verdict = aggregate_verdict(phases)
-    print(json.dumps({"summary": str(summary), "verdict": verdict, "phases": [asdict(p) for p in phases]}, indent=2))
+    print(
+        json.dumps(
+            {"summary": str(summary), "verdict": verdict, "phases": [asdict(p) for p in phases]},
+            indent=2,
+        )
+    )
     if verdict == "FAIL":
         return 2
     if verdict == "BLOCKED":
         return 3
-    if verdict == "PARTIAL":
+    if verdict == "CONTROL_ONLY":
+        # Smoke/control path: exit 0 but never claim FULL_PASS.
         return 0
+    if verdict == "PARTIAL":
+        # Incomplete mandatory coverage — not a Soft-OPEN qualify.
+        return 4
     return 0 if verdict == "PASS" else 1
 
 

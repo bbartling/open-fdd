@@ -2,6 +2,19 @@
 
 This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER.md) owns historical FQ/ops pins; [BUG_REPORT_WAVE_P](docs/operations/BUG_REPORT_WAVE_P.md) owns bugs and evidence. **Active product patch train (2026-10-03):** [`.cursor/plans/patch_all_open_issues_master.plan.md`](.cursor/plans/patch_all_open_issues_master.plan.md). Historical migration milestones remain under `docs/migration/` and `openfdd_agent_spec/`.
 
+## Soft-OPEN 371 — memory completion + product smoke (2026-10-11) — IN PROGRESS
+
+**Plan:** [`.cursor/plans/post_softopen_371_patch_ghcr_20261010.plan.md`](.cursor/plans/post_softopen_371_patch_ghcr_20261010.plan.md)  
+**Published candidate:** `sha-b146d4c` / **3.5.71** · **#1179 CLOSED** · **#1127 OPEN** (live memory/restart umbrella)  
+**Soft-OPEN ≠ FQ.** Seed+append smoke is **CONTROL_ONLY**, not qualification. Product smoke Soft-OPEN gate: no analytics 502 HTML, revision=candidate, no `avg(Utf8View)`, nonempty motor/BAS-vs-web or honest package-map BLOCKED. MEGA/ZAP alone cannot Soft-OPEN.
+
+| Track | Status | Notes |
+| --- | --- | --- |
+| T0b evaluator honesty (M71-01) | **IN PROGRESS** | Strict typed counts + durable readback + explicit stub FAIL; worktree `softopen371/t0b-evaluator-honesty` |
+| T1b–f source residuals | **OPEN** | Registry cancel caller, run quotas, append bounds, spool, AFDD windows |
+| T2b–d / T3d product UI | **OPEN** | ACME 502 / BUILDING_100 motors+BAS-OAT / Utf8View; pin must be tip |
+| T6a full matrix | **PARTIAL** | Long phases still unimplemented after honesty repair |
+
 ## Next-rev Soft-OPEN board (2026-10-05) — IN PROGRESS
 
 **Orchestrator:** [`.cursor/plans/next_rev_ghcr_refresh_train_20261005.plan.md`](.cursor/plans/next_rev_ghcr_refresh_train_20261005.plan.md)  
