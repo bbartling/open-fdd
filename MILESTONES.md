@@ -14,7 +14,8 @@ This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER
 | T1b registry cancel (M71-03) | **MERGED** | #1211 / `6609c82b` — cancel through registry SQL collect |
 | T1c run quota (M71-04) | **MERGED** | #1214 / `32550e4c` — `RunQuotaPool` + peek-before-admit; body-after-permit residual |
 | T1d atomic append (M71-05) | **MERGED** | #1215 — atomic Parquet + stream hash; residual full Arrow + delta |
-| T1e queue/microbatch bytes | **PATCHING** | #1218 — pre-clone live-writer byte admit + process microbatch; residual receipt/spool |
+| T1e queue/microbatch bytes | **MERGED** | #1218 — pre-clone LiveWriter bytes + process microbatch |
+| T1e spool/receipt residual | **PATCHING** | page_pending before deserialize; receipt Absent≠I/O fail; eviction replay |
 | T1f anomaly dates (M71-08) | **MERGED** | #1216 / `21a38871` — bound sql_anomaly + warmup; residual AFDD JSON rebuild |
 | T0c/T3d product smoke gate | **MERGED** | #1219 — `product_smoke_softopen.py`; live dual-site prove still required |
 | T3e Playwright Soft-OPEN | **MERGED** | #1217 — Overview update + nonempty Plotly strengthen |
