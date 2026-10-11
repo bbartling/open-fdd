@@ -77,14 +77,16 @@ pub async fn handle_analytics(req: &AnalyticsRequest) -> analytics::AnalyticsEnv
         );
     }
     let p = params_from_request(req);
-    match analytics::historian::sql_anomaly_from_history(
-        req.query.equipment_ids.as_deref(),
-        req.query.building_id.as_deref(),
-        p.window_rows,
-        p.z_threshold,
-        &p.method,
-        p.transition_events,
-    )
+    match analytics::historian::sql_anomaly_from_history(analytics::historian::SqlAnomalyRequest {
+        equipment_filter: req.query.equipment_ids.as_deref(),
+        building_id: req.query.building_id.as_deref(),
+        window_rows: p.window_rows,
+        z_threshold: p.z_threshold,
+        method: &p.method,
+        transition_events: p.transition_events,
+        start: req.query.start,
+        end: req.query.end,
+    })
     .await
     {
         Ok(Some(env)) => analytics::finalize_historian(req, env, analytics::QV_SQL_ANOMALY),
