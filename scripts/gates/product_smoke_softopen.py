@@ -387,7 +387,7 @@ def main() -> int:
                 site=site,
                 art=art,
                 lookback_days=args.lookback_days,
-                hard_timeout=args.hard_timeout,
+                hard_timeout=args.hard_timeout_secs,
                 start_override=args.start or None,
             )
         )
