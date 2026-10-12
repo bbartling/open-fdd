@@ -63,9 +63,7 @@ fn load_equipment_type_stamps() -> EquipmentTypeStamps {
     if let Ok(devices) = crate::config::load_field_devices(None) {
         for device in devices {
             if let Some(stamp) = device.equipment_type {
-                by_equipment
-                    .entry(device.name)
-                    .or_insert(stamp);
+                by_equipment.entry(device.name).or_insert(stamp);
             }
         }
     }

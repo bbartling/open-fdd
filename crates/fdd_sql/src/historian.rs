@@ -495,10 +495,9 @@ mod tests {
 
         let ctx = SessionContext::new();
         let allow = vec!["hosted-weather".into(), "rtu_01".into()];
-        let (reg, _guard) =
-            register_historian_building_equipment(&ctx, tmp.path(), "ACME", &allow)
-                .await
-                .unwrap();
+        let (reg, _guard) = register_historian_building_equipment(&ctx, tmp.path(), "ACME", &allow)
+            .await
+            .unwrap();
         assert_eq!(reg.kind, HistorianDatasetKind::CanonicalHive);
         assert!(reg.root.contains("hosted-weather"));
         assert!(reg.root.contains("rtu_01"));
@@ -521,7 +520,10 @@ mod tests {
                 ids.push(col.value(i).to_string());
             }
         }
-        assert_eq!(ids, vec!["hosted-weather".to_string(), "rtu_01".to_string()]);
+        assert_eq!(
+            ids,
+            vec!["hosted-weather".to_string(), "rtu_01".to_string()]
+        );
     }
 
     #[tokio::test]

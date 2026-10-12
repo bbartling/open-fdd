@@ -2847,7 +2847,7 @@ pub async fn bas_vs_web_from_history(
         else {
             return Ok(None);
         };
-        return bas_vs_web_run_on_ctx(
+        return bas_vs_web_run_on_ctx(BasVsWebRunArgs {
             ctx,
             cols,
             n,
@@ -2858,13 +2858,13 @@ pub async fn bas_vs_web_from_history(
             end_t,
             defaulted_start,
             deadline,
-            false,
-            &[],
-            &[],
-        )
+            has_weather_ids: false,
+            weather_ids: &[],
+            bas_ids: &[],
+        })
         .await;
     };
-    bas_vs_web_run_on_ctx(
+    bas_vs_web_run_on_ctx(BasVsWebRunArgs {
         ctx,
         cols,
         n,
@@ -2876,27 +2876,44 @@ pub async fn bas_vs_web_from_history(
         defaulted_start,
         deadline,
         has_weather_ids,
-        &weather_ids,
-        &bas_ids,
-    )
+        weather_ids: &weather_ids,
+        bas_ids: &bas_ids,
+    })
     .await
 }
 
-async fn bas_vs_web_run_on_ctx(
+struct BasVsWebRunArgs<'a> {
     ctx: SessionContext,
     cols: HashSet<String>,
     n: i64,
-    equipment_filter: Option<&[String]>,
+    equipment_filter: Option<&'a [String]>,
     max_points: usize,
-    building_id: Option<&str>,
-    mut start_t: DateTime<Utc>,
+    building_id: Option<&'a str>,
+    start_t: DateTime<Utc>,
     end_t: DateTime<Utc>,
     defaulted_start: bool,
     deadline: tokio::time::Instant,
     has_weather_ids: bool,
-    weather_ids: &[String],
-    bas_ids: &[String],
-) -> Result<Option<AnalyticsEnvelope>> {
+    weather_ids: &'a [String],
+    bas_ids: &'a [String],
+}
+
+async fn bas_vs_web_run_on_ctx(args: BasVsWebRunArgs<'_>) -> Result<Option<AnalyticsEnvelope>> {
+    let BasVsWebRunArgs {
+        ctx,
+        cols,
+        n,
+        equipment_filter,
+        max_points,
+        building_id,
+        mut start_t,
+        end_t,
+        defaulted_start,
+        deadline,
+        has_weather_ids,
+        weather_ids,
+        bas_ids,
+    } = args;
     let Some(ts_col) = pick_ts_col(&cols) else {
         return Ok(None);
     };
