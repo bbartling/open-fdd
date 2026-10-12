@@ -1254,6 +1254,7 @@ mod tests {
             mstp_mac: Vec::new(),
             rpm_chunk: 1,
             max_apdu: 1_472,
+            equipment_type: None,
             points: object_instances
                 .iter()
                 .map(|object_instance| crate::config::FieldPoint {

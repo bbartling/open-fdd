@@ -544,13 +544,62 @@ pub fn plant_group_for_typed(
     }
 }
 
-/// SQL predicate for equipment whose package stamp is canonical kind `weather`.
+/// Load equipment type stamps from hub + every tenant root for `building_id`.
 ///
-/// An empty stamp set matches nothing (`AND 1 = 0`) or, when `negate`, leaves
-/// the predicate off so non-weather rows are not invented from id text.
-fn stamped_weather_id_predicate(building_id: Option<&str>, negate: bool) -> String {
-    let map = open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
-    let mut ids: Vec<String> = map
+/// Live MQTT writes under `tenants/{tid}/building=…`; ops patches may land on
+/// the hub `building=…` map. Soft-OPEN 371 #1229: weather stamps must be found
+/// wherever they live so bas-vs-web can prune before DataFusion opens the hive.
+fn load_type_maps_for_building(building_id: &str) -> BTreeMap<String, String> {
+    let mut merged = BTreeMap::new();
+    let base = parquet_root_base();
+    for (id, stamp) in
+        open_fdd_edge_prototype::equipment_types::load_type_map(&base, Some(building_id))
+    {
+        merged.insert(id, stamp);
+    }
+    for (id, stamp) in
+        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), Some(building_id))
+    {
+        // Prefer an already-recognized weather stamp over a later zone_other.
+        if let Some(existing) = merged.get(&id) {
+            if open_fdd_edge_prototype::equipment_types::canonical_kind(existing) == Some("weather")
+            {
+                continue;
+            }
+        }
+        merged.insert(id, stamp);
+    }
+    let tenants = base.join("tenants");
+    if tenants.is_dir() {
+        if let Ok(rd) = std::fs::read_dir(&tenants) {
+            for entry in rd.flatten() {
+                let tenant_root = entry.path();
+                for (id, stamp) in open_fdd_edge_prototype::equipment_types::load_type_map(
+                    &tenant_root,
+                    Some(building_id),
+                ) {
+                    if let Some(existing) = merged.get(&id) {
+                        if open_fdd_edge_prototype::equipment_types::canonical_kind(existing)
+                            == Some("weather")
+                        {
+                            continue;
+                        }
+                    }
+                    // Tenant live stamps win over hub except weather protection above.
+                    merged.insert(id, stamp);
+                }
+            }
+        }
+    }
+    merged
+}
+
+/// Equipment ids whose stamp canonicalizes to `weather`.
+fn stamped_weather_ids(building_id: Option<&str>) -> Vec<String> {
+    let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Vec::new();
+    };
+    let mut ids: Vec<String> = load_type_maps_for_building(bid)
         .into_iter()
         .filter(|(_, stamp)| {
             open_fdd_edge_prototype::equipment_types::canonical_kind(stamp) == Some("weather")
@@ -558,6 +607,16 @@ fn stamped_weather_id_predicate(building_id: Option<&str>, negate: bool) -> Stri
         .map(|(id, _)| id)
         .collect();
     ids.sort();
+    ids
+}
+
+/// SQL predicate for equipment whose package stamp is canonical kind `weather`.
+///
+/// An empty stamp set matches nothing (`AND 1 = 0`) or, when `negate`, leaves
+/// the predicate off so non-weather rows are not invented from id text.
+/// Prefer positive `IN` lists — `NOT IN` defeats Hive partition pruning on ACME.
+fn stamped_weather_id_predicate(building_id: Option<&str>, negate: bool) -> String {
+    let ids = stamped_weather_ids(building_id);
     if ids.is_empty() {
         return if negate {
             String::new()
@@ -570,11 +629,87 @@ fn stamped_weather_id_predicate(building_id: Option<&str>, negate: bool) -> Stri
         .map(|id| format!("'{}'", id.replace('\'', "''")))
         .collect::<Vec<_>>()
         .join(", ");
+    // Keep equipment_id uncast so DataFusion can prune Hive partitions.
     if negate {
-        format!(" AND CAST(equipment_id AS VARCHAR) NOT IN ({list})")
+        format!(" AND equipment_id NOT IN ({list})")
     } else {
-        format!(" AND CAST(equipment_id AS VARCHAR) IN ({list})")
+        format!(" AND equipment_id IN ({list})")
     }
+}
+
+/// Positive equipment allow-list for bas-vs-web (weather + BAS OAT carriers).
+///
+/// Never returns the full ACME hive. When weather stamps exist, BAS carriers are
+/// caller filters, AHU stamps, or a schema peek for `oa_t` (metadata only).
+fn bas_vs_web_equipment_allow_list(
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+    equipment_filter: Option<&[String]>,
+) -> Vec<String> {
+    let Some(bid) = safe_building_segment(building_id) else {
+        return Vec::new();
+    };
+    let weather = stamped_weather_ids(Some(&bid));
+    let mut allow: BTreeSet<String> = weather.iter().cloned().collect();
+    if let Some(filter) = equipment_filter {
+        for id in filter {
+            let id = id.trim();
+            if !id.is_empty() {
+                allow.insert(id.to_string());
+            }
+        }
+    }
+    let types = load_type_maps_for_building(&bid);
+    for (id, stamp) in &types {
+        if open_fdd_edge_prototype::equipment_types::canonical_kind(stamp) == Some("ahu") {
+            allow.insert(id.clone());
+        }
+    }
+    // Schema peek for BAS / web OAT carriers when stamps alone are incomplete
+    // (ACME MQTT often stamps everything zone_other; package fixtures may have
+    // web_oa_t on an unstamped weather equipment id).
+    let hub = parquet_root_base();
+    let read_root = fdd_store::resolve_building_read_root(&hub, preferred_tenant, &bid)
+        .map(|r| r.root)
+        .unwrap_or(hub);
+    let need_bas_peek = allow.len() <= weather.len();
+    let need_web_peek = weather.is_empty();
+    if need_bas_peek || need_web_peek {
+        for id in list_equipment_ids_from_hive(&bid) {
+            if weather.iter().any(|w| w == &id) {
+                continue;
+            }
+            let cols = fdd_store::peek_equipment_history_columns(&read_root, &bid, &id);
+            let has_bas = cols.iter().any(|c| {
+                matches!(
+                    c.as_str(),
+                    "oa_t" | "outside_air_temp" | "outside_air_temperature"
+                )
+            });
+            let has_web = cols.iter().any(|c| {
+                matches!(
+                    c.as_str(),
+                    "web_oa_t" | "oa_t_web" | "oat_meteo" | "oa_t_meteo" | "dry_bulb_f"
+                )
+            });
+            if (need_bas_peek && has_bas) || (need_web_peek && has_web) {
+                allow.insert(id);
+            }
+        }
+    }
+    allow.into_iter().collect()
+}
+
+fn equipment_id_in_predicate(ids: &[String]) -> String {
+    if ids.is_empty() {
+        return " AND 1 = 0".to_string();
+    }
+    let list = ids
+        .iter()
+        .map(|id| format!("'{}'", id.replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(" AND equipment_id IN ({list})")
 }
 
 /// OAT for mech-cooling bins: prefer web/meteo OAT (pandas Overview default).
@@ -1264,6 +1399,68 @@ async fn open_history_scoped_for_tenant(
     }
     let cols = history_columns_async(&ctx).await?;
     Ok(Some((ctx, cols, n, scan)))
+}
+
+/// Soft-OPEN 371 #1229: open only allow-listed equipment partitions.
+///
+/// Holds [`fdd_sql::EquipmentScopeGuard`] for the query lifetime so staging
+/// symlinks stay valid. `history_rows` is the allow-list size (not a full-hive
+/// `COUNT(*)` — that scan is what aborted ACME bas-vs-web).
+async fn open_history_scoped_equipment_for_tenant(
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+    equipment_ids: &[String],
+) -> Result<
+    Option<(
+        SessionContext,
+        HashSet<String>,
+        i64,
+        fdd_store::ScanPermit,
+        fdd_sql::EquipmentScopeGuard,
+    )>,
+> {
+    let Some(bid) = safe_building_segment(building_id) else {
+        return Ok(None);
+    };
+    if equipment_ids.is_empty() {
+        return Ok(None);
+    }
+    let hub = parquet_root_base();
+    if !hub.is_dir() {
+        return Ok(None);
+    }
+    let resolved = match fdd_store::resolve_building_read_root(&hub, preferred_tenant, &bid) {
+        Ok(r) => r,
+        Err(_) => return Ok(None),
+    };
+    let scan = fdd_store::try_historian_scan_permit()
+        .or_else(|_| Ok::<_, anyhow::Error>(fdd_store::historian_scan_permit_wait()))?;
+    let ctx = new_bounded_session()?;
+    let (_reg, guard) = match fdd_sql::register_historian_building_equipment(
+        &ctx,
+        &resolved.root,
+        &bid,
+        equipment_ids,
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::debug!(
+                error = %e,
+                building = %bid,
+                equipment_n = equipment_ids.len(),
+                "equipment-scoped historian register skipped"
+            );
+            return Ok(None);
+        }
+    };
+    let _ = fdd_rules::occupancy_schedule::apply_session_occupancy_schedule(&ctx).await;
+    let cols = history_columns_async(&ctx).await?;
+    // Avoid full-hive COUNT(*). Presence of columns is enough; coverage uses
+    // allow-list size as a bounded proxy.
+    let n = equipment_ids.len() as i64;
+    Ok(Some((ctx, cols, n, scan, guard)))
 }
 
 fn as_f64(v: Option<&serde_json::Value>) -> Option<f64> {
@@ -2626,18 +2823,107 @@ pub async fn bas_vs_web_from_history(
     end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let defaulted_start = start.is_none();
-    let (mut start_t, end_opt) =
+    let (start_t, end_opt) =
         match resolve_analytics_window(start, end, BAS_VS_WEB_DEFAULT_LOOKBACK_DAYS) {
             Ok(w) => w,
             Err(msg) => anyhow::bail!("{msg}"),
         };
     let end_t = end_opt.unwrap_or_else(Utc::now);
     let deadline = tokio::time::Instant::now() + BAS_VS_WEB_QUERY_TIMEOUT;
-    let Some((ctx, cols, n, _scan)) =
-        open_history_scoped_for_tenant(building_id, preferred_tenant).await?
+    // Soft-OPEN 371 #1229: never open_history_scoped the full ACME hive.
+    // Register only weather + BAS OAT carriers (positive IN on both CTEs).
+    let allow = bas_vs_web_equipment_allow_list(building_id, preferred_tenant, equipment_filter);
+    let weather_ids = stamped_weather_ids(building_id);
+    let has_weather_ids = !weather_ids.is_empty();
+    let bas_ids: Vec<String> = allow
+        .iter()
+        .filter(|id| !weather_ids.iter().any(|w| w == *id))
+        .cloned()
+        .collect();
+    let Some((ctx, cols, n, _scan, _eq_guard)) =
+        open_history_scoped_equipment_for_tenant(building_id, preferred_tenant, &allow).await?
     else {
-        return Ok(None);
+        // Fall back only when allow-list is empty (no stamps / no oa_t peek).
+        // Still refuse full-hive open for known large sites with weather stamps.
+        if has_weather_ids {
+            tracing::warn!(
+                building = building_id.unwrap_or(""),
+                "bas-vs-web equipment scope empty despite weather stamps; fail-closed"
+            );
+            return Ok(None);
+        }
+        let Some((ctx, cols, n, _scan)) =
+            open_history_scoped_for_tenant(building_id, preferred_tenant).await?
+        else {
+            return Ok(None);
+        };
+        return bas_vs_web_run_on_ctx(BasVsWebRunArgs {
+            ctx,
+            cols,
+            n,
+            equipment_filter,
+            max_points,
+            building_id,
+            start_t,
+            end_t,
+            defaulted_start,
+            deadline,
+            has_weather_ids: false,
+            weather_ids: &[],
+            bas_ids: &[],
+        })
+        .await;
     };
+    bas_vs_web_run_on_ctx(BasVsWebRunArgs {
+        ctx,
+        cols,
+        n,
+        equipment_filter,
+        max_points,
+        building_id,
+        start_t,
+        end_t,
+        defaulted_start,
+        deadline,
+        has_weather_ids,
+        weather_ids: &weather_ids,
+        bas_ids: &bas_ids,
+    })
+    .await
+}
+
+struct BasVsWebRunArgs<'a> {
+    ctx: SessionContext,
+    cols: HashSet<String>,
+    n: i64,
+    equipment_filter: Option<&'a [String]>,
+    max_points: usize,
+    building_id: Option<&'a str>,
+    start_t: DateTime<Utc>,
+    end_t: DateTime<Utc>,
+    defaulted_start: bool,
+    deadline: tokio::time::Instant,
+    has_weather_ids: bool,
+    weather_ids: &'a [String],
+    bas_ids: &'a [String],
+}
+
+async fn bas_vs_web_run_on_ctx(args: BasVsWebRunArgs<'_>) -> Result<Option<AnalyticsEnvelope>> {
+    let BasVsWebRunArgs {
+        ctx,
+        cols,
+        n,
+        equipment_filter,
+        max_points,
+        building_id,
+        mut start_t,
+        end_t,
+        defaulted_start,
+        deadline,
+        has_weather_ids,
+        weather_ids,
+        bas_ids,
+    } = args;
     let Some(ts_col) = pick_ts_col(&cols) else {
         return Ok(None);
     };
@@ -2646,12 +2932,21 @@ pub async fn bas_vs_web_from_history(
     };
     let web_col = web_oat_col(&cols);
     let _eq_filter = equipment_filter_sql(equipment_filter);
-    let weather_only = stamped_weather_id_predicate(building_id, false);
-    let weather_excluded = stamped_weather_id_predicate(building_id, true);
-    // Prefer stamped weather equipment whenever present. ACME's hive schema
-    // includes web_oa_t, so the unscoped column path scanned every device and
-    // slope-aborted at ~15 GiB even after date_bin join (#1222 residual).
-    let has_weather_ids = !weather_only.is_empty() && !weather_only.contains("1 = 0");
+    let weather_only = if has_weather_ids {
+        equipment_id_in_predicate(weather_ids)
+    } else {
+        stamped_weather_id_predicate(building_id, false)
+    };
+    // Positive BAS IN — never NOT IN (defeats Hive pruning → ACME full scan).
+    let bas_scope = if has_weather_ids {
+        if bas_ids.is_empty() {
+            " AND 1 = 0".to_string()
+        } else {
+            equipment_id_in_predicate(bas_ids)
+        }
+    } else {
+        String::new()
+    };
     let weather_split = has_weather_ids || web_col.is_none();
     if !has_weather_ids && web_col == Some(bas) {
         return Ok(None);
@@ -2659,8 +2954,6 @@ pub async fn bas_vs_web_from_history(
     let limit = max_points.clamp(100, 5000);
     let mut used_retain_fallback = false;
     let mut bin_secs = date_bin_seconds_for_points(start_t, end_t, limit);
-    // Join on date_bin buckets; scope BAS to non-weather and web to weather
-    // equipment when stamps exist so hive-wide MQTT sites stay bounded.
     let web_label = if has_weather_ids {
         web_col
             .map(|c| format!("{c}@weather"))
@@ -2673,14 +2966,12 @@ pub async fn bas_vs_web_from_history(
     let bas_f = history_temp_sql(bas);
     let build_sql = |start_t: DateTime<Utc>, bin_secs: i64| -> String {
         let range_sql = time_range_sql(ts_col, Some(start_t), Some(end_t));
-        let (web_f, bas_scope, web_scope) = if has_weather_ids {
+        let (web_f, bas_scope_sql, web_scope) = if has_weather_ids {
             let web_f = history_temp_sql(web_col.unwrap_or(bas));
-            (web_f, weather_excluded.as_str(), weather_only.as_str())
+            (web_f, bas_scope.as_str(), weather_only.as_str())
         } else if let Some(web) = web_col {
             (history_temp_sql(web), "", "")
         } else {
-            // No weather stamps and no distinct web column — unreachable after
-            // the early return above; keep a fail-closed empty web side.
             (history_temp_sql(bas), "", " AND 1 = 0")
         };
         format!(
@@ -2690,7 +2981,7 @@ WITH bas_by_ts AS (
     date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP)) AS bucket_ts,
     AVG({bas_f}) AS bas_oat_f
   FROM history
-  WHERE {bas_f} IS NOT NULL{bas_scope}{range_sql}
+  WHERE {bas_f} IS NOT NULL{bas_scope_sql}{range_sql}
   GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP))
 ),
 web_by_ts AS (
@@ -2843,6 +3134,13 @@ LIMIT {limit}
         "bas_column": bas,
         "web_column": web_label,
         "weather_equipment_split": weather_split,
+        "equipment_scope": if has_weather_ids {
+            "allow_list"
+        } else {
+            "building"
+        },
+        "weather_equipment_n": weather_ids.len(),
+        "bas_equipment_n": bas_ids.len(),
         "oat_join": "site_broadcast_by_date_bin",
         "downsample": "date_bin",
         "bin_seconds": bin_secs,

@@ -55,10 +55,18 @@ fn load_equipment_type_stamps() -> EquipmentTypeStamps {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
-    let by_equipment = std::env::var("OPENFDD_EQUIPMENT_TYPE_MAP")
+    let mut by_equipment = std::env::var("OPENFDD_EQUIPMENT_TYPE_MAP")
         .ok()
         .and_then(|raw| serde_json::from_str::<HashMap<String, String>>(&raw).ok())
         .unwrap_or_default();
+    // Merge field_devices.toml equipment_type / equipType (hosted-weather → weather).
+    if let Ok(devices) = crate::config::load_field_devices(None) {
+        for device in devices {
+            if let Some(stamp) = device.equipment_type {
+                by_equipment.entry(device.name).or_insert(stamp);
+            }
+        }
+    }
     EquipmentTypeStamps {
         default_type,
         by_equipment,
@@ -1544,7 +1552,10 @@ mod tests {
     #[test]
     fn equipment_type_stamp_prefers_row_then_map_then_default() {
         std::env::set_var("OPENFDD_EQUIPMENT_TYPE", "zone_other");
-        std::env::set_var("OPENFDD_EQUIPMENT_TYPE_MAP", r#"{"FEC_1":"cv_ahu"}"#);
+        std::env::set_var(
+            "OPENFDD_EQUIPMENT_TYPE_MAP",
+            r#"{"FEC_1":"cv_ahu","hosted-weather":"weather"}"#,
+        );
         let stamps = load_equipment_type_stamps();
         assert_eq!(
             equipment_type_for(&stamps, "FEC_1", Some("vav")),
@@ -1557,6 +1568,11 @@ mod tests {
         assert_eq!(
             equipment_type_for(&stamps, "OTHER", None),
             Some("zone_other".into())
+        );
+        // MAP / field_devices.toml hosted-weather → weather beats zone_other default.
+        assert_eq!(
+            equipment_type_for(&stamps, "hosted-weather", None),
+            Some("weather".into())
         );
         std::env::remove_var("OPENFDD_EQUIPMENT_TYPE");
         std::env::remove_var("OPENFDD_EQUIPMENT_TYPE_MAP");

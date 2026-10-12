@@ -2555,6 +2555,7 @@ mod poll_select_tests {
             mstp_mac: vec![],
             rpm_chunk: 25,
             max_apdu: 480,
+            equipment_type: None,
             points,
         }
     }

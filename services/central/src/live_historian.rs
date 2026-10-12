@@ -681,7 +681,18 @@ impl LiveHistorian {
         }
         for (building_id, stamps) in by_building {
             let mut merged = equipment_types::load_type_map(root, Some(building_id.as_str()));
-            merged.extend(stamps);
+            for (equipment_id, stamp) in stamps {
+                // Durable weather: zone_other (or any non-weather) must not
+                // overwrite an existing weather stamp on disk.
+                if let Some(existing) = merged.get(&equipment_id) {
+                    if equipment_types::canonical_kind(existing) == Some("weather")
+                        && equipment_types::canonical_kind(&stamp) != Some("weather")
+                    {
+                        continue;
+                    }
+                }
+                merged.insert(equipment_id, stamp);
+            }
             if let Err(error) = equipment_types::write_type_map(root, &building_id, &merged) {
                 warn!(%error, building_id, "live historian equipment type registry update failed");
             }
@@ -1087,17 +1098,51 @@ fn collect_type_stamps(env: &TelemetryEnvelope, out: &mut BTreeMap<EquipmentKey,
             continue;
         };
         if let Some(stamp) = equipment_type_stamp(point) {
-            out.insert((building_id, equipment_id), stamp);
+            let key = (building_id, equipment_id);
+            // Soft-OPEN 371 #1229: once weather, never demote to zone_other from
+            // OPENFDD_EQUIPMENT_TYPE=zone_other on the Railway edge compose.
+            if let Some(prev) = out.get(&key) {
+                if equipment_types::canonical_kind(prev) == Some("weather")
+                    && equipment_types::canonical_kind(&stamp) != Some("weather")
+                {
+                    continue;
+                }
+            }
+            out.insert(key, stamp);
         }
     }
 }
 
 fn equipment_type_stamp(point: &TelemetryPoint) -> Option<String> {
-    string_tag(point, TAG_EQUIPMENT_TYPE)
+    if let Some(stamp) = string_tag(point, TAG_EQUIPMENT_TYPE)
         .or_else(|| string_tag(point, TAG_EQUIP_TYPE))
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(str::to_string)
+    {
+        // Role web_oa_t / web-outside-air-temp is weather even when the edge
+        // default stamp is zone_other (compose.edge.railway.yml).
+        if equipment_types::canonical_kind(stamp) == Some("weather") {
+            return Some(stamp.to_string());
+        }
+        if point_role_is_web_oat(point) {
+            return Some("weather".to_string());
+        }
+        return Some(stamp.to_string());
+    }
+    if point_role_is_web_oat(point) {
+        return Some("weather".to_string());
+    }
+    None
+}
+
+fn point_role_is_web_oat(point: &TelemetryPoint) -> bool {
+    let Some(raw) = string_tag(point, TAG_ROLE) else {
+        return false;
+    };
+    matches!(
+        normalize_role(raw).as_str(),
+        "web_oa_t" | "oa_t_web" | "oat_meteo" | "oa_t_meteo" | "dry_bulb_f"
+    )
 }
 
 fn point_identity(point: &TelemetryPoint) -> Result<Option<(String, String, String)>> {
@@ -1478,6 +1523,62 @@ mod tests {
                 .unwrap()
                 .to_rfc3339(),
             "2026-08-21T12:00:00+00:00"
+        );
+    }
+
+    #[test]
+    fn weather_stamp_survives_zone_other_mqtt_default() {
+        let tmp = TempDir::new().unwrap();
+        let config = HistorianConfig {
+            storage_url: StorageUrl::File {
+                root: tmp.path().to_path_buf(),
+            },
+            flush_rows: 1,
+            flush_seconds: 60,
+            target_file_mb: 128,
+            compaction_min_files: 8,
+            compaction_enabled: true,
+            query_memory_mb: 512,
+            spill_directory: None,
+            legacy_parquet_root: None,
+        };
+        let mut live = LiveHistorian::from_config(&config).unwrap();
+        let mut weather_point = point("web_oa_t", json!(55.0));
+        weather_point
+            .tags
+            .insert("equipment_id".into(), json!("hosted-weather"));
+        weather_point
+            .tags
+            .insert("equipment_type".into(), json!("zone_other"));
+        let report = live
+            .ingest_envelope(&envelope(vec![weather_point]))
+            .unwrap();
+        assert!(report.persisted_rows >= 1);
+        let types_path = tmp
+            .path()
+            .join("building=BUILDING_100/equipment_types.json");
+        let types: BTreeMap<String, String> =
+            serde_json::from_str(&std::fs::read_to_string(&types_path).unwrap()).unwrap();
+        assert_eq!(
+            types.get("hosted-weather").map(String::as_str),
+            Some("weather"),
+            "web_oa_t role must stamp weather despite zone_other tag"
+        );
+
+        // A later zone_other stamp without a web-OAT role must not demote weather.
+        let mut demote = point("sat", json!(56.0));
+        demote
+            .tags
+            .insert("equipment_id".into(), json!("hosted-weather"));
+        demote
+            .tags
+            .insert("equipment_type".into(), json!("zone_other"));
+        let _ = live.ingest_envelope(&envelope(vec![demote])).unwrap();
+        let types: BTreeMap<String, String> =
+            serde_json::from_str(&std::fs::read_to_string(types_path).unwrap()).unwrap();
+        assert_eq!(
+            types.get("hosted-weather").map(String::as_str),
+            Some("weather")
         );
     }
 

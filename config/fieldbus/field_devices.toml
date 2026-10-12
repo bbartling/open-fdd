@@ -23,6 +23,8 @@ enabled = true
 device_instance = 599998
 host = "127.0.0.1"
 port = 47808
+# Durable stamp: must stay weather under OPENFDD_EQUIPMENT_TYPE=zone_other (Soft-OPEN 371 #1229).
+equipment_type = "weather"
 points = [
   { object_type = "analog-value", object_instance = 9101, point_name = "web-outside-air-temp", units = "°F" },
 ]
