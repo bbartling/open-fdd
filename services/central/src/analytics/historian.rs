@@ -712,6 +712,120 @@ fn equipment_id_in_predicate(ids: &[String]) -> String {
     format!(" AND equipment_id IN ({list})")
 }
 
+/// Soft-OPEN 371 #1230: motor/runtime carriers only — never the full ACME hive.
+///
+/// Prefer stamped ahu/chiller/boiler/heatpump, then schema-peek equipment that
+/// actually carries fan/pump/chiller/boiler status columns (MQTT sites often
+/// stamp everything `zone_other`).
+fn motor_runtime_equipment_allow_list(
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+    equipment_filter: Option<&[String]>,
+) -> Vec<String> {
+    let Some(bid) = safe_building_segment(building_id) else {
+        return Vec::new();
+    };
+    let mut allow: BTreeSet<String> = BTreeSet::new();
+    if let Some(filter) = equipment_filter {
+        for id in filter {
+            let id = id.trim();
+            if !id.is_empty() {
+                allow.insert(id.to_string());
+            }
+        }
+    }
+    let types = load_type_maps_for_building(&bid);
+    for (id, stamp) in &types {
+        if let Some("ahu" | "chiller" | "boiler" | "heatpump" | "cooling_tower" | "weather") =
+            open_fdd_edge_prototype::equipment_types::canonical_kind(stamp)
+        {
+            allow.insert(id.clone());
+        }
+    }
+    // Weather ids for weekly OAT broadcast (not motors; tiny).
+    let weather = stamped_weather_ids(Some(&bid));
+    for id in &weather {
+        allow.insert(id.clone());
+    }
+    let hub = parquet_root_base();
+    let read_root = fdd_store::resolve_building_read_root(&hub, preferred_tenant, &bid)
+        .map(|r| r.root)
+        .unwrap_or(hub);
+    // Peek when stamps alone are thin (ACME MQTT often stamps everything zone_other).
+    let motor_stamped = allow
+        .iter()
+        .filter(|id| !weather.iter().any(|w| w == *id))
+        .count();
+    if motor_stamped < 2 {
+        for id in list_equipment_ids_from_hive(&bid) {
+            let cols = fdd_store::peek_equipment_history_columns(&read_root, &bid, &id);
+            if cols.iter().any(|c| {
+                let u = c.to_ascii_lowercase();
+                matches!(
+                    u.as_str(),
+                    "fan_status"
+                        | "fan_cmd"
+                        | "chiller_status"
+                        | "compressor_status"
+                        | "boiler_status"
+                        | "boiler_cmd"
+                        | "hwp_status"
+                        | "cwp_status"
+                ) || ((u.contains("fan") || u.contains("pump") || u.contains("boiler"))
+                    && u.contains("status"))
+            }) {
+                allow.insert(id);
+            }
+        }
+    }
+    allow.into_iter().collect()
+}
+
+/// Exact stamped ids for a cohort, with a fan/sat peek fallback for AHU when
+/// MQTT defaults stamp everything `zone_other`.
+fn cohort_equipment_allow_list(
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+    kinds: &[&str],
+    equipment_filter: Option<&[String]>,
+) -> Vec<String> {
+    let Some(bid) = safe_building_segment(building_id) else {
+        return Vec::new();
+    };
+    let mut allow: BTreeSet<String> = BTreeSet::new();
+    if let Some(filter) = equipment_filter {
+        for id in filter {
+            let id = id.trim();
+            if !id.is_empty() {
+                allow.insert(id.to_string());
+            }
+        }
+    }
+    let wanted = wanted_kinds(kinds);
+    if !wanted.is_empty() {
+        allow.extend(ids_from_stamp_map(Some(&bid), &wanted));
+    }
+    let wants_ahu = wanted.iter().any(|k| *k == "ahu");
+    if allow.is_empty() && wants_ahu {
+        let hub = parquet_root_base();
+        let read_root = fdd_store::resolve_building_read_root(&hub, preferred_tenant, &bid)
+            .map(|r| r.root)
+            .unwrap_or(hub);
+        for id in list_equipment_ids_from_hive(&bid) {
+            let cols = fdd_store::peek_equipment_history_columns(&read_root, &bid, &id);
+            if cols.iter().any(|c| {
+                matches!(
+                    c.as_str(),
+                    "fan_status" | "fan_cmd" | "sat" | "mat" | "rat" | "duct_static"
+                )
+            }) {
+                allow.insert(id);
+            }
+        }
+    }
+    allow.into_iter().collect()
+}
+
 /// OAT for mech-cooling bins: prefer web/meteo OAT (pandas Overview default).
 fn mech_oat_col(cols: &HashSet<String>) -> Option<&'static str> {
     web_oat_col(cols).or_else(|| {
@@ -953,14 +1067,6 @@ pub async fn runtime_from_history(
     end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let deadline = tokio::time::Instant::now() + RUNTIME_QUERY_TIMEOUT;
-    let ctx = new_bounded_session()?;
-    let (ok, _scan) = open_history_scan(&ctx, building_id).await?;
-    if !ok {
-        return Ok(None);
-    }
-
-    let cols = history_columns_async(&ctx).await?;
-
     let query = AnalyticsQuery {
         building_id: building_id.map(str::to_string),
         start,
@@ -968,8 +1074,63 @@ pub async fn runtime_from_history(
         ..AnalyticsQuery::default()
     };
     let max_gap = max_gap_seconds.max(0.0);
-    let eq_filter = equipment_filter_sql(equipment_filter);
     let stamped_types = rcx_type_stamps(building_id);
+
+    // Soft-OPEN 371 #1230: never LEAD over a named site's full hive. Register
+    // only motor carriers (stamped plant + fan/pump status peek). Building-less
+    // callers (unit fixtures) keep the legacy full open_history_scan path.
+    let (ctx, cols, _scan_guard) = if building_id.is_some() {
+        let allow = motor_runtime_equipment_allow_list(building_id, None, equipment_filter);
+        if allow.is_empty() {
+            let mut env = envelope_with_engine(
+                QV_RUNTIME,
+                &query,
+                vec![
+                    "runtime BLOCKED: no motor carriers in package/hive — need stamped \
+                     ahu/chiller/boiler/heatpump or columns fan_status|fan_cmd|chiller_status|\
+                     compressor_status|boiler_status|hwp_status|cwp_status (or *status with \
+                     fan/pump/boiler)"
+                        .into(),
+                ],
+                DF_ENGINE,
+            );
+            env.coverage = Some(json!({
+                "max_gap_seconds": max_gap,
+                "source": "historian_parquet",
+                "building_id": safe_building_segment(building_id),
+                "start": start.map(|t| t.to_rfc3339()),
+                "end": end.map(|t| t.to_rfc3339()),
+                "allow_list_empty": true,
+                "missing_roles": [
+                    "fan_status",
+                    "fan_cmd",
+                    "chiller_status",
+                    "compressor_status",
+                    "boiler_status",
+                    "hwp_status",
+                    "cwp_status"
+                ],
+            }));
+            return Ok(Some(env));
+        }
+        let Some((ctx, cols, _n, _scan, guard)) =
+            open_history_scoped_equipment_for_tenant(building_id, None, &allow).await?
+        else {
+            return Ok(None);
+        };
+        (ctx, cols, Some(guard))
+    } else {
+        let ctx = new_bounded_session()?;
+        let (ok, _scan) = open_history_scan(&ctx, building_id).await?;
+        if !ok {
+            return Ok(None);
+        }
+        let cols = history_columns_async(&ctx).await?;
+        (ctx, cols, None)
+    };
+    let _keep_eq_scope = _scan_guard;
+    // Allow-list already selected carriers; keep IN filter for caller subsets.
+    let eq_filter = equipment_filter_sql(equipment_filter);
 
     if cols.contains("equipment_id") {
         // Fan for air handlers; chiller/boiler/pump status for plant motors.
@@ -3165,8 +3326,10 @@ pub async fn inspect_from_history(
     if eq.is_empty() {
         return Ok(None);
     }
-    let Some((ctx, cols, n, _scan)) =
-        open_history_scoped_for_tenant(building_id, preferred_tenant).await?
+    // Soft-OPEN 371 #1230: never open the full ACME hive for one equipment id.
+    let allow = vec![eq.to_string()];
+    let Some((ctx, cols, n, _scan, _guard)) =
+        open_history_scoped_equipment_for_tenant(building_id, preferred_tenant, &allow).await?
     else {
         return Ok(None);
     };
@@ -3310,8 +3473,11 @@ LIMIT {limit}
     env.rows = selected.iter().map(|c| json!({ "column": c })).collect();
     let mut coverage = json!({
         "equipment_id": eq,
-        "row_count": n,
+        // equipment-scoped open uses allow-list len as `n`; point_count is the
+        // truthful returned sample size for this inspect window.
+        "row_count": env.points.len(),
         "point_count": env.points.len(),
+        "registered_equipment_n": n,
         "plottable_columns": plottable,
         "columns_plotted": selected,
         "first_timestamp": first,
@@ -4065,17 +4231,74 @@ pub async fn descriptive_counts_from_history_filtered(
     building_id: Option<&str>,
     cohort_kinds: Option<&[&str]>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
-        return Ok(None);
+    // Soft-OPEN 371 #1230: rcx cohorts must not open_history_scoped the full
+    // ACME hive (COUNT + GROUP BY OOM → nginx 502). Prefer equipment register.
+    // Legacy callers (metering) with no cohort/filter still use full scoped open.
+    let query = AnalyticsQuery::default();
+    let (ctx, _cols, n, _scan, _eq_guard) = match cohort_kinds {
+        Some(kinds) => {
+            let allow = cohort_equipment_allow_list(building_id, None, kinds, equipment_filter);
+            if allow.is_empty() {
+                let missing = if kinds.iter().any(|k| k.eq_ignore_ascii_case("ahu")) {
+                    "stamped ahu OR columns fan_status|fan_cmd|sat|mat|rat|duct_static"
+                } else if kinds
+                    .iter()
+                    .any(|k| matches!(k.to_ascii_lowercase().as_str(), "vav" | "zone" | "fcu"))
+                {
+                    "stamped vav/zone OR zone_t roles"
+                } else {
+                    "stamped cohort equipment_ids"
+                };
+                let mut env = envelope_with_engine(
+                    query_version,
+                    &query,
+                    vec![format!(
+                        "{note} — BLOCKED: empty equipment allow-list ({missing}); refusing full-hive scan"
+                    )],
+                    DF_ENGINE,
+                );
+                env.coverage = Some(json!({
+                    "equipment_count": 0,
+                    "history_rows": 0,
+                    "source": "historian_parquet",
+                    "building_id": safe_building_segment(building_id),
+                    "allow_list_empty": true,
+                    "missing_roles": missing,
+                }));
+                return Ok(Some(env));
+            }
+            let Some(opened) =
+                open_history_scoped_equipment_for_tenant(building_id, None, &allow).await?
+            else {
+                return Ok(None);
+            };
+            (opened.0, opened.1, opened.2, opened.3, Some(opened.4))
+        }
+        None => {
+            if let Some(filter) = equipment_filter.filter(|f| !f.is_empty()) {
+                let allow: Vec<String> = filter
+                    .iter()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                let Some(opened) =
+                    open_history_scoped_equipment_for_tenant(building_id, None, &allow).await?
+                else {
+                    return Ok(None);
+                };
+                (opened.0, opened.1, opened.2, opened.3, Some(opened.4))
+            } else {
+                let Some((ctx, cols, n, scan)) = open_history_scoped(building_id).await? else {
+                    return Ok(None);
+                };
+                (ctx, cols, n, scan, None)
+            }
+        }
     };
     let eq_filter = equipment_filter_sql(equipment_filter);
-    let extra = match cohort_kinds {
-        Some(kinds) => stamped_cohort_sql(&ctx, building_id, kinds, &cols).await,
-        None => String::new(),
-    };
     let sql = format!(
         "SELECT equipment_id, COUNT(*) AS history_rows FROM history \
-         WHERE equipment_id IS NOT NULL{eq_filter}{extra} \
+         WHERE equipment_id IS NOT NULL{eq_filter} \
          GROUP BY equipment_id ORDER BY equipment_id"
     );
     let result = run_sql(&ctx, &sql).await?;
@@ -4092,15 +4315,21 @@ pub async fn descriptive_counts_from_history_filtered(
         "{note} — descriptive historian row-count evidence via DataFusion only; \
          family-specific engineering metrics are not fabricated"
     )];
-    let query = AnalyticsQuery::default();
+    let history_rows_sum: u64 = rows
+        .iter()
+        .filter_map(|r| r.get("history_rows").and_then(|v| v.as_u64()))
+        .sum();
     let mut env = envelope_with_engine(query_version, &query, warnings, DF_ENGINE);
     env.rows = rows.clone();
     env.equipment = rows;
     env.coverage = Some(json!({
         "equipment_count": env.equipment.len(),
-        "history_rows": n,
+        // Prefer SUM of per-equipment counts — equipment-scoped open returns
+        // allow-list length as `n`, not Parquet row count.
+        "history_rows": if history_rows_sum > 0 { history_rows_sum } else { n as u64 },
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
+        "equipment_scoped": _eq_guard.is_some(),
     }));
     Ok(Some(env))
 }

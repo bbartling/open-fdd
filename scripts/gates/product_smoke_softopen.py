@@ -285,15 +285,56 @@ def probe_site(
             nrows = envelope_rows(out)
             entry["rows"] = nrows
             if name == "analytics_runtime" and nrows == 0:
-                fanish = {r for r in roles if "fan" in r.lower() or "pump" in r.lower()}
-                if not fanish and "fan_status" not in roles and "fan-status" not in roles:
+                warns = []
+                cov = {}
+                if isinstance(out, dict):
+                    warns = out.get("warnings") or []
+                    cov = out.get("coverage") or {}
+                warn_txt = " ".join(str(w) for w in warns)
+                if cov.get("fail_closed") or "fail-closed" in warn_txt.lower():
+                    entry["status"] = "FAIL"
+                    entry["reason"] = (
+                        "runtime fail_closed timeout — hive too wide or window too long"
+                    )
+                    fails += 1
+                elif cov.get("allow_list_empty") or "BLOCKED" in warn_txt:
+                    missing = cov.get("missing_roles") or "fan_status|fan_cmd|plant status"
                     entry["status"] = "BLOCKED"
-                    entry["reason"] = "package-map missing fan/pump status roles for motor weekly"
+                    entry["reason"] = f"runtime allow-list empty; missing roles: {missing}"
                     blocked += 1
                 else:
-                    entry["status"] = "FAIL"
-                    entry["reason"] = "empty motor/runtime with mapped fan/pump roles"
-                    fails += 1
+                    # Status/on-proof roles only (allow-list contract) — fan_speed
+                    # alone is not enough to FAIL empty motors.
+                    status_roles = {
+                        "fan_status",
+                        "fan-status",
+                        "fan_cmd",
+                        "fan-cmd",
+                        "chiller_status",
+                        "chiller-status",
+                        "compressor_status",
+                        "compressor-status",
+                        "boiler_status",
+                        "boiler-status",
+                        "boiler_cmd",
+                        "hwp_status",
+                        "cwp_status",
+                    }
+                    has_status = bool(roles & status_roles) or any(
+                        (("fan" in r.lower() or "pump" in r.lower() or "boiler" in r.lower())
+                         and "status" in r.lower())
+                        for r in roles
+                    )
+                    if not has_status:
+                        entry["status"] = "BLOCKED"
+                        entry["reason"] = (
+                            "package-map missing fan/pump/plant status roles for motor weekly"
+                        )
+                        blocked += 1
+                    else:
+                        entry["status"] = "FAIL"
+                        entry["reason"] = "empty motor/runtime with mapped status roles"
+                        fails += 1
             elif name == "analytics_bas_vs_web_oat" and nrows == 0:
                 has_bas = "oa_t" in roles or "outside-air-temp" in roles
                 has_web = "web_oa_t" in roles or "web-outside-air-temp" in roles
