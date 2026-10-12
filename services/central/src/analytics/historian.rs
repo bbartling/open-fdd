@@ -3473,8 +3473,11 @@ LIMIT {limit}
     env.rows = selected.iter().map(|c| json!({ "column": c })).collect();
     let mut coverage = json!({
         "equipment_id": eq,
-        "row_count": n,
+        // equipment-scoped open uses allow-list len as `n`; point_count is the
+        // truthful returned sample size for this inspect window.
+        "row_count": env.points.len(),
         "point_count": env.points.len(),
+        "registered_equipment_n": n,
         "plottable_columns": plottable,
         "columns_plotted": selected,
         "first_timestamp": first,
@@ -4312,12 +4315,18 @@ pub async fn descriptive_counts_from_history_filtered(
         "{note} — descriptive historian row-count evidence via DataFusion only; \
          family-specific engineering metrics are not fabricated"
     )];
+    let history_rows_sum: u64 = rows
+        .iter()
+        .filter_map(|r| r.get("history_rows").and_then(|v| v.as_u64()))
+        .sum();
     let mut env = envelope_with_engine(query_version, &query, warnings, DF_ENGINE);
     env.rows = rows.clone();
     env.equipment = rows;
     env.coverage = Some(json!({
         "equipment_count": env.equipment.len(),
-        "history_rows": n,
+        // Prefer SUM of per-equipment counts — equipment-scoped open returns
+        // allow-list length as `n`, not Parquet row count.
+        "history_rows": if history_rows_sum > 0 { history_rows_sum } else { n as u64 },
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
         "equipment_scoped": _eq_guard.is_some(),

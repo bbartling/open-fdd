@@ -303,16 +303,37 @@ def probe_site(
                     entry["reason"] = f"runtime allow-list empty; missing roles: {missing}"
                     blocked += 1
                 else:
-                    fanish = {r for r in roles if "fan" in r.lower() or "pump" in r.lower()}
-                    if not fanish and "fan_status" not in roles and "fan-status" not in roles:
+                    # Status/on-proof roles only (allow-list contract) — fan_speed
+                    # alone is not enough to FAIL empty motors.
+                    status_roles = {
+                        "fan_status",
+                        "fan-status",
+                        "fan_cmd",
+                        "fan-cmd",
+                        "chiller_status",
+                        "chiller-status",
+                        "compressor_status",
+                        "compressor-status",
+                        "boiler_status",
+                        "boiler-status",
+                        "boiler_cmd",
+                        "hwp_status",
+                        "cwp_status",
+                    }
+                    has_status = bool(roles & status_roles) or any(
+                        (("fan" in r.lower() or "pump" in r.lower() or "boiler" in r.lower())
+                         and "status" in r.lower())
+                        for r in roles
+                    )
+                    if not has_status:
                         entry["status"] = "BLOCKED"
                         entry["reason"] = (
-                            "package-map missing fan/pump status roles for motor weekly"
+                            "package-map missing fan/pump/plant status roles for motor weekly"
                         )
                         blocked += 1
                     else:
                         entry["status"] = "FAIL"
-                        entry["reason"] = "empty motor/runtime with mapped fan/pump roles"
+                        entry["reason"] = "empty motor/runtime with mapped status roles"
                         fails += 1
             elif name == "analytics_bas_vs_web_oat" and nrows == 0:
                 has_bas = "oa_t" in roles or "outside-air-temp" in roles
