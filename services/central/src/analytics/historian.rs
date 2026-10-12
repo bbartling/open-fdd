@@ -2655,8 +2655,9 @@ pub async fn bas_vs_web_from_history(
     let limit = max_points.clamp(100, 5000);
     let mut used_retain_fallback = false;
     let mut bin_secs = date_bin_seconds_for_points(start_t, end_t, limit);
-    // Two-pass shape without ROW_NUMBER/COUNT(*) OVER: second-level join then
-    // date_bin GROUP BY with a bounded bucket count (#1179).
+    // Join on date_bin buckets directly — never materialize per-second site
+    // aggregates over the full ACME hive (Soft-OPEN 371 #1222 residual: that
+    // intermediate climbed to ~14–16 GiB and slope-aborted central).
     let web_label = web_col
         .map(str::to_string)
         .unwrap_or_else(|| "oa_t@weather".into());
@@ -2668,30 +2669,29 @@ pub async fn bas_vs_web_from_history(
             format!(
                 r#"
 WITH bas_by_ts AS (
-  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas_f}) AS bas_oat_f
+  SELECT
+    date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP)) AS bucket_ts,
+    AVG({bas_f}) AS bas_oat_f
   FROM history
   WHERE {bas_f} IS NOT NULL{range_sql}
-  GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
+  GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP))
 ),
 web_by_ts AS (
-  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({web_f}) AS web_oat_f
+  SELECT
+    date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP)) AS bucket_ts,
+    AVG({web_f}) AS web_oat_f
   FROM history
   WHERE {web_f} IS NOT NULL{range_sql}
-  GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
+  GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP))
 ),
 joined AS (
-  SELECT b.ts, b.bas_oat_f, w.web_oat_f, (b.bas_oat_f - w.web_oat_f) AS delta_f
-  FROM bas_by_ts b
-  INNER JOIN web_by_ts w ON b.ts = w.ts
-),
-bucketed AS (
   SELECT
-    date_bin(INTERVAL '{bin_secs}' SECOND, ts) AS bucket_ts,
-    AVG(bas_oat_f) AS bas_oat_f,
-    AVG(web_oat_f) AS web_oat_f,
-    AVG(delta_f) AS delta_f
-  FROM joined
-  GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, ts)
+    b.bucket_ts,
+    b.bas_oat_f,
+    w.web_oat_f,
+    (b.bas_oat_f - w.web_oat_f) AS delta_f
+  FROM bas_by_ts b
+  INNER JOIN web_by_ts w ON b.bucket_ts = w.bucket_ts
 )
 SELECT
   CAST(bucket_ts AS VARCHAR) AS timestamp_utc,
@@ -2699,7 +2699,7 @@ SELECT
   bas_oat_f,
   web_oat_f,
   delta_f
-FROM bucketed
+FROM joined
 ORDER BY bucket_ts
 LIMIT {limit}
 "#
@@ -2708,30 +2708,29 @@ LIMIT {limit}
             format!(
                 r#"
 WITH bas_by_ts AS (
-  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas_f}) AS bas_oat_f
+  SELECT
+    date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP)) AS bucket_ts,
+    AVG({bas_f}) AS bas_oat_f
   FROM history
   WHERE {bas_f} IS NOT NULL{weather_excluded}{range_sql}
-  GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
+  GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP))
 ),
 web_by_ts AS (
-  SELECT date_trunc('second', CAST({ts_col} AS TIMESTAMP)) AS ts, AVG({bas_f}) AS web_oat_f
+  SELECT
+    date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP)) AS bucket_ts,
+    AVG({bas_f}) AS web_oat_f
   FROM history
   WHERE {bas_f} IS NOT NULL{weather_only}{range_sql}
-  GROUP BY date_trunc('second', CAST({ts_col} AS TIMESTAMP))
+  GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP))
 ),
 joined AS (
-  SELECT b.ts, b.bas_oat_f, w.web_oat_f, (b.bas_oat_f - w.web_oat_f) AS delta_f
-  FROM bas_by_ts b
-  INNER JOIN web_by_ts w ON b.ts = w.ts
-),
-bucketed AS (
   SELECT
-    date_bin(INTERVAL '{bin_secs}' SECOND, ts) AS bucket_ts,
-    AVG(bas_oat_f) AS bas_oat_f,
-    AVG(web_oat_f) AS web_oat_f,
-    AVG(delta_f) AS delta_f
-  FROM joined
-  GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, ts)
+    b.bucket_ts,
+    b.bas_oat_f,
+    w.web_oat_f,
+    (b.bas_oat_f - w.web_oat_f) AS delta_f
+  FROM bas_by_ts b
+  INNER JOIN web_by_ts w ON b.bucket_ts = w.bucket_ts
 )
 SELECT
   CAST(bucket_ts AS VARCHAR) AS timestamp_utc,
@@ -2739,7 +2738,7 @@ SELECT
   bas_oat_f,
   web_oat_f,
   delta_f
-FROM bucketed
+FROM joined
 ORDER BY bucket_ts
 LIMIT {limit}
 "#
@@ -2867,7 +2866,7 @@ LIMIT {limit}
         "bas_column": bas,
         "web_column": web_label,
         "weather_equipment_split": weather_split,
-        "oat_join": "site_broadcast_by_second",
+        "oat_join": "site_broadcast_by_date_bin",
         "downsample": "date_bin",
         "bin_seconds": bin_secs,
         "source": "historian_parquet",
@@ -5538,7 +5537,7 @@ mod tests {
         assert!(!env.points.is_empty());
         assert_eq!(
             env.coverage.as_ref().unwrap()["oat_join"],
-            "site_broadcast_by_second"
+            "site_broadcast_by_date_bin"
         );
         assert!(env.rows.iter().any(|r| r["kind"] == "delta_hist"));
     }
@@ -5605,7 +5604,7 @@ mod tests {
         assert!(p0["web_oat_f"].as_f64().is_some());
         assert_eq!(
             env.coverage.as_ref().unwrap()["oat_join"],
-            "site_broadcast_by_second"
+            "site_broadcast_by_date_bin"
         );
     }
 
