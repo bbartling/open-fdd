@@ -145,6 +145,118 @@ async fn register_canonical_building_history(
         .with_context(|| format!("register canonical building history from {root}"))
 }
 
+fn safe_equipment_partition(equipment_id: &str) -> Result<String> {
+    let eq = equipment_id.trim();
+    if eq.is_empty()
+        || eq.contains('/')
+        || eq.contains('\\')
+        || eq.contains("..")
+        || eq.contains('\0')
+        || eq.contains('=')
+        || eq.contains('\'')
+    {
+        bail!("unsafe equipment_id for historian equipment scope");
+    }
+    Ok(eq.to_string())
+}
+
+/// Keeps the staging directory for an equipment-scoped hive registration alive
+/// for the lifetime of the DataFusion query (symlinks into real partitions).
+#[derive(Debug)]
+pub struct EquipmentScopeGuard {
+    _staging: tempfile::TempDir,
+}
+
+/// Register historian rows for a single building **and** an explicit equipment
+/// allow-list (Soft-OPEN 371 #1222 / #1229).
+///
+/// Full-building `register_historian_building` exposes every `equipment_id=*`
+/// partition under the hive. ACME bas-vs-web then ran `NOT IN (weather)` over
+/// that full listing and slope-aborted. Callers that already know the weather
+/// and BAS OAT carriers must register only those partitions so DataFusion
+/// never opens the rest of the hive.
+///
+/// Staging uses symlinks under a temp dir so ListingTable still merges sparse
+/// schemas (weather `web_oa_t` vs AHU `oa_t`) the same way a full hive does.
+/// Hold the returned [`EquipmentScopeGuard`] until SQL collect finishes.
+pub async fn register_historian_building_equipment(
+    ctx: &SessionContext,
+    storage_root: &Path,
+    building_id: &str,
+    equipment_ids: &[String],
+) -> Result<(HistorianRegistration, EquipmentScopeGuard)> {
+    let bid = building_id.trim();
+    if bid.is_empty()
+        || bid.contains('/')
+        || bid.contains('\\')
+        || bid.contains("..")
+        || bid.contains('\0')
+        || bid.contains('=')
+    {
+        bail!("unsafe building_id for historian equipment scope");
+    }
+    let mut eqs: Vec<String> = Vec::new();
+    for raw in equipment_ids {
+        let eq = safe_equipment_partition(raw)?;
+        if !eqs.iter().any(|e| e == &eq) {
+            eqs.push(eq);
+        }
+    }
+    if eqs.is_empty() {
+        bail!("equipment allow-list is empty");
+    }
+
+    let canonical = storage_root
+        .join("history")
+        .join(format!("building_id={bid}"));
+    if !canonical.is_dir() {
+        bail!(
+            "no canonical history for building_id={bid} under {}",
+            storage_root.display()
+        );
+    }
+
+    let staging = tempfile::Builder::new()
+        .prefix("ofdd-eq-scope-")
+        .tempdir()
+        .context("create equipment-scope staging dir")?;
+    let mut linked = Vec::new();
+    for eq in &eqs {
+        let src = canonical.join(format!("equipment_id={eq}"));
+        if !contains_parquet(&src) {
+            continue;
+        }
+        let dst = staging.path().join(format!("equipment_id={eq}"));
+        std::os::unix::fs::symlink(&src, &dst).with_context(|| {
+            format!(
+                "symlink equipment scope {} -> {}",
+                src.display(),
+                dst.display()
+            )
+        })?;
+        linked.push(eq.clone());
+    }
+    if linked.is_empty() {
+        bail!(
+            "no Parquet parts for allow-listed equipment under {}",
+            canonical.display()
+        );
+    }
+
+    register_canonical_building_history(ctx, staging.path()).await?;
+    Ok((
+        HistorianRegistration {
+            kind: HistorianDatasetKind::CanonicalHive,
+            root: format!(
+                "{}#equipment={}",
+                canonical.to_string_lossy(),
+                linked.join(",")
+            ),
+        },
+        EquipmentScopeGuard { _staging: staging },
+    ))
+}
+
 async fn register_canonical_history(ctx: &SessionContext, history_root: &Path) -> Result<()> {
     // Keep all Hive partition columns as strings. In DataFusion 43, zero-padded
     // path values such as `month=08` are represented reliably as Utf8 and prune
@@ -199,7 +311,7 @@ mod tests {
 
     use chrono::{DateTime, Utc};
     use datafusion::arrow::array::{
-        Float64Array, Int64Array, StringArray, TimestampNanosecondArray,
+        Array, Float64Array, Int64Array, StringArray, TimestampNanosecondArray,
     };
     use datafusion::arrow::datatypes::{DataType as ArrowDataType, Field, Schema, TimeUnit};
     use datafusion::arrow::record_batch::RecordBatch;
@@ -353,6 +465,63 @@ mod tests {
             .unwrap();
         let rows: usize = batches.iter().map(|b| b.num_rows()).sum();
         assert_eq!(rows, 1, "scoped register must not leak BUILDING_100");
+    }
+
+    #[tokio::test]
+    async fn register_historian_building_equipment_excludes_siblings() {
+        let tmp = TempDir::new().unwrap();
+        let writer = ParquetPartWriter::new(LocalStorage::new(tmp.path()));
+        writer
+            .write_history_batch(
+                "ACME",
+                "hosted-weather",
+                &canonical_batch("hosted-weather", "2026-09-05T18:00:00Z", 50.0),
+            )
+            .unwrap();
+        writer
+            .write_history_batch(
+                "ACME",
+                "rtu_01",
+                &canonical_batch("rtu_01", "2026-09-05T18:00:00Z", 55.0),
+            )
+            .unwrap();
+        writer
+            .write_history_batch(
+                "ACME",
+                "ghost_equip",
+                &canonical_batch("ghost_equip", "2026-09-05T18:00:00Z", 99.0),
+            )
+            .unwrap();
+
+        let ctx = SessionContext::new();
+        let allow = vec!["hosted-weather".into(), "rtu_01".into()];
+        let (reg, _guard) =
+            register_historian_building_equipment(&ctx, tmp.path(), "ACME", &allow)
+                .await
+                .unwrap();
+        assert_eq!(reg.kind, HistorianDatasetKind::CanonicalHive);
+        assert!(reg.root.contains("hosted-weather"));
+        assert!(reg.root.contains("rtu_01"));
+
+        let batches = ctx
+            .sql("SELECT DISTINCT equipment_id FROM history ORDER BY equipment_id")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+        let mut ids = Vec::new();
+        for batch in &batches {
+            let col = batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<datafusion::arrow::array::StringArray>()
+                .unwrap();
+            for i in 0..col.len() {
+                ids.push(col.value(i).to_string());
+            }
+        }
+        assert_eq!(ids, vec!["hosted-weather".to_string(), "rtu_01".to_string()]);
     }
 
     #[tokio::test]

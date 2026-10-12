@@ -139,6 +139,7 @@ fn routed_write_target_keeps_router_and_remote_mac_distinct() {
         mstp_mac: vec![42],
         rpm_chunk: 10,
         max_apdu: 206,
+        equipment_type: None,
         points: Vec::new(),
     };
     let target = routed_device_config(&device).expect("routed target");

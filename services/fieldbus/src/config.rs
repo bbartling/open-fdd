@@ -368,6 +368,10 @@ pub struct FieldDevice {
     pub rpm_chunk: usize,
     /// Advertised maximum APDU for a manually seeded routed device.
     pub max_apdu: u32,
+    /// Optional package `equipType` / `equipment_type` stamp for MQTT tags.
+    /// Soft-OPEN 371 #1229: `hosted-weather` must publish `weather` even when
+    /// `OPENFDD_EQUIPMENT_TYPE=zone_other` is the site default.
+    pub equipment_type: Option<String>,
     pub points: Vec<FieldPoint>,
 }
 
@@ -568,6 +572,8 @@ struct FieldDeviceToml {
     mstp_mac: Option<Vec<u8>>,
     rpm_chunk: Option<usize>,
     max_apdu: Option<u32>,
+    #[serde(default, alias = "equipType")]
+    equipment_type: Option<String>,
     points: Option<Vec<FieldPointToml>>,
 }
 
@@ -1146,6 +1152,10 @@ pub fn load_field_devices(path: Option<&Path>) -> Result<Vec<FieldDevice>, Strin
             mstp_mac: d.mstp_mac.unwrap_or_default(),
             rpm_chunk: d.rpm_chunk.unwrap_or(25).clamp(1, 100),
             max_apdu: d.max_apdu.unwrap_or(480),
+            equipment_type: d
+                .equipment_type
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
             points: d
                 .points
                 .unwrap_or_default()

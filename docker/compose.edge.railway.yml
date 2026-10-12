@@ -9,4 +9,6 @@ services:
       OPENFDD_TENANT_ID: ${OPENFDD_TENANT_ID:-acme}
       OPENFDD_BUILDING_ID: ${OPENFDD_BUILDING_ID:-ACME}
       OPENFDD_EQUIPMENT_TYPE: "zone_other"
+      # Soft-OPEN 371 #1229: hosted-weather must not inherit zone_other.
+      OPENFDD_EQUIPMENT_TYPE_MAP: '{"hosted-weather":"weather"}'
       OPENFDD_FIELDBUS_DEV_FAST_POLL: "0"
