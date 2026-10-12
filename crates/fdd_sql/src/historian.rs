@@ -209,52 +209,97 @@ pub async fn register_historian_building_equipment(
     let canonical = storage_root
         .join("history")
         .join(format!("building_id={bid}"));
-    if !canonical.is_dir() {
-        bail!(
-            "no canonical history for building_id={bid} under {}",
-            storage_root.display()
-        );
-    }
+    let legacy = storage_root.join(format!("building={bid}"));
 
     let staging = tempfile::Builder::new()
         .prefix("ofdd-eq-scope-")
         .tempdir()
         .context("create equipment-scope staging dir")?;
     let mut linked = Vec::new();
-    for eq in &eqs {
-        let src = canonical.join(format!("equipment_id={eq}"));
-        if !contains_parquet(&src) {
-            continue;
+
+    if canonical.is_dir() {
+        for eq in &eqs {
+            let src = canonical.join(format!("equipment_id={eq}"));
+            if !contains_parquet(&src) {
+                continue;
+            }
+            let dst = staging.path().join(format!("equipment_id={eq}"));
+            std::os::unix::fs::symlink(&src, &dst).with_context(|| {
+                format!(
+                    "symlink equipment scope {} -> {}",
+                    src.display(),
+                    dst.display()
+                )
+            })?;
+            linked.push(eq.clone());
         }
-        let dst = staging.path().join(format!("equipment_id={eq}"));
-        std::os::unix::fs::symlink(&src, &dst).with_context(|| {
-            format!(
-                "symlink equipment scope {} -> {}",
-                src.display(),
-                dst.display()
-            )
-        })?;
-        linked.push(eq.clone());
-    }
-    if linked.is_empty() {
-        bail!(
-            "no Parquet parts for allow-listed equipment under {}",
-            canonical.display()
-        );
+        if !linked.is_empty() {
+            register_canonical_building_history(ctx, staging.path()).await?;
+            return Ok((
+                HistorianRegistration {
+                    kind: HistorianDatasetKind::CanonicalHive,
+                    root: format!(
+                        "{}#equipment={}",
+                        canonical.to_string_lossy(),
+                        linked.join(",")
+                    ),
+                },
+                EquipmentScopeGuard { _staging: staging },
+            ));
+        }
     }
 
-    register_canonical_building_history(ctx, staging.path()).await?;
-    Ok((
-        HistorianRegistration {
-            kind: HistorianDatasetKind::CanonicalHive,
-            root: format!(
-                "{}#equipment={}",
-                canonical.to_string_lossy(),
-                linked.join(",")
-            ),
-        },
-        EquipmentScopeGuard { _staging: staging },
-    ))
+    // Legacy package sidecars: building={bid}/equipment={id}/ (unit tests + CSV).
+    if legacy.is_dir() {
+        for eq in &eqs {
+            let src = legacy.join(format!("equipment={eq}"));
+            if !contains_parquet(&src) {
+                continue;
+            }
+            let dst = staging.path().join(format!("equipment={eq}"));
+            std::os::unix::fs::symlink(&src, &dst).with_context(|| {
+                format!(
+                    "symlink legacy equipment scope {} -> {}",
+                    src.display(),
+                    dst.display()
+                )
+            })?;
+            linked.push(eq.clone());
+        }
+        if !linked.is_empty() {
+            // Staging is directory-symlinks; WalkDir must follow them to see parts.
+            if !contains_parquet_follow(staging.path()) {
+                bail!(
+                    "no Parquet history under equipment-scope staging {}",
+                    staging.path().display()
+                );
+            }
+            let glob = staging.path().join("**/*.parquet");
+            let glob_str = glob.to_string_lossy().to_string();
+            ctx.register_parquet("history", glob_str.as_str(), ParquetReadOptions::default())
+                .await
+                .with_context(|| {
+                    format!("register legacy equipment-scoped history from {glob_str}")
+                })?;
+            return Ok((
+                HistorianRegistration {
+                    kind: HistorianDatasetKind::LegacySidecar,
+                    root: format!(
+                        "{}#equipment={}",
+                        legacy.to_string_lossy(),
+                        linked.join(",")
+                    ),
+                },
+                EquipmentScopeGuard { _staging: staging },
+            ));
+        }
+    }
+
+    bail!(
+        "no Parquet parts for allow-listed equipment under {} or {}",
+        canonical.display(),
+        legacy.display()
+    )
 }
 
 async fn register_canonical_history(ctx: &SessionContext, history_root: &Path) -> Result<()> {
@@ -288,11 +333,19 @@ async fn register_legacy_history(ctx: &SessionContext, parquet_root: &Path) -> R
 }
 
 fn contains_parquet(root: &Path) -> bool {
+    contains_parquet_walk(root, false)
+}
+
+fn contains_parquet_follow(root: &Path) -> bool {
+    contains_parquet_walk(root, true)
+}
+
+fn contains_parquet_walk(root: &Path, follow_links: bool) -> bool {
     if !root.is_dir() {
         return false;
     }
     WalkDir::new(root)
-        .follow_links(false)
+        .follow_links(follow_links)
         .into_iter()
         .filter_map(|entry| entry.ok())
         .any(|entry| {

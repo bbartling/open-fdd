@@ -665,24 +665,34 @@ fn bas_vs_web_equipment_allow_list(
             allow.insert(id.clone());
         }
     }
-    // Schema peek for BAS oa_t when stamps alone are only weather (ACME MQTT
-    // often stamps everything zone_other via OPENFDD_EQUIPMENT_TYPE).
-    if allow.len() <= weather.len() {
-        let hub = parquet_root_base();
-        let read_root = fdd_store::resolve_building_read_root(&hub, preferred_tenant, &bid)
-            .map(|r| r.root)
-            .unwrap_or(hub);
+    // Schema peek for BAS / web OAT carriers when stamps alone are incomplete
+    // (ACME MQTT often stamps everything zone_other; package fixtures may have
+    // web_oa_t on an unstamped weather equipment id).
+    let hub = parquet_root_base();
+    let read_root = fdd_store::resolve_building_read_root(&hub, preferred_tenant, &bid)
+        .map(|r| r.root)
+        .unwrap_or(hub);
+    let need_bas_peek = allow.len() <= weather.len();
+    let need_web_peek = weather.is_empty();
+    if need_bas_peek || need_web_peek {
         for id in list_equipment_ids_from_hive(&bid) {
             if weather.iter().any(|w| w == &id) {
                 continue;
             }
             let cols = fdd_store::peek_equipment_history_columns(&read_root, &bid, &id);
-            if cols.iter().any(|c| {
+            let has_bas = cols.iter().any(|c| {
                 matches!(
                     c.as_str(),
                     "oa_t" | "outside_air_temp" | "outside_air_temperature"
                 )
-            }) {
+            });
+            let has_web = cols.iter().any(|c| {
+                matches!(
+                    c.as_str(),
+                    "web_oa_t" | "oa_t_web" | "oat_meteo" | "oa_t_meteo" | "dry_bulb_f"
+                )
+            });
+            if (need_bas_peek && has_bas) || (need_web_peek && has_web) {
                 allow.insert(id);
             }
         }
