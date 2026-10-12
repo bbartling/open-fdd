@@ -2645,35 +2645,52 @@ pub async fn bas_vs_web_from_history(
         return Ok(None);
     };
     let web_col = web_oat_col(&cols);
-    let weather_split = web_col.is_none();
-    if !weather_split && web_col == Some(bas) {
-        return Ok(None);
-    }
     let _eq_filter = equipment_filter_sql(equipment_filter);
     let weather_only = stamped_weather_id_predicate(building_id, false);
     let weather_excluded = stamped_weather_id_predicate(building_id, true);
+    // Prefer stamped weather equipment whenever present. ACME's hive schema
+    // includes web_oa_t, so the unscoped column path scanned every device and
+    // slope-aborted at ~15 GiB even after date_bin join (#1222 residual).
+    let has_weather_ids = !weather_only.is_empty() && !weather_only.contains("1 = 0");
+    let weather_split = has_weather_ids || web_col.is_none();
+    if !has_weather_ids && web_col == Some(bas) {
+        return Ok(None);
+    }
     let limit = max_points.clamp(100, 5000);
     let mut used_retain_fallback = false;
     let mut bin_secs = date_bin_seconds_for_points(start_t, end_t, limit);
-    // Join on date_bin buckets directly — never materialize per-second site
-    // aggregates over the full ACME hive (Soft-OPEN 371 #1222 residual: that
-    // intermediate climbed to ~14–16 GiB and slope-aborted central).
-    let web_label = web_col
-        .map(str::to_string)
-        .unwrap_or_else(|| "oa_t@weather".into());
+    // Join on date_bin buckets; scope BAS to non-weather and web to weather
+    // equipment when stamps exist so hive-wide MQTT sites stay bounded.
+    let web_label = if has_weather_ids {
+        web_col
+            .map(|c| format!("{c}@weather"))
+            .unwrap_or_else(|| "oa_t@weather".into())
+    } else {
+        web_col
+            .map(str::to_string)
+            .unwrap_or_else(|| "oa_t@weather".into())
+    };
     let bas_f = history_temp_sql(bas);
     let build_sql = |start_t: DateTime<Utc>, bin_secs: i64| -> String {
         let range_sql = time_range_sql(ts_col, Some(start_t), Some(end_t));
-        if let Some(web) = web_col {
-            let web_f = history_temp_sql(web);
-            format!(
-                r#"
+        let (web_f, bas_scope, web_scope) = if has_weather_ids {
+            let web_f = history_temp_sql(web_col.unwrap_or(bas));
+            (web_f, weather_excluded.as_str(), weather_only.as_str())
+        } else if let Some(web) = web_col {
+            (history_temp_sql(web), "", "")
+        } else {
+            // No weather stamps and no distinct web column — unreachable after
+            // the early return above; keep a fail-closed empty web side.
+            (history_temp_sql(bas), "", " AND 1 = 0")
+        };
+        format!(
+            r#"
 WITH bas_by_ts AS (
   SELECT
     date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP)) AS bucket_ts,
     AVG({bas_f}) AS bas_oat_f
   FROM history
-  WHERE {bas_f} IS NOT NULL{range_sql}
+  WHERE {bas_f} IS NOT NULL{bas_scope}{range_sql}
   GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP))
 ),
 web_by_ts AS (
@@ -2681,7 +2698,7 @@ web_by_ts AS (
     date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP)) AS bucket_ts,
     AVG({web_f}) AS web_oat_f
   FROM history
-  WHERE {web_f} IS NOT NULL{range_sql}
+  WHERE {web_f} IS NOT NULL{web_scope}{range_sql}
   GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP))
 ),
 joined AS (
@@ -2703,47 +2720,7 @@ FROM joined
 ORDER BY bucket_ts
 LIMIT {limit}
 "#
-            )
-        } else {
-            format!(
-                r#"
-WITH bas_by_ts AS (
-  SELECT
-    date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP)) AS bucket_ts,
-    AVG({bas_f}) AS bas_oat_f
-  FROM history
-  WHERE {bas_f} IS NOT NULL{weather_excluded}{range_sql}
-  GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP))
-),
-web_by_ts AS (
-  SELECT
-    date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP)) AS bucket_ts,
-    AVG({bas_f}) AS web_oat_f
-  FROM history
-  WHERE {bas_f} IS NOT NULL{weather_only}{range_sql}
-  GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP))
-),
-joined AS (
-  SELECT
-    b.bucket_ts,
-    b.bas_oat_f,
-    w.web_oat_f,
-    (b.bas_oat_f - w.web_oat_f) AS delta_f
-  FROM bas_by_ts b
-  INNER JOIN web_by_ts w ON b.bucket_ts = w.bucket_ts
-)
-SELECT
-  CAST(bucket_ts AS VARCHAR) AS timestamp_utc,
-  'site' AS equipment_id,
-  bas_oat_f,
-  web_oat_f,
-  delta_f
-FROM joined
-ORDER BY bucket_ts
-LIMIT {limit}
-"#
-            )
-        }
+        )
     };
     let result = loop {
         let sql = build_sql(start_t, bin_secs);
