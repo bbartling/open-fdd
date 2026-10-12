@@ -167,12 +167,14 @@ fn safe_building_segment(building_id: Option<&str>) -> Option<String> {
     Some(bid.to_string())
 }
 
-/// Soft-OPEN 371 #1222: inventory equipment from hive partition directories.
+/// Soft-OPEN 371 #1222: inventory equipment from on-disk partition directories.
 ///
 /// Never run `SELECT … GROUP BY equipment_id` over a live wide hive (ACME
 /// ~100k parts → multi‑GiB DataFusion materialization → slope abort → central
-/// restart → nginx 502). Directory names `equipment_id=*` under
-/// `history/building_id={bid}/` (hub + tenants) are the authoritative id list.
+/// restart → nginx 502). Prefer:
+/// - hive `history/building_id={bid}/equipment_id=*` (hub + tenants)
+/// - legacy package `building={bid}/equipment=*`
+/// - additive `equipment_types.json` keys
 pub fn list_equipment_ids_from_hive(building_id: &str) -> Vec<String> {
     let Some(bid) = safe_building_segment(Some(building_id)) else {
         return Vec::new();
@@ -181,17 +183,31 @@ pub fn list_equipment_ids_from_hive(building_id: &str) -> Vec<String> {
     let base = parquet_root_base();
     collect_equipment_ids_under(
         &base.join("history").join(format!("building_id={bid}")),
+        "equipment_id=",
+        &mut out,
+    );
+    collect_equipment_ids_under(
+        &base.join(format!("building={bid}")),
+        "equipment=",
         &mut out,
     );
     let tenants = base.join("tenants");
     if tenants.is_dir() {
         if let Ok(rd) = std::fs::read_dir(&tenants) {
             for entry in rd.flatten() {
-                let path = entry
-                    .path()
-                    .join("history")
-                    .join(format!("building_id={bid}"));
-                collect_equipment_ids_under(&path, &mut out);
+                let tenant_root = entry.path();
+                collect_equipment_ids_under(
+                    &tenant_root
+                        .join("history")
+                        .join(format!("building_id={bid}")),
+                    "equipment_id=",
+                    &mut out,
+                );
+                collect_equipment_ids_under(
+                    &tenant_root.join(format!("building={bid}")),
+                    "equipment=",
+                    &mut out,
+                );
             }
         }
     }
@@ -207,11 +223,11 @@ pub fn list_equipment_ids_from_hive(building_id: &str) -> Vec<String> {
     out.into_iter().collect()
 }
 
-fn collect_equipment_ids_under(building_history: &std::path::Path, out: &mut BTreeSet<String>) {
-    if !building_history.is_dir() {
+fn collect_equipment_ids_under(parent: &std::path::Path, prefix: &str, out: &mut BTreeSet<String>) {
+    if !parent.is_dir() {
         return;
     }
-    let Ok(rd) = std::fs::read_dir(building_history) else {
+    let Ok(rd) = std::fs::read_dir(parent) else {
         return;
     };
     for entry in rd.flatten() {
@@ -222,7 +238,7 @@ fn collect_equipment_ids_under(building_history: &std::path::Path, out: &mut BTr
         let Some(name) = name.to_str() else {
             continue;
         };
-        let Some(eq) = name.strip_prefix("equipment_id=") else {
+        let Some(eq) = name.strip_prefix(prefix) else {
             continue;
         };
         if eq.is_empty()
@@ -5676,8 +5692,10 @@ mod tests {
         let tenant = tmp
             .path()
             .join("tenants/acme/history/building_id=ACME/equipment_id=jci_vav_10");
+        let legacy = tmp.path().join("building=BUILDING_100/equipment=AHU_2");
         std::fs::create_dir_all(&hub).unwrap();
         std::fs::create_dir_all(&tenant).unwrap();
+        std::fs::create_dir_all(&legacy).unwrap();
         // Decoy: year partition must not be treated as equipment.
         std::fs::create_dir_all(
             tmp.path()
@@ -5688,6 +5706,8 @@ mod tests {
         assert!(ids.contains(&"rtu_01".into()), "{ids:?}");
         assert!(ids.contains(&"jci_vav_10".into()), "{ids:?}");
         assert!(!ids.iter().any(|id| id.starts_with("year")), "{ids:?}");
+        let b100 = list_equipment_ids_from_hive("BUILDING_100");
+        assert!(b100.contains(&"AHU_2".into()), "{b100:?}");
         if let Some(v) = prev_storage {
             std::env::set_var("OPENFDD_STORAGE_URL", v);
         } else {
