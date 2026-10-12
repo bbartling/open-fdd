@@ -167,6 +167,92 @@ fn safe_building_segment(building_id: Option<&str>) -> Option<String> {
     Some(bid.to_string())
 }
 
+/// Soft-OPEN 371 #1222: inventory equipment from on-disk partition directories.
+///
+/// Never run `SELECT … GROUP BY equipment_id` over a live wide hive (ACME
+/// ~100k parts → multi‑GiB DataFusion materialization → slope abort → central
+/// restart → nginx 502). Prefer:
+/// - hive `history/building_id={bid}/equipment_id=*` (hub + tenants)
+/// - legacy package `building={bid}/equipment=*`
+/// - additive `equipment_types.json` keys
+pub fn list_equipment_ids_from_hive(building_id: &str) -> Vec<String> {
+    let Some(bid) = safe_building_segment(Some(building_id)) else {
+        return Vec::new();
+    };
+    let mut out = BTreeSet::new();
+    let base = parquet_root_base();
+    collect_equipment_ids_under(
+        &base.join("history").join(format!("building_id={bid}")),
+        "equipment_id=",
+        &mut out,
+    );
+    collect_equipment_ids_under(
+        &base.join(format!("building={bid}")),
+        "equipment=",
+        &mut out,
+    );
+    let tenants = base.join("tenants");
+    if tenants.is_dir() {
+        if let Ok(rd) = std::fs::read_dir(&tenants) {
+            for entry in rd.flatten() {
+                let tenant_root = entry.path();
+                collect_equipment_ids_under(
+                    &tenant_root
+                        .join("history")
+                        .join(format!("building_id={bid}")),
+                    "equipment_id=",
+                    &mut out,
+                );
+                collect_equipment_ids_under(
+                    &tenant_root.join(format!("building={bid}")),
+                    "equipment=",
+                    &mut out,
+                );
+            }
+        }
+    }
+    // Registry keys are additive (stamped types without hive parts yet).
+    for id in open_fdd_edge_prototype::equipment_types::load_type_map(&base, Some(&bid)).keys() {
+        out.insert(id.clone());
+    }
+    for id in
+        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), Some(&bid)).keys()
+    {
+        out.insert(id.clone());
+    }
+    out.into_iter().collect()
+}
+
+fn collect_equipment_ids_under(parent: &std::path::Path, prefix: &str, out: &mut BTreeSet<String>) {
+    if !parent.is_dir() {
+        return;
+    }
+    let Ok(rd) = std::fs::read_dir(parent) else {
+        return;
+    };
+    for entry in rd.flatten() {
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let Some(eq) = name.strip_prefix(prefix) else {
+            continue;
+        };
+        if eq.is_empty()
+            || eq.contains('/')
+            || eq.contains('\\')
+            || eq.contains("..")
+            || eq.contains('\0')
+        {
+            continue;
+        }
+        out.insert(eq.to_string());
+    }
+}
+
 /// Register `history` for an optional `building_id` scope (OFDD-070).
 ///
 /// When `building_id` is set, prefers canonical live Hive
@@ -5577,6 +5663,51 @@ mod tests {
             format!("file://{}", storage.display()),
         );
         assert_eq!(parquet_root(), storage);
+        if let Some(v) = prev_storage {
+            std::env::set_var("OPENFDD_STORAGE_URL", v);
+        } else {
+            std::env::remove_var("OPENFDD_STORAGE_URL");
+        }
+        if let Some(v) = prev_parquet {
+            std::env::set_var("OPENFDD_PARQUET_ROOT", v);
+        } else {
+            std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        }
+    }
+
+    #[test]
+    fn list_equipment_ids_from_hive_reads_partition_dirs_not_sql() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let prev_storage = std::env::var("OPENFDD_STORAGE_URL").ok();
+        let prev_parquet = std::env::var("OPENFDD_PARQUET_ROOT").ok();
+        std::env::remove_var("OPENFDD_STORAGE_URL");
+        std::env::set_var(
+            "OPENFDD_STORAGE_URL",
+            format!("file://{}", tmp.path().display()),
+        );
+        let hub = tmp
+            .path()
+            .join("history/building_id=ACME/equipment_id=rtu_01");
+        let tenant = tmp
+            .path()
+            .join("tenants/acme/history/building_id=ACME/equipment_id=jci_vav_10");
+        let legacy = tmp.path().join("building=BUILDING_100/equipment=AHU_2");
+        std::fs::create_dir_all(&hub).unwrap();
+        std::fs::create_dir_all(&tenant).unwrap();
+        std::fs::create_dir_all(&legacy).unwrap();
+        // Decoy: year partition must not be treated as equipment.
+        std::fs::create_dir_all(
+            tmp.path()
+                .join("history/building_id=ACME/equipment_id=rtu_01/year=2026"),
+        )
+        .unwrap();
+        let ids = list_equipment_ids_from_hive("ACME");
+        assert!(ids.contains(&"rtu_01".into()), "{ids:?}");
+        assert!(ids.contains(&"jci_vav_10".into()), "{ids:?}");
+        assert!(!ids.iter().any(|id| id.starts_with("year")), "{ids:?}");
+        let b100 = list_equipment_ids_from_hive("BUILDING_100");
+        assert!(b100.contains(&"AHU_2".into()), "{b100:?}");
         if let Some(v) = prev_storage {
             std::env::set_var("OPENFDD_STORAGE_URL", v);
         } else {

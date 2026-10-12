@@ -8,10 +8,9 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use anyhow::Result;
-use fdd_sql::run_sql;
 use serde_json::{json, Map, Value};
 
-use super::historian::{self, open_history_scan};
+use super::historian;
 use super::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest, DF_ENGINE};
 
 pub const QV_AHU_HEALTH: &str = "ahu-health-v1";
@@ -686,26 +685,9 @@ fn spec_rule_ids(spec: &MatrixSpec) -> BTreeSet<&'static str> {
     ids
 }
 
-async fn historian_equipment_ids(bid: &str) -> Result<Vec<String>> {
-    let ctx = historian::new_bounded_session()?;
-    let (ok, _scan) = open_history_scan(&ctx, Some(bid)).await?;
-    if !ok {
-        return Ok(Vec::new());
-    }
-    let result = run_sql(
-        &ctx,
-        "SELECT equipment_id FROM history GROUP BY equipment_id ORDER BY equipment_id",
-    )
-    .await?;
-    Ok(result
-        .rows
-        .into_iter()
-        .filter_map(|row| {
-            row.get("equipment_id")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
-        .collect())
+/// Soft-OPEN 371 #1222: hive partition walk only — never full-history GROUP BY.
+fn historian_equipment_ids(bid: &str) -> Vec<String> {
+    historian::list_equipment_ids_from_hive(bid)
 }
 
 async fn equipment_ids_for_spec(
@@ -715,9 +697,9 @@ async fn equipment_ids_for_spec(
 ) -> Result<Vec<String>> {
     match spec.scope {
         EquipmentScope::AnyFdd => {
-            // Prefer historian equipment so Overview matrices render before SV/FDD
-            // results exist (flags stay Unknown / pending until Run all rules).
-            let hist = historian_equipment_ids(bid).await?;
+            // Prefer hive/registry equipment so Overview matrices render before
+            // SV/FDD results exist (flags stay Unknown until Run all rules).
+            let hist = historian_equipment_ids(bid);
             if !hist.is_empty() {
                 return Ok(hist);
             }
@@ -731,7 +713,7 @@ async fn equipment_ids_for_spec(
             ids.dedup();
             Ok(ids)
         }
-        EquipmentScope::Family(_) => historian_equipment_ids(bid).await,
+        EquipmentScope::Family(_) => Ok(historian_equipment_ids(bid)),
     }
 }
 
