@@ -137,15 +137,31 @@ pub fn peek_equipment_history_columns(
     let Ok(equipment) = crate::historian::safe_partition_value(equipment_id, "equipment_id") else {
         return Vec::new();
     };
-    let prefix = Path::new("history")
-        .join(format!("building_id={building}"))
-        .join(format!("equipment_id={equipment}"));
-    let abs = storage_root.join(&prefix);
+    // Canonical MQTT hive, then legacy package `building=/equipment=` (BUILDING_100).
+    let candidates = [
+        storage_root
+            .join("history")
+            .join(format!("building_id={building}"))
+            .join(format!("equipment_id={equipment}")),
+        storage_root
+            .join(format!("building={building}"))
+            .join(format!("equipment={equipment}")),
+    ];
+    for abs in candidates {
+        let names = peek_columns_under_dir(&abs);
+        if !names.is_empty() {
+            return names;
+        }
+    }
+    Vec::new()
+}
+
+fn peek_columns_under_dir(abs: &Path) -> Vec<String> {
     if !abs.is_dir() {
         return Vec::new();
     }
     let mut names = BTreeSet::new();
-    let mut stack = vec![abs];
+    let mut stack = vec![abs.to_path_buf()];
     while let Some(dir) = stack.pop() {
         let Ok(rd) = fs::read_dir(&dir) else {
             continue;
@@ -356,5 +372,30 @@ mod tests {
         assert!(cols.iter().any(|c| c == "sat"), "{cols:?}");
         let hub_miss = peek_equipment_history_columns(tmp.path(), "bldg2", "bldg2-zone-loopback");
         assert!(hub_miss.is_empty(), "{hub_miss:?}");
+    }
+
+    #[test]
+    fn peek_columns_reads_legacy_building_equipment_layout() {
+        use parquet::arrow::ArrowWriter;
+
+        let tmp = TempDir::new().unwrap();
+        let legacy = tmp
+            .path()
+            .join("building=BUILDING_100")
+            .join("equipment=AHU_2");
+        fs::create_dir_all(&legacy).unwrap();
+        let path = legacy.join("history.parquet");
+        let file = fs::File::create(&path).unwrap();
+        let rb = batch(&["2026-07-01T00:00:00Z"]);
+        let mut writer = ArrowWriter::try_new(file, rb.schema(), None).unwrap();
+        writer.write(&rb).unwrap();
+        writer.close().unwrap();
+
+        let cols = peek_equipment_history_columns(tmp.path(), "BUILDING_100", "AHU_2");
+        assert!(cols.iter().any(|c| c == "sat"), "{cols:?}");
+        assert!(
+            peek_equipment_history_columns(tmp.path(), "BUILDING_100", "AHU_1").is_empty(),
+            "missing legacy equipment must not invent columns"
+        );
     }
 }
