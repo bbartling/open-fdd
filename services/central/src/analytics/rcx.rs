@@ -257,11 +257,14 @@ pub fn handle_vav(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 /// no inline series is provided; otherwise inline reset-evidence coverage stub.
 pub async fn handle_ahu_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     if req.series.is_none() {
-        match historian::descriptive_counts_from_history(
+        // Soft-OPEN 371 #1230: AHU stamp (+ fan/sat peek) allow-list — never
+        // full-hive GROUP BY (ACME OOM → nginx 502).
+        match historian::descriptive_counts_from_history_filtered(
             QV_RCX_AHU,
             req.query.equipment_ids.as_deref(),
             "rcx/ahu: reset-evidence coverage requires inline series",
             req.query.building_id.as_deref(),
+            Some(&["ahu"]),
         )
         .await
         {
@@ -279,11 +282,12 @@ pub async fn handle_ahu_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 /// no inline series is provided; otherwise inline zone-comfort ranking.
 pub async fn handle_vav_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     if req.series.is_none() {
-        match historian::descriptive_counts_from_history(
+        match historian::descriptive_counts_from_history_filtered(
             QV_RCX_VAV,
             req.query.equipment_ids.as_deref(),
             "rcx/vav: zone-comfort ranking requires inline zone_temp/setpoint series",
             req.query.building_id.as_deref(),
+            Some(&["vav", "zone", "fcu", "zone_other"]),
         )
         .await
         {
