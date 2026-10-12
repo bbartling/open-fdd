@@ -202,6 +202,7 @@ def probe_site(
     lookback_days: int,
     hard_timeout: float,
     start_override: str | None,
+    end_override: str | None = None,
 ) -> dict:
     site_art = art / re.sub(r"[^A-Za-z0-9_.-]+", "_", site)
     site_art.mkdir(parents=True, exist_ok=True)
@@ -210,6 +211,7 @@ def probe_site(
     blocked = 0
 
     start = (start_override or "").strip()
+    end = (end_override or "").strip()
     if not start:
         start = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
@@ -220,6 +222,12 @@ def probe_site(
         "start": start,
         "refresh": True,
     }
+    # Historian sites (BUILDING_100) need an explicit end so start→now does not
+    # exceed the 90-day analytics refuse window and return empty rows.
+    if end:
+        window["end"] = end
+        # Summary retains the end for ART readers.
+    summary_end = end or None
 
     path = f"/api/csv/import/package/mapping?building_id={urllib.parse.quote(site)}"
     code, mapping, raw = http_json("GET", f"{base}{path}", token=token, timeout=60.0)
@@ -314,6 +322,8 @@ def probe_site(
         "start": start,
         "rows": rows,
     }
+    if summary_end:
+        summary["end"] = summary_end
     (site_art / "SUMMARY.json").write_text(json.dumps(summary, indent=2) + "\n")
     return summary
 
@@ -346,6 +356,11 @@ def main() -> int:
         "--start",
         default=os.environ.get("OPENFDD_GATE_START", ""),
         help="Fixed ISO start (BUILDING_100 historian window)",
+    )
+    ap.add_argument(
+        "--end",
+        default=os.environ.get("OPENFDD_GATE_END", ""),
+        help="Fixed ISO end (pair with --start; avoids >90d empty refuse)",
     )
     args = ap.parse_args()
     expected = (args.expected_revision or "").strip()
@@ -391,6 +406,7 @@ def main() -> int:
                 lookback_days=args.lookback_days,
                 hard_timeout=args.hard_timeout_secs,
                 start_override=args.start or None,
+                end_override=args.end or None,
             )
         )
 
