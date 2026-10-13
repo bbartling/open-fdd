@@ -46,37 +46,40 @@ jobs:
         run: |
           .venv-pypi/bin/python scripts/sql_pandas_oracle_check.py --require-external-oracle
 
-  current-sql-datafusion:
-    name: current SQL/DataFusion oracle suite
+  current-sql-registry:
+    name: current SQL/fdd registry (Timescale pack)
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95.0
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Run FDD SQL/DataFusion oracle suite
-        run: cargo test -p fdd_rules
+      - name: Forbid product DataFusion
+        run: bash scripts/ci/forbid_datafusion_product.sh
+
+      - name: Registry + plot-role unit tests
+        run: |
+          cargo test -p fdd_rules
+          cargo test -p openfdd-central plot_role_tests
 
       - name: Record checkout revision
         run: |
           {
-            echo "## Current SQL/DataFusion side"
+            echo "## Current SQL/Timescale pack"
             echo
             echo "- Git revision: \`${GITHUB_SHA}\`"
-            echo "- Test: \`cargo test -p fdd_rules\`"
-            echo "- Contract: SQL mask/duration oracle tests"
+            echo "- Test: \`cargo test -p fdd_rules\` + plot_role_tests"
+            echo "- Contract: 77-rule warehouse registry (DataFusion retired)"
           } >> "$GITHUB_STEP_SUMMARY"
 
   contract-note:
     name: independent-check contract
     needs:
       - published-pandas-oracle
-      - current-sql-datafusion
+      - current-sql-registry
     runs-on: ubuntu-latest
     steps:
       - name: Record interpretation
@@ -84,7 +87,6 @@ jobs:
           {
             echo "## Independent oracle-check interpretation"
             echo
-            echo "Both independently maintained oracle paths passed their own committed contracts."
-            echo "This workflow does not compare pandas and DataFusion result artifacts and therefore does not claim direct engine-to-engine equality."
-            echo "Direct equality remains part of the synthetic/live qualification path, where both engines can emit the same canonical result set."
+            echo "Published pandas oracle and the Timescale SQL/fdd registry pack each passed their own contracts."
+            echo "Wave-X: product DataFusion is retired; full 77-case API parity is a separate Soft-OPEN gate (≠ FQ)."
           } >> "$GITHUB_STEP_SUMMARY"

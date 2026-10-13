@@ -1,34 +1,30 @@
-name: FDD DataFusion Engine CI
-# Wave-X: offline DF CLI / library path (legacy-datafusion). Product central is Timescale-only.
+name: FDD SQL Engine CI
+# Wave-X: Timescale/SQL pack gates. DataFusion CLI/bench retired (C2).
 
 on:
   push:
     branches: [master, main]
     paths:
       - "crates/**"
+      - "sql/fdd/**"
       - "sql_rules/**"
-      - "rule_tuning/**"
-      - "examples/sample_data/**"
-      - "tests/fixtures/**"
-      - "scripts/compare_synthetic_slice.py"
-      - "scripts/make_metric_history_twin.py"
+      - "services/central/**"
+      - "scripts/ci/forbid_datafusion_product.sh"
       - ".github/workflows/fdd-engine-ci.yml"
   pull_request:
     paths:
       - "crates/**"
+      - "sql/fdd/**"
       - "sql_rules/**"
-      - "rule_tuning/**"
-      - "examples/sample_data/**"
-      - "tests/fixtures/**"
-      - "scripts/compare_synthetic_slice.py"
-      - "scripts/make_metric_history_twin.py"
+      - "services/central/**"
+      - "scripts/ci/forbid_datafusion_product.sh"
       - ".github/workflows/fdd-engine-ci.yml"
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  fdd-engine:
+  fdd-sql-pack:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,55 +34,47 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install PyYAML for registry validation
         run: python3 -m pip install --user PyYAML
+      - name: Forbid product DataFusion / fdd_sql
+        run: bash scripts/ci/forbid_datafusion_product.sh
       - name: cargo fmt
         run: cargo fmt --all --check
-      - name: cargo clippy (fdd crates)
+      - name: cargo clippy (Timescale FDD crates)
         run: |
-          cargo clippy -p fdd_core -p fdd_csv -p fdd_store -p fdd_sql -p fdd_resources --all-targets -- -D warnings
-          cargo clippy -p fdd_rules --all-targets --features legacy-datafusion -- -D warnings
-          # fdd_cli / fdd_bench always enable fdd_rules/legacy-datafusion (offline DF path).
-          cargo clippy -p fdd_bench -p fdd_cli --all-targets -- -D warnings
-      - name: cargo test (fdd crates)
+          cargo clippy -p fdd_core -p fdd_csv -p fdd_resources -p fdd_rules -p fdd_tsdb --all-targets -- -D warnings
+          cargo clippy -p openfdd-central --all-targets -- -D warnings
+      - name: cargo test (plot roles + registry)
         run: |
-          cargo test -p fdd_core -p fdd_csv -p fdd_store -p fdd_sql -p fdd_resources
-          cargo test -p fdd_rules --features legacy-datafusion
-          cargo test -p fdd_bench -p fdd_cli
-      - name: AFDD schedule and lookback-upsert contract
-        run: bash scripts/gates/afdd_schedule_upsert_contract.sh --cargo
-      - name: SQL registry files exist
+          cargo test -p fdd_rules
+          cargo test -p openfdd-central plot_role_tests -- --nocapture
+      - name: SQL/fdd registry = 77 warehouse rules
         run: |
           python3 - <<'PY'
           import yaml, pathlib, sys
-          root = pathlib.Path("sql_rules")
+          root = pathlib.Path("sql/fdd")
           reg = yaml.safe_load((root / "registry.yaml").read_text())
+          rules = reg.get("rules", [])
           missing = []
-          for rule in reg.get("rules", []):
-              p = root / rule["sql_file"]
-              if not p.is_file():
-                  missing.append(str(p))
+          for rule in rules:
+              for cand in (
+                  root / "postgres" / "rules" / rule["sql_file"],
+                  root / "warehouse" / "rules" / rule["sql_file"],
+                  root / "rules" / rule["sql_file"],
+                  root / rule["sql_file"],
+              ):
+                  if cand.is_file():
+                      break
+              else:
+                  missing.append(rule["sql_file"])
           if missing:
               print("Missing SQL files:", missing)
               sys.exit(1)
-          n = len(reg.get("rules", []))
-          if n < 66:
-              print(f"Expected >= 66 registry rules (validated catalog), got {n}")
+          n = len(rules)
+          if n != 77:
+              print(f"Expected exactly 77 registry rules (warehouse handoff), got {n}")
               sys.exit(1)
-          print(f"OK: {n} rules")
+          empty = [r["rule_id"] for r in rules if not (r.get("required_roles") or r.get("optional_roles"))]
+          if empty:
+              print("Rules with empty plot roles:", empty)
+              sys.exit(1)
+          print(f"OK: {n} rules with plot roles")
           PY
-      - name: fixture validate
-        run: cargo run -p fdd_cli --release -- validate --data-root examples/sample_data --building BUILDING_FIXTURE
-      - name: fixture ingest + run-rules
-        run: |
-          cargo run -p fdd_cli --release -- ingest --data-root examples/sample_data --building BUILDING_FIXTURE --out .cache/parquet
-          cargo run -p fdd_cli --release -- run-rules --parquet .cache/parquet --rules-dir sql_rules --out .cache/rule_results
-      - name: synthetic slice ingest + run-rules
-        run: |
-          cargo run -p fdd_cli --release -- ingest --data-root tests/fixtures/synthetic_slice --building OPENFDD_SYNTHETIC_SLICE_V1 --out .cache/parquet_slice
-          cargo run -p fdd_cli --release -- run-rules --parquet .cache/parquet_slice --rules-dir sql_rules --out .cache/rule_results_slice --confirm-seconds 0
-          python3 scripts/compare_synthetic_slice.py tests/fixtures/synthetic_slice/expected_faults_slice.csv .cache/rule_results_slice
-      - name: metric twin invariance
-        run: |
-          python3 scripts/make_metric_history_twin.py tests/fixtures/synthetic_slice/OPENFDD_SYNTHETIC_SLICE_V1 .cache/metric_twin/OPENFDD_SYNTHETIC_SLICE_V1
-          cargo run -p fdd_cli --release -- ingest --data-root .cache/metric_twin --building OPENFDD_SYNTHETIC_SLICE_V1 --out .cache/parquet_metric
-          cargo run -p fdd_cli --release -- run-rules --parquet .cache/parquet_metric --rules-dir sql_rules --out .cache/rule_results_metric --unit-system metric --confirm-seconds 0
-          python3 scripts/compare_synthetic_slice.py tests/fixtures/synthetic_slice/expected_faults_slice.csv .cache/rule_results_metric

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { LockedSiteCaption } from "../components/LockedSiteCaption";
 import { ruleLabelStandard, mergeRuleDescriptionsFromApi } from "../lib/ruleLabels";
@@ -250,6 +250,8 @@ export function ReportsPage() {
     [filteredInventory],
   );
 
+  const plotAbortRef = useRef<AbortController | null>(null);
+
   const loadSeries = useCallback(async () => {
     if (!equipmentId || !ruleId) {
       setError(buildingId ? "Select equipment and rule" : "Lock a site on Overview first");
@@ -264,12 +266,18 @@ export function ReportsPage() {
       );
       return;
     }
+    plotAbortRef.current?.abort();
+    const ac = new AbortController();
+    plotAbortRef.current = ac;
     setLoading(true);
     setError(null);
     setNoFaultBanner(null);
     setNoFaultIsError(false);
     try {
-      const series = await getFddSeries(equipmentId, ruleId, buildingId || undefined);
+      const series = await getFddSeries(equipmentId, ruleId, buildingId || undefined, {
+        signal: ac.signal,
+        maxPoints: 1500,
+      });
       let rows = (series.rows ?? []) as Array<Record<string, unknown>>;
       const zoneRule = isZoneTempRule(ruleId, rules);
       const gateOn = zoneRule && applyZoneComfortGate;
@@ -354,16 +362,18 @@ export function ReportsPage() {
         );
       }
     } catch (err) {
+      if (ac.signal.aborted) return;
       setFigure(null);
       setError(formatErr(err));
     } finally {
-      setLoading(false);
+      if (!ac.signal.aborted) setLoading(false);
     }
   }, [buildingId, equipmentId, ruleId, results, rules, applyZoneComfortGate]);
 
   useEffect(() => {
     if (!buildingId || !equipmentId || !ruleId) return;
     void loadSeries();
+    return () => plotAbortRef.current?.abort();
   }, [buildingId, equipmentId, ruleId, loadSeries]);
 
   // After Lab "Update this rule" / Overview run-all, refresh results + fault overlay.

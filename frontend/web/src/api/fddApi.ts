@@ -106,6 +106,8 @@ export const FDD_RULES_PATH = "/api/fdd/rules";
 export const FDD_RUN_PATH = "/api/fdd/run";
 export const FDD_RESULTS_PATH = "/api/fdd/results";
 export const FDD_SERIES_PATH = "/api/fdd/series";
+/** C12 lean Plotly — one rule+equip, catalog roles, max_points≈1500. */
+export const FDD_PLOT_PATH = "/api/fdd/plot";
 
 export function buildFddResultsPath(buildingId?: string): string {
   if (!buildingId) return FDD_RESULTS_PATH;
@@ -118,12 +120,24 @@ export function buildFddSeriesPath(
   ruleId: string,
   buildingId?: string,
 ): string {
+  return buildFddPlotPath(equipmentId, ruleId, buildingId);
+}
+
+export function buildFddPlotPath(
+  equipmentId: string,
+  ruleId: string,
+  buildingId?: string,
+  opts?: { maxPoints?: number; windowStart?: string; windowEnd?: string },
+): string {
   const q = new URLSearchParams({
     equipment_id: equipmentId,
     rule_id: ruleId,
   });
   if (buildingId) q.set("building_id", buildingId);
-  return `${FDD_SERIES_PATH}?${q.toString()}`;
+  q.set("max_points", String(opts?.maxPoints ?? 1500));
+  if (opts?.windowStart) q.set("window_start", opts.windowStart);
+  if (opts?.windowEnd) q.set("window_end", opts.windowEnd);
+  return `${FDD_PLOT_PATH}?${q.toString()}`;
 }
 
 export async function getFddStatus(): Promise<FddStatus> {
@@ -206,9 +220,23 @@ export async function getFddSeries(
   equipmentId: string,
   ruleId: string,
   buildingId?: string,
+  init?: { signal?: AbortSignal; maxPoints?: number },
+): Promise<FddSeriesResponse> {
+  return getFddPlot(equipmentId, ruleId, buildingId, init);
+}
+
+/** C12: abortable lean plot fetch (flip rule/equip → one request). */
+export async function getFddPlot(
+  equipmentId: string,
+  ruleId: string,
+  buildingId?: string,
+  init?: { signal?: AbortSignal; maxPoints?: number },
 ): Promise<FddSeriesResponse> {
   const body = await apiFetch<FddSeriesResponse>(
-    buildFddSeriesPath(equipmentId, ruleId, buildingId),
+    buildFddPlotPath(equipmentId, ruleId, buildingId, {
+      maxPoints: init?.maxPoints ?? 1500,
+    }),
+    { signal: init?.signal },
   );
   if (!body.ok) {
     const missing = Array.isArray(body.missing_roles)
@@ -216,8 +244,8 @@ export async function getFddSeries(
       : "";
     throw new Error(
       missing
-        ? `Rule unavailable — unmapped roles: ${missing}. If package mapping already has these roles, re-ingest the site Parquet (building-scoped historian) and retry.`
-        : body.error || "Failed to load FDD series",
+        ? `Rule unavailable — unmapped roles: ${missing}. Map roles on the equipment and re-seed Timescale, then retry.`
+        : body.error || "Failed to load FDD plot",
     );
   }
   return body;

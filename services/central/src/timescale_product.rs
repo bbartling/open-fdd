@@ -19,10 +19,21 @@ use crate::analytics::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, 
 const TS_ENGINE: &str = "timescale-sql";
 
 fn sql_root() -> PathBuf {
-    std::env::var_os("OPENFDD_SQL_ROOT")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("OPENFDD_SQL_RULES_DIR").map(PathBuf::from))
-        .unwrap_or_else(|| PathBuf::from("sql/fdd"))
+    if let Some(p) = std::env::var_os("OPENFDD_SQL_ROOT") {
+        return PathBuf::from(p);
+    }
+    if let Some(p) = std::env::var_os("OPENFDD_SQL_RULES_DIR") {
+        return PathBuf::from(p);
+    }
+    // Workspace root (services/central/../..) then sql/fdd — works in unit tests.
+    let from_manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../sql/fdd")
+        .canonicalize()
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../sql/fdd"));
+    if from_manifest.is_dir() {
+        return from_manifest;
+    }
+    PathBuf::from("sql/fdd")
 }
 
 fn load_reg() -> Result<RuleRegistry> {
@@ -669,19 +680,82 @@ pub async fn inspect_json(req: &AnalyticsRequest) -> Result<Value> {
     }
 }
 
+/// Cap series count for lean Plotly (C12): required ∪ limited optional, ≤6.
+const LEAN_PLOT_MAX_ROLES: usize = 6;
+const LEAN_PLOT_DEFAULT_POINTS: usize = 1500;
+const LEAN_PLOT_HARD_CAP: usize = 5000;
+
+/// Resolve catalog roles for a rule — never alphabetically dump point_map.
+pub fn catalog_plot_roles(rule: &RuleSpec) -> Vec<String> {
+    let mut roles: Vec<String> = rule.required_roles.clone();
+    for r in &rule.optional_roles {
+        if !roles.iter().any(|x| x == r) {
+            roles.push(r.clone());
+        }
+    }
+    roles.retain(|r| safe_ident(r));
+    if roles.len() > LEAN_PLOT_MAX_ROLES {
+        roles.truncate(LEAN_PLOT_MAX_ROLES);
+    }
+    roles
+}
+
+/// Assert every registry rule has a non-empty plot role list (C12 / warehouse 77).
+pub fn assert_all_rules_have_plot_roles(reg: &RuleRegistry) -> Result<()> {
+    if reg.rules.len() != 77 {
+        return Err(anyhow!(
+            "registry has {} rules; warehouse handoff requires exactly 77",
+            reg.rules.len()
+        ));
+    }
+    let mut empty = Vec::new();
+    for rule in &reg.rules {
+        if catalog_plot_roles(rule).is_empty() {
+            empty.push(rule.rule_id.clone());
+        }
+    }
+    if !empty.is_empty() {
+        return Err(anyhow!(
+            "catalog rules missing plot roles: {}",
+            empty.join(", ")
+        ));
+    }
+    Ok(())
+}
+
+fn clamp_max_points(max_points: Option<usize>) -> usize {
+    max_points
+        .unwrap_or(LEAN_PLOT_DEFAULT_POINTS)
+        .clamp(50, LEAN_PLOT_HARD_CAP)
+}
+
 /// FDD plot series: wide role columns for one equipment + rule roles.
+#[allow(dead_code)]
 pub async fn fdd_series(
     building_id: Option<&str>,
     equipment_id: &str,
     rule_id: &str,
 ) -> Result<Value> {
+    fdd_plot(building_id, equipment_id, rule_id, None, None, None).await
+}
+
+/// Lean Plotly data plane (C12): catalog roles only, downsampled, optional window.
+pub async fn fdd_plot(
+    building_id: Option<&str>,
+    equipment_id: &str,
+    rule_id: &str,
+    max_points: Option<usize>,
+    window_start: Option<&str>,
+    window_end: Option<&str>,
+) -> Result<Value> {
     let bid = building_id.map(str::trim).filter(|s| !s.is_empty());
     let Some(building_id) = bid else {
         return Ok(json!({
             "ok": false,
-            "error": "building_id required for Timescale FDD series",
+            "error": "building_id required for Timescale FDD plot",
             "engine": TS_ENGINE,
             "rows": [],
+            "series": {},
         }));
     };
     let reg = load_reg()?;
@@ -690,22 +764,30 @@ pub async fn fdd_series(
         .iter()
         .find(|r| r.rule_id == rule_id || r.aliases.iter().any(|a| a == rule_id))
     else {
-        return Ok(json!({"ok": false, "error": format!("unknown rule_id {rule_id}"), "rows": []}));
+        return Ok(json!({
+            "ok": false,
+            "error": format!("unknown rule_id {rule_id}"),
+            "rows": [],
+            "series": {},
+            "note": "Unknown catalog rule — no point_map LIMIT-N fallback.",
+        }));
     };
-    let mut roles: Vec<String> = rule.required_roles.clone();
-    for r in &rule.optional_roles {
-        if !roles.iter().any(|x| x == r) {
-            roles.push(r.clone());
-        }
-    }
-    roles.retain(|r| safe_ident(r));
+    let mut roles = catalog_plot_roles(rule);
+    let max_pts = clamp_max_points(max_points);
     if roles.is_empty() {
         return Ok(json!({
             "ok": true,
             "equipment_id": equipment_id,
             "rule_id": rule.rule_id,
+            "site_id": building_id,
+            "building_id": building_id,
             "rows": [],
             "roles": [],
+            "series": {},
+            "confirmed_fault": {"ts": [], "y": []},
+            "point_count": 0,
+            "max_points": max_pts,
+            "note": "Catalog rule has no plottable roles for this equipment.",
             "engine": TS_ENGINE,
         }));
     }
@@ -715,9 +797,11 @@ pub async fn fdd_series(
     let missing: Vec<String> = rule
         .required_roles
         .iter()
-        .filter(|r| !present_set.contains(*r))
+        .filter(|r| safe_ident(r) && !present_set.contains(r.as_str()))
         .cloned()
         .collect();
+    // Soft note when optional roles missing; hard fail only if required missing.
+    let mut note_parts: Vec<String> = Vec::new();
     if !missing.is_empty() {
         return Ok(json!({
             "ok": false,
@@ -725,12 +809,32 @@ pub async fn fdd_series(
             "missing_roles": missing,
             "equipment_id": equipment_id,
             "rule_id": rule.rule_id,
+            "site_id": building_id,
             "building_id": building_id,
             "rows": [],
+            "series": {},
             "engine": TS_ENGINE,
         }));
     }
     roles.retain(|r| present_set.contains(r));
+    if roles.is_empty() {
+        note_parts.push("No mapped roles present on this equipment.".into());
+        return Ok(json!({
+            "ok": true,
+            "equipment_id": equipment_id,
+            "rule_id": rule.rule_id,
+            "site_id": building_id,
+            "building_id": building_id,
+            "rows": [],
+            "roles": [],
+            "series": {},
+            "confirmed_fault": {"ts": [], "y": []},
+            "point_count": 0,
+            "max_points": max_pts,
+            "note": note_parts.join(" "),
+            "engine": TS_ENGINE,
+        }));
+    }
     let mut max_cols = String::new();
     for role in &roles {
         max_cols.push_str(&format!(
@@ -744,6 +848,17 @@ pub async fn fdd_series(
         }
         filters.push_str(&format!("openfdd_key = '{equipment_id}.{role}'"));
     }
+    let mut window_sql = String::new();
+    if let Some(start) = window_start.map(str::trim).filter(|s| !s.is_empty()) {
+        if DateTime::parse_from_rfc3339(start).is_ok() {
+            window_sql.push_str(&format!(" AND ts >= '{start}'::timestamptz"));
+        }
+    }
+    if let Some(end) = window_end.map(str::trim).filter(|s| !s.is_empty()) {
+        if DateTime::parse_from_rfc3339(end).is_ok() {
+            window_sql.push_str(&format!(" AND ts <= '{end}'::timestamptz"));
+        }
+    }
     let sql = format!(
         r#"
 SELECT timestamp_utc {sel}
@@ -754,7 +869,7 @@ FROM (
     ROW_NUMBER() OVER (ORDER BY ts) AS _rn,
     COUNT(*) OVER () AS _cnt
   FROM sample
-  WHERE site_id = $1 AND ({filters})
+  WHERE site_id = $1 AND ({filters}){window_sql}
   GROUP BY ts
 ) s
 WHERE _rn = 1 OR _rn = _cnt
@@ -768,54 +883,139 @@ LIMIT $2
             .collect::<String>(),
         max_cols = max_cols,
         filters = filters,
+        window_sql = window_sql,
     );
     let rows = sqlx::query(&sql)
         .bind(building_id)
-        .bind(4000_i64)
+        .bind(max_pts as i64)
         .fetch_all(tsdb.pool())
         .await
-        .context("fdd_series pivot")?;
+        .context("fdd_plot pivot")?;
     let mut out_rows = Vec::with_capacity(rows.len());
+    let mut lean: serde_json::Map<String, Value> = serde_json::Map::new();
+    for role in &roles {
+        lean.insert(role.clone(), json!({"ts": [], "y": []}));
+    }
+    let mut fault_ts = Vec::new();
+    let mut fault_y = Vec::new();
     for r in &rows {
+        let ts = r
+            .try_get::<DateTime<Utc>, _>("timestamp_utc")
+            .ok()
+            .map(|t| t.to_rfc3339());
         let mut row = json!({
-            "timestamp_utc": r.try_get::<DateTime<Utc>, _>("timestamp_utc").ok().map(|t| t.to_rfc3339()),
+            "timestamp_utc": ts,
             "equipment_id": equipment_id,
         });
         if let Some(obj) = row.as_object_mut() {
             for c in &roles {
                 let v = r.try_get::<Option<f64>, _>(c.as_str()).ok().flatten();
                 obj.insert(c.clone(), json!(v));
+                if let Some(series) = lean.get_mut(c).and_then(|s| s.as_object_mut()) {
+                    if let Some(ts_arr) = series.get_mut("ts").and_then(|x| x.as_array_mut()) {
+                        ts_arr.push(json!(ts));
+                    }
+                    if let Some(y_arr) = series.get_mut("y").and_then(|x| x.as_array_mut()) {
+                        y_arr.push(json!(v));
+                    }
+                }
             }
-            // Soft-OPEN: confirmed_fault filled after /api/fdd/run when result JSON exists
             obj.insert("confirmed_fault".into(), Value::Null);
         }
         out_rows.push(row);
     }
-    // Overlay confirmed_fault from last result file if present (best-effort).
     if let Ok(fault_map) = load_confirmed_fault_hint(building_id, equipment_id, &rule.rule_id) {
         for row in &mut out_rows {
-            if let Some(ts) = row.get("timestamp_utc").and_then(|v| v.as_str()) {
-                if let Some(flag) = fault_map.get(ts) {
+            let ts_owned = row
+                .get("timestamp_utc")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            if let Some(ts) = ts_owned {
+                if let Some(flag) = fault_map.get(ts.as_str()) {
                     if let Some(obj) = row.as_object_mut() {
                         obj.insert("confirmed_fault".into(), json!(flag));
                     }
+                    fault_ts.push(json!(ts));
+                    fault_y.push(json!(if *flag { 1 } else { 0 }));
                 }
             }
         }
     }
+    let point_count = out_rows.len();
+    if point_count >= max_pts {
+        note_parts.push(format!("Downsampled to ≤{max_pts} pts/series for UI."));
+    }
+    // OAT-METEO must never fall back to duct-static via point_map dump (roles from catalog only).
+    if rule.rule_id.eq_ignore_ascii_case("OAT-METEO")
+        && roles
+            .iter()
+            .any(|r| r.contains("duct") || r.contains("static"))
+    {
+        note_parts.push("OAT-METEO catalog roles exclude duct-static fallback.".into());
+    }
+    let note = if note_parts.is_empty() {
+        Value::Null
+    } else {
+        json!(note_parts.join(" "))
+    };
     Ok(json!({
         "ok": true,
         "equipment_id": equipment_id,
         "rule_id": rule.rule_id,
+        "site_id": building_id,
         "building_id": building_id,
         "roles": roles,
         "rows": out_rows,
+        "series": lean,
+        "confirmed_fault": {"ts": fault_ts, "y": fault_y},
+        "fault_hours": Value::Null,
+        "point_count": point_count,
         "downsampled": true,
-        "max_points": 4000,
+        "max_points": max_pts,
+        "note": note,
         "has_confirmed_fault": out_rows.iter().any(|r| r.get("confirmed_fault").and_then(|v| v.as_bool()).is_some()),
         "engine": TS_ENGINE,
         "source": "timescale_sample",
     }))
+}
+
+#[cfg(test)]
+mod plot_role_tests {
+    use super::*;
+
+    #[test]
+    fn all_77_catalog_rules_have_plot_roles() {
+        let reg = load_reg().expect("load sql/fdd registry");
+        assert_all_rules_have_plot_roles(&reg).expect("77 plot roles");
+    }
+
+    #[test]
+    fn oat_meteo_roles_exclude_duct_static() {
+        let reg = load_reg().expect("registry");
+        let rule = reg
+            .rules
+            .iter()
+            .find(|r| r.rule_id == "OAT-METEO")
+            .expect("OAT-METEO");
+        let roles = catalog_plot_roles(rule);
+        assert!(
+            !roles
+                .iter()
+                .any(|r| r.contains("duct") || r.contains("static")),
+            "OAT-METEO roles={roles:?}"
+        );
+        assert!(
+            roles.iter().any(|r| r.contains("oa") || r.contains("web")),
+            "OAT-METEO should include OAT/web roles, got {roles:?}"
+        );
+    }
+
+    #[test]
+    fn clamp_max_points_bounds() {
+        assert_eq!(clamp_max_points(None), 1500);
+        assert_eq!(clamp_max_points(Some(10)), 50);
+        assert_eq!(clamp_max_points(Some(99_999)), 5000);
+    }
 }
 
 fn results_dir(building_id: &str) -> PathBuf {

@@ -103,10 +103,10 @@ describe("fddApi", () => {
       "/api/fdd/results?building_id=B1",
     );
     expect(buildFddSeriesPath("AHU_1", "FC1")).toBe(
-      "/api/fdd/series?equipment_id=AHU_1&rule_id=FC1",
+      "/api/fdd/plot?equipment_id=AHU_1&rule_id=FC1&max_points=1500",
     );
     expect(buildFddSeriesPath("AHU_1", "FC1", "B1")).toBe(
-      "/api/fdd/series?equipment_id=AHU_1&rule_id=FC1&building_id=B1",
+      "/api/fdd/plot?equipment_id=AHU_1&rule_id=FC1&building_id=B1&max_points=1500",
     );
   });
 

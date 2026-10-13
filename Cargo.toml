@@ -7,11 +7,9 @@ members = [
     "crates/fdd_csv",
     "crates/fdd_store",
     "crates/fdd_resources",
-    "crates/fdd_sql",
+    # Wave-X C2: fdd_sql / fdd_cli / fdd_bench retired from workspace (no product DF).
     "crates/fdd_tsdb",
     "crates/fdd_rules",
-    "crates/fdd_bench",
-    "crates/fdd_cli",
     "crates/openfdd_contracts",
     "crates/openfdd_connector_runtime",
     "crates/openfdd_mqtt",

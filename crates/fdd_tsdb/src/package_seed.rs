@@ -435,7 +435,10 @@ pub async fn seed_package_dir(
 ) -> Result<u64> {
     let (_column_map, _type_reg, plans) = build_seed_plans(package_root, sql_root, None)?;
     if plans.is_empty() {
-        bail!("no history_wide.csv / history.csv under {}", package_root.display());
+        bail!(
+            "no history_wide.csv / history.csv under {}",
+            package_root.display()
+        );
     }
 
     tsdb.ensure_site_building(building_id).await?;
@@ -463,13 +466,7 @@ pub async fn seed_package_dir(
             &plan.col_to_role,
         )
         .await
-        .with_context(|| {
-            format!(
-                "stage {} ({})",
-                plan.equipment_id,
-                plan.csv_path.display()
-            )
-        })?;
+        .with_context(|| format!("stage {} ({})", plan.equipment_id, plan.csv_path.display()))?;
         tracing::info!(
             equipment_id = %plan.equipment_id,
             n,
@@ -558,9 +555,14 @@ pub async fn append_package_equipment(
     for plan in plans {
         tsdb.upsert_equipment(building_id, &plan.equipment_id, plan.equip_type.as_deref())
             .await?;
-        let (n, roles) =
-            upsert_one_csv(tsdb, building_id, &plan.equipment_id, &plan.csv_path, &plan.col_to_role)
-                .await?;
+        let (n, roles) = upsert_one_csv(
+            tsdb,
+            building_id,
+            &plan.equipment_id,
+            &plan.csv_path,
+            &plan.col_to_role,
+        )
+        .await?;
         upsert_roles(tsdb, building_id, &plan.equipment_id, &roles).await?;
         tracing::info!(
             equipment_id = %plan.equipment_id,

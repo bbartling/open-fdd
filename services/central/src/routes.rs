@@ -205,7 +205,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/commands", post(issue_command))
         .route("/api/commands/{command_id}/ack", get(get_ack))
         .route("/api/agent/tools", get(agent_tools))
-        // C4 H9/H10: server-owned SPARQL templates → typed bindings + consumers.
+        // C13: playground-style free-form SPARQL + templates + consumers.
         .route("/api/model/sparql", post(central_package_sparql))
         .route(
             "/api/model/sparql/predefined",
@@ -214,6 +214,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/api/model/sparql/query",
             post(central_package_sparql_query),
+        )
+        .route(
+            "/api/model/sparql/upload",
+            post(central_package_sparql_upload),
         )
         .route(
             "/api/model/sparql/consumers",
@@ -226,6 +230,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/fdd/results", get(fdd_results))
         .route("/api/fdd/results/readiness", get(fdd_results_readiness))
         .route("/api/fdd/series", get(fdd_series))
+        .route("/api/fdd/plot", get(fdd_plot))
         .route("/api/fdd/roles", get(fdd_roles))
         .route("/api/fdd/cookbook-roles", get(fdd_cookbook_roles))
         .route(
@@ -3866,12 +3871,35 @@ pub struct FddSeriesQuery {
     rule_id: Option<String>,
     #[serde(default)]
     building_id: Option<String>,
+    #[serde(default)]
+    max_points: Option<usize>,
+    #[serde(default)]
+    window_start: Option<String>,
+    #[serde(default)]
+    window_end: Option<String>,
 }
 
 pub async fn fdd_series(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Query(query): Query<FddSeriesQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    fdd_plot_inner(state, headers, query).await
+}
+
+/// C12 lean Plotly: one visible rule+equip → catalog roles → Timescale downsample.
+pub async fn fdd_plot(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(query): Query<FddSeriesQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    fdd_plot_inner(state, headers, query).await
+}
+
+async fn fdd_plot_inner(
+    state: Arc<AppState>,
+    headers: HeaderMap,
+    query: FddSeriesQuery,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     if let Some(deny) =
         deny_if_building_out_of_scope(&state, &headers, query.building_id.as_deref())
@@ -3895,6 +3923,7 @@ pub async fn fdd_series(
             "ok": true,
             "rows": [],
             "roles": [],
+            "series": {},
             "building_id": query.building_id,
             "equipment_id": query.equipment_id,
             "rule_id": query.rule_id,
@@ -3904,10 +3933,13 @@ pub async fn fdd_series(
     let rule_id = rule_id.to_string();
     let building_id = query.building_id.clone();
     if crate::timescale_historian::historian_is_timescale() {
-        return match crate::timescale_product::fdd_series(
+        return match crate::timescale_product::fdd_plot(
             building_id.as_deref(),
             &equipment_id,
             &rule_id,
+            query.max_points,
+            query.window_start.as_deref(),
+            query.window_end.as_deref(),
         )
         .await
         {
@@ -3919,6 +3951,7 @@ pub async fn fdd_series(
                 "equipment_id": equipment_id,
                 "rule_id": rule_id,
                 "rows": [],
+                "series": {},
             }))),
         };
     }
@@ -4956,30 +4989,36 @@ pub async fn csv_import_package_mapping_haystack_dataset(
 pub struct CentralPackageSparqlBody {
     /// Server template id from GET /api/model/sparql/predefined.
     query_id: Option<String>,
-    /// Rejected: free-form SPARQL is not accepted on the product path.
+    /// C13 playground-style free-form SELECT/ASK (read-only guard).
     query: Option<String>,
     building_id: Option<String>,
     equipment_id: Option<String>,
 }
 
-/// Product-central SPARQL templates over the package RDF dataset (C4 H9).
-/// JWT-gated via router layer. Free-form `query` is rejected.
+const SPARQL_UPLOAD_MAX_BYTES: usize = 200 * 1024;
+
+/// Product-central SPARQL (C13): free-form `query` (sparql-playground style) **or**
+/// template `query_id`. JWT + building scope. Mutations/SERVICE/FROM rejected.
 pub async fn central_package_sparql(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(body): Json<CentralPackageSparqlBody>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if body
+    let freeform = body
         .query
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .is_some()
-    {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(crate::haystack_rdf::sparql_freeform_rejected()),
-        ));
+        .map(str::to_string);
+    if let Some(query) = freeform {
+        return run_central_readonly_sparql(
+            state,
+            headers,
+            &query,
+            body.building_id,
+            body.equipment_id,
+        )
+        .await;
     }
     let Some(query_id) = body
         .query_id
@@ -4992,7 +5031,7 @@ pub async fn central_package_sparql(
             StatusCode::BAD_REQUEST,
             Json(json!({
                 "ok": false,
-                "error": "query_id required (see GET /api/model/sparql/predefined)",
+                "error": "query or query_id required (free-form SELECT/ASK, or GET /api/model/sparql/predefined)",
             })),
         ));
     };
@@ -5047,6 +5086,75 @@ pub async fn central_package_sparql(
     }
 }
 
+async fn run_central_readonly_sparql(
+    state: Arc<AppState>,
+    headers: HeaderMap,
+    query: &str,
+    building_id: Option<String>,
+    equipment_id: Option<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if query.len() > SPARQL_UPLOAD_MAX_BYTES {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": format!("query exceeds {SPARQL_UPLOAD_MAX_BYTES} byte limit"),
+            })),
+        ));
+    }
+    let Some(building_id) = building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "building_id required"})),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let equipment_id = equipment_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, Some(&building_id));
+    let cache = state.haystack_rdf.clone();
+    let query = query.to_string();
+    let result = tokio::task::spawn_blocking(move || {
+        cache.execute_readonly_query(
+            &building_id,
+            equipment_id.as_deref(),
+            preferred.as_deref(),
+            &query,
+        )
+    })
+    .await
+    .unwrap_or_else(|e| Err(json!({"ok": false, "error": format!("sparql task: {e}")})));
+    match result {
+        Ok(v) => {
+            // sparql-playground shape: { results, meta } when possible.
+            let meta = json!({
+                "schema": v.get("schema").cloned().unwrap_or(json!("ofdd_sparql_readonly_v1")),
+                "query_engine": v.get("query_engine").cloned().unwrap_or(json!("central_package_sparql_readonly_v1")),
+                "building_id": v.get("building_id").cloned().unwrap_or(Value::Null),
+                "truncated": v.get("truncated").cloned().unwrap_or(json!(false)),
+                "row_count": v.get("row_count").cloned().unwrap_or(Value::Null),
+            });
+            Ok(Json(json!({
+                "ok": true,
+                "results": v,
+                "meta": meta,
+            })))
+        }
+        Err(err) => Err((StatusCode::BAD_REQUEST, Json(err))),
+    }
+}
+
 pub async fn central_package_sparql_catalog() -> Json<Value> {
     Json(crate::haystack_rdf::sparql_catalog())
 }
@@ -5059,7 +5167,7 @@ pub struct CentralPackageSparqlQueryBody {
     equipment_id: Option<String>,
 }
 
-/// N5: bounded read-only free-form SPARQL for UI + AI agents (JWT + building scope).
+/// Alias of playground-style free-form SPARQL (same runner as POST /api/model/sparql).
 pub async fn central_package_sparql_query(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -5077,44 +5185,16 @@ pub async fn central_package_sparql_query(
             Json(json!({"ok": false, "error": "query text required"})),
         ));
     };
-    let Some(building_id) = body
-        .building_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-    else {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "building_id required"})),
-        ));
-    };
-    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
-        return Err(deny);
-    }
-    let equipment_id = body
-        .equipment_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string);
-    let ctx = resolve_tenant_context(&state, &headers);
-    let preferred = preferred_tenant_for_building_read(&ctx, Some(&building_id));
-    let cache = state.haystack_rdf.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        cache.execute_readonly_query(
-            &building_id,
-            equipment_id.as_deref(),
-            preferred.as_deref(),
-            &query,
-        )
-    })
-    .await
-    .unwrap_or_else(|e| Err(json!({"ok": false, "error": format!("sparql task: {e}")})));
-    match result {
-        Ok(v) => Ok(Json(v)),
-        Err(err) => Err((StatusCode::BAD_REQUEST, Json(err))),
-    }
+    run_central_readonly_sparql(state, headers, &query, body.building_id, body.equipment_id).await
+}
+
+/// C13: upload UTF-8 `.rq` / `.txt` as JSON `{query, building_id}` (≤200KiB).
+pub async fn central_package_sparql_upload(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<CentralPackageSparqlQueryBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    central_package_sparql_query(State(state), headers, Json(body)).await
 }
 
 /// H10/H11: typed bindings + FDD/history/ECM consumer plans (JWT + building scope).
