@@ -700,29 +700,6 @@ pub fn catalog_plot_roles(rule: &RuleSpec) -> Vec<String> {
     roles
 }
 
-/// Assert every registry rule has a non-empty plot role list (C12 / warehouse 77).
-pub fn assert_all_rules_have_plot_roles(reg: &RuleRegistry) -> Result<()> {
-    if reg.rules.len() != 77 {
-        return Err(anyhow!(
-            "registry has {} rules; warehouse handoff requires exactly 77",
-            reg.rules.len()
-        ));
-    }
-    let mut empty = Vec::new();
-    for rule in &reg.rules {
-        if catalog_plot_roles(rule).is_empty() {
-            empty.push(rule.rule_id.clone());
-        }
-    }
-    if !empty.is_empty() {
-        return Err(anyhow!(
-            "catalog rules missing plot roles: {}",
-            empty.join(", ")
-        ));
-    }
-    Ok(())
-}
-
 fn clamp_max_points(max_points: Option<usize>) -> usize {
     max_points
         .unwrap_or(LEAN_PLOT_DEFAULT_POINTS)
@@ -977,45 +954,6 @@ LIMIT $2
         "engine": TS_ENGINE,
         "source": "timescale_sample",
     }))
-}
-
-#[cfg(test)]
-mod plot_role_tests {
-    use super::*;
-
-    #[test]
-    fn all_77_catalog_rules_have_plot_roles() {
-        let reg = load_reg().expect("load sql/fdd registry");
-        assert_all_rules_have_plot_roles(&reg).expect("77 plot roles");
-    }
-
-    #[test]
-    fn oat_meteo_roles_exclude_duct_static() {
-        let reg = load_reg().expect("registry");
-        let rule = reg
-            .rules
-            .iter()
-            .find(|r| r.rule_id == "OAT-METEO")
-            .expect("OAT-METEO");
-        let roles = catalog_plot_roles(rule);
-        assert!(
-            !roles
-                .iter()
-                .any(|r| r.contains("duct") || r.contains("static")),
-            "OAT-METEO roles={roles:?}"
-        );
-        assert!(
-            roles.iter().any(|r| r.contains("oa") || r.contains("web")),
-            "OAT-METEO should include OAT/web roles, got {roles:?}"
-        );
-    }
-
-    #[test]
-    fn clamp_max_points_bounds() {
-        assert_eq!(clamp_max_points(None), 1500);
-        assert_eq!(clamp_max_points(Some(10)), 50);
-        assert_eq!(clamp_max_points(Some(99_999)), 5000);
-    }
 }
 
 fn results_dir(building_id: &str) -> PathBuf {
@@ -1416,4 +1354,65 @@ pub async fn equipment_from_timescale(building_id: Option<&str>) -> Result<Value
         "engine": TS_ENGINE,
         "building_id": bid,
     }))
+}
+
+#[cfg(test)]
+mod plot_role_tests {
+    use super::*;
+
+    fn assert_all_rules_have_plot_roles(reg: &RuleRegistry) -> Result<()> {
+        if reg.rules.len() != 77 {
+            return Err(anyhow!(
+                "registry has {} rules; warehouse handoff requires exactly 77",
+                reg.rules.len()
+            ));
+        }
+        let mut empty = Vec::new();
+        for rule in &reg.rules {
+            if catalog_plot_roles(rule).is_empty() {
+                empty.push(rule.rule_id.clone());
+            }
+        }
+        if !empty.is_empty() {
+            return Err(anyhow!(
+                "catalog rules missing plot roles: {}",
+                empty.join(", ")
+            ));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn all_77_catalog_rules_have_plot_roles() {
+        let reg = load_reg().expect("load sql/fdd registry");
+        assert_all_rules_have_plot_roles(&reg).expect("77 plot roles");
+    }
+
+    #[test]
+    fn oat_meteo_roles_exclude_duct_static() {
+        let reg = load_reg().expect("registry");
+        let rule = reg
+            .rules
+            .iter()
+            .find(|r| r.rule_id == "OAT-METEO")
+            .expect("OAT-METEO");
+        let roles = catalog_plot_roles(rule);
+        assert!(
+            !roles
+                .iter()
+                .any(|r| r.contains("duct") || r.contains("static")),
+            "OAT-METEO roles={roles:?}"
+        );
+        assert!(
+            roles.iter().any(|r| r.contains("oa") || r.contains("web")),
+            "OAT-METEO should include OAT/web roles, got {roles:?}"
+        );
+    }
+
+    #[test]
+    fn clamp_max_points_bounds() {
+        assert_eq!(clamp_max_points(None), 1500);
+        assert_eq!(clamp_max_points(Some(10)), 50);
+        assert_eq!(clamp_max_points(Some(99_999)), 5000);
+    }
 }
