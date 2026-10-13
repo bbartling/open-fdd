@@ -207,10 +207,13 @@ fn mzvav_fdd_eval_and_purge() {
             let eval = execution::run_rule_sql_from_historian("SELECT 1", 0, &json!({}));
             assert_eq!(eval.get("ok").and_then(|v| v.as_bool()), Some(false));
             assert!(
-                eval.get("error")
-                    .and_then(|v| v.as_str())
-                    .is_some_and(|e| e.contains("retired") || e.contains("Timescale")),
-                "expected Timescale retire message, got {eval}"
+                eval.get("error").and_then(|v| v.as_str()).is_some_and(|e| {
+                    e.contains("retired")
+                        || e.contains("deleted")
+                        || e.contains("Timescale")
+                        || e.contains("DataFusion")
+                }),
+                "expected Timescale/DF-deleted message, got {eval}"
             );
         }
 
