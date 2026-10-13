@@ -172,11 +172,41 @@ impl AfddSchedulerRuntime {
         Ok(Some(watermark.latest_persisted_timestamp_utc))
     }
 
-    /// Scoped watermark from building historian parquet order (#1192).
+    /// Scoped watermark from Timescale `sample` max(ts) (Wave-X C6).
+    /// Falls back to global live-telemetry file only when Timescale is offline.
     fn latest_telemetry_for_scope(&self, scope: &str) -> Result<Option<DateTime<Utc>>> {
         if scope == "all" {
             return self.latest_telemetry();
         }
+        if crate::timescale_historian::historian_is_timescale() {
+            let rt = tokio::runtime::Handle::try_current();
+            let query = async {
+                let tsdb = fdd_tsdb::Tsdb::connect_from_env().await?;
+                tsdb.max_sample_ts(scope).await
+            };
+            match rt {
+                Ok(handle) => match handle.block_on(query) {
+                    Ok(ts) => return Ok(ts),
+                    Err(error) => {
+                        warn!(%error, %scope, "Timescale AFDD watermark failed; trying file fallback");
+                    }
+                },
+                Err(_) => {
+                    // Scheduler may already be inside a runtime; use a tiny current-thread RT.
+                    let local = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .context("afdd watermark runtime")?;
+                    match local.block_on(query) {
+                        Ok(ts) => return Ok(ts),
+                        Err(error) => {
+                            warn!(%error, %scope, "Timescale AFDD watermark failed; trying file fallback");
+                        }
+                    }
+                }
+            }
+        }
+        // Legacy Parquet order path retained only when Timescale is not product historian.
         let workspace = PathBuf::from(
             std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()),
         );
@@ -544,20 +574,32 @@ impl AfddSchedulerRuntime {
                 if let Some(equipment_id) = eq {
                     payload["equipment_id"] = json!(equipment_id);
                 }
-                let cancel_worker = cancel.clone();
-                let result = tokio::task::spawn_blocking({
-                    let payload = payload.clone();
-                    move || {
-                        open_fdd_edge_prototype::fdd::registry_api::run_registry_with_cancel(
-                            &payload,
-                            cancel_worker,
-                        )
+                // Wave-X C6: one SQL executor — never call the retired DF stub.
+                let result = if crate::timescale_historian::historian_is_timescale() {
+                    match crate::timescale_product::run_fdd_registry(&payload).await {
+                        Ok(v) => v,
+                        Err(error) => json!({
+                            "ok": false,
+                            "engine": "postgres-sql",
+                            "error": format!("AFDD Timescale run failed: {error:#}"),
+                        }),
                     }
-                })
-                .await
-                .unwrap_or_else(|error| {
-                    json!({"ok": false, "error": format!("AFDD registry task failed: {error}")})
-                });
+                } else {
+                    let cancel_worker = cancel.clone();
+                    tokio::task::spawn_blocking({
+                        let payload = payload.clone();
+                        move || {
+                            open_fdd_edge_prototype::fdd::registry_api::run_registry_with_cancel(
+                                &payload,
+                                cancel_worker,
+                            )
+                        }
+                    })
+                    .await
+                    .unwrap_or_else(|error| {
+                        json!({"ok": false, "error": format!("AFDD registry task failed: {error}")})
+                    })
+                };
                 if result
                     .get("cancelled")
                     .and_then(Value::as_bool)

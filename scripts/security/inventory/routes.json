@@ -2743,6 +2743,44 @@
     },
     {
       "method": "GET",
+      "path": "/api/fdd/plot",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fdd_plot",
+        "y.authz.get_api_fdd_plot"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fdd_plot",
+        "y.authz.get_api_fdd_plot"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Wave-X C12 lean Plotly: catalog roles, max_points\u22481500, Timescale downsample"
+    },
+    {
+      "method": "GET",
       "path": "/api/fdd/roles",
       "section": "protected",
       "auth": "jwt_required",
@@ -6133,7 +6171,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "C4 H9: server SPARQL templates \u2192 ofdd_haystack_typed_bindings_v1; free-form query rejected"
+      "notes": "Wave-X C13: free-form SELECT/ASK or query_id templates; JWT+building; mutations/SERVICE rejected"
     },
     {
       "method": "POST",
@@ -6173,6 +6211,45 @@
         "semantic_meta"
       ],
       "notes": "N5: bounded read-only SPARQL query (SELECT); tenant/building scoped"
+    },
+    {
+      "method": "POST",
+      "path": "/api/model/sparql/upload",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_model_sparql_upload",
+        "y.authz.post_api_model_sparql_upload"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_model_sparql_upload",
+        "y.authz.post_api_model_sparql_upload"
+      ],
+      "request_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity",
+        "semantic_meta"
+      ],
+      "notes": "Wave-X C13: JSON {query,building_id} \u2264200KiB playground upload alias"
     },
     {
       "method": "GET",

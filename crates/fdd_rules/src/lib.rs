@@ -1,29 +1,15 @@
-//! Rule registry and (optional) DataFusion SQL batch runner.
+//! Rule registry and params for the Timescale SQL product path.
 //!
-//! Wave-X default: registry + params only — **no** `SessionContext`.
-//! Enable feature `legacy-datafusion` for Parquet/DF rule execution.
+//! Wave-X C2: DataFusion runner deleted. Stubs keep call-site signatures.
 
 pub mod params;
 pub mod registry;
 pub mod tuning;
 
-#[cfg(feature = "legacy-datafusion")]
-pub mod occupancy_schedule;
-#[cfg(feature = "legacy-datafusion")]
-pub mod runner;
-
 pub use params::{poll_params, read_poll_from_cache, rule_params, substitute_sql};
 pub use registry::{load_registry, RuleParameterDef, RuleRegistry, RuleSpec};
 pub use tuning::{effective_param_strings, load_tuning_profiles};
 
-#[cfg(feature = "legacy-datafusion")]
-pub use runner::{
-    run_all_rules, run_all_rules_with_overrides, scope_history_to_time_window, RuleRunReport,
-    RunOptions,
-};
-
-/// Timescale-default stubs — signatures match `runner` so edge compiles without DF.
-#[cfg(not(feature = "legacy-datafusion"))]
 mod runner_stub {
     use std::collections::HashMap;
     use std::path::Path;
@@ -65,7 +51,7 @@ mod runner_stub {
         _registry: &RuleRegistry,
         _out_dir: &Path,
     ) -> Result<RuleRunReport> {
-        bail!("Wave-X 3.6.0: DataFusion rule runner retired (enable fdd_rules/legacy-datafusion)")
+        bail!("Wave-X 3.6.1: DataFusion rule runner deleted; use Timescale sql/fdd")
     }
 
     pub async fn run_all_rules_with_overrides(
@@ -75,38 +61,18 @@ mod runner_stub {
         _overrides: &HashMap<String, HashMap<String, f64>>,
         _options: RunOptions<'_>,
     ) -> Result<RuleRunReport> {
-        bail!("Wave-X 3.6.0: DataFusion rule runner retired (enable fdd_rules/legacy-datafusion)")
+        bail!("Wave-X 3.6.1: DataFusion rule runner deleted; use Timescale sql/fdd")
     }
 
     pub fn retired_run_json() -> Value {
         json!({
             "ok": false,
             "engine": "postgres-sql",
-            "error": "Wave-X: DataFusion FDD runner retired; use Timescale sql/fdd postgres-sql path",
+            "error": "Wave-X: DataFusion FDD runner deleted; use Timescale sql/fdd postgres-sql path",
         })
     }
 }
 
-#[cfg(not(feature = "legacy-datafusion"))]
 pub use runner_stub::{
     retired_run_json, run_all_rules, run_all_rules_with_overrides, RuleRunReport, RunOptions,
 };
-
-#[cfg(test)]
-#[cfg(feature = "legacy-datafusion")]
-mod econ4_confirm_test;
-#[cfg(test)]
-#[cfg(feature = "legacy-datafusion")]
-mod fcu_parity_test;
-#[cfg(test)]
-#[cfg(feature = "legacy-datafusion")]
-mod oat_meteo_target_test;
-#[cfg(test)]
-#[cfg(feature = "legacy-datafusion")]
-mod oracle_harness;
-#[cfg(test)]
-#[cfg(feature = "legacy-datafusion")]
-mod oracle_parity_test;
-#[cfg(test)]
-#[cfg(feature = "legacy-datafusion")]
-mod poll_test;

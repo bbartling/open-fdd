@@ -1,7 +1,5 @@
-//! Fault detection layer.
-//!
-//! Wave-X default: registry / session_config / wires without DataFusion.
-//! `legacy-datafusion` restores Parquet/DF SQL execution.
+//! Fault detection layer — Timescale product path (Wave-X C2).
+//! DataFusion Parquet/SQL execution deleted.
 
 pub mod confirmation;
 pub mod registry_api;
@@ -10,12 +8,6 @@ pub mod session_config;
 pub mod sql_safety;
 pub mod wires;
 
-#[cfg(feature = "legacy-datafusion")]
-pub mod datafusion_sql;
-#[cfg(feature = "legacy-datafusion")]
-pub mod execution;
-
-#[cfg(not(feature = "legacy-datafusion"))]
 pub mod datafusion_sql {
     use serde_json::{json, Value};
 
@@ -32,7 +24,7 @@ pub mod datafusion_sql {
         json!({
             "ok": false,
             "engine": "postgres-sql",
-            "error": "Wave-X: DataFusion batch FDD retired; use Timescale sql/fdd",
+            "error": "Wave-X: DataFusion batch FDD deleted; use Timescale sql/fdd",
         })
     }
     pub fn run_fdd_response(payload: &Value) -> Value {
@@ -40,12 +32,11 @@ pub mod datafusion_sql {
         json!({
             "ok": false,
             "engine": "postgres-sql",
-            "error": "Wave-X: DataFusion FDD retired; use Timescale sql/fdd",
+            "error": "Wave-X: DataFusion FDD deleted; use Timescale sql/fdd",
         })
     }
 }
 
-#[cfg(not(feature = "legacy-datafusion"))]
 pub mod execution {
     use serde_json::{json, Value};
 
@@ -55,13 +46,11 @@ pub mod execution {
             "dialect": "postgres-sql",
             "engine": "timescale",
             "tables": [],
-            "note": "Wave-X: DataFusion schema retired",
+            "note": "Wave-X: DataFusion schema deleted",
         })
     }
 
     pub fn fdd_inputs_json() -> Value {
-        // Keep commissioning / package validation aware of canonical roles even
-        // without DataFusion SessionContext (Wave-X Timescale product path).
         json!({
             "ok": true,
             "engine": "timescale",
@@ -103,7 +92,7 @@ pub mod execution {
         json!({
             "ok": false,
             "engine": "postgres-sql",
-            "error": "Wave-X: DataFusion SessionContext retired",
+            "error": "Wave-X: DataFusion SessionContext deleted",
         })
     }
 

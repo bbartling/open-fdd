@@ -1,13 +1,8 @@
-//! Historian analytics — Timescale product default vs legacy DataFusion.
+//! Historian analytics — Timescale product path (Wave-X C2).
 //!
-//! Default (`legacy-datafusion` OFF): stub fail-closed, **no** `SessionContext`.
-//! Enable `legacy-datafusion` to compile `historian_datafusion.rs`.
+//! DataFusion / Parquet historian bridge deleted. Stub fail-closed unless
+//! Timescale helpers handle the request.
 
-#[cfg(feature = "legacy-datafusion")]
-#[path = "historian_datafusion.rs"]
-mod imp;
-
-#[cfg(not(feature = "legacy-datafusion"))]
 #[path = "historian_stub.rs"]
 mod imp;
 

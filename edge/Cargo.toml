@@ -1,6 +1,6 @@
 [package]
 name = "open_fdd_edge_prototype"
-version = "3.6.0"
+version = "3.6.1"
 edition = "2021"
 
 [[bin]]
@@ -15,17 +15,17 @@ path = "src/bin/openfdd_edge.rs"
 name = "haystack_c3_export_fixture"
 path = "src/bin/haystack_c3_export_fixture.rs"
 
-# Wave-X: default edge build has no DataFusion SessionContext (Timescale product path).
-# Enable legacy-datafusion for Parquet/DF FDD bring-up only.
+# Wave-X: Timescale product path. DataFusion feature deleted (C2).
 [features]
 default = []
-legacy-datafusion = [
-  "dep:datafusion",
-  "dep:fdd_sql",
-  "fdd_rules/legacy-datafusion",
-]
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = [
+  'cfg(feature, values("legacy-datafusion", "legacy-parquet"))',
+] }
 
 [dependencies]
+# Arrow IPC remains for package CSV dataset pages (not product FDD engine).
 arrow.workspace = true
 base64 = "0.22"
 bcrypt = "0.16"
@@ -35,7 +35,6 @@ chrono-tz = "0.10"
 encoding_rs = "0.8"
 clap = { version = "4", features = ["derive"] }
 csv = "1.3"
-datafusion = { workspace = true, optional = true }
 hex = "0.4"
 libc = "0.2"
 hmac = "0.12"
@@ -59,7 +58,6 @@ oxigraph = "0.5"
 spargebra = "=0.4.6"
 fdd_core = { path = "../crates/fdd_core" }
 fdd_rules = { path = "../crates/fdd_rules" }
-fdd_sql = { path = "../crates/fdd_sql", optional = true }
 fdd_resources = { path = "../crates/fdd_resources" }
 fdd_store = { path = "../crates/fdd_store" }
 walkdir = "2"
